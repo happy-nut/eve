@@ -289,10 +289,11 @@
             onkeydown={plusKey} onfocusout={(e) => { if (!(e.relatedTarget as HTMLElement | null)?.closest('.plus-wrap')) plusOpen = false; }}>
             {#each plusItems as it, i}
               <li role="none">
+                <!-- one highlight only: the mouse moves focus instead of adding a hover state -->
                 {#if i === 0}
-                  <button role="menuitem" use:autofocus onclick={() => plusPick(i)}>{it.label}<kbd>{prettyKeys(it.keys)}</kbd></button>
+                  <button role="menuitem" use:autofocus onmouseenter={(e) => e.currentTarget.focus()} onclick={() => plusPick(i)}>{it.label}<kbd>{prettyKeys(it.keys)}</kbd></button>
                 {:else}
-                  <button role="menuitem" onclick={() => plusPick(i)}>{it.label}<kbd>{prettyKeys(it.keys)}</kbd></button>
+                  <button role="menuitem" onmouseenter={(e) => e.currentTarget.focus()} onclick={() => plusPick(i)}>{it.label}<kbd>{prettyKeys(it.keys)}</kbd></button>
                 {/if}
               </li>
             {/each}
@@ -353,7 +354,7 @@
     width: 100%; display: flex; flex-direction: row; justify-content: space-between; align-items: center; gap: 12px;
     border: 0; background: none; color: inherit; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 5px; text-align: left; white-space: nowrap;
   }
-  .plus-menu button:hover, .plus-menu button:focus-visible { background: var(--accent-soft); outline: none; }
+  .plus-menu button:focus { background: var(--accent-soft); outline: none; }
   .plus-menu kbd { font: inherit; font-size: 11.5px; color: var(--fg-dim); }
 
   .tree { flex: 1; overflow-y: auto; padding: 2px 6px 8px; }
