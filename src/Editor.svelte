@@ -41,7 +41,7 @@
       suggestionUI,
       cursor: notes.cursor.get(note.id),
     });
-    if (ui.focusOwner !== 'sidebar') editor.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
+    if (ui.focusOwner !== 'sidebar') editor?.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
     return () => {
       if (editor) notes.cursor.set(id, editor.state.selection.from);
       editor?.destroy();
@@ -62,9 +62,6 @@
     document.querySelector('.suggest li.sel')?.scrollIntoView({ block: 'nearest' });
   });
 
-  // more top room for the big icon
-  $effect(() => { editor?.view.dom.classList.toggle('with-icon', !!note.icon); });
-
   // rebind editor shortcuts live when the user changes them
   $effect(() => { shortcuts.actions; if (editor) applyKeymap(editor); });
 
@@ -77,19 +74,21 @@
   });
 </script>
 
-{#if !note.path}
-  <div class="page-head">
-    {#if note.icon}
-      <button class="big-icon" title="아이콘 변경" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={56} /></button>
-    {:else}
-      <button class="add-icon" onclick={(e) => changeIcon(e.currentTarget)}>
-        <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 9.5c.6.9 1.5 1.5 2.5 1.5s1.9-.6 2.5-1.5M6 6.5h.01M10 6.5h.01"/></svg>
-        아이콘 추가
-      </button>
-    {/if}
-  </div>
-{/if}
-<div class="editor" class:has-head={!note.path} bind:this={el}></div>
+<div class="scroll">
+  {#if !note.path}
+    <div class="page-head" class:with-icon={!!note.icon}>
+      {#if note.icon}
+        <button class="big-icon" title="아이콘 변경" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={56} /></button>
+      {:else}
+        <button class="add-icon" onclick={(e) => changeIcon(e.currentTarget)}>
+          <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 9.5c.6.9 1.5 1.5 2.5 1.5s1.9-.6 2.5-1.5M6 6.5h.01M10 6.5h.01"/></svg>
+          아이콘 추가
+        </button>
+      {/if}
+    </div>
+  {/if}
+  <div class="editor" class:has-head={!note.path} bind:this={el}></div>
+</div>
 
 {#if items.length}
   <ul class="suggest" style="left:{pos.x}px; top:{pos.y}px" transition:fly={{ y: 4, duration: 120 }}>
@@ -100,12 +99,13 @@
 {/if}
 
 <style>
-  .editor { height: 100%; overflow-y: auto; }
+  .scroll { height: 100%; overflow-y: auto; }
+  .editor { min-height: 100%; }
   .page-head {
-    position: absolute; top: 40px; left: 0; right: 0; z-index: 2; pointer-events: none;
-    max-width: var(--editor-width, 820px); margin: 0 auto; padding: 0 clamp(24px, 8vw, 96px); box-sizing: border-box;
+    max-width: var(--editor-width, 820px); margin: 0 auto; padding: 44px clamp(24px, 8vw, 96px) 0; box-sizing: border-box;
+    height: 72px; /* reserves the "add icon" row so the title doesn't jump */
   }
-  .page-head button { pointer-events: auto; }
+  .page-head.with-icon { height: 118px; }
   .add-icon {
     display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--fg-dim);
     font: inherit; font-size: 12.5px; padding: 3px 6px; margin-left: -6px; border-radius: 6px; opacity: 0;
@@ -120,8 +120,7 @@
   }
   .big-icon:hover { background: var(--bg-hover); }
   .big-icon:active { transform: scale(0.95); }
-  .editor.has-head :global(.tiptap) { padding-top: 72px; }
-  .editor.has-head :global(.tiptap.with-icon) { padding-top: 120px; }
+  .editor.has-head :global(.tiptap) { padding-top: 0; min-height: calc(100% - 72px); }
   .suggest {
     position: fixed;
     z-index: 10;

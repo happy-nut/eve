@@ -37,6 +37,17 @@ export function assetUrl(src: string | undefined): string | undefined {
 let convertFileSrcSync: (p: string) => string = (p) => p;
 if (isTauri) import('@tauri-apps/api/core').then((m) => (convertFileSrcSync = m.convertFileSrc));
 
+/** Save an image blob (paste / drop) next to the notes and return its relative path. Browser fallback: data URL. */
+export async function saveImage(file: Blob): Promise<string> {
+  if (!isTauri) {
+    return new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsDataURL(file); });
+  }
+  const ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+  const { invoke: inv } = await import('@tauri-apps/api/core');
+  await storage.path();
+  return inv<string>('save_asset', new Uint8Array(await file.arrayBuffer()), { headers: { 'x-ext': ext } });
+}
+
 /** Open a native file picker, copy the image next to the notes, return its relative path. Null if cancelled. */
 export async function pickImage(): Promise<string | null> {
   if (!isTauri) {

@@ -66,6 +66,33 @@ fn import_asset(app: AppHandle, src: String) -> Result<String, String> {
     Ok(format!("assets/{name}"))
 }
 
+/// Image bytes from the clipboard / a drop, saved into notes/assets. Body = raw bytes, header x-ext = extension.
+#[tauri::command]
+fn save_asset(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    let ext = request
+        .headers()
+        .get("x-ext")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("png")
+        .to_ascii_lowercase();
+    if !["png", "jpg", "jpeg", "gif", "webp", "svg", "heic"].contains(&ext.as_str()) {
+        return Err("unsupported image type".into());
+    }
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b.clone(),
+        _ => return Err("expected raw bytes".into()),
+    };
+    let dir = notes_dir(&app)?.join("assets");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let name = format!("{stamp:x}.{ext}");
+    fs::write(dir.join(&name), bytes).map_err(|e| e.to_string())?;
+    Ok(format!("assets/{name}"))
+}
+
 /// External files (opened via Finder / "Open With"). Edited in place, never synced.
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
@@ -133,6 +160,7 @@ pub fn run() {
             list_notes,
             write_note,
             import_asset,
+            save_asset,
             read_file,
             write_file,
             take_pending_files,

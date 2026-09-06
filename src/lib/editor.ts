@@ -11,7 +11,7 @@ import { Callout } from './callout';
 import { LocalImage } from './image';
 import { ui } from './ui.svelte';
 import { isCustom } from './icons';
-import { pickImage } from './platform';
+import { pickImage, saveImage } from './platform';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
 
@@ -133,6 +133,18 @@ const SLASH: SuggestItem[] = [
   },
 ];
 
+function insertImageFiles(editor: Editor, files?: FileList | null): boolean {
+  const images = [...(files ?? [])].filter((f) => f.type.startsWith('image/'));
+  if (!images.length) return false;
+  (async () => {
+    for (const f of images) {
+      const src = await saveImage(f);
+      editor.chain().focus().setImage({ src }).run();
+    }
+  })();
+  return true;
+}
+
 export function createEditor(opts: {
   element: HTMLElement;
   content: string;
@@ -142,11 +154,16 @@ export function createEditor(opts: {
   suggestionUI: SuggestionUI;
   cursor?: number;
 }) {
-  const editor = new Editor({
+  const editor: Editor = new Editor({
     element: opts.element,
     autofocus: false, // Editor.svelte decides (the sidebar may own focus, e.g. after deleting from the list)
     content: opts.content,
-    editorProps: { attributes: { class: 'prose', spellcheck: 'true' } },
+    editorProps: {
+      attributes: { class: 'prose', spellcheck: 'true' },
+      // images pasted or dropped in are stored as files (blob: URLs would die on restart)
+      handlePaste: (_view, event): boolean => insertImageFiles(editor, event.clipboardData?.files),
+      handleDrop: (_view, event): boolean => insertImageFiles(editor, event.dataTransfer?.files),
+    },
     onCreate: ({ editor }) => {
       if (opts.cursor !== undefined) editor.commands.setTextSelection(Math.min(opts.cursor, editor.state.doc.content.size));
     },
