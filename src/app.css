@@ -1,7 +1,7 @@
 :root {
   /* EVE palette: shell white, soft grays, visor black, eye blue */
-  --fg: #111318;
-  --fg-dim: #6b7280;
+  --fg: #33363d; /* softer than pure black, like Notion's ink */
+  --fg-dim: #7c8089;
   --bg: #ffffff;
   --bg-side: #f2f3f5;
   --bg-pop: #ffffff;
@@ -17,7 +17,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --fg: #e6e8ec;
+    --fg: #d3d6dc;
     --fg-dim: #8b909a;
     --bg: #0b0c10;
     --bg-side: #111318;
@@ -90,7 +90,7 @@ aside:focus-within, main:focus-within { animation: focus-in 0.7s ease-out; }
   font-size: var(--font-size, 15px);
 }
 .tiptap > * + * { margin-top: 0.5em; }
-.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 { font-weight: 650; line-height: 1.25; margin: 1.2em 0 0.3em; letter-spacing: -0.01em; }
+.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 { font-weight: 600; line-height: 1.25; margin: 1.2em 0 0.3em; letter-spacing: -0.01em; }
 .tiptap h1 { font-size: 1.9em; }
 .tiptap h2 { font-size: 1.45em; }
 .tiptap h3 { font-size: 1.15em; }
@@ -98,6 +98,7 @@ aside:focus-within, main:focus-within { animation: focus-in 0.7s ease-out; }
 .tiptap h5 { font-size: 0.9em; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.04em; }
 .tiptap > h1:first-child { margin-top: 0; }
 .tiptap p { margin: 0; }
+.tiptap strong { font-weight: 600; }
 .tiptap p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: var(--fg-dim);
