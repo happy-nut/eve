@@ -59,6 +59,20 @@ export async function pickImage(): Promise<string | null> {
   return invoke<string>('import_asset', { src: path });
 }
 
+/** External files opened through macOS (Open With / double-click). */
+export const files = {
+  read: (path: string) => invoke<string>('read_file', { path }),
+  write: (path: string, text: string) => invoke<void>('write_file', { path, text }),
+  /** Subscribe to open requests; also drains files opened before the UI was ready. */
+  async onOpen(cb: (paths: string[]) => void) {
+    if (!isTauri) return;
+    const { listen } = await import('@tauri-apps/api/event');
+    await listen<string[]>('open-files', (e) => cb(e.payload));
+    const pending = await invoke<string[]>('take_pending_files');
+    if (pending.length) cb(pending);
+  },
+};
+
 export const win = {
   toggle: () => (isTauri ? invoke<void>('toggle_window') : Promise.resolve()),
   hide: () => (isTauri ? invoke<void>('hide_app') : Promise.resolve()),

@@ -1,5 +1,9 @@
-use std::{fs, path::PathBuf};
-use tauri::{AppHandle, Manager, WindowEvent};
+use std::{fs, path::PathBuf, sync::Mutex};
+use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+
+/// Files macOS asked us to open before the frontend was listening.
+#[derive(Default)]
+struct Pending(Mutex<Vec<String>>);
 
 fn notes_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
@@ -62,6 +66,22 @@ fn import_asset(app: AppHandle, src: String) -> Result<String, String> {
     Ok(format!("assets/{name}"))
 }
 
+/// External files (opened via Finder / "Open With"). Edited in place, never synced.
+#[tauri::command]
+fn read_file(path: String) -> Result<String, String> {
+    fs::read_to_string(path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn write_file(path: String, text: String) -> Result<(), String> {
+    fs::write(path, text).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn take_pending_files(pending: tauri::State<Pending>) -> Vec<String> {
+    std::mem::take(&mut *pending.0.lock().unwrap())
+}
+
 #[tauri::command]
 fn notes_path(app: AppHandle) -> Result<String, String> {
     Ok(notes_dir(&app)?.to_string_lossy().into_owned())
@@ -99,10 +119,14 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .manage(Pending::default())
         .invoke_handler(tauri::generate_handler![
             list_notes,
             write_note,
             import_asset,
+            read_file,
+            write_file,
+            take_pending_files,
             notes_path,
             toggle_window,
             hide_app
@@ -114,6 +138,24 @@ pub fn run() {
                 let _ = hide_app(window.app_handle().clone());
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running eve");
+        .build(tauri::generate_context!())
+        .expect("error while building eve")
+        .run(|app, event| {
+            // Finder "Open With", double-click on a .md, `open -a Eve file.md`
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = event {
+                let paths: Vec<String> = urls
+                    .iter()
+                    .filter_map(|u| u.to_file_path().ok())
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .collect();
+                app.state::<Pending>().0.lock().unwrap().extend(paths.clone());
+                let _ = app.emit("open-files", paths);
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = app.show();
+                    let _ = win.show();
+                    let _ = win.set_focus();
+                }
+            }
+        });
 }

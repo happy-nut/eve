@@ -1,4 +1,4 @@
-import { storage } from './platform';
+import { storage, files } from './platform';
 
 export interface Note {
   id: string;
@@ -7,6 +7,8 @@ export interface Note {
   deleted: boolean;
   group: string; // '' = root
   order: number; // manual sort rank within its group (ascending)
+  /** set for external files opened via macOS: edited in place, not synced, not persisted in notes/ */
+  path?: string;
 }
 
 export const newId = () =>
@@ -47,7 +49,8 @@ export function plain(line: string): string {
     .trim();
 }
 
-export function titleOf(n: Pick<Note, 'body'>): string {
+export function titleOf(n: Pick<Note, 'body' | 'path'>): string {
+  if (n.path) return n.path.split('/').pop() ?? n.path;
   const first = n.body.split('\n').find((l) => l.trim()) ?? '';
   return plain(first) || 'Untitled';
 }
@@ -126,8 +129,18 @@ class NotesStore {
     if (!n) return;
     clearTimeout(this.timers.get(id));
     this.timers.delete(id);
-    void storage.write(n.id, serialize(n));
-    this.dirty++;
+    if (n.path) void files.write(n.path, n.body);
+    else { void storage.write(n.id, serialize(n)); this.dirty++; }
+  }
+
+  /** Open an external file in place (or focus it if already open). */
+  async openFile(path: string) {
+    const existing = this.all.find((n) => n.path === path);
+    if (existing) { this.currentId = existing.id; return; }
+    const body = await files.read(path);
+    const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group: '', order: 0, path };
+    this.all.push(n);
+    this.currentId = n.id;
   }
 
   /** Move a note into a group ('' = root), appended at the end. */
@@ -142,7 +155,7 @@ class NotesStore {
    */
   move(id: string, group: string, beforeId: string | null) {
     const n = this.all.find((x) => x.id === id);
-    if (!n || id === beforeId) return;
+    if (!n || id === beforeId || n.path) return;
     const list = this.visible.filter((x) => x.group === group && x.id !== id);
     let order: number;
     if (beforeId) {
@@ -161,12 +174,18 @@ class NotesStore {
     this.flush(id);
   }
 
+  /** Delete a note (tombstone). For an external file this only closes it; the file stays on disk. */
   remove(id: string) {
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
-    n.deleted = true;
-    n.updatedAt = Date.now();
-    this.flush(id);
+    if (n.path) {
+      clearTimeout(this.timers.get(id));
+      this.all = this.all.filter((x) => x.id !== id);
+    } else {
+      n.deleted = true;
+      n.updatedAt = Date.now();
+      this.flush(id);
+    }
     if (this.currentId === id) this.currentId = this.visible[0]?.id ?? null;
     if (!this.currentId) this.create();
   }

@@ -15,6 +15,8 @@ import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
 
 const KEYMAP = new PluginKey('eve-keymap');
+const APP_GUARD = new PluginKey('eve-app-guard');
+let suggestionVisible: () => boolean = () => false;
 
 export const getMarkdown = (editor: Editor): string => (editor.storage as any).markdown.getMarkdown();
 
@@ -66,6 +68,22 @@ export function applyKeymap(editor: Editor) {
     if (a.scope === 'editor' && a.keys && cmds[a.id]) bindings[a.keys] = () => cmds[a.id]();
   }
   editor.unregisterPlugin(KEYMAP);
+  editor.unregisterPlugin(APP_GUARD);
+  // App-scope combos (e.g. ⌘B rebound to "focus sidebar") must not be eaten by the editor's
+  // built-in keymaps; mark the event and stop editor handling so the window listener runs it.
+  const guard = new Plugin({
+    key: APP_GUARD,
+    props: {
+      handleKeyDown: (_view, e) => {
+        if (suggestionVisible()) return false;
+        const a = shortcuts.match(e, ['app']);
+        if (!a || a.id === 'hide') return false;
+        (e as any).eveApp = true;
+        return true;
+      },
+    },
+  });
+  editor.registerPlugin(guard, (p, all) => [p, ...all]);
   const plugin = new Plugin({ key: KEYMAP, props: { handleKeyDown: keydownHandler(bindings) } });
   editor.registerPlugin(plugin, (p, all) => [p, ...all]);
 }
@@ -204,6 +222,7 @@ export function createEditor(opts: {
     ],
     onUpdate: ({ editor }) => opts.onUpdate(getMarkdown(editor)),
   });
+  suggestionVisible = () => opts.suggestionUI.visible();
   applyKeymap(editor);
   if (import.meta.env.DEV) (window as any).__eve = editor;
   return editor;

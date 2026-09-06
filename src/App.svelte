@@ -5,7 +5,7 @@
   import { shortcuts } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { groups } from './lib/groups.svelte';
-  import { setGlobalHotkey, win } from './lib/platform';
+  import { setGlobalHotkey, win, files } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Settings from './Settings.svelte';
@@ -25,7 +25,7 @@
   });
 
   onMount(() => {
-    notes.load();
+    notes.load().then(() => files.onOpen((paths) => paths.forEach((p) => notes.openFile(p))));
     return sync.start();
   });
 
@@ -42,10 +42,11 @@
   }
   async function deleteCurrent() {
     const n = notes.current;
-    if (n && (await ui.ask(`Delete “${titleOf(n)}”?`))) notes.remove(n.id);
+    if (!n) return;
+    if (n.path || (await ui.ask(`Delete “${titleOf(n)}”?`))) notes.remove(n.id);
   }
   function onKeydown(e: KeyboardEvent) {
-    if (e.defaultPrevented || ui.pending) return;
+    if ((e.defaultPrevented && !(e as any).eveApp) || ui.pending) return;
     const a = shortcuts.match(e, ['app']);
     if (!a) return;
     if (a.id === 'hide' && (settingsOpen || document.activeElement === searchEl)) return; // handled locally

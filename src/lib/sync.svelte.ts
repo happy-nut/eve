@@ -40,7 +40,7 @@ class Sync {
     if (!this.enabled || this.status === 'syncing') return false;
     this.status = 'syncing';
     try {
-      const changed = notes.all.filter((n) => (this.pushedAt.get(n.id) ?? -1) < n.updatedAt);
+      const changed = notes.all.filter((n) => !n.path && (this.pushedAt.get(n.id) ?? -1) < n.updatedAt);
       const res = await fetch(this.settings.url.replace(/\/$/, '') + '/sync', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${this.settings.token}` },

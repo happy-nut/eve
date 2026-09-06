@@ -15,9 +15,17 @@
   let query = $state('');
   const q = $derived(query.trim().toLowerCase());
   const filtered = $derived(q ? notes.visible.filter((n) => n.body.toLowerCase().includes(q)) : notes.visible);
-  const inGroup = (g: string) => filtered.filter((n) => n.group === g);
-  // sections: every group, then root. While searching: one flat list.
-  const sections = $derived(q ? [{ name: '', notes: filtered }] : [...groups.names.map((g) => ({ name: g, notes: inGroup(g) })), { name: '', notes: inGroup('') }]);
+  const inGroup = (g: string) => filtered.filter((n) => n.group === g && !n.path);
+  const FILES = '\0files'; // external files opened via macOS
+  // sections: open files, every group, then root. While searching: one flat list.
+  const sections = $derived(
+    q ? [{ name: '', notes: filtered }]
+      : [
+          ...(filtered.some((n) => n.path) ? [{ name: FILES, notes: filtered.filter((n) => n.path) }] : []),
+          ...groups.names.map((g) => ({ name: g, notes: inGroup(g) })),
+          { name: '', notes: inGroup('') },
+        ],
+  );
 
   // ---- drag & drop (native HTML5) ----
   let dragId = $state<string | null>(null);
@@ -90,6 +98,7 @@
     if (await ui.ask(`Delete group “${g}”?${n ? ` Its ${n} note${n > 1 ? 's' : ''} move to Notes.` : ''}`)) groups.remove(g);
   }
   async function removeNote(n: Note) {
+    if (n.path) { notes.remove(n.id); return; } // just closes the file
     if (await ui.ask(`Delete “${titleOf(n)}”?`)) notes.remove(n.id);
   }
   /** ⌥↑ / ⌥↓: move the focused note one visible row up or down, crossing group boundaries. */
@@ -162,10 +171,12 @@
     <div class="tree" role="tree" tabindex="-1" onkeydown={treeKey}>
       {#each sections as s (s.name)}
         {@const collapsed = !q && s.name && groups.isCollapsed(s.name)}
-        <section class:over={over === s.name && dragId !== null} class:root={!s.name}
-          role="group" aria-label={s.name || 'Notes'}
-          ondragover={(e) => dragOver(e, s.name)} ondragleave={() => (over = null)} ondrop={(e) => drop(e, s.name)}>
-          {#if s.name}
+        <section class:over={over === s.name && dragId !== null && s.name !== FILES} class:root={!s.name}
+          role="group" aria-label={s.name === FILES ? 'Files' : s.name || 'Notes'}
+          ondragover={(e) => s.name !== FILES && dragOver(e, s.name)} ondragleave={() => (over = null)} ondrop={(e) => s.name !== FILES && drop(e, s.name)}>
+          {#if s.name === FILES}
+            <div class="ghead root"><span class="gname static">Open files</span></div>
+          {:else if s.name}
             <div class="ghead" class:collapsed>
               {#if groups.editing === s.name}
                 <input class="rename" value={s.name} use:focus onkeydown={(e) => renameKey(e, s.name)}
@@ -185,14 +196,14 @@
             <ul transition:slide={{ duration: 160 }}>
               {#each s.notes as n (n.id)}
                 <li animate:flip={{ duration: 200 }} transition:fade={{ duration: 120 }}
-                  draggable="true" ondragstart={(e) => dragStart(e, n)} ondragend={dragEnd}
+                  draggable={!n.path} ondragstart={(e) => !n.path && dragStart(e, n)} ondragend={dragEnd}
                   ondragover={(e) => rowOver(e, n)} ondrop={(e) => rowDrop(e, n, s.notes)}
                   class:dragging={dragId === n.id}
                   class:drop-before={dropAt?.id === n.id && dropAt.before} class:drop-after={dropAt?.id === n.id && !dropAt.before}>
                   <button data-row data-note={n.id} class:active={n.id === notes.currentId}
                     onclick={(e) => { notes.currentId = n.id; e.currentTarget.focus(); }}>
                     <span class="title">{titleOf(n)}</span>
-                    <span class="meta"><span class="preview">{preview(n.body)}</span><time>{ago(n.updatedAt)}</time></span>
+                    <span class="meta"><span class="preview">{n.path ? n.path.replace(/^\/Users\/[^/]+/, '~') : preview(n.body)}</span><time>{ago(n.updatedAt)}</time></span>
                   </button>
                 </li>
               {/each}
