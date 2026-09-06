@@ -1,32 +1,35 @@
 :root {
-  --fg: #1d1d1f;
-  --fg-dim: #7a7a80;
+  /* EVE palette: shell white, soft grays, visor black, eye blue */
+  --fg: #111318;
+  --fg-dim: #6b7280;
   --bg: #ffffff;
-  --bg-side: #f5f5f7;
+  --bg-side: #f2f3f5;
   --bg-pop: #ffffff;
-  --bg-input: rgba(0, 0, 0, 0.05);
-  --bg-hover: rgba(0, 0, 0, 0.05);
-  --bg-active: rgba(0, 0, 0, 0.09);
-  --line: rgba(0, 0, 0, 0.08);
-  --accent: #3478f6;
-  --accent-soft: rgba(52, 120, 246, 0.25);
-  --code-bg: rgba(0, 0, 0, 0.05);
+  --bg-input: rgba(17, 19, 24, 0.05);
+  --bg-hover: rgba(17, 19, 24, 0.05);
+  --bg-active: rgba(17, 19, 24, 0.09);
+  --line: rgba(17, 19, 24, 0.09);
+  --accent: #1e9bff;
+  --accent-soft: rgba(30, 155, 255, 0.22);
+  --glow: 0 0 0 transparent;
+  --code-bg: rgba(17, 19, 24, 0.05);
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --fg: #e8e8ed;
-    --fg-dim: #8e8e93;
-    --bg: #1e1e20;
-    --bg-side: #27272a;
-    --bg-pop: #2c2c2e;
+    --fg: #e6e8ec;
+    --fg-dim: #8b909a;
+    --bg: #0b0c10;
+    --bg-side: #111318;
+    --bg-pop: #16181d;
     --bg-input: rgba(255, 255, 255, 0.07);
     --bg-hover: rgba(255, 255, 255, 0.06);
-    --bg-active: rgba(255, 255, 255, 0.11);
-    --line: rgba(255, 255, 255, 0.08);
-    --accent: #4d8dff;
-    --accent-soft: rgba(77, 141, 255, 0.3);
-    --code-bg: rgba(255, 255, 255, 0.08);
+    --bg-active: rgba(255, 255, 255, 0.1);
+    --line: rgba(255, 255, 255, 0.09);
+    --accent: #3fc1ff;
+    --accent-soft: rgba(63, 193, 255, 0.28);
+    --glow: 0 0 14px rgba(63, 193, 255, 0.35);
+    --code-bg: rgba(255, 255, 255, 0.07);
   }
 }
 
@@ -105,9 +108,9 @@ main { flex: 1; min-width: 0; position: relative; }
   padding: 0.05em 0.35em;
   border-radius: 4px;
   cursor: pointer;
-  transition: filter 0.12s;
+  transition: filter 0.12s, box-shadow 0.2s;
 }
-.tiptap .wikilink:hover { filter: brightness(1.15); }
+.tiptap .wikilink:hover { filter: brightness(1.15); box-shadow: var(--glow); }
 .tiptap .ProseMirror-selectednode.wikilink, .tiptap .wikilink.ProseMirror-selectednode { outline: 2px solid var(--accent); }
 .tiptap ::selection { background: var(--accent-soft); }
 

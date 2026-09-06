@@ -112,7 +112,7 @@
     transition: box-shadow 0.15s, background 0.15s;
   }
   .chip:hover { background: var(--bg-hover); }
-  .chip.rec { box-shadow: 0 0 0 2px var(--accent); animation: blink 1s infinite; }
+  .chip.rec { box-shadow: 0 0 0 2px var(--accent), var(--glow); animation: blink 1s infinite; }
   @keyframes blink { 50% { box-shadow: 0 0 0 2px transparent; } }
   .hint { color: var(--fg-dim); margin: 4px 0 8px; }
   .err { color: #ff453a; }
@@ -121,6 +121,6 @@
   label { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; color: var(--fg-dim); }
   label input { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-input); color: var(--fg); outline: none; }
   label input:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
-  .primary { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 6px; border: 0; background: var(--accent); color: white; }
+  .primary { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 6px; border: 0; background: var(--accent); color: #0b0c10; font-weight: 600; box-shadow: var(--glow); }
   .primary:disabled { opacity: 0.4; }
 </style>

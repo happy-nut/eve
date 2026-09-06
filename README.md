@@ -1,4 +1,10 @@
+<p align="center"><img src="docs/banner.svg" alt="Eve" width="800"></p>
+
 # Eve
+
+Named after EVE from Pixar's *WALL·E* ([wiki](https://en.wikipedia.org/wiki/WALL-E)): a sleek white shell,
+a black visor, and glowing blue eyes. The theme borrows exactly those four colors — shell white, soft gray,
+visor black, eye blue — with the blue reserved for what matters: links, focus, and the cursor of attention.
 
 Fast, keyboard-first markdown notes for macOS. Summon it from anywhere with a global hotkey,
 type Notion-style markdown, link notes with `[[wiki links]]`, and sync through your own server.

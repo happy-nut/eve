@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 300" width="960" height="300">
+  <defs>
+    <radialGradient id="bg" cx="25%" cy="50%" r="80%"><stop offset="0" stop-color="#1a2230"/><stop offset="1" stop-color="#0a0c11"/></radialGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#d9dde3"/></linearGradient>
+    <linearGradient id="visor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b1e25"/><stop offset="1" stop-color="#05060a"/></linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="960" height="300" rx="24" fill="url(#bg)"/>
+  <g transform="translate(70 40) scale(0.215)">
+    <path fill="url(#body)" d="M512 176c168 0 282 132 282 318 0 190-120 354-282 354S230 684 230 494c0-186 114-318 282-318z"/>
+    <path fill="url(#visor)" d="M512 322c118 0 196 72 196 166 0 92-78 156-196 156s-196-64-196-156c0-94 78-166 196-166z"/>
+    <g fill="#3fc1ff" filter="url(#glow)">
+      <ellipse cx="438" cy="478" rx="58" ry="24" transform="rotate(-14 438 478)"/>
+      <ellipse cx="586" cy="478" rx="58" ry="24" transform="rotate(14 586 478)"/>
+    </g>
+  </g>
+  <text x="330" y="150" font-family="-apple-system, Inter, Helvetica, Arial, sans-serif" font-size="96" font-weight="700" fill="#ffffff" letter-spacing="-3">Eve</text>
+  <text x="332" y="200" font-family="-apple-system, Inter, Helvetica, Arial, sans-serif" font-size="22" fill="#8b909a">Fast, keyboard-first markdown notes for macOS.</text>
+  <text x="332" y="232" font-family="-apple-system, Inter, Helvetica, Arial, sans-serif" font-size="22" fill="#3fc1ff">Summon it from anywhere. ⌘⇧Space</text>
+</svg>

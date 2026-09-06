@@ -93,7 +93,7 @@
     outline: none;
     transition: box-shadow 0.15s;
   }
-  input:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
+  input:focus { box-shadow: 0 0 0 2px var(--accent-soft), var(--glow); }
   ul { list-style: none; margin: 0; padding: 4px 6px; overflow-y: auto; flex: 1; }
   li button {
     width: 100%;
@@ -134,7 +134,7 @@
     background: var(--fg-dim);
     transition: background 0.3s;
   }
-  .sync.ok::before { background: #34c759; }
+  .sync.ok::before { background: var(--accent); box-shadow: var(--glow); }
   .sync.error::before { background: #ff453a; }
   .sync.syncing::before { background: var(--accent); animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: 0.3; } }
