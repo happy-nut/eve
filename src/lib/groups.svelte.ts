@@ -8,11 +8,11 @@ import { notes } from './notes.svelte';
 const LS = 'eve.groups';
 export const MAX_DEPTH = 3;
 
-interface Saved { order: string[]; collapsed: string[] }
+interface Saved { order: string[]; collapsed: string[]; icons: Record<string, string> }
 
 function load(): Saved {
-  try { return { order: [], collapsed: [], ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; }
-  catch { return { order: [], collapsed: [] }; }
+  try { return { order: [], collapsed: [], icons: {}, ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; }
+  catch { return { order: [], collapsed: [], icons: {} }; }
 }
 
 export const parentOf = (p: string) => p.split('/').slice(0, -1).join('/');
@@ -53,6 +53,13 @@ class Groups {
   }
 
   private persist() { localStorage.setItem(LS, JSON.stringify(this.saved)); }
+
+  icon(g: string) { return this.saved.icons[g] ?? ''; }
+  setIcon(g: string, icon: string) {
+    icon = icon.trim();
+    if (icon) this.saved.icons[g] = icon; else delete this.saved.icons[g];
+    this.persist();
+  }
 
   isCollapsed(g: string) { return this.saved.collapsed.includes(g); }
   toggle(g: string) {
@@ -99,6 +106,7 @@ class Groups {
     if (idx < 0) rest.push(...moved); else rest.splice(idx, 0, ...moved);
     this.saved.order = rest;
     this.saved.collapsed = this.saved.collapsed.map((g) => (sub.includes(g) ? map(g) : g));
+    this.saved.icons = Object.fromEntries(Object.entries(this.saved.icons).map(([g, i]) => [sub.includes(g) ? map(g) : g, i]));
     this.persist();
     if (np !== p) for (const n of notes.all) if (!n.deleted && within(n.group, p)) notes.relabel(n.id, map(n.group));
     return np;
@@ -123,6 +131,7 @@ class Groups {
     const sub = this.subtree(p);
     this.saved.order = this.names.filter((g) => !sub.includes(g));
     this.saved.collapsed = this.saved.collapsed.filter((g) => !sub.includes(g));
+    for (const g of sub) delete this.saved.icons[g];
     this.persist();
     for (const n of notes.all) if (!n.deleted && within(n.group, p)) notes.setGroup(n.id, '');
   }

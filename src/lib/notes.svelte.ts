@@ -7,6 +7,7 @@ export interface Note {
   deleted: boolean;
   group: string; // '' = root
   order: number; // manual sort rank within its group (ascending)
+  icon?: string; // emoji shown in the sidebar (Notion-style)
   /** set for external files opened via macOS: edited in place, not synced, not persisted in notes/ */
   path?: string;
 }
@@ -16,7 +17,7 @@ export const newId = () =>
 
 // ---- (de)serialization: markdown with a tiny frontmatter -------------------
 export function serialize(n: Note): string {
-  return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\norder: ${n.order}${n.group ? `\ngroup: ${n.group}` : ''}\n---\n${n.body}`;
+  return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\norder: ${n.order}${n.group ? `\ngroup: ${n.group}` : ''}${n.icon ? `\nicon: ${n.icon}` : ''}\n---\n${n.body}`;
 }
 
 export function parse(text: string): Note | null {
@@ -34,6 +35,7 @@ export function parse(text: string): Note | null {
     updatedAt: Number(meta.updated) || 0,
     deleted: meta.deleted === 'true',
     group: meta.group ?? '',
+    icon: meta.icon || undefined,
     // legacy notes without order: newest first
     order: meta.order !== undefined && !Number.isNaN(Number(meta.order)) ? Number(meta.order) : -(Number(meta.updated) || 0),
   };
@@ -141,6 +143,14 @@ class NotesStore {
     const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group: '', order: 0, path };
     this.all.push(n);
     this.currentId = n.id;
+  }
+
+  setIcon(id: string, icon: string) {
+    const n = this.all.find((x) => x.id === id);
+    if (!n) return;
+    n.icon = icon.trim() || undefined;
+    n.updatedAt = Date.now();
+    this.flush(id);
   }
 
   /** Change a note's group path without touching its rank (used when a group is moved/renamed). */

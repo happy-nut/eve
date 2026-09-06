@@ -193,11 +193,20 @@
         break;
       }
       case 'Enter': if (group) { groups.editing = group; break; } return;
+      case 'i': if (group) pickIcon({ group }); else pickIcon({ note: notes.all.find((n) => n.id === noteId) }); break;
       case 'Escape': document.querySelector<HTMLElement>('.tiptap')?.focus(); break;
       default: return;
     }
     e.preventDefault();
     e.stopPropagation();
+  }
+
+  // ---- icons (emoji) ----
+  async function pickIcon(target: { note?: Note; group?: string }) {
+    const current = target.note ? target.note.icon ?? '' : groups.icon(target.group!);
+    const v = await ui.prompt('Icon — paste an emoji (empty to remove)', current);
+    if (v === null) return;
+    if (target.note) notes.setIcon(target.note.id, v); else groups.setIcon(target.group!, v);
   }
 
   // ---- rename ----
@@ -243,7 +252,11 @@
         class:dragging={drag?.note === n.id} class:drop-before={dropAt?.beforeNote === n.id}>
         <button data-row data-note={n.id} class:active={n.id === notes.currentId} onclick={() => openNote(n)}>
           <span class="title">
-            <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ note: n }); }}>
+              {#if n.icon}<span class="emoji">{n.icon}</span>{:else}
+              <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>{/if}
+            </span>
             <span class="t">{titleOf(n)}</span>
           </span>
           <span class="meta"><span class="preview">{n.path ? n.path.replace(/^\/Users\/[^/]+/, '~') : preview(n.body)}</span><time>{ago(n.updatedAt)}</time></span>
@@ -270,7 +283,11 @@
           ondragstart={(e) => dragStartGroup(e, g)} ondragend={dragEnd} ondragover={(e) => overGroup(e, g)} ondrop={drop}
           onclick={() => groups.toggle(g)} ondblclick={() => (groups.editing = g)}>
           <span class="chev">›</span>
-          <svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H2.5a1 1 0 0 0-1 1z"/></svg>
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ group: g }); }}>
+            {#if groups.icon(g)}<span class="emoji">{groups.icon(g)}</span>{:else}
+            <svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H2.5a1 1 0 0 0-1 1z"/></svg>{/if}
+          </span>
           <span class="t">{leafOf(g)}</span>
           <span class="count">{groups.notesIn(g, true).length}</span>
         </button>
@@ -375,6 +392,9 @@
   .grp.root { min-height: 48px; }
   .body { padding-left: 12px; border-left: 1px solid var(--line); margin-left: 13px; }
   .ico { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; opacity: 0.75; }
+  .ico-slot { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: none; border-radius: 4px; transition: background 0.12s; }
+  .ico-slot:hover { background: var(--bg-active); }
+  .emoji { font-size: 13px; line-height: 1; }
 
   .ghead { position: relative; display: flex; align-items: center; gap: 2px; padding: 4px 2px 2px 2px; }
   .ghead .icon.mini { opacity: 0; width: 20px; height: 20px; font-size: 13px; }
@@ -412,7 +432,7 @@
   li > button:hover { background: var(--bg-hover); }
   li > button:active { transform: scale(0.985); }
   li > button.active { background: var(--bg-active); }
-  [data-row]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; box-shadow: var(--glow); }
+  [data-row]:focus { outline: 2px solid var(--accent); outline-offset: -2px; box-shadow: var(--glow); }
   .title { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .meta { display: flex; gap: 8px; font-size: 11.5px; color: var(--fg-dim); padding-left: 19px; width: 100%; }
