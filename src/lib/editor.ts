@@ -10,6 +10,7 @@ import { WikiLink } from './wikilink';
 import { Callout } from './callout';
 import { LocalImage } from './image';
 import { ui } from './ui.svelte';
+import { isCustom } from './icons';
 import { pickImage } from './platform';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
@@ -121,6 +122,15 @@ const SLASH: SuggestItem[] = [
   { label: 'Divider', hint: '---', run: (e) => e.chain().focus().setHorizontalRule().run() },
   { label: 'Image', hint: 'Pick a file', run: (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); } },
   { label: 'Link to note', hint: '[[ another note', run: (e) => e.chain().focus().insertContent('[[').run() },
+  {
+    label: 'Emoji', hint: '😀 pick one',
+    run: (e) => {
+      const c = e.view.coordsAtPos(e.state.selection.from);
+      ui.pickEmoji(new DOMRect(c.left, c.top, 0, c.bottom - c.top)).then((v) => {
+        if (v && !isCustom(v)) e.chain().focus().insertContent(v).run(); else e.commands.focus();
+      });
+    },
+  },
 ];
 
 export function createEditor(opts: {
