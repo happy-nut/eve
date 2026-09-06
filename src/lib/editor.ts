@@ -98,15 +98,7 @@ function popup(uiRef: SuggestionUI) {
 
 /** The "/" block menu, Notion-style. */
 const SLASH: SuggestItem[] = [
-  { label: 'Text', hint: 'Plain paragraph', run: (e) => e.chain().focus().setParagraph().run() },
-  { label: 'Heading 1', hint: 'Big section heading', run: (e) => e.chain().focus().setHeading({ level: 1 }).run() },
-  { label: 'Heading 2', hint: 'Medium heading', run: (e) => e.chain().focus().setHeading({ level: 2 }).run() },
-  { label: 'Heading 3', hint: 'Small heading', run: (e) => e.chain().focus().setHeading({ level: 3 }).run() },
-  { label: 'Bulleted list', hint: '- item', run: (e) => e.chain().focus().toggleBulletList().run() },
-  { label: 'Numbered list', hint: '1. item', run: (e) => e.chain().focus().toggleOrderedList().run() },
-  { label: 'To-do list', hint: '[ ] task', run: (e) => e.chain().focus().toggleTaskList().run() },
   { label: 'Callout', hint: '💡 highlighted box', run: (e) => e.chain().focus().toggleWrap('callout').run() },
-  { label: 'Quote', hint: '> quotation', run: (e) => e.chain().focus().toggleBlockquote().run() },
   { label: 'Code block', hint: '``` code', run: (e) => e.chain().focus().toggleCodeBlock().run() },
   { label: 'Divider', hint: '---', run: (e) => e.chain().focus().setHorizontalRule().run() },
   { label: 'Image', hint: 'Pick a file', run: (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); } },

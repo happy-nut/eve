@@ -45,6 +45,12 @@
     };
   });
 
+  // keep the highlighted suggestion visible while arrowing through a long list
+  $effect(() => {
+    sel;
+    document.querySelector('.suggest li.sel')?.scrollIntoView({ block: 'nearest' });
+  });
+
   // rebind editor shortcuts live when the user changes them
   $effect(() => { shortcuts.actions; if (editor) applyKeymap(editor); });
 
