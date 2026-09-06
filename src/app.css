@@ -122,6 +122,12 @@ aside:focus-within, main:focus-within { animation: focus-in 0.7s ease-out; }
 .tiptap .wikilink:hover { filter: brightness(1.15); box-shadow: var(--glow); }
 .tiptap .ProseMirror-selectednode.wikilink, .tiptap .wikilink.ProseMirror-selectednode { outline: 2px solid var(--accent); }
 .tiptap ::selection { background: var(--accent-soft); }
+/* WebKit paints "selection gaps" between blocks with the block's own ::selection colour; make list
+   containers, task checkboxes and callout icons transparent so only the text reads as selected */
+.tiptap ul::selection, .tiptap ol::selection, .tiptap li::selection, .tiptap li > div::selection,
+.tiptap label::selection, .tiptap label *::selection, .tiptap blockquote::selection, .tiptap .callout::selection,
+.tiptap .callout-body::selection, .tiptap .callout-emoji::selection { background: transparent; }
+.tiptap ul[data-type='taskList'] li > label, .tiptap .callout-emoji { user-select: none; -webkit-user-select: none; }
 
 /* callout */
 .tiptap .callout {
