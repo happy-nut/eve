@@ -48,14 +48,16 @@ class Groups {
     return name;
   }
 
-  rename(from: string, to: string) {
+  /** Returns the group's final name (unchanged on empty/duplicate input). */
+  rename(from: string, to: string): string {
     to = to.trim();
     this.editing = null;
-    if (!to || to === from || this.names.includes(to)) return;
+    if (!to || to === from || this.names.includes(to)) return from;
     this.saved.order = this.names.map((g) => (g === from ? to : g));
     this.saved.collapsed = this.saved.collapsed.map((g) => (g === from ? to : g));
     this.persist();
     for (const n of notes.all) if (n.group === from) notes.setGroup(n.id, to);
+    return to;
   }
 
   /** delete a group; its notes go back to root */

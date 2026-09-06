@@ -87,8 +87,17 @@
   }
   function renameKey(e: KeyboardEvent, g: string) {
     if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
-    if (e.key === 'Escape') { groups.editing = null; e.stopPropagation(); }
+    if (e.key === 'Escape') { groups.editing = null; focusGroup(g); }
     e.stopPropagation(); // keep app shortcuts out of the input
+  }
+  /** rename input closes -> keep keyboard focus on that group's row */
+  async function finishRename(from: string, value: string) {
+    if (groups.editing !== from) return; // Esc already handled
+    focusGroup(groups.rename(from, value));
+  }
+  async function focusGroup(name: string) {
+    await tick();
+    document.querySelector<HTMLElement>(`aside [data-group="${CSS.escape(name)}"]`)?.focus();
   }
   const focus = (el: HTMLInputElement) => { el.focus(); el.select(); };
 
@@ -180,7 +189,7 @@
             <div class="ghead" class:collapsed>
               {#if groups.editing === s.name}
                 <input class="rename" value={s.name} use:focus onkeydown={(e) => renameKey(e, s.name)}
-                  onblur={(e) => groups.rename(s.name, e.currentTarget.value)} spellcheck="false" />
+                  onblur={(e) => finishRename(s.name, e.currentTarget.value)} spellcheck="false" />
               {:else}
                 <button class="gname" data-row data-group={s.name} onclick={() => groups.toggle(s.name)} ondblclick={() => (groups.editing = s.name)}>
                   <span class="chev">›</span>{s.name}<span class="count">{s.notes.length}</span>
