@@ -482,8 +482,8 @@
   .note-row > button:hover { background: var(--bg-hover); }
   .note-row > button:active { transform: scale(0.985); }
   .note-row > button.active { background: var(--bg-active); }
-  /* keyboard cursor: a soft accent tint with a thin bar on the left; the open note stays neutral grey */
-  [data-row]:focus { outline: none; background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
+  /* keyboard cursor: a soft accent tint; the open note stays neutral grey */
+  [data-row]:focus { outline: none; background: color-mix(in srgb, var(--accent) 14%, transparent); }
   .note-row > button.active:focus { background: color-mix(in srgb, var(--accent) 16%, var(--bg-active)); }
   .title { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
