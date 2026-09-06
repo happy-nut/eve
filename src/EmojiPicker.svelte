@@ -28,6 +28,16 @@
     if (!el) return;
     el.i18n = ko;
     (el as any).customEmoji = CUSTOM_ICONS.map((c) => ({ name: c.label, shortcodes: [c.name], url: customUrl(c), category: '기타' }));
+    // the element always lists custom icons first; move that tab to the far right and mark the
+    // selected tab by background instead of the sliding indicator (which assumes source order)
+    const root = el.shadowRoot;
+    if (root && !root.querySelector('#eve-nav')) {
+      const st = document.createElement('style');
+      st.id = 'eve-nav';
+      st.textContent = `.nav-button[data-group-id="-1"] { order: 99 } .indicator-wrapper { display: none }
+        .nav-button[aria-selected="true"] { background: var(--button-active-background); border-radius: 6px }`;
+      root.append(st);
+    }
   });
 
   function onPick(e: Event) {
