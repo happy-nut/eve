@@ -1,6 +1,6 @@
 <script lang="ts">
   import { flip } from 'svelte/animate';
-  import { fade, slide } from 'svelte/transition';
+  import { fade, slide, scale } from 'svelte/transition';
   import { tick } from 'svelte';
   import { cubicOut } from 'svelte/easing';
   import { notes, titleOf, plain, type Note } from './lib/notes.svelte';
@@ -13,6 +13,22 @@
     { open: boolean; searchEl: HTMLInputElement | null; onSettings: () => void } = $props();
 
   let query = $state('');
+  let plusOpen = $state(false); // "+" dropdown: new note / new group
+  const plusItems = [
+    { label: 'New note', keys: () => shortcuts.keysFor('newNote'), run: () => notes.create() },
+    { label: 'New group', keys: () => shortcuts.keysFor('newGroup'), run: () => groups.create() },
+  ];
+  function plusPick(i: number) { plusOpen = false; plusItems[i].run(); }
+  function plusKey(e: KeyboardEvent) {
+    const items = [...document.querySelectorAll<HTMLElement>('.plus-menu button')];
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    if (e.key === 'ArrowDown') items[(i + 1) % items.length]?.focus();
+    else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length]?.focus();
+    else if (e.key === 'Escape') { plusOpen = false; document.querySelector<HTMLElement>('.plus')?.focus(); }
+    else return;
+    e.preventDefault(); e.stopPropagation();
+  }
+  const autofocus = (el: HTMLElement) => el.focus();
   const q = $derived(query.trim().toLowerCase());
   const filtered = $derived(q ? notes.visible.filter((n) => n.body.toLowerCase().includes(q)) : notes.visible);
   const inGroup = (g: string) => filtered.filter((n) => n.group === g && !n.path);
@@ -172,8 +188,25 @@
     <div class="top" data-tauri-drag-region>
       <input bind:this={searchEl} bind:value={query} onkeydown={onSearchKey}
         placeholder="Search  {prettyKeys(shortcuts.keysFor('search'))}" spellcheck="false" />
-      <button class="icon" title="New group {prettyKeys(shortcuts.keysFor('newGroup'))}" onclick={() => groups.create()}>▢</button>
-      <button class="icon" title="New note {prettyKeys(shortcuts.keysFor('newNote'))}" onclick={() => notes.create()}>+</button>
+      <div class="plus-wrap">
+        <button class="icon plus" class:on={plusOpen} title="New…" aria-haspopup="menu" aria-expanded={plusOpen}
+          onclick={() => (plusOpen = !plusOpen)}>+</button>
+        {#if plusOpen}
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+          <ul class="plus-menu" role="menu" transition:scale={{ start: 0.92, duration: 140 }}
+            onkeydown={plusKey} onfocusout={(e) => { if (!(e.relatedTarget as HTMLElement | null)?.closest('.plus-wrap')) plusOpen = false; }}>
+            {#each plusItems as it, i}
+              <li role="none">
+                {#if i === 0}
+                  <button role="menuitem" use:autofocus onclick={() => plusPick(i)}>{it.label}<kbd>{prettyKeys(it.keys())}</kbd></button>
+                {:else}
+                  <button role="menuitem" onclick={() => plusPick(i)}>{it.label}<kbd>{prettyKeys(it.keys())}</kbd></button>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
     </div>
 
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -249,6 +282,20 @@
     transition: box-shadow 0.15s;
   }
   .top input:focus { box-shadow: 0 0 0 2px var(--accent-soft), var(--glow); }
+  .plus-wrap { position: relative; }
+  .plus { font-size: 18px; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.12s, color 0.12s; }
+  .plus.on { transform: rotate(45deg); background: var(--bg-active); color: var(--fg); }
+  .plus-menu {
+    position: absolute; right: 0; top: 30px; z-index: 10; min-width: 170px; list-style: none; margin: 0; padding: 4px;
+    background: var(--bg-pop); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    transform-origin: top right;
+  }
+  .plus-menu button {
+    width: 100%; display: flex; flex-direction: row; justify-content: space-between; align-items: center; gap: 12px;
+    border: 0; background: none; color: inherit; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 5px; text-align: left;
+  }
+  .plus-menu button:hover, .plus-menu button:focus-visible { background: var(--accent-soft); outline: none; }
+  .plus-menu kbd { font: inherit; font-size: 11.5px; color: var(--fg-dim); }
 
   .tree { flex: 1; overflow-y: auto; padding: 2px 6px 8px; }
   section { border-radius: 8px; padding: 2px; transition: background 0.15s, box-shadow 0.15s; }
