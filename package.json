@@ -37,6 +37,8 @@
     "@tiptap/pm": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
     "@tiptap/suggestion": "^3.31.3",
+    "emoji-picker-element": "^1.29.1",
+    "emoji-picker-element-data": "^1.8.0",
     "tiptap-markdown": "^0.9.0"
   }
 }

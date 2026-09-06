@@ -38,7 +38,7 @@ export const Callout = Node.create({
       emoji.title = 'Change icon';
       emoji.addEventListener('mousedown', async (e) => {
         e.preventDefault();
-        const v = await ui.prompt('Callout icon (emoji)', node.attrs.emoji);
+        const v = await ui.pickEmoji(emoji, node.attrs.emoji);
         if (v?.trim()) editor.chain().focus().command(({ tr }) => {
           tr.setNodeMarkup(getPos()!, undefined, { emoji: v.trim() });
           return true;

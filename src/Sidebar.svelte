@@ -7,10 +7,10 @@
   import { groups, parentOf, leafOf, depthOf, MAX_DEPTH } from './lib/groups.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
-  import { ui } from './lib/ui.svelte';
+  import { ui, hooks } from './lib/ui.svelte';
 
-  let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), openPlus = $bindable(), cmdHeld = false, onSettings }:
-    { open: boolean; searchEl: HTMLInputElement | null; openPlus?: (anchor?: HTMLElement) => void; cmdHeld?: boolean; onSettings: () => void } = $props();
+  let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings }:
+    { open: boolean; searchEl: HTMLInputElement | null; cmdHeld?: boolean; onSettings: () => void } = $props();
   /** ⌘ held: 1…9 badges on the notes in the order shown */
   const jumpNumbers = $derived.by(() => {
     const m = new Map<string, number>();
@@ -62,7 +62,7 @@
   let ctxGroup = $state('');
   let plusFrom: HTMLElement | null = null; // row that had focus when the menu opened
   let plusStyle = $state(''); // anchored under the focused row (⌘N) or under the toolbar + button
-  openPlus = (anchor?: HTMLElement) => {
+  hooks.openPlus = (anchor?: HTMLElement) => {
     if (plusOpen) { plusOpen = false; return; }
     const el = document.activeElement as HTMLElement | null;
     const row = el?.closest<HTMLElement>('[data-row]');
@@ -267,9 +267,10 @@
   }
 
   // ---- icons (emoji) ----
-  async function pickIcon(target: { note?: Note; group?: string }) {
+  async function pickIcon(target: { note?: Note; group?: string }, anchor?: HTMLElement) {
     const current = target.note ? target.note.icon ?? '' : groups.icon(target.group!);
-    const v = await ui.prompt('Icon — paste an emoji (empty to remove)', current);
+    const el = anchor ?? document.querySelector<HTMLElement>(target.note ? `aside [data-note="${target.note.id}"]` : `aside [data-group="${CSS.escape(target.group!)}"]`);
+    const v = await ui.pickEmoji(el ?? new DOMRect(60, 60, 0, 0), current);
     if (v === null) return;
     if (target.note) notes.setIcon(target.note.id, v); else groups.setIcon(target.group!, v);
   }
@@ -351,7 +352,7 @@
               <button data-row data-note={n.id} class:active={n.id === notes.currentId} onclick={() => openNote(n)}>
                 <span class="title">
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
-                  <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ note: n }); }}>
+                  <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ note: n }, e.currentTarget); }}>
                     {#if jumpNumbers.has(n.id)}<span class="num">{jumpNumbers.get(n.id)}</span>
                     {:else if n.icon}<span class="emoji">{n.icon}</span>{:else}
                     <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>{/if}
@@ -374,7 +375,7 @@
                   onclick={() => groups.toggle(g)} ondblclick={() => (groups.editing = g)}>
                   <span class="chev">›</span>
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
-                  <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ group: g }); }}>
+                  <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ group: g }, e.currentTarget); }}>
                     {#if groups.icon(g)}<span class="emoji">{groups.icon(g)}</span>{:else}
                     <svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H2.5a1 1 0 0 0-1 1z"/></svg>{/if}
                   </span>

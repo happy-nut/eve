@@ -50,11 +50,19 @@
     };
   });
 
+  async function changeIcon(anchor: HTMLElement) {
+    const v = await ui.pickEmoji(anchor, note.icon ?? '');
+    if (v !== null) notes.setIcon(note.id, v);
+  }
+
   // keep the highlighted suggestion visible while arrowing through a long list
   $effect(() => {
     sel;
     document.querySelector('.suggest li.sel')?.scrollIntoView({ block: 'nearest' });
   });
+
+  // more top room for the big icon
+  $effect(() => { editor?.view.dom.classList.toggle('with-icon', !!note.icon); });
 
   // rebind editor shortcuts live when the user changes them
   $effect(() => { shortcuts.actions; if (editor) applyKeymap(editor); });
@@ -68,7 +76,19 @@
   });
 </script>
 
-<div class="editor" bind:this={el}></div>
+{#if !note.path}
+  <div class="page-head">
+    {#if note.icon}
+      <button class="big-icon" title="아이콘 변경" onclick={(e) => changeIcon(e.currentTarget)}>{note.icon}</button>
+    {:else}
+      <button class="add-icon" onclick={(e) => changeIcon(e.currentTarget)}>
+        <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 9.5c.6.9 1.5 1.5 2.5 1.5s1.9-.6 2.5-1.5M6 6.5h.01M10 6.5h.01"/></svg>
+        아이콘 추가
+      </button>
+    {/if}
+  </div>
+{/if}
+<div class="editor" class:has-head={!note.path} bind:this={el}></div>
 
 {#if items.length}
   <ul class="suggest" style="left:{pos.x}px; top:{pos.y}px" transition:fly={{ y: 4, duration: 120 }}>
@@ -80,6 +100,27 @@
 
 <style>
   .editor { height: 100%; overflow-y: auto; }
+  .page-head {
+    position: absolute; top: 40px; left: 0; right: 0; z-index: 2; pointer-events: none;
+    max-width: 820px; margin: 0 auto; padding: 0 clamp(24px, 8vw, 96px); box-sizing: border-box;
+  }
+  .page-head button { pointer-events: auto; }
+  .add-icon {
+    display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--fg-dim);
+    font: inherit; font-size: 12.5px; padding: 3px 6px; margin-left: -6px; border-radius: 6px; opacity: 0;
+    transition: opacity 0.15s, background 0.12s;
+  }
+  .add-icon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; }
+  :global(main:hover) .add-icon, .add-icon:focus-visible { opacity: 1; }
+  .add-icon:hover { background: var(--bg-hover); color: var(--fg); }
+  .big-icon {
+    border: 0; background: none; font-size: 56px; line-height: 1; padding: 4px; margin-left: -4px; border-radius: 10px;
+    transition: background 0.12s, transform 0.12s;
+  }
+  .big-icon:hover { background: var(--bg-hover); }
+  .big-icon:active { transform: scale(0.95); }
+  .editor.has-head :global(.tiptap) { padding-top: 72px; }
+  .editor.has-head :global(.tiptap.with-icon) { padding-top: 120px; }
   .suggest {
     position: fixed;
     z-index: 10;

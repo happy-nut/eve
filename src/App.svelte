@@ -10,14 +10,14 @@
   import Editor from './Editor.svelte';
   import Settings from './Settings.svelte';
   import Confirm from './Confirm.svelte';
-  import { ui } from './lib/ui.svelte';
+  import EmojiPicker from './EmojiPicker.svelte';
+  import { ui, hooks } from './lib/ui.svelte';
   import { titleOf } from './lib/notes.svelte';
 
   let sidebarOpen = $state(true);
   let settingsOpen = $state(false);
   let searchEl = $state<HTMLInputElement | null>(null);
   let hotkeyError = $state<string | null>(null);
-  let openPlus = $state<((anchor?: HTMLElement) => void) | undefined>();
   // hold ⌘: sidebar notes show 1…9, ⌘<digit> opens that note
   let cmdHeld = $state(false);
   let cmdTimer: ReturnType<typeof setTimeout> | undefined;
@@ -71,7 +71,7 @@
   }
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Meta') cmdDown();
-    if (ui.pending) return;
+    if (ui.pending || ui.emoji) return;
     if (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
       e.preventDefault();
       jumpTo(Number(e.code[5]));
@@ -85,7 +85,7 @@
     switch (a.id) {
       case 'newNote':
         // from the sidebar, ask what to create (note or group) via the + menu
-        if (document.activeElement?.closest('aside')) openPlus?.();
+        if (document.activeElement?.closest('aside')) hooks.openPlus?.();
         else notes.create();
         break;
       case 'newGroup': sidebarOpen = true; groups.create(); break;
@@ -118,11 +118,11 @@
     <button class="icon" title="Forward {prettyKeys(shortcuts.keysFor('forward'))}" disabled={!notes.canForward} onclick={() => notes.forward()}>
       <svg viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
     </button>
-    <button class="icon" title="New… {prettyKeys(shortcuts.keysFor('newNote'))}" onclick={(e) => (sidebarOpen && openPlus ? openPlus(e.currentTarget) : notes.create())}>
+    <button class="icon" title="New… {prettyKeys(shortcuts.keysFor('newNote'))}" onclick={(e) => (sidebarOpen && hooks.openPlus ? hooks.openPlus(e.currentTarget) : notes.create())}>
       <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
     </button>
   </div>
-  <Sidebar bind:open={sidebarOpen} bind:searchEl bind:openPlus {cmdHeld} onSettings={() => (settingsOpen = true)} />
+  <Sidebar bind:open={sidebarOpen} bind:searchEl {cmdHeld} onSettings={() => (settingsOpen = true)} />
   <main>
     {#if notes.loaded && notes.current}
       {#key notes.currentId}
@@ -139,4 +139,7 @@
 {/if}
 {#if ui.pending}
   <Confirm />
+{/if}
+{#if ui.emoji}
+  <EmojiPicker />
 {/if}
