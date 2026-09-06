@@ -143,6 +143,15 @@ class NotesStore {
     this.currentId = n.id;
   }
 
+  /** Change a note's group path without touching its rank (used when a group is moved/renamed). */
+  relabel(id: string, group: string) {
+    const n = this.all.find((x) => x.id === id);
+    if (!n || n.group === group) return;
+    n.group = group;
+    n.updatedAt = Date.now();
+    this.flush(id);
+  }
+
   /** Move a note into a group ('' = root), appended at the end. */
   setGroup(id: string, group: string) {
     this.move(id, group, null);
