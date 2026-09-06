@@ -102,7 +102,7 @@
   .editor { height: 100%; overflow-y: auto; }
   .page-head {
     position: absolute; top: 40px; left: 0; right: 0; z-index: 2; pointer-events: none;
-    max-width: 820px; margin: 0 auto; padding: 0 clamp(24px, 8vw, 96px); box-sizing: border-box;
+    max-width: var(--editor-width, 820px); margin: 0 auto; padding: 0 clamp(24px, 8vw, 96px); box-sizing: border-box;
   }
   .page-head button { pointer-events: auto; }
   .add-icon {

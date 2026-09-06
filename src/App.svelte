@@ -5,6 +5,8 @@
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { groups } from './lib/groups.svelte';
+  import { appearance } from './lib/appearance.svelte';
+  appearance.apply();
   import { setGlobalHotkey, win, files, autostart, isTauri } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';

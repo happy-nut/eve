@@ -5,12 +5,13 @@
   import { sync } from './lib/sync.svelte';
   import { storage, autostart, isTauri } from './lib/platform';
   import { ui } from './lib/ui.svelte';
+  import { appearance, FONTS } from './lib/appearance.svelte';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
 
   let recording = $state<string | null>(null);
   let conflict = $state<{ id: string; keys: string; with: string } | null>(null);
-  let tab = $state<'shortcuts' | 'sync'>('shortcuts');
+  let tab = $state<'shortcuts' | 'font' | 'sync'>('shortcuts');
   let notesPath = $state('');
   let launchAtLogin = $state(false);
   onMount(() => { storage.path().then((p) => (notesPath = p)); autostart.get().then((v) => (launchAtLogin = v)); });
@@ -45,6 +46,7 @@
   <header>
     <nav>
       <button class:on={tab === 'shortcuts'} onclick={() => (tab = 'shortcuts')}>Shortcuts</button>
+      <button class:on={tab === 'font'} onclick={() => (tab = 'font')}>Font</button>
       <button class:on={tab === 'sync'} onclick={() => (tab = 'sync')}>Sync & app</button>
     </nav>
     <button class="icon" onclick={onClose} title="Close (Esc)">✕</button>
@@ -69,6 +71,27 @@
         {/each}
       {/each}
       <button class="link" onclick={() => shortcuts.reset()}>Reset all to defaults</button>
+    </section>
+  {:else if tab === 'font'}
+    <section>
+      <label>Editor font
+        <select value={appearance.s.font} onchange={(e) => appearance.set({ font: e.currentTarget.value })}>
+          {#each FONTS as f}<option value={f.id}>{f.label}</option>{/each}
+        </select>
+      </label>
+      {#if appearance.s.font === 'custom'}
+        <label>Font family (CSS) <input value={appearance.s.custom} oninput={(e) => appearance.set({ custom: e.currentTarget.value })} placeholder="'Pretendard', 'Noto Sans KR', sans-serif" spellcheck="false" /></label>
+      {/if}
+      <label class="row check"><span>Size <span class="hint">{appearance.s.size}px</span></span>
+        <input type="range" min="12" max="24" step="1" value={appearance.s.size} oninput={(e) => appearance.set({ size: Number(e.currentTarget.value) })} /></label>
+      <label class="row check"><span>Line height <span class="hint">{appearance.s.lineHeight}</span></span>
+        <input type="range" min="1.2" max="2.2" step="0.05" value={appearance.s.lineHeight} oninput={(e) => appearance.set({ lineHeight: Number(e.currentTarget.value) })} /></label>
+      <label class="row check"><span>Text width <span class="hint">{appearance.s.width}px</span></span>
+        <input type="range" min="520" max="1400" step="20" value={appearance.s.width} oninput={(e) => appearance.set({ width: Number(e.currentTarget.value) })} /></label>
+      <p class="sample" style="font-family: {appearance.stack}; font-size: {appearance.s.size}px; line-height: {appearance.s.lineHeight}">
+        The quick brown fox jumps over the lazy dog. 다람쥐 헌 쳇바퀴에 타고파. 0123456789
+      </p>
+      <button class="link" onclick={() => appearance.reset()}>Reset to defaults</button>
     </section>
   {:else}
     <section>
@@ -139,7 +162,10 @@
   label { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; color: var(--fg-dim); }
   label.check { flex-direction: row; justify-content: space-between; align-items: center; color: var(--fg); }
   label.check .hint { display: block; margin: 0; font-size: 11.5px; }
-  label.check input { accent-color: var(--accent); width: 16px; height: 16px; }
+  label.check input[type='checkbox'] { accent-color: var(--accent); width: 16px; height: 16px; }
+  label.check input[type='range'] { accent-color: var(--accent); width: 180px; }
+  select { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-input); color: var(--fg); }
+  .sample { margin: 14px 0 6px; padding: 12px 14px; border-radius: 8px; background: var(--bg-input); color: var(--fg); }
   label input { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-input); color: var(--fg); outline: none; }
   label input:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   .primary { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 6px; border: 0; background: var(--accent); color: #0b0c10; font-weight: 600; box-shadow: var(--glow); }

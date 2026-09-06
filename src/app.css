@@ -78,11 +78,12 @@ aside:focus-within, main:focus-within { animation: focus-in 0.7s ease-out; }
   outline: none;
   min-height: 100%;
   padding: 44px clamp(24px, 8vw, 96px) 40vh;
-  max-width: 820px;
+  max-width: var(--editor-width, 820px);
   margin: 0 auto;
   user-select: text;
-  line-height: 1.6;
-  font-size: 15px;
+  font-family: var(--font-editor, inherit);
+  line-height: var(--line-height, 1.6);
+  font-size: var(--font-size, 15px);
 }
 .tiptap > * + * { margin-top: 0.5em; }
 .tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 { font-weight: 650; line-height: 1.25; margin: 1.2em 0 0.3em; letter-spacing: -0.01em; }
