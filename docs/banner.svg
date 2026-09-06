@@ -28,11 +28,11 @@
         d="M512 168c188 0 318 138 318 326 0 176-124 342-318 342S194 670 194 494c0-188 130-326 318-326z"/>
   <!-- visor: rounded inverted triangle -->
   <path fill="url(#visor)"
-        d="M286 542 C286 616 386 666 512 666 C638 666 738 616 738 542 C738 482 690 392 630 336 C560 282 464 282 394 336 C334 392 286 482 286 542 Z"/>
+        d="M512 312 C612 312 730 418 730 542 C730 626 640 674 512 674 C384 674 294 626 294 542 C294 418 412 312 512 312 Z"/>
   <!-- eyes -->
   <g fill="#3fc1ff" filter="url(#glow)">
-    <ellipse cx="442" cy="500" rx="60" ry="38" transform="rotate(14 442 500)"/>
-    <ellipse cx="582" cy="500" rx="60" ry="38" transform="rotate(-14 582 500)"/>
+    <ellipse cx="444" cy="506" rx="60" ry="38" transform="rotate(14 444 506)"/>
+    <ellipse cx="580" cy="506" rx="60" ry="38" transform="rotate(-14 580 506)"/>
   </g>
 </g>
   <text x="330" y="150" font-family="-apple-system, Inter, Helvetica, Arial, sans-serif" font-size="96" font-weight="700" fill="#ffffff" letter-spacing="-3">Eve</text>

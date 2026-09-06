@@ -58,11 +58,13 @@ class Shortcuts {
   keysFor(id: string) {
     return this.actions.find((a) => a.id === id)?.keys ?? '';
   }
-  set(id: string, keys: string) {
-    // steal the combo from any other action bound to it
-    for (const a of this.actions) if (a.keys === keys && a.id !== id) this.overrides[a.id] = '';
+  /** Bind `keys` to `id`. Returns the conflicting action instead if another action already uses them. */
+  set(id: string, keys: string): Action | null {
+    const clash = this.actions.find((a) => a.keys === keys && a.id !== id);
+    if (clash) return clash;
     this.overrides[id] = keys;
     localStorage.setItem(LS_KEY, JSON.stringify(this.overrides));
+    return null;
   }
   reset(id?: string) {
     if (id) delete this.overrides[id];

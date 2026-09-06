@@ -46,7 +46,7 @@ npm run bundle     # builds src-tauri/target/release/bundle/macos/Eve.app (~4 MB
 | editor | Bullets / Numbers / To-dos      | `⌘⇧8` `⌘⇧7` `⌘⇧9` |
 | editor | Quote / Code block / Divider    | `⌘⇧.` `⌘⌥C` `⌘⇧-` |
 
-Change any of them in Settings → Shortcuts: click the key chip, press the new combo. Applies immediately.
+Change any of them in Settings → Shortcuts: click the key chip, press the new combo. Applies immediately; a combo already used by another action is refused and the conflict is named.
 
 ## Sync server
 

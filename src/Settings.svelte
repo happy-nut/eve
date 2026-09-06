@@ -9,6 +9,7 @@
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
 
   let recording = $state<string | null>(null);
+  let conflict = $state<{ id: string; keys: string; with: string } | null>(null);
   let tab = $state<'shortcuts' | 'sync'>('shortcuts');
   let notesPath = $state('');
   onMount(() => { storage.path().then((p) => (notesPath = p)); });
@@ -23,10 +24,12 @@
     if (ui.pending) return;
     if (recording) {
       e.preventDefault(); e.stopPropagation();
-      if (e.key === 'Escape') { recording = null; return; }
+      if (e.key === 'Escape') { recording = null; conflict = null; return; }
       const keys = eventToKeys(e);
       if (!keys) return; // modifier only, keep waiting
-      shortcuts.set(recording, keys);
+      const clash = shortcuts.set(recording, keys);
+      if (clash) { conflict = { id: recording, keys, with: clash.label }; return; } // keep recording
+      conflict = null;
       recording = null;
       return;
     }
@@ -55,10 +58,13 @@
         {#each shortcuts.actions.filter((a) => a.scope === g.scope) as a (a.id)}
           <div class="row">
             <span>{a.label}</span>
-            <button class="chip" class:rec={recording === a.id} onclick={() => (recording = a.id)}>
+            <button class="chip" class:rec={recording === a.id} class:bad={conflict?.id === a.id} onclick={() => { recording = a.id; conflict = null; }}>
               {recording === a.id ? 'press keys…' : a.keys ? prettyKeys(a.keys) : 'unbound'}
             </button>
           </div>
+          {#if conflict?.id === a.id}
+            <p class="err conflict">{prettyKeys(conflict.keys)} is already used by “{conflict.with}”. Try another combination, or Esc to cancel.</p>
+          {/if}
         {/each}
       {/each}
       <button class="link" onclick={() => shortcuts.reset()}>Reset all to defaults</button>
@@ -115,6 +121,9 @@
   }
   .chip:hover { background: var(--bg-hover); }
   .chip.rec { box-shadow: 0 0 0 2px var(--accent), var(--glow); animation: blink 1s infinite; }
+  .chip.bad { box-shadow: 0 0 0 2px #ff453a; animation: shake 0.3s; }
+  @keyframes shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+  .conflict { margin: 0 0 6px; font-size: 12px; }
   @keyframes blink { 50% { box-shadow: 0 0 0 2px transparent; } }
   .hint { color: var(--fg-dim); margin: 4px 0 8px; }
   .err { color: #ff453a; }
