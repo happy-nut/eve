@@ -8,6 +8,7 @@
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { ui, hooks } from './lib/ui.svelte';
+  import Icon from './Icon.svelte';
 
   let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings }:
     { open: boolean; searchEl: HTMLInputElement | null; cmdHeld?: boolean; onSettings: () => void } = $props();
@@ -354,7 +355,7 @@
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ note: n }, e.currentTarget); }}>
                     {#if jumpNumbers.has(n.id)}<span class="num">{jumpNumbers.get(n.id)}</span>
-                    {:else if n.icon}<span class="emoji">{n.icon}</span>{:else}
+                    {:else if n.icon}<Icon icon={n.icon} />{:else}
                     <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>{/if}
                   </span>
                   <span class="t">{titleOf(n)}</span>
@@ -376,7 +377,7 @@
                   <span class="chev">›</span>
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ group: g }, e.currentTarget); }}>
-                    {#if groups.icon(g)}<span class="emoji">{groups.icon(g)}</span>{:else}
+                    {#if groups.icon(g)}<Icon icon={groups.icon(g)} />{:else}
                     <svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H2.5a1 1 0 0 0-1 1z"/></svg>{/if}
                   </span>
                   <span class="t">{leafOf(g)}</span>

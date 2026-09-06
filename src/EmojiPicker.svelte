@@ -3,6 +3,7 @@
   import dataSource from 'emoji-picker-element-data/en/emojibase/data.json?url';
   import { fade, scale } from 'svelte/transition';
   import { ui } from './lib/ui.svelte';
+  import { CUSTOM_ICONS, customUrl } from './lib/icons';
 
   const req = $derived(ui.emoji!);
   let el: HTMLElement & { i18n?: unknown };
@@ -19,13 +20,20 @@
     skinToneLabel: '피부색 선택 (현재 {skinTone})', skinTonesLabel: '피부색',
     skinTones: ['기본', '밝은', '약간 밝은', '중간', '약간 어두운', '어두운'],
     categories: {
-      custom: '사용자', 'smileys-emotion': '표정 및 사람', 'people-body': '사람 및 신체', 'animals-nature': '동물 및 자연',
+      custom: '기타', 'smileys-emotion': '표정 및 사람', 'people-body': '사람 및 신체', 'animals-nature': '동물 및 자연',
       'food-drink': '음식 및 음료', 'travel-places': '여행 및 장소', activities: '활동', objects: '사물', symbols: '기호', flags: '깃발',
     },
   };
-  $effect(() => { if (el) el.i18n = ko; });
+  $effect(() => {
+    if (!el) return;
+    el.i18n = ko;
+    (el as any).customEmoji = CUSTOM_ICONS.map((c) => ({ name: c.label, shortcodes: [c.name], url: customUrl(c), category: '기타' }));
+  });
 
-  function onPick(e: Event) { ui.emojiDone((e as CustomEvent).detail.unicode); }
+  function onPick(e: Event) {
+    const d = (e as CustomEvent).detail;
+    ui.emojiDone(d.unicode ?? `:${d.emoji.shortcodes[0]}:`);
+  }
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); ui.emojiDone(null); }
   }
@@ -59,6 +67,6 @@
     --input-placeholder-color: var(--fg-dim); --input-border-radius: 8px; --input-padding: 7px 10px; --input-font-size: 13px;
     --outline-color: var(--accent); --category-font-color: var(--fg-dim); --category-font-size: 11.5px;
     --button-hover-background: var(--bg-hover); --button-active-background: var(--bg-active);
-    --emoji-size: 1.35rem; --emoji-padding: 0.4rem; --num-columns: 9; --skintone-border-radius: 8px;
+    --emoji-size: 1.35rem; --emoji-padding: 0.4rem; --num-columns: 9; --skintone-border-radius: 8px; --custom-emoji-size: 1.35rem;
   }
 </style>

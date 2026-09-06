@@ -83,9 +83,25 @@ export const autostart = {
   },
 };
 
+/** Summon / dismiss with a short fade. The window is transparent, so fading <body> fades the whole thing. */
+const FADE_MS = 140;
+const html = () => document.documentElement;
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+async function fadeIn() {
+  html().classList.add('fx-hidden'); // opacity 0 before the window appears
+  await invoke<void>('show_window');
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  html().classList.remove('fx-hidden');
+}
+async function fadeOut() {
+  html().classList.add('fx-hidden');
+  await wait(FADE_MS);
+  await invoke<void>('hide_app');
+  html().classList.remove('fx-hidden'); // ready for next time (window is hidden now)
+}
 export const win = {
-  toggle: () => (isTauri ? invoke<void>('toggle_window') : Promise.resolve()),
-  hide: () => (isTauri ? invoke<void>('hide_app') : Promise.resolve()),
+  toggle: async () => { if (!isTauri) return; (await invoke<boolean>('is_front')) ? fadeOut() : fadeIn(); },
+  hide: () => (isTauri ? fadeOut() : Promise.resolve()),
 };
 
 /** Register the global "summon" hotkey. Re-callable: unregisters everything first. */

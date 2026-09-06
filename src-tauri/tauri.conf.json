@@ -22,7 +22,9 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "alwaysOnTop": false,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "transparent": true,
+        "shadow": true
       }
     ],
     "security": {
@@ -33,7 +35,8 @@
           "$APPDATA/notes/assets/**"
         ]
       }
-    }
+    },
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,

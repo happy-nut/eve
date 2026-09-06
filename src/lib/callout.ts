@@ -1,5 +1,11 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ui } from './ui.svelte';
+import { customIcon } from './icons';
+
+const renderIcon = (el: HTMLElement, icon: string) => {
+  const c = customIcon(icon);
+  if (c) el.innerHTML = c.svg; else el.textContent = icon;
+};
 
 /**
  * Notion-style callout: emoji + colored box. Markdown form (Obsidian-compatible-ish):
@@ -34,7 +40,7 @@ export const Callout = Node.create({
       const emoji = document.createElement('span');
       emoji.className = 'callout-emoji';
       emoji.contentEditable = 'false';
-      emoji.textContent = node.attrs.emoji;
+      renderIcon(emoji, node.attrs.emoji);
       emoji.title = 'Change icon';
       emoji.addEventListener('mousedown', async (e) => {
         e.preventDefault();
@@ -52,7 +58,7 @@ export const Callout = Node.create({
         contentDOM,
         update: (n) => {
           if (n.type.name !== 'callout') return false;
-          emoji.textContent = n.attrs.emoji;
+          renderIcon(emoji, n.attrs.emoji);
           dom.dataset.callout = n.attrs.emoji;
           return true;
         },

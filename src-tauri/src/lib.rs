@@ -87,20 +87,28 @@ fn notes_path(app: AppHandle) -> Result<String, String> {
     Ok(notes_dir(&app)?.to_string_lossy().into_owned())
 }
 
+/// Is the main window currently visible and frontmost? (the frontend decides whether to summon or dismiss)
+#[tauri::command]
+fn is_front(app: AppHandle) -> bool {
+    app.get_webview_window("main")
+        .map(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false))
+        .unwrap_or(false)
+}
+
+/// Show + focus the main window.
+#[tauri::command]
+fn show_window(app: AppHandle) -> Result<(), String> {
+    let win = app.get_webview_window("main").ok_or("no main window")?;
+    #[cfg(target_os = "macos")]
+    app.show().map_err(|e| e.to_string())?;
+    win.show().map_err(|e| e.to_string())?;
+    win.set_focus().map_err(|e| e.to_string())
+}
+
 /// Show + focus the main window, or hide the whole app (returning focus to the previous app).
 #[tauri::command]
 fn toggle_window(app: AppHandle) -> Result<(), String> {
-    let win = app.get_webview_window("main").ok_or("no main window")?;
-    let visible = win.is_visible().unwrap_or(false);
-    let focused = win.is_focused().unwrap_or(false);
-    if visible && focused {
-        hide_app(app)
-    } else {
-        #[cfg(target_os = "macos")]
-        app.show().map_err(|e| e.to_string())?;
-        win.show().map_err(|e| e.to_string())?;
-        win.set_focus().map_err(|e| e.to_string())
-    }
+    if is_front(app.clone()) { hide_app(app) } else { show_window(app) }
 }
 
 #[tauri::command]
@@ -130,6 +138,8 @@ pub fn run() {
             take_pending_files,
             notes_path,
             toggle_window,
+            is_front,
+            show_window,
             hide_app
         ])
         .on_window_event(|window, event| {

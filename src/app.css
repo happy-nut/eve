@@ -35,11 +35,15 @@
 
 * { box-sizing: border-box; }
 html, body, #app { height: 100%; margin: 0; }
+/* the native window is transparent: the page paints its own rounded surface, so summon/dismiss can fade */
+html, body { background: transparent; }
+#app { background: var(--bg); border-radius: 10px; overflow: hidden; }
+body { transition: opacity 0.14s ease-out, transform 0.14s ease-out; }
+html.fx-hidden body { opacity: 0; transform: scale(0.985); }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif;
   font-size: 14px;
   color: var(--fg);
-  background: var(--bg);
   -webkit-font-smoothing: antialiased;
   user-select: none;
   overflow: hidden;
@@ -140,6 +144,7 @@ aside:focus-within, main:focus-within { animation: focus-in 0.7s ease-out; }
   background: var(--accent-soft); border-radius: 8px; padding: 12px 14px; margin: 0.6em 0;
 }
 .tiptap .callout-emoji { font-size: 1.15em; line-height: 1.5; cursor: pointer; user-select: none; }
+.tiptap .callout-emoji svg { width: 1.2em; height: 1.2em; vertical-align: -0.2em; }
 .tiptap .callout-body { flex: 1; min-width: 0; }
 .tiptap .callout-body > * + * { margin-top: 0.4em; }
 /* image */
