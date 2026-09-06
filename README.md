@@ -17,7 +17,7 @@ type Notion-style markdown, link notes with `[[wiki links]]`, and sync through y
 ```bash
 npm install
 npm run app        # tauri dev (needs Rust: https://rustup.rs)
-npm run bundle     # builds Jot.app + .dmg into src-tauri/target/release/bundle
+npm run bundle     # builds src-tauri/target/release/bundle/macos/Jot.app (~4 MB); drag it to /Applications
 ```
 
 `npm run dev` runs the UI alone in a browser (notes go to localStorage) — handy for UI work.
