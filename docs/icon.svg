@@ -29,7 +29,7 @@
         d="M512 306 C664 306 734 414 734 526 C734 632 640 678 512 678 C384 678 290 632 290 526 C290 414 360 306 512 306 Z"/>
   <!-- eyes -->
   <g fill="#3fc1ff" filter="url(#glow)">
-    <ellipse cx="444" cy="506" rx="60" ry="38" transform="rotate(14 444 506)"/>
-    <ellipse cx="580" cy="506" rx="60" ry="38" transform="rotate(-14 580 506)"/>
+    <ellipse cx="424" cy="506" rx="60" ry="38" transform="rotate(14 424 506)"/>
+    <ellipse cx="600" cy="506" rx="60" ry="38" transform="rotate(-14 600 506)"/>
   </g>
 </svg>
