@@ -9,8 +9,9 @@
   let el: HTMLElement & { i18n?: unknown };
   // keep the panel inside the window
   const W = 352, H = 400;
+  const TOP = 44; // stay clear of the traffic lights / toolbar strip
   const x = $derived(Math.max(8, Math.min(req.x, window.innerWidth - W - 8)));
-  const y = $derived(req.y + H > window.innerHeight - 8 ? Math.max(8, req.y - H - 40) : req.y);
+  const y = $derived(Math.max(TOP, req.y + H > window.innerHeight - 8 ? req.y - H - 40 : req.y));
 
   const ko = {
     categoriesLabel: '카테고리', emojiUnsupportedMessage: '이 브라우저는 컬러 이모지를 지원하지 않습니다.',
