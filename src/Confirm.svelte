@@ -3,34 +3,35 @@
   import { ui } from './lib/ui.svelte';
 
   const p = $derived(ui.pending!);
-  // give focus back to where it was (sidebar row, editor) when the dialog closes
+  // give focus back to where it was (sidebar row, editor) the moment the dialog closes —
+  // synchronously, before any list re-render, so a later focusRow() can still override it
   const returnTo = document.activeElement as HTMLElement | null;
-  $effect(() => () => returnTo?.isConnected && returnTo.focus());
+  function done(v: string | null) { returnTo?.isConnected && returnTo.focus(); ui.done(v); }
   let value = $state('');
   $effect(() => { value = p.input ?? ''; });
 
   function onKey(e: KeyboardEvent) {
     e.stopPropagation();
-    if (e.key === 'Escape') { e.preventDefault(); ui.done(null); }
-    if (e.key === 'Enter') { e.preventDefault(); ui.done(p.input !== undefined ? value : 'yes'); }
+    if (e.key === 'Escape') { e.preventDefault(); done(null); }
+    if (e.key === 'Enter') { e.preventDefault(); done(p.input !== undefined ? value : 'yes'); }
   }
   const focus = (el: HTMLElement) => { el.focus(); if (el instanceof HTMLInputElement) el.select(); };
 </script>
 
 <svelte:window onkeydown={onKey} />
 
-<div class="backdrop" transition:fade={{ duration: 120 }} onmousedown={() => ui.done(null)} role="presentation"></div>
+<div class="backdrop" transition:fade={{ duration: 120 }} onmousedown={() => done(null)} role="presentation"></div>
 <div class="box" transition:scale={{ start: 0.94, duration: 160 }} role="dialog">
   <p>{p.message}</p>
   {#if p.input !== undefined}
     <input bind:value use:focus spellcheck="false" />
   {/if}
   <div class="actions">
-    <button onclick={() => ui.done(null)}>Cancel</button>
+    <button onclick={() => done(null)}>Cancel</button>
     {#if p.input !== undefined}
-      <button class="primary" onclick={() => ui.done(value)}>OK</button>
+      <button class="primary" onclick={() => done(value)}>OK</button>
     {:else}
-      <button class="primary" class:danger={p.danger} use:focus onclick={() => ui.done('yes')}>Delete</button>
+      <button class="primary" class:danger={p.danger} use:focus onclick={() => done('yes')}>Delete</button>
     {/if}
   </div>
 </div>

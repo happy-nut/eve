@@ -38,7 +38,7 @@
     (plusFrom?.isConnected ? plusFrom : document.querySelector<HTMLElement>('aside [data-row]'))?.focus();
   }
   const plusItems = $derived([
-    { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', keys: shortcuts.keysFor('newNote'), run: () => notes.create('', ctxGroup) },
+    { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', keys: shortcuts.keysFor('newNote'), run: () => focusRow(`[data-note="${notes.create('', ctxGroup).id}"]`) },
     {
       label: ctxGroup && depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : 'New group',
       keys: shortcuts.keysFor('newGroup'),
@@ -396,9 +396,13 @@
   .ico-slot:hover { background: var(--bg-active); }
   .emoji { font-size: 13px; line-height: 1; }
 
-  .ghead { position: relative; display: flex; align-items: center; gap: 2px; padding: 4px 2px 2px 2px; }
-  .ghead .icon.mini { opacity: 0; width: 20px; height: 20px; font-size: 13px; }
+  .ghead { position: relative; display: flex; align-items: center; padding: 3px 0 1px; }
+  /* + and × float over the right edge on hover, so the header row itself spans the full width */
+  .ghead .icon.mini { position: absolute; top: 50%; transform: translateY(-50%); opacity: 0; width: 20px; height: 20px; font-size: 13px; background: var(--bg-side); }
+  .ghead .icon.mini { right: 22px; }
+  .ghead .icon.mini + .icon.mini { right: 2px; }
   .ghead:hover .icon.mini { opacity: 1; }
+  .ghead:hover .count { opacity: 0; }
   .gname {
     flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px;
     border: 0; background: none; color: var(--fg); font: inherit; font-size: 12.5px; font-weight: 600;
@@ -409,7 +413,7 @@
   .gname .t { overflow: hidden; text-overflow: ellipsis; }
   .chev { display: inline-block; width: 10px; color: var(--fg-dim); font-size: 14px; line-height: 1; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); transform: rotate(90deg); }
   .collapsed .chev { transform: rotate(0deg); }
-  .count { margin-left: auto; font-weight: 500; font-size: 11px; color: var(--fg-dim); padding-left: 6px; }
+  .count { margin-left: auto; font-weight: 500; font-size: 11px; color: var(--fg-dim); padding-left: 6px; transition: opacity 0.12s; }
   .rename {
     flex: 1; min-width: 0; font: inherit; font-size: 12.5px; padding: 3px 6px; border-radius: 4px;
     border: 1px solid var(--accent); background: var(--bg-input); color: var(--fg); outline: none; box-shadow: var(--glow);
@@ -432,7 +436,9 @@
   li > button:hover { background: var(--bg-hover); }
   li > button:active { transform: scale(0.985); }
   li > button.active { background: var(--bg-active); }
-  [data-row]:focus { outline: 2px solid var(--accent); outline-offset: -2px; box-shadow: var(--glow); }
+  /* keyboard cursor: a soft accent tint with a thin bar on the left; the open note stays neutral grey */
+  [data-row]:focus { outline: none; background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
+  li > button.active:focus { background: color-mix(in srgb, var(--accent) 16%, var(--bg-active)); }
   .title { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .meta { display: flex; gap: 8px; font-size: 11.5px; color: var(--fg-dim); padding-left: 19px; width: 100%; }
