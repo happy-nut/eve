@@ -9,8 +9,8 @@
   import { sync } from './lib/sync.svelte';
   import { ui } from './lib/ui.svelte';
 
-  let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), onSettings }:
-    { open: boolean; searchEl: HTMLInputElement | null; onSettings: () => void } = $props();
+  let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), openPlus = $bindable(), onSettings }:
+    { open: boolean; searchEl: HTMLInputElement | null; openPlus?: (anchor?: HTMLElement) => void; onSettings: () => void } = $props();
 
   let query = $state('');
   const q = $derived(query.trim().toLowerCase());
@@ -21,21 +21,21 @@
   let plusOpen = $state(false);
   let ctxGroup = $state('');
   let plusFrom: HTMLElement | null = null; // row that had focus when the menu opened
-  let plusStyle = $state(''); // anchored under that row (⌘N), or under the + button
-  function openPlus() {
+  let plusStyle = $state(''); // anchored under the focused row (⌘N) or under the toolbar + button
+  openPlus = (anchor?: HTMLElement) => {
+    if (plusOpen) { plusOpen = false; return; }
     const el = document.activeElement as HTMLElement | null;
     const row = el?.closest<HTMLElement>('[data-row]');
     plusFrom = row ?? null;
-    if (row) {
-      const r = row.getBoundingClientRect();
-      plusStyle = `position: fixed; left: ${r.left + 8}px; top: ${r.bottom + 2}px; right: auto; transform-origin: top left;`;
-    } else plusStyle = '';
+    const r = (anchor ?? row ?? searchEl)?.getBoundingClientRect();
+    plusStyle = r ? `left: ${r.left + (row && !anchor ? 8 : 0)}px; top: ${r.bottom + 4}px;` : 'left: 12px; top: 40px;';
     ctxGroup = row?.dataset.group ?? notes.all.find((n) => n.id === row?.dataset.note)?.group ?? '';
-    plusOpen = !plusOpen;
-  }
+    plusOpen = true;
+  };
   function closePlus() {
     plusOpen = false;
     (plusFrom?.isConnected ? plusFrom : document.querySelector<HTMLElement>('aside [data-row]'))?.focus();
+    ui.focusOwner = 'sidebar';
   }
   const plusItems = $derived([
     { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', keys: shortcuts.keysFor('newNote'), run: () => focusRow(`[data-note="${notes.create('', ctxGroup).id}"]`) },
@@ -330,7 +330,6 @@
       <input bind:this={searchEl} bind:value={query} onkeydown={onSearchKey}
         placeholder="Search  {prettyKeys(shortcuts.keysFor('search'))}" spellcheck="false" />
       <div class="plus-wrap">
-        <button class="icon plus" class:on={plusOpen} title="New…" aria-haspopup="menu" aria-expanded={plusOpen} onclick={openPlus}>+</button>
         {#if plusOpen}
           <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
           <ul class="plus-menu" role="menu" style={plusStyle} transition:scale={{ start: 0.92, duration: 140 }}
@@ -384,19 +383,16 @@
     width: 260px; flex: none; display: flex; flex-direction: column;
     background: var(--bg-side); border-right: 1px solid var(--line); overflow: hidden;
   }
-  .top { display: flex; gap: 4px; padding: 40px 10px 8px; }
+  .top { display: flex; gap: 4px; padding: 42px 10px 8px; }
   .top input {
     flex: 1; min-width: 0; border: 0; border-radius: 6px; padding: 6px 8px;
     background: var(--bg-input); color: inherit; font: inherit; font-size: 13px; outline: none; transition: box-shadow 0.15s;
   }
   .top input:focus { box-shadow: 0 0 0 2px var(--accent-soft), var(--glow); }
-  .plus-wrap { position: relative; }
-  .plus { font-size: 18px; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.12s, color 0.12s; }
-  .plus.on { transform: rotate(45deg); background: var(--bg-active); color: var(--fg); }
   .plus-menu {
-    position: absolute; right: 0; top: 30px; z-index: 10; min-width: 190px; list-style: none; margin: 0; padding: 4px;
+    position: fixed; z-index: 10; min-width: 190px; list-style: none; margin: 0; padding: 4px;
     background: var(--bg-pop); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-    transform-origin: top right;
+    transform-origin: top left;
   }
   .plus-menu button {
     width: 100%; display: flex; flex-direction: row; justify-content: space-between; align-items: center; gap: 12px;

@@ -60,6 +60,10 @@ button.icon:active { transform: scale(0.9); }
 }
 @keyframes appear { from { opacity: 0; transform: scale(0.985); } }
 .dragbar { position: fixed; top: 0; left: 0; right: 0; height: 28px; z-index: 5; }
+.toolbar { position: fixed; top: 7px; left: 78px; display: flex; gap: 2px; z-index: 6; }
+.toolbar .icon { width: 26px; height: 24px; }
+.toolbar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.toolbar .icon:disabled { opacity: 0.3; pointer-events: none; }
 main { flex: 1; min-width: 0; position: relative; }
 /* where is the keyboard? a blue edge flashes on the pane that just took focus, then fades out */
 aside:focus-within, main:focus-within { animation: focus-in 0.7s ease-out; }

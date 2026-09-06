@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { notes } from './lib/notes.svelte';
-  import { shortcuts } from './lib/shortcuts.svelte';
+  import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { groups } from './lib/groups.svelte';
   import { setGlobalHotkey, win, files, autostart, isTauri } from './lib/platform';
@@ -17,6 +17,7 @@
   let settingsOpen = $state(false);
   let searchEl = $state<HTMLInputElement | null>(null);
   let hotkeyError = $state<string | null>(null);
+  let openPlus = $state<((anchor?: HTMLElement) => void) | undefined>();
 
   // global hotkey follows the shortcut store live
   $effect(() => {
@@ -65,7 +66,7 @@
     switch (a.id) {
       case 'newNote':
         // from the sidebar, ask what to create (note or group) via the + menu
-        if (document.activeElement?.closest('aside')) document.querySelector<HTMLElement>('aside .plus')?.click();
+        if (document.activeElement?.closest('aside')) openPlus?.();
         else notes.create();
         break;
       case 'newGroup': sidebarOpen = true; groups.create(); break;
@@ -87,7 +88,22 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="shell" onfocusin={(e) => (ui.focusOwner = (e.target as HTMLElement).closest('aside') ? 'sidebar' : 'editor')}>
   <div class="dragbar" data-tauri-drag-region></div>
-  <Sidebar bind:open={sidebarOpen} bind:searchEl onSettings={() => (settingsOpen = true)} />
+  <!-- window toolbar, right of the traffic lights -->
+  <div class="toolbar">
+    <button class="icon" title="Sidebar {prettyKeys(shortcuts.keysFor('focusSidebar'))}" onclick={() => (sidebarOpen = !sidebarOpen)}>
+      <svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6.5 3v10"/></svg>
+    </button>
+    <button class="icon" title="Back {prettyKeys(shortcuts.keysFor('back'))}" disabled={!notes.canBack} onclick={() => notes.back()}>
+      <svg viewBox="0 0 16 16"><path d="M13 8H3M7 4L3 8l4 4"/></svg>
+    </button>
+    <button class="icon" title="Forward {prettyKeys(shortcuts.keysFor('forward'))}" disabled={!notes.canForward} onclick={() => notes.forward()}>
+      <svg viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+    </button>
+    <button class="icon" title="New… {prettyKeys(shortcuts.keysFor('newNote'))}" onclick={(e) => (sidebarOpen && openPlus ? openPlus(e.currentTarget) : notes.create())}>
+      <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
+    </button>
+  </div>
+  <Sidebar bind:open={sidebarOpen} bind:searchEl bind:openPlus onSettings={() => (settingsOpen = true)} />
   <main>
     {#if notes.loaded && notes.current}
       {#key notes.currentId}

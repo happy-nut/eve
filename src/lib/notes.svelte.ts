@@ -62,8 +62,10 @@ class NotesStore {
   all = $state<Note[]>([]);
   private _cur = $state<string | null>(null);
   /** visited-note history for back/forward (⌘[ / ⌘]) */
-  private history: string[] = [];
-  private hIndex = -1;
+  private history = $state<string[]>([]);
+  private hIndex = $state(-1);
+  get canBack() { return this.hIndex > 0; }
+  get canForward() { return this.hIndex < this.history.length - 1; }
   /** last cursor position per note, restored when navigating back */
   cursor = new Map<string, number>();
 
