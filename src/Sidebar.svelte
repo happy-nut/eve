@@ -135,10 +135,14 @@
     const i = rows.findIndex((r) => r.dataset.note === id);
     const me = notes.all.find((n) => n.id === id);
     let nb = rows[i + dir];
-    if (!nb || !me) return;
+    if (!me) return;
     const byId = (x?: string) => notes.all.find((n) => n.id === x);
-    if (dir < 0 && nb.dataset.group === me.group) nb = rows[i - 2]; // skip my own header
-    if (!nb) return;
+    if (nb && dir < 0 && nb.dataset.group === me.group) nb = rows[i - 2]; // skip my own header
+    if (!nb) {
+      // bottom of the list: leave the group for its parent (root when top-level)
+      if (dir > 0 && me.group) { notes.move(id, parentOf(me.group), null); focusRow(`[data-note="${id}"]`); }
+      return;
+    }
     if (nb.dataset.note) {
       const n2 = byId(nb.dataset.note)!;
       if (n2.group !== me.group) notes.move(id, n2.group, dir < 0 ? null : n2.id);
