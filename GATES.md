@@ -19,6 +19,7 @@
 - [x] G5 App runs in browser dev mode: create note, sidebar updates, settings rebind applies live
   EVIDENCE: manual, in-app browser at http://127.0.0.1:5173 — rebound Bold to ⌘⇧B via Settings, localStorage
   stored {"bold":"Mod-Shift-b"}, ⌘⇧B then toggled bold in the editor; Esc closed the dialog.
-- [ ] G6 Public GitHub repo exists with code pushed
+- [x] G6 Public GitHub repo exists with code pushed
   CHECK: gh repo view happy-nut/jot --json visibility -q .visibility
   EXPECT: PUBLIC
+  EVIDENCE: zsh, ~/repos/jot, exit 0, "PUBLIC https://github.com/happy-nut/jot"
