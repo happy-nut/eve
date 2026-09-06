@@ -17,6 +17,7 @@
     "global-shortcut:allow-unregister",
     "global-shortcut:allow-unregister-all",
     "global-shortcut:allow-is-registered",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "autostart:default"
   ]
 }

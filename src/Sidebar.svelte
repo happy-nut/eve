@@ -20,11 +20,22 @@
   // ---- "+" dropdown: new note / new group, relative to the focused row ----
   let plusOpen = $state(false);
   let ctxGroup = $state('');
+  let plusFrom: HTMLElement | null = null; // row that had focus when the menu opened
+  let plusStyle = $state(''); // anchored under that row (⌘N), or under the + button
   function openPlus() {
     const el = document.activeElement as HTMLElement | null;
     const row = el?.closest<HTMLElement>('[data-row]');
+    plusFrom = row ?? null;
+    if (row) {
+      const r = row.getBoundingClientRect();
+      plusStyle = `position: fixed; left: ${r.left + 8}px; top: ${r.bottom + 2}px; right: auto; transform-origin: top left;`;
+    } else plusStyle = '';
     ctxGroup = row?.dataset.group ?? notes.all.find((n) => n.id === row?.dataset.note)?.group ?? '';
     plusOpen = !plusOpen;
+  }
+  function closePlus() {
+    plusOpen = false;
+    (plusFrom?.isConnected ? plusFrom : document.querySelector<HTMLElement>('aside [data-row]'))?.focus();
   }
   const plusItems = $derived([
     { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', keys: shortcuts.keysFor('newNote'), run: () => notes.create('', ctxGroup) },
@@ -40,7 +51,7 @@
     const i = items.indexOf(document.activeElement as HTMLElement);
     if (e.key === 'ArrowDown') items[(i + 1) % items.length]?.focus();
     else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length]?.focus();
-    else if (e.key === 'Escape') { plusOpen = false; document.querySelector<HTMLElement>('.plus')?.focus(); }
+    else if (e.key === 'Escape') closePlus();
     else return;
     e.preventDefault(); e.stopPropagation();
   }
@@ -285,7 +296,7 @@
         <button class="icon plus" class:on={plusOpen} title="New…" aria-haspopup="menu" aria-expanded={plusOpen} onclick={openPlus}>+</button>
         {#if plusOpen}
           <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-          <ul class="plus-menu" role="menu" transition:scale={{ start: 0.92, duration: 140 }}
+          <ul class="plus-menu" role="menu" style={plusStyle} transition:scale={{ start: 0.92, duration: 140 }}
             onkeydown={plusKey} onfocusout={(e) => { if (!(e.relatedTarget as HTMLElement | null)?.closest('.plus-wrap')) plusOpen = false; }}>
             {#each plusItems as it, i}
               <li role="none">

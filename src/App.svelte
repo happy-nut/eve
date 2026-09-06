@@ -5,7 +5,7 @@
   import { shortcuts } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { groups } from './lib/groups.svelte';
-  import { setGlobalHotkey, win, files } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, isTauri } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Settings from './Settings.svelte';
@@ -24,7 +24,12 @@
     setGlobalHotkey(keys).then((err) => (hotkeyError = err));
   });
 
+  if (import.meta.env.DEV) (window as any).__notes = notes;
   onMount(() => {
+    // first run: launch at login so the summon hotkey is always available (toggle in Settings)
+    if (isTauri && !localStorage.getItem('eve.autostart.init')) {
+      autostart.set(true).finally(() => localStorage.setItem('eve.autostart.init', '1'));
+    }
     notes.load().then(() => files.onOpen((paths) => paths.forEach((p) => notes.openFile(p))));
     return sync.start();
   });

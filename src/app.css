@@ -99,7 +99,8 @@ aside:focus-within, main:focus-within { animation: focus-in 0.7s ease-out; }
 .tiptap li { margin: 0.15em 0; }
 .tiptap ul[data-type='taskList'] { list-style: none; padding-left: 0.2em; }
 .tiptap ul[data-type='taskList'] li { display: flex; gap: 8px; align-items: flex-start; }
-.tiptap ul[data-type='taskList'] li > label { flex: none; margin-top: 3px; }
+/* checkbox centred on the first text line (line-height 1.6), so the text no longer floats above it */
+.tiptap ul[data-type='taskList'] li > label { flex: none; display: flex; align-items: center; height: 1.6em; margin: 0; }
 .tiptap ul[data-type='taskList'] li > div { flex: 1; }
 .tiptap ul[data-type='taskList'] li[data-checked='true'] > div { color: var(--fg-dim); text-decoration: line-through; }
 .tiptap input[type='checkbox'] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }

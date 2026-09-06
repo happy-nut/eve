@@ -30,6 +30,7 @@
   };
 
   onMount(() => {
+    const id = note.id;
     editor = createEditor({
       element: el,
       content: note.body,
@@ -41,9 +42,11 @@
     });
     if (ui.focusOwner !== 'sidebar') editor.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
     return () => {
-      if (editor) notes.cursor.set(note.id, editor.state.selection.from);
-      notes.flush(note.id);
+      if (editor) notes.cursor.set(id, editor.state.selection.from);
       editor?.destroy();
+      // Svelte runs teardown with pre-update state visible, so a flush here would persist stale data
+      // (it resurrected deleted notes). Flush right after the batch instead.
+      setTimeout(() => notes.flush(id), 0);
     };
   });
 

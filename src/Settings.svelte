@@ -3,7 +3,7 @@
   import { fade, scale } from 'svelte/transition';
   import { shortcuts, eventToKeys, prettyKeys, type Scope } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
-  import { storage } from './lib/platform';
+  import { storage, autostart, isTauri } from './lib/platform';
   import { ui } from './lib/ui.svelte';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
@@ -12,7 +12,8 @@
   let conflict = $state<{ id: string; keys: string; with: string } | null>(null);
   let tab = $state<'shortcuts' | 'sync'>('shortcuts');
   let notesPath = $state('');
-  onMount(() => { storage.path().then((p) => (notesPath = p)); });
+  let launchAtLogin = $state(false);
+  onMount(() => { storage.path().then((p) => (notesPath = p)); autostart.get().then((v) => (launchAtLogin = v)); });
 
   const groups: { scope: Scope; label: string }[] = [
     { scope: 'global', label: 'System-wide' },
@@ -44,7 +45,7 @@
   <header>
     <nav>
       <button class:on={tab === 'shortcuts'} onclick={() => (tab = 'shortcuts')}>Shortcuts</button>
-      <button class:on={tab === 'sync'} onclick={() => (tab = 'sync')}>Sync</button>
+      <button class:on={tab === 'sync'} onclick={() => (tab = 'sync')}>Sync & app</button>
     </nav>
     <button class="icon" onclick={onClose} title="Close (Esc)">✕</button>
   </header>
@@ -83,6 +84,12 @@
           {:else if sync.settings.lastSynced}last synced {new Date(sync.settings.lastSynced).toLocaleTimeString()}{/if}
         </span>
       </div>
+      <h3>App</h3>
+      <label class="row check">
+        <span>Launch at login <span class="hint">keeps {prettyKeys(shortcuts.keysFor('toggleWindow'))} available after a quit</span></span>
+        <input type="checkbox" checked={launchAtLogin} disabled={!isTauri}
+          onchange={(e) => { launchAtLogin = e.currentTarget.checked; autostart.set(launchAtLogin); }} />
+      </label>
       <h3>Storage</h3>
       <p class="hint mono">{notesPath}</p>
     </section>
@@ -130,6 +137,9 @@
   .mono { font-family: ui-monospace, monospace; font-size: 11.5px; word-break: break-all; }
   .link { border: 0; background: none; color: var(--accent); font: inherit; font-size: 12px; margin-top: 12px; padding: 0; }
   label { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; color: var(--fg-dim); }
+  label.check { flex-direction: row; justify-content: space-between; align-items: center; color: var(--fg); }
+  label.check .hint { display: block; margin: 0; font-size: 11.5px; }
+  label.check input { accent-color: var(--accent); width: 16px; height: 16px; }
   label input { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-input); color: var(--fg); outline: none; }
   label input:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   .primary { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 6px; border: 0; background: var(--accent); color: #0b0c10; font-weight: 600; box-shadow: var(--glow); }

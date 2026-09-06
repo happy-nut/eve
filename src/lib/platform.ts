@@ -73,6 +73,16 @@ export const files = {
   },
 };
 
+/** Launch at login, so the global hotkey works even after the app was quit. */
+export const autostart = {
+  async get() { if (!isTauri) return false; return (await import('@tauri-apps/plugin-autostart')).isEnabled(); },
+  async set(on: boolean) {
+    if (!isTauri) return;
+    const m = await import('@tauri-apps/plugin-autostart');
+    await (on ? m.enable() : m.disable());
+  },
+};
+
 export const win = {
   toggle: () => (isTauri ? invoke<void>('toggle_window') : Promise.resolve()),
   hide: () => (isTauri ? invoke<void>('hide_app') : Promise.resolve()),
