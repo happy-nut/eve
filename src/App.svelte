@@ -36,7 +36,13 @@
     if (next) notes.currentId = next.id;
   }
 
+  /** ⌘⇧E: closed -> open + focus list; focus already in list -> close + back to editor; else focus list. */
   function focusSidebar() {
+    if (sidebarOpen && document.activeElement?.closest('aside')) {
+      sidebarOpen = false;
+      queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap')?.focus());
+      return;
+    }
     sidebarOpen = true;
     queueMicrotask(() => (document.querySelector<HTMLElement>('aside [data-row].active') ?? document.querySelector<HTMLElement>('aside [data-row]'))?.focus());
   }
