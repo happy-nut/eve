@@ -6,7 +6,7 @@ import { notes, type Note } from './notes.svelte';
  *   <- { cursor, notes: [notes changed on server since cursor] }
  * Conflicts resolve last-writer-wins on updatedAt, on both ends.
  */
-const LS = 'jot.sync';
+const LS = 'eve.sync';
 
 interface Settings { url: string; token: string; cursor: number; lastSynced: number }
 

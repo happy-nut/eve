@@ -1,15 +1,15 @@
 [package]
-name = "jot"
+name = "eve"
 version = "0.1.0"
 description = "Fast, keyboard-first markdown notes"
 authors = ["happynut"]
 license = "MIT"
-repository = "https://github.com/happy-nut/jot"
+repository = "https://github.com/happy-nut/eve"
 edition = "2021"
 rust-version = "1.77.2"
 
 [lib]
-name = "jot_lib"
+name = "eve_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

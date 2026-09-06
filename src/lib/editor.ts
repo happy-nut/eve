@@ -9,7 +9,7 @@ import { Plugin, PluginKey, type Command } from '@tiptap/pm/state';
 import { WikiLink } from './wikilink';
 import { shortcuts } from './shortcuts.svelte';
 
-const KEYMAP = new PluginKey('jot-keymap');
+const KEYMAP = new PluginKey('eve-keymap');
 
 export const getMarkdown = (editor: Editor): string => (editor.storage as any).markdown.getMarkdown();
 
@@ -139,6 +139,6 @@ export function createEditor(opts: {
     onUpdate: ({ editor }) => opts.onUpdate(getMarkdown(editor)),
   });
   applyKeymap(editor);
-  if (import.meta.env.DEV) (window as any).__jot = editor;
+  if (import.meta.env.DEV) (window as any).__eve = editor;
   return editor;
 }

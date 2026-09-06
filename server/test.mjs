@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 const PORT = 18787, TOKEN = 't', DB = 'test.sqlite';
 rmSync(DB, { force: true });
-const srv = spawn(process.execPath, ['server/index.mjs'], { env: { ...process.env, PORT, JOT_TOKEN: TOKEN, JOT_DB: DB } });
+const srv = spawn(process.execPath, ['server/index.mjs'], { env: { ...process.env, PORT, EVE_TOKEN: TOKEN, EVE_DB: DB } });
 await new Promise((r) => srv.stdout.once('data', r));
 const sync = (cursor, notes) =>
   fetch(`http://localhost:${PORT}/sync`, { method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ cursor, notes }) }).then((r) => r.json());

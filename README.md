@@ -1,15 +1,15 @@
-# Jot
+# Eve
 
 Fast, keyboard-first markdown notes for macOS. Summon it from anywhere with a global hotkey,
 type Notion-style markdown, link notes with `[[wiki links]]`, and sync through your own server.
 
 - **Instant** — Tauri 2 shell (native WKWebView, ~10 MB), Svelte 5 UI, TipTap editor. No Electron.
-- **Global hotkey** — `⌘⇧Space` (default) shows/hides Jot over any app; focus returns to where you were.
+- **Global hotkey** — `⌘⇧Space` (default) shows/hides Eve over any app; focus returns to where you were.
 - **Live markdown** — `# `, `- `, `1. `, `[ ] `, `> `, ` ``` `, `**bold**`, `` `code` ``… render as you type.
 - **Every shortcut is rebindable** live in Settings (`⌘,`): system hotkey, app actions, editor formatting.
 - **Notes link to notes** — type `[[` for a picker; click a link to jump (creates the note if missing).
 - **Sidebar** with search (`⌘K`), FLIP-animated list, smooth transitions everywhere.
-- **Plain files** — each note is a `.md` with a 3-line frontmatter in `~/Library/Application Support/dev.happynut.jot/notes/`.
+- **Plain files** — each note is a `.md` with a 3-line frontmatter in `~/Library/Application Support/dev.happynut.eve/notes/`.
 - **Self-hosted sync** — a zero-dependency Node server (`server/`), one Docker command, last-writer-wins.
 
 ## Run
@@ -17,7 +17,7 @@ type Notion-style markdown, link notes with `[[wiki links]]`, and sync through y
 ```bash
 npm install
 npm run app        # tauri dev (needs Rust: https://rustup.rs)
-npm run bundle     # builds src-tauri/target/release/bundle/macos/Jot.app (~4 MB); drag it to /Applications
+npm run bundle     # builds src-tauri/target/release/bundle/macos/Eve.app (~4 MB); drag it to /Applications
 ```
 
 `npm run dev` runs the UI alone in a browser (notes go to localStorage) — handy for UI work.
@@ -26,7 +26,7 @@ npm run bundle     # builds src-tauri/target/release/bundle/macos/Jot.app (~4 MB
 
 | Scope  | Action                          | Keys              |
 | ------ | ------------------------------- | ----------------- |
-| system | Summon / dismiss Jot            | `⌘⇧Space`         |
+| system | Summon / dismiss Eve            | `⌘⇧Space`         |
 | app    | New note / Search / Sidebar     | `⌘N` `⌘K` `⌘\`    |
 | app    | Next / previous note            | `⌘⇧↓` `⌘⇧↑`       |
 | app    | Delete note / Settings / Hide   | `⌘⇧⌫` `⌘,` `Esc`  |
@@ -42,10 +42,10 @@ Change any of them in Settings → Shortcuts: click the key chip, press the new 
 
 ```bash
 cd server
-JOT_TOKEN=$(openssl rand -hex 24) docker compose up -d      # or: JOT_TOKEN=... node index.mjs
+EVE_TOKEN=$(openssl rand -hex 24) docker compose up -d      # or: EVE_TOKEN=... node index.mjs
 ```
 
-Then in Jot → Settings → Sync, enter the URL (e.g. `https://notes.example.com`) and the token.
+Then in Eve → Settings → Sync, enter the URL (e.g. `https://notes.example.com`) and the token.
 Sync runs 2 s after edits, every minute, and on focus. Put it behind HTTPS (Caddy, Tailscale, …).
 
 Protocol is one endpoint: `POST /sync {cursor, notes[]} → {cursor, notes[]}`. Conflicts resolve

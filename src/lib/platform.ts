@@ -6,7 +6,7 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
   return invoke<T>(cmd, args);
 }
 
-const LS = 'jot.notes.';
+const LS = 'eve.notes.';
 
 export const storage = {
   async list(): Promise<string[]> {

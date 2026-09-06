@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Jot",
+  "productName": "Eve",
   "version": "0.1.0",
-  "identifier": "dev.happynut.jot",
+  "identifier": "dev.happynut.eve",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Jot",
+        "title": "Eve",
         "width": 960,
         "height": 640,
         "minWidth": 480,

@@ -10,7 +10,7 @@ export interface Action {
 }
 
 export const DEFAULTS: Action[] = [
-  { id: 'toggleWindow', label: 'Summon / dismiss Jot (system-wide)', scope: 'global', keys: 'Mod-Shift-Space' },
+  { id: 'toggleWindow', label: 'Summon / dismiss Eve (system-wide)', scope: 'global', keys: 'Mod-Shift-Space' },
 
   { id: 'newNote', label: 'New note', scope: 'app', keys: 'Mod-n' },
   { id: 'search', label: 'Search notes', scope: 'app', keys: 'Mod-k' },
@@ -40,7 +40,7 @@ export const DEFAULTS: Action[] = [
   { id: 'divider', label: 'Divider', scope: 'editor', keys: 'Mod-Shift-Minus' },
 ];
 
-const LS_KEY = 'jot.shortcuts';
+const LS_KEY = 'eve.shortcuts';
 
 class Shortcuts {
   overrides = $state<Record<string, string>>(load());

@@ -1,13 +1,13 @@
-// Jot sync server — zero dependencies, Node >= 22 (node:sqlite).
+// Eve sync server — zero dependencies, Node >= 22 (node:sqlite).
 // POST /sync  { cursor, notes:[{id, body, updatedAt, deleted}] }  ->  { cursor, notes:[...] }
-// Auth: Authorization: Bearer $JOT_TOKEN
+// Auth: Authorization: Bearer $EVE_TOKEN
 import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 
 const PORT = Number(process.env.PORT ?? 8787);
-const TOKEN = process.env.JOT_TOKEN;
-const DB_PATH = process.env.JOT_DB ?? 'jot.sqlite';
-if (!TOKEN) { console.error('Set JOT_TOKEN'); process.exit(1); }
+const TOKEN = process.env.EVE_TOKEN;
+const DB_PATH = process.env.EVE_DB ?? 'eve.sqlite';
+if (!TOKEN) { console.error('Set EVE_TOKEN'); process.exit(1); }
 
 const db = new DatabaseSync(DB_PATH);
 db.exec(`
@@ -52,7 +52,7 @@ const CORS = {
 
 createServer((req, res) => {
   if (req.method === 'OPTIONS') return res.writeHead(204, CORS).end();
-  if (req.method === 'GET' && req.url === '/') return res.writeHead(200, CORS).end('jot sync ok');
+  if (req.method === 'GET' && req.url === '/') return res.writeHead(200, CORS).end('eve sync ok');
   if (req.method !== 'POST' || req.url !== '/sync') return res.writeHead(404, CORS).end();
   if (req.headers.authorization !== `Bearer ${TOKEN}`) return res.writeHead(401, CORS).end('unauthorized');
   let body = '';
@@ -65,4 +65,4 @@ createServer((req, res) => {
       res.writeHead(400, CORS).end(String(e.message ?? e));
     }
   });
-}).listen(PORT, () => console.log(`jot sync on :${PORT} (db: ${DB_PATH})`));
+}).listen(PORT, () => console.log(`eve sync on :${PORT} (db: ${DB_PATH})`));

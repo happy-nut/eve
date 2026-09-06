@@ -64,7 +64,7 @@
   {:else}
     <section>
       <p class="hint">
-        Point Jot at your own sync server (see <code>server/</code> in the repo). Leave URL empty to stay local-only.
+        Point Eve at your own sync server (see <code>server/</code> in the repo). Leave URL empty to stay local-only.
       </p>
       <label>Server URL <input value={sync.settings.url} oninput={(e) => sync.save({ url: e.currentTarget.value.trim() })} placeholder="https://notes.example.com" spellcheck="false" /></label>
       <label>Token <input type="password" value={sync.settings.token} oninput={(e) => sync.save({ token: e.currentTarget.value })} /></label>
