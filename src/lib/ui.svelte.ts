@@ -3,6 +3,8 @@ interface Pending { message: string; input?: string; danger?: boolean; resolve: 
 
 class Ui {
   pending = $state<Pending | null>(null);
+  /** which pane owns keyboard focus; dialogs don't change it, so focus can return there afterwards */
+  focusOwner = $state<'editor' | 'sidebar'>('editor');
 
   /** Yes/no. `danger` colors the confirm button red. */
   ask(message: string, danger = true): Promise<boolean> {

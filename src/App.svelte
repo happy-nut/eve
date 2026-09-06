@@ -79,7 +79,8 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<div class="shell">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="shell" onfocusin={(e) => (ui.focusOwner = (e.target as HTMLElement).closest('aside') ? 'sidebar' : 'editor')}>
   <div class="dragbar" data-tauri-drag-region></div>
   <Sidebar bind:open={sidebarOpen} bind:searchEl onSettings={() => (settingsOpen = true)} />
   <main>

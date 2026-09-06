@@ -5,6 +5,7 @@
   import { createEditor, applyKeymap, getMarkdown, type SuggestItem } from './lib/editor';
   import { notes, titleOf, type Note } from './lib/notes.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
+  import { ui } from './lib/ui.svelte';
 
   let { note }: { note: Note } = $props();
 
@@ -38,6 +39,7 @@
       suggestionUI,
       cursor: notes.cursor.get(note.id),
     });
+    if (ui.focusOwner !== 'sidebar') editor.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
     return () => {
       if (editor) notes.cursor.set(note.id, editor.state.selection.from);
       notes.flush(note.id);
