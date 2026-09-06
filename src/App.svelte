@@ -30,7 +30,7 @@
   });
 
   function step(delta: number) {
-    const list = notes.visible;
+    const list = groups.ordered();
     const i = list.findIndex((n) => n.id === notes.currentId);
     const next = list[(i + delta + list.length) % list.length];
     if (next) notes.currentId = next.id;

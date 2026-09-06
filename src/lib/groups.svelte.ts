@@ -25,6 +25,12 @@ class Groups {
     return [...this.saved.order, ...extra];
   });
 
+  /** notes in the order the sidebar shows them: each group in order, then root */
+  ordered() {
+    const v = notes.visible;
+    return [...this.names.flatMap((g) => v.filter((n) => n.group === g)), ...v.filter((n) => !n.group)];
+  }
+
   private persist() { localStorage.setItem(LS, JSON.stringify(this.saved)); }
 
   isCollapsed(g: string) { return this.saved.collapsed.includes(g); }

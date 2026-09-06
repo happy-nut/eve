@@ -1,4 +1,4 @@
-import { Editor, Extension } from '@tiptap/core';
+import { Editor, Extension, textInputRule } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -170,6 +170,13 @@ export function createEditor(opts: {
         },
       }),
       Callout,
+      Extension.create({
+        name: 'arrows',
+        addInputRules: () => [
+          textInputRule({ find: /->$/, replace: '→' }),
+          textInputRule({ find: /=>$/, replace: '⇒' }),
+        ],
+      }),
       LocalImage.configure({ inline: false, allowBase64: true }),
       Extension.create({
         name: 'slashMenu',

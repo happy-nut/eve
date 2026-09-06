@@ -1,6 +1,7 @@
 <script lang="ts">
   import { flip } from 'svelte/animate';
   import { fade, slide } from 'svelte/transition';
+  import { tick } from 'svelte';
   import { cubicOut } from 'svelte/easing';
   import { notes, titleOf, plain, type Note } from './lib/notes.svelte';
   import { groups } from './lib/groups.svelte';
@@ -91,6 +92,30 @@
   async function removeNote(n: Note) {
     if (await ui.ask(`Delete “${titleOf(n)}”?`)) notes.remove(n.id);
   }
+  /** ⌥↑ / ⌥↓: move the focused note one visible row up or down, crossing group boundaries. */
+  async function nudge(id: string, dir: 1 | -1) {
+    const rows = [...document.querySelectorAll<HTMLElement>('aside [data-row]')];
+    const i = rows.findIndex((r) => r.dataset.note === id);
+    const nb = rows[i + dir];
+    const me = notes.all.find((n) => n.id === id);
+    if (!nb || !me) return;
+    const byId = (x?: string) => notes.all.find((n) => n.id === x);
+    if (nb.dataset.note) {
+      const n2 = byId(nb.dataset.note)!;
+      if (n2.group !== me.group) notes.move(id, n2.group, dir < 0 ? null : n2.id); // enter neighbour group at its end / start
+      else if (dir < 0) notes.move(id, me.group, n2.id);
+      else {
+        const after = byId(rows[i + 2]?.dataset.note);
+        notes.move(id, me.group, after && after.group === me.group ? after.id : null);
+      }
+    } else {
+      const g = nb.dataset.group!;
+      if (g !== me.group) notes.move(id, g, dir < 0 ? null : inGroup(g)[0]?.id ?? null);
+      else if (dir < 0) { const gi = groups.names.indexOf(g); if (gi > 0) notes.move(id, groups.names[gi - 1], null); }
+    }
+    await tick();
+    (document.querySelector<HTMLElement>(`aside [data-note="${id}"]`) ?? document.querySelector<HTMLElement>(`aside [data-group="${me.group}"]`))?.focus();
+  }
   function treeKey(e: KeyboardEvent) {
     if (ui.pending) return;
     const rows = [...document.querySelectorAll<HTMLElement>('aside [data-row]')];
@@ -98,7 +123,13 @@
     if (!el || (e.target as HTMLElement).tagName === 'INPUT') return;
     const i = rows.indexOf(el);
     const noteId = el.dataset.note, group = el.dataset.group;
+    if (e.altKey && noteId && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault(); e.stopPropagation();
+      nudge(noteId, e.key === 'ArrowUp' ? -1 : 1);
+      return;
+    }
     switch (e.key) {
+      case ' ': if (group) groups.toggle(group); else return; break;
       case 'ArrowDown': rows[i + 1]?.focus(); break;
       case 'ArrowUp': rows[i - 1]?.focus(); break;
       case 'ArrowLeft': if (group && !groups.isCollapsed(group)) groups.toggle(group); else return; break;
@@ -158,7 +189,8 @@
                   ondragover={(e) => rowOver(e, n)} ondrop={(e) => rowDrop(e, n, s.notes)}
                   class:dragging={dragId === n.id}
                   class:drop-before={dropAt?.id === n.id && dropAt.before} class:drop-after={dropAt?.id === n.id && !dropAt.before}>
-                  <button data-row data-note={n.id} class:active={n.id === notes.currentId} onclick={() => (notes.currentId = n.id)}>
+                  <button data-row data-note={n.id} class:active={n.id === notes.currentId}
+                    onclick={(e) => { notes.currentId = n.id; e.currentTarget.focus(); }}>
                     <span class="title">{titleOf(n)}</span>
                     <span class="meta"><span class="preview">{preview(n.body)}</span><time>{ago(n.updatedAt)}</time></span>
                   </button>

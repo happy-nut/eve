@@ -26,10 +26,10 @@
         d="M512 168c188 0 318 138 318 326 0 176-124 342-318 342S194 670 194 494c0-188 130-326 318-326z"/>
   <!-- visor: rounded inverted triangle -->
   <path fill="url(#visor)"
-        d="M292 434 C292 346 390 288 512 288 C634 288 732 346 732 434 C732 546 642 658 512 658 C382 658 292 546 292 434 Z"/>
+        d="M286 420 C286 346 386 296 512 296 C638 296 738 346 738 420 C738 480 690 570 630 626 C560 680 464 680 394 626 C334 570 286 480 286 420 Z"/>
   <!-- eyes -->
   <g fill="#3fc1ff" filter="url(#glow)">
-    <ellipse cx="438" cy="470" rx="62" ry="40" transform="rotate(14 438 470)"/>
-    <ellipse cx="586" cy="470" rx="62" ry="40" transform="rotate(-14 586 470)"/>
+    <ellipse cx="440" cy="462" rx="60" ry="38" transform="rotate(14 440 462)"/>
+    <ellipse cx="584" cy="462" rx="60" ry="38" transform="rotate(-14 584 462)"/>
   </g>
 </svg>
