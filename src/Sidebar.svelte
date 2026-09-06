@@ -154,13 +154,33 @@
     }
     focusRow(`[data-note="${id}"]`);
   }
-  /** ⌥↑↓ swap with a sibling group, ⌥← out to the parent's level, ⌥→ into the previous sibling. */
+  /**
+   * ⌥↑ / ⌥↓ walk a group through every visible slot in outline order — past siblings, out of its
+   * parent, into (expanded) groups above — like dragging it one row at a time. Collapsed groups are
+   * skipped as targets and the moved group keeps its own fold state. ⌥← / ⌥→ un-nest / nest directly.
+   */
+  type Slot = { parent: string; before: string | null };
+  function slots(g: string, parent: string): Slot[] {
+    const out: Slot[] = [];
+    for (const c of groups.children(parent)) {
+      if (c === g) continue;
+      out.push({ parent, before: c });
+      if (!groups.isCollapsed(c) && groups.canPlace(g, c)) out.push(...slots(g, c));
+    }
+    out.push({ parent, before: null });
+    return out.filter((s) => groups.canPlace(g, s.parent));
+  }
   function nudgeGroup(g: string, key: string) {
     let np: string | null = null;
-    if (key === 'ArrowUp') { const prev = groups.prevSibling(g); if (prev) np = groups.move(g, parentOf(g), prev); }
-    if (key === 'ArrowDown') { const next = groups.nextSibling(g); if (next) np = groups.move(g, parentOf(g), groups.nextSibling(next)); }
+    if (key === 'ArrowUp' || key === 'ArrowDown') {
+      const list = slots(g, '');
+      const cur: Slot = { parent: parentOf(g), before: groups.nextSibling(g) };
+      const i = list.findIndex((s) => s.parent === cur.parent && s.before === cur.before);
+      const t = list[i + (key === 'ArrowDown' ? 1 : -1)];
+      if (t) np = groups.move(g, t.parent, t.before);
+    }
     if (key === 'ArrowLeft' && parentOf(g)) { const par = parentOf(g); np = groups.move(g, parentOf(par), groups.nextSibling(par)); }
-    if (key === 'ArrowRight') { const prev = groups.prevSibling(g); if (prev) { np = groups.move(g, prev, null); if (np) groups.expand(prev); } }
+    if (key === 'ArrowRight') { const prev = groups.prevSibling(g); if (prev) np = groups.move(g, prev, null); }
     if (np) focusRow(groupSel(np));
   }
   function treeKey(e: KeyboardEvent) {
