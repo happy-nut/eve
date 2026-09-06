@@ -13,7 +13,7 @@
       <stop offset="0" stop-color="#e8fbff"/><stop offset="0.35" stop-color="#7fe0ff"/><stop offset="0.75" stop-color="#2eb8ff"/><stop offset="1" stop-color="#1a8fe0"/>
     </radialGradient>
     <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
-      <feGaussianBlur stdDeviation="22" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      <feGaussianBlur stdDeviation="14" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
     <filter id="soft" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="40"/></filter>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
@@ -26,19 +26,15 @@
   <!-- head: rounded shell, slightly wider at the top -->
   <path filter="url(#shadow)" fill="url(#body)"
         d="M512 168c188 0 318 138 318 326 0 176-124 342-318 342S194 670 194 494c0-188 130-326 318-326z"/>
-  <!-- visor -->
+  <!-- visor: rounded inverted triangle -->
   <path fill="url(#visor)"
-        d="M512 300c136 0 226 82 226 190 0 104-90 178-226 178S286 594 286 490c0-108 90-190 226-190z"/>
-  <!-- eyes: inner ends dip, outer ends lift; soft halo behind -->
-  <g fill="#3fc1ff" opacity=".55" filter="url(#soft)">
-    <ellipse cx="428" cy="478" rx="84" ry="56"/><ellipse cx="596" cy="478" rx="84" ry="56"/>
+        d="M372 298 L652 298 Q752 298 722 390 L604 596 Q512 700 420 596 L302 390 Q272 298 372 298 Z"/>
+  <!-- eyes -->
+  <g fill="#3fc1ff" filter="url(#glow)">
+    <ellipse cx="436" cy="458" rx="64" ry="38" transform="rotate(16 436 458)"/>
+    <ellipse cx="588" cy="458" rx="64" ry="38" transform="rotate(-16 588 458)"/>
   </g>
-  <g fill="url(#eye)" filter="url(#glow)">
-    <ellipse cx="428" cy="480" rx="74" ry="46" transform="rotate(16 428 480)"/>
-    <ellipse cx="596" cy="480" rx="74" ry="46" transform="rotate(-16 596 480)"/>
-  </g>
-
-  </g>
+</g>
   <text x="330" y="150" font-family="-apple-system, Inter, Helvetica, Arial, sans-serif" font-size="96" font-weight="700" fill="#ffffff" letter-spacing="-3">Eve</text>
   <text x="332" y="200" font-family="-apple-system, Inter, Helvetica, Arial, sans-serif" font-size="22" fill="#8b909a">Fast, keyboard-first markdown notes for macOS.</text>
   <text x="332" y="232" font-family="-apple-system, Inter, Helvetica, Arial, sans-serif" font-size="22" fill="#3fc1ff">Summon it from anywhere. ⌘⇧Space</text>
