@@ -1,0 +1,116 @@
+:root {
+  --fg: #1d1d1f;
+  --fg-dim: #7a7a80;
+  --bg: #ffffff;
+  --bg-side: #f5f5f7;
+  --bg-pop: #ffffff;
+  --bg-input: rgba(0, 0, 0, 0.05);
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --bg-active: rgba(0, 0, 0, 0.09);
+  --line: rgba(0, 0, 0, 0.08);
+  --accent: #3478f6;
+  --accent-soft: rgba(52, 120, 246, 0.25);
+  --code-bg: rgba(0, 0, 0, 0.05);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #e8e8ed;
+    --fg-dim: #8e8e93;
+    --bg: #1e1e20;
+    --bg-side: #27272a;
+    --bg-pop: #2c2c2e;
+    --bg-input: rgba(255, 255, 255, 0.07);
+    --bg-hover: rgba(255, 255, 255, 0.06);
+    --bg-active: rgba(255, 255, 255, 0.11);
+    --line: rgba(255, 255, 255, 0.08);
+    --accent: #4d8dff;
+    --accent-soft: rgba(77, 141, 255, 0.3);
+    --code-bg: rgba(255, 255, 255, 0.08);
+  }
+}
+
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; margin: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+button { cursor: default; }
+button.icon {
+  border: 0; background: none; color: var(--fg-dim); font-size: 15px; line-height: 1;
+  width: 26px; height: 26px; border-radius: 6px; padding: 0;
+  transition: background 0.12s, color 0.12s, transform 0.12s;
+}
+button.icon:hover { background: var(--bg-hover); color: var(--fg); }
+button.icon:active { transform: scale(0.9); }
+
+.shell {
+  display: flex;
+  height: 100%;
+  animation: appear 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes appear { from { opacity: 0; transform: scale(0.985); } }
+.dragbar { position: fixed; top: 0; left: 0; right: 0; height: 28px; z-index: 5; }
+main { flex: 1; min-width: 0; position: relative; }
+.page { position: absolute; inset: 0; }
+
+/* ---- editor ---- */
+.editor .tiptap {
+  outline: none;
+  min-height: 100%;
+  padding: 44px clamp(24px, 8vw, 96px) 40vh;
+  max-width: 820px;
+  margin: 0 auto;
+  user-select: text;
+  line-height: 1.6;
+  font-size: 15px;
+}
+.tiptap > * + * { margin-top: 0.5em; }
+.tiptap h1, .tiptap h2, .tiptap h3 { font-weight: 650; line-height: 1.25; margin: 1.2em 0 0.3em; letter-spacing: -0.01em; }
+.tiptap h1 { font-size: 1.9em; }
+.tiptap h2 { font-size: 1.45em; }
+.tiptap h3 { font-size: 1.15em; }
+.tiptap > h1:first-child { margin-top: 0; }
+.tiptap p { margin: 0; }
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--fg-dim);
+  float: left; height: 0; pointer-events: none;
+}
+.tiptap ul, .tiptap ol { padding-left: 1.4em; margin: 0; }
+.tiptap li > p { margin: 0; }
+.tiptap li { margin: 0.15em 0; }
+.tiptap ul[data-type='taskList'] { list-style: none; padding-left: 0.2em; }
+.tiptap ul[data-type='taskList'] li { display: flex; gap: 8px; align-items: flex-start; }
+.tiptap ul[data-type='taskList'] li > label { flex: none; margin-top: 3px; }
+.tiptap ul[data-type='taskList'] li > div { flex: 1; }
+.tiptap ul[data-type='taskList'] li[data-checked='true'] > div { color: var(--fg-dim); text-decoration: line-through; }
+.tiptap input[type='checkbox'] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+.tiptap blockquote { border-left: 3px solid var(--line); margin: 0.5em 0; padding-left: 1em; color: var(--fg-dim); }
+.tiptap code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.88em; background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 4px; }
+.tiptap pre { background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; margin: 0.6em 0; }
+.tiptap pre code { background: none; padding: 0; font-size: 0.85em; }
+.tiptap hr { border: 0; border-top: 1px solid var(--line); margin: 1.2em 0; }
+.tiptap a { color: var(--accent); text-decoration: none; }
+.tiptap a:hover { text-decoration: underline; }
+.tiptap .wikilink {
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 0.05em 0.35em;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+.tiptap .wikilink:hover { filter: brightness(1.15); }
+.tiptap .ProseMirror-selectednode.wikilink, .tiptap .wikilink.ProseMirror-selectednode { outline: 2px solid var(--accent); }
+.tiptap ::selection { background: var(--accent-soft); }
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--fg-dim); }
