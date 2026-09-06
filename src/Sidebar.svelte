@@ -23,6 +23,40 @@
   const hits = $derived(notes.visible.filter((n) => n.body.toLowerCase().includes(q)));
   const openFiles = $derived(notes.visible.filter((n) => n.path));
 
+  /**
+   * One flat, keyed list of rows (groups, notes, labels, placeholders). A single {#each} lets
+   * animate:flip carry a row smoothly to its new place even when it changes group or nesting.
+   */
+  type Row =
+    | { kind: 'group'; key: string; g: string; depth: number }
+    | { kind: 'note'; key: string; n: Note; depth: number }
+    | { kind: 'label'; key: string; text: string; g: string }
+    | { kind: 'empty'; key: string; text: string; g: string; depth: number };
+  const rows = $derived.by((): Row[] => {
+    if (q) return hits.length ? hits.map((n) => ({ kind: 'note', key: n.id, n, depth: 0 })) : [{ kind: 'empty', key: 'empty:search', text: 'No matches', g: '', depth: 0 }];
+    const out: Row[] = [];
+    if (openFiles.length) {
+      out.push({ kind: 'label', key: 'label:files', text: 'Open files', g: '\0files' });
+      for (const n of openFiles) out.push({ kind: 'note', key: n.id, n, depth: 0 });
+    }
+    const walk = (parent: string, depth: number) => {
+      for (const g of groups.children(parent)) {
+        out.push({ kind: 'group', key: 'g:' + groups.id(g), g, depth });
+        if (groups.isCollapsed(g)) continue;
+        const kids = groups.children(g), own = groups.notesIn(g);
+        walk(g, depth + 1);
+        for (const n of own) out.push({ kind: 'note', key: n.id, n, depth: depth + 1 });
+        if (!kids.length && !own.length) out.push({ kind: 'empty', key: 'empty:' + g, text: 'Drop notes here', g, depth: depth + 1 });
+      }
+    };
+    walk('', 0);
+    const root = groups.notesIn('');
+    if (groups.names.length) out.push({ kind: 'label', key: 'label:root', text: 'Notes', g: '' });
+    for (const n of root) out.push({ kind: 'note', key: n.id, n, depth: 0 });
+    if (!root.length) out.push({ kind: 'empty', key: 'empty:root', text: 'No notes', g: '', depth: 0 });
+    return out;
+  });
+
   // ---- "+" dropdown: new note / new group, relative to the focused row ----
   let plusOpen = $state(false);
   let ctxGroup = $state('');
@@ -88,8 +122,9 @@
     dropAt = { into: g };
   }
   /** over a note row: before / after it (same group) */
-  function overNote(e: DragEvent, n: Note, list: Note[]) {
-    if (!drag || drag.note === n.id) return;
+  function overNote(e: DragEvent, n: Note) {
+    if (!drag || drag.note === n.id || n.path) return;
+    const list = groups.notesIn(n.group);
     if (drag.group !== undefined) { overSection(e, n.group); return; } // groups can't sit between notes
     allow(e);
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -273,68 +308,6 @@
   }
 </script>
 
-{#snippet noteRows(list: Note[], emptyText: string)}
-  <ul>
-    {#each list as n (n.id)}
-      <li animate:flip={{ duration: 200 }} transition:fade={{ duration: 120 }}
-        draggable={!n.path} ondragstart={(e) => !n.path && dragStartNote(e, n)} ondragend={dragEnd}
-        ondragover={(e) => overNote(e, n, list)} ondrop={drop}
-        class:dragging={drag?.note === n.id} class:drop-before={dropAt?.beforeNote === n.id}>
-        <button data-row data-note={n.id} class:active={n.id === notes.currentId} onclick={() => openNote(n)}>
-          <span class="title">
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ note: n }); }}>
-              {#if jumpNumbers.has(n.id)}<span class="num">{jumpNumbers.get(n.id)}</span>
-              {:else if n.icon}<span class="emoji">{n.icon}</span>{:else}
-              <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>{/if}
-            </span>
-            <span class="t">{titleOf(n)}</span>
-          </span>
-          <span class="meta"><span class="preview">{n.path ? n.path.replace(/^\/Users\/[^/]+/, '~') : preview(n.body)}</span><time>{ago(n.updatedAt)}</time></span>
-        </button>
-      </li>
-    {/each}
-    {#if !list.length}<li class="empty">{emptyText}</li>{/if}
-  </ul>
-{/snippet}
-
-{#snippet groupBlock(g: string, depth: number)}
-  {@const collapsed = groups.isCollapsed(g)}
-  {@const kids = groups.children(g)}
-  {@const own = groups.notesIn(g)}
-  <section class="grp" class:over={dropAt?.into === g && !dropAt.beforeNote && !dropAt.beforeGroup} class:dragging={drag?.group === g}
-    style="--d: {depth}" role="group" aria-label={g}
-    ondragover={(e) => overSection(e, g)} ondrop={drop}>
-    <div class="ghead" class:collapsed class:drop-before={dropAt?.beforeGroup === g}>
-      {#if groups.editing === g}
-        <input class="rename" value={leafOf(g)} use:focusInput onkeydown={(e) => renameKey(e, g)}
-          onblur={(e) => finishRename(g, e.currentTarget.value)} spellcheck="false" />
-      {:else}
-        <button class="gname" data-row data-group={g} draggable="true"
-          ondragstart={(e) => dragStartGroup(e, g)} ondragend={dragEnd} ondragover={(e) => overGroup(e, g)} ondrop={drop}
-          onclick={() => groups.toggle(g)} ondblclick={() => (groups.editing = g)}>
-          <span class="chev">›</span>
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ group: g }); }}>
-            {#if groups.icon(g)}<span class="emoji">{groups.icon(g)}</span>{:else}
-            <svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H2.5a1 1 0 0 0-1 1z"/></svg>{/if}
-          </span>
-          <span class="t">{leafOf(g)}</span>
-          <span class="count">{groups.notesIn(g, true).length}</span>
-        </button>
-        <button class="icon mini" title="New note here" onclick={() => notes.create('', g)}>+</button>
-        <button class="icon mini" title="Delete group" onclick={() => removeGroup(g)}>×</button>
-      {/if}
-    </div>
-    {#if !collapsed}
-      <div class="body" transition:slide={{ duration: 160 }}>
-        {#each kids as k (k)}{@render groupBlock(k, depth + 1)}{/each}
-        {@render noteRows(own, kids.length ? '' : 'Drop notes here')}
-      </div>
-    {/if}
-  </section>
-{/snippet}
-
 {#if open}
   <aside transition:slide={{ axis: 'x', duration: 220, easing: cubicOut }}>
     <div class="top" data-tauri-drag-region>
@@ -361,24 +334,67 @@
     </div>
 
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div class="tree" role="tree" tabindex="-1" onkeydown={treeKey}>
-      {#if q}
-        {@render noteRows(hits, 'No matches')}
-      {:else}
-        {#if openFiles.length}
-          <section class="grp files" role="group" aria-label="Files">
-            <div class="ghead static"><span class="gname static">Open files</span></div>
-            {@render noteRows(openFiles, '')}
-          </section>
-        {/if}
-        {#each groups.children('') as g (g)}{@render groupBlock(g, 0)}{/each}
-        <section class="grp root" class:over={dropAt?.into === '' && !dropAt.beforeNote && !dropAt.beforeGroup} role="group" aria-label="Notes"
-          ondragover={(e) => overSection(e, '')} ondrop={drop}>
-          {#if groups.names.length}<div class="ghead static"><span class="gname static">Notes</span></div>{/if}
-          {@render noteRows(groups.notesIn(''), 'No notes')}
-        </section>
-      {/if}
-    </div>
+    <ul class="tree" role="tree" tabindex="-1" onkeydown={treeKey}
+      ondragover={(e) => overSection(e, '')} ondrop={drop}>
+      {#each rows as r (r.key)}
+        <li animate:flip={{ duration: 260, easing: cubicOut }} transition:slide={{ duration: 180, easing: cubicOut }}
+          class="row {r.kind}" style="--d: {'depth' in r ? r.depth : 0}"
+          class:over={r.kind !== 'note' && dropAt?.into === r.g && !dropAt.beforeNote && !dropAt.beforeGroup}
+          class:drop-before={(r.kind === 'note' && dropAt?.beforeNote === r.n.id) || (r.kind === 'group' && dropAt?.beforeGroup === r.g)}
+          class:dragging={(r.kind === 'note' && drag?.note === r.n.id) || (r.kind === 'group' && drag?.group === r.g)}>
+          {#each { length: 'depth' in r ? r.depth : 0 } as _, i}<i class="guide" style="left: {13 + i * 22}px"></i>{/each}
+
+          {#if r.kind === 'note'}
+            {@const n = r.n}
+            <div class="note-row" draggable={!n.path} ondragstart={(e) => !n.path && dragStartNote(e, n)} ondragend={dragEnd}
+              ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation">
+              <button data-row data-note={n.id} class:active={n.id === notes.currentId} onclick={() => openNote(n)}>
+                <span class="title">
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ note: n }); }}>
+                    {#if jumpNumbers.has(n.id)}<span class="num">{jumpNumbers.get(n.id)}</span>
+                    {:else if n.icon}<span class="emoji">{n.icon}</span>{:else}
+                    <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>{/if}
+                  </span>
+                  <span class="t">{titleOf(n)}</span>
+                </span>
+                <span class="meta"><span class="preview">{n.path ? n.path.replace(/^\/Users\/[^/]+/, '~') : preview(n.body)}</span><time>{ago(n.updatedAt)}</time></span>
+              </button>
+            </div>
+
+          {:else if r.kind === 'group'}
+            {@const g = r.g}
+            <div class="ghead" class:collapsed={groups.isCollapsed(g)}>
+              {#if groups.editing === g}
+                <input class="rename" value={leafOf(g)} use:focusInput onkeydown={(e) => renameKey(e, g)}
+                  onblur={(e) => finishRename(g, e.currentTarget.value)} spellcheck="false" />
+              {:else}
+                <button class="gname" data-row data-group={g} draggable="true"
+                  ondragstart={(e) => dragStartGroup(e, g)} ondragend={dragEnd} ondragover={(e) => overGroup(e, g)} ondrop={drop}
+                  onclick={() => groups.toggle(g)} ondblclick={() => (groups.editing = g)}>
+                  <span class="chev">›</span>
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ group: g }); }}>
+                    {#if groups.icon(g)}<span class="emoji">{groups.icon(g)}</span>{:else}
+                    <svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H2.5a1 1 0 0 0-1 1z"/></svg>{/if}
+                  </span>
+                  <span class="t">{leafOf(g)}</span>
+                  <span class="count">{groups.notesIn(g, true).length}</span>
+                </button>
+                <button class="icon mini" title="New note here" onclick={() => notes.create('', g)}>+</button>
+                <button class="icon mini" title="Delete group" onclick={() => removeGroup(g)}>×</button>
+              {/if}
+            </div>
+
+          {:else if r.kind === 'label'}
+            <div class="ghead static" role="presentation" ondragover={(e) => r.g === '' && overSection(e, '')} ondrop={drop}><span class="gname static">{r.text}</span></div>
+
+          {:else}
+            <div class="empty" role="presentation" ondragover={(e) => overSection(e, r.g)} ondrop={drop}>{r.text}</div>
+          {/if}
+        </li>
+      {/each}
+    </ul>
 
     <footer>
       <span class="sync {sync.status}" title={sync.error || (sync.enabled ? 'Synced' : 'Sync off')}>
@@ -412,12 +428,11 @@
   .plus-menu button:focus { background: var(--accent-soft); outline: none; }
   .plus-menu kbd { font: inherit; font-size: 11.5px; color: var(--fg-dim); }
 
-  .tree { flex: 1; overflow-y: auto; padding: 2px 6px 8px; }
-  .grp { border-radius: 8px; padding: 1px; transition: background 0.15s, box-shadow 0.15s; }
-  .grp.over { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
-  .grp.dragging { opacity: 0.4; }
-  .grp.root { min-height: 48px; }
-  .body { padding-left: 12px; border-left: 1px solid var(--line); margin-left: 13px; }
+  .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 2px 6px 8px; margin: 0; list-style: none; }
+  .row { position: relative; padding-left: calc(var(--d) * 22px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
+  .row.dragging { opacity: 0.4; }
+  .row.over { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
+  .guide { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); pointer-events: none; }
   .ico { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; opacity: 0.75; }
   .ico-slot { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: none; border-radius: 4px; transition: background 0.12s; }
   .ico-slot:hover { background: var(--bg-active); }
@@ -431,12 +446,12 @@
   @keyframes num-in { from { transform: scale(0.6); opacity: 0; } }
 
   .ghead { position: relative; display: flex; align-items: center; padding: 3px 0 1px; }
-  /* + and × float over the right edge on hover, so the header row itself spans the full width */
   .ghead .icon.mini { position: absolute; top: 50%; transform: translateY(-50%); opacity: 0; width: 20px; height: 20px; font-size: 13px; background: var(--bg-side); }
   .ghead .icon.mini { right: 22px; }
   .ghead .icon.mini + .icon.mini { right: 2px; }
   .ghead:hover .icon.mini { opacity: 1; }
   .ghead:hover .count { opacity: 0; }
+  .ghead.static { padding-top: 8px; }
   .gname {
     flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px;
     border: 0; background: none; color: var(--fg); font: inherit; font-size: 12.5px; font-weight: 600;
@@ -453,29 +468,25 @@
     border: 1px solid var(--accent); background: var(--bg-input); color: var(--fg); outline: none; box-shadow: var(--glow);
   }
 
-  ul { list-style: none; margin: 0; padding: 0; }
-  li { position: relative; border-radius: 6px; transition: opacity 0.15s; }
-  li.dragging { opacity: 0.4; }
-  li.empty { padding: 5px 10px; font-size: 11.5px; color: var(--fg-dim); opacity: 0.7; }
-  li.empty:empty { display: none; }
-  li.drop-before::before, .ghead.drop-before::before {
-    content: ''; position: absolute; left: 8px; right: 8px; top: -1px; height: 2px; border-radius: 1px;
-    background: var(--accent); box-shadow: var(--glow); pointer-events: none;
+  .empty { padding: 5px 10px; font-size: 11.5px; color: var(--fg-dim); opacity: 0.7; }
+  .row.drop-before::before {
+    content: ''; position: absolute; left: calc(var(--d) * 22px + 8px); right: 8px; top: -1px; height: 2px; border-radius: 1px;
+    background: var(--accent); box-shadow: var(--glow); pointer-events: none; z-index: 1;
   }
-  li > button {
+  .note-row > button {
     width: 100%; text-align: left; border: 0; background: none; color: inherit; font: inherit;
     padding: 5px 8px; border-radius: 6px; display: flex; flex-direction: column; gap: 2px;
     cursor: default; transition: background 0.12s, transform 0.12s;
   }
-  li > button:hover { background: var(--bg-hover); }
-  li > button:active { transform: scale(0.985); }
-  li > button.active { background: var(--bg-active); }
+  .note-row > button:hover { background: var(--bg-hover); }
+  .note-row > button:active { transform: scale(0.985); }
+  .note-row > button.active { background: var(--bg-active); }
   /* keyboard cursor: a soft accent tint with a thin bar on the left; the open note stays neutral grey */
   [data-row]:focus { outline: none; background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
-  li > button.active:focus { background: color-mix(in srgb, var(--accent) 16%, var(--bg-active)); }
+  .note-row > button.active:focus { background: color-mix(in srgb, var(--accent) 16%, var(--bg-active)); }
   .title { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .meta { display: flex; gap: 8px; font-size: 11.5px; color: var(--fg-dim); padding-left: 19px; width: 100%; }
+  .meta { display: flex; gap: 8px; font-size: 11.5px; color: var(--fg-dim); padding-left: 23px; width: 100%; }
   .preview { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   footer {

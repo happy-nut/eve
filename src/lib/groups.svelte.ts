@@ -61,6 +61,15 @@ class Groups {
 
   private persist() { localStorage.setItem(LS, JSON.stringify(this.saved)); }
 
+  /** stable identity that survives renames and moves (sidebar row key, so rows animate instead of re-mounting).
+   *  Plain Map, not $state: it is filled lazily from inside a $derived. */
+  private ids = new Map<string, string>();
+  id(g: string) {
+    let id = this.ids.get(g);
+    if (!id) { id = Math.random().toString(36).slice(2, 10); this.ids.set(g, id); }
+    return id;
+  }
+
   icon(g: string) { return this.saved.icons[g] ?? ''; }
   setIcon(g: string, icon: string) {
     icon = icon.trim();
@@ -113,7 +122,8 @@ class Groups {
     if (idx < 0) rest.push(...moved); else rest.splice(idx, 0, ...moved);
     this.saved.order = rest;
     this.saved.collapsed = this.saved.collapsed.map((g) => (sub.includes(g) ? map(g) : g));
-    this.saved.icons = Object.fromEntries(Object.entries(this.saved.icons).map(([g, i]) => [sub.includes(g) ? map(g) : g, i]));
+    this.saved.icons = Object.fromEntries(Object.entries(this.saved.icons).map(([g, v]) => [sub.includes(g) ? map(g) : g, v]));
+    this.ids = new Map([...this.ids].map(([g, v]) => [sub.includes(g) ? map(g) : g, v]));
     this.persist();
     if (np !== p) for (const n of notes.all) if (!n.deleted && within(n.group, p)) notes.relabel(n.id, map(n.group));
     return np;
@@ -138,7 +148,7 @@ class Groups {
     const sub = this.subtree(p);
     this.saved.order = this.names.filter((g) => !sub.includes(g));
     this.saved.collapsed = this.saved.collapsed.filter((g) => !sub.includes(g));
-    for (const g of sub) delete this.saved.icons[g];
+    for (const g of sub) { delete this.saved.icons[g]; this.ids.delete(g); }
     this.persist();
     for (const n of notes.all) if (!n.deleted && within(n.group, p)) notes.setGroup(n.id, '');
   }
