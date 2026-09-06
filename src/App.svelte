@@ -36,7 +36,7 @@
     if (next) notes.currentId = next.id;
   }
 
-  /** ⌘⇧E: closed -> open + focus list; focus already in list -> close + back to editor; else focus list. */
+  /** ⌘\\: closed -> open + focus list; focus already in list -> close + back to editor; else focus list. */
   function focusSidebar() {
     if (sidebarOpen && document.activeElement?.closest('aside')) {
       sidebarOpen = false;
@@ -61,7 +61,6 @@
       case 'newNote': notes.create(); break;
       case 'newGroup': sidebarOpen = true; groups.create(); break;
       case 'search': sidebarOpen = true; queueMicrotask(() => searchEl?.focus()); break;
-      case 'toggleSidebar': sidebarOpen = !sidebarOpen; break;
       case 'focusSidebar': focusSidebar(); break;
       case 'back': notes.back(); break;
       case 'forward': notes.forward(); break;
