@@ -169,9 +169,14 @@
       case 'ArrowLeft': if (group && !groups.isCollapsed(group)) groups.toggle(group); else return; break;
       case 'ArrowRight': if (group && groups.isCollapsed(group)) groups.toggle(group); else return; break;
       case 'Backspace': case 'Delete': {
-        const next = rows[i + 1] ?? rows[i - 1];
-        if (noteId) removeNote(notes.all.find((n) => n.id === noteId)!).then(() => next?.focus());
-        else if (group) removeGroup(group).then(() => next?.focus());
+        // remember the neighbour by id: the DOM rows are rebuilt after the delete
+        const nb = rows[i + 1] ?? rows[i - 1];
+        const sel = nb?.dataset.note ? `[data-note="${nb.dataset.note}"]` : nb?.dataset.group ? `[data-group="${CSS.escape(nb.dataset.group)}"]` : '[data-row]';
+        const done = noteId ? removeNote(notes.all.find((n) => n.id === noteId)!) : group ? removeGroup(group) : Promise.resolve();
+        done.then(async () => {
+          await tick();
+          (document.querySelector<HTMLElement>(`aside ${sel}`) ?? document.querySelector<HTMLElement>('aside [data-row]'))?.focus();
+        });
         break;
       }
       case 'Enter': if (group) { groups.editing = group; break; } return;

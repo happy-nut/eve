@@ -134,7 +134,8 @@ export function createEditor(opts: {
 }) {
   const editor = new Editor({
     element: opts.element,
-    autofocus: opts.cursor === undefined ? 'end' : false,
+    // don't steal focus from the sidebar (e.g. after deleting a note from the list)
+    autofocus: document.activeElement?.closest('aside') ? false : opts.cursor === undefined ? 'end' : false,
     content: opts.content,
     editorProps: { attributes: { class: 'prose', spellcheck: 'true' } },
     onCreate: ({ editor }) => {
