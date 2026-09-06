@@ -214,11 +214,12 @@
     if (e.key === 'Escape') { query = ''; searchEl?.blur(); e.preventDefault(); }
     if (e.key === 'Enter' && hits[0]) { notes.currentId = hits[0].id; searchEl?.blur(); e.preventDefault(); }
   }
-  /** mouse: open and jump into the editor; keyboard (Enter/Space): open but stay in the list */
-  async function openNote(n: Note, e: MouseEvent) {
+  /** click or Enter on a note: open it and move into the editor */
+  async function openNote(n: Note) {
+    ui.focusOwner = 'editor';
     notes.currentId = n.id;
-    if (e.detail > 0) { await tick(); document.querySelector<HTMLElement>('.tiptap')?.focus(); }
-    else (e.currentTarget as HTMLElement).focus();
+    await tick();
+    document.querySelector<HTMLElement>('.tiptap')?.focus();
   }
 </script>
 
@@ -229,7 +230,7 @@
         draggable={!n.path} ondragstart={(e) => !n.path && dragStartNote(e, n)} ondragend={dragEnd}
         ondragover={(e) => overNote(e, n, list)} ondrop={drop}
         class:dragging={drag?.note === n.id} class:drop-before={dropAt?.beforeNote === n.id}>
-        <button data-row data-note={n.id} class:active={n.id === notes.currentId} onclick={(e) => openNote(n, e)}>
+        <button data-row data-note={n.id} class:active={n.id === notes.currentId} onclick={() => openNote(n)}>
           <span class="title">
             <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>
             <span class="t">{titleOf(n)}</span>
