@@ -52,6 +52,13 @@ class Groups {
     return walk('');
   }
 
+  /** like ordered(), but only what the sidebar currently shows (collapsed groups skipped) */
+  visibleOrdered() {
+    const walk = (p: string): typeof notes.visible =>
+      [...this.children(p).flatMap((c) => (this.isCollapsed(c) ? [] : walk(c))), ...this.notesIn(p)];
+    return [...notes.visible.filter((n) => n.path), ...walk('')];
+  }
+
   private persist() { localStorage.setItem(LS, JSON.stringify(this.saved)); }
 
   icon(g: string) { return this.saved.icons[g] ?? ''; }

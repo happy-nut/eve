@@ -9,8 +9,14 @@
   import { sync } from './lib/sync.svelte';
   import { ui } from './lib/ui.svelte';
 
-  let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), openPlus = $bindable(), onSettings }:
-    { open: boolean; searchEl: HTMLInputElement | null; openPlus?: (anchor?: HTMLElement) => void; onSettings: () => void } = $props();
+  let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), openPlus = $bindable(), cmdHeld = false, onSettings }:
+    { open: boolean; searchEl: HTMLInputElement | null; openPlus?: (anchor?: HTMLElement) => void; cmdHeld?: boolean; onSettings: () => void } = $props();
+  /** ⌘ held: 1…9 badges on the notes in the order shown */
+  const jumpNumbers = $derived.by(() => {
+    const m = new Map<string, number>();
+    if (cmdHeld && !q) groups.visibleOrdered().slice(0, 9).forEach((n, i) => m.set(n.id, i + 1));
+    return m;
+  });
 
   let query = $state('');
   const q = $derived(query.trim().toLowerCase());
@@ -278,7 +284,8 @@
           <span class="title">
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ note: n }); }}>
-              {#if n.icon}<span class="emoji">{n.icon}</span>{:else}
+              {#if jumpNumbers.has(n.id)}<span class="num">{jumpNumbers.get(n.id)}</span>
+              {:else if n.icon}<span class="emoji">{n.icon}</span>{:else}
               <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>{/if}
             </span>
             <span class="t">{titleOf(n)}</span>
@@ -415,6 +422,13 @@
   .ico-slot { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: none; border-radius: 4px; transition: background 0.12s; }
   .ico-slot:hover { background: var(--bg-active); }
   .emoji { font-size: 13px; line-height: 1; }
+  .num {
+    width: 16px; height: 16px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+    animation: num-in 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  @keyframes num-in { from { transform: scale(0.6); opacity: 0; } }
 
   .ghead { position: relative; display: flex; align-items: center; padding: 3px 0 1px; }
   /* + and × float over the right edge on hover, so the header row itself spans the full width */

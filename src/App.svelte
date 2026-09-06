@@ -18,6 +18,18 @@
   let searchEl = $state<HTMLInputElement | null>(null);
   let hotkeyError = $state<string | null>(null);
   let openPlus = $state<((anchor?: HTMLElement) => void) | undefined>();
+  // hold ⌘: sidebar notes show 1…9, ⌘<digit> opens that note
+  let cmdHeld = $state(false);
+  let cmdTimer: ReturnType<typeof setTimeout> | undefined;
+  function cmdDown() { clearTimeout(cmdTimer); cmdTimer = setTimeout(() => (cmdHeld = true), 150); }
+  function cmdUp() { clearTimeout(cmdTimer); cmdHeld = false; }
+  function jumpTo(n: number) {
+    const note = groups.visibleOrdered()[n - 1];
+    if (!note) return;
+    ui.focusOwner = 'editor';
+    notes.currentId = note.id;
+    queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap')?.focus());
+  }
 
   // global hotkey follows the shortcut store live
   $effect(() => {
@@ -58,7 +70,14 @@
     if (n.path || (await ui.ask(`Delete “${titleOf(n)}”?`))) notes.remove(n.id);
   }
   function onKeydown(e: KeyboardEvent) {
-    if ((e.defaultPrevented && !(e as any).eveApp) || ui.pending) return;
+    if (e.key === 'Meta') cmdDown();
+    if (ui.pending) return;
+    if (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
+      e.preventDefault();
+      jumpTo(Number(e.code[5]));
+      return;
+    }
+    if (e.defaultPrevented && !(e as any).eveApp) return;
     const a = shortcuts.match(e, ['app']);
     if (!a) return;
     if (a.id === 'hide' && (settingsOpen || document.activeElement === searchEl)) return; // handled locally
@@ -83,7 +102,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={cmdUp} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="shell" onfocusin={(e) => (ui.focusOwner = (e.target as HTMLElement).closest('aside') ? 'sidebar' : 'editor')}>
@@ -103,7 +122,7 @@
       <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
     </button>
   </div>
-  <Sidebar bind:open={sidebarOpen} bind:searchEl bind:openPlus onSettings={() => (settingsOpen = true)} />
+  <Sidebar bind:open={sidebarOpen} bind:searchEl bind:openPlus {cmdHeld} onSettings={() => (settingsOpen = true)} />
   <main>
     {#if notes.loaded && notes.current}
       {#key notes.currentId}
