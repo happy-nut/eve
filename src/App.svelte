@@ -58,7 +58,11 @@
     if (a.id === 'hide' && (settingsOpen || document.activeElement === searchEl)) return; // handled locally
     e.preventDefault();
     switch (a.id) {
-      case 'newNote': notes.create(); break;
+      case 'newNote':
+        // from the sidebar, ask what to create (note or group) via the + menu
+        if (document.activeElement?.closest('aside')) document.querySelector<HTMLElement>('aside .plus')?.click();
+        else notes.create();
+        break;
       case 'newGroup': sidebarOpen = true; groups.create(); break;
       case 'search': sidebarOpen = true; queueMicrotask(() => searchEl?.focus()); break;
       case 'focusSidebar': focusSidebar(); break;

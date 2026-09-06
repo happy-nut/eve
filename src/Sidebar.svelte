@@ -29,6 +29,12 @@
     e.preventDefault(); e.stopPropagation();
   }
   const autofocus = (el: HTMLElement) => el.focus();
+  /** mouse: open and jump into the editor; keyboard (Enter/Space): open but stay in the list */
+  async function openNote(n: Note, e: MouseEvent) {
+    notes.currentId = n.id;
+    if (e.detail > 0) { await tick(); document.querySelector<HTMLElement>('.tiptap')?.focus(); }
+    else (e.currentTarget as HTMLElement).focus();
+  }
   const q = $derived(query.trim().toLowerCase());
   const filtered = $derived(q ? notes.visible.filter((n) => n.body.toLowerCase().includes(q)) : notes.visible);
   const inGroup = (g: string) => filtered.filter((n) => n.group === g && !n.path);
@@ -248,7 +254,7 @@
                   class:dragging={dragId === n.id}
                   class:drop-before={dropAt?.id === n.id && dropAt.before} class:drop-after={dropAt?.id === n.id && !dropAt.before}>
                   <button data-row data-note={n.id} class:active={n.id === notes.currentId}
-                    onclick={(e) => { notes.currentId = n.id; e.currentTarget.focus(); }}>
+                    onclick={(e) => openNote(n, e)}>
                     <span class="title">{titleOf(n)}</span>
                     <span class="meta"><span class="preview">{n.path ? n.path.replace(/^\/Users\/[^/]+/, '~') : preview(n.body)}</span><time>{ago(n.updatedAt)}</time></span>
                   </button>

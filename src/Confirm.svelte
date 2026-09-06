@@ -3,6 +3,9 @@
   import { ui } from './lib/ui.svelte';
 
   const p = $derived(ui.pending!);
+  // give focus back to where it was (sidebar row, editor) when the dialog closes
+  const returnTo = document.activeElement as HTMLElement | null;
+  $effect(() => () => returnTo?.isConnected && returnTo.focus());
   let value = $state('');
   $effect(() => { value = p.input ?? ''; });
 
