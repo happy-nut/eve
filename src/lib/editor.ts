@@ -7,6 +7,11 @@ import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
 import { Plugin, PluginKey, type Command } from '@tiptap/pm/state';
 import { WikiLink } from './wikilink';
+import { Callout } from './callout';
+import { LocalImage } from './image';
+import { ui } from './ui.svelte';
+import { pickImage } from './platform';
+import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
 
 const KEYMAP = new PluginKey('eve-keymap');
@@ -17,6 +22,12 @@ export const getMarkdown = (editor: Editor): string => (editor.storage as any).m
 function editorCommands(editor: Editor): Record<string, () => boolean> {
   const c = () => editor.chain().focus();
   return {
+    slash: () => c().insertContent('/').run(),
+    callout: () => c().toggleWrap('callout').run(),
+    image: () => {
+      pickImage().then((src) => src && c().setImage({ src }).run());
+      return true;
+    },
     bold: () => c().toggleBold().run(),
     italic: () => c().toggleItalic().run(),
     underline: () => c().toggleUnderline().run(),
@@ -24,16 +35,20 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     code: () => c().toggleCode().run(),
     link: () => {
       const prev = editor.getAttributes('link').href as string | undefined;
-      const url = window.prompt('URL', prev ?? 'https://');
-      if (url === null) return true;
-      if (!url) return c().unsetLink().run();
-      return c().extendMarkRange('link').setLink({ href: url }).run();
+      ui.prompt('Link URL', prev ?? 'https://').then((url) => {
+        if (url === null) return;
+        if (!url) c().unsetLink().run();
+        else c().extendMarkRange('link').setLink({ href: url }).run();
+      });
+      return true;
     },
     wikiLink: () => c().insertContent('[[').run(),
     paragraph: () => c().setParagraph().run(),
     h1: () => c().toggleHeading({ level: 1 }).run(),
     h2: () => c().toggleHeading({ level: 2 }).run(),
     h3: () => c().toggleHeading({ level: 3 }).run(),
+    h4: () => c().toggleHeading({ level: 4 }).run(),
+    h5: () => c().toggleHeading({ level: 5 }).run(),
     bulletList: () => c().toggleBulletList().run(),
     orderedList: () => c().toggleOrderedList().run(),
     taskList: () => c().toggleTaskList().run(),
@@ -55,13 +70,48 @@ export function applyKeymap(editor: Editor) {
   editor.registerPlugin(plugin, (p, all) => [p, ...all]);
 }
 
+export interface SuggestItem { label: string; hint?: string; run?: (editor: Editor) => void }
 export interface SuggestionUI {
-  show(items: string[], rect: DOMRect | null, pick: (title: string) => void): void;
+  show(items: SuggestItem[], rect: DOMRect | null, pick: (item: SuggestItem) => void): void;
   move(delta: number): void;
   select(): boolean;
   hide(): void;
   visible(): boolean;
 }
+
+/** Shared suggestion popup wiring for [[ and / menus. */
+function popup(uiRef: SuggestionUI) {
+  return {
+    onStart: (p: any) => uiRef.show(p.items, p.clientRect?.() ?? null, (i: SuggestItem) => p.command(i)),
+    onUpdate: (p: any) => uiRef.show(p.items, p.clientRect?.() ?? null, (i: SuggestItem) => p.command(i)),
+    onKeyDown: ({ event }: { event: KeyboardEvent }) => {
+      if (!uiRef.visible()) return false;
+      if (event.key === 'ArrowDown') return (uiRef.move(1), true);
+      if (event.key === 'ArrowUp') return (uiRef.move(-1), true);
+      if (event.key === 'Enter' || event.key === 'Tab') return uiRef.select();
+      if (event.key === 'Escape') return (uiRef.hide(), true);
+      return false;
+    },
+    onExit: () => uiRef.hide(),
+  };
+}
+
+/** The "/" block menu, Notion-style. */
+const SLASH: SuggestItem[] = [
+  { label: 'Text', hint: 'Plain paragraph', run: (e) => e.chain().focus().setParagraph().run() },
+  { label: 'Heading 1', hint: 'Big section heading', run: (e) => e.chain().focus().setHeading({ level: 1 }).run() },
+  { label: 'Heading 2', hint: 'Medium heading', run: (e) => e.chain().focus().setHeading({ level: 2 }).run() },
+  { label: 'Heading 3', hint: 'Small heading', run: (e) => e.chain().focus().setHeading({ level: 3 }).run() },
+  { label: 'Bulleted list', hint: '- item', run: (e) => e.chain().focus().toggleBulletList().run() },
+  { label: 'Numbered list', hint: '1. item', run: (e) => e.chain().focus().toggleOrderedList().run() },
+  { label: 'To-do list', hint: '[ ] task', run: (e) => e.chain().focus().toggleTaskList().run() },
+  { label: 'Callout', hint: '💡 highlighted box', run: (e) => e.chain().focus().toggleWrap('callout').run() },
+  { label: 'Quote', hint: '> quotation', run: (e) => e.chain().focus().toggleBlockquote().run() },
+  { label: 'Code block', hint: '``` code', run: (e) => e.chain().focus().toggleCodeBlock().run() },
+  { label: 'Divider', hint: '---', run: (e) => e.chain().focus().setHorizontalRule().run() },
+  { label: 'Image', hint: 'Pick a file', run: (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); } },
+  { label: 'Link to note', hint: '[[ another note', run: (e) => e.chain().focus().insertContent('[[').run() },
+];
 
 export function createEditor(opts: {
   element: HTMLElement;
@@ -70,15 +120,19 @@ export function createEditor(opts: {
   onOpenNote: (title: string) => void;
   titles: () => string[];
   suggestionUI: SuggestionUI;
+  cursor?: number;
 }) {
   const editor = new Editor({
     element: opts.element,
-    autofocus: 'end',
+    autofocus: opts.cursor === undefined ? 'end' : false,
     content: opts.content,
     editorProps: { attributes: { class: 'prose', spellcheck: 'true' } },
+    onCreate: ({ editor }) => {
+      if (opts.cursor !== undefined) editor.commands.setTextSelection(Math.min(opts.cursor, editor.state.doc.content.size));
+    },
     extensions: [
       StarterKit.configure({
-        heading: { levels: [1, 2, 3] },
+        heading: { levels: [1, 2, 3, 4, 5] },
         link: { openOnClick: false, autolink: true },
         codeBlock: { languageClassPrefix: 'language-' },
       }),
@@ -111,28 +165,41 @@ export function createEditor(opts: {
             const q = query.toLowerCase();
             const hits = opts.titles().filter((t) => t.toLowerCase().includes(q)).slice(0, 8);
             if (query && !hits.some((t) => t.toLowerCase() === q)) hits.push(query);
-            return hits;
+            return hits.map((label) => ({ label }));
           },
           command: ({ editor, range, props }) =>
             editor
               .chain()
               .focus()
               .deleteRange(range)
-              .insertContent([{ type: 'wikiLink', attrs: { title: props } }, { type: 'text', text: ' ' }])
+              .insertContent([{ type: 'wikiLink', attrs: { title: (props as SuggestItem).label } }, { type: 'text', text: ' ' }])
               .run(),
-          render: () => ({
-            onStart: (p) => opts.suggestionUI.show(p.items as string[], p.clientRect?.() ?? null, (t) => p.command(t)),
-            onUpdate: (p) => opts.suggestionUI.show(p.items as string[], p.clientRect?.() ?? null, (t) => p.command(t)),
-            onKeyDown: ({ event }) => {
-              if (!opts.suggestionUI.visible()) return false;
-              if (event.key === 'ArrowDown') return (opts.suggestionUI.move(1), true);
-              if (event.key === 'ArrowUp') return (opts.suggestionUI.move(-1), true);
-              if (event.key === 'Enter' || event.key === 'Tab') return opts.suggestionUI.select();
-              if (event.key === 'Escape') return (opts.suggestionUI.hide(), true);
-              return false;
-            },
-            onExit: () => opts.suggestionUI.hide(),
-          }),
+          render: () => popup(opts.suggestionUI),
+        },
+      }),
+      Callout,
+      LocalImage.configure({ inline: false, allowBase64: true }),
+      Extension.create({
+        name: 'slashMenu',
+        addProseMirrorPlugins() {
+          return [
+            Suggestion({
+              editor: this.editor,
+              char: '/',
+              pluginKey: new PluginKey('slashMenu'),
+              allowSpaces: false,
+              allowedPrefixes: null, // trigger mid-word too, like Notion
+              items: ({ query }) => {
+                const q = query.toLowerCase();
+                return SLASH.filter((i) => i.label.toLowerCase().includes(q) || i.hint?.toLowerCase().includes(q));
+              },
+              command: ({ editor, range, props }) => {
+                editor.chain().focus().deleteRange(range).run();
+                (props as SuggestItem).run?.(editor);
+              },
+              render: () => popup(opts.suggestionUI),
+            }),
+          ];
         },
       }),
     ],

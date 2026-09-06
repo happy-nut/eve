@@ -11,8 +11,10 @@ const sync = (cursor, notes) =>
   fetch(`http://localhost:${PORT}/sync`, { method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ cursor, notes }) }).then((r) => r.json());
 try {
   // client A pushes
-  let a = await sync(0, [{ id: 'n1', body: 'hello', updatedAt: 100, deleted: false }]);
+  let a = await sync(0, [{ id: 'n1', body: 'hello', updatedAt: 100, deleted: false, group: 'Work', order: 2.5 }]);
   assert.equal(a.notes.length, 1);
+  assert.equal(a.notes[0].group, 'Work');
+  assert.equal(a.notes[0].order, 2.5);
   // client B pulls from 0
   let b = await sync(0, []);
   assert.equal(b.notes[0].body, 'hello');

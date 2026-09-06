@@ -5,6 +5,8 @@ export interface Note {
   body: string; // markdown
   updatedAt: number; // ms epoch
   deleted: boolean;
+  group: string; // '' = root
+  order: number; // manual sort rank within its group (ascending)
 }
 
 export const newId = () =>
@@ -12,7 +14,7 @@ export const newId = () =>
 
 // ---- (de)serialization: markdown with a tiny frontmatter -------------------
 export function serialize(n: Note): string {
-  return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\n---\n${n.body}`;
+  return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\norder: ${n.order}${n.group ? `\ngroup: ${n.group}` : ''}\n---\n${n.body}`;
 }
 
 export function parse(text: string): Note | null {
@@ -29,6 +31,9 @@ export function parse(text: string): Note | null {
     body: m[2],
     updatedAt: Number(meta.updated) || 0,
     deleted: meta.deleted === 'true',
+    group: meta.group ?? '',
+    // legacy notes without order: newest first
+    order: meta.order !== undefined && !Number.isNaN(Number(meta.order)) ? Number(meta.order) : -(Number(meta.updated) || 0),
   };
 }
 
@@ -50,13 +55,39 @@ export function titleOf(n: Pick<Note, 'body'>): string {
 // ---- reactive store --------------------------------------------------------
 class NotesStore {
   all = $state<Note[]>([]);
-  currentId = $state<string | null>(null);
+  private _cur = $state<string | null>(null);
+  /** visited-note history for back/forward (⌘[ / ⌘]) */
+  private history: string[] = [];
+  private hIndex = -1;
+  /** last cursor position per note, restored when navigating back */
+  cursor = new Map<string, number>();
+
+  get currentId() { return this._cur; }
+  set currentId(id: string | null) {
+    if (id === this._cur) return;
+    if (id) {
+      this.history = this.history.slice(0, this.hIndex + 1).filter((h) => h !== id);
+      this.history.push(id);
+      this.hIndex = this.history.length - 1;
+    }
+    this._cur = id;
+  }
+  back() { this.step(-1); }
+  forward() { this.step(1); }
+  private step(d: number) {
+    let i = this.hIndex + d;
+    while (i >= 0 && i < this.history.length) {
+      const n = this.all.find((x) => x.id === this.history[i]);
+      if (n && !n.deleted) { this.hIndex = i; this._cur = n.id; return; }
+      i += d;
+    }
+  }
   loaded = $state(false);
   /** bumps whenever a note changes locally; sync listens to it */
   dirty = $state(0);
 
   get visible() {
-    return this.all.filter((n) => !n.deleted).sort((a, b) => b.updatedAt - a.updatedAt);
+    return this.all.filter((n) => !n.deleted).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt);
   }
   get current() {
     return this.all.find((n) => n.id === this.currentId) ?? null;
@@ -70,8 +101,9 @@ class NotesStore {
     this.loaded = true;
   }
 
-  create(body = ''): Note {
-    const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false };
+  create(body = '', group = this.current?.group ?? ''): Note {
+    const first = this.visible.find((x) => x.group === group);
+    const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group, order: first ? first.order - 1 : 0 };
     this.all.push(n);
     this.currentId = n.id;
     void storage.write(n.id, serialize(n));
@@ -96,6 +128,37 @@ class NotesStore {
     this.timers.delete(id);
     void storage.write(n.id, serialize(n));
     this.dirty++;
+  }
+
+  /** Move a note into a group ('' = root), appended at the end. */
+  setGroup(id: string, group: string) {
+    this.move(id, group, null);
+  }
+
+  /**
+   * Place a note in `group` right before `beforeId` (null = at the end).
+   * Ranks are floats; midpoints are used so only the moved note is rewritten.
+   * ponytail: ranks can get arbitrarily close after thousands of moves; renormalize then.
+   */
+  move(id: string, group: string, beforeId: string | null) {
+    const n = this.all.find((x) => x.id === id);
+    if (!n || id === beforeId) return;
+    const list = this.visible.filter((x) => x.group === group && x.id !== id);
+    let order: number;
+    if (beforeId) {
+      const i = list.findIndex((x) => x.id === beforeId);
+      if (i < 0) return;
+      const prev = list[i - 1], next = list[i];
+      order = prev ? (prev.order + next.order) / 2 : next.order - 1;
+    } else {
+      const last = list.at(-1);
+      order = last ? last.order + 1 : 0;
+    }
+    if (n.group === group && n.order === order) return;
+    n.group = group;
+    n.order = order;
+    n.updatedAt = Date.now();
+    this.flush(id);
   }
 
   remove(id: string) {

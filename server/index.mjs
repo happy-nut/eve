@@ -17,11 +17,14 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS notes_seq ON notes(seq);
 `);
+for (const col of ['grp TEXT NOT NULL DEFAULT \'\'', 'ord REAL NOT NULL DEFAULT 0']) {
+  try { db.exec(`ALTER TABLE notes ADD COLUMN ${col}`); } catch { /* column exists */ }
+}
 const qGet = db.prepare('SELECT updated_at FROM notes WHERE id = ?');
 const qMaxSeq = db.prepare('SELECT COALESCE(MAX(seq), 0) AS s FROM notes');
-const qUpsert = db.prepare(`INSERT INTO notes (id, body, updated_at, deleted, seq) VALUES (?, ?, ?, ?, ?)
-  ON CONFLICT(id) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at, deleted = excluded.deleted, seq = excluded.seq`);
-const qSince = db.prepare('SELECT id, body, updated_at, deleted FROM notes WHERE seq > ? ORDER BY seq');
+const qUpsert = db.prepare(`INSERT INTO notes (id, body, updated_at, deleted, grp, ord, seq) VALUES (?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at, deleted = excluded.deleted, grp = excluded.grp, ord = excluded.ord, seq = excluded.seq`);
+const qSince = db.prepare('SELECT id, body, updated_at, deleted, grp, ord FROM notes WHERE seq > ? ORDER BY seq');
 
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -34,12 +37,12 @@ export function handleSync({ cursor = 0, notes = [] }) {
       if (!ID_RE.test(n.id) || typeof n.body !== 'string' || !Number.isFinite(n.updatedAt)) continue;
       const cur = qGet.get(n.id);
       if (cur && cur.updated_at >= n.updatedAt) continue; // last writer wins
-      qUpsert.run(n.id, n.body, n.updatedAt, n.deleted ? 1 : 0, ++seq);
+      qUpsert.run(n.id, n.body, n.updatedAt, n.deleted ? 1 : 0, typeof n.group === 'string' ? n.group.slice(0, 200) : '', Number.isFinite(n.order) ? n.order : 0, ++seq);
     }
     tx('COMMIT');
   } catch (e) { tx('ROLLBACK'); throw e; }
   const changed = qSince.all(Number(cursor) || 0).map((r) => ({
-    id: r.id, body: r.body, updatedAt: r.updated_at, deleted: !!r.deleted,
+    id: r.id, body: r.body, updatedAt: r.updated_at, deleted: !!r.deleted, group: r.grp, order: r.ord,
   }));
   return { cursor: seq, notes: changed };
 }

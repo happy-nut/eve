@@ -8,6 +8,8 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 
 const LS = 'eve.notes.';
 
+let notesDir = '';
+
 export const storage = {
   async list(): Promise<string[]> {
     if (isTauri) return invoke<string[]>('list_notes');
@@ -20,9 +22,42 @@ export const storage = {
     localStorage.setItem(LS + id, text);
   },
   async path(): Promise<string> {
-    return isTauri ? invoke<string>('notes_path') : 'localStorage';
+    if (!notesDir) notesDir = isTauri ? await invoke<string>('notes_path') : 'localStorage';
+    return notesDir;
   },
 };
+
+/** Map a markdown image src to something the webview can load. Relative paths live under notes/. */
+export function assetUrl(src: string | undefined): string | undefined {
+  if (!src || !isTauri || /^(https?:|data:|asset:|file:)/.test(src)) return src;
+  if (!notesDir) return src;
+  // lazy import keeps the browser bundle Tauri-free
+  return convertFileSrcSync(`${notesDir}/${src}`);
+}
+let convertFileSrcSync: (p: string) => string = (p) => p;
+if (isTauri) import('@tauri-apps/api/core').then((m) => (convertFileSrcSync = m.convertFileSrc));
+
+/** Open a native file picker, copy the image next to the notes, return its relative path. Null if cancelled. */
+export async function pickImage(): Promise<string | null> {
+  if (!isTauri) {
+    return new Promise((res) => {
+      const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
+      inp.onchange = () => {
+        const f = inp.files?.[0];
+        if (!f) return res(null);
+        const r = new FileReader();
+        r.onload = () => res(String(r.result)); // browser fallback: data URL
+        r.readAsDataURL(f);
+      };
+      inp.click();
+    });
+  }
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const path = await open({ multiple: false, filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic'] }] });
+  if (!path) return null;
+  await storage.path();
+  return invoke<string>('import_asset', { src: path });
+}
 
 export const win = {
   toggle: () => (isTauri ? invoke<void>('toggle_window') : Promise.resolve()),

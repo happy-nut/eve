@@ -41,6 +41,27 @@ fn write_note(app: AppHandle, id: String, text: String) -> Result<(), String> {
     fs::rename(tmp, path).map_err(|e| e.to_string())
 }
 
+/// Copy an image picked by the user into notes/assets and return its note-relative path.
+#[tauri::command]
+fn import_asset(app: AppHandle, src: String) -> Result<String, String> {
+    let src = PathBuf::from(src);
+    let ext = src
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .filter(|e| ["png", "jpg", "jpeg", "gif", "webp", "svg", "heic"].contains(&e.as_str()))
+        .ok_or("unsupported image type")?;
+    let dir = notes_dir(&app)?.join("assets");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let name = format!("{stamp:x}.{ext}");
+    fs::copy(&src, dir.join(&name)).map_err(|e| e.to_string())?;
+    Ok(format!("assets/{name}"))
+}
+
 #[tauri::command]
 fn notes_path(app: AppHandle) -> Result<String, String> {
     Ok(notes_dir(&app)?.to_string_lossy().into_owned())
@@ -77,9 +98,11 @@ fn hide_app(app: AppHandle) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             list_notes,
             write_note,
+            import_asset,
             notes_path,
             toggle_window,
             hide_app

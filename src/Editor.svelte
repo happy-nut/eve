@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
   import type { Editor as TipTap } from '@tiptap/core';
-  import { createEditor, applyKeymap, getMarkdown } from './lib/editor';
+  import { createEditor, applyKeymap, getMarkdown, type SuggestItem } from './lib/editor';
   import { notes, titleOf, type Note } from './lib/notes.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
 
@@ -12,13 +12,13 @@
   let editor: TipTap | undefined;
 
   // [[ suggestion popup state
-  let items = $state<string[]>([]);
+  let items = $state<SuggestItem[]>([]);
   let sel = $state(0);
   let pos = $state({ x: 0, y: 0 });
-  let pick: (t: string) => void = () => {};
+  let pick: (t: SuggestItem) => void = () => {};
 
   const suggestionUI = {
-    show(list: string[], rect: DOMRect | null, cb: (t: string) => void) {
+    show(list: SuggestItem[], rect: DOMRect | null, cb: (t: SuggestItem) => void) {
       items = list; sel = 0; pick = cb;
       if (rect) pos = { x: rect.left, y: rect.bottom + 4 };
     },
@@ -36,8 +36,13 @@
       onOpenNote: (title) => { notes.flush(note.id); notes.openByTitle(title); },
       titles: () => notes.visible.filter((n) => n.id !== note.id).map(titleOf),
       suggestionUI,
+      cursor: notes.cursor.get(note.id),
     });
-    return () => { notes.flush(note.id); editor?.destroy(); };
+    return () => {
+      if (editor) notes.cursor.set(note.id, editor.state.selection.from);
+      notes.flush(note.id);
+      editor?.destroy();
+    };
   });
 
   // rebind editor shortcuts live when the user changes them
@@ -57,7 +62,7 @@
 {#if items.length}
   <ul class="suggest" style="left:{pos.x}px; top:{pos.y}px" transition:fly={{ y: 4, duration: 120 }}>
     {#each items as t, i}
-      <li class:sel={i === sel}><button onmousedown={(e) => { e.preventDefault(); pick(t); }}>{t}</button></li>
+      <li class:sel={i === sel}><button onmousedown={(e) => { e.preventDefault(); pick(t); }}>{t.label}{#if t.hint}<span class="hint">{t.hint}</span>{/if}</button></li>
     {/each}
   </ul>
 {/if}
@@ -70,8 +75,10 @@
     list-style: none;
     margin: 0;
     padding: 4px;
-    min-width: 180px;
-    max-width: 320px;
+    min-width: 200px;
+    max-width: 340px;
+    max-height: 300px;
+    overflow-y: auto;
     background: var(--bg-pop);
     border: 1px solid var(--line);
     border-radius: 8px;
@@ -80,4 +87,5 @@
   }
   .suggest button { width: 100%; text-align: left; border: 0; background: none; color: inherit; font: inherit; padding: 5px 8px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .suggest li.sel button { background: var(--accent-soft); }
+  .suggest .hint { float: right; margin-left: 12px; color: var(--fg-dim); font-size: 11.5px; }
 </style>

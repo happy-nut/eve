@@ -75,10 +75,12 @@ main { flex: 1; min-width: 0; position: relative; }
   font-size: 15px;
 }
 .tiptap > * + * { margin-top: 0.5em; }
-.tiptap h1, .tiptap h2, .tiptap h3 { font-weight: 650; line-height: 1.25; margin: 1.2em 0 0.3em; letter-spacing: -0.01em; }
+.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 { font-weight: 650; line-height: 1.25; margin: 1.2em 0 0.3em; letter-spacing: -0.01em; }
 .tiptap h1 { font-size: 1.9em; }
 .tiptap h2 { font-size: 1.45em; }
 .tiptap h3 { font-size: 1.15em; }
+.tiptap h4 { font-size: 1em; }
+.tiptap h5 { font-size: 0.9em; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.04em; }
 .tiptap > h1:first-child { margin-top: 0; }
 .tiptap p { margin: 0; }
 .tiptap p.is-editor-empty:first-child::before {
@@ -113,6 +115,18 @@ main { flex: 1; min-width: 0; position: relative; }
 .tiptap .wikilink:hover { filter: brightness(1.15); box-shadow: var(--glow); }
 .tiptap .ProseMirror-selectednode.wikilink, .tiptap .wikilink.ProseMirror-selectednode { outline: 2px solid var(--accent); }
 .tiptap ::selection { background: var(--accent-soft); }
+
+/* callout */
+.tiptap .callout {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: var(--accent-soft); border-radius: 8px; padding: 12px 14px; margin: 0.6em 0;
+}
+.tiptap .callout-emoji { font-size: 1.15em; line-height: 1.5; cursor: pointer; user-select: none; }
+.tiptap .callout-body { flex: 1; min-width: 0; }
+.tiptap .callout-body > * + * { margin-top: 0.4em; }
+/* image */
+.tiptap img { max-width: 100%; border-radius: 8px; display: block; margin: 0.6em 0; }
+.tiptap img.ProseMirror-selectednode { outline: 2px solid var(--accent); box-shadow: var(--glow); }
 
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }

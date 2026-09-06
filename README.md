@@ -13,9 +13,10 @@ type Notion-style markdown, link notes with `[[wiki links]]`, and sync through y
 - **Global hotkey** — `⌘⇧Space` (default) shows/hides Eve over any app; focus returns to where you were.
 - **Live markdown** — `# `, `- `, `1. `, `[ ] `, `> `, ` ``` `, `**bold**`, `` `code` ``… render as you type.
 - **Every shortcut is rebindable** live in Settings (`⌘,`): system hotkey, app actions, editor formatting.
-- **Notes link to notes** — type `[[` for a picker; click a link to jump (creates the note if missing).
-- **Sidebar** with search (`⌘K`), FLIP-animated list, smooth transitions everywhere.
-- **Plain files** — each note is a `.md` with a 3-line frontmatter in `~/Library/Application Support/dev.happynut.eve/notes/`.
+- **Notes link to notes** — type `[[` for a picker; click a link to jump (creates the note if missing). `⌘[` / `⌘]` go back and forward through the notes you visited, restoring the cursor.
+- **`/` block menu** — headings, lists, to-dos, callouts (`> [!💡]` in markdown), quotes, code, dividers, images (copied into `notes/assets/`).
+- **Sidebar** with search (`⌘K`), collapsible **groups** (folders). Drag notes to reorder or move between groups; `⌘⇧E` focuses the list (↑↓ move, ⌫ deletes with confirmation, ← → fold, Esc back).
+- **Plain files** — each note is a `.md` with a tiny frontmatter (id, updated, group) in `~/Library/Application Support/dev.happynut.eve/notes/`.
 - **Self-hosted sync** — a zero-dependency Node server (`server/`), one Docker command, last-writer-wins.
 
 ## Run
@@ -33,12 +34,14 @@ npm run bundle     # builds src-tauri/target/release/bundle/macos/Eve.app (~4 MB
 | Scope  | Action                          | Keys              |
 | ------ | ------------------------------- | ----------------- |
 | system | Summon / dismiss Eve            | `⌘⇧Space`         |
-| app    | New note / Search / Sidebar     | `⌘N` `⌘K` `⌘\`    |
-| app    | Next / previous note            | `⌘⇧↓` `⌘⇧↑`       |
+| app    | New note / New group / Search / Sidebar | `⌘N` `⌘⇧N` `⌘K` `⌘\` |
+| app    | Next / previous note / Back / Forward | `⌘⇧↓` `⌘⇧↑` `⌘[` `⌘]` |
+| app    | Focus sidebar                   | `⌘⇧E`             |
 | app    | Delete note / Settings / Hide   | `⌘⇧⌫` `⌘,` `Esc`  |
 | editor | Bold / Italic / Underline       | `⌘B` `⌘I` `⌘U`    |
-| editor | Strike / Code / Link / `[[`     | `⌘⇧X` `⌘E` `⌘⇧K` `⌘[` |
-| editor | Text / H1 / H2 / H3             | `⌘⌥0` `⌘⌥1` `⌘⌥2` `⌘⌥3` |
+| editor | Strike / Code / Link / `[[`     | `⌘⇧X` `⌘E` `⌘⇧K` `⌘⇧L` |
+| editor | `/` menu / Callout / Image       | `⌘/` `⌘⇧C` `⌘⇧I` |
+| editor | Text / H1 … H5                  | `⌘⌥0` `⌘⌥1` … `⌘⌥5` |
 | editor | Bullets / Numbers / To-dos      | `⌘⇧8` `⌘⇧7` `⌘⇧9` |
 | editor | Quote / Code block / Divider    | `⌘⇧.` `⌘⌥C` `⌘⇧-` |
 
@@ -52,7 +55,7 @@ EVE_TOKEN=$(openssl rand -hex 24) docker compose up -d      # or: EVE_TOKEN=... 
 ```
 
 Then in Eve → Settings → Sync, enter the URL (e.g. `https://notes.example.com`) and the token.
-Sync runs 2 s after edits, every minute, and on focus. Put it behind HTTPS (Caddy, Tailscale, …).
+Sync runs 2 s after edits, every minute, and on focus. Images in `notes/assets/` are not synced (yet). Put it behind HTTPS (Caddy, Tailscale, …).
 
 Protocol is one endpoint: `POST /sync {cursor, notes[]} → {cursor, notes[]}`. Conflicts resolve
 last-writer-wins by `updatedAt`; deletes are tombstones. `node server/test.mjs` exercises it.

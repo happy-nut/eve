@@ -4,6 +4,7 @@
   import { shortcuts, eventToKeys, prettyKeys, type Scope } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { storage } from './lib/platform';
+  import { ui } from './lib/ui.svelte';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
 
@@ -19,6 +20,7 @@
   ];
 
   function onKey(e: KeyboardEvent) {
+    if (ui.pending) return;
     if (recording) {
       e.preventDefault(); e.stopPropagation();
       if (e.key === 'Escape') { recording = null; return; }

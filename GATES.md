@@ -23,3 +23,18 @@
   CHECK: gh repo view happy-nut/eve --json visibility -q .visibility
   EXPECT: PUBLIC
   EVIDENCE: zsh, ~/repos/eve, exit 0, "PUBLIC https://github.com/happy-nut/eve"
+
+# GATES — groups / slash menu / navigation batch (2026-09-06)
+
+- [x] G7 Frontend type-checks; server test passes with group + order columns
+  CHECK: npm run check && node server/test.mjs
+  EXPECT: SYNC_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS 0 WARNINGS" / "SYNC_OK"
+- [x] G8 Rust compiles with dialog plugin, import_asset, protocol-asset feature
+  CHECK: cd src-tauri && cargo check 2>&1 | tail -1
+  EXPECT: Finished
+  EVIDENCE: zsh, ~/repos/eve/src-tauri, exit 0, "Finished `dev` profile"
+- [x] G9 Browser dev-mode checks (manual, in-app browser): drag note between groups and to a position
+  (insertion marker shown, frontmatter gets group/order), ⌘[ / ⌘] back/forward, ⌘⇧E focuses sidebar row,
+  ⌫ opens confirm dialog and Enter deletes (deleted: true in storage), "/" opens block menu, "call" filters
+  to Callout, Enter wraps block, markdown "> [!🚀]" round-trips to a callout, H5 renders.
