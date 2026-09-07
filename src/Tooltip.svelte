@@ -4,7 +4,6 @@
    * gets it on hover, rendered at body level so panes can't clip it. Classes on the element:
    * tip-up (above), tip-right (right-aligned).
    */
-  import { fly } from 'svelte/transition';
   import Keys from './Keys.svelte';
 
   let tip = $state<{ text: string; keys: string; x: number; y: number; up: boolean; right: boolean } | null>(null);
@@ -23,14 +22,6 @@
       tip = { text: el.dataset.tip ?? '', keys: el.dataset.keys ?? '', x: right ? r.right : r.left + r.width / 2, y: up ? r.top - 7 : r.bottom + 7, up, right };
     }, 400);
   }
-  // belt and braces: while a tip is up, drop it the moment its control is no longer hovered
-  // (covers pointer leaving the window, controls folding away, modals opening, etc.)
-  $effect(() => {
-    if (!tip) return;
-    const iv = setInterval(() => { if (!current?.isConnected || !current.matches(':hover')) out(); }, 150);
-    return () => clearInterval(iv);
-  });
-
   function out(e?: MouseEvent) {
     // only when the pointer really leaves the control (not when it crosses into a child)
     if (e && current && e.relatedTarget instanceof Node && current.contains(e.relatedTarget)) return;
@@ -42,10 +33,11 @@
 <svelte:document onmouseover={over} onmouseout={out} onmousedown={() => out()} onkeydown={() => out()}
   onmousemove={() => current && !current.matches(':hover') && out()} onscrollcapture={() => out()} />
 <svelte:window onblur={() => out()} onmouseout={(e) => !e.relatedTarget && out()} />
+<svelte:document onvisibilitychange={() => out()} />
 
 {#if tip}
-  <div class="tip" class:up={tip.up} class:right={tip.right} style="left: {tip.x}px; top: {tip.y}px"
-    transition:fly={{ y: tip.up ? 3 : -3, duration: 120 }}>
+  <!-- CSS intro only: a Svelte outro can stall when the window is hidden mid-animation and leave a ghost tip -->
+  <div class="tip" class:up={tip.up} class:right={tip.right} style="left: {tip.x}px; top: {tip.y}px">
     {tip.text}{#if tip.keys}<Keys keys={tip.keys} dark />{/if}
   </div>
 {/if}
@@ -56,7 +48,9 @@
     transform: translateX(-50%); background: var(--tip-bg); color: var(--tip-fg);
     font-size: 11.5px; font-weight: 500; line-height: 1; padding: 5px 8px; border-radius: 6px; white-space: nowrap;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    animation: tip-in 0.12s ease-out;
   }
+  @keyframes tip-in { from { opacity: 0; } }
   .tip.up { transform: translate(-50%, -100%); }
   .tip.right { transform: translateX(-100%); }
   .tip.right.up { transform: translate(-100%, -100%); }

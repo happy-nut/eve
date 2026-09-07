@@ -108,6 +108,7 @@ async function fadeIn() {
   html().classList.remove('fx-hidden');
 }
 async function fadeOut() {
+  document.dispatchEvent(new Event('visibilitychange')); // closes tooltips/popovers before the fade
   html().classList.add('fx-hidden');
   await wait(FADE_MS);
   await invoke<void>('hide_app');
