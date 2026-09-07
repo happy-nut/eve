@@ -111,10 +111,16 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
   color: var(--fg-dim);
   float: left; height: 0; pointer-events: none;
 }
-.tiptap ul, .tiptap ol { padding-left: 1.4em; margin: 0; }
+.tiptap ul, .tiptap ol { padding-left: 1.4em; margin: 0; list-style: none; }
 .tiptap li > p { margin: 0; }
-.tiptap li { margin: 0.15em 0; }
-.tiptap ul[data-type='taskList'] { list-style: none; padding-left: 0.2em; }
+.tiptap li { margin: 0.15em 0; position: relative; }
+/* markers drawn by an absolutely positioned ::before instead of ::marker: an outside marker sits in the line box,
+   so WebKit fills the space between it and the text when a selection continues onto the line (the "2." lit up) */
+.tiptap li::before { position: absolute; right: calc(100% + 0.4em); top: 0; color: inherit; font-variant-numeric: tabular-nums; }
+.tiptap ol > li::before { content: counter(list-item) '.'; }
+.tiptap ul > li::before { content: '•'; }
+.tiptap ul[data-type='taskList'] { padding-left: 0.2em; }
+.tiptap ul[data-type='taskList'] > li::before { content: none; }
 .tiptap ul[data-type='taskList'] li { display: flex; gap: 8px; align-items: flex-start; }
 /* checkbox centred on the first text line (line-height 1.6), so the text no longer floats above it */
 .tiptap ul[data-type='taskList'] li > label { flex: none; display: flex; align-items: center; height: 1.6em; margin: 0; }
