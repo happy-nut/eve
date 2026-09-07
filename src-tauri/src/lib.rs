@@ -156,6 +156,33 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(Pending::default())
+        .setup(|app| {
+            // ⌘Q hides instead of quitting, so the summon hotkey keeps working; ⌘⌥Q really quits.
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::menu::{Menu, MenuItem};
+                let menu = Menu::default(app.handle())?;
+                if let Some(first) = menu.items()?.first() {
+                    if let Some(sub) = first.as_submenu() {
+                        for it in sub.items()? {
+                            let text = it.as_predefined_menuitem().and_then(|p| p.text().ok());
+                            if text.as_deref().map_or(false, |t| t.starts_with("Quit")) {
+                                sub.remove(&it)?;
+                            }
+                        }
+                        sub.append(&MenuItem::with_id(app, "hide", "Hide Eve", true, Some("CmdOrCtrl+Q"))?)?;
+                        sub.append(&MenuItem::with_id(app, "quit", "Quit Eve", true, Some("CmdOrCtrl+Alt+Q"))?)?;
+                    }
+                }
+                app.set_menu(menu)?;
+                app.on_menu_event(|app, e| match e.id().as_ref() {
+                    "hide" => { let _ = app.emit("dismiss", ()); }
+                    "quit" => app.exit(0),
+                    _ => {}
+                });
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             list_notes,
             write_note,

@@ -113,6 +113,9 @@ async function fadeOut() {
   await invoke<void>('hide_app');
   // stays at opacity 0 while hidden, so the next summon fades in from nothing
 }
+/** ⌘Q from the menu asks the page to dismiss with the usual fade. */
+if (isTauri) import('@tauri-apps/api/event').then(({ listen }) => listen('dismiss', () => fadeOut()));
+
 export const win = {
   toggle: async () => { if (!isTauri) return; (await invoke<boolean>('is_front')) ? fadeOut() : fadeIn(); },
   hide: () => (isTauri ? fadeOut() : Promise.resolve()),

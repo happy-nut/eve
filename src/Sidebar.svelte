@@ -338,7 +338,7 @@
           class:over={r.kind !== 'note' && dropAt?.into === r.g && !dropAt.beforeNote && !dropAt.beforeGroup}
           class:drop-before={(r.kind === 'note' && dropAt?.beforeNote === r.n.id) || (r.kind === 'group' && dropAt?.beforeGroup === r.g)}
           class:dragging={(r.kind === 'note' && drag?.note === r.n.id) || (r.kind === 'group' && drag?.group === r.g)}>
-          {#each { length: 'depth' in r ? r.depth : 0 } as _, i}<i class="guide" style="left: {13 + i * 22}px"></i>{/each}
+          {#each { length: 'depth' in r ? r.depth : 0 } as _, i}<i class="guide" style="left: {6 + i * 18}px"></i>{/each}
 
           {#if r.kind === 'note'}
             {@const n = r.n}
@@ -405,7 +405,7 @@
     width: 260px; flex: none; display: flex; flex-direction: column;
     background: var(--bg-side); border-right: 1px solid var(--line); overflow: hidden;
   }
-  .top { display: flex; gap: 4px; padding: 42px 10px 8px; }
+  .top { display: flex; gap: 4px; padding: 42px 12px 8px; }
   .top input {
     flex: 1; min-width: 0; border: 0; border-radius: 6px; padding: 6px 8px;
     background: var(--bg-input); color: inherit; font: inherit; font-size: 13px; outline: none; transition: box-shadow 0.15s;
@@ -422,8 +422,8 @@
   }
   .plus-menu button:focus { background: var(--accent-soft); outline: none; }
 
-  .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 2px 6px 8px; margin: 0; list-style: none; }
-  .row { position: relative; padding-left: calc(var(--d) * 22px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
+  .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 12px 8px; margin: 0; list-style: none; }
+  .row { position: relative; padding-left: calc(var(--d) * 18px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
   .row.dragging { opacity: 0.4; }
   .row.over { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
   .guide { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); pointer-events: none; }
@@ -448,13 +448,13 @@
   .ghead.static { padding-top: 8px; }
   .gname {
     flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px;
-    border: 0; background: none; color: var(--fg); font: inherit; font-size: 12.5px; font-weight: 600;
-    padding: 3px 4px; border-radius: 6px; text-align: left; white-space: nowrap; overflow: hidden;
+    border: 0; background: none; color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
+    padding: 4px 6px 4px 0; border-radius: 6px; text-align: left; white-space: nowrap; overflow: hidden;
   }
   .gname:hover { background: var(--bg-hover); }
-  .gname.static { color: var(--fg-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; cursor: default; padding-left: 6px; }
+  .gname.static { color: var(--fg-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; cursor: default; padding-left: 0; }
   .gname .t { overflow: hidden; text-overflow: ellipsis; }
-  .chev { display: inline-block; width: 10px; color: var(--fg-dim); font-size: 14px; line-height: 1; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); transform: rotate(90deg); }
+  .chev { display: inline-block; width: 12px; text-align: center; color: var(--fg-dim); font-size: 14px; line-height: 1; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); transform: rotate(90deg); }
   .collapsed .chev { transform: rotate(0deg); }
   .count { margin-left: auto; font-weight: 500; font-size: 11px; color: var(--fg-dim); padding-left: 6px; transition: opacity 0.12s; }
   .rename {
@@ -464,12 +464,12 @@
 
   .empty { padding: 5px 10px; font-size: 11.5px; color: var(--fg-dim); opacity: 0.7; }
   .row.drop-before::before {
-    content: ''; position: absolute; left: calc(var(--d) * 22px + 8px); right: 8px; top: -1px; height: 2px; border-radius: 1px;
+    content: ''; position: absolute; left: calc(var(--d) * 18px); right: 8px; top: -1px; height: 2px; border-radius: 1px;
     background: var(--accent); box-shadow: var(--glow); pointer-events: none; z-index: 1;
   }
   .note-row > button {
-    width: 100%; text-align: left; border: 0; background: none; color: inherit; font: inherit;
-    padding: 4px 8px; border-radius: 6px; display: flex; flex-direction: column;
+    width: 100%; text-align: left; border: 0; background: none; color: inherit; font: inherit; padding-left: 18px !important;
+    padding: 5px 6px 5px 0; border-radius: 6px; display: flex; flex-direction: column;
     cursor: default; transition: background 0.12s, transform 0.12s;
   }
   .note-row > button:hover { background: var(--bg-hover); }
@@ -478,7 +478,7 @@
   /* keyboard cursor: a soft accent tint; the open note stays neutral grey */
   [data-row]:focus { outline: none; background: color-mix(in srgb, var(--accent) 14%, transparent); }
   .note-row > button.active:focus { background: color-mix(in srgb, var(--accent) 16%, var(--bg-active)); }
-  .title { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
+  .title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   footer {
