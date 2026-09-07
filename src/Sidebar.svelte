@@ -402,7 +402,9 @@
       <span class="sync {sync.status}" title={sync.error || (sync.enabled ? 'Synced' : 'Sync off')}>
         {sync.enabled ? (sync.status === 'error' ? 'sync error' : sync.status === 'syncing' ? 'syncing…' : 'synced') : 'local only'}
       </span>
-      <button class="icon tip-up" data-tip="Settings" data-keys={shortcuts.keysFor('settings')} onclick={onSettings}>⚙︎</button>
+      <button class="icon tip-up gear" aria-label="Settings" data-tip="Settings" data-keys={shortcuts.keysFor('settings')} onclick={onSettings}>
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/><circle cx="12" cy="12" r="7"/></svg>
+      </button>
     </footer>
   </aside>
 {/if}
@@ -492,9 +494,11 @@
   .title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+  .gear { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
+  .gear svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
   footer {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 6px 12px 8px 18px; font-size: 11.5px; color: var(--fg-dim); border-top: 1px solid var(--line);
+    padding: 6px 10px 8px 18px; font-size: 11.5px; color: var(--fg-dim); border-top: 1px solid var(--line);
   }
   .sync::before {
     content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px;

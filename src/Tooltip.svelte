@@ -30,7 +30,9 @@
   }
 </script>
 
-<svelte:document onmouseover={over} onmouseout={out} onmousedown={() => out()} onkeydown={() => out()} />
+<!-- controls can vanish under a still pointer (e.g. the group tools folding away): re-check hover on movement -->
+<svelte:document onmouseover={over} onmouseout={out} onmousedown={() => out()} onkeydown={() => out()}
+  onmousemove={() => current && !current.matches(':hover') && out()} onscrollcapture={() => out()} />
 
 {#if tip}
   <div class="tip" class:up={tip.up} class:right={tip.right} style="left: {tip.x}px; top: {tip.y}px"
