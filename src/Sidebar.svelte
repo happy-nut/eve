@@ -47,7 +47,6 @@
         const kids = groups.children(g), own = groups.notesIn(g);
         walk(g, depth + 1);
         for (const n of own) out.push({ kind: 'note', key: n.id, n, depth: depth + 1 });
-        if (!kids.length && !own.length) out.push({ kind: 'empty', key: 'empty:' + g, text: 'Drop notes here', g, depth: depth + 1 });
       }
     };
     walk('', 0);
@@ -333,7 +332,7 @@
     <ul class="tree" role="tree" tabindex="-1" onkeydown={treeKey}
       ondragover={(e) => overSection(e, '')} ondrop={drop}>
       {#each rows as r (r.key)}
-        <li animate:flip={{ duration: 260, easing: cubicOut }} transition:slide={{ duration: 180, easing: cubicOut }}
+        <li animate:flip={{ duration: 220, easing: cubicOut }} in:fade={{ duration: 140 }} out:slide={{ duration: 180, easing: cubicOut }}
           class="row {r.kind}" style="--d: {'depth' in r ? r.depth : 0}"
           class:over={r.kind !== 'note' && dropAt?.into === r.g && !dropAt.beforeNote && !dropAt.beforeGroup}
           class:drop-before={(r.kind === 'note' && dropAt?.beforeNote === r.n.id) || (r.kind === 'group' && dropAt?.beforeGroup === r.g)}
@@ -366,18 +365,25 @@
               {:else}
                 <button class="gname" data-row data-group={g} draggable="true"
                   ondragstart={(e) => dragStartGroup(e, g)} ondragend={dragEnd} ondragover={(e) => overGroup(e, g)} ondrop={drop}
-                  onclick={() => groups.toggle(g)} ondblclick={() => (groups.editing = g)}>
+                  onclick={() => groups.toggle(g)}>
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ group: g }, e.currentTarget); }}>
                     {#if groups.icon(g)}<Icon icon={groups.icon(g)} />{:else}
                     <svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H2.5a1 1 0 0 0-1 1z"/></svg>{/if}
                   </span>
-                  <span class="t">{leafOf(g)}</span>
+                  <!-- double-click exactly on the name renames; anywhere else on the row just folds -->
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <span class="t" ondblclick={(e) => { e.stopPropagation(); groups.editing = g; }}>{leafOf(g)}</span>
+                </button>
+                <span class="tools">
+                  <button class="icon mini" data-tip="New note here" onclick={async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap')?.focus(); }}>+</button>
+                  <button class="icon mini" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
+                </span>
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                <span class="tail" role="presentation" onclick={() => groups.toggle(g)}>
                   <span class="count">{groups.notesIn(g, true).length}</span>
                   <span class="chev">›</span>
-                </button>
-                <button class="icon mini" data-tip="New note here" onclick={async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap')?.focus(); }}>+</button>
-                <button class="icon mini" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
+                </span>
               {/if}
             </div>
 
@@ -405,7 +411,7 @@
     width: 260px; flex: none; display: flex; flex-direction: column;
     background: var(--bg-side); border-right: 1px solid var(--line); overflow: hidden;
   }
-  .top { display: flex; gap: 4px; padding: 42px 16px 8px; }
+  .top { display: flex; gap: 4px; padding: 50px 16px 8px; } /* toolbar bottom (34) + 16 */
   .top input {
     flex: 1; min-width: 0; border: 0; border-radius: 6px; padding: 6px 8px;
     background: var(--bg-input); color: inherit; font: inherit; font-size: 13px; outline: none; transition: box-shadow 0.15s;
@@ -451,13 +457,12 @@
     border: 0; background: none; color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
     padding: 4px 6px 4px 0; border-radius: 6px; text-align: left; white-space: nowrap; overflow: hidden;
   }
-  .gname:hover { background: var(--bg-hover); }
   .gname.static { color: var(--fg-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; cursor: default; padding-left: 0; }
   .gname .t { overflow: hidden; text-overflow: ellipsis; }
   /* disclosure chevron lives on the right, so group icons sit flush left and notes indent just one column */
   .chev { display: inline-block; width: 12px; text-align: center; color: var(--fg-dim); font-size: 14px; line-height: 1; margin-left: 4px; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.12s; transform: rotate(90deg); }
   .collapsed .chev { transform: rotate(0deg); }
-  .count { margin-left: auto; font-weight: 500; font-size: 11px; color: var(--fg-dim); padding-left: 6px; transition: opacity 0.12s; }
+  .count { font-weight: 500; font-size: 11px; color: var(--fg-dim); padding-left: 6px; }
   .rename {
     flex: 1; min-width: 0; font: inherit; font-size: 12.5px; padding: 3px 6px; border-radius: 4px;
     border: 1px solid var(--accent); background: var(--bg-input); color: var(--fg); outline: none; box-shadow: var(--glow);
@@ -469,8 +474,8 @@
     background: var(--accent); box-shadow: var(--glow); pointer-events: none; z-index: 1;
   }
   .note-row > button {
-    width: 100%; text-align: left; border: 0; background: none; color: inherit; font: inherit; padding-left: 18px !important;
-    padding: 5px 6px 5px 0; border-radius: 6px; display: flex; flex-direction: column;
+    width: 100%; text-align: left; border: 0; background: none; color: inherit; font: inherit;
+    padding: 5px 6px; border-radius: 6px; display: flex; flex-direction: column;
     cursor: default; transition: background 0.12s, transform 0.12s;
   }
   .note-row > button:hover { background: var(--bg-hover); }
