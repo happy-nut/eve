@@ -99,8 +99,11 @@ const FADE_MS = 140;
 const html = () => document.documentElement;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function fadeIn() {
-  html().classList.add('fx-hidden'); // opacity 0 before the window appears
+  // A hidden webview doesn't paint, so we can't fade from 0 unless the page was left at opacity 0
+  // when it was dismissed (fadeOut does that). Otherwise just show — no flash of a wrong frame.
+  const canFade = html().classList.contains('fx-hidden');
   await invoke<void>('show_window');
+  if (!canFade) return;
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   html().classList.remove('fx-hidden');
 }
@@ -108,7 +111,7 @@ async function fadeOut() {
   html().classList.add('fx-hidden');
   await wait(FADE_MS);
   await invoke<void>('hide_app');
-  html().classList.remove('fx-hidden'); // ready for next time (window is hidden now)
+  // stays at opacity 0 while hidden, so the next summon fades in from nothing
 }
 export const win = {
   toggle: async () => { if (!isTauri) return; (await invoke<boolean>('is_front')) ? fadeOut() : fadeIn(); },

@@ -78,14 +78,15 @@
     (plusFrom?.isConnected ? plusFrom : document.querySelector<HTMLElement>('aside [data-row]'))?.focus();
     ui.focusOwner = 'sidebar';
   }
-  const plusItems = $derived([
-    { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', keys: shortcuts.keysFor('newNote'), run: () => focusRow(`[data-note="${notes.create('', ctxGroup).id}"]`) },
-    {
-      label: ctxGroup && depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : 'New group',
-      keys: shortcuts.keysFor('newGroup'),
-      run: () => groups.create(ctxGroup),
-    },
-  ]);
+  const plusItems = $derived.by(() => {
+    const newNote = (g: string) => () => focusRow(`[data-note="${notes.create('', g).id}"]`);
+    const items = [
+      { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', run: newNote(ctxGroup) },
+      { label: ctxGroup && depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : 'New group', run: () => groups.create(ctxGroup) },
+    ];
+    if (ctxGroup) items.push({ label: 'New note at top level', run: newNote('') }, { label: 'New group at top level', run: () => groups.create('') });
+    return items;
+  });
   function plusPick(i: number) { plusOpen = false; plusItems[i].run(); }
   function plusKey(e: KeyboardEvent) {
     const items = [...document.querySelectorAll<HTMLElement>('.plus-menu button')];
@@ -324,9 +325,9 @@
               <li role="none">
                 <!-- one highlight only: the mouse moves focus instead of adding a hover state -->
                 {#if i === 0}
-                  <button role="menuitem" use:autofocus onmouseenter={(e) => e.currentTarget.focus()} onclick={() => plusPick(i)}>{it.label}<kbd>{prettyKeys(it.keys)}</kbd></button>
+                  <button role="menuitem" use:autofocus onmouseenter={(e) => e.currentTarget.focus()} onclick={() => plusPick(i)}>{it.label}</button>
                 {:else}
-                  <button role="menuitem" onmouseenter={(e) => e.currentTarget.focus()} onclick={() => plusPick(i)}>{it.label}<kbd>{prettyKeys(it.keys)}</kbd></button>
+                  <button role="menuitem" onmouseenter={(e) => e.currentTarget.focus()} onclick={() => plusPick(i)}>{it.label}</button>
                 {/if}
               </li>
             {/each}
@@ -353,7 +354,7 @@
               <button data-row data-note={n.id} class:active={n.id === notes.currentId} onclick={() => openNote(n)}>
                 <span class="title">
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
-                  <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ note: n }, e.currentTarget); }}>
+                  <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ note: n }, e.currentTarget); }}>
                     {#if jumpNumbers.has(n.id)}<span class="num">{jumpNumbers.get(n.id)}</span>
                     {:else if n.icon}<Icon icon={n.icon} />{:else}
                     <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>{/if}
@@ -376,15 +377,15 @@
                   onclick={() => groups.toggle(g)} ondblclick={() => (groups.editing = g)}>
                   <span class="chev">›</span>
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
-                  <span class="ico-slot" role="button" tabindex="-1" title="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ group: g }, e.currentTarget); }}>
+                  <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ group: g }, e.currentTarget); }}>
                     {#if groups.icon(g)}<Icon icon={groups.icon(g)} />{:else}
                     <svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H2.5a1 1 0 0 0-1 1z"/></svg>{/if}
                   </span>
                   <span class="t">{leafOf(g)}</span>
                   <span class="count">{groups.notesIn(g, true).length}</span>
                 </button>
-                <button class="icon mini" title="New note here" onclick={() => notes.create('', g)}>+</button>
-                <button class="icon mini" title="Delete group" onclick={() => removeGroup(g)}>×</button>
+                <button class="icon mini" data-tip="New note here" onclick={() => notes.create('', g)}>+</button>
+                <button class="icon mini" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
               {/if}
             </div>
 
@@ -402,7 +403,7 @@
       <span class="sync {sync.status}" title={sync.error || (sync.enabled ? 'Synced' : 'Sync off')}>
         {sync.enabled ? (sync.status === 'error' ? 'sync error' : sync.status === 'syncing' ? 'syncing…' : 'synced') : 'local only'}
       </span>
-      <button class="icon" title="Settings {prettyKeys(shortcuts.keysFor('settings'))}" onclick={onSettings}>⚙︎</button>
+      <button class="icon tip-up" data-tip="Settings  {prettyKeys(shortcuts.keysFor('settings'))}" onclick={onSettings}>⚙︎</button>
     </footer>
   </aside>
 {/if}
@@ -428,7 +429,6 @@
     border: 0; background: none; color: inherit; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 5px; text-align: left; white-space: nowrap;
   }
   .plus-menu button:focus { background: var(--accent-soft); outline: none; }
-  .plus-menu kbd { font: inherit; font-size: 11.5px; color: var(--fg-dim); }
 
   .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 2px 6px 8px; margin: 0; list-style: none; }
   .row { position: relative; padding-left: calc(var(--d) * 22px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }

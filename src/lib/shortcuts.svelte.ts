@@ -13,7 +13,6 @@ export const DEFAULTS: Action[] = [
   { id: 'toggleWindow', label: 'Summon / dismiss Eve (system-wide)', scope: 'global', keys: 'Mod-Shift-Space' },
 
   { id: 'newNote', label: 'New note', scope: 'app', keys: 'Mod-n' },
-  { id: 'newGroup', label: 'New group', scope: 'app', keys: 'Mod-Shift-n' },
   { id: 'search', label: 'Search notes', scope: 'app', keys: 'Mod-k' },
   { id: 'focusSidebar', label: 'Sidebar: focus / close (↑↓ move, ⌥↑↓ reorder, Space fold, ⌫ delete, Esc back)', scope: 'app', keys: 'Mod-\\' },
   { id: 'back', label: 'Back (previous note)', scope: 'app', keys: 'Mod-[' },

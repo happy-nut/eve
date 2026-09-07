@@ -35,7 +35,7 @@ npm run bundle     # builds src-tauri/target/release/bundle/macos/Eve.app (~4 MB
 | Scope  | Action                          | Keys              |
 | ------ | ------------------------------- | ----------------- |
 | system | Summon / dismiss Eve            | `⌘⇧Space`         |
-| app    | New note / New group / Search   | `⌘N` `⌘⇧N` `⌘K`   |
+| app    | New (note / group menu) / Search | `⌘N` `⌘K`        |
 | app    | Next / previous note / Back / Forward | `⌘⇧↓` `⌘⇧↑` `⌘[` `⌘]` |
 | app    | Sidebar: open + focus / close   | `⌘\`              |
 | app    | Delete note / Settings / Hide   | `⌘⇧⌫` `⌘,` `Esc`  |
