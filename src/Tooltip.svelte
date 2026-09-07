@@ -9,10 +9,13 @@
 
   let tip = $state<{ text: string; keys: string; x: number; y: number; up: boolean; right: boolean } | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let current: HTMLElement | null = null; // element the tooltip belongs to
 
   function over(e: MouseEvent) {
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-tip]');
+    if (el === current) return; // moving between children of the same control: keep it still
     clearTimeout(timer);
+    current = el;
     if (!el) { tip = null; return; }
     timer = setTimeout(() => {
       const r = el.getBoundingClientRect();
@@ -20,10 +23,14 @@
       tip = { text: el.dataset.tip ?? '', keys: el.dataset.keys ?? '', x: right ? r.right : r.left + r.width / 2, y: up ? r.top - 7 : r.bottom + 7, up, right };
     }, 400);
   }
-  function out() { clearTimeout(timer); tip = null; }
+  function out(e?: MouseEvent) {
+    // only when the pointer really leaves the control (not when it crosses into a child)
+    if (e && current && e.relatedTarget instanceof Node && current.contains(e.relatedTarget)) return;
+    clearTimeout(timer); tip = null; current = null;
+  }
 </script>
 
-<svelte:document onmouseover={over} onmouseout={out} onmousedown={out} onkeydown={out} />
+<svelte:document onmouseover={over} onmouseout={out} onmousedown={() => out()} onkeydown={() => out()} />
 
 {#if tip}
   <div class="tip" class:up={tip.up} class:right={tip.right} style="left: {tip.x}px; top: {tip.y}px"
