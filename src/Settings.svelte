@@ -6,6 +6,7 @@
   import { storage, autostart, isTauri } from './lib/platform';
   import { ui } from './lib/ui.svelte';
   import { appearance, FONTS } from './lib/appearance.svelte';
+  import Keys from './Keys.svelte';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
 
@@ -62,11 +63,11 @@
           <div class="row">
             <span>{a.label}</span>
             <button class="chip" class:rec={recording === a.id} class:bad={conflict?.id === a.id} onclick={() => { recording = a.id; conflict = null; }}>
-              {recording === a.id ? 'press keys…' : a.keys ? prettyKeys(a.keys) : 'unbound'}
+              {#if recording === a.id}press keys…{:else if a.keys}<Keys keys={a.keys} />{:else}unbound{/if}
             </button>
           </div>
           {#if conflict?.id === a.id}
-            <p class="err conflict">{prettyKeys(conflict.keys)} is already used by “{conflict.with}”. Try another combination, or Esc to cancel.</p>
+            <p class="err conflict"><Keys keys={conflict.keys} /> is already used by “{conflict.with}”. Try another combination, or Esc to cancel.</p>
           {/if}
         {/each}
       {/each}
@@ -109,7 +110,7 @@
       </div>
       <h3>App</h3>
       <label class="row check">
-        <span>Launch at login <span class="hint">keeps {prettyKeys(shortcuts.keysFor('toggleWindow'))} available after a quit</span></span>
+        <span>Launch at login <span class="hint">keeps <Keys keys={shortcuts.keysFor('toggleWindow')} /> available after a quit</span></span>
         <input type="checkbox" checked={launchAtLogin} disabled={!isTauri}
           onchange={(e) => { launchAtLogin = e.currentTarget.checked; autostart.set(launchAtLogin); }} />
       </label>
@@ -144,9 +145,8 @@
   h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-dim); margin: 16px 0 6px; }
   .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 0; }
   .chip {
-    font: inherit; font-size: 12px; font-family: ui-monospace, monospace;
-    padding: 3px 8px; border-radius: 6px; min-width: 60px;
-    border: 1px solid var(--line); background: var(--bg-input); color: inherit;
+    font: inherit; font-size: 12px; padding: 4px 6px; border-radius: 6px; min-width: 60px;
+    border: 1px solid transparent; background: none; color: var(--fg-dim);
     transition: box-shadow 0.15s, background 0.15s;
   }
   .chip:hover { background: var(--bg-hover); }

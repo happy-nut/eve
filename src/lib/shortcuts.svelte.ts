@@ -108,6 +108,16 @@ export function eventToKeys(e: KeyboardEvent): string {
   return [...mods, key].join('-');
 }
 
+/** One symbol per key for chip rendering: "Mod-Shift-k" -> ["⌘", "⇧", "K"] */
+export function keyParts(keys: string): string[] {
+  const sym: Record<string, string> = {
+    Mod: isMac ? '⌘' : 'Ctrl', Ctrl: '⌃', Alt: isMac ? '⌥' : 'Alt', Shift: '⇧',
+    Space: '␣', Escape: 'Esc', Backspace: '⌫', Enter: '↩', Minus: '-', Tab: '⇥',
+    ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+  };
+  return keys ? keys.split('-').map((p) => sym[p] ?? (p.length === 1 ? p.toUpperCase() : p)) : [];
+}
+
 /** Pretty-print for the UI: "Mod-Shift-k" -> "⌘⇧K" */
 export function prettyKeys(keys: string): string {
   const sym: Record<string, string> = {

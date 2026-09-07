@@ -402,7 +402,7 @@
       <span class="sync {sync.status}" title={sync.error || (sync.enabled ? 'Synced' : 'Sync off')}>
         {sync.enabled ? (sync.status === 'error' ? 'sync error' : sync.status === 'syncing' ? 'syncing…' : 'synced') : 'local only'}
       </span>
-      <button class="icon tip-up" data-tip="Settings  {prettyKeys(shortcuts.keysFor('settings'))}" onclick={onSettings}>⚙︎</button>
+      <button class="icon tip-up" data-tip="Settings" data-keys={shortcuts.keysFor('settings')} onclick={onSettings}>⚙︎</button>
     </footer>
   </aside>
 {/if}

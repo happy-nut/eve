@@ -13,6 +13,7 @@
   import Settings from './Settings.svelte';
   import Confirm from './Confirm.svelte';
   import EmojiPicker from './EmojiPicker.svelte';
+  import Tooltip from './Tooltip.svelte';
   import { ui, hooks } from './lib/ui.svelte';
   import { titleOf } from './lib/notes.svelte';
 
@@ -112,16 +113,16 @@
   <div class="dragbar" data-tauri-drag-region></div>
   <!-- window toolbar, right of the traffic lights -->
   <div class="toolbar">
-    <button class="icon" aria-label="Sidebar" data-tip="Sidebar  {prettyKeys(shortcuts.keysFor('focusSidebar'))}" onclick={() => (sidebarOpen = !sidebarOpen)}>
+    <button class="icon" aria-label="Sidebar" data-tip="Sidebar" data-keys={shortcuts.keysFor('focusSidebar')} onclick={() => (sidebarOpen = !sidebarOpen)}>
       <svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6.5 3v10"/></svg>
     </button>
-    <button class="icon" aria-label="Back" data-tip="Back  {prettyKeys(shortcuts.keysFor('back'))}" disabled={!notes.canBack} onclick={() => notes.back()}>
+    <button class="icon" aria-label="Back" data-tip="Back" data-keys={shortcuts.keysFor('back')} disabled={!notes.canBack} onclick={() => notes.back()}>
       <svg viewBox="0 0 16 16"><path d="M13 8H3M7 4L3 8l4 4"/></svg>
     </button>
-    <button class="icon" aria-label="Forward" data-tip="Forward  {prettyKeys(shortcuts.keysFor('forward'))}" disabled={!notes.canForward} onclick={() => notes.forward()}>
+    <button class="icon" aria-label="Forward" data-tip="Forward" data-keys={shortcuts.keysFor('forward')} disabled={!notes.canForward} onclick={() => notes.forward()}>
       <svg viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
     </button>
-    <button class="icon" aria-label="New" data-tip="New  {prettyKeys(shortcuts.keysFor('newNote'))}" onclick={(e) => { if (sidebarOpen && hooks.openPlus) hooks.openPlus(e.currentTarget); else { ui.focusOwner = 'editor'; notes.create(); } }}>
+    <button class="icon" aria-label="New" data-tip="New" data-keys={shortcuts.keysFor('newNote')} onclick={(e) => { if (sidebarOpen && hooks.openPlus) hooks.openPlus(e.currentTarget); else { ui.focusOwner = 'editor'; notes.create(); } }}>
       <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
     </button>
   </div>
@@ -146,3 +147,4 @@
 {#if ui.emoji}
   <EmojiPicker />
 {/if}
+<Tooltip />
