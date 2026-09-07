@@ -23,6 +23,14 @@
       tip = { text: el.dataset.tip ?? '', keys: el.dataset.keys ?? '', x: right ? r.right : r.left + r.width / 2, y: up ? r.top - 7 : r.bottom + 7, up, right };
     }, 400);
   }
+  // belt and braces: while a tip is up, drop it the moment its control is no longer hovered
+  // (covers pointer leaving the window, controls folding away, modals opening, etc.)
+  $effect(() => {
+    if (!tip) return;
+    const iv = setInterval(() => { if (!current?.isConnected || !current.matches(':hover')) out(); }, 150);
+    return () => clearInterval(iv);
+  });
+
   function out(e?: MouseEvent) {
     // only when the pointer really leaves the control (not when it crosses into a child)
     if (e && current && e.relatedTarget instanceof Node && current.contains(e.relatedTarget)) return;
@@ -33,6 +41,7 @@
 <!-- controls can vanish under a still pointer (e.g. the group tools folding away): re-check hover on movement -->
 <svelte:document onmouseover={over} onmouseout={out} onmousedown={() => out()} onkeydown={() => out()}
   onmousemove={() => current && !current.matches(':hover') && out()} onscrollcapture={() => out()} />
+<svelte:window onblur={() => out()} onmouseout={(e) => !e.relatedTarget && out()} />
 
 {#if tip}
   <div class="tip" class:up={tip.up} class:right={tip.right} style="left: {tip.x}px; top: {tip.y}px"
