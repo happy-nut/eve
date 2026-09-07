@@ -380,11 +380,11 @@
                 </span>
                 <!-- on hover the tools unfold between the count and the chevron; the chevron stays at the edge -->
                 <span class="tools">
-                  <button class="icon mini" data-tip="New note here" onclick={async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap')?.focus(); }}>+</button>
-                  <button class="icon mini" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
+                  <button class="icon mini tip-right" data-tip="New note here" onclick={async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap')?.focus(); }}>+</button>
+                  <button class="icon mini tip-right" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
                 </span>
                 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <button class="icon mini fold" data-tip={groups.isCollapsed(g) ? 'Expand' : 'Collapse'} onclick={() => groups.toggle(g)}><span class="chev">›</span></button>
+                <button class="icon mini fold tip-right" data-tip={groups.isCollapsed(g) ? 'Expand' : 'Collapse'} onclick={() => groups.toggle(g)}><span class="chev">›</span></button>
               {/if}
             </div>
 
@@ -449,9 +449,9 @@
   /* keyboard cursor colours the whole header row (not just the name button) */
   .ghead:focus-within { background: color-mix(in srgb, var(--accent) 14%, transparent); }
   /* + and × unfold between the count and the chevron on hover; the chevron never moves */
-  .tools { display: flex; gap: 1px; width: 0; opacity: 0; overflow: hidden; transform: translateX(6px);
+  .tools { display: flex; gap: 2px; width: 0; opacity: 0; overflow: hidden; transform: translateX(6px);
     transition: width 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.16s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
-  .ghead:hover .tools, .tools:focus-within { width: 47px; opacity: 1; transform: none; }
+  .ghead:hover .tools, .tools:focus-within { width: 46px; opacity: 1; transform: none; }
   .tools .icon.mini, .fold { width: 22px; height: 22px; font-size: 14px; flex: none; }
   .fold { margin-left: 2px; }
   .tail { display: flex; align-items: center; cursor: default; }
@@ -466,7 +466,7 @@
   /* disclosure chevron lives on the right, so group icons sit flush left and notes indent just one column */
   .chev { display: inline-block; width: 12px; text-align: center; color: var(--fg-dim); font-size: 14px; line-height: 1; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); transform: rotate(90deg); }
   .collapsed .chev { transform: rotate(0deg); }
-  .count { font-weight: 500; font-size: 11px; color: var(--fg-dim); padding-left: 6px; }
+  .count { font-weight: 500; font-size: 11px; color: var(--fg-dim); padding: 0 2px 0 6px; }
   .rename {
     flex: 1; min-width: 0; font: inherit; font-size: 12.5px; padding: 3px 6px; border-radius: 4px;
     border: 1px solid var(--accent); background: var(--bg-input); color: var(--fg); outline: none; box-shadow: var(--glow);

@@ -73,6 +73,9 @@ button.icon:active { transform: scale(0.9); }
 }
 [data-tip].tip-up:hover::after { top: auto; bottom: calc(100% + 7px); transform: translateX(-50%) translateY(2px); }
 @keyframes tip-in { to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+/* controls at a clipped right edge: hang the tooltip to the left so it stays inside the pane */
+[data-tip].tip-right:hover::after { left: auto; right: 0; transform: translateY(-2px); animation-name: tip-in-r; }
+@keyframes tip-in-r { to { opacity: 1; transform: translateY(0); } }
 
 .shell {
   display: flex;
