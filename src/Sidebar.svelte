@@ -429,7 +429,7 @@
   }
   .plus-menu button:focus { background: var(--accent-soft); outline: none; }
 
-  .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 16px 8px; margin: 0; list-style: none; }
+  .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 10px 8px; margin: 0; list-style: none; }
   .row { position: relative; padding-left: calc(var(--d) * 18px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
   .row.dragging { opacity: 0.4; }
   .row.over { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
@@ -445,19 +445,22 @@
   }
   @keyframes num-in { from { transform: scale(0.6); opacity: 0; } }
 
-  .ghead { position: relative; display: flex; align-items: center; padding: 3px 0 1px; }
-  .ghead .icon.mini { position: absolute; top: 50%; transform: translateY(-50%); opacity: 0; width: 20px; height: 20px; font-size: 13px; background: var(--bg-side); }
-  .ghead .icon.mini { right: 24px; }
-  .ghead .icon.mini + .icon.mini { right: 4px; }
-  .ghead:hover .icon.mini { opacity: 1; }
-  .ghead:hover .count, .ghead:hover .chev { opacity: 0; }
+  .ghead { position: relative; display: flex; align-items: center; padding: 1px 4px 1px 0; border-radius: 6px; transition: background 0.12s; }
+  /* keyboard cursor colours the whole header row (not just the name button) */
+  .ghead:focus-within { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  /* + and × unfold between the count and the chevron on hover; the chevron never moves */
+  .tools { display: flex; gap: 1px; width: 0; opacity: 0; overflow: hidden; transform: translateX(6px);
+    transition: width 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.16s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .ghead:hover .tools, .tools:focus-within { width: 47px; opacity: 1; transform: none; }
+  .tools .icon.mini { width: 22px; height: 22px; font-size: 14px; flex: none; }
+  .tail { display: flex; align-items: center; cursor: default; }
   .ghead.static { padding-top: 8px; }
   .gname {
     flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px;
     border: 0; background: none; color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
-    padding: 4px 6px 4px 0; border-radius: 6px; text-align: left; white-space: nowrap; overflow: hidden;
+    padding: 4px 6px; border-radius: 6px; text-align: left; white-space: nowrap; overflow: hidden;
   }
-  .gname.static { color: var(--fg-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; cursor: default; padding-left: 0; }
+  .gname.static { color: var(--fg-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; cursor: default; }
   .gname .t { overflow: hidden; text-overflow: ellipsis; }
   /* disclosure chevron lives on the right, so group icons sit flush left and notes indent just one column */
   .chev { display: inline-block; width: 12px; text-align: center; color: var(--fg-dim); font-size: 14px; line-height: 1; margin-left: 4px; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.12s; transform: rotate(90deg); }
@@ -482,7 +485,8 @@
   .note-row > button:active { transform: scale(0.985); }
   .note-row > button.active { background: var(--bg-active); }
   /* keyboard cursor: a soft accent tint; the open note stays neutral grey */
-  [data-row]:focus { outline: none; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .note-row > [data-row]:focus { outline: none; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .gname:focus { outline: none; }
   .note-row > button.active:focus { background: color-mix(in srgb, var(--accent) 16%, var(--bg-active)); }
   .title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
