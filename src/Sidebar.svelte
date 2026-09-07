@@ -377,13 +377,14 @@
                 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
                 <span class="tail" role="presentation" onclick={() => groups.toggle(g)}>
                   <span class="count">{groups.notesIn(g, true).length}</span>
-                  <span class="chev">›</span>
                 </span>
-                <!-- on hover the tools unfold at the right edge, nudging the chevron left -->
+                <!-- on hover the tools unfold between the count and the chevron; the chevron stays at the edge -->
                 <span class="tools">
                   <button class="icon mini" data-tip="New note here" onclick={async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap')?.focus(); }}>+</button>
                   <button class="icon mini" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
                 </span>
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                <span class="tail" role="presentation" onclick={() => groups.toggle(g)}><span class="chev">›</span></span>
               {/if}
             </div>
 
