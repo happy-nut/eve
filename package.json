@@ -11,8 +11,7 @@
     "tauri": "tauri",
     "app": "tauri dev",
     "bundle": "tauri build",
-    "server": "node server/index.mjs",
-    "test": "node server/test.mjs"
+    "test": "node --experimental-strip-types --no-warnings src/lib/github.test.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",

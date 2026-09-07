@@ -40,8 +40,43 @@ fn list_notes(app: AppHandle) -> Result<Vec<String>, String> {
 fn write_note(app: AppHandle, id: String, text: String) -> Result<(), String> {
     safe_id(&id)?;
     let path = notes_dir(&app)?.join(format!("{id}.md"));
-    let tmp = path.with_extension("md.tmp");
-    fs::write(&tmp, text).map_err(|e| e.to_string())?;
+    write_atomic(&path, text.as_bytes())
+}
+
+fn assets_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = notes_dir(app)?.join("assets");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+const IMAGE_EXTS: [&str; 7] = ["png", "jpg", "jpeg", "gif", "webp", "svg", "heic"];
+
+fn safe_name(name: &str) -> Result<(), String> {
+    let ok = !name.is_empty()
+        && name.len() <= 64
+        && !name.starts_with('.')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.');
+    if ok { Ok(()) } else { Err("invalid asset name".into()) }
+}
+
+fn stamp_name(ext: &str) -> String {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    format!("{stamp:x}.{ext}")
+}
+
+fn raw_body(request: &tauri::ipc::Request<'_>) -> Result<Vec<u8>, String> {
+    match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => Ok(b.clone()),
+        _ => Err("expected raw bytes".into()),
+    }
+}
+
+fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    let tmp = path.with_extension("tmp");
+    fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
     fs::rename(tmp, path).map_err(|e| e.to_string())
 }
 
@@ -53,16 +88,10 @@ fn import_asset(app: AppHandle, src: String) -> Result<String, String> {
         .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase())
-        .filter(|e| ["png", "jpg", "jpeg", "gif", "webp", "svg", "heic"].contains(&e.as_str()))
+        .filter(|e| IMAGE_EXTS.contains(&e.as_str()))
         .ok_or("unsupported image type")?;
-    let dir = notes_dir(&app)?.join("assets");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    let name = format!("{stamp:x}.{ext}");
-    fs::copy(&src, dir.join(&name)).map_err(|e| e.to_string())?;
+    let name = stamp_name(&ext);
+    fs::copy(&src, assets_dir(&app)?.join(&name)).map_err(|e| e.to_string())?;
     Ok(format!("assets/{name}"))
 }
 
@@ -75,22 +104,77 @@ fn save_asset(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<String
         .and_then(|v| v.to_str().ok())
         .unwrap_or("png")
         .to_ascii_lowercase();
-    if !["png", "jpg", "jpeg", "gif", "webp", "svg", "heic"].contains(&ext.as_str()) {
+    if !IMAGE_EXTS.contains(&ext.as_str()) {
         return Err("unsupported image type".into());
     }
-    let bytes = match request.body() {
-        tauri::ipc::InvokeBody::Raw(b) => b.clone(),
-        _ => return Err("expected raw bytes".into()),
-    };
-    let dir = notes_dir(&app)?.join("assets");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    let name = format!("{stamp:x}.{ext}");
-    fs::write(dir.join(&name), bytes).map_err(|e| e.to_string())?;
+    let name = stamp_name(&ext);
+    fs::write(assets_dir(&app)?.join(&name), raw_body(&request)?).map_err(|e| e.to_string())?;
     Ok(format!("assets/{name}"))
+}
+
+// ---- sync: the assets folder as a list of immutable named blobs -------------
+#[tauri::command]
+fn list_assets(app: AppHandle) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for entry in fs::read_dir(assets_dir(&app)?).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if safe_name(&name).is_ok() && entry.path().is_file() {
+            out.push(name);
+        }
+    }
+    Ok(out)
+}
+
+/// Raw bytes of one asset (arrives in JS as an ArrayBuffer).
+#[tauri::command]
+fn read_asset(app: AppHandle, name: String) -> Result<tauri::ipc::Response, String> {
+    safe_name(&name)?;
+    let bytes = fs::read(assets_dir(&app)?.join(&name)).map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// An asset pulled from sync. Body = raw bytes, header x-name = file name.
+#[tauri::command]
+fn write_asset(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let name = request
+        .headers()
+        .get("x-name")
+        .and_then(|v| v.to_str().ok())
+        .ok_or("missing x-name")?
+        .to_string();
+    safe_name(&name)?;
+    write_atomic(&assets_dir(&app)?.join(&name), &raw_body(&request)?)
+}
+
+// ---- GitHub sign-in (device flow) -------------------------------------------
+/// github.com/login/* has no CORS headers, so the two device-flow POSTs run here through macOS's curl.
+/// `form` = [[key, value], ...]. Async so the main thread never blocks.
+#[tauri::command]
+async fn github_post(url: String, form: Vec<(String, String)>) -> Result<String, String> {
+    if !url.starts_with("https://github.com/login/") {
+        return Err("url not allowed".into());
+    }
+    let mut cmd = std::process::Command::new("curl");
+    cmd.args(["-sS", "-X", "POST", "-H", "Accept: application/json", &url]);
+    for (k, v) in &form {
+        cmd.args(["--data-urlencode", &format!("{k}={v}")]);
+    }
+    let out = cmd.output().map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Open the device-flow page in the default browser.
+#[tauri::command]
+async fn open_github(url: String) -> Result<(), String> {
+    if !url.starts_with("https://github.com/") {
+        return Err("url not allowed".into());
+    }
+    let ok = std::process::Command::new("open").arg(&url).status().map_err(|e| e.to_string())?.success();
+    if ok { Ok(()) } else { Err("could not open the browser".into()) }
 }
 
 /// External files (opened via Finder / "Open With"). Edited in place, never synced.
@@ -156,38 +240,16 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(Pending::default())
-        .setup(|app| {
-            // ⌘Q hides instead of quitting, so the summon hotkey keeps working; ⌘⌥Q really quits.
-            #[cfg(target_os = "macos")]
-            {
-                use tauri::menu::{Menu, MenuItem};
-                let menu = Menu::default(app.handle())?;
-                if let Some(first) = menu.items()?.first() {
-                    if let Some(sub) = first.as_submenu() {
-                        for it in sub.items()? {
-                            let text = it.as_predefined_menuitem().and_then(|p| p.text().ok());
-                            if text.as_deref().map_or(false, |t| t.starts_with("Quit")) {
-                                sub.remove(&it)?;
-                            }
-                        }
-                        sub.append(&MenuItem::with_id(app, "hide", "Hide Eve", true, Some("CmdOrCtrl+Q"))?)?;
-                        sub.append(&MenuItem::with_id(app, "quit", "Quit Eve", true, Some("CmdOrCtrl+Alt+Q"))?)?;
-                    }
-                }
-                app.set_menu(menu)?;
-                app.on_menu_event(|app, e| match e.id().as_ref() {
-                    "hide" => { let _ = app.emit("dismiss", ()); }
-                    "quit" => app.exit(0),
-                    _ => {}
-                });
-            }
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![
             list_notes,
             write_note,
             import_asset,
             save_asset,
+            list_assets,
+            read_asset,
+            write_asset,
+            github_post,
+            open_github,
             read_file,
             write_file,
             take_pending_files,

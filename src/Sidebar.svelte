@@ -443,9 +443,9 @@
     width: 16px; height: 16px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;
     font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent);
     background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
-    animation: num-in 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+    animation: num-in 0.25s ease-out;
   }
-  @keyframes num-in { from { transform: scale(0.6); opacity: 0; } }
+  @keyframes num-in { from { opacity: 0; } }
 
   .ghead { position: relative; display: flex; align-items: center; padding: 1px 2px 1px 0; border-radius: 6px; transition: background 0.12s; }
   /* keyboard cursor colours the whole header row (not just the name button) */

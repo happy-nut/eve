@@ -70,6 +70,23 @@ export async function pickImage(): Promise<string | null> {
   return invoke<string>('import_asset', { src: path });
 }
 
+/** Images in notes/assets, for sync. Browser mode has none (images are data URLs there). */
+export const assets = {
+  list: (): Promise<string[]> => (isTauri ? invoke<string[]>('list_assets') : Promise.resolve([])),
+  read: async (name: string): Promise<Uint8Array> => new Uint8Array(await invoke<ArrayBuffer>('read_asset', { name })),
+  async write(name: string, data: Uint8Array): Promise<void> {
+    if (!isTauri) return;
+    const { invoke: inv } = await import('@tauri-apps/api/core');
+    await inv('write_asset', data, { headers: { 'x-name': name } });
+  },
+};
+
+/** GitHub sign-in helpers that must run outside the webview: github.com/login has no CORS, and opening the browser. */
+export const github = {
+  post: (url: string, form: Record<string, string>) => invoke<string>('github_post', { url, form: Object.entries(form) }),
+  open: (url: string) => invoke<void>('open_github', { url }),
+};
+
 /** External files opened through macOS (Open With / double-click). */
 export const files = {
   read: (path: string) => invoke<string>('read_file', { path }),
@@ -114,9 +131,6 @@ async function fadeOut() {
   await invoke<void>('hide_app');
   // stays at opacity 0 while hidden, so the next summon fades in from nothing
 }
-/** ⌘Q from the menu asks the page to dismiss with the usual fade. */
-if (isTauri) import('@tauri-apps/api/event').then(({ listen }) => listen('dismiss', () => fadeOut()));
-
 export const win = {
   toggle: async () => { if (!isTauri) return; (await invoke<boolean>('is_front')) ? fadeOut() : fadeIn(); },
   hide: () => (isTauri ? fadeOut() : Promise.resolve()),
