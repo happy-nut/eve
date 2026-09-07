@@ -103,7 +103,9 @@
   }
 </script>
 
-<svelte:window onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={cmdUp} />
+<svelte:window onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={cmdUp}
+  onmousedowncapture={() => (document.documentElement.dataset.input = 'mouse')}
+  onkeydowncapture={() => (document.documentElement.dataset.input = 'keyboard')} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="shell" onfocusin={(e) => (ui.focusOwner = (e.target as HTMLElement).closest('aside') ? 'sidebar' : 'editor')}>
