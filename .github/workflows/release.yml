@@ -12,10 +12,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
+        with:
+          node-version: 22
+          cache: npm
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
       - run: npm run bundle
       - run: ditto -c -k --keepParent src-tauri/target/release/bundle/macos/Eve.app Eve-macos-arm64.zip
       - run: gh release create "$GITHUB_REF_NAME" Eve-macos-arm64.zip --title "Eve $GITHUB_REF_NAME" --generate-notes
-        env: { GH_TOKEN: ${{ github.token }} }
+        env:
+          GH_TOKEN: ${{ github.token }}
