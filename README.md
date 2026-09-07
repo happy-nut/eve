@@ -23,11 +23,11 @@ type Notion-style markdown, link notes with `[[wiki links]]`, and sync through a
 ## Install
 
 ```bash
-brew install --cask --no-quarantine happy-nut/tap/eve
+brew install --cask happy-nut/tap/eve
 ```
 
-Apple silicon only. The app is not notarized, hence `--no-quarantine`; without it macOS refuses to open it
-(fix after the fact with `xattr -dr com.apple.quarantine /Applications/Eve.app`). New versions: `brew reinstall --cask eve`.
+Apple silicon only. The app is ad-hoc signed, not notarized; the cask strips the quarantine flag so it opens
+without a Gatekeeper detour. New versions: `brew reinstall --cask eve`.
 Releases are built by `.github/workflows/release.yml` from a `v*` tag; the cask lives in [happy-nut/homebrew-tap](https://github.com/happy-nut/homebrew-tap).
 
 ## Run from source
