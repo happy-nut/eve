@@ -31,9 +31,8 @@
 
 <!-- controls can vanish under a still pointer (e.g. the group tools folding away): re-check hover on movement -->
 <svelte:document onmouseover={over} onmouseout={out} onmousedown={() => out()} onkeydown={() => out()}
-  onmousemove={() => current && !current.matches(':hover') && out()} onscrollcapture={() => out()} />
+  onmousemove={() => current && !current.matches(':hover') && out()} onscrollcapture={() => out()} onvisibilitychange={() => out()} />
 <svelte:window onblur={() => out()} onmouseout={(e) => !e.relatedTarget && out()} />
-<svelte:document onvisibilitychange={() => out()} />
 
 {#if tip}
   <!-- CSS intro only: a Svelte outro can stall when the window is hidden mid-animation and leave a ghost tip -->
