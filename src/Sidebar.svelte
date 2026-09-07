@@ -79,7 +79,8 @@
     ui.focusOwner = 'sidebar';
   }
   const plusItems = $derived.by(() => {
-    const newNote = (g: string) => () => focusRow(`[data-note="${notes.create('', g).id}"]`);
+    // a new note goes straight into the editor (deleting keeps focus in the list)
+    const newNote = (g: string) => async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap')?.focus(); };
     const items = [
       { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', run: newNote(ctxGroup) },
       { label: ctxGroup && depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : 'New group', run: () => groups.create(ctxGroup) },
@@ -384,7 +385,7 @@
                   <span class="t">{leafOf(g)}</span>
                   <span class="count">{groups.notesIn(g, true).length}</span>
                 </button>
-                <button class="icon mini" data-tip="New note here" onclick={() => notes.create('', g)}>+</button>
+                <button class="icon mini" data-tip="New note here" onclick={async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap')?.focus(); }}>+</button>
                 <button class="icon mini" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
               {/if}
             </div>

@@ -88,7 +88,7 @@
       case 'newNote':
         // from the sidebar, ask what to create (note or group) via the + menu
         if (document.activeElement?.closest('aside')) hooks.openPlus?.();
-        else notes.create();
+        else { ui.focusOwner = 'editor'; notes.create(); }
         break;
       case 'search': sidebarOpen = true; queueMicrotask(() => searchEl?.focus()); break;
       case 'focusSidebar': focusSidebar(); break;
@@ -119,7 +119,7 @@
     <button class="icon" aria-label="Forward" data-tip="Forward  {prettyKeys(shortcuts.keysFor('forward'))}" disabled={!notes.canForward} onclick={() => notes.forward()}>
       <svg viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
     </button>
-    <button class="icon" aria-label="New" data-tip="New  {prettyKeys(shortcuts.keysFor('newNote'))}" onclick={(e) => (sidebarOpen && hooks.openPlus ? hooks.openPlus(e.currentTarget) : notes.create())}>
+    <button class="icon" aria-label="New" data-tip="New  {prettyKeys(shortcuts.keysFor('newNote'))}" onclick={(e) => { if (sidebarOpen && hooks.openPlus) hooks.openPlus(e.currentTarget); else { ui.focusOwner = 'editor'; notes.create(); } }}>
       <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
     </button>
   </div>
