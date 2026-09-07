@@ -24,11 +24,7 @@
         "alwaysOnTop": false,
         "dragDropEnabled": false,
         "transparent": true,
-        "shadow": true,
-        "trafficLightPosition": {
-          "x": 14,
-          "y": 16
-        }
+        "shadow": true
       }
     ],
     "security": {

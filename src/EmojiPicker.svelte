@@ -32,6 +32,13 @@
     // the element always lists custom icons first; move that tab to the far right and mark the
     // selected tab by background instead of the sliding indicator (which assumes source order)
     const root = el.shadowRoot;
+    // focus the search box as soon as it exists, so you can type straight away
+    let tries = 0;
+    const focusSearch = () => {
+      const inp = root?.querySelector<HTMLInputElement>('input.search, input[type="search"], input');
+      if (inp) inp.focus(); else if (tries++ < 40) setTimeout(focusSearch, 25);
+    };
+    focusSearch();
     if (root && !root.querySelector('#eve-nav')) {
       const st = document.createElement('style');
       st.id = 'eve-nav';
