@@ -367,7 +367,6 @@
                 <button class="gname" data-row data-group={g} draggable="true"
                   ondragstart={(e) => dragStartGroup(e, g)} ondragend={dragEnd} ondragover={(e) => overGroup(e, g)} ondrop={drop}
                   onclick={() => groups.toggle(g)} ondblclick={() => (groups.editing = g)}>
-                  <span class="chev">›</span>
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ group: g }, e.currentTarget); }}>
                     {#if groups.icon(g)}<Icon icon={groups.icon(g)} />{:else}
@@ -375,6 +374,7 @@
                   </span>
                   <span class="t">{leafOf(g)}</span>
                   <span class="count">{groups.notesIn(g, true).length}</span>
+                  <span class="chev">›</span>
                 </button>
                 <button class="icon mini" data-tip="New note here" onclick={async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap')?.focus(); }}>+</button>
                 <button class="icon mini" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
@@ -405,7 +405,7 @@
     width: 260px; flex: none; display: flex; flex-direction: column;
     background: var(--bg-side); border-right: 1px solid var(--line); overflow: hidden;
   }
-  .top { display: flex; gap: 4px; padding: 42px 12px 8px 7px; } /* 7px = traffic lights' left edge */
+  .top { display: flex; gap: 4px; padding: 42px 12px 8px; }
   .top input {
     flex: 1; min-width: 0; border: 0; border-radius: 6px; padding: 6px 8px;
     background: var(--bg-input); color: inherit; font: inherit; font-size: 13px; outline: none; transition: box-shadow 0.15s;
@@ -422,7 +422,7 @@
   }
   .plus-menu button:focus { background: var(--accent-soft); outline: none; }
 
-  .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 12px 8px 7px; margin: 0; list-style: none; }
+  .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 12px 8px; margin: 0; list-style: none; }
   .row { position: relative; padding-left: calc(var(--d) * 18px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
   .row.dragging { opacity: 0.4; }
   .row.over { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
@@ -441,10 +441,10 @@
 
   .ghead { position: relative; display: flex; align-items: center; padding: 3px 0 1px; }
   .ghead .icon.mini { position: absolute; top: 50%; transform: translateY(-50%); opacity: 0; width: 20px; height: 20px; font-size: 13px; background: var(--bg-side); }
-  .ghead .icon.mini { right: 22px; }
-  .ghead .icon.mini + .icon.mini { right: 2px; }
+  .ghead .icon.mini { right: 24px; }
+  .ghead .icon.mini + .icon.mini { right: 4px; }
   .ghead:hover .icon.mini { opacity: 1; }
-  .ghead:hover .count { opacity: 0; }
+  .ghead:hover .count, .ghead:hover .chev { opacity: 0; }
   .ghead.static { padding-top: 8px; }
   .gname {
     flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px;
@@ -454,7 +454,8 @@
   .gname:hover { background: var(--bg-hover); }
   .gname.static { color: var(--fg-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; cursor: default; padding-left: 0; }
   .gname .t { overflow: hidden; text-overflow: ellipsis; }
-  .chev { display: inline-block; width: 12px; text-align: center; color: var(--fg-dim); font-size: 14px; line-height: 1; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); transform: rotate(90deg); }
+  /* disclosure chevron lives on the right, so group icons sit flush left and notes indent just one column */
+  .chev { display: inline-block; width: 12px; text-align: center; color: var(--fg-dim); font-size: 14px; line-height: 1; margin-left: 4px; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.12s; transform: rotate(90deg); }
   .collapsed .chev { transform: rotate(0deg); }
   .count { margin-left: auto; font-weight: 500; font-size: 11px; color: var(--fg-dim); padding-left: 6px; transition: opacity 0.12s; }
   .rename {
@@ -483,7 +484,7 @@
 
   footer {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 6px 10px 8px 9px; font-size: 11.5px; color: var(--fg-dim); border-top: 1px solid var(--line);
+    padding: 6px 10px 8px 14px; font-size: 11.5px; color: var(--fg-dim); border-top: 1px solid var(--line);
   }
   .sync::before {
     content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px;
