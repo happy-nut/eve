@@ -405,7 +405,7 @@
     width: 260px; flex: none; display: flex; flex-direction: column;
     background: var(--bg-side); border-right: 1px solid var(--line); overflow: hidden;
   }
-  .top { display: flex; gap: 4px; padding: 42px 12px 8px; }
+  .top { display: flex; gap: 4px; padding: 42px 12px 8px 7px; } /* 7px = traffic lights' left edge */
   .top input {
     flex: 1; min-width: 0; border: 0; border-radius: 6px; padding: 6px 8px;
     background: var(--bg-input); color: inherit; font: inherit; font-size: 13px; outline: none; transition: box-shadow 0.15s;
@@ -422,7 +422,7 @@
   }
   .plus-menu button:focus { background: var(--accent-soft); outline: none; }
 
-  .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 12px 8px; margin: 0; list-style: none; }
+  .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 12px 8px 7px; margin: 0; list-style: none; }
   .row { position: relative; padding-left: calc(var(--d) * 18px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
   .row.dragging { opacity: 0.4; }
   .row.over { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
@@ -483,7 +483,7 @@
 
   footer {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 6px 10px 8px 14px; font-size: 11.5px; color: var(--fg-dim); border-top: 1px solid var(--line);
+    padding: 6px 10px 8px 9px; font-size: 11.5px; color: var(--fg-dim); border-top: 1px solid var(--line);
   }
   .sync::before {
     content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px;
