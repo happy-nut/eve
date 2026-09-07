@@ -81,7 +81,7 @@ button.icon:active { transform: scale(0.9); }
 }
 @keyframes appear { from { opacity: 0; transform: scale(0.985); } }
 .dragbar { position: fixed; top: 0; left: 0; right: 0; height: 28px; z-index: 5; }
-.toolbar { position: fixed; top: 4px; left: 78px; display: flex; gap: 4px; z-index: 6; }
+.toolbar { position: fixed; top: 4px; left: 86px; display: flex; gap: 4px; z-index: 6; }
 .toolbar .icon { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
 .toolbar svg { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .toolbar .icon:disabled { opacity: 0.3; pointer-events: none; }

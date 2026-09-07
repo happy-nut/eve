@@ -26,7 +26,7 @@
         "transparent": true,
         "shadow": true,
         "trafficLightPosition": {
-          "x": 12,
+          "x": 16,
           "y": 18
         }
       }
