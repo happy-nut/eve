@@ -217,13 +217,13 @@ class NotesStore {
     this.currentId = hit ? hit.id : this.create(`# ${title}\n\n`).id;
   }
 
-  /** Apply notes coming from the sync server (last-writer-wins). Returns true if anything changed. */
-  mergeRemote(remote: Note[]): boolean {
+  /** Apply notes coming from sync (last-writer-wins, or unconditionally with `force`). Returns true if anything changed. */
+  mergeRemote(remote: Note[], force = false): boolean {
     let changed = false;
     for (const r of remote) {
       const local = this.all.find((n) => n.id === r.id);
-      if (local && local.updatedAt >= r.updatedAt) continue;
-      if (local) Object.assign(local, r);
+      if (!force && local && local.updatedAt >= r.updatedAt) continue;
+      if (local) Object.assign(local, { icon: undefined }, r); // a removed icon must come through too
       else this.all.push(r);
       void storage.write(r.id, serialize(r));
       changed = true;

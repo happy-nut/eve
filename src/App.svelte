@@ -24,7 +24,7 @@
   // hold ⌘: sidebar notes show 1…9, ⌘<digit> opens that note
   let cmdHeld = $state(false);
   let cmdTimer: ReturnType<typeof setTimeout> | undefined;
-  function cmdDown() { clearTimeout(cmdTimer); cmdTimer = setTimeout(() => (cmdHeld = true), 150); }
+  function cmdDown() { clearTimeout(cmdTimer); cmdTimer = setTimeout(() => (cmdHeld = true), 550); }
   function cmdUp() { clearTimeout(cmdTimer); cmdHeld = false; }
   function jumpTo(n: number) {
     const note = groups.visibleOrdered()[n - 1];

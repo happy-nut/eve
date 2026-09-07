@@ -232,7 +232,7 @@ export function createEditor(opts: {
               char: '/',
               pluginKey: new PluginKey('slashMenu'),
               allowSpaces: false,
-              allowedPrefixes: null, // trigger mid-word too, like Notion
+              // default prefixes (line start / after a space): a '/' already inside text like KRW/USD must not open the menu
               items: ({ query }) => {
                 const q = query.toLowerCase();
                 return SLASH.filter((i) => i.label.toLowerCase().includes(q) || i.hint?.toLowerCase().includes(q));
