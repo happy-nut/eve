@@ -337,7 +337,6 @@
           class:over={r.kind !== 'note' && dropAt?.into === r.g && !dropAt.beforeNote && !dropAt.beforeGroup}
           class:drop-before={(r.kind === 'note' && dropAt?.beforeNote === r.n.id) || (r.kind === 'group' && dropAt?.beforeGroup === r.g)}
           class:dragging={(r.kind === 'note' && drag?.note === r.n.id) || (r.kind === 'group' && drag?.group === r.g)}>
-          {#each { length: 'depth' in r ? r.depth : 0 } as _, i}<i class="guide" style="left: {6 + i * 18}px"></i>{/each}
 
           {#if r.kind === 'note'}
             {@const n = r.n}
@@ -432,7 +431,6 @@
   .row { position: relative; padding-left: calc(var(--d) * 18px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
   .row.dragging { opacity: 0.4; }
   .row.over { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
-  .guide { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); pointer-events: none; }
   .ico { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; opacity: 0.75; }
   .ico-slot { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: none; border-radius: 4px; transition: background 0.12s; }
   .ico-slot:hover { background: var(--bg-active); }
