@@ -384,7 +384,7 @@
                   <button class="icon mini" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
                 </span>
                 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <span class="tail" role="presentation" onclick={() => groups.toggle(g)}><span class="chev">›</span></span>
+                <button class="icon mini fold" data-tip={groups.isCollapsed(g) ? 'Expand' : 'Collapse'} onclick={() => groups.toggle(g)}><span class="chev">›</span></button>
               {/if}
             </div>
 
@@ -445,14 +445,15 @@
   }
   @keyframes num-in { from { transform: scale(0.6); opacity: 0; } }
 
-  .ghead { position: relative; display: flex; align-items: center; padding: 1px 4px 1px 0; border-radius: 6px; transition: background 0.12s; }
+  .ghead { position: relative; display: flex; align-items: center; padding: 1px 2px 1px 0; border-radius: 6px; transition: background 0.12s; }
   /* keyboard cursor colours the whole header row (not just the name button) */
   .ghead:focus-within { background: color-mix(in srgb, var(--accent) 14%, transparent); }
   /* + and × unfold between the count and the chevron on hover; the chevron never moves */
   .tools { display: flex; gap: 1px; width: 0; opacity: 0; overflow: hidden; transform: translateX(6px);
     transition: width 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.16s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
   .ghead:hover .tools, .tools:focus-within { width: 47px; opacity: 1; transform: none; }
-  .tools .icon.mini { width: 22px; height: 22px; font-size: 14px; flex: none; }
+  .tools .icon.mini, .fold { width: 22px; height: 22px; font-size: 14px; flex: none; }
+  .fold { margin-left: 2px; }
   .tail { display: flex; align-items: center; cursor: default; }
   .ghead.static { padding-top: 8px; }
   .gname {
@@ -463,7 +464,7 @@
   .gname.static { color: var(--fg-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; cursor: default; }
   .gname .t { overflow: hidden; text-overflow: ellipsis; }
   /* disclosure chevron lives on the right, so group icons sit flush left and notes indent just one column */
-  .chev { display: inline-block; width: 12px; text-align: center; color: var(--fg-dim); font-size: 14px; line-height: 1; margin-left: 4px; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.12s; transform: rotate(90deg); }
+  .chev { display: inline-block; width: 12px; text-align: center; color: var(--fg-dim); font-size: 14px; line-height: 1; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); transform: rotate(90deg); }
   .collapsed .chev { transform: rotate(0deg); }
   .count { font-weight: 500; font-size: 11px; color: var(--fg-dim); padding-left: 6px; }
   .rename {
