@@ -3,7 +3,7 @@
   import { fade, slide, scale } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { tick } from 'svelte';
-  import { notes, titleOf, plain, type Note } from './lib/notes.svelte';
+  import { notes, titleOf, type Note } from './lib/notes.svelte';
   import { groups, parentOf, leafOf, depthOf, MAX_DEPTH } from './lib/groups.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
@@ -291,14 +291,6 @@
   const focusInput = (el: HTMLInputElement) => { el.focus(); el.select(); };
 
   // ---- misc ----
-  function ago(t: number) {
-    const s = (Date.now() - t) / 1000;
-    if (s < 60) return 'now';
-    if (s < 3600) return `${Math.floor(s / 60)}m`;
-    if (s < 86400) return `${Math.floor(s / 3600)}h`;
-    return `${Math.floor(s / 86400)}d`;
-  }
-  const preview = (body: string) => body.split('\n').slice(1).map(plain).find((l) => l && !/^```/.test(l)) ?? '';
   function onSearchKey(e: KeyboardEvent) {
     if (e.key === 'Escape') { query = ''; searchEl?.blur(); e.preventDefault(); }
     if (e.key === 'Enter' && hits[0]) { notes.currentId = hits[0].id; searchEl?.blur(); e.preventDefault(); }
@@ -362,7 +354,6 @@
                   </span>
                   <span class="t">{titleOf(n)}</span>
                 </span>
-                <span class="meta"><span class="preview">{n.path ? n.path.replace(/^\/Users\/[^/]+/, '~') : preview(n.body)}</span><time>{ago(n.updatedAt)}</time></span>
               </button>
             </div>
 
@@ -478,7 +469,7 @@
   }
   .note-row > button {
     width: 100%; text-align: left; border: 0; background: none; color: inherit; font: inherit;
-    padding: 5px 8px; border-radius: 6px; display: flex; flex-direction: column; gap: 2px;
+    padding: 4px 8px; border-radius: 6px; display: flex; flex-direction: column;
     cursor: default; transition: background 0.12s, transform 0.12s;
   }
   .note-row > button:hover { background: var(--bg-hover); }
@@ -489,8 +480,6 @@
   .note-row > button.active:focus { background: color-mix(in srgb, var(--accent) 16%, var(--bg-active)); }
   .title { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .meta { display: flex; gap: 8px; font-size: 11.5px; color: var(--fg-dim); padding-left: 23px; width: 100%; }
-  .preview { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   footer {
     display: flex; align-items: center; justify-content: space-between;
