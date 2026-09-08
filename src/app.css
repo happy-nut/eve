@@ -59,6 +59,8 @@ button.icon {
   transition: background 0.12s, color 0.12s, transform 0.12s;
 }
 button.icon:hover { background: var(--bg-hover); color: var(--fg); }
+/* icon buttons show keyboard focus as a tinted pill, like hover, not a ring that gets clipped by their containers */
+button.icon:focus-visible { outline: none; background: var(--accent-soft); color: var(--fg); }
 button.icon:active { transform: scale(0.9); }
 
 /* tooltips: data-tip="text" data-keys="Mod-k" — rendered by Tooltip.svelte at body level */

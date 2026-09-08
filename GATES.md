@@ -64,3 +64,17 @@
 - [x] G15 Manual: Tauri app syncs notes + an image to the repo and a second client gets them
   EVIDENCE: installed Eve.app signed in via device flow, pushed 18 notes to happy-nut/eve-notes (commits "eve: init", "eve: 18 files"), sidebar shows "synced" after the cache fix (fetch cache:'no-store'; WebKit served GitHub's max-age=60 branch reply after our own push -> 422 loop). No image in the notes yet, so the asset path is covered by G11/G12 only. Earlier note — needs the user's token in the app (not typed by Claude). Verified instead in the browser dev build: Settings -> Sync, repo o/r + dummy token, Sync now -> "401 bad token" shown in dialog + sidebar. Assumption to confirm in the bundled app: crypto.subtle exists on tauri://localhost (WebKit treats scheme-handler origins as secure).
   ABANDON: G3 (server/test.mjs) — server/ removed; G11/G12 cover sync now.
+
+# GATES — kanban block (2026-09-08)
+
+- [x] G16 Board JSON <-> data round-trips (bodies with lists/headings/fences, broken JSON -> null, sloppy shapes tolerated, move ops)
+  CHECK: node --experimental-strip-types --no-warnings src/lib/board.test.mjs
+  EXPECT: BOARD_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "BOARD_OK" (also part of `npm test`, with SYNC_OK)
+- [x] G17 Frontend type-checks and builds
+  CHECK: npm run check && npm run build
+  EXPECT: built in
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS 0 WARNINGS" / "✓ built in"
+- [x] G18 Manual, in-app browser: "/" -> Kanban inserts a board; arrows move between cards/headers; ⌥arrows move a card (up/down/left/right, animated) and a column (left/right); Enter on a card opens the floating page, edits show on the card, Esc closes; mouse drag moves a card between columns; Esc from the board selects the block; markdown of the note contains a ```kanban fence.
+  EVIDENCE (round 2, JSON form + polish): in-app browser — a ```kanban JSON fence rendered as a board and a broken one stayed a `language-kanban` code block that round-trips; ↓ from the line above / ↑ from the line below entered the board (first header), ↑ on a header left to "above", Esc left to "below"; Backspace at the start of "below" opened "Delete the board and its 1 card?", Enter deleted it, undo restored it; Tab/⇧Tab in the confirm dialog cycled Cancel ↔ Delete only; Tab in the card page cycled title ↔ body; ←→ across five columns scrolled the board (scrollLeft 2 → 1002); the block no longer draws a selection outline (selectable: false). Installed to /Applications/Eve.app via `npm run bundle` + ditto.
+  EVIDENCE (round 1): in-app browser at http://localhost:5173 — "/kan" + Enter inserted the board and focused the first header; ↓ → "+ New", Enter created a card and opened the floating page (title input focused), typed title + body, Esc closed it and the card showed the title with a dim body line; markdown became "```kanban\n## To do\n- Write the spec\n  Some **details** here…". With Alpha/Beta/Gamma | Delta: ↓ → Beta, → Delta, ← Alpha; ⌥→ moved Alpha into "In progress" at row 0 (crossfade fly-over seen mid-flight), ⌥↓ reordered it below Delta (flip); on a header ⌥← swapped the columns; ⌘Z inside the board undid it and focus stayed on the header; Esc gave the editor a NodeSelection on the block (ProseMirror-selectednode), Enter re-entered. Mouse DnD: the CDP mouse drag cannot start a native drag, so dragstart/dragover/drop were dispatched as DragEvents: dragover previewed Beta as a ghost in "Done", drop committed it (file updated), a drop of the same payload on an editor paragraph inserted nothing. Dark theme checked by screenshot.
