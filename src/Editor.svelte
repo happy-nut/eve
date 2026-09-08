@@ -20,6 +20,7 @@
   let heads = $state<{ top: number; text: string; preview: string; level: number; on: boolean }[]>([]);
   let overflow = $state(false);
   let hover = $state<number | null>(null);
+  let outlineHot = $state(false); // pointer over the outline: ticks grow to their full length
   let raf = 0;
   function measure() {
     cancelAnimationFrame(raf);
@@ -127,7 +128,7 @@
   <div class="editor" class:has-head={!note.path} bind:this={el}></div>
 </div>
 {#if overflow && heads.length}
-  <nav class="outline" aria-label="Sections" onmouseleave={() => (hover = null)}>
+  <nav class="outline" class:hot={outlineHot} aria-label="Sections" onmouseenter={() => (outlineHot = true)} onmouseleave={() => { outlineHot = false; hover = null; }}>
     {#each heads as h, i (i)}
       <button class="tick l{h.level}" class:on={h.on} title={h.text} onmouseenter={() => (hover = i)} onclick={() => go(h.top)}>
         <i></i>
@@ -154,15 +155,18 @@
   .scroll::-webkit-scrollbar { display: none; }
   .outline {
     position: absolute; left: 12px; top: 50%; transform: translateY(-50%); z-index: 4;
-    display: flex; flex-direction: column; gap: 4px; max-height: 72%;
+    display: flex; flex-direction: column; gap: 2px; max-height: 72%;
   }
-  .tick { position: relative; display: flex; align-items: center; height: 10px; width: 44px; padding: 0; border: 0; background: none; }
-  .tick i { display: block; width: 12px; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--fg) 20%, transparent); transition: background 0.25s, width 0.25s, height 0.25s; }
-  .tick.l1 i { width: 22px; }
-  .tick.l2 i { width: 16px; }
-  .tick.on i { width: 28px; height: 3px; background: var(--fg); }
-  .tick:hover i { background: color-mix(in srgb, var(--fg) 45%, transparent); }
-  .tick.on:hover i { background: var(--fg); }
+  .tick { position: relative; display: flex; align-items: center; height: 8px; width: 44px; padding: 0; border: 0; background: none; }
+  /* resting: short faint dashes; the sections on screen are dark. Hovering the outline stretches them by level. */
+  .tick i { display: block; width: 8px; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--fg) 12%, transparent); transition: background 0.25s, width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.25s; }
+  .tick.on i { width: 12px; background: var(--fg); }
+  .hot .tick i { width: 12px; background: color-mix(in srgb, var(--fg) 22%, transparent); }
+  .hot .tick.l1 i { width: 22px; }
+  .hot .tick.l2 i { width: 16px; }
+  .hot .tick.on i { width: 28px; height: 3px; background: var(--fg); }
+  .hot .tick:hover i { background: color-mix(in srgb, var(--fg) 45%, transparent); }
+  .hot .tick.on:hover i { background: var(--fg); }
   .peek { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); z-index: 5; }
   .peek-in {
     display: flex; flex-direction: column; gap: 5px; width: min(460px, 60vw); padding: 12px 16px; border-radius: 12px;
