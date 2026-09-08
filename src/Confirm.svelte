@@ -10,10 +10,16 @@
   let value = $state('');
   $effect(() => { value = p.input ?? ''; });
 
+  let box: HTMLDivElement;
   function onKey(e: KeyboardEvent) {
     e.stopPropagation();
     if (e.key === 'Escape') { e.preventDefault(); done(null); }
     if (e.key === 'Enter') { e.preventDefault(); done(p.input !== undefined ? value : 'yes'); }
+    if (e.key === 'Tab') { // focus stays inside the dialog
+      e.preventDefault();
+      const els = [...box.querySelectorAll<HTMLElement>('input, button')];
+      els[(els.indexOf(document.activeElement as HTMLElement) + (e.shiftKey ? -1 : 1) + els.length) % els.length]?.focus();
+    }
   }
   const focus = (el: HTMLElement) => { el.focus(); if (el instanceof HTMLInputElement) el.select(); };
 </script>
@@ -21,7 +27,7 @@
 <svelte:window onkeydown={onKey} />
 
 <div class="backdrop" transition:fade={{ duration: 120 }} onmousedown={() => done(null)} role="presentation"></div>
-<div class="box" transition:scale={{ start: 0.94, duration: 160 }} role="dialog">
+<div class="box" bind:this={box} transition:scale={{ start: 0.94, duration: 160 }} role="dialog">
   <p>{p.message}</p>
   {#if p.input !== undefined}
     <input bind:value use:focus spellcheck="false" />

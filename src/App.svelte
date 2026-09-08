@@ -12,6 +12,7 @@
   import Editor from './Editor.svelte';
   import Settings from './Settings.svelte';
   import Confirm from './Confirm.svelte';
+import CardPage from './CardPage.svelte';
   import EmojiPicker from './EmojiPicker.svelte';
   import Tooltip from './Tooltip.svelte';
   import { ui, hooks } from './lib/ui.svelte';
@@ -140,6 +141,9 @@
 
 {#if settingsOpen}
   <Settings onClose={() => (settingsOpen = false)} {hotkeyError} />
+{/if}
+{#if ui.card}
+  <CardPage />
 {/if}
 {#if ui.pending}
   <Confirm />

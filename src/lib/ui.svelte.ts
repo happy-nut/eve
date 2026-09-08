@@ -1,6 +1,9 @@
 /** In-app confirm/prompt (WKWebView has no native JS dialogs). Rendered by Confirm.svelte. */
 interface Pending { message: string; input?: string; danger?: boolean; resolve: (v: string | null) => void }
 
+/** a kanban card opened as a floating page; edits stream back through onChange */
+export interface CardReq { title: string; body: string; onChange: (c: { title: string; body: string }) => void; resolve: () => void }
+
 interface EmojiReq { x: number; y: number; current: string; resolve: (v: string | null) => void }
 
 class Ui {
@@ -12,6 +15,12 @@ class Ui {
     return new Promise((res) => { this.emoji = { x: r.left, y: r.bottom + 6, current, resolve: res }; });
   }
   emojiDone(v: string | null) { this.emoji?.resolve(v); this.emoji = null; }
+  card = $state<CardReq | null>(null);
+  /** Open a card as a floating page; resolves when it closes. */
+  openCard(c: { title: string; body: string }, onChange: CardReq['onChange']): Promise<void> {
+    return new Promise((res) => { this.card = { ...c, onChange, resolve: res }; });
+  }
+  closeCard() { this.card?.resolve(); this.card = null; }
   pending = $state<Pending | null>(null);
   /** which pane owns keyboard focus; dialogs don't change it, so focus can return there afterwards */
   focusOwner = $state<'editor' | 'sidebar'>('editor');

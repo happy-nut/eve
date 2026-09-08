@@ -2,11 +2,12 @@
   import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
   import type { Editor as TipTap } from '@tiptap/core';
-  import { createEditor, applyKeymap, getMarkdown, type SuggestItem } from './lib/editor';
+  import { createEditor, applyKeymap, getMarkdown } from './lib/editor';
   import { notes, titleOf, type Note } from './lib/notes.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
   import { ui } from './lib/ui.svelte';
   import Icon from './Icon.svelte';
+  import Suggest from './Suggest.svelte';
   import { RANDOM_ICONS } from './lib/icons';
 
   let { note }: { note: Note } = $props();
@@ -47,22 +48,7 @@
   }
   const go = (top: number) => scrollEl?.scrollTo({ top: Math.max(0, top - 44), behavior: 'smooth' });
 
-  // [[ suggestion popup state
-  let items = $state<SuggestItem[]>([]);
-  let sel = $state(0);
-  let pos = $state({ x: 0, y: 0 });
-  let pick: (t: SuggestItem) => void = () => {};
-
-  const suggestionUI = {
-    show(list: SuggestItem[], rect: DOMRect | null, cb: (t: SuggestItem) => void) {
-      items = list; sel = 0; pick = cb;
-      if (rect) pos = { x: rect.left, y: rect.bottom + 4 };
-    },
-    move: (d: number) => { sel = (sel + d + items.length) % items.length; },
-    select: () => { if (!items.length) return false; pick(items[sel]); return true; },
-    hide: () => { items = []; },
-    visible: () => items.length > 0,
-  };
+  let suggest: ReturnType<typeof Suggest>; // [[ and / popup
 
   onMount(() => {
     const id = note.id;
@@ -72,7 +58,7 @@
       onUpdate: (md) => notes.update(note.id, md),
       onOpenNote: (title) => { notes.flush(note.id); notes.openByTitle(title); },
       titles: () => notes.visible.filter((n) => n.id !== note.id).map(titleOf),
-      suggestionUI,
+      suggestionUI: suggest.ui,
       cursor: notes.cursor.get(note.id),
     });
     if (ui.focusOwner !== 'sidebar') editor?.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
@@ -94,12 +80,6 @@
     const v = await ui.pickEmoji(anchor, note.icon ?? '');
     if (v !== null) notes.setIcon(note.id, v);
   }
-
-  // keep the highlighted suggestion visible while arrowing through a long list
-  $effect(() => {
-    sel;
-    document.querySelector('.suggest li.sel')?.scrollIntoView({ block: 'nearest' });
-  });
 
   // rebind editor shortcuts live when the user changes them
   $effect(() => { shortcuts.actions; if (editor) applyKeymap(editor); });
@@ -143,13 +123,7 @@
   </nav>
 {/if}
 
-{#if items.length}
-  <ul class="suggest" style="left:{pos.x}px; top:{pos.y}px" transition:fly={{ y: 4, duration: 120 }}>
-    {#each items as t, i}
-      <li class:sel={i === sel}><button onmousedown={(e) => { e.preventDefault(); pick(t); }}>{t.label}{#if t.hint}<span class="hint">{t.hint}</span>{/if}</button></li>
-    {/each}
-  </ul>
-{/if}
+<Suggest bind:this={suggest} />
 
 <style>
   .scroll { height: 100%; overflow-y: auto; scrollbar-width: none; }
@@ -196,23 +170,4 @@
   .big-icon:hover { background: var(--bg-hover); }
   .big-icon:active { transform: scale(0.95); }
   .editor.has-head :global(.tiptap) { padding-top: 0; min-height: calc(100% - 72px); }
-  .suggest {
-    position: fixed;
-    z-index: 10;
-    list-style: none;
-    margin: 0;
-    padding: 4px;
-    min-width: 200px;
-    max-width: 340px;
-    max-height: 300px;
-    overflow-y: auto;
-    background: var(--bg-pop);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-    font-size: 13px;
-  }
-  .suggest button { width: 100%; text-align: left; border: 0; background: none; color: inherit; font: inherit; padding: 5px 8px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .suggest li.sel button { background: var(--accent-soft); }
-  .suggest .hint { float: right; margin-left: 12px; color: var(--fg-dim); font-size: 11.5px; }
 </style>

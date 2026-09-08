@@ -1,5 +1,6 @@
-import { Editor, Extension, textInputRule } from '@tiptap/core';
+import { Editor, Extension, textInputRule, wrappingInputRule } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
+import { OrderedList } from '@tiptap/extension-list';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -10,6 +11,7 @@ import { WikiLink } from './wikilink';
 import { Callout } from './callout';
 import { LocalImage } from './image';
 import { Bookmark } from './bookmark';
+import { Kanban, insertKanban } from './kanban';
 import { ui } from './ui.svelte';
 import { isCustom } from './icons';
 import { pickImage, saveImage } from './platform';
@@ -121,6 +123,7 @@ const SLASH: SuggestItem[] = [
   { label: 'Callout', hint: '💡 highlighted box', run: (e) => e.chain().focus().toggleWrap('callout').run() },
   { label: 'Code block', hint: '``` code', run: (e) => e.chain().focus().toggleCodeBlock().run() },
   { label: 'Divider', hint: '---', run: (e) => e.chain().focus().setHorizontalRule().run() },
+  { label: 'Kanban', hint: '칸반 board', run: insertKanban },
   { label: 'Image', hint: 'Pick a file', run: (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); } },
   { label: 'Link to note', hint: '[[ another note', run: (e) => e.chain().focus().insertContent('[[').run() },
   {
@@ -170,9 +173,17 @@ export function createEditor(opts: {
     },
     extensions: [
       StarterKit.configure({
+        orderedList: false, // replaced below: a new "1. " right after a numbered list continues it
         heading: { levels: [1, 2, 3, 4, 5] },
         link: { openOnClick: false, autolink: true },
         codeBlock: { languageClassPrefix: 'language-' },
+      }),
+      // Notion-style numbering: typing "1. " (any number) directly after a numbered list joins it and
+      // continues the count. Stock TipTap only joins when the typed number is the next one.
+      OrderedList.extend({
+        addInputRules() {
+          return [wrappingInputRule({ find: /^(\d+)\.\s$/, type: this.type, getAttributes: (m) => ({ start: +m[1] }), joinPredicate: (_m, node) => !node.attrs.type || node.attrs.type === '1' })];
+        },
       }),
       TaskList,
       // tiptap-markdown only marks bullet/ordered lists as tight; do the same for task lists
@@ -225,6 +236,7 @@ export function createEditor(opts: {
       }),
       LocalImage.configure({ inline: false, allowBase64: true }),
       Bookmark,
+      Kanban,
       Extension.create({
         name: 'slashMenu',
         addProseMirrorPlugins() {

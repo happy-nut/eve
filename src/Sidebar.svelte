@@ -384,7 +384,7 @@
                   <button class="icon mini tip-right" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
                 </span>
                 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <button class="icon mini fold tip-right" data-tip={groups.isCollapsed(g) ? 'Expand' : 'Collapse'} onclick={() => groups.toggle(g)}><span class="chev">›</span></button>
+                <button class="icon mini fold tip-right" aria-label={groups.isCollapsed(g) ? 'Expand' : 'Collapse'} data-tip={groups.isCollapsed(g) ? 'Expand' : 'Collapse'} onclick={() => groups.toggle(g)}><svg class="chev" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4"/></svg></button>
               {/if}
             </div>
 
@@ -466,7 +466,9 @@
   .gname.static { color: var(--fg-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; cursor: default; }
   .gname .t { overflow: hidden; text-overflow: ellipsis; }
   /* disclosure chevron lives on the right, so group icons sit flush left and notes indent just one column */
-  .chev { display: inline-block; width: 12px; text-align: center; color: var(--fg-dim); font-size: 14px; line-height: 1; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); transform: rotate(90deg); }
+  /* an SVG, not a "›" glyph: text glyphs sit off-centre in their box, which shows once rotated */
+  .fold { display: inline-flex; align-items: center; justify-content: center; }
+  .chev { display: block; width: 14px; height: 14px; fill: none; stroke: var(--fg-dim); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); transform: rotate(90deg); }
   .collapsed .chev { transform: rotate(0deg); }
   .count { font-weight: 500; font-size: 11px; color: var(--fg-dim); padding: 0 2px 0 6px; }
   .rename {
