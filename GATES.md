@@ -87,3 +87,14 @@
   EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS 0 WARNINGS" / "✓ built in"
 - [x] G20 Manual, in-app browser with the OS in dark: Settings -> Appearance -> Theme = Light paints the page light, Dark paints it dark, System follows the OS; the choice survives a reload.
   EVIDENCE: in-app browser at http://localhost:5173 with prefers-color-scheme emulated dark: #app background rgb(255,255,255) after Theme = Light, rgb(11,12,16) after Dark, rgb(11,12,16) after System; localStorage eve.appearance holds theme:"light" and the page came back light on reload; screenshot of the light UI under the dark OS.
+
+# GATES — kanban × highlight + list numbering (2026-09-08)
+
+- [x] G21 Type-checks and builds
+  CHECK: npm run check && npm run build
+  EXPECT: built in
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS 0 WARNINGS" / "✓ built in"
+- [x] G22 Manual, in-app browser: two numbered lists that touch become one list (count carries on)
+  EVIDENCE: list(5 items) + empty paragraph + list(2) -> Backspace on the empty paragraph -> one orderedList of 7, markers 1…7.
+- [x] G23 Manual, in-app browser: keyboard → + → × → + → header: the +/× highlight follows the focused control and clears (class `on`, not :focus)
+  EVIDENCE: × focused: on=true bg accent-soft opacity 1; ↑: × on=false bg transparent opacity 0, + on=true; ←: header focused, neither on. Not reproduced in Chromium (the stale highlight is WebKit-only; the dev app could not be driven — full-screen control was not approved), so the WebKit fix is unverified in the app.

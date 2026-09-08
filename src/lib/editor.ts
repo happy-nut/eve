@@ -7,6 +7,8 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
 import { Plugin, PluginKey, type Command } from '@tiptap/pm/state';
+import { canJoin } from '@tiptap/pm/transform';
+import type { Node as PMNode } from '@tiptap/pm/model';
 import { WikiLink } from './wikilink';
 import { Callout } from './callout';
 import { LocalImage } from './image';
@@ -183,6 +185,33 @@ export function createEditor(opts: {
       OrderedList.extend({
         addInputRules() {
           return [wrappingInputRule({ find: /^(\d+)\.\s$/, type: this.type, getAttributes: (m) => ({ start: +m[1] }), joinPredicate: (_m, node) => !node.attrs.type || node.attrs.type === '1' })];
+        },
+      }),
+      // Two numbered lists that end up touching (a blank line between them deleted, a paragraph
+      // between them turned into an item, …) become one list, so the count carries on instead of restarting at 1.
+      Extension.create({
+        name: 'joinOrderedLists',
+        addProseMirrorPlugins() {
+          const ol = this.editor.schema.nodes.orderedList;
+          return [new Plugin({
+            appendTransaction(trs, _old, state) {
+              if (!trs.some((t) => t.docChanged)) return null;
+              const at: number[] = [];
+              const scan = (node: PMNode, start: number) => {
+                let prev: PMNode | null = null;
+                node.forEach((child, offset) => {
+                  if (prev?.type === ol && child.type === ol && prev.attrs.type === child.attrs.type) at.push(start + offset);
+                  prev = child;
+                  scan(child, start + offset + 1);
+                });
+              };
+              scan(state.doc, 0);
+              if (!at.length) return null;
+              const tr = state.tr;
+              for (const p of at.reverse()) if (canJoin(tr.doc, p)) tr.join(p); // back to front: earlier positions stay valid
+              return tr;
+            },
+          })];
         },
       }),
       TaskList,
