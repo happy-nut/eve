@@ -129,9 +129,9 @@
   <div class="editor" class:has-head={!note.path} bind:this={el}></div>
 </div>
 {#if overflow && heads.length}
-  <nav class="outline" aria-label="Sections" onmouseleave={() => (hover = null)}>
+  <nav class="outline" class:peeking={hover !== null} aria-label="Sections" onmouseleave={() => (hover = null)}>
     {#each heads as h, i (i)}
-      <button class="tick" class:on={h.on} class:hov={hover === i} style="--w: {tickWidth(i)}px" title={h.text} onmouseenter={() => (hover = i)} onclick={() => go(h.top)}>
+      <button class="tick" class:on={h.on} class:hov={hover === i} style="--w: {tickWidth(i)}px" onmouseenter={() => (hover = i)} onclick={() => go(h.top)}>
         <i></i>
         {#if hover === i}
           <span class="peek"><span class="peek-in" in:fly={{ x: -8, duration: 150 }}>
@@ -161,7 +161,8 @@
   .tick { position: relative; display: flex; align-items: center; height: 8px; width: 44px; padding: 0; border: 0; background: none; }
   /* equal faint dashes; sections on screen are dark. Hovering one stretches it (and its neighbours, in a wave). */
   .tick i { display: block; width: var(--w); height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--fg) 12%, transparent); transition: background 0.2s, width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.2s; }
-  .tick.on i, .tick.hov i { background: var(--fg); }
+  /* while a tick is hovered only that one is dark; the on-screen marks fade back */
+  .outline:not(.peeking) .tick.on i, .tick.hov i { background: var(--fg); }
   .tick.hov i { height: 3px; }
   .peek { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); z-index: 5; }
   .peek-in {
