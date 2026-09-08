@@ -14,12 +14,12 @@
   let el: HTMLDivElement;
   let editor: TipTap | undefined;
 
-  // Section outline in place of a scrollbar: one tick per heading, dark while that section is on screen,
-  // titles slide out on hover. Only when the note does not fit the window.
+  // Section outline in place of a scrollbar: one tick per heading, dark while that section is on screen;
+  // hovering a tick shows the section's title and first lines. Only when the note does not fit the window.
   let scrollEl = $state<HTMLDivElement | null>(null);
-  let heads = $state<{ top: number; text: string; level: number; on: boolean }[]>([]);
+  let heads = $state<{ top: number; text: string; preview: string; level: number; on: boolean }[]>([]);
   let overflow = $state(false);
-  let outlineOpen = $state(false);
+  let hover = $state<number | null>(null);
   let raf = 0;
   function measure() {
     cancelAnimationFrame(raf);
@@ -33,10 +33,14 @@
       overflow = !!last && last.getBoundingClientRect().bottom - base > sc.clientHeight;
       const hs = [...root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5')];
       const tops = hs.map((h) => h.getBoundingClientRect().top - base);
-      heads = hs.map((h, i) => ({
-        top: tops[i], text: h.textContent?.trim() || '…', level: Number(h.tagName[1]),
-        on: tops[i] < bottom && (tops[i + 1] ?? sc.scrollHeight) > top,
-      }));
+      heads = hs.map((h, i) => {
+        let preview = '', e = h.nextElementSibling;
+        while (e && !/^H[1-5]$/.test(e.tagName) && preview.length < 240) { preview += (e.textContent?.trim() ?? '') + ' '; e = e.nextElementSibling; }
+        return {
+          top: tops[i], text: h.textContent?.trim() || '…', preview: preview.trim(), level: Number(h.tagName[1]),
+          on: tops[i] < bottom && (tops[i + 1] ?? sc.scrollHeight) > top,
+        };
+      });
     });
   }
   const go = (top: number) => scrollEl?.scrollTo({ top: Math.max(0, top - 44), behavior: 'smooth' });
@@ -123,10 +127,16 @@
   <div class="editor" class:has-head={!note.path} bind:this={el}></div>
 </div>
 {#if overflow && heads.length}
-  <nav class="outline" class:open={outlineOpen} aria-label="Sections"
-    onmouseenter={() => (outlineOpen = true)} onmouseleave={() => (outlineOpen = false)}>
+  <nav class="outline" aria-label="Sections" onmouseleave={() => (hover = null)}>
     {#each heads as h, i (i)}
-      <button class="tick l{h.level}" class:on={h.on} style="--i: {i}" onclick={() => go(h.top)}><i></i><span>{h.text}</span></button>
+      <button class="tick l{h.level}" class:on={h.on} title={h.text} onmouseenter={() => (hover = i)} onclick={() => go(h.top)}>
+        <i></i>
+        {#if hover === i}
+          <span class="peek"><span class="peek-in" in:fly={{ x: -8, duration: 150 }}>
+            <b>{h.text}</b>{#if h.preview}<span class="pv">{h.preview}</span>{/if}
+          </span></span>
+        {/if}
+      </button>
     {/each}
   </nav>
 {/if}
@@ -143,26 +153,27 @@
   .scroll { height: 100%; overflow-y: auto; scrollbar-width: none; }
   .scroll::-webkit-scrollbar { display: none; }
   .outline {
-    position: absolute; left: 8px; top: 50%; transform: translateY(-50%); z-index: 4;
-    display: flex; flex-direction: column; gap: 3px; padding: 6px 5px; border-radius: 9px; max-height: 72%; overflow: hidden;
-    transition: background 0.18s, box-shadow 0.18s;
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%); z-index: 4;
+    display: flex; flex-direction: column; gap: 4px; max-height: 72%;
   }
-  .outline.open { background: var(--bg-pop); box-shadow: 0 0 0 0.5px var(--line), 0 10px 30px rgba(0, 0, 0, 0.14); }
-  .tick {
-    display: flex; align-items: center; gap: 9px; height: 15px; padding: 0 5px; border: 0; background: none; border-radius: 5px;
-    color: var(--fg-dim); font: inherit; font-size: 11.5px; text-align: left; max-width: 260px;
+  .tick { position: relative; display: flex; align-items: center; height: 10px; width: 44px; padding: 0; border: 0; background: none; }
+  .tick i { display: block; width: 12px; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--fg) 20%, transparent); transition: background 0.25s, width 0.25s, height 0.25s; }
+  .tick.l1 i { width: 22px; }
+  .tick.l2 i { width: 16px; }
+  .tick.on i { width: 28px; height: 3px; background: var(--fg); }
+  .tick:hover i { background: color-mix(in srgb, var(--fg) 45%, transparent); }
+  .tick.on:hover i { background: var(--fg); }
+  .peek { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); z-index: 5; }
+  .peek-in {
+    display: flex; flex-direction: column; gap: 5px; width: min(460px, 60vw); padding: 12px 16px; border-radius: 12px;
+    background: var(--bg-pop); box-shadow: 0 0 0 0.5px var(--line), 0 12px 36px rgba(0, 0, 0, 0.16);
+    text-align: left; font-size: 13px; line-height: 1.45; color: var(--fg);
   }
-  .tick i { display: block; flex: none; width: 14px; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--fg) 22%, transparent); transition: background 0.25s; }
-  .tick.l2 i { width: 10px; }
-  .tick.l3 i, .tick.l4 i, .tick.l5 i { width: 6px; }
-  .tick.on i { background: var(--fg); }
-  .tick.on { color: var(--fg); }
-  .tick span {
-    max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; transform: translateX(-6px);
-    transition: opacity 0.18s, transform 0.18s, max-width 0.18s; transition-delay: calc(var(--i) * 12ms);
+  .peek b { display: block; font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pv {
+    color: var(--fg-dim); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical;
+    mask-image: linear-gradient(#000 50%, transparent); -webkit-mask-image: linear-gradient(#000 50%, transparent);
   }
-  .outline.open .tick span { max-width: 230px; opacity: 1; transform: none; }
-  .outline.open .tick:hover { background: var(--bg-hover); }
   .editor { min-height: 100%; }
   .page-head {
     max-width: var(--editor-width, 820px); margin: 0 auto; padding: 44px clamp(24px, 8vw, 96px) 0; box-sizing: border-box;
