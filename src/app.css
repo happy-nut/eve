@@ -145,6 +145,12 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
 .tiptap .wikilink:hover { filter: brightness(1.15); box-shadow: var(--glow); }
 .tiptap .ProseMirror-selectednode.wikilink, .tiptap .wikilink.ProseMirror-selectednode { outline: 2px solid var(--accent); }
 .tiptap ::selection { background: var(--accent-soft); }
+/* A selection that runs past a line's end is painted out to the block's right edge by WebKit. Making each text
+   block its own selection root (overflow: clip) shrunk to its content keeps the highlight on the text; the 2px
+   keeps the caret at a line end from being clipped. Empty paragraphs stay full width (placeholder, click target). */
+.tiptap p:not(.is-empty):not(:has(> br:only-child)), .tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 {
+  overflow: clip; width: fit-content; max-width: 100%; padding-right: 2px;
+}
 /* WebKit paints "selection gaps" between blocks with the block's own ::selection colour; make list
    containers, task checkboxes and callout icons transparent so only the text reads as selected */
 .tiptap ul::selection, .tiptap ol::selection, .tiptap li::selection, .tiptap li > div::selection,
