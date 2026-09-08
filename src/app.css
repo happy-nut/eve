@@ -1,41 +1,24 @@
 :root {
-  /* EVE palette: shell white, soft grays, visor black, eye blue */
-  --fg: #33363d; /* softer than pure black, like Notion's ink */
-  --fg-dim: #7c8089;
-  --bg: #ffffff;
-  --bg-side: #f2f3f5;
-  --bg-pop: #ffffff;
-  --bg-input: rgba(17, 19, 24, 0.05);
-  --bg-hover: rgba(17, 19, 24, 0.05);
-  --bg-active: rgba(17, 19, 24, 0.09);
-  --line: rgba(17, 19, 24, 0.09);
-  --accent: #1e9bff;
-  --accent-soft: rgba(30, 155, 255, 0.22);
-  --glow: 0 0 0 transparent;
-  --code-bg: rgba(17, 19, 24, 0.05);
-  --tip-bg: #2b2e35;
-  --tip-fg: #f2f3f5;
-  color-scheme: light dark;
+  /* EVE palette: shell white, soft grays, visor black, eye blue — light-dark(light, dark) pairs */
+  --fg: light-dark(#33363d, #d3d6dc); /* softer than pure black, like Notion's ink */
+  --fg-dim: light-dark(#7c8089, #8b909a);
+  --bg: light-dark(#ffffff, #0b0c10);
+  --bg-side: light-dark(#f2f3f5, #111318);
+  --bg-pop: light-dark(#ffffff, #16181d);
+  --bg-input: light-dark(rgba(17, 19, 24, 0.05), rgba(255, 255, 255, 0.07));
+  --bg-hover: light-dark(rgba(17, 19, 24, 0.05), rgba(255, 255, 255, 0.06));
+  --bg-active: light-dark(rgba(17, 19, 24, 0.09), rgba(255, 255, 255, 0.1));
+  --line: light-dark(rgba(17, 19, 24, 0.09), rgba(255, 255, 255, 0.09));
+  --accent: light-dark(#1e9bff, #3fc1ff);
+  --accent-soft: light-dark(rgba(30, 155, 255, 0.22), rgba(63, 193, 255, 0.28));
+  --glow: 0 0 14px light-dark(transparent, rgba(63, 193, 255, 0.35));
+  --code-bg: light-dark(rgba(17, 19, 24, 0.05), rgba(255, 255, 255, 0.07));
+  --tip-bg: light-dark(#2b2e35, #e8eaee);
+  --tip-fg: light-dark(#f2f3f5, #1a1c22);
+  color-scheme: light dark; /* follows the system; Settings -> Appearance -> Theme pins one */
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fg: #d3d6dc;
-    --fg-dim: #8b909a;
-    --bg: #0b0c10;
-    --bg-side: #111318;
-    --bg-pop: #16181d;
-    --bg-input: rgba(255, 255, 255, 0.07);
-    --bg-hover: rgba(255, 255, 255, 0.06);
-    --bg-active: rgba(255, 255, 255, 0.1);
-    --line: rgba(255, 255, 255, 0.09);
-    --accent: #3fc1ff;
-    --accent-soft: rgba(63, 193, 255, 0.28);
-    --glow: 0 0 14px rgba(63, 193, 255, 0.35);
-    --code-bg: rgba(255, 255, 255, 0.07);
-    --tip-bg: #e8eaee;
-    --tip-fg: #1a1c22;
-  }
-}
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 html, body, #app { height: 100%; margin: 0; }
