@@ -107,3 +107,8 @@
   EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS 0 WARNINGS"; `cargo check` after `cargo clean -p eve`: Finished (set_dock_hidden registered).
 - [x] G25 Manual, in-app browser: Settings → Sync & app shows "Hide from Dock and ⌘Tab", on by default, and eve.dock is written on startup
   EVIDENCE: rows ["Launch at login…", "Hide from Dock and ⌘Tab like Raycast…"], switch checked=true (disabled outside Tauri), localStorage eve.dock = "hidden". The activation-policy switch itself (Accessory ↔ Regular) runs only in the app — not exercised here; confirm in the release build.
+
+# GATES — card preview skips a leading divider (2026-09-08)
+
+- [x] G26 Manual, in-app browser: a card whose body starts with a divider still shows its first text line on the card
+  EVIDENCE: card body "---\n\nhello" (hr + paragraph in the card page) -> .kb-cbody "hello"; before the fix plain('---') === '' left the card without a preview.

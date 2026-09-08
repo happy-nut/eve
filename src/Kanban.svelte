@@ -47,7 +47,8 @@
   const focusCard = (colId: string, id: string) => q(`.kb-col[data-id="${colId}"] .kb-card[data-id="${id}"]`);
   const focusHead = (colId?: string) => q(`.kb-col[data-id="${colId}"] .kb-head`);
   const focusAdd = (colId: string) => q(`.kb-col[data-id="${colId}"] .kb-add`);
-  const firstLine = (body: string) => plain(body.split('\n').find((l) => l.trim()) ?? '');
+  // first line that still says something once markdown is stripped (a divider or a bare list marker is skipped)
+  const firstLine = (body: string) => body.split('\n').map(plain).find(Boolean) ?? '';
 
   // ---- mouse drag: the board previews the move while dragging, commits on drop ----
   let dragging = $state<{ id: string; colId: string } | null>(null);
