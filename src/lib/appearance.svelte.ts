@@ -1,4 +1,4 @@
-/** Editor typography, applied as CSS variables on <html>. Persisted locally. */
+/** Theme + editor typography, applied on <html> (data-theme and CSS variables). Persisted locally. */
 const LS = 'eve.appearance';
 
 export const FONTS: { id: string; label: string; stack: string }[] = [
@@ -9,8 +9,11 @@ export const FONTS: { id: string; label: string; stack: string }[] = [
   { id: 'custom', label: 'Custom…', stack: '' },
 ];
 
-interface Appearance { font: string; custom: string; size: number; lineHeight: number; width: number }
-const DEFAULTS: Appearance = { font: 'system', custom: '', size: 15, lineHeight: 1.6, width: 820 };
+export const THEMES = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']] as const;
+export type Theme = (typeof THEMES)[number][0];
+
+interface Appearance { theme: Theme; font: string; custom: string; size: number; lineHeight: number; width: number }
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: 15, lineHeight: 1.6, width: 820 };
 
 function load(): Appearance {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; } catch { return { ...DEFAULTS }; }
@@ -21,9 +24,10 @@ class AppearanceStore {
   get stack() { return this.s.font === 'custom' ? this.s.custom || DEFAULTS.font : FONTS.find((f) => f.id === this.s.font)?.stack ?? FONTS[0].stack; }
   set(patch: Partial<Appearance>) { Object.assign(this.s, patch); localStorage.setItem(LS, JSON.stringify(this.s)); }
   reset() { this.set({ ...DEFAULTS }); }
-  /** call once; keeps <html> CSS variables in sync */
+  /** call once; keeps <html> in sync */
   apply() {
     $effect(() => {
+      document.documentElement.dataset.theme = this.s.theme; // app.css pins color-scheme for light/dark
       const r = document.documentElement.style;
       r.setProperty('--font-editor', this.stack);
       r.setProperty('--font-size', `${this.s.size}px`);

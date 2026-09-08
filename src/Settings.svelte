@@ -5,14 +5,14 @@
   import { sync } from './lib/sync.svelte';
   import { storage, autostart, isTauri } from './lib/platform';
   import { ui } from './lib/ui.svelte';
-  import { appearance, FONTS } from './lib/appearance.svelte';
+  import { appearance, FONTS, THEMES, type Theme } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
 
   let recording = $state<string | null>(null);
   let conflict = $state<{ id: string; keys: string; with: string } | null>(null);
-  let tab = $state<'shortcuts' | 'font' | 'sync'>('shortcuts');
+  let tab = $state<'shortcuts' | 'appearance' | 'sync'>('shortcuts');
   let notesPath = $state('');
   let launchAtLogin = $state(false);
   onMount(() => { storage.path().then((p) => (notesPath = p)); autostart.get().then((v) => (launchAtLogin = v)); });
@@ -22,7 +22,7 @@
     { scope: 'app', label: 'App' },
     { scope: 'editor', label: 'Editor' },
   ];
-  const tabs = [['shortcuts', 'Shortcuts'], ['font', 'Font'], ['sync', 'Sync & app']] as const;
+  const tabs = [['shortcuts', 'Shortcuts'], ['appearance', 'Appearance'], ['sync', 'Sync & app']] as const;
 
   const syncText = $derived(
     sync.status === 'syncing' ? 'Syncing…'
@@ -82,7 +82,16 @@
       {/each}
       <div class="foot"><button class="link" onclick={() => shortcuts.reset()}>Reset all to defaults</button></div>
 
-    {:else if tab === 'font'}
+    {:else if tab === 'appearance'}
+      <h3>Theme</h3>
+      <div class="card">
+        <label class="row">
+          <span class="label">Appearance <span class="sub">System follows macOS</span></span>
+          <select value={appearance.s.theme} onchange={(e) => appearance.set({ theme: e.currentTarget.value as Theme })}>
+            {#each THEMES as [id, label]}<option value={id}>{label}</option>{/each}
+          </select>
+        </label>
+      </div>
       <h3>Typeface</h3>
       <div class="card">
         <label class="row">
@@ -214,11 +223,11 @@
     background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line), 0 1px 2px rgba(0, 0, 0, 0.06);
     transition: filter 0.12s, transform 0.12s;
   }
-  .btn:hover { filter: brightness(0.97); }
+  .btn:hover { background: color-mix(in srgb, var(--bg-pop), var(--fg) 5%); } /* darker in light, lighter in dark */
   .btn:active { transform: scale(0.97); }
-  .btn.primary { background: var(--accent); color: #fff; box-shadow: var(--glow); }
+  .btn.primary { background: var(--accent); color: light-dark(#fff, #0b0c10); box-shadow: var(--glow); }
+  .btn.primary:hover { filter: brightness(1.08); }
   .btn:disabled { opacity: 0.4; pointer-events: none; }
-  @media (prefers-color-scheme: dark) { .btn.primary { color: #0b0c10; } .btn:hover { filter: brightness(1.08); } }
   select, input:not([type]) {
     font: inherit; font-size: 12.5px; padding: 5px 8px; border-radius: 7px; border: 0; outline: none;
     background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line); max-width: 240px;
