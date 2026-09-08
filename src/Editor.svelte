@@ -14,6 +14,33 @@
   let el: HTMLDivElement;
   let editor: TipTap | undefined;
 
+  // Section outline in place of a scrollbar: one tick per heading, dark while that section is on screen,
+  // titles slide out on hover. Only when the note does not fit the window.
+  let scrollEl = $state<HTMLDivElement | null>(null);
+  let heads = $state<{ top: number; text: string; level: number; on: boolean }[]>([]);
+  let overflow = $state(false);
+  let outlineOpen = $state(false);
+  let raf = 0;
+  function measure() {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      const sc = scrollEl;
+      const root = sc?.querySelector('.tiptap');
+      if (!sc || !root) return;
+      const top = sc.scrollTop, bottom = top + sc.clientHeight;
+      const base = sc.getBoundingClientRect().top - top;
+      const last = root.lastElementChild;
+      overflow = !!last && last.getBoundingClientRect().bottom - base > sc.clientHeight;
+      const hs = [...root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5')];
+      const tops = hs.map((h) => h.getBoundingClientRect().top - base);
+      heads = hs.map((h, i) => ({
+        top: tops[i], text: h.textContent?.trim() || '…', level: Number(h.tagName[1]),
+        on: tops[i] < bottom && (tops[i + 1] ?? sc.scrollHeight) > top,
+      }));
+    });
+  }
+  const go = (top: number) => scrollEl?.scrollTo({ top: Math.max(0, top - 44), behavior: 'smooth' });
+
   // [[ suggestion popup state
   let items = $state<SuggestItem[]>([]);
   let sel = $state(0);
@@ -43,7 +70,12 @@
       cursor: notes.cursor.get(note.id),
     });
     if (ui.focusOwner !== 'sidebar') editor?.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
+    editor.on('update', measure);
+    const ro = new ResizeObserver(measure);
+    if (scrollEl) ro.observe(scrollEl);
+    measure();
     return () => {
+      ro.disconnect();
       if (editor) notes.cursor.set(id, editor.state.selection.from);
       editor?.destroy();
       // Svelte runs teardown with pre-update state visible, so a flush here would persist stale data
@@ -75,7 +107,7 @@
   });
 </script>
 
-<div class="scroll">
+<div class="scroll" bind:this={scrollEl} onscroll={measure}>
   {#if !note.path}
     <div class="page-head" class:with-icon={!!note.icon}>
       {#if note.icon}
@@ -90,6 +122,14 @@
   {/if}
   <div class="editor" class:has-head={!note.path} bind:this={el}></div>
 </div>
+{#if overflow && heads.length}
+  <nav class="outline" class:open={outlineOpen} aria-label="Sections"
+    onmouseenter={() => (outlineOpen = true)} onmouseleave={() => (outlineOpen = false)}>
+    {#each heads as h, i (i)}
+      <button class="tick l{h.level}" class:on={h.on} style="--i: {i}" onclick={() => go(h.top)}><i></i><span>{h.text}</span></button>
+    {/each}
+  </nav>
+{/if}
 
 {#if items.length}
   <ul class="suggest" style="left:{pos.x}px; top:{pos.y}px" transition:fly={{ y: 4, duration: 120 }}>
@@ -100,7 +140,29 @@
 {/if}
 
 <style>
-  .scroll { height: 100%; overflow-y: auto; }
+  .scroll { height: 100%; overflow-y: auto; scrollbar-width: none; }
+  .scroll::-webkit-scrollbar { display: none; }
+  .outline {
+    position: absolute; left: 8px; top: 50%; transform: translateY(-50%); z-index: 4;
+    display: flex; flex-direction: column; gap: 3px; padding: 6px 5px; border-radius: 9px; max-height: 72%; overflow: hidden;
+    transition: background 0.18s, box-shadow 0.18s;
+  }
+  .outline.open { background: var(--bg-pop); box-shadow: 0 0 0 0.5px var(--line), 0 10px 30px rgba(0, 0, 0, 0.14); }
+  .tick {
+    display: flex; align-items: center; gap: 9px; height: 15px; padding: 0 5px; border: 0; background: none; border-radius: 5px;
+    color: var(--fg-dim); font: inherit; font-size: 11.5px; text-align: left; max-width: 260px;
+  }
+  .tick i { display: block; flex: none; width: 14px; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--fg) 22%, transparent); transition: background 0.25s; }
+  .tick.l2 i { width: 10px; }
+  .tick.l3 i, .tick.l4 i, .tick.l5 i { width: 6px; }
+  .tick.on i { background: var(--fg); }
+  .tick.on { color: var(--fg); }
+  .tick span {
+    max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; transform: translateX(-6px);
+    transition: opacity 0.18s, transform 0.18s, max-width 0.18s; transition-delay: calc(var(--i) * 12ms);
+  }
+  .outline.open .tick span { max-width: 230px; opacity: 1; transform: none; }
+  .outline.open .tick:hover { background: var(--bg-hover); }
   .editor { min-height: 100%; }
   .page-head {
     max-width: var(--editor-width, 820px); margin: 0 auto; padding: 44px clamp(24px, 8vw, 96px) 0; box-sizing: border-box;
