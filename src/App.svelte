@@ -7,7 +7,7 @@
   import { groups } from './lib/groups.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
-  import { setGlobalHotkey, win, files, autostart, isTauri } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, dock, isTauri } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Settings from './Settings.svelte';
@@ -47,6 +47,7 @@ import CardPage from './CardPage.svelte';
     if (isTauri && !localStorage.getItem('eve.autostart.init')) {
       autostart.set(true).finally(() => localStorage.setItem('eve.autostart.init', '1'));
     }
+    if (dock.hidden) dock.set(true);
     notes.load().then(() => files.onOpen((paths) => paths.forEach((p) => notes.openFile(p))));
     return sync.start();
   });

@@ -3,7 +3,7 @@
   import { fade, scale } from 'svelte/transition';
   import { shortcuts, eventToKeys, type Scope } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
-  import { storage, autostart, isTauri } from './lib/platform';
+  import { storage, autostart, dock, isTauri } from './lib/platform';
   import { ui } from './lib/ui.svelte';
   import { appearance, FONTS, THEMES, type Theme } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
@@ -162,6 +162,10 @@
           <span class="label">Launch at login <span class="sub">keeps <Keys keys={shortcuts.keysFor('toggleWindow')} /> available after a quit</span></span>
           <input type="checkbox" class="switch" checked={launchAtLogin} disabled={!isTauri}
             onchange={(e) => { launchAtLogin = e.currentTarget.checked; autostart.set(launchAtLogin); }} />
+        </label>
+        <label class="row">
+          <span class="label">Hide from Dock and ⌘Tab <span class="sub">like Raycast: only the hotkey and Finder open it</span></span>
+          <input type="checkbox" class="switch" checked={dock.hidden} disabled={!isTauri} onchange={(e) => dock.set(e.currentTarget.checked)} />
         </label>
       </div>
 
