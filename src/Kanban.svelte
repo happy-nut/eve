@@ -36,6 +36,7 @@
 
   let root: HTMLDivElement;
   let last: HTMLElement | null = null;
+  let focused = $state<string | null>(null); // data-kb of the focused control (drives the +/× highlight, see the CSS)
   let editing = $state<string | null>(null); // column being renamed
   // focus + keep it in view: the board scrolls sideways and the note scrolls vertically
   const q = (sel: string) => {
@@ -194,7 +195,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="kb-wrap">
-<div class="kb" bind:this={root} onkeydown={onKey} onfocusin={(e) => (last = e.target as HTMLElement)}>
+<div class="kb" bind:this={root} onkeydown={onKey} onfocusin={(e) => { last = e.target as HTMLElement; focused = last.dataset.kb ?? null; }} onfocusout={() => (focused = null)}>
   {#each view as col (col.id)}
     <div class="kb-col" data-id={col.id} animate:flip={{ duration: 220 }} ondragover={(e) => dragOver(e, col)} ondrop={drop}>
       {#if editing === col.id}
@@ -221,8 +222,8 @@
   {/each}
   <!-- past the last column: + adds a column; below it a × (shown while hovering the board) deletes the board -->
   <div class="kb-end">
-    <button class="icon kb-addcol" data-kb="addcol" aria-label="Add column" data-tip="Add column" onclick={addColumn}>+</button>
-    <button class="icon kb-x" data-kb="x" tabindex="-1" aria-label="Delete board" data-tip="Delete board" onclick={remove}>×</button>
+    <button class="icon kb-addcol" class:on={focused === 'addcol'} data-kb="addcol" aria-label="Add column" data-tip="Add column" onclick={addColumn}>+</button>
+    <button class="icon kb-x" class:on={focused === 'x'} data-kb="x" tabindex="-1" aria-label="Delete board" data-tip="Delete board" onclick={remove}>×</button>
   </div>
 </div>
 </div>
@@ -230,9 +231,11 @@
 <style>
   .kb-end { flex: none; display: flex; flex-direction: column; gap: 4px; }
   .kb-x { width: 28px; height: 28px; font-size: 16px; opacity: 0; transition: opacity 0.12s, background 0.12s; }
-  .kb-wrap:hover .kb-x, .kb-x:focus { opacity: 1; }
-  /* same app-tracked keyboard highlight as the other icon buttons; WebKit's :focus-visible skips programmatic focus */
-  :global(html[data-input='keyboard']) :is(.kb-addcol, .kb-x):focus { background: var(--accent-soft); color: var(--fg); }
+  .kb-wrap:hover .kb-x, .kb-x.on { opacity: 1; }
+  /* keyboard highlight from the tracked `focused` control, not :focus: WebKit's :focus-visible skips programmatic
+     focus, and WebKit left :focus styling on the × after the focus had moved on to a header */
+  .kb-end .icon:focus-visible { background: none; color: var(--fg-dim); }
+  :global(html[data-input='keyboard']) :is(.kb-addcol, .kb-x).on { background: var(--accent-soft); color: var(--fg); }
   /* 4px side padding inside the scroller so a focus ring is not clipped at its edge */
   .kb { display: flex; align-items: flex-start; gap: 14px; overflow-x: auto; padding: 6px 4px 14px; margin: 0.6em -4px; user-select: none; -webkit-user-select: none; scrollbar-width: thin; }
   .kb-col { flex: none; width: 236px; display: flex; flex-direction: column; gap: 7px; min-height: 60px; }
