@@ -167,14 +167,40 @@ async fn github_post(url: String, form: Vec<(String, String)>) -> Result<String,
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-/// Open the device-flow page in the default browser.
+fn is_web_url(url: &str) -> bool {
+    url.starts_with("https://") || url.starts_with("http://")
+}
+
+/// Open a link in the default browser (device-flow page, bookmark cards).
 #[tauri::command]
-async fn open_github(url: String) -> Result<(), String> {
-    if !url.starts_with("https://github.com/") {
+async fn open_url(url: String) -> Result<(), String> {
+    if !is_web_url(&url) {
         return Err("url not allowed".into());
     }
     let ok = std::process::Command::new("open").arg(&url).status().map_err(|e| e.to_string())?.success();
     if ok { Ok(()) } else { Err("could not open the browser".into()) }
+}
+
+/// Page HTML for link previews (og:* tags). curl keeps the webview's cookies and CORS out of it; the
+/// body is cut at 300k chars, plenty for <head>.
+#[tauri::command]
+async fn fetch_url(url: String) -> Result<String, String> {
+    if !is_web_url(&url) {
+        return Err("url not allowed".into());
+    }
+    let out = std::process::Command::new("curl")
+        .args(["-sSL", "--max-time", "8", "--max-filesize", "5000000", "--compressed", "-A",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", &url])
+        .output()
+        .map_err(|e| e.to_string())?;
+    let mut html = String::from_utf8_lossy(&out.stdout).into_owned();
+    if html.is_empty() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    if let Some((i, _)) = html.char_indices().nth(300_000) {
+        html.truncate(i);
+    }
+    Ok(html)
 }
 
 /// External files (opened via Finder / "Open With"). Edited in place, never synced.
@@ -249,7 +275,8 @@ pub fn run() {
             read_asset,
             write_asset,
             github_post,
-            open_github,
+            open_url,
+            fetch_url,
             read_file,
             write_file,
             take_pending_files,

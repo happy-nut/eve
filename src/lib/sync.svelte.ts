@@ -1,5 +1,5 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
-import { assets, github, isTauri } from './platform';
+import { assets, github, openUrl, isTauri } from './platform';
 import { Repo, syncRound, blobSha, deviceLogin, ensureRepo, type LocalFile, type RemoteFile } from './github';
 
 /**
@@ -46,7 +46,7 @@ class Sync {
     this.abort = new AbortController();
     this.error = '';
     try {
-      const token = await deviceLogin(github.post, (code, url) => { this.pending = { code, url }; void github.open(url); }, this.abort.signal);
+      const token = await deviceLogin(github.post, (code, url) => { this.pending = { code, url }; void openUrl(url); }, this.abort.signal);
       const { user, repo } = await ensureRepo(token);
       this.save({ token, user, repo });
       this.pending = null;
@@ -61,7 +61,7 @@ class Sync {
   }
   cancelLogin() { this.abort?.abort(); }
   /** re-open the device page (the browser tab may have been closed) */
-  openLogin() { if (this.pending) void github.open(this.pending.url); }
+  openLogin() { if (this.pending) void openUrl(this.pending.url); }
   /** Forget the token (it stays valid on GitHub until revoked at github.com/settings/applications). */
   logout() {
     this.save({ token: '', user: '', repo: '' });

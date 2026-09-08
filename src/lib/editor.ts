@@ -9,6 +9,7 @@ import { Plugin, PluginKey, type Command } from '@tiptap/pm/state';
 import { WikiLink } from './wikilink';
 import { Callout } from './callout';
 import { LocalImage } from './image';
+import { Bookmark } from './bookmark';
 import { ui } from './ui.svelte';
 import { isCustom } from './icons';
 import { pickImage, saveImage } from './platform';
@@ -223,6 +224,7 @@ export function createEditor(opts: {
         ],
       }),
       LocalImage.configure({ inline: false, allowBase64: true }),
+      Bookmark,
       Extension.create({
         name: 'slashMenu',
         addProseMirrorPlugins() {

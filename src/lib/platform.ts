@@ -81,11 +81,16 @@ export const assets = {
   },
 };
 
-/** GitHub sign-in helpers that must run outside the webview: github.com/login has no CORS, and opening the browser. */
+/** GitHub sign-in: github.com/login has no CORS, so the desktop side runs the two POSTs. */
 export const github = {
   post: (url: string, form: Record<string, string>) => invoke<string>('github_post', { url, form: Object.entries(form) }),
-  open: (url: string) => invoke<void>('open_github', { url }),
 };
+
+/** Open a link in the default browser. */
+export const openUrl = (url: string) => (isTauri ? invoke<void>('open_url', { url }) : Promise.resolve(void window.open(url, '_blank')));
+
+/** Page HTML for link previews. Browser mode: plain fetch (works only for CORS-friendly sites). */
+export const fetchUrl = (url: string) => (isTauri ? invoke<string>('fetch_url', { url }) : fetch(url).then((r) => r.text()));
 
 /** External files opened through macOS (Open With / double-click). */
 export const files = {
