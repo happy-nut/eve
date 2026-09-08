@@ -20,7 +20,8 @@
   let heads = $state<{ top: number; text: string; preview: string; level: number; on: boolean }[]>([]);
   let overflow = $state(false);
   let hover = $state<number | null>(null);
-  let outlineHot = $state(false); // pointer over the outline: ticks grow to their full length
+  // tick length: all equal at rest; the hovered one stretches and its neighbours follow in a wave
+  const tickWidth = (i: number) => (hover === null ? 10 : ([28, 21, 15][Math.abs(i - hover)] ?? 10));
   let raf = 0;
   function measure() {
     cancelAnimationFrame(raf);
@@ -128,9 +129,9 @@
   <div class="editor" class:has-head={!note.path} bind:this={el}></div>
 </div>
 {#if overflow && heads.length}
-  <nav class="outline" class:hot={outlineHot} aria-label="Sections" onmouseenter={() => (outlineHot = true)} onmouseleave={() => { outlineHot = false; hover = null; }}>
+  <nav class="outline" aria-label="Sections" onmouseleave={() => (hover = null)}>
     {#each heads as h, i (i)}
-      <button class="tick l{h.level}" class:on={h.on} title={h.text} onmouseenter={() => (hover = i)} onclick={() => go(h.top)}>
+      <button class="tick" class:on={h.on} class:hov={hover === i} style="--w: {tickWidth(i)}px" title={h.text} onmouseenter={() => (hover = i)} onclick={() => go(h.top)}>
         <i></i>
         {#if hover === i}
           <span class="peek"><span class="peek-in" in:fly={{ x: -8, duration: 150 }}>
@@ -158,15 +159,10 @@
     display: flex; flex-direction: column; gap: 2px; max-height: 72%;
   }
   .tick { position: relative; display: flex; align-items: center; height: 8px; width: 44px; padding: 0; border: 0; background: none; }
-  /* resting: short faint dashes; the sections on screen are dark. Hovering the outline stretches them by level. */
-  .tick i { display: block; width: 8px; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--fg) 12%, transparent); transition: background 0.25s, width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.25s; }
-  .tick.on i { width: 12px; background: var(--fg); }
-  .hot .tick i { width: 12px; background: color-mix(in srgb, var(--fg) 22%, transparent); }
-  .hot .tick.l1 i { width: 22px; }
-  .hot .tick.l2 i { width: 16px; }
-  .hot .tick.on i { width: 28px; height: 3px; background: var(--fg); }
-  .hot .tick:hover i { background: color-mix(in srgb, var(--fg) 45%, transparent); }
-  .hot .tick.on:hover i { background: var(--fg); }
+  /* equal faint dashes; sections on screen are dark. Hovering one stretches it (and its neighbours, in a wave). */
+  .tick i { display: block; width: var(--w); height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--fg) 12%, transparent); transition: background 0.2s, width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.2s; }
+  .tick.on i, .tick.hov i { background: var(--fg); }
+  .tick.hov i { height: 3px; }
   .peek { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); z-index: 5; }
   .peek-in {
     display: flex; flex-direction: column; gap: 5px; width: min(460px, 60vw); padding: 12px 16px; border-radius: 12px;
