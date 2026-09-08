@@ -116,6 +116,17 @@ export const autostart = {
   },
 };
 
+/** Hide from the Dock and ⌘Tab (macOS accessory app, like Raycast). Default on; remembered locally. */
+// ponytail: applied by the frontend after launch, so a Dock icon can flash for a moment at login; a Rust-side
+// marker file would avoid that if it ever bothers anyone
+export const dock = {
+  get hidden() { return localStorage.getItem('eve.dock') !== 'shown'; },
+  async set(hidden: boolean) {
+    localStorage.setItem('eve.dock', hidden ? 'hidden' : 'shown');
+    if (isTauri) await invoke('set_dock_hidden', { hidden });
+  },
+};
+
 /** Summon / dismiss with a short fade. The window is transparent, so fading <body> fades the whole thing. */
 const FADE_MS = 140;
 const html = () => document.documentElement;

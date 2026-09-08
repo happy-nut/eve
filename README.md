@@ -10,7 +10,7 @@ Fast, keyboard-first markdown notes for macOS. Summon it from anywhere with a gl
 type Notion-style markdown, link notes with `[[wiki links]]`, and sync through a private GitHub repo.
 
 - **Instant** — Tauri 2 shell (native WKWebView, ~10 MB), Svelte 5 UI, TipTap editor. No Electron.
-- **Global hotkey** — `⌘⇧Space` (default) shows/hides Eve over any app; focus returns to where you were. Eve launches at login (toggle in Settings); closing the window only hides it, so the hotkey keeps working. `⌘Q` quits.
+- **Global hotkey** — `⌘⇧Space` (default) shows/hides Eve over any app; focus returns to where you were. Like Raycast, Eve stays out of the Dock and ⌘Tab (toggle in Settings → Sync & app). Eve launches at login (toggle in Settings); closing the window only hides it, so the hotkey keeps working. `⌘Q` quits.
 - **Live markdown** — `# `, `- `, `1. `, `[ ] `, `> `, ` ``` `, `**bold**`, `` `code` ``… render as you type.
 - **Every shortcut is rebindable** live in Settings (`⌘,`): system hotkey, app actions, editor formatting.
 - **Notes link to notes** — type `[[` for a picker; click a link to jump (creates the note if missing). `⌘[` / `⌘]` go back and forward through the notes you visited, restoring the cursor.

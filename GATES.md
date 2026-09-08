@@ -98,3 +98,12 @@
   EVIDENCE: list(5 items) + empty paragraph + list(2) -> Backspace on the empty paragraph -> one orderedList of 7, markers 1…7.
 - [x] G23 Manual, in-app browser: keyboard → + → × → + → header: the +/× highlight follows the focused control and clears (class `on`, not :focus)
   EVIDENCE: × focused: on=true bg accent-soft opacity 1; ↑: × on=false bg transparent opacity 0, + on=true; ←: header focused, neither on. Not reproduced in Chromium (the stale highlight is WebKit-only; the dev app could not be driven — full-screen control was not approved), so the WebKit fix is unverified in the app.
+
+# GATES — hide from Dock / ⌘Tab (2026-09-08)
+
+- [x] G24 Rust + frontend compile
+  CHECK: npm run check
+  EXPECT: 0 ERRORS
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS 0 WARNINGS"; `cargo check` after `cargo clean -p eve`: Finished (set_dock_hidden registered).
+- [x] G25 Manual, in-app browser: Settings → Sync & app shows "Hide from Dock and ⌘Tab", on by default, and eve.dock is written on startup
+  EVIDENCE: rows ["Launch at login…", "Hide from Dock and ⌘Tab like Raycast…"], switch checked=true (disabled outside Tauri), localStorage eve.dock = "hidden". The activation-policy switch itself (Accessory ↔ Regular) runs only in the app — not exercised here; confirm in the release build.

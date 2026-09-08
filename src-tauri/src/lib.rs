@@ -259,6 +259,18 @@ fn hide_app(app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Like Raycast: no Dock icon and no ⌘Tab entry (Settings → Hide from Dock). The window is still summoned by
+/// the hotkey, Finder "Open With" or `open -a Eve`; key equivalents (⌘C/V/Z/Q…) still route through the hidden menu.
+#[tauri::command]
+fn set_dock_hidden(app: AppHandle, hidden: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    return app
+        .set_activation_policy(if hidden { tauri::ActivationPolicy::Accessory } else { tauri::ActivationPolicy::Regular })
+        .map_err(|e| e.to_string());
+    #[cfg(not(target_os = "macos"))]
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -284,7 +296,8 @@ pub fn run() {
             toggle_window,
             is_front,
             show_window,
-            hide_app
+            hide_app,
+            set_dock_hidden
         ])
         .on_window_event(|window, event| {
             // Closing the window keeps the app alive so the global hotkey still works.
