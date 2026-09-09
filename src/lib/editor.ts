@@ -218,6 +218,23 @@ export function createEditor(opts: {
       // tiptap-markdown only marks bullet/ordered lists as tight; do the same for task lists
       Extension.create({
         name: 'tightTaskList',
+        addStorage: () => ({
+          markdown: {
+            // An empty task item serializes to "- [ ] "; markdown-it drops that trailing space, and
+            // markdown-it-task-lists only recognises "[ ] " *followed by* content, so a note with an empty
+            // checkbox came back as a bullet with the literal text "[ ]". Put the space back first.
+            parse: {
+              setup(md: any) {
+                md.core.ruler.before('inline', 'eve-empty-task-item', (state: any) => {
+                  const t = state.tokens;
+                  for (let i = 2; i < t.length; i++) {
+                    if (t[i].type === 'inline' && t[i - 2].type === 'list_item_open' && /^\[[ xX]\]$/.test(t[i].content)) t[i].content += ' ';
+                  }
+                });
+              },
+            },
+          },
+        }),
         addGlobalAttributes: () => [{
           types: ['taskList'],
           attributes: {

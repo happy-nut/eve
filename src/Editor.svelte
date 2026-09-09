@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fly } from 'svelte/transition';
   import type { Editor as TipTap } from '@tiptap/core';
   import { createEditor, applyKeymap, getMarkdown } from './lib/editor';
   import { notes, titleOf, type Note } from './lib/notes.svelte';
@@ -8,45 +7,15 @@
   import { ui } from './lib/ui.svelte';
   import Icon from './Icon.svelte';
   import Suggest from './Suggest.svelte';
+  import Outline from './Outline.svelte';
   import { RANDOM_ICONS } from './lib/icons';
 
   let { note }: { note: Note } = $props();
 
   let el: HTMLDivElement;
-  let editor: TipTap | undefined;
+  let editor = $state<TipTap | undefined>();
 
-  // Section outline in place of a scrollbar: one tick per heading, dark while that section is on screen;
-  // hovering a tick shows the section's title and first lines. Only when the note does not fit the window.
   let scrollEl = $state<HTMLDivElement | null>(null);
-  let heads = $state<{ top: number; text: string; preview: string; level: number; on: boolean }[]>([]);
-  let overflow = $state(false);
-  let hover = $state<number | null>(null);
-  // tick length: all equal at rest; the hovered one stretches and its neighbours follow in a wave
-  const tickWidth = (i: number) => (hover === null ? 10 : ([28, 21, 15][Math.abs(i - hover)] ?? 10));
-  let raf = 0;
-  function measure() {
-    cancelAnimationFrame(raf);
-    raf = requestAnimationFrame(() => {
-      const sc = scrollEl;
-      const root = sc?.querySelector('.tiptap');
-      if (!sc || !root) return;
-      const top = sc.scrollTop, bottom = top + sc.clientHeight;
-      const base = sc.getBoundingClientRect().top - top;
-      const last = root.lastElementChild;
-      overflow = !!last && last.getBoundingClientRect().bottom - base > sc.clientHeight;
-      const hs = [...root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5')];
-      const tops = hs.map((h) => h.getBoundingClientRect().top - base);
-      heads = hs.map((h, i) => {
-        let preview = '', e = h.nextElementSibling;
-        while (e && !/^H[1-5]$/.test(e.tagName) && preview.length < 240) { preview += (e.textContent?.trim() ?? '') + ' '; e = e.nextElementSibling; }
-        return {
-          top: tops[i], text: h.textContent?.trim() || '…', preview: preview.trim(), level: Number(h.tagName[1]),
-          on: tops[i] < bottom && (tops[i + 1] ?? sc.scrollHeight) > top,
-        };
-      });
-    });
-  }
-  const go = (top: number) => scrollEl?.scrollTo({ top: Math.max(0, top - 44), behavior: 'smooth' });
 
   let suggest: ReturnType<typeof Suggest>; // [[ and / popup
 
@@ -62,12 +31,7 @@
       cursor: notes.cursor.get(note.id),
     });
     if (ui.focusOwner !== 'sidebar') editor?.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
-    editor.on('update', measure);
-    const ro = new ResizeObserver(measure);
-    if (scrollEl) ro.observe(scrollEl);
-    measure();
     return () => {
-      ro.disconnect();
       if (editor) notes.cursor.set(id, editor.state.selection.from);
       editor?.destroy();
       // Svelte runs teardown with pre-update state visible, so a flush here would persist stale data
@@ -93,7 +57,7 @@
   });
 </script>
 
-<div class="scroll" bind:this={scrollEl} onscroll={measure}>
+<div class="scroll" bind:this={scrollEl}>
   {#if !note.path}
     <div class="page-head" class:with-icon={!!note.icon}>
       {#if note.icon}
@@ -108,47 +72,13 @@
   {/if}
   <div class="editor" class:has-head={!note.path} bind:this={el}></div>
 </div>
-{#if overflow && heads.length}
-  <nav class="outline" class:peeking={hover !== null} aria-label="Sections" onmouseleave={() => (hover = null)}>
-    {#each heads as h, i (i)}
-      <button class="tick" class:on={h.on} class:hov={hover === i} style="--w: {tickWidth(i)}px" onmouseenter={() => (hover = i)} onclick={() => go(h.top)}>
-        <i></i>
-        {#if hover === i}
-          <span class="peek"><span class="peek-in" in:fly={{ x: -8, duration: 150 }}>
-            <b>{h.text}</b>{#if h.preview}<span class="pv">{h.preview}</span>{/if}
-          </span></span>
-        {/if}
-      </button>
-    {/each}
-  </nav>
-{/if}
+<Outline {scrollEl} {editor} />
 
 <Suggest bind:this={suggest} />
 
 <style>
   .scroll { height: 100%; overflow-y: auto; scrollbar-width: none; }
   .scroll::-webkit-scrollbar { display: none; }
-  .outline {
-    position: absolute; left: 12px; top: 50%; transform: translateY(-50%); z-index: 4;
-    display: flex; flex-direction: column; gap: 2px; max-height: 72%;
-  }
-  .tick { position: relative; display: flex; align-items: center; height: 8px; width: 44px; padding: 0; border: 0; background: none; }
-  /* equal faint dashes; sections on screen are dark. Hovering one stretches it (and its neighbours, in a wave). */
-  .tick i { display: block; width: var(--w); height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--fg) 12%, transparent); transition: background 0.2s, width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.2s; }
-  /* while a tick is hovered only that one is dark; the on-screen marks fade back */
-  .outline:not(.peeking) .tick.on i, .tick.hov i { background: var(--fg); }
-  .tick.hov i { height: 3px; }
-  .peek { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); z-index: 5; }
-  .peek-in {
-    display: flex; flex-direction: column; gap: 5px; width: min(460px, 60vw); padding: 12px 16px; border-radius: 12px;
-    background: var(--bg-pop); box-shadow: 0 0 0 0.5px var(--line), 0 12px 36px rgba(0, 0, 0, 0.16);
-    text-align: left; font-size: 13px; line-height: 1.45; color: var(--fg);
-  }
-  .peek b { display: block; font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pv {
-    color: var(--fg-dim); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical;
-    mask-image: linear-gradient(#000 50%, transparent); -webkit-mask-image: linear-gradient(#000 50%, transparent);
-  }
   .editor { min-height: 100%; }
   .page-head {
     max-width: var(--editor-width, 820px); margin: 0 auto; padding: 44px clamp(24px, 8vw, 96px) 0; box-sizing: border-box;
