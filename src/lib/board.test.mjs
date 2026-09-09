@@ -1,6 +1,7 @@
 // Kanban board file form <-> data self-check: node --experimental-strip-types src/lib/board.test.mjs
 import assert from 'node:assert/strict';
 import { parseBoard, serializeBoard, moveCard, moveColumn, patchCard } from './board.ts';
+import { cardDoc, splitCard, plain } from './markdown.ts';
 
 const strip = (cols) => cols.map((c) => ({ title: c.title, cards: c.cards.map((k) => ({ title: k.title, body: k.body })) }));
 const src = { columns: [
@@ -37,5 +38,14 @@ assert.deepEqual(moveColumn(cols, c.id, 0).map((x) => x.id), [c.id, a.id, b.id])
 assert.deepEqual(moveColumn(cols, a.id, 5).map((x) => x.id), [b.id, c.id, a.id]);
 assert.equal(patchCard(cols, ship.id, { title: 'Shipped' })[2].cards[0].title, 'Shipped');
 assert.equal(cols[2].cards[0].title, 'Ship'); // inputs untouched
+
+// card <-> document: the card page edits one document whose first line is the title
+assert.deepEqual(splitCard(cardDoc('Ship it', 'Body **bold**\n\n- a')), { title: 'Ship it', body: 'Body **bold**\n\n- a' });
+assert.deepEqual(splitCard('# Only a title'), { title: 'Only a title', body: '' }); // no body: not the title again
+assert.deepEqual(splitCard('# **1517** \\#1 이슈'), { title: '1517 #1 이슈', body: '' }); // marks and escapes stripped
+assert.deepEqual(splitCard(cardDoc('', '')), { title: '', body: '' });
+assert.deepEqual(splitCard('plain line\n\nmore'), { title: '', body: 'plain line\n\nmore' }); // heading deleted
+assert.deepEqual(splitCard('## Not the title\n\nx'), { title: '', body: '## Not the title\n\nx' });
+assert.equal(plain('# **done** [[note]]'), 'done note');
 
 console.log('BOARD_OK');

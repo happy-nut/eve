@@ -11,6 +11,9 @@
   --line: light-dark(rgba(17, 19, 24, 0.09), rgba(255, 255, 255, 0.09));
   --accent: light-dark(#1e9bff, #3fc1ff);
   --accent-soft: light-dark(rgba(30, 155, 255, 0.22), rgba(63, 193, 255, 0.28));
+  /* selection: opaque (a translucent tint let code chips and wikilink pills show through as a second colour)
+     and a step away from --accent-soft, so a selection inside a callout or a wikilink still reads as selected */
+  --sel: light-dark(#b3d7ff, #2c5c7d);
   --glow: 0 0 14px light-dark(transparent, rgba(63, 193, 255, 0.35));
   --code-bg: light-dark(rgba(17, 19, 24, 0.05), rgba(255, 255, 255, 0.07));
   --tip-bg: light-dark(#2b2e35, #e8eaee);
@@ -129,19 +132,25 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
 }
 .tiptap .wikilink:hover { filter: brightness(1.15); box-shadow: var(--glow); }
 .tiptap .ProseMirror-selectednode.wikilink, .tiptap .wikilink.ProseMirror-selectednode { outline: 2px solid var(--accent); }
-.tiptap ::selection { background: var(--accent-soft); }
+.tiptap ::selection { background: var(--sel); color: var(--fg); }
 /* A selection that runs past a line's end is painted out to the block's right edge by WebKit. Making each text
    block its own selection root (overflow: clip) shrunk to its content keeps the highlight on the text; the 2px
    keeps the caret at a line end from being clipped. Empty paragraphs stay full width (placeholder, click target). */
 .tiptap p:not(.is-empty):not(:has(> br:only-child)), .tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 {
   overflow: clip; width: fit-content; max-width: 100%; padding-right: 2px;
 }
-/* WebKit paints "selection gaps" between blocks with the block's own ::selection colour; make list
-   containers, task checkboxes and callout icons transparent so only the text reads as selected */
-.tiptap ul::selection, .tiptap ol::selection, .tiptap li::selection, .tiptap li > div::selection,
+/* WebKit paints "selection gaps" with the containing block's own ::selection colour — between two blocks, and
+   beside a block narrower than its container, which the clip above makes every text block. That is what turned a
+   drag across blocks into full-width bars (Chromium paints no gaps, so the browser preview never showed them).
+   A block that only holds other blocks paints nothing, so only the text reads as selected. */
+.tiptap::selection, .tiptap ul::selection, .tiptap ol::selection, .tiptap li::selection, .tiptap li > div::selection,
 .tiptap label::selection, .tiptap label *::selection, .tiptap blockquote::selection, .tiptap .callout::selection,
 .tiptap .callout-body::selection, .tiptap .callout-emoji::selection { background: transparent; }
-.tiptap ul[data-type='taskList'] li > label, .tiptap .callout-emoji { user-select: none; -webkit-user-select: none; }
+/* Only the callout icon opts out of selection. The checkbox must not: user-select: none on the label made
+   WebKit put the insertion point *outside* the item whenever the last task item was empty, so typing there
+   deleted the item and prepended the text to the block below. The ::selection rules above already keep the
+   checkbox from lighting up. */
+.tiptap .callout-emoji { user-select: none; -webkit-user-select: none; }
 
 /* callout */
 .tiptap .callout {

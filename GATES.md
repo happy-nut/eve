@@ -112,3 +112,64 @@
 
 - [x] G26 Manual, in-app browser: a card whose body starts with a divider still shows its first text line on the card
   EVIDENCE: card body "---\n\nhello" (hr + paragraph in the card page) -> .kb-cbody "hello"; before the fix plain('---') === '' left the card without a preview.
+
+# GATES — text selection: opaque highlight, no WebKit gap bars (2026-09-08)
+
+- [x] G27 Type-checks and builds
+  CHECK: npm run check && npm run build
+  EXPECT: built in
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS 0 WARNINGS" / "✓ built in 129ms"
+- [x] G28 A drag across blocks paints no full-width bars in WebKit, and code chips / wikilink pills stop
+  showing through the highlight
+  EVIDENCE: WKWebView (offscreen snapshot of the editor markup + src/app.css, selection set over heading →
+  list → callout → task list, macOS WebKit). Gap strip between blocks and beside a shrink-wrapped block:
+  rgb(26,63,83) = the old selection tint before, page background rgb(11,12,16) after. Code chip vs plain
+  selected text on the same line: Δ12/255 before, Δ4 after; wikilink pill: Δ(11,36,48) before, Δ(3,11,14)
+  after (that remainder is the snapshot's inactive-window selection alpha; a focused window paints opaque).
+  Callout: the old --sel equalled accent-soft over the page, so a selection inside a callout was invisible —
+  --sel is a step away from it now. Chromium (in-app browser at http://localhost:5173) unchanged: it paints
+  no selection gaps at all.
+
+# GATES — card page: title in the document, outline rail shared (2026-09-09)
+
+- [x] G29 Type-checks, builds, and the card ↔ document split is covered
+  CHECK: npm run check && npm test
+  EXPECT: BOARD_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS 0 WARNINGS" / "BOARD_OK" / "SYNC_OK"; splitCard asserts cover
+  a title-only card (body stays empty — the bug the browser caught), a deleted heading, marks and escapes.
+- [x] G30 Manual, in-app browser: a drag that starts in the card title runs on into the body
+  EVIDENCE: card "1517 이슈처리" opened, drag from the h1 down through the list into "원인" — one selection
+  across title, list and heading (the old `<input>` title could not extend past itself).
+- [x] G31 Manual, in-app browser: the board still gets the title, and the outline rail shows on a long card
+  EVIDENCE: typing " 수정" in the title wrote {"title":"1517 이슈처리 수정"} into the kanban block; a title-only
+  card saved {"title":"제목만 있는 카드 편집","body":""}; the long card shows the heading ticks at its left edge,
+  the short one none. Card open/close transitions could not be watched in the preview (the pane's tab reports
+  document.hidden, so Svelte's intro/outro never advance) — the close path was verified by state instead:
+  Escape ran close(), ui.card became null.
+
+# GATES — typing in an empty last task item (2026-09-09)
+
+- [x] G32 Type-checks, builds, tests pass
+  CHECK: npm run check && npm test
+  EXPECT: BOARD_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS 0 WARNINGS" / "BOARD_OK" / "SYNC_OK"
+- [x] G33 Typing into an empty last task item keeps the text in that item (WebKit)
+  EVIDENCE: real WKWebView driven against the dev server (offscreen WKWebView, seeded note, caret in the item,
+  `document.execCommand('insertText')`). Before: "AAA | abcplain paragraph here" — the item was gone and the
+  text had moved into the block below; after: "AAA | Task item checkbox for abc | abc | plain paragraph here".
+  Chromium never reproduced it (same script in the in-app browser kept the text in the item both times), which
+  is why the browser preview looked fine.
+  Cause: `user-select: none` on the task item's `<label>`. With no selectable content left in the item, WebKit
+  resolved the insertion point to the next block. Narrowed by toggling one rule at a time in the live page:
+  `display: block` on the item did not help, `-webkit-user-select: auto` on the label did.
+  Cases covered after the fix: empty last item followed by a paragraph / bullet list / ordered list / nothing,
+  empty item in the middle, single-item list, and callouts (1 and 2 paragraphs) — text stays put in all of them.
+  Selection still paints only on text (WebKit snapshot of the same document unchanged: checkboxes not lit).
+- [x] G34 An empty checkbox survives a save and reload
+  CHECK: npm run check && npm test
+  EXPECT: BOARD_OK
+  EVIDENCE: in-app browser, note "- [ ] AAA / - [ ] / - [x] / - [x] DONE": all four items came back as task
+  items with data-checked false/false/true/true and empty text (before the fix the empty ones parsed as
+  bullets with the literal text "[ ]"), and re-serializing gave byte-identical markdown. Guards: a paragraph
+  that is only "[ ]" stays a paragraph, "- 그냥 불릿" stays a bullet, "- [ ]" becomes an empty task item (GFM).
+  WebKit re-check after the change: typing into an empty last task item still keeps the text in the item.

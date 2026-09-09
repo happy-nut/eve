@@ -1,4 +1,7 @@
 import { storage, files } from './platform';
+import { plain } from './markdown';
+
+export { plain };
 
 export interface Note {
   id: string;
@@ -41,15 +44,7 @@ export function parse(text: string): Note | null {
   };
 }
 
-/** Strip markdown syntax from one line for display. */
-export function plain(line: string): string {
-  return line
-    .replace(/^[#>\-*+\s]+|^\d+\.\s+|^\[[ x]\]\s*/g, '')
-    .replace(/\\(.)/g, '$1')
-    .replace(/[*_`~]/g, '')
-    .replace(/\[\[(.+?)\]\]/g, '$1')
-    .trim();
-}
+
 
 export function titleOf(n: Pick<Note, 'body' | 'path'>): string {
   if (n.path) return n.path.split('/').pop() ?? n.path;
