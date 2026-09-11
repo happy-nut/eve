@@ -1,6 +1,6 @@
 import { Editor, Extension, textInputRule, wrappingInputRule } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { OrderedList } from '@tiptap/extension-list';
+import { ListItem, OrderedList } from '@tiptap/extension-list';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -12,13 +12,16 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { WikiLink } from './wikilink';
 import { Callout } from './callout';
 import { LocalImage } from './image';
-import { Bookmark } from './bookmark';
+import { Bookmark, URL_RE } from './bookmark';
 import { Kanban, insertKanban } from './kanban';
 import { ui } from './ui.svelte';
 import { isCustom } from './icons';
 import { pickImage, saveImage } from './platform';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
+
+/** list items hold text or an image first, then any block (stock TipTap insists on a paragraph) */
+const LIST_ITEM_CONTENT = '(paragraph|image) block*';
 
 const KEYMAP = new PluginKey('eve-keymap');
 const APP_GUARD = new PluginKey('eve-app-guard');
@@ -167,7 +170,14 @@ export function createEditor(opts: {
     editorProps: {
       attributes: { class: 'prose', spellcheck: 'true' },
       // images pasted or dropped in are stored as files (blob: URLs would die on restart)
-      handlePaste: (_view, event): boolean => insertImageFiles(editor, event.clipboardData?.files),
+      handlePaste: (view, event): boolean => {
+        if (insertImageFiles(editor, event.clipboardData?.files)) return true;
+        // a URL pasted over selected text links that text instead of replacing it (a bare URL on its own
+        // line still becomes a bookmark card — that is the empty-selection case, further down the chain)
+        const text = event.clipboardData?.getData('text/plain').trim() ?? '';
+        if (URL_RE.test(text) && !view.state.selection.empty) return editor.chain().focus().setLink({ href: text }).run();
+        return false;
+      },
       handleDrop: (_view, event): boolean => insertImageFiles(editor, event.dataTransfer?.files),
     },
     onCreate: ({ editor }) => {
@@ -176,10 +186,14 @@ export function createEditor(opts: {
     extensions: [
       StarterKit.configure({
         orderedList: false, // replaced below: a new "1. " right after a numbered list continues it
+        listItem: false, // replaced below: an image may be an item's first block
         heading: { levels: [1, 2, 3, 4, 5] },
         link: { openOnClick: false, autolink: true },
         codeBlock: { languageClassPrefix: 'language-' },
       }),
+      // An image pasted onto an empty list item takes that line. Stock list items are `paragraph block*`, so
+      // the image could only go *after* the item's paragraph and the empty line stayed above it.
+      ListItem.extend({ content: LIST_ITEM_CONTENT }),
       // Notion-style numbering: typing "1. " (any number) directly after a numbered list joins it and
       // continues the count. Stock TipTap only joins when the typed number is the next one.
       OrderedList.extend({
@@ -215,9 +229,10 @@ export function createEditor(opts: {
         },
       }),
       TaskList,
-      // tiptap-markdown only marks bullet/ordered lists as tight; do the same for task lists
+      // markdown quirks around lists: tightness for task lists (tiptap-markdown only does bullet/ordered),
+      // empty checkboxes, and an image that is a list item's whole content
       Extension.create({
-        name: 'tightTaskList',
+        name: 'listMarkdown',
         addStorage: () => ({
           markdown: {
             // An empty task item serializes to "- [ ] "; markdown-it drops that trailing space, and
@@ -231,6 +246,19 @@ export function createEditor(opts: {
                     if (t[i].type === 'inline' && t[i - 2].type === 'list_item_open' && /^\[[ xX]\]$/.test(t[i].content)) t[i].content += ' ';
                   }
                 });
+              },
+              // markdown-it wraps a loose list item's content in a <p>; ProseMirror then splits that paragraph
+              // around the block image, leaving the item with an empty first line above the picture. Unwrap an
+              // item that is nothing but an image (the checkbox moves up: the task-item hook reads it there).
+              updateDOM(element: HTMLElement) {
+                for (const p of element.querySelectorAll('li > p')) {
+                  const kids = [...p.children];
+                  const img = kids.find((c) => c.tagName === 'IMG');
+                  if (!img || p.textContent!.trim() || kids.some((c) => c !== img && c.tagName !== 'INPUT')) continue;
+                  const box = kids.find((c) => c.tagName === 'INPUT');
+                  if (box) p.before(box);
+                  p.replaceWith(img);
+                }
               },
             },
           },
@@ -246,7 +274,7 @@ export function createEditor(opts: {
           },
         }],
       }),
-      TaskItem.configure({ nested: true }),
+      TaskItem.extend({ content: LIST_ITEM_CONTENT }).configure({ nested: true }),
       Placeholder.configure({ placeholder: 'Start typing… `#` heading, `-` list, `[[` link' }),
       Markdown.configure({ html: true, transformPastedText: true, linkify: true, breaks: false }),
       WikiLink.configure({

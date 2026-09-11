@@ -96,6 +96,7 @@ class NotesStore {
   }
 
   async load() {
+    await storage.path(); // image srcs are resolved against it: an editor must not render before it is known
     const texts = await storage.list();
     this.all = texts.map(parse).filter((n): n is Note => !!n);
     this.currentId = this.visible[0]?.id ?? null;

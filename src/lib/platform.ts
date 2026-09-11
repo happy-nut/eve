@@ -21,9 +21,13 @@ export const storage = {
     if (isTauri) return invoke('write_note', { id, text });
     localStorage.setItem(LS + id, text);
   },
+  /** Where the notes live. Resolves the asset mapper too, so `assetUrl` is ready before anything renders. */
   async path(): Promise<string> {
-    if (!notesDir) notesDir = isTauri ? await invoke<string>('notes_path') : 'localStorage';
-    return notesDir;
+    if (notesDir) return notesDir;
+    if (!isTauri) return (notesDir = 'localStorage');
+    const { invoke: inv, convertFileSrc } = await import('@tauri-apps/api/core');
+    convertFileSrcSync = convertFileSrc;
+    return (notesDir = await inv<string>('notes_path'));
   },
 };
 
@@ -34,8 +38,7 @@ export function assetUrl(src: string | undefined): string | undefined {
   // lazy import keeps the browser bundle Tauri-free
   return convertFileSrcSync(`${notesDir}/${src}`);
 }
-let convertFileSrcSync: (p: string) => string = (p) => p;
-if (isTauri) import('@tauri-apps/api/core').then((m) => (convertFileSrcSync = m.convertFileSrc));
+let convertFileSrcSync: (p: string) => string = (p) => p; // set by storage.path()
 
 /** Save an image blob (paste / drop) next to the notes and return its relative path. Browser fallback: data URL. */
 export async function saveImage(file: Blob): Promise<string> {

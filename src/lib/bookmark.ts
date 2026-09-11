@@ -7,7 +7,7 @@ import { fetchUrl, openUrl } from './platform';
  * thumbnail) and opens in the browser on click. Markdown form is just the bare URL, so files stay plain.
  * Made by pasting a URL into an empty line, or by typing one and pressing Enter.
  */
-const URL_RE = /^https?:\/\/[^\s<>"']+$/;
+export const URL_RE = /^https?:\/\/[^\s<>"']+$/;
 const LS = 'eve.links';
 export interface Meta { title: string; desc: string; image: string; icon: string }
 
