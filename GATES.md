@@ -173,3 +173,42 @@
   bullets with the literal text "[ ]"), and re-serializing gave byte-identical markdown. Guards: a paragraph
   that is only "[ ]" stays a paragraph, "- 그냥 불릿" stays a bullet, "- [ ]" becomes an empty task item (GFM).
   WebKit re-check after the change: typing into an empty last task item still keeps the text in the item.
+
+# GATES — an image pasted onto an empty list item takes that line (2026-09-11)
+
+- [x] G35 Type-checks, builds, tests pass
+  CHECK: npm run check && npm test
+  EXPECT: BOARD_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS 0 WARNINGS" / "BOARD_OK" / "SYNC_OK"
+- [x] G36 A pasted image lands on the empty to-do line, not one line below it
+  EVIDENCE: paste of an image file simulated on the editor (ClipboardEvent with a File), caret in an empty
+  task item. Before: `<li><div><p><br></p><img></div></li>` — the empty line stayed above the picture, which
+  is what the report showed. After: `<li><div><img></div></li>`. Same for an empty bullet item. Cause: list
+  items are `paragraph block*` in stock TipTap, so an image could only go after the item's paragraph; they
+  are `(paragraph|image) block*` here. Checked in Chromium (in-app browser) and in WebKit (offscreen
+  WKWebView against the dev server), where typing into an empty last task item still behaves (G33).
+- [x] G37 It survives a save and reload, tight or loose list, checked or not
+  EVIDENCE: after the paste the note stored `- [ ] ![](…)` and came back with the image as the item's own
+  block. A loose list (blank lines between items, which markdown-it wraps in <p>) came back the same way
+  after the parse hook unwraps an item whose whole content is an image — with `- [x] ![](…)` the checkbox
+  stayed checked (data-checked true) because the input is moved out of the paragraph before it is unwrapped.
+  A "- [ ] plain" item still parses to a paragraph.
+
+# GATES — paste a URL over selected text; images render on a cold start (2026-09-11)
+
+- [x] G38 Type-checks, builds, tests pass
+  CHECK: npm run check && npm test
+  EXPECT: BOARD_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS 0 WARNINGS" / "BOARD_OK" / "SYNC_OK"
+- [x] G39 A URL pasted over selected text links that text
+  EVIDENCE: in-app browser, real ProseMirror selection (from 15 to 19, empty=false, depth 3 — inside a task
+  item). Before: the whole task list was replaced by a bookmark card, because the Bookmark extension's
+  markdown parse hook turns a bare-URL paragraph into a card and that hook also runs on the pasted slice.
+  After: `<li …><p><a href="https://tossteam.gopay.co.kr/">메타페이</a></p></li>`, list intact. Still working:
+  a URL pasted on an empty line becomes a bookmark card, and plain text over a selection just replaces it.
+- [x] G40 Images render right after the app starts
+  EVIDENCE: `assetUrl` maps `assets/x.png` through the notes directory, but nothing resolved that directory
+  at startup — only Settings and saving an image did — so on a cold start every `<img>` kept its relative
+  src and showed as a broken image (what the report showed; the file itself was on disk). `notes.load()`
+  now awaits `storage.path()`, which also resolves `convertFileSrc` instead of racing a floating import.
+  Checked in the app: the note that showed a broken picture renders it.
