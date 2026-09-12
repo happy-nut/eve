@@ -14,8 +14,10 @@ import { Callout } from './callout';
 import { LocalImage } from './image';
 import { Bookmark, URL_RE } from './bookmark';
 import { Kanban, insertKanban } from './kanban';
+import { CodeBlock } from './code';
 import { ui } from './ui.svelte';
-import { isCustom } from './icons';
+import { notes, titleOf } from './notes.svelte';
+import { isCustom, RANDOM_ICONS } from './icons';
 import { pickImage, saveImage } from './platform';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
@@ -131,6 +133,7 @@ const SLASH: SuggestItem[] = [
   { label: 'Kanban', hint: '칸반 board', run: insertKanban },
   { label: 'Image', hint: 'Pick a file', run: (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); } },
   { label: 'Link to note', hint: '[[ another note', run: (e) => e.chain().focus().insertContent('[[').run() },
+  { label: 'New page', hint: '📄 하위 페이지', run: newPage },
   {
     label: 'Emoji', hint: '😀 pick one',
     run: (e) => {
@@ -141,6 +144,29 @@ const SLASH: SuggestItem[] = [
     },
   },
 ];
+
+/** 'Untitled', 'Untitled 2', … — a fresh page needs a title no other page answers to, because
+ *  [[links]] resolve by title. Renaming the page carries its links along (see followRename). */
+function untitled(): string {
+  const taken = new Set(notes.visible.map((n) => titleOf(n)));
+  let title = 'Untitled';
+  for (let i = 2; taken.has(title); i++) title = `Untitled ${i}`;
+  return title;
+}
+
+/**
+ * Notion-style sub-page: a [[link]] lands at the cursor and the new page opens straight away,
+ * nested under this one in the sidebar, with its title selected so the first keystroke names it.
+ */
+function newPage(editor: Editor) {
+  const parent = notes.current;
+  const title = untitled();
+  editor.chain().focus().insertContent([{ type: 'wikiLink', attrs: { title } }, { type: 'text', text: ' ' }]).run();
+  if (parent) notes.flush(parent.id); // creating the page navigates away from this editor
+  notes.selectTitle = true;
+  const child = notes.create(`# ${title}\n\n`, parent?.group ?? '', parent?.id);
+  if (parent?.icon) notes.setIcon(child.id, RANDOM_ICONS[Math.floor(Math.random() * RANDOM_ICONS.length)]);
+}
 
 function insertImageFiles(editor: Editor, files?: FileList | null): boolean {
   const images = [...(files ?? [])].filter((f) => f.type.startsWith('image/'));
@@ -189,10 +215,11 @@ export function createEditor(opts: {
         listItem: false, // replaced below: an image may be an item's first block
         heading: { levels: [1, 2, 3, 4, 5] },
         link: { openOnClick: false, autolink: true },
-        codeBlock: { languageClassPrefix: 'language-' },
+        codeBlock: false, // replaced below: syntax highlighting + a language chip
       }),
       // An image pasted onto an empty list item takes that line. Stock list items are `paragraph block*`, so
       // the image could only go *after* the item's paragraph and the empty line stayed above it.
+      CodeBlock,
       ListItem.extend({ content: LIST_ITEM_CONTENT }),
       // Notion-style numbering: typing "1. " (any number) directly after a numbered list joins it and
       // continues the count. Stock TipTap only joins when the typed number is the next one.

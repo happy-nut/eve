@@ -10,6 +10,7 @@ export interface Note {
   deleted: boolean;
   group: string; // '' = root
   order: number; // manual sort rank within its group (ascending)
+  parent?: string; // id of the page this one was created inside (sub-page; sits under it in the sidebar)
   icon?: string; // emoji shown in the sidebar (Notion-style)
   /** set for external files opened via macOS: edited in place, not synced, not persisted in notes/ */
   path?: string;
@@ -20,7 +21,7 @@ export const newId = () =>
 
 // ---- (de)serialization: markdown with a tiny frontmatter -------------------
 export function serialize(n: Note): string {
-  return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\norder: ${n.order}${n.group ? `\ngroup: ${n.group}` : ''}${n.icon ? `\nicon: ${n.icon}` : ''}\n---\n${n.body}`;
+  return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\norder: ${n.order}${n.group ? `\ngroup: ${n.group}` : ''}${n.parent ? `\nparent: ${n.parent}` : ''}${n.icon ? `\nicon: ${n.icon}` : ''}\n---\n${n.body}`;
 }
 
 export function parse(text: string): Note | null {
@@ -38,6 +39,7 @@ export function parse(text: string): Note | null {
     updatedAt: Number(meta.updated) || 0,
     deleted: meta.deleted === 'true',
     group: meta.group ?? '',
+    parent: meta.parent || undefined,
     icon: meta.icon || undefined,
     // legacy notes without order: newest first
     order: meta.order !== undefined && !Number.isNaN(Number(meta.order)) ? Number(meta.order) : -(Number(meta.updated) || 0),
@@ -52,6 +54,23 @@ export function titleOf(n: Pick<Note, 'body' | 'path'>): string {
   return plain(first) || 'Untitled';
 }
 
+/** `list` depth-first: every page is followed by its sub-pages. A sub-page whose parent is not in
+ *  `list` (deleted, or dragged into another group) shows up at the top level. */
+export function nested(list: Note[]): { n: Note; depth: number }[] {
+  const ids = new Set(list.map((n) => n.id));
+  const kids = new Map<string, Note[]>();
+  for (const n of list) {
+    const p = n.parent && ids.has(n.parent) ? n.parent : '';
+    (kids.get(p) ?? kids.set(p, []).get(p)!).push(n);
+  }
+  const out: { n: Note; depth: number }[] = [];
+  const walk = (parent: string, depth: number) => {
+    for (const n of kids.get(parent) ?? []) { out.push({ n, depth }); walk(n.id, depth + 1); }
+  };
+  walk('', 0);
+  return out;
+}
+
 // ---- reactive store --------------------------------------------------------
 class NotesStore {
   all = $state<Note[]>([]);
@@ -63,6 +82,8 @@ class NotesStore {
   get canForward() { return this.hIndex < this.history.length - 1; }
   /** last cursor position per note, restored when navigating back */
   cursor = new Map<string, number>();
+  /** set just before creating a page whose title is a placeholder: the editor selects it on open */
+  selectTitle = false;
 
   get currentId() { return this._cur; }
   set currentId(id: string | null) {
@@ -99,15 +120,17 @@ class NotesStore {
     await storage.path(); // image srcs are resolved against it: an editor must not render before it is known
     const texts = await storage.list();
     this.all = texts.map(parse).filter((n): n is Note => !!n);
+    for (const n of this.all) this.titles.set(n.id, titleOf(n));
     this.currentId = this.visible[0]?.id ?? null;
     if (!this.currentId) this.create();
     this.loaded = true;
   }
 
-  create(body = '', group = this.current?.group ?? ''): Note {
+  create(body = '', group = this.current?.group ?? '', parent?: string): Note {
     const first = this.visible.find((x) => x.group === group);
-    const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group, order: first ? first.order - 1 : 0 };
+    const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group, parent, order: first ? first.order - 1 : 0 };
     this.all.push(n);
+    this.titles.set(n.id, titleOf(n));
     this.currentId = n.id;
     void storage.write(n.id, serialize(n));
     this.dirty++;
@@ -129,8 +152,27 @@ class NotesStore {
     if (!n) return;
     clearTimeout(this.timers.get(id));
     this.timers.delete(id);
+    this.followRename(n);
     if (n.path) void files.write(n.path, n.body);
     else { void storage.write(n.id, serialize(n)); this.dirty++; }
+  }
+
+  /** title as of the last flush, so a retitled page can take its [[links]] with it */
+  private titles = new Map<string, string>();
+  private followRename(n: Note) {
+    const now = titleOf(n);
+    const was = this.titles.get(n.id);
+    this.titles.set(n.id, now);
+    if (was === undefined || was === now) return;
+    // ponytail: scans every body on a rename; fine for local notes, index the links if it ever bites
+    for (const other of this.all) {
+      if (other.deleted || other.id === n.id) continue;
+      const body = other.body.split(`[[${was}]]`).join(`[[${now}]]`);
+      if (body === other.body) continue;
+      other.body = body;
+      other.updatedAt = Date.now();
+      this.flush(other.id);
+    }
   }
 
   /** Open an external file in place (or focus it if already open). */
@@ -185,10 +227,14 @@ class NotesStore {
       order = last ? last.order + 1 : 0;
     }
     if (n.group === group && n.order === order) return;
+    const from = n.group;
     n.group = group;
     n.order = order;
+    n.parent = undefined; // dropped by hand: it is a page of its own now, wherever it landed
     n.updatedAt = Date.now();
     this.flush(id);
+    // its own sub-pages follow it into the new group (they keep their rank and their parent)
+    if (from !== group) for (const kid of this.all) if (!kid.deleted && kid.parent === id) this.relabel(kid.id, group);
   }
 
   /** Delete a note (tombstone). For an external file this only closes it; the file stays on disk. */
@@ -219,8 +265,9 @@ class NotesStore {
     for (const r of remote) {
       const local = this.all.find((n) => n.id === r.id);
       if (!force && local && local.updatedAt >= r.updatedAt) continue;
-      if (local) Object.assign(local, { icon: undefined }, r); // a removed icon must come through too
+      if (local) Object.assign(local, { icon: undefined, parent: undefined }, r); // a removed icon/parent must come through too
       else this.all.push(r);
+      this.titles.set(r.id, titleOf(r)); // a remote edit is not this note being renamed here
       void storage.write(r.id, serialize(r));
       changed = true;
     }

@@ -11,8 +11,12 @@
   $effect(() => { value = p.input ?? ''; });
 
   let box: HTMLDivElement;
+  // the keypress that opened the dialog (Enter on a / menu item, say) is still travelling to window:
+  // it must not count as the answer to a dialog that did not exist when the key went down
+  const openedAt = performance.now();
   function onKey(e: KeyboardEvent) {
     e.stopPropagation();
+    if (e.timeStamp < openedAt) return;
     if (e.key === 'Escape') { e.preventDefault(); done(null); }
     if (e.key === 'Enter') { e.preventDefault(); done(p.input !== undefined ? value : 'yes'); }
     if (e.key === 'Tab') { // focus stays inside the dialog

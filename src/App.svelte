@@ -75,7 +75,9 @@ import CardPage from './CardPage.svelte';
     if (n.path || (await ui.ask(`Delete “${titleOf(n)}”?`))) notes.remove(n.id);
   }
   function onKeydown(e: KeyboardEvent) {
+    // ⌘ alone peeks at the numbers; ⌘ with anything else is a shortcut, so the icons come straight back
     if (e.key === 'Meta') cmdDown();
+    else cmdUp();
     if (ui.pending || ui.emoji) return;
     if (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
       e.preventDefault();

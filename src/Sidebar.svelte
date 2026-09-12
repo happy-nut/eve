@@ -3,7 +3,7 @@
   import { fade, slide, scale } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { tick } from 'svelte';
-  import { notes, titleOf, type Note } from './lib/notes.svelte';
+  import { notes, nested, titleOf, type Note } from './lib/notes.svelte';
   import { groups, parentOf, leafOf, depthOf, MAX_DEPTH } from './lib/groups.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
@@ -44,15 +44,15 @@
       for (const g of groups.children(parent)) {
         out.push({ kind: 'group', key: 'g:' + groups.id(g), g, depth });
         if (groups.isCollapsed(g)) continue;
-        const kids = groups.children(g), own = groups.notesIn(g);
+        const own = nested(groups.notesIn(g));
         walk(g, depth + 1);
-        for (const n of own) out.push({ kind: 'note', key: n.id, n, depth: depth + 1 });
+        for (const { n, depth: d } of own) out.push({ kind: 'note', key: n.id, n, depth: depth + 1 + d });
       }
     };
     walk('', 0);
-    const root = groups.notesIn('');
+    const root = nested(groups.notesIn(''));
     if (groups.names.length) out.push({ kind: 'label', key: 'label:root', text: 'Notes', g: '' });
-    for (const n of root) out.push({ kind: 'note', key: n.id, n, depth: 0 });
+    for (const { n, depth } of root) out.push({ kind: 'note', key: n.id, n, depth });
     if (!root.length) out.push({ kind: 'empty', key: 'empty:root', text: 'No notes', g: '', depth: 0 });
     return out;
   });

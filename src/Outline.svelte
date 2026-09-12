@@ -61,7 +61,8 @@
 {#if overflow && heads.length}
   <nav class="outline" class:peeking={hover !== null} aria-label="Sections" onmouseleave={() => (hover = null)}>
     {#each heads as h, i (i)}
-      <button class="tick" class:on={h.on} class:hov={hover === i} style="--w: {tickWidth(i)}px" onmouseenter={() => (hover = i)} onclick={() => go(h.top)}>
+      <!-- tabindex -1: a mouse-only jump strip, Tab from the editor should not land in it -->
+      <button class="tick" tabindex="-1" class:on={h.on} class:hov={hover === i} style="--w: {tickWidth(i)}px" onmouseenter={() => (hover = i)} onclick={() => go(h.top)}>
         <i></i>
         {#if hover === i}
           <span class="peek"><span class="peek-in" in:fly={{ x: -8, duration: 150 }}>
