@@ -30,7 +30,12 @@
       suggestionUI: suggest.ui,
       cursor: notes.cursor.get(note.id),
     });
-    if (ui.focusOwner !== 'sidebar') editor?.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
+    if (notes.selectTitle) {
+      // a brand-new page: its placeholder title is selected, so typing renames it right away
+      notes.selectTitle = false;
+      editor.commands.setTextSelection({ from: 1, to: 1 + (editor.state.doc.firstChild?.content.size ?? 0) });
+      editor.commands.focus();
+    } else if (ui.focusOwner !== 'sidebar') editor?.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
     return () => {
       if (editor) notes.cursor.set(id, editor.state.selection.from);
       editor?.destroy();
@@ -70,7 +75,10 @@
       {/if}
     </div>
   {/if}
-  <div class="editor" class:has-head={!note.path} bind:this={el}></div>
+  <!-- Tab indents a list (the editor marks those handled); anywhere else it must not walk focus out of the editor -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="editor" class:has-head={!note.path} bind:this={el}
+    onkeydown={(e) => { if (e.key === 'Tab' && !e.defaultPrevented) e.preventDefault(); }}></div>
 </div>
 <Outline {scrollEl} {editor} />
 

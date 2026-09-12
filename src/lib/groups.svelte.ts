@@ -1,4 +1,4 @@
-import { notes } from './notes.svelte';
+import { notes, nested } from './notes.svelte';
 
 /**
  * Sidebar folders, nested up to MAX_DEPTH. A group is a path like "Work/Projects/Alpha";
@@ -46,16 +46,19 @@ class Groups {
   height(p: string) { return Math.max(...this.subtree(p).map(depthOf)) - depthOf(p) + 1; }
   notesIn(p: string, deep = false) { return notes.visible.filter((n) => !n.path && (deep ? within(n.group, p) : n.group === p)); }
 
+  /** notes of a group as the sidebar stacks them: each page followed by its sub-pages */
+  pagesIn(p: string) { return nested(this.notesIn(p)).map((r) => r.n); }
+
   /** notes in the order the sidebar shows them: depth-first groups (subgroups before notes), then root */
   ordered() {
-    const walk = (p: string): typeof notes.visible => [...this.children(p).flatMap(walk), ...this.notesIn(p)];
+    const walk = (p: string): typeof notes.visible => [...this.children(p).flatMap(walk), ...this.pagesIn(p)];
     return walk('');
   }
 
   /** like ordered(), but only what the sidebar currently shows (collapsed groups skipped) */
   visibleOrdered() {
     const walk = (p: string): typeof notes.visible =>
-      [...this.children(p).flatMap((c) => (this.isCollapsed(c) ? [] : walk(c))), ...this.notesIn(p)];
+      [...this.children(p).flatMap((c) => (this.isCollapsed(c) ? [] : walk(c))), ...this.pagesIn(p)];
     return [...notes.visible.filter((n) => n.path), ...walk('')];
   }
 
