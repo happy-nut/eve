@@ -8,11 +8,11 @@ import { notes, nested } from './notes.svelte';
 const LS = 'eve.groups';
 export const MAX_DEPTH = 3;
 
-interface Saved { order: string[]; collapsed: string[]; icons: Record<string, string> }
+interface Saved { order: string[]; collapsed: string[]; icons: Record<string, string>; folded: string[] }
 
 function load(): Saved {
-  try { return { order: [], collapsed: [], icons: {}, ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; }
-  catch { return { order: [], collapsed: [], icons: {} }; }
+  try { return { order: [], collapsed: [], icons: {}, folded: [], ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; }
+  catch { return { order: [], collapsed: [], icons: {}, folded: [] }; }
 }
 
 export const parentOf = (p: string) => p.split('/').slice(0, -1).join('/');
@@ -47,7 +47,16 @@ class Groups {
   notesIn(p: string, deep = false) { return notes.visible.filter((n) => !n.path && (deep ? within(n.group, p) : n.group === p)); }
 
   /** notes of a group as the sidebar stacks them: each page followed by its sub-pages */
-  pagesIn(p: string) { return nested(this.notesIn(p)).map((r) => r.n); }
+  pagesIn(p: string, hideFolded = false) {
+    return nested(this.notesIn(p), hideFolded ? (id) => this.isFolded(id) : undefined).map((r) => r.n);
+  }
+
+  /** a page whose sub-pages are folded away (sidebar layout, like a collapsed group) */
+  isFolded(id: string) { return this.saved.folded.includes(id); }
+  fold(id: string) {
+    this.saved.folded = this.isFolded(id) ? this.saved.folded.filter((x) => x !== id) : [...this.saved.folded, id];
+    this.persist();
+  }
 
   /** notes in the order the sidebar shows them: depth-first groups (subgroups before notes), then root */
   ordered() {
@@ -58,7 +67,7 @@ class Groups {
   /** like ordered(), but only what the sidebar currently shows (collapsed groups skipped) */
   visibleOrdered() {
     const walk = (p: string): typeof notes.visible =>
-      [...this.children(p).flatMap((c) => (this.isCollapsed(c) ? [] : walk(c))), ...this.pagesIn(p)];
+      [...this.children(p).flatMap((c) => (this.isCollapsed(c) ? [] : walk(c))), ...this.pagesIn(p, true)];
     return [...notes.visible.filter((n) => n.path), ...walk('')];
   }
 

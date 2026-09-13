@@ -1,6 +1,7 @@
 import { Editor, Extension, textInputRule, wrappingInputRule } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { ListItem, OrderedList } from '@tiptap/extension-list';
+import Paragraph from '@tiptap/extension-paragraph';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -24,6 +25,31 @@ import { shortcuts } from './shortcuts.svelte';
 
 /** list items hold text or an image first, then any block (stock TipTap insists on a paragraph) */
 const LIST_ITEM_CONTENT = '(paragraph|image) block*';
+
+/**
+ * A blank line the user pressed Enter for. Markdown has no empty paragraph — the blank lines around a
+ * block are just separators — so an empty one used to vanish the next time the note was read back.
+ * It travels as a line holding a single non-breaking space, and the parse hook empties it again.
+ */
+const BLANK = '\u00a0';
+const BlankLine = Paragraph.extend({
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state: any, node: PMNode) {
+          if (node.content.size) state.renderInline(node);
+          else state.write(BLANK);
+          state.closeBlock(node);
+        },
+        parse: {
+          updateDOM(element: HTMLElement) {
+            for (const p of element.querySelectorAll('p')) if (p.textContent === BLANK) p.replaceChildren();
+          },
+        },
+      },
+    };
+  },
+});
 
 const KEYMAP = new PluginKey('eve-keymap');
 const APP_GUARD = new PluginKey('eve-app-guard');
@@ -80,15 +106,16 @@ export function applyKeymap(editor: Editor) {
   }
   editor.unregisterPlugin(KEYMAP);
   editor.unregisterPlugin(APP_GUARD);
-  // App-scope combos (e.g. ⌘B rebound to "focus sidebar") must not be eaten by the editor's
-  // built-in keymaps; mark the event and stop editor handling so the window listener runs it.
+  // App-scope combos (e.g. ⌘B rebound to "focus sidebar", Esc to hide the window) must not be eaten
+  // by the editor's built-in keymaps; mark the event and stop editor handling so the window listener
+  // runs it. A card page still closes on Esc instead: it stops the event before it reaches the window.
   const guard = new Plugin({
     key: APP_GUARD,
     props: {
       handleKeyDown: (_view, e) => {
         if (suggestionVisible()) return false;
         const a = shortcuts.match(e, ['app']);
-        if (!a || a.id === 'hide') return false;
+        if (!a) return false;
         (e as any).eveApp = true;
         return true;
       },
@@ -99,7 +126,7 @@ export function applyKeymap(editor: Editor) {
   editor.registerPlugin(plugin, (p, all) => [p, ...all]);
 }
 
-export interface SuggestItem { label: string; hint?: string; run?: (editor: Editor) => void }
+export interface SuggestItem { label: string; hint?: string; icon?: string; noteIcon?: string; run?: (editor: Editor) => void }
 export interface SuggestionUI {
   show(items: SuggestItem[], rect: DOMRect | null, pick: (item: SuggestItem) => void): void;
   move(delta: number): void;
@@ -125,17 +152,26 @@ function popup(uiRef: SuggestionUI) {
   };
 }
 
-/** The "/" block menu, Notion-style. */
+/** 16x16 line icons for the menu, drawn in the sidebar's stroke style. */
+const ICONS = {
+  page: '<path d="M4 1.5h5L12.5 5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5"/><path d="M6.2 10h3.6M8 8.2v3.6"/>',
+  note: '<path d="M4 1.5h5L12.5 5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5"/><path d="M5.9 8.6h4.2M5.9 11h4.2"/>',
+  callout: '<circle cx="8" cy="6.6" r="4"/><path d="M6.3 11.6h3.4M6.9 13.6h2.2"/>',
+  kanban: '<rect x="2.5" y="3.5" width="3.2" height="9" rx="1"/><rect x="6.4" y="3.5" width="3.2" height="6" rx="1"/><rect x="10.3" y="3.5" width="3.2" height="7.6" rx="1"/>',
+  image: '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><circle cx="6" cy="6.8" r="1"/><path d="M3.2 11.8 6.4 8.7l2.3 2.1 2.1-2 2.5 2.8"/>',
+  wikiLink: '<path d="M6.4 3.5H4.3v9h2.1M11.7 3.5H9.6v9h2.1"/>',
+  emoji: '<circle cx="8" cy="8" r="6"/><path d="M5.8 9.4c.6.9 1.3 1.4 2.2 1.4s1.6-.5 2.2-1.4"/><path d="M6.3 6.4h.01M9.7 6.4h.01"/>',
+};
+
+/** The "/" block menu, Notion-style. ``` and --- still make a code block / divider as you type. */
 const SLASH: SuggestItem[] = [
-  { label: 'Callout', hint: '💡 highlighted box', run: (e) => e.chain().focus().toggleWrap('callout').run() },
-  { label: 'Code block', hint: '``` code', run: (e) => e.chain().focus().toggleCodeBlock().run() },
-  { label: 'Divider', hint: '---', run: (e) => e.chain().focus().setHorizontalRule().run() },
-  { label: 'Kanban', hint: '칸반 board', run: insertKanban },
-  { label: 'Image', hint: 'Pick a file', run: (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); } },
-  { label: 'Link to note', hint: '[[ another note', run: (e) => e.chain().focus().insertContent('[[').run() },
-  { label: 'New page', hint: '📄 하위 페이지', run: newPage },
+  { label: 'New page', hint: '📄 하위 페이지', icon: ICONS.page, run: newPage },
+  { label: 'Callout', hint: '💡 highlighted box', icon: ICONS.callout, run: (e) => e.chain().focus().toggleWrap('callout').run() },
+  { label: 'Kanban', hint: '칸반 board', icon: ICONS.kanban, run: insertKanban },
+  { label: 'Image', hint: 'Pick a file', icon: ICONS.image, run: (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); } },
+  { label: 'Link to note', hint: '[[ another note', icon: ICONS.wikiLink, run: (e) => e.chain().focus().insertContent('[[').run() },
   {
-    label: 'Emoji', hint: '😀 pick one',
+    label: 'Emoji', hint: '😀 pick one', icon: ICONS.emoji,
     run: (e) => {
       const c = e.view.coordsAtPos(e.state.selection.from);
       ui.pickEmoji(new DOMRect(c.left, c.top, 0, c.bottom - c.top)).then((v) => {
@@ -189,6 +225,7 @@ export function createEditor(opts: {
   suggestionUI: SuggestionUI;
   cursor?: number;
 }) {
+  const iconOf = (title: string) => notes.visible.find((n) => titleOf(n).toLowerCase() === title.toLowerCase())?.icon ?? '';
   const editor: Editor = new Editor({
     element: opts.element,
     autofocus: false, // Editor.svelte decides (the sidebar may own focus, e.g. after deleting from the list)
@@ -211,6 +248,7 @@ export function createEditor(opts: {
     },
     extensions: [
       StarterKit.configure({
+        paragraph: false, // replaced below: an empty paragraph survives the markdown round trip
         orderedList: false, // replaced below: a new "1. " right after a numbered list continues it
         listItem: false, // replaced below: an image may be an item's first block
         heading: { levels: [1, 2, 3, 4, 5] },
@@ -219,6 +257,7 @@ export function createEditor(opts: {
       }),
       // An image pasted onto an empty list item takes that line. Stock list items are `paragraph block*`, so
       // the image could only go *after* the item's paragraph and the empty line stayed above it.
+      BlankLine,
       CodeBlock,
       ListItem.extend({ content: LIST_ITEM_CONTENT }),
       // Notion-style numbering: typing "1. " (any number) directly after a numbered list joins it and
@@ -306,6 +345,7 @@ export function createEditor(opts: {
       Markdown.configure({ html: true, transformPastedText: true, linkify: true, breaks: false }),
       WikiLink.configure({
         onOpen: opts.onOpenNote,
+        iconOf,
         suggestion: {
           char: '[[',
           allowSpaces: true,
@@ -314,8 +354,13 @@ export function createEditor(opts: {
           items: ({ query }) => {
             const q = query.toLowerCase();
             const hits = opts.titles().filter((t) => t.toLowerCase().includes(q)).slice(0, 8);
-            if (query && !hits.some((t) => t.toLowerCase() === q)) hits.push(query);
-            return hits.map((label) => ({ label }));
+            const items: SuggestItem[] = hits.map((label) => {
+              const icon = iconOf(label);
+              return icon ? { label, noteIcon: icon } : { label, icon: ICONS.note };
+            });
+            // a title nothing answers to yet: picking it links a page that gets created on the first visit
+            if (query && !hits.some((t) => t.toLowerCase() === q)) items.push({ label: query, hint: 'new page', icon: ICONS.page });
+            return items;
           },
           command: ({ editor, range, props }) =>
             editor
