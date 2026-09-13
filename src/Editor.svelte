@@ -30,6 +30,7 @@
       suggestionUI: suggest.ui,
       cursor: notes.cursor.get(note.id),
     });
+    if (import.meta.env.DEV) (window as any).__editor = editor;
     if (notes.selectTitle) {
       // a brand-new page: its placeholder title is selected, so typing renames it right away
       notes.selectTitle = false;

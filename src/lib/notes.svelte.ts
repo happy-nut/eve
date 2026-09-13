@@ -54,18 +54,22 @@ export function titleOf(n: Pick<Note, 'body' | 'path'>): string {
   return plain(first) || 'Untitled';
 }
 
-/** `list` depth-first: every page is followed by its sub-pages. A sub-page whose parent is not in
- *  `list` (deleted, or dragged into another group) shows up at the top level. */
-export function nested(list: Note[]): { n: Note; depth: number }[] {
+/** `list` depth-first: every page is followed by its sub-pages (`folded` hides a page's sub-pages,
+ *  it still reports `kids`). A sub-page whose parent is not in `list` (deleted, or dragged into
+ *  another group) shows up at the top level. */
+export function nested(list: Note[], folded?: (id: string) => boolean): { n: Note; depth: number; kids: boolean }[] {
   const ids = new Set(list.map((n) => n.id));
   const kids = new Map<string, Note[]>();
   for (const n of list) {
     const p = n.parent && ids.has(n.parent) ? n.parent : '';
     (kids.get(p) ?? kids.set(p, []).get(p)!).push(n);
   }
-  const out: { n: Note; depth: number }[] = [];
+  const out: { n: Note; depth: number; kids: boolean }[] = [];
   const walk = (parent: string, depth: number) => {
-    for (const n of kids.get(parent) ?? []) { out.push({ n, depth }); walk(n.id, depth + 1); }
+    for (const n of kids.get(parent) ?? []) {
+      out.push({ n, depth, kids: kids.has(n.id) });
+      if (!folded?.(n.id)) walk(n.id, depth + 1);
+    }
   };
   walk('', 0);
   return out;

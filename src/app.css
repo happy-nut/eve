@@ -31,11 +31,9 @@
 
 * { box-sizing: border-box; }
 html, body, #app { height: 100%; margin: 0; }
-/* the native window is transparent: the page paints its own rounded surface, so summon/dismiss can fade */
+/* the native window is transparent: the page paints its own rounded surface */
 html, body { background: transparent; }
 #app { background: var(--bg); border-radius: 10px; overflow: hidden; }
-body { transition: opacity 0.16s ease-out; will-change: opacity; }
-html.fx-hidden body { opacity: 0; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif;
   font-size: 14px;
@@ -124,6 +122,9 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
 .tiptap blockquote { border-left: 3px solid var(--line); margin: 0.5em 0; padding-left: 1em; color: var(--fg-dim); }
 .tiptap code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.88em; background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 4px; }
 .tiptap pre { background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; margin: 0.6em 0; }
+/* ProseMirror's own stylesheet sets pre-wrap on code blocks and loads after this one; the extra class
+   outweighs it, so a long line scrolls sideways instead of folding onto the next */
+.tiptap .code-block pre, .tiptap .code-block pre code { white-space: pre; }
 .tiptap pre code { background: none; padding: 0; font-size: 0.85em; }
 /* the chip sits on the wrapper, not the <pre>: inside a scrolling <pre> it would slide away with long lines */
 .tiptap .code-block { position: relative; }
@@ -170,16 +171,15 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
 .tiptap hr { border: 0; border-top: 1px solid var(--line); margin: 1.2em 0; }
 .tiptap a { color: var(--accent); text-decoration: none; }
 .tiptap a:hover { text-decoration: underline; }
-.tiptap .wikilink {
-  color: var(--accent);
-  background: var(--accent-soft);
-  padding: 0.05em 0.35em;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: filter 0.12s, box-shadow 0.2s;
-}
-.tiptap .wikilink:hover { filter: brightness(1.15); box-shadow: var(--glow); }
-.tiptap .ProseMirror-selectednode.wikilink, .tiptap .wikilink.ProseMirror-selectednode { outline: 2px solid var(--accent); }
+/* a link to another note reads as text with the note's icon and an underline — no pill, so nothing
+   sticks out of the line box to be clipped, and the selected state is the plain selection colour */
+.tiptap .wikilink { cursor: pointer; }
+.tiptap .wikilink .wl-t { text-decoration: underline; text-decoration-color: var(--fg-dim); text-underline-offset: 2px; }
+.tiptap .wikilink:hover { color: var(--accent); }
+.tiptap .wikilink:hover .wl-t { text-decoration-color: var(--accent); }
+.tiptap .wl-ico { margin-right: 0.28em; font-size: 0.95em; line-height: 1; }
+.tiptap .wl-ico svg { width: 1em; height: 1em; vertical-align: -0.12em; }
+.tiptap .ProseMirror-selectednode.wikilink, .tiptap .wikilink.ProseMirror-selectednode { background: var(--sel); border-radius: 3px; }
 .tiptap ::selection { background: var(--sel); color: var(--fg); }
 /* A selection that runs past a line's end is painted out to the block's right edge by WebKit. Making each text
    block its own selection root (overflow: clip) shrunk to its content keeps the highlight on the text; the 2px
@@ -227,7 +227,25 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
 /* image */
 .tiptap img { max-width: 100%; border-radius: 8px; display: block; margin: 0.6em 0; }
 .tiptap img.ProseMirror-selectednode { outline: 2px solid var(--accent); box-shadow: var(--glow); }
+/* an image and its caption: the caption is the alt text, shown under the picture */
+.tiptap .img-fig { margin: 0.6em 0; width: fit-content; max-width: 100%; } /* shrink to the picture, so the caption sits under it */
+.tiptap .img-fig img { margin: 0; }
+.tiptap .img-fig.ProseMirror-selectednode img { outline: 2px solid var(--accent); box-shadow: var(--glow); }
+.tiptap .img-cap {
+  margin-top: 5px; text-align: center; font-size: 0.85em; color: var(--fg-dim); outline: none;
+  border-radius: 4px; padding: 1px 4px;
+}
+.tiptap .img-cap:empty { display: none; } /* no caption, no empty line under the picture … */
+.tiptap .img-fig.ProseMirror-selectednode .img-cap:empty, .tiptap .img-fig:hover .img-cap:empty { display: block; }
+.tiptap .img-cap:empty::before { content: attr(data-placeholder); color: var(--fg-dim); opacity: 0.6; } /* … until you go looking for it */
+.tiptap .img-cap:focus { background: var(--bg-input); }
 
-::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar { width: 8px; height: 8px; } /* height, or a sideways bar keeps WebKit's chunky default */
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--fg-dim); }
+/* a code block's sideways bar: thin, no track (a grey band across the block reads as a border), and
+   shown whenever the line overruns — hover-only made two blocks side by side look inconsistent */
+.tiptap .code-block pre::-webkit-scrollbar { height: 6px; }
+.tiptap .code-block pre::-webkit-scrollbar-track { background: transparent; }
+.tiptap .code-block pre::-webkit-scrollbar-thumb { background: var(--line); }
+.tiptap .code-block pre::-webkit-scrollbar-thumb:hover { background: var(--fg-dim); }

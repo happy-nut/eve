@@ -30,7 +30,7 @@
    */
   type Row =
     | { kind: 'group'; key: string; g: string; depth: number }
-    | { kind: 'note'; key: string; n: Note; depth: number }
+    | { kind: 'note'; key: string; n: Note; depth: number; kids?: boolean }
     | { kind: 'label'; key: string; text: string; g: string }
     | { kind: 'empty'; key: string; text: string; g: string; depth: number };
   const rows = $derived.by((): Row[] => {
@@ -44,15 +44,15 @@
       for (const g of groups.children(parent)) {
         out.push({ kind: 'group', key: 'g:' + groups.id(g), g, depth });
         if (groups.isCollapsed(g)) continue;
-        const own = nested(groups.notesIn(g));
+        const own = nested(groups.notesIn(g), (id) => groups.isFolded(id));
         walk(g, depth + 1);
-        for (const { n, depth: d } of own) out.push({ kind: 'note', key: n.id, n, depth: depth + 1 + d });
+        for (const { n, depth: d, kids } of own) out.push({ kind: 'note', key: n.id, n, depth: depth + 1 + d, kids });
       }
     };
     walk('', 0);
-    const root = nested(groups.notesIn(''));
+    const root = nested(groups.notesIn(''), (id) => groups.isFolded(id));
     if (groups.names.length) out.push({ kind: 'label', key: 'label:root', text: 'Notes', g: '' });
-    for (const { n, depth } of root) out.push({ kind: 'note', key: n.id, n, depth });
+    for (const { n, depth, kids } of root) out.push({ kind: 'note', key: n.id, n, depth, kids });
     if (!root.length) out.push({ kind: 'empty', key: 'empty:root', text: 'No notes', g: '', depth: 0 });
     return out;
   });
@@ -244,7 +244,7 @@
       return;
     }
     switch (e.key) {
-      case ' ': if (group) groups.toggle(group); else return; break;
+      case ' ': if (group) groups.toggle(group); else if (noteId) groups.fold(noteId); else return; break;
       case 'ArrowDown': rows[i + 1]?.focus(); break;
       case 'ArrowUp': rows[i - 1]?.focus(); break;
       case 'ArrowLeft':
@@ -340,7 +340,7 @@
 
           {#if r.kind === 'note'}
             {@const n = r.n}
-            <div class="note-row" draggable={!n.path} ondragstart={(e) => !n.path && dragStartNote(e, n)} ondragend={dragEnd}
+            <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!n.path} ondragstart={(e) => !n.path && dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation">
               <button data-row data-note={n.id} class:active={n.id === notes.currentId} onclick={() => openNote(n)}>
                 <span class="title">
@@ -353,6 +353,12 @@
                   <span class="t">{titleOf(n)}</span>
                 </span>
               </button>
+              {#if r.kids}
+                <button class="icon mini fold tip-right" aria-label={groups.isFolded(n.id) ? 'Expand' : 'Collapse'}
+                  data-tip={groups.isFolded(n.id) ? 'Expand' : 'Collapse'} onclick={() => groups.fold(n.id)}>
+                  <svg class="chev" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4"/></svg>
+                </button>
+              {/if}
             </div>
 
           {:else if r.kind === 'group'}
@@ -481,13 +487,14 @@
     content: ''; position: absolute; left: calc(var(--d) * 18px); right: 8px; top: -1px; height: 2px; border-radius: 1px;
     background: var(--accent); box-shadow: var(--glow); pointer-events: none; z-index: 1;
   }
-  .note-row > button {
-    width: 100%; text-align: left; border: 0; background: none; color: inherit; font: inherit;
+  .note-row { display: flex; align-items: center; }
+  .note-row > button:first-child {
+    flex: 1; min-width: 0; text-align: left; border: 0; background: none; color: inherit; font: inherit;
     padding: 5px 6px; border-radius: 6px; display: flex; flex-direction: column;
     cursor: default; transition: background 0.12s, transform 0.12s;
   }
-  .note-row > button:hover { background: var(--bg-hover); }
-  .note-row > button:active { transform: scale(0.985); }
+  .note-row > button:first-child:hover { background: var(--bg-hover); }
+  .note-row > button:first-child:active { transform: scale(0.985); }
   .note-row > button.active { background: var(--bg-active); }
   /* keyboard cursor: a soft accent tint; the open note stays neutral grey */
   .note-row > [data-row]:focus { outline: none; background: color-mix(in srgb, var(--accent) 14%, transparent); }

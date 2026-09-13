@@ -49,8 +49,18 @@ import CardPage from './CardPage.svelte';
     }
     if (dock.hidden) dock.set(true);
     notes.load().then(() => files.onOpen((paths) => paths.forEach((p) => notes.openFile(p))));
-    return sync.start();
+    window.addEventListener('eve-summon', restoreFocus);
+    const stopSync = sync.start();
+    return () => { window.removeEventListener('eve-summon', restoreFocus); stopSync?.(); };
   });
+
+  /** Summoned back (⌘⇧Space, Dock, ⌘Tab): the caret goes where it was, the editor by default. */
+  function restoreFocus() {
+    if (ui.pending || ui.emoji || settingsOpen) return; // a dialog owns focus
+    const a = document.activeElement as HTMLElement | null;
+    const keep = a && a.isConnected && a !== document.body && a.closest('aside, .card, input');
+    (keep ? a : document.querySelector<HTMLElement>(ui.card ? '.card .tiptap' : '.tiptap'))?.focus();
+  }
 
   function step(delta: number) {
     const list = groups.ordered();
@@ -108,7 +118,7 @@ import CardPage from './CardPage.svelte';
   }
 </script>
 
-<svelte:window onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={cmdUp}
+<svelte:window onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={cmdUp} onfocus={restoreFocus}
   onmousedowncapture={() => (document.documentElement.dataset.input = 'mouse')}
   onkeydowncapture={() => (document.documentElement.dataset.input = 'keyboard')} />
 

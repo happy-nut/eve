@@ -130,29 +130,23 @@ export const dock = {
   },
 };
 
-/** Summon / dismiss with a short fade. The window is transparent, so fading <body> fades the whole thing. */
-const FADE_MS = 140;
-const html = () => document.documentElement;
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function fadeIn() {
-  // A hidden webview doesn't paint, so we can't fade from 0 unless the page was left at opacity 0
-  // when it was dismissed (fadeOut does that). Otherwise just show — no flash of a wrong frame.
-  const canFade = html().classList.contains('fx-hidden');
+/**
+ * Summon / dismiss. No fade: the page keeps its pixels while hidden, so the window comes back whole —
+ * the traffic lights and the note appearing together instead of the chrome arriving a few frames early.
+ */
+async function show() {
   await invoke<void>('show_window');
-  if (!canFade) return;
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  html().classList.remove('fx-hidden');
+  // the webview can come back with nothing focused; App puts the caret back (window 'focus' alone
+  // is not dependable here — the webview may already hold focus while the app was hidden)
+  window.dispatchEvent(new Event('eve-summon'));
 }
-async function fadeOut() {
-  document.dispatchEvent(new Event('visibilitychange')); // closes tooltips/popovers before the fade
-  html().classList.add('fx-hidden');
-  await wait(FADE_MS);
+async function dismiss() {
+  document.dispatchEvent(new Event('visibilitychange')); // closes tooltips/popovers on the way out
   await invoke<void>('hide_app');
-  // stays at opacity 0 while hidden, so the next summon fades in from nothing
 }
 export const win = {
-  toggle: async () => { if (!isTauri) return; (await invoke<boolean>('is_front')) ? fadeOut() : fadeIn(); },
-  hide: () => (isTauri ? fadeOut() : Promise.resolve()),
+  toggle: async () => { if (!isTauri) return; (await invoke<boolean>('is_front')) ? dismiss() : show(); },
+  hide: () => (isTauri ? dismiss() : Promise.resolve()),
 };
 
 /** Register the global "summon" hotkey. Re-callable: unregisters everything first. */
