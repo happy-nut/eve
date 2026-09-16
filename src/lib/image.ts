@@ -1,6 +1,7 @@
 import Image from '@tiptap/extension-image';
 import { Plugin, PluginKey, NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { assetUrl } from './platform';
+import { nameOf, sizeGrip, widthOf, withWidth } from './resize';
 
 /**
  * Images. Markdown keeps a portable relative path (`assets/x.png`, next to the notes);
@@ -9,6 +10,19 @@ import { assetUrl } from './platform';
  * The caption is the image's alt text, so `![caption](assets/x.png)` is all the markdown needs.
  */
 export const LocalImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      // how wide the writer dragged it, carried in the caption as "caption|540" so the markdown keeps it
+      width: {
+        default: null,
+        parseHTML: (el) => widthOf(el.getAttribute('alt')) ?? (el.getAttribute('width') ? Number(el.getAttribute('width')) : null),
+        renderHTML: (attrs: any) => (attrs.width ? { style: `width:${attrs.width}px` } : {}),
+      },
+      alt: { default: null, parseHTML: (el: HTMLElement) => nameOf(el.getAttribute('alt')) || null },
+    };
+  },
+
   renderHTML({ HTMLAttributes }) {
     return ['img', { ...HTMLAttributes, src: assetUrl(HTMLAttributes.src), draggable: 'false' }];
   },
@@ -19,7 +33,9 @@ export const LocalImage = Image.extend({
         // the stock serializer writes the image inline and never closes the block, so whatever followed
         // it ("끝" right after a picture) was glued onto the same markdown line
         serialize(state: any, node: any) {
-          state.write(`![${state.esc(node.attrs.alt ?? '')}](${state.esc(node.attrs.src ?? '')}${node.attrs.title ? ` "${state.esc(node.attrs.title)}"` : ''})`);
+          // the src is a URL, not text: escaping it would put backslashes into the file name
+          const alt = withWidth(state.esc(node.attrs.alt ?? ''), node.attrs.width);
+          state.write(`![${alt}](${node.attrs.src ?? ''}${node.attrs.title ? ` "${state.esc(node.attrs.title)}"` : ''})`);
           state.closeBlock(node);
         },
       },
@@ -55,6 +71,16 @@ export const LocalImage = Image.extend({
       img.src = assetUrl(node.attrs.src) ?? node.attrs.src;
       img.draggable = false;
       if (node.attrs.alt) img.alt = node.attrs.alt;
+      if (node.attrs.width) img.style.width = `${node.attrs.width}px`;
+
+      /** the dragged width goes onto the node, so it is saved with the note and undoable */
+      const setWidth = (width: number | null) => {
+        const pos = typeof getPos === 'function' ? getPos() : null;
+        if (pos == null) return;
+        const current = editor.state.doc.nodeAt(pos);
+        if (!current) return;
+        editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, width }));
+      };
 
       const cap = document.createElement('figcaption');
       const owns = (target: EventTarget | Node | null) => target === cap || (target instanceof Node && cap.contains(target));
@@ -99,13 +125,14 @@ export const LocalImage = Image.extend({
         editor.commands.focus();
       });
 
-      figure.append(img, cap);
+      figure.append(img, sizeGrip(img, setWidth), cap);
       return {
         dom: figure,
         update: (updated) => {
           if (updated.type !== node.type) return false;
           img.src = assetUrl(updated.attrs.src) ?? updated.attrs.src;
           img.alt = updated.attrs.alt ?? '';
+          img.style.width = updated.attrs.width ? `${updated.attrs.width}px` : '';
           if (document.activeElement !== cap) cap.textContent = updated.attrs.alt ?? '';
           return true;
         },

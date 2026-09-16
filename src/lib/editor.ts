@@ -7,21 +7,33 @@ import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
-import { Plugin, PluginKey, type Command } from '@tiptap/pm/state';
+import { Plugin, PluginKey, Selection, type Command } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
 import type { Node as PMNode } from '@tiptap/pm/model';
+import type { EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
 import { Callout } from './callout';
 import { LocalImage } from './image';
 import { Bookmark, URL_RE } from './bookmark';
 import { Kanban, insertKanban } from './kanban';
 import { CodeBlock } from './code';
+import { Pdf } from './pdf';
+import { Video } from './video';
+import { TableNodes } from './table';
+import { Find } from './find';
+import { Divider } from './divider';
 import { ui } from './ui.svelte';
 import { notes, titleOf } from './notes.svelte';
-import { isCustom, RANDOM_ICONS } from './icons';
-import { pickImage, saveImage } from './platform';
+import { isCustom } from './icons';
+import { pickImage, pickVideo, openUrl } from './platform';
+import { fileMarkdown, isAsset } from './drop';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
+
+/** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
+const MD_SYNTAX = /(\*\*|__|~~|^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|`|\[[^\]]*\]\(|^\|.*\|\s*$)/m;
+/** clipboard HTML that carries formatting of its own, so it is more than a plain-text flavour */
+const RICH_HTML = /<(strong|b|em|i|u|s|a|h[1-6]|ul|ol|li|code|pre|blockquote|img|table|hr)\b/i;
 
 /** list items hold text or an image first, then any block (stock TipTap insists on a paragraph) */
 const LIST_ITEM_CONTENT = '(paragraph|image) block*';
@@ -57,6 +69,73 @@ let suggestionVisible: () => boolean = () => false;
 
 export const getMarkdown = (editor: Editor): string => (editor.storage as any).markdown.getMarkdown();
 
+/**
+ * Move whatever the selection covers one step up or down among its siblings — a line, a list item, a
+ * picture, or a whole dragged-over range. Nothing to swap with at this level (the only paragraph in a
+ * list item, say) means the block one level out moves instead, so ⌥↓ walks an item down the list.
+ *
+ * The neighbour is the one that actually moves: cutting it and putting it back on the other side
+ * leaves the selection where the writer put it, carried along by the transaction's own mapping.
+ */
+function moveBlock(dir: -1 | 1) {
+  return ({ state, dispatch }: { state: any; dispatch?: (tr: any) => void }): boolean => {
+    const { $from, $to } = state.selection;
+    let range = $from.blockRange($to);
+    while (range) {
+      const { parent, startIndex, endIndex, start, end } = range;
+      const i = dir < 0 ? startIndex - 1 : endIndex;
+      if (i >= 0 && i < parent.childCount) {
+        if (dispatch) {
+          const node = parent.child(i);
+          const tr = state.tr;
+          if (dir < 0) {
+            tr.delete(start - node.nodeSize, start);
+            tr.insert(tr.mapping.map(end), node);
+          } else {
+            tr.delete(end, end + node.nodeSize);
+            tr.insert(start, node);
+          }
+          dispatch(tr.scrollIntoView());
+        }
+        return true;
+      }
+      // first / last item of a list: the item itself steps over whatever sits beside the list, instead
+      // of dragging the whole list along
+      if (/List$/.test(parent.type.name)) return hopOutOfList({ state, dispatch }, range, dir);
+      if (range.depth < 1) return false;
+      range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1)); // one level out
+    }
+    return false;
+  };
+}
+
+/** Carry the item out of its list and past the block on the other side, still an item of its own list. */
+function hopOutOfList(
+  { state, dispatch }: { state: any; dispatch?: (tr: any) => void },
+  range: any,
+  dir: -1 | 1,
+): boolean {
+  const { parent, start, end, depth } = range;
+  const $start = state.doc.resolve(start);
+  const listStart = $start.before(depth), listEnd = $start.after(depth);
+  const beside = dir < 0 ? state.doc.resolve(listStart).nodeBefore : state.doc.resolve(listEnd).nodeAfter;
+  if (!beside) return false; // the list is already at the edge: there is nothing to step over
+  const alone = parent.childCount === 1; // the last item leaves no empty list behind
+  const cut = alone ? { from: listStart, to: listEnd } : { from: start, to: end };
+  // measured from the list's own edges: the item has to clear the whole neighbour, not just the list
+  const target = dir < 0 ? listStart - beside.nodeSize : listEnd + beside.nodeSize;
+  if (dispatch) {
+    const moved = alone ? state.doc.slice(listStart, listEnd).content : parent.copy(state.doc.slice(start, end).content);
+    const caretIn = state.selection.from - (alone ? listStart : start - 1); // where the caret sat inside it
+    const tr = state.tr.delete(cut.from, cut.to);
+    const at = tr.mapping.map(target);
+    tr.insert(at, moved);
+    tr.setSelection(Selection.near(tr.doc.resolve(Math.min(at + caretIn, tr.doc.content.size))));
+    dispatch(tr.scrollIntoView());
+  }
+  return true;
+}
+
 /** Editor-scoped actions, by id. Rebindable at runtime (see applyKeymap). */
 function editorCommands(editor: Editor): Record<string, () => boolean> {
   const c = () => editor.chain().focus();
@@ -67,6 +146,8 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
       pickImage().then((src) => src && c().setImage({ src }).run());
       return true;
     },
+    moveBlockUp: () => editor.commands.command(moveBlock(-1)),
+    moveBlockDown: () => editor.commands.command(moveBlock(1)),
     bold: () => c().toggleBold().run(),
     italic: () => c().toggleItalic().run(),
     underline: () => c().toggleUnderline().run(),
@@ -159,7 +240,9 @@ const ICONS = {
   callout: '<circle cx="8" cy="6.6" r="4"/><path d="M6.3 11.6h3.4M6.9 13.6h2.2"/>',
   kanban: '<rect x="2.5" y="3.5" width="3.2" height="9" rx="1"/><rect x="6.4" y="3.5" width="3.2" height="6" rx="1"/><rect x="10.3" y="3.5" width="3.2" height="7.6" rx="1"/>',
   image: '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><circle cx="6" cy="6.8" r="1"/><path d="M3.2 11.8 6.4 8.7l2.3 2.1 2.1-2 2.5 2.8"/>',
+  video: '<rect x="1.5" y="3.5" width="9" height="9" rx="1.5"/><path d="M10.5 7.4l4-2.2v5.6l-4-2.2z"/>',
   wikiLink: '<path d="M6.4 3.5H4.3v9h2.1M11.7 3.5H9.6v9h2.1"/>',
+  table: '<rect x="2.5" y="3.5" width="11" height="9" rx="1"/><path d="M2.5 6.6h11M6.5 6.6v5.9M10 6.6v5.9"/>',
   emoji: '<circle cx="8" cy="8" r="6"/><path d="M5.8 9.4c.6.9 1.3 1.4 2.2 1.4s1.6-.5 2.2-1.4"/><path d="M6.3 6.4h.01M9.7 6.4h.01"/>',
 };
 
@@ -168,7 +251,9 @@ const SLASH: SuggestItem[] = [
   { label: 'New page', hint: '📄 하위 페이지', icon: ICONS.page, run: newPage },
   { label: 'Callout', hint: '💡 highlighted box', icon: ICONS.callout, run: (e) => e.chain().focus().toggleWrap('callout').run() },
   { label: 'Kanban', hint: '칸반 board', icon: ICONS.kanban, run: insertKanban },
+  { label: 'Table', hint: '3×3, with a header row', icon: ICONS.table, run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   { label: 'Image', hint: 'Pick a file', icon: ICONS.image, run: (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); } },
+  { label: 'Video', hint: 'Pick a file', icon: ICONS.video, run: (e) => { pickVideo().then((src) => src && e.chain().focus().insertContent({ type: 'video', attrs: { src, name: src.split('/').pop() } }).run()); } },
   { label: 'Link to note', hint: '[[ another note', icon: ICONS.wikiLink, run: (e) => e.chain().focus().insertContent('[[').run() },
   {
     label: 'Emoji', hint: '😀 pick one', icon: ICONS.emoji,
@@ -200,20 +285,43 @@ function newPage(editor: Editor) {
   editor.chain().focus().insertContent([{ type: 'wikiLink', attrs: { title } }, { type: 'text', text: ' ' }]).run();
   if (parent) notes.flush(parent.id); // creating the page navigates away from this editor
   notes.selectTitle = true;
-  const child = notes.create(`# ${title}\n\n`, parent?.group ?? '', parent?.id);
-  if (parent?.icon) notes.setIcon(child.id, RANDOM_ICONS[Math.floor(Math.random() * RANDOM_ICONS.length)]);
+  notes.create(`# ${title}\n\n`, parent?.group ?? '', parent?.id);
 }
 
-function insertImageFiles(editor: Editor, files?: FileList | null): boolean {
-  const images = [...(files ?? [])].filter((f) => f.type.startsWith('image/'));
-  if (!images.length) return false;
+/**
+ * Attachments pasted or dropped into a note: a picture or a PDF, stored next to the notes (a blob: URL
+ * would die on restart). `at` is the drop point, so a file lands where it was let go, not at the caret.
+ * A markdown/text file is not an attachment — App opens it as a note of its own.
+ */
+function insertFiles(editor: Editor, files?: FileList | null, at?: number): boolean {
+  const take = [...(files ?? [])].filter(isAsset);
+  if (!take.length) return false;
   (async () => {
-    for (const f of images) {
-      const src = await saveImage(f);
-      editor.chain().focus().setImage({ src }).run();
+    let pos = at;
+    for (const f of take) {
+      const md = await fileMarkdown(f);
+      if (md === null) continue;
+      const content = (editor.storage as any).markdown.parser.parse(md);
+      const chain = editor.chain().focus();
+      (pos === undefined ? chain.insertContent(content) : chain.insertContentAt(pos, content)).run();
+      if (pos !== undefined) pos = editor.state.selection.to; // the next file follows this one
     }
   })();
   return true;
+}
+
+/**
+ * Where a dropped file belongs: between blocks, on the side of the line the pointer is nearer to.
+ * The raw coordinate would land mid-word and split the heading it was dropped on.
+ */
+function dropBlock(view: EditorView, event: DragEvent): number | undefined {
+  const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+  if (!at) return undefined;
+  const $pos = view.state.doc.resolve(at.pos);
+  if ($pos.depth < 1) return at.pos;
+  const before = $pos.before(1);
+  const box = (view.nodeDOM(before) as HTMLElement | null)?.getBoundingClientRect?.();
+  return box && event.clientY < box.top + box.height / 2 ? before : $pos.after(1);
 }
 
 export function createEditor(opts: {
@@ -234,14 +342,39 @@ export function createEditor(opts: {
       attributes: { class: 'prose', spellcheck: 'true' },
       // images pasted or dropped in are stored as files (blob: URLs would die on restart)
       handlePaste: (view, event): boolean => {
-        if (insertImageFiles(editor, event.clipboardData?.files)) return true;
+        if (insertFiles(editor, event.clipboardData?.files)) return true;
         // a URL pasted over selected text links that text instead of replacing it (a bare URL on its own
         // line still becomes a bookmark card — that is the empty-selection case, further down the chain)
-        const text = event.clipboardData?.getData('text/plain').trim() ?? '';
+        const raw = event.clipboardData?.getData('text/plain') ?? '';
+        const text = raw.trim();
         if (URL_RE.test(text) && !view.state.selection.empty) return editor.chain().focus().setLink({ href: text }).run();
+        // markdown copied from a chat or a terminal comes as plain text that happens to carry HTML of the
+        // same characters; render it instead of pasting the ** and # in literally. Real formatting wins.
+        const html = event.clipboardData?.getData('text/html') ?? '';
+        if (text && MD_SYNTAX.test(text) && !RICH_HTML.test(html) && !editor.isActive('codeBlock')) {
+          const parsed = (editor.storage as any).markdown.parser.parse(raw);
+          return editor.chain().focus().insertContent(parsed).run();
+        }
         return false;
       },
-      handleDrop: (_view, event): boolean => insertImageFiles(editor, event.dataTransfer?.files),
+      // links open in the browser: the editor's own webview must not navigate away from the app
+      handleDOMEvents: {
+        click: (_view, event) => {
+          const a = (event.target as HTMLElement | null)?.closest?.('a[href]');
+          if (!a || a.closest('.bookmark')) return false; // the bookmark card opens itself
+          event.preventDefault();
+          void openUrl(a.getAttribute('href') ?? '');
+          return true;
+        },
+      },
+      // a file dragged in from Finder lands at the drop point. Even one we have no use for is swallowed:
+      // the webview's own drop pastes DOM straight into the editor, which then takes no keystroke at all.
+      handleDrop: (view, event): boolean => {
+        const files = event.dataTransfer?.files;
+        if (!files?.length) return false;
+        insertFiles(editor, files, dropBlock(view, event));
+        return true;
+      },
     },
     onCreate: ({ editor }) => {
       if (opts.cursor !== undefined) editor.commands.setTextSelection(Math.min(opts.cursor, editor.state.doc.content.size));
@@ -254,11 +387,17 @@ export function createEditor(opts: {
         heading: { levels: [1, 2, 3, 4, 5] },
         link: { openOnClick: false, autolink: true },
         codeBlock: false, // replaced below: syntax highlighting + a language chip
+        horizontalRule: false, // replaced below: no divider inside a list, and the caret can reach it
       }),
       // An image pasted onto an empty list item takes that line. Stock list items are `paragraph block*`, so
       // the image could only go *after* the item's paragraph and the empty line stayed above it.
       BlankLine,
       CodeBlock,
+      Pdf,
+      Video,
+      ...TableNodes,
+      Divider,
+      Find,
       ListItem.extend({ content: LIST_ITEM_CONTENT }),
       // Notion-style numbering: typing "1. " (any number) directly after a numbered list joins it and
       // continues the count. Stock TipTap only joins when the typed number is the next one.
@@ -267,12 +406,12 @@ export function createEditor(opts: {
           return [wrappingInputRule({ find: /^(\d+)\.\s$/, type: this.type, getAttributes: (m) => ({ start: +m[1] }), joinPredicate: (_m, node) => !node.attrs.type || node.attrs.type === '1' })];
         },
       }),
-      // Two numbered lists that end up touching (a blank line between them deleted, a paragraph
-      // between them turned into an item, …) become one list, so the count carries on instead of restarting at 1.
+      // Two lists that end up touching (a blank line between them deleted, a paragraph between them
+      // turned into an item, an item moved out with ⌥↓, …) become one list — markdown has no way to
+      // keep them apart anyway, and a numbered count carries on instead of restarting at 1.
       Extension.create({
-        name: 'joinOrderedLists',
+        name: 'joinLists',
         addProseMirrorPlugins() {
-          const ol = this.editor.schema.nodes.orderedList;
           return [new Plugin({
             appendTransaction(trs, _old, state) {
               if (!trs.some((t) => t.docChanged)) return null;
@@ -280,7 +419,8 @@ export function createEditor(opts: {
               const scan = (node: PMNode, start: number) => {
                 let prev: PMNode | null = null;
                 node.forEach((child, offset) => {
-                  if (prev?.type === ol && child.type === ol && prev.attrs.type === child.attrs.type) at.push(start + offset);
+                  const same = prev?.type === child.type && /List$/.test(child.type.name);
+                  if (same && prev!.attrs.type === child.attrs.type) at.push(start + offset);
                   prev = child;
                   scan(child, start + offset + 1);
                 });

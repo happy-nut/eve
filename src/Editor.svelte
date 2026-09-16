@@ -4,10 +4,12 @@
   import { createEditor, applyKeymap, getMarkdown } from './lib/editor';
   import { notes, titleOf, type Note } from './lib/notes.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
-  import { ui } from './lib/ui.svelte';
+  import { ui, hooks } from './lib/ui.svelte';
   import Icon from './Icon.svelte';
   import Suggest from './Suggest.svelte';
   import Outline from './Outline.svelte';
+  import TableTools from './TableTools.svelte';
+  import Find from './Find.svelte';
   import { RANDOM_ICONS } from './lib/icons';
 
   let { note }: { note: Note } = $props();
@@ -31,6 +33,16 @@
       cursor: notes.cursor.get(note.id),
     });
     if (import.meta.env.DEV) (window as any).__editor = editor;
+    // a file dropped outside the note (the sidebar, the margins) still attaches to the open one
+    // an attachment joins the note as its own block, never glued onto the last sentence
+    hooks.attach = (md) => {
+      const e = editor!;
+      const content = (e.storage as any).markdown.parser.parse(md);
+      const last = e.state.doc.lastChild;
+      const chain = e.chain().focus('end');
+      (last && last.content.size ? chain.splitBlock() : chain).insertContent(content).run();
+    };
+    hooks.noteHtml = () => editor?.getHTML() ?? '';
     if (notes.selectTitle) {
       // a brand-new page: its placeholder title is selected, so typing renames it right away
       notes.selectTitle = false;
@@ -38,6 +50,8 @@
       editor.commands.focus();
     } else if (ui.focusOwner !== 'sidebar') editor?.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
     return () => {
+      hooks.attach = undefined;
+      hooks.noteHtml = undefined;
       if (editor) notes.cursor.set(id, editor.state.selection.from);
       editor?.destroy();
       // Svelte runs teardown with pre-update state visible, so a flush here would persist stale data
@@ -64,24 +78,24 @@
 </script>
 
 <div class="scroll" bind:this={scrollEl}>
-  {#if !note.path}
-    <div class="page-head" class:with-icon={!!note.icon}>
-      {#if note.icon}
-        <button class="big-icon" title="아이콘 변경" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={56} /></button>
-      {:else}
-        <button class="add-icon" onclick={() => notes.setIcon(note.id, RANDOM_ICONS[Math.floor(Math.random() * RANDOM_ICONS.length)])}>
-          <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 9.5c.6.9 1.5 1.5 2.5 1.5s1.9-.6 2.5-1.5M6 6.5h.01M10 6.5h.01"/></svg>
-          아이콘 추가
-        </button>
-      {/if}
-    </div>
-  {/if}
+  <div class="page-head" class:with-icon={!!note.icon}>
+    {#if note.icon}
+      <button class="big-icon" title="아이콘 변경" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={56} /></button>
+    {:else}
+      <button class="add-icon" onclick={() => notes.setIcon(note.id, RANDOM_ICONS[Math.floor(Math.random() * RANDOM_ICONS.length)])}>
+        <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 9.5c.6.9 1.5 1.5 2.5 1.5s1.9-.6 2.5-1.5M6 6.5h.01M10 6.5h.01"/></svg>
+        아이콘 추가
+      </button>
+    {/if}
+  </div>
   <!-- Tab indents a list (the editor marks those handled); anywhere else it must not walk focus out of the editor -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="editor" class:has-head={!note.path} bind:this={el}
+  <div class="editor has-head" bind:this={el}
     onkeydown={(e) => { if (e.key === 'Tab' && !e.defaultPrevented) e.preventDefault(); }}></div>
 </div>
 <Outline {scrollEl} {editor} />
+<TableTools {editor} />
+{#if ui.find}<Find {editor} />{/if}
 
 <Suggest bind:this={suggest} />
 

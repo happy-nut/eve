@@ -3,7 +3,7 @@
   import { fade, scale } from 'svelte/transition';
   import { shortcuts, eventToKeys, type Scope } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
-  import { storage, autostart, dock, isTauri } from './lib/platform';
+  import { storage, autostart, dock, defaultApp, isTauri } from './lib/platform';
   import { ui } from './lib/ui.svelte';
   import { appearance, FONTS, THEMES, type Theme } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
@@ -15,7 +15,23 @@
   let tab = $state<'shortcuts' | 'appearance' | 'sync'>('shortcuts');
   let notesPath = $state('');
   let launchAtLogin = $state(false);
-  onMount(() => { storage.path().then((p) => (notesPath = p)); autostart.get().then((v) => (launchAtLogin = v)); });
+  let opensMarkdown = $state(false);
+  let defaultAppError = $state<string | null>(null);
+  onMount(() => {
+    storage.path().then((p) => (notesPath = p));
+    autostart.get().then((v) => (launchAtLogin = v));
+    defaultApp.get().then((v) => (opensMarkdown = v));
+  });
+  async function claimMarkdown(on: boolean) {
+    defaultAppError = null;
+    try {
+      await defaultApp.set(on);
+      opensMarkdown = await defaultApp.get(); // LaunchServices decides; show what it settled on
+    } catch (err) {
+      defaultAppError = String(err);
+      opensMarkdown = await defaultApp.get();
+    }
+  }
 
   const groups: { scope: Scope; label: string }[] = [
     { scope: 'global', label: 'System-wide' },
@@ -92,6 +108,23 @@
           </select>
         </label>
       </div>
+      <h3>Window</h3>
+      <div class="card">
+        <label class="row">
+          <span class="label">Close sidebar when you start writing <span class="sub">typing or arrowing in the editor folds the list away</span></span>
+          <input type="checkbox" class="switch" checked={appearance.s.hideSidebarOnEdit}
+            onchange={(e) => appearance.set({ hideSidebarOnEdit: e.currentTarget.checked })} />
+        </label>
+        <label class="row">
+          <span class="label">Give new notes an icon <span class="sub">a random one on every new or imported note; you can always change it</span></span>
+          <input type="checkbox" class="switch" checked={appearance.s.autoIcon}
+            onchange={(e) => appearance.set({ autoIcon: e.currentTarget.checked })} />
+        </label>
+        <label class="row">
+          <span class="label">Hide from Dock and ⌘Tab <span class="sub">like Raycast: only the hotkey and Finder open it</span></span>
+          <input type="checkbox" class="switch" checked={dock.hidden} disabled={!isTauri} onchange={(e) => dock.set(e.currentTarget.checked)} />
+        </label>
+      </div>
       <h3>Typeface</h3>
       <div class="card">
         <label class="row">
@@ -164,9 +197,11 @@
             onchange={(e) => { launchAtLogin = e.currentTarget.checked; autostart.set(launchAtLogin); }} />
         </label>
         <label class="row">
-          <span class="label">Hide from Dock and ⌘Tab <span class="sub">like Raycast: only the hotkey and Finder open it</span></span>
-          <input type="checkbox" class="switch" checked={dock.hidden} disabled={!isTauri} onchange={(e) => dock.set(e.currentTarget.checked)} />
+          <span class="label">Open .md files <span class="sub">double-clicking a markdown or text file in Finder opens it here</span></span>
+          <input type="checkbox" class="switch" checked={opensMarkdown} disabled={!isTauri}
+            onchange={(e) => claimMarkdown(e.currentTarget.checked)} />
         </label>
+        {#if defaultAppError}<p class="alert">{defaultAppError}</p>{/if}
       </div>
 
       <h3>Storage</h3>

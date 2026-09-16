@@ -83,7 +83,7 @@ class Sync {
     const repo = new Repo(this.settings);
     try {
       await syncRound(repo, async () => {
-        const out: LocalFile[] = notes.all.filter((n) => !n.path).map((n) => ({ path: `notes/${n.id}.md`, data: enc.encode(serialize(n)) }));
+        const out: LocalFile[] = notes.all.map((n) => ({ path: `notes/${n.id}.md`, data: enc.encode(serialize(n)) }));
         // images never change once written, so only unknown names need reading
         for (const name of await assets.list()) if (!(ASSETS + name in repo.s.known)) out.push({ path: ASSETS + name, data: await assets.read(name) });
         return out;

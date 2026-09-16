@@ -49,7 +49,10 @@ fn assets_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-const IMAGE_EXTS: [&str; 7] = ["png", "jpg", "jpeg", "gif", "webp", "svg", "heic"];
+/// What may live in notes/assets: pictures, videos, and PDFs dropped into a note.
+const ASSET_EXTS: [&str; 12] = [
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "heic", "pdf", "mp4", "mov", "m4v", "webm",
+];
 
 fn safe_name(name: &str) -> Result<(), String> {
     let ok = !name.is_empty()
@@ -80,7 +83,7 @@ fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
     fs::rename(tmp, path).map_err(|e| e.to_string())
 }
 
-/// Copy an image picked by the user into notes/assets and return its note-relative path.
+/// Copy a file picked by the user into notes/assets and return its note-relative path.
 #[tauri::command]
 fn import_asset(app: AppHandle, src: String) -> Result<String, String> {
     let src = PathBuf::from(src);
@@ -88,14 +91,14 @@ fn import_asset(app: AppHandle, src: String) -> Result<String, String> {
         .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase())
-        .filter(|e| IMAGE_EXTS.contains(&e.as_str()))
-        .ok_or("unsupported image type")?;
+        .filter(|e| ASSET_EXTS.contains(&e.as_str()))
+        .ok_or("unsupported file type")?;
     let name = stamp_name(&ext);
     fs::copy(&src, assets_dir(&app)?.join(&name)).map_err(|e| e.to_string())?;
     Ok(format!("assets/{name}"))
 }
 
-/// Image bytes from the clipboard / a drop, saved into notes/assets. Body = raw bytes, header x-ext = extension.
+/// File bytes from the clipboard / a drop, saved into notes/assets. Body = raw bytes, header x-ext = extension.
 #[tauri::command]
 fn save_asset(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<String, String> {
     let ext = request
@@ -104,12 +107,46 @@ fn save_asset(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<String
         .and_then(|v| v.to_str().ok())
         .unwrap_or("png")
         .to_ascii_lowercase();
-    if !IMAGE_EXTS.contains(&ext.as_str()) {
-        return Err("unsupported image type".into());
+    if !ASSET_EXTS.contains(&ext.as_str()) {
+        return Err("unsupported file type".into());
     }
     let name = stamp_name(&ext);
     fs::write(assets_dir(&app)?.join(&name), raw_body(&request)?).map_err(|e| e.to_string())?;
     Ok(format!("assets/{name}"))
+}
+
+/// First page of a stored PDF as a PNG, for the card in a note. Rendered by Quick Look (the same
+/// picture Finder shows) and cached, so a note full of PDFs costs one render each, once.
+/// ponytail: runs qlmanage on the async runtime; if a huge PDF ever makes that felt, move it to
+/// spawn_blocking.
+#[tauri::command]
+async fn pdf_thumb(app: AppHandle, name: String) -> Result<tauri::ipc::Response, String> {
+    safe_name(&name)?;
+    let src = assets_dir(&app)?.join(&name);
+    if !src.is_file() {
+        return Err("no such asset".into());
+    }
+    let dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("thumbs");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let png = dir.join(format!("{name}.png")); // qlmanage names it after the whole file name
+    if !png.is_file() {
+        let out = std::process::Command::new("/usr/bin/qlmanage")
+            .args(["-t", "-s", "320", "-o"])
+            .arg(&dir)
+            .arg(&src)
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !png.is_file() {
+            return Err(format!("no thumbnail: {}", String::from_utf8_lossy(&out.stderr)));
+        }
+    }
+    Ok(tauri::ipc::Response::new(
+        fs::read(&png).map_err(|e| e.to_string())?,
+    ))
 }
 
 // ---- sync: the assets folder as a list of immutable named blobs -------------
@@ -181,6 +218,23 @@ async fn open_url(url: String) -> Result<(), String> {
     if ok { Ok(()) } else { Err("could not open the browser".into()) }
 }
 
+/// Hand a stored asset to whatever app owns it (Preview, for a PDF). The asset protocol URL the
+/// webview renders means nothing to the rest of the system, so the file itself is opened by path.
+#[tauri::command]
+async fn open_asset(app: AppHandle, name: String) -> Result<(), String> {
+    safe_name(&name)?;
+    let path = assets_dir(&app)?.join(&name);
+    if !path.is_file() {
+        return Err("no such asset".into());
+    }
+    let ok = std::process::Command::new("open")
+        .arg(&path)
+        .status()
+        .map_err(|e| e.to_string())?
+        .success();
+    if ok { Ok(()) } else { Err("could not open the file".into()) }
+}
+
 /// Page HTML for link previews (og:* tags). curl keeps the webview's cookies and CORS out of it; the
 /// body is cut at 300k chars, plenty for <head>.
 #[tauri::command]
@@ -212,6 +266,62 @@ fn read_file(path: String) -> Result<String, String> {
 #[tauri::command]
 fn write_file(path: String, text: String) -> Result<(), String> {
     fs::write(path, text).map_err(|e| e.to_string())
+}
+
+/// Open the system print panel for the window — "Save as PDF" in it is the app's PDF export.
+#[tauri::command]
+fn print_page(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.print().map_err(|e| e.to_string())
+}
+
+/// A standalone HTML page rendered to a PNG, by the same Quick Look that draws a PDF's first page.
+/// Used to export a note as a picture; `out` is where the user asked for it.
+#[tauri::command]
+async fn html_to_png(app: AppHandle, html: String, out: String) -> Result<(), String> {
+    let dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("export");
+    let _ = fs::remove_dir_all(&dir); // one export at a time; qlmanage names the file after the source
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let src = dir.join("note.html");
+    fs::write(&src, html).map_err(|e| e.to_string())?;
+    let res = std::process::Command::new("/usr/bin/qlmanage")
+        .args(["-t", "-s", "1600", "-o"])
+        .arg(&dir)
+        .arg(&src)
+        .output()
+        .map_err(|e| e.to_string())?;
+    let png = dir.join("note.html.png");
+    if !png.is_file() {
+        return Err(format!("could not render: {}", String::from_utf8_lossy(&res.stderr)));
+    }
+    fs::copy(&png, &out).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Every file under a picked folder, as paths relative to it (hidden files skipped).
+#[tauri::command]
+fn list_folder(root: String) -> Result<Vec<String>, String> {
+    let root = PathBuf::from(&root);
+    let mut out = Vec::new();
+    let mut stack = vec![root.clone()];
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(&dir).map_err(|e| e.to_string())? {
+            let path = entry.map_err(|e| e.to_string())?.path();
+            if path.file_name().and_then(|n| n.to_str()).is_none_or(|n| n.starts_with('.')) {
+                continue;
+            }
+            if path.is_dir() {
+                stack.push(path);
+            } else if let Ok(rel) = path.strip_prefix(&root) {
+                out.push(rel.to_string_lossy().into_owned());
+            }
+        }
+    }
+    out.sort();
+    Ok(out)
 }
 
 #[tauri::command]
@@ -271,6 +381,90 @@ fn set_dock_hidden(app: AppHandle, hidden: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// Whether macOS opens .md files with this app, and the switch that claims them.
+///
+/// LaunchServices keeps one handler per content type; `duti` and friends are just wrappers around
+/// these two calls, so the app makes them itself.
+#[cfg(target_os = "macos")]
+mod default_app {
+    use core_foundation::base::{CFRelease, TCFType};
+    use core_foundation::string::{CFString, CFStringRef};
+
+    // .md / .markdown, and the plain-text family a .txt falls into
+    pub const TYPES: [&str; 2] = ["net.daringfireball.markdown", "public.plain-text"];
+    const ALL_ROLES: u32 = 0xFFFF_FFFF;
+
+    #[link(name = "CoreServices", kind = "framework")]
+    unsafe extern "C" {
+        fn LSCopyDefaultRoleHandlerForContentType(content_type: CFStringRef, role: u32) -> CFStringRef;
+        fn LSSetDefaultRoleHandlerForContentType(content_type: CFStringRef, role: u32, handler: CFStringRef) -> i32;
+    }
+
+    pub fn handler(content_type: &str) -> Option<String> {
+        let ty = CFString::new(content_type);
+        unsafe {
+            let raw = LSCopyDefaultRoleHandlerForContentType(ty.as_concrete_TypeRef(), ALL_ROLES);
+            if raw.is_null() {
+                return None;
+            }
+            let id = CFString::wrap_under_get_rule(raw).to_string();
+            CFRelease(raw as *const _);
+            Some(id)
+        }
+    }
+
+    pub fn set(content_type: &str, bundle_id: &str) -> Result<(), String> {
+        let ty = CFString::new(content_type);
+        let handler = CFString::new(bundle_id);
+        let status = unsafe {
+            LSSetDefaultRoleHandlerForContentType(ty.as_concrete_TypeRef(), ALL_ROLES, handler.as_concrete_TypeRef())
+        };
+        if status == 0 { Ok(()) } else { Err(format!("LaunchServices refused ({status})")) }
+    }
+}
+
+/// Is this app what macOS opens a .md with?
+#[tauri::command]
+fn is_default_for_markdown(app: AppHandle) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        let me = app.config().identifier.to_lowercase();
+        return default_app::TYPES
+            .iter()
+            .all(|t| default_app::handler(t).map(|h| h.to_lowercase() == me).unwrap_or(false));
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        false
+    }
+}
+
+/// Claim (or hand back) .md and .txt. Handing back picks TextEdit, the system's own editor.
+#[tauri::command]
+fn set_default_for_markdown(app: AppHandle, on: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let id = if on { app.config().identifier.clone() } else { "com.apple.TextEdit".to_string() };
+        for t in default_app::TYPES {
+            default_app::set(t, &id)?;
+        }
+        return Ok(());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, on);
+        Err("macOS only".into())
+    }
+}
+
+/// Keep the window above other apps (⌘⇧P). Notes stay readable while you work in another window.
+#[tauri::command]
+fn set_always_on_top(app: AppHandle, on: bool) -> Result<(), String> {
+    let win = app.get_webview_window("main").ok_or("no window")?;
+    win.set_always_on_top(on).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -283,21 +477,29 @@ pub fn run() {
             write_note,
             import_asset,
             save_asset,
+            pdf_thumb,
             list_assets,
             read_asset,
             write_asset,
             github_post,
             open_url,
+            open_asset,
             fetch_url,
             read_file,
             write_file,
+            print_page,
+            html_to_png,
+            list_folder,
             take_pending_files,
             notes_path,
             toggle_window,
             is_front,
             show_window,
             hide_app,
-            set_dock_hidden
+            set_dock_hidden,
+            is_default_for_markdown,
+            set_default_for_markdown,
+            set_always_on_top
         ])
         .on_window_event(|window, event| {
             // Closing the window keeps the app alive so the global hotkey still works.

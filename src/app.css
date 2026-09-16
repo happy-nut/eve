@@ -22,8 +22,9 @@
   --hl-num: light-dark(#6d4bd3, #b39dff); /* numbers, literals, symbols */
   --hl-fn: light-dark(#1b44b8, #9fb9ff); /* function and class names */
   --hl-var: light-dark(#a84b1f, #e5a06b); /* attributes, properties, variables */
-  --tip-bg: light-dark(#2b2e35, #e8eaee);
-  --tip-fg: light-dark(#f2f3f5, #1a1c22);
+  /* tooltips sit on the same grey as a callout or a code block (opaque, so they read over anything) */
+  --tip-bg: light-dark(#f3f3f4, #1c1d21);
+  --tip-fg: var(--fg);
   color-scheme: light dark; /* follows the system; Settings -> Appearance -> Theme pins one */
 }
 :root[data-theme='light'] { color-scheme: light; }
@@ -49,6 +50,7 @@ button.icon {
   transition: background 0.12s, color 0.12s, transform 0.12s;
 }
 button.icon:hover { background: var(--bg-hover); color: var(--fg); }
+button.icon.on { color: var(--accent); background: var(--accent-soft); } /* a toggle that is on (window pinned) */
 /* icon buttons show keyboard focus as a tinted pill, like hover, not a ring that gets clipped by their containers */
 button.icon:focus-visible { outline: none; background: var(--accent-soft); color: var(--fg); }
 button.icon:active { transform: scale(0.9); }
@@ -67,6 +69,12 @@ button.icon:active { transform: scale(0.9); }
 .toolbar svg { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .toolbar .icon:disabled { opacity: 0.3; pointer-events: none; }
 main { flex: 1; min-width: 0; position: relative; }
+/* the toolbar floats over the note (and with the sidebar closed it sits right on the text): a fade to
+   the page colour keeps lines from running into the icons as they scroll past */
+main::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 72px; z-index: 4; pointer-events: none;
+  background: linear-gradient(to bottom, var(--bg) 38%, rgba(0, 0, 0, 0) 100%);
+}
 /* where is the keyboard? a blue edge flashes on the pane that just took focus, then fades out —
    only when focus moved by keyboard; a mouse click already shows where you are */
 html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main:focus-within { animation: focus-in 0.7s ease-out; }
@@ -169,6 +177,11 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
 .tiptap .hljs-emphasis { font-style: italic; }
 .tiptap .hljs-strong { font-weight: 700; }
 .tiptap hr { border: 0; border-top: 1px solid var(--line); margin: 1.2em 0; }
+/* the caret cannot sit on a line with no text in it, so a divider the arrows landed on says so itself */
+.tiptap hr.ProseMirror-selectednode {
+  border-top-color: var(--accent); box-shadow: var(--glow);
+  outline: 6px solid var(--accent-soft); outline-offset: -1px; border-radius: 1px;
+}
 .tiptap a { color: var(--accent); text-decoration: none; }
 .tiptap a:hover { text-decoration: underline; }
 /* a link to another note reads as text with the note's icon and an underline — no pill, so nothing
@@ -191,9 +204,11 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
    beside a block narrower than its container, which the clip above makes every text block. That is what turned a
    drag across blocks into full-width bars (Chromium paints no gaps, so the browser preview never showed them).
    A block that only holds other blocks paints nothing, so only the text reads as selected. */
+html::selection, body::selection, .scroll::selection, .editor::selection,
 .tiptap::selection, .tiptap ul::selection, .tiptap ol::selection, .tiptap li::selection, .tiptap li > div::selection,
 .tiptap label::selection, .tiptap label *::selection, .tiptap blockquote::selection, .tiptap .callout::selection,
-.tiptap .callout-body::selection, .tiptap .callout-emoji::selection { background: transparent; }
+.tiptap .callout-body::selection, .tiptap .callout-emoji::selection, .tiptap .code-block::selection,
+.tiptap .img-fig::selection { background: transparent; }
 /* Only the callout icon opts out of selection. The checkbox must not: user-select: none on the label made
    WebKit put the insertion point *outside* the item whenever the last task item was empty, so typing there
    deleted the item and prepended the text to the block below. The ::selection rules above already keep the
@@ -203,7 +218,7 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
 /* callout */
 .tiptap .callout {
   display: flex; gap: 10px; align-items: flex-start;
-  background: var(--accent-soft); border-radius: 8px; padding: 12px 14px; margin: 0.6em 0;
+  background: var(--code-bg); border-radius: 8px; padding: 12px 14px; margin: 0.6em 0; /* same grey as a code block */
 }
 .tiptap .callout-emoji { font-size: 1.15em; line-height: 1.5; cursor: pointer; user-select: none; }
 .tiptap .callout-emoji svg { width: 1.2em; height: 1.2em; vertical-align: -0.2em; }
@@ -221,9 +236,47 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
 .tiptap .bm-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tiptap .bm-desc { color: var(--fg-dim); font-size: 0.88em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tiptap .bm-site { display: flex; align-items: center; gap: 6px; color: var(--fg-dim); font-size: 0.82em; margin-top: auto; }
+.tiptap .bm-url { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tiptap .bookmark img { margin: 0; }
 .tiptap .bm-ico { width: 14px; height: 14px; border-radius: 3px; }
 .tiptap .bm-thumb { flex: none; width: 104px; height: 68px; object-fit: cover; border-radius: 6px; }
+/* video: plays in place, same frame as a picture */
+.tiptap .vid-fig { margin: 0.6em 0; width: fit-content; max-width: 100%; position: relative; }
+.tiptap .vid-fig video { display: block; max-width: 100%; border-radius: 8px; background: #000; }
+.tiptap .vid-fig.ProseMirror-selectednode video { outline: 2px solid var(--accent); box-shadow: var(--glow); }
+
+/* the width grip on a picture or a video: a bar on the right edge, only while the mouse is near */
+.tiptap .img-fig, .tiptap .vid-fig { position: relative; }
+.tiptap .size-grip {
+  position: absolute; top: 0; right: -3px; width: 12px; height: 100%; cursor: col-resize;
+  display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.12s;
+}
+.tiptap .size-grip::after {
+  content: ''; width: 4px; height: min(42px, 40%); border-radius: 2px;
+  background: var(--fg); opacity: 0.55; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+.tiptap .img-fig:hover .size-grip, .tiptap .vid-fig:hover .size-grip { opacity: 1; }
+/* the caption sits under the picture, so the grip only spans the media itself */
+.tiptap .img-fig .size-grip { height: auto; top: 0; bottom: 22px; }
+
+/* tables: flat grid, header row tinted; a wide one scrolls inside the note instead of stretching it */
+.tiptap .tableWrapper { overflow-x: auto; margin: 0.7em 0; scrollbar-width: none; }
+.tiptap .tableWrapper::-webkit-scrollbar { display: none; }
+.tiptap table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 0.95em; }
+.tiptap th, .tiptap td { border: 1px solid var(--line); padding: 6px 9px; vertical-align: top; position: relative; min-width: 3em; }
+.tiptap th { background: var(--bg-input); font-weight: 600; text-align: left; }
+.tiptap th > p, .tiptap td > p { margin: 0; }
+.tiptap .selectedCell::after {
+  content: ''; position: absolute; inset: 0; background: var(--accent-soft); pointer-events: none;
+}
+/* the drag handle between two columns */
+.tiptap .column-resize-handle {
+  position: absolute; right: -2px; top: 0; bottom: 0; width: 4px; background: var(--accent); pointer-events: none;
+}
+.tiptap.resize-cursor { cursor: col-resize; }
+/* find: every match tinted, the one in view stronger */
+.tiptap .find-hit { background: light-dark(rgba(255, 214, 0, 0.35), rgba(255, 214, 0, 0.25)); border-radius: 2px; }
+.tiptap .find-hit.current { background: light-dark(rgba(255, 176, 0, 0.75), rgba(255, 196, 0, 0.5)); }
 /* image */
 .tiptap img { max-width: 100%; border-radius: 8px; display: block; margin: 0.6em 0; }
 .tiptap img.ProseMirror-selectednode { outline: 2px solid var(--accent); box-shadow: var(--glow); }
@@ -235,9 +288,14 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
   margin-top: 5px; text-align: center; font-size: 0.85em; color: var(--fg-dim); outline: none;
   border-radius: 4px; padding: 1px 4px;
 }
-.tiptap .img-cap:empty { display: none; } /* no caption, no empty line under the picture … */
-.tiptap .img-fig.ProseMirror-selectednode .img-cap:empty, .tiptap .img-fig:hover .img-cap:empty { display: block; }
-.tiptap .img-cap:empty::before { content: attr(data-placeholder); color: var(--fg-dim); opacity: 0.6; } /* … until you go looking for it */
+/* an empty caption keeps its line: the picture and everything under it must not jump when the mouse
+   passes over. Only the placeholder text fades in. */
+.tiptap .img-cap:empty::before {
+  content: attr(data-placeholder); color: var(--fg-dim); opacity: 0; transition: opacity 0.12s;
+}
+.tiptap .img-fig:hover .img-cap:empty::before,
+.tiptap .img-fig.ProseMirror-selectednode .img-cap:empty::before,
+.tiptap .img-cap:focus:empty::before { opacity: 0.6; }
 .tiptap .img-cap:focus { background: var(--bg-input); }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; } /* height, or a sideways bar keeps WebKit's chunky default */
@@ -249,3 +307,52 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
 .tiptap .code-block pre::-webkit-scrollbar-track { background: transparent; }
 .tiptap .code-block pre::-webkit-scrollbar-thumb { background: var(--line); }
 .tiptap .code-block pre::-webkit-scrollbar-thumb:hover { background: var(--fg-dim); }
+
+/* ---- a file dragged in from Finder: where it would land ---- */
+.drop-hint {
+  position: fixed; inset: 0; z-index: 45; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; box-shadow: inset 0 0 0 2px var(--accent), inset 0 0 60px var(--accent-soft);
+}
+.drop-pill {
+  background: var(--tip-bg); color: var(--tip-fg); font-size: 12.5px; font-weight: 500;
+  padding: 7px 14px; border-radius: 999px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+
+/* ---- PDF card: a dropped PDF inside a note (the page arrives when it scrolls into view) ---- */
+.tiptap .pdf-card {
+  display: flex; align-items: center; gap: 14px; margin: 0.6em 0; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 8px; cursor: default;
+  transition: background 0.12s, box-shadow 0.2s;
+}
+.tiptap .pdf-card:hover { background: var(--bg-hover); }
+.tiptap .pdf-card.ProseMirror-selectednode { outline: 2px solid var(--accent); box-shadow: var(--glow); }
+.tiptap .pdf-thumb {
+  flex: none; position: relative; width: 62px; height: 80px; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 5px; background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+}
+.tiptap .pdf-thumb svg { width: 30px; height: 30px; fill: none; stroke: var(--fg-dim); stroke-width: 1.2; stroke-linejoin: round; }
+.tiptap .pdf-thumb svg text { font-size: 5px; fill: var(--fg-dim); stroke: none; letter-spacing: 0.3px; }
+/* the real first page, once it has been rendered, covers the glyph */
+.tiptap .pdf-page { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; border-radius: 0; object-fit: cover; object-position: top center; background: var(--bg); }
+.tiptap .pdf-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 0.9em; line-height: 1.35; }
+.tiptap .pdf-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tiptap .pdf-sub { color: var(--fg-dim); font-size: 0.82em; white-space: nowrap; }
+
+/* ---- printing (Export as PDF goes through the system print panel) ---- */
+@media print {
+  html, body, #app { height: auto; overflow: visible; background: #fff; border-radius: 0; }
+  .shell { display: block; animation: none; }
+  /* only the note is printed: no window chrome, no floating anything */
+  aside, .toolbar, .dragbar, .drop-hint, .pdf-panel, .tip, .plus-menu, .backdrop { display: none !important; }
+  main { position: static; }
+  .page { position: static; }
+  .scroll { height: auto; overflow: visible; }
+  .editor .tiptap { max-width: none; padding: 0; min-height: 0; }
+  .editor.has-head .tiptap { min-height: 0; }
+  .page-head { display: none; }
+  /* a card or a picture must not be split across two sheets */
+  .tiptap img, .tiptap .pdf-card, .tiptap .bookmark, .tiptap pre, .tiptap blockquote, .tiptap .callout { break-inside: avoid; }
+  .tiptap h1, .tiptap h2, .tiptap h3 { break-after: avoid; }
+}

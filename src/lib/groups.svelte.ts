@@ -44,7 +44,7 @@ class Groups {
   subtree(p: string) { return this.names.filter((g) => within(g, p)); }
   /** height of a group's subtree (itself = 1) */
   height(p: string) { return Math.max(...this.subtree(p).map(depthOf)) - depthOf(p) + 1; }
-  notesIn(p: string, deep = false) { return notes.visible.filter((n) => !n.path && (deep ? within(n.group, p) : n.group === p)); }
+  notesIn(p: string, deep = false) { return notes.visible.filter((n) => (deep ? within(n.group, p) : n.group === p)); }
 
   /** notes of a group as the sidebar stacks them: each page followed by its sub-pages */
   pagesIn(p: string, hideFolded = false) {
@@ -58,6 +58,9 @@ class Groups {
     this.persist();
   }
 
+  /** show a page's sub-pages (used when one is tucked under it) */
+  unfold(id: string) { if (this.isFolded(id)) this.fold(id); }
+
   /** notes in the order the sidebar shows them: depth-first groups (subgroups before notes), then root */
   ordered() {
     const walk = (p: string): typeof notes.visible => [...this.children(p).flatMap(walk), ...this.pagesIn(p)];
@@ -68,7 +71,7 @@ class Groups {
   visibleOrdered() {
     const walk = (p: string): typeof notes.visible =>
       [...this.children(p).flatMap((c) => (this.isCollapsed(c) ? [] : walk(c))), ...this.pagesIn(p, true)];
-    return [...notes.visible.filter((n) => n.path), ...walk('')];
+    return walk('');
   }
 
   private persist() { localStorage.setItem(LS, JSON.stringify(this.saved)); }
