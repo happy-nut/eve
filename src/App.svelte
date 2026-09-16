@@ -4,22 +4,28 @@
   import { notes } from './lib/notes.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
-  import { groups } from './lib/groups.svelte';
+  import { groups, MAX_DEPTH } from './lib/groups.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
-  import { setGlobalHotkey, win, files, autostart, dock, isTauri } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, dock, pin, isTauri } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Settings from './Settings.svelte';
   import Confirm from './Confirm.svelte';
 import CardPage from './CardPage.svelte';
   import EmojiPicker from './EmojiPicker.svelte';
+  import LinkChoice from './LinkChoice.svelte';
   import Tooltip from './Tooltip.svelte';
   import { ui, hooks } from './lib/ui.svelte';
+  import { fileMarkdown, droppedFiles, stem, TEXT_FILE } from './lib/drop';
+  import { importPaths } from './lib/transfer';
+  import PdfViewer from './PdfViewer.svelte';
   import { titleOf } from './lib/notes.svelte';
 
   let sidebarOpen = $state(true);
   let settingsOpen = $state(false);
+  let pinned = $state(pin.on);
+  function togglePin() { pinned = !pinned; void pin.set(pinned); }
   let searchEl = $state<HTMLInputElement | null>(null);
   let hotkeyError = $state<string | null>(null);
   // hold ⌘: sidebar notes show 1…9, ⌘<digit> opens that note
@@ -48,10 +54,16 @@ import CardPage from './CardPage.svelte';
       autostart.set(true).finally(() => localStorage.setItem('eve.autostart.init', '1'));
     }
     if (dock.hidden) dock.set(true);
-    notes.load().then(() => files.onOpen((paths) => paths.forEach((p) => notes.openFile(p))));
+    if (pinned) void pin.set(true); // the window forgets it across restarts; the setting does not
+    // a file opened from Finder joins the notes like any import — it is a note from then on, movable
+    // in the sidebar and synced (the file on disk is left as it was)
+    notes.load().then(() => files.onOpen(async (paths) => {
+      const first = await importPaths(paths);
+      if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; }
+    }));
     window.addEventListener('eve-summon', restoreFocus);
     const stopSync = sync.start();
-    return () => { window.removeEventListener('eve-summon', restoreFocus); stopSync?.(); };
+    return () => { window.removeEventListener('eve-summon', restoreFocus); clearTimeout(hintTimer); stopSync?.(); };
   });
 
   /** Summoned back (⌘⇧Space, Dock, ⌘Tab): the caret goes where it was, the editor by default. */
@@ -82,13 +94,73 @@ import CardPage from './CardPage.svelte';
   async function deleteCurrent() {
     const n = notes.current;
     if (!n) return;
-    if (n.path || (await ui.ask(`Delete “${titleOf(n)}”?`))) notes.remove(n.id);
+    if (await ui.ask(`Delete “${titleOf(n)}”?`)) notes.remove(n.id);
   }
+  const EDIT_KEYS = /^(Arrow|Backspace|Delete|Enter|Tab)/;
+  /** a keystroke that writes or moves the caret in the editor (not a shortcut, not the sidebar's own keys) */
+  function isWriting(e: KeyboardEvent) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return false;
+    if (!(document.activeElement as HTMLElement | null)?.closest('.tiptap')) return false;
+    return e.key.length === 1 || EDIT_KEYS.test(e.key);
+  }
+
+  /**
+   * A file dragged in from Finder. Every file becomes a note of its own, at the end of the group, and
+   * leaves a mark in the note that was open: a text file links to the note it made, an attachment
+   * (picture, PDF) shows up as itself. A whole folder can be dropped too — its shape becomes groups,
+   * and it keeps to itself instead of writing into the open note. Either way the webview never gets
+   * the drop: its own pastes DOM into the editor, which then takes no keystroke at all.
+   */
+  let dropHint = $state<'attach' | 'new' | null>(null);
+  let hintTimer: ReturnType<typeof setTimeout> | undefined;
+  function onDragOver(e: DragEvent) {
+    if (!e.dataTransfer?.types.includes('Files')) return;
+    e.preventDefault(); // otherwise no drop event follows
+    // an attachment joins the note, a text file becomes one — and only the type is knowable in flight
+    const items = [...e.dataTransfer.items];
+    const asset = items.length > 0 && items.every((i) => i.kind === 'file' && (i.type.startsWith('image/') || i.type === 'application/pdf'));
+    dropHint = asset ? 'attach' : 'new';
+    // a drag leaving the window fires nothing dependable, so the hint simply stops being refreshed
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => (dropHint = null), 160);
+  }
+  async function onDrop(e: DragEvent) {
+    clearTimeout(hintTimer);
+    dropHint = null;
+    if (!e.dataTransfer?.types.includes('Files')) return;
+    const taken = e.defaultPrevented; // dropped into a note: the editor has that attachment already
+    e.preventDefault();
+    for (const { file, dir } of await droppedFiles(e.dataTransfer)) {
+      const md = await fileMarkdown(file);
+      if (md === null) continue;
+      const text = TEXT_FILE.test(file.name);
+      const title = stem(file.name);
+      const group = dir ? dir.split('/').slice(0, MAX_DEPTH).join('/') : undefined;
+      if (group) groups.remember(group);
+      const note = notes.addImported(text && /^\s*#\s/.test(md) ? md : `# ${title}\n\n${md}\n`, group);
+      ui.focusOwner = 'editor';
+      if (dir) continue; // a folder brings its own tree; it does not write into the open note
+      if (text) hooks.attach?.(`[[${titleOf(note)}]]`);
+      else if (!taken) hooks.attach?.(md);
+    }
+  }
+
   function onKeydown(e: KeyboardEvent) {
     // ⌘ alone peeks at the numbers; ⌘ with anything else is a shortcut, so the icons come straight back
     if (e.key === 'Meta') cmdDown();
     else cmdUp();
+    // writing takes the window: the list folds away the moment you type or arrow inside the editor
+    if (sidebarOpen && appearance.s.hideSidebarOnEdit && isWriting(e)) sidebarOpen = false;
     if (ui.pending || ui.emoji) return;
+    // Escape puts away whatever is open over the note — the find bar, then the PDF panel — and only a
+    // bare note lets it through to hide the window. Tied to the key, not to the rebindable action:
+    // closing the thing on top is what Escape means everywhere in the app.
+    if (e.key === 'Escape' && (ui.find || ui.pdf)) {
+      e.preventDefault();
+      if (ui.find) { ui.find = false; queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap')?.focus()); }
+      else ui.closePdf();
+      return;
+    }
     if (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
       e.preventDefault();
       jumpTo(Number(e.code[5]));
@@ -97,6 +169,8 @@ import CardPage from './CardPage.svelte';
     if (e.defaultPrevented && !(e as any).eveApp) return;
     const a = shortcuts.match(e, ['app']);
     if (!a) return;
+    // Escape belongs to whatever is open on top of the note (the PDF panel closes on it, and lets the
+    // window hide once it is gone)
     if (a.id === 'hide' && (settingsOpen || document.activeElement === searchEl)) return; // handled locally
     e.preventDefault();
     switch (a.id) {
@@ -106,6 +180,10 @@ import CardPage from './CardPage.svelte';
         else { ui.focusOwner = 'editor'; notes.create(); }
         break;
       case 'search': sidebarOpen = true; queueMicrotask(() => searchEl?.focus()); break;
+      case 'find': // pressing it again puts the bar away and hands the note back the caret
+        ui.find = !ui.find;
+        if (!ui.find) queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap')?.focus());
+        break;
       case 'focusSidebar': focusSidebar(); break;
       case 'back': notes.back(); break;
       case 'forward': notes.forward(); break;
@@ -114,11 +192,12 @@ import CardPage from './CardPage.svelte';
       case 'deleteNote': deleteCurrent(); break;
       case 'settings': settingsOpen = !settingsOpen; break;
       case 'hide': win.hide(); break;
+      case 'pin': togglePin(); break;
     }
   }
 </script>
 
-<svelte:window onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={cmdUp} onfocus={restoreFocus}
+<svelte:window ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={cmdUp} onfocus={restoreFocus}
   onmousedowncapture={() => (document.documentElement.dataset.input = 'mouse')}
   onkeydowncapture={() => (document.documentElement.dataset.input = 'keyboard')} />
 
@@ -135,6 +214,10 @@ import CardPage from './CardPage.svelte';
     </button>
     <button class="icon" aria-label="Forward" data-tip="Forward" data-keys={shortcuts.keysFor('forward')} disabled={!notes.canForward} onclick={() => notes.forward()}>
       <svg viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+    </button>
+    <button class="icon" class:on={pinned} aria-label="Keep on top" data-tip={pinned ? 'On top' : 'Keep on top'} data-keys={shortcuts.keysFor('pin')} onclick={togglePin}>
+      <!-- a pushpin: head, shaft, point -->
+      <svg viewBox="0 0 16 16"><path d="M6 1.8h4l-.6 3.4 2.2 2.2v1.2H4.4V7.4l2.2-2.2z"/><path d="M8 8.6V14"/></svg>
     </button>
     <button class="icon" aria-label="New" data-tip="New" data-keys={shortcuts.keysFor('newNote')} onclick={(e) => { if (sidebarOpen && hooks.openPlus) hooks.openPlus(e.currentTarget); else { ui.focusOwner = 'editor'; notes.create(); } }}>
       <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
@@ -158,10 +241,21 @@ import CardPage from './CardPage.svelte';
 {#if ui.card}
   <CardPage />
 {/if}
+{#if ui.pdf}
+  <PdfViewer />
+{/if}
+{#if dropHint}
+  <div class="drop-hint" transition:fade={{ duration: 90 }}>
+    <span class="drop-pill">{dropHint === 'attach' ? 'Attach to this note' : 'Open as a new note'}</span>
+  </div>
+{/if}
 {#if ui.pending}
   <Confirm />
 {/if}
 {#if ui.emoji}
   <EmojiPicker />
+{/if}
+{#if ui.link}
+  <LinkChoice />
 {/if}
 <Tooltip />

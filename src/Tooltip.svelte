@@ -37,7 +37,7 @@
 {#if tip}
   <!-- CSS intro only: a Svelte outro can stall when the window is hidden mid-animation and leave a ghost tip -->
   <div class="tip" class:up={tip.up} class:right={tip.right} style="left: {tip.x}px; top: {tip.y}px">
-    {tip.text}{#if tip.keys}<Keys keys={tip.keys} dark />{/if}
+    {tip.text}{#if tip.keys}<Keys keys={tip.keys} />{/if}
   </div>
 {/if}
 
@@ -46,7 +46,7 @@
     position: fixed; z-index: 100; pointer-events: none; display: inline-flex; align-items: center; gap: 7px;
     transform: translateX(-50%); background: var(--tip-bg); color: var(--tip-fg);
     font-size: 11.5px; font-weight: 500; line-height: 1; padding: 5px 8px; border-radius: 6px; white-space: nowrap;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 0 0 0.5px var(--line), 0 6px 18px rgba(0, 0, 0, 0.14);
     animation: tip-in 0.12s ease-out;
   }
   @keyframes tip-in { from { opacity: 0; } }

@@ -21,6 +21,19 @@ class Ui {
     return new Promise((res) => { this.card = { ...c, onChange, resolve: res }; });
   }
   closeCard() { this.card?.resolve(); this.card = null; }
+  /** a PDF opened from a note, shown by PdfViewer.svelte as a floating panel (nothing modal about it) */
+  pdf = $state<{ src: string; name: string } | null>(null);
+  openPdf(src: string, name: string) { this.pdf = { src, name }; }
+  closePdf() { this.pdf = null; }
+  /** how a pasted link should land: a card, plain underlined text, or both */
+  link = $state<{ x: number; y: number; resolve: (v: 'card' | 'link' | 'both' | null) => void } | null>(null);
+  pickLink(at: DOMRect): Promise<'card' | 'link' | 'both' | null> {
+    return new Promise((res) => { this.link = { x: at.left, y: at.bottom + 6, resolve: res }; });
+  }
+  linkDone(v: 'card' | 'link' | 'both' | null) { this.link?.resolve(v); this.link = null; }
+
+  /** the find bar over the open note (⌘F) */
+  find = $state(false);
   pending = $state<Pending | null>(null);
   /** which pane owns keyboard focus; dialogs don't change it, so focus can return there afterwards */
   focusOwner = $state<'editor' | 'sidebar'>('editor');
@@ -39,4 +52,10 @@ class Ui {
 export const ui = new Ui();
 
 /** Imperative hooks a component registers for others to call (plain object, not state). */
-export const hooks: { openPlus?: (anchor?: HTMLElement) => void } = {};
+export const hooks: {
+  openPlus?: (anchor?: HTMLElement) => void;
+  /** append markdown to the open note (a dropped attachment; registered by the editor) */
+  attach?: (markdown: string) => void;
+  /** the open note as rendered HTML, for exporting it as a picture */
+  noteHtml?: () => string;
+} = {};

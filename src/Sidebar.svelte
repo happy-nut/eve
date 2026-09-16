@@ -8,6 +8,7 @@
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { ui, hooks } from './lib/ui.svelte';
+  import { importFromFinder, importFromFolder, exportNote, type ExportAs } from './lib/transfer';
   import Icon from './Icon.svelte';
 
   let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings }:
@@ -22,7 +23,6 @@
   let query = $state('');
   const q = $derived(query.trim().toLowerCase());
   const hits = $derived(notes.visible.filter((n) => n.body.toLowerCase().includes(q)));
-  const openFiles = $derived(notes.visible.filter((n) => n.path));
 
   /**
    * One flat, keyed list of rows (groups, notes, labels, placeholders). A single {#each} lets
@@ -36,10 +36,6 @@
   const rows = $derived.by((): Row[] => {
     if (q) return hits.length ? hits.map((n) => ({ kind: 'note', key: n.id, n, depth: 0 })) : [{ kind: 'empty', key: 'empty:search', text: 'No matches', g: '', depth: 0 }];
     const out: Row[] = [];
-    if (openFiles.length) {
-      out.push({ kind: 'label', key: 'label:files', text: 'Open files', g: '\0files' });
-      for (const n of openFiles) out.push({ kind: 'note', key: n.id, n, depth: 0 });
-    }
     const walk = (parent: string, depth: number) => {
       for (const g of groups.children(parent)) {
         out.push({ kind: 'group', key: 'g:' + groups.id(g), g, depth });
@@ -77,14 +73,33 @@
     (plusFrom?.isConnected ? plusFrom : document.querySelector<HTMLElement>('aside [data-row]'))?.focus();
     ui.focusOwner = 'sidebar';
   }
+  /** Import / export. A failed export says so instead of doing nothing at all. */
+  async function transfer(run: () => Promise<unknown>) {
+    try { await run(); } catch (err) { await ui.ask(String(err), false); }
+  }
+  const opened = (first: Note | null) => { if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; } };
+  const importFiles = () => transfer(async () => opened(await importFromFinder()));
+  const importFolder = () => transfer(async () => opened(await importFromFolder()));
+  const exportAs = (as: ExportAs) => () => transfer(async () => {
+    const n = notes.current;
+    if (n) await exportNote(n, as, hooks.noteHtml ?? (() => ''));
+  });
+
   const plusItems = $derived.by(() => {
     // a new note goes straight into the editor (deleting keeps focus in the list)
     const newNote = (g: string) => async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap')?.focus(); };
-    const items = [
+    const items: { label: string; run: () => void; sep?: boolean }[] = [
       { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', run: newNote(ctxGroup) },
       { label: ctxGroup && depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : 'New group', run: () => groups.create(ctxGroup) },
     ];
     if (ctxGroup) items.push({ label: 'New note at top level', run: newNote('') }, { label: 'New group at top level', run: () => groups.create('') });
+    items.push(
+      { label: 'Import files…', run: importFiles, sep: true },
+      { label: 'Import folder…', run: importFolder },
+      { label: 'Export as Markdown…', run: exportAs('md') },
+      { label: 'Export as PDF…', run: exportAs('pdf') },
+      { label: 'Export as image…', run: exportAs('png') },
+    );
     return items;
   });
   function plusPick(i: number) { plusOpen = false; plusItems[i].run(); }
@@ -98,6 +113,11 @@
     e.preventDefault(); e.stopPropagation();
   }
   const autofocus = (el: HTMLElement) => el.focus();
+  /** keep the keyboard where it is: a press that moves focus out of the menu closes it mid-click */
+  function hold(e: MouseEvent) {
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).focus();
+  }
 
   // ---- drag & drop (native HTML5): notes and whole groups ----
   let drag = $state<{ note?: string; group?: string } | null>(null);
@@ -125,7 +145,7 @@
   }
   /** over a note row: before / after it (same group) */
   function overNote(e: DragEvent, n: Note) {
-    if (!drag || drag.note === n.id || n.path) return;
+    if (!drag || drag.note === n.id) return;
     const list = groups.notesIn(n.group);
     if (drag.group !== undefined) { overSection(e, n.group); return; } // groups can't sit between notes
     allow(e);
@@ -145,6 +165,7 @@
     dropAt = before ? { beforeGroup: g, into: parentOf(g) } : { into: g };
   }
   function drop(e: DragEvent) {
+    if (!drag) return; // a file dragged in from Finder belongs to the app's own drop handler
     e.preventDefault(); e.stopPropagation();
     const d = drag, at = dropAt;
     dragEnd();
@@ -162,7 +183,6 @@
     if (await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`)) groups.remove(g);
   }
   async function removeNote(n: Note) {
-    if (n.path) { notes.remove(n.id); return; } // just closes the file
     if (await ui.ask(`Delete “${titleOf(n)}”?`)) notes.remove(n.id);
   }
   const rowsNow = () => [...document.querySelectorAll<HTMLElement>('aside [data-row]')];
@@ -172,35 +192,66 @@
   }
   const groupSel = (g: string) => `[data-group="${CSS.escape(g)}"]`;
 
-  /** ⌥↑ / ⌥↓ on a note: one visible row up/down, crossing group boundaries. */
-  function nudgeNote(id: string, dir: 1 | -1) {
-    const rows = rowsNow();
-    const i = rows.findIndex((r) => r.dataset.note === id);
-    const me = notes.all.find((n) => n.id === id);
-    let nb = rows[i + dir];
-    if (!me) return;
-    const byId = (x?: string) => notes.all.find((n) => n.id === x);
-    if (nb && dir < 0 && nb.dataset.group === me.group) nb = rows[i - 2]; // skip my own header
-    if (!nb) {
-      // bottom of the list: leave the group for its parent (root when top-level)
-      if (dir > 0 && me.group) { notes.move(id, parentOf(me.group), null); focusRow(`[data-note="${id}"]`); }
-      return;
-    }
-    if (nb.dataset.note) {
-      const n2 = byId(nb.dataset.note)!;
-      if (n2.group !== me.group) notes.move(id, n2.group, dir < 0 ? null : n2.id);
-      else if (dir < 0) notes.move(id, me.group, n2.id);
-      else {
-        const after = byId(rows[i + 2]?.dataset.note);
-        notes.move(id, me.group, after && after.group === me.group ? after.id : null);
+  /**
+   * Every spot the moving note could take, in the order the sidebar stacks them: before each page,
+   * inside an unfolded page as a sub-page, at the end of each list, and on through the groups. ⌥↑ / ⌥↓
+   * step through this list, so a page slides *into* the one above instead of hopping over it.
+   */
+  type NoteSlot = { group: string; parent: string; before: string | null };
+  function noteSlots(me: Note): NoteSlot[] {
+    const out: NoteSlot[] = [];
+    const pages = (group: string, parent: string) => {
+      for (const p of notes.visible) {
+        if (p.group !== group || (p.parent ?? '') !== parent) continue;
+        if (p.id === me.id || notes.isAncestor(me.id, p.id)) continue; // itself and its own sub-pages
+        out.push({ group, parent, before: p.id });
+        if (!groups.isFolded(p.id)) pages(group, p.id); // an open page can take it in
       }
+      out.push({ group, parent, before: null });
+    };
+    const walk = (g: string) => {
+      for (const c of groups.children(g)) if (!groups.isCollapsed(c)) walk(c); // subgroups first, as the tree shows them
+      pages(g, '');
+    };
+    walk('');
+    return out;
+  }
+
+  /** ⌥↑ / ⌥↓ on a note: one slot up/down — past a page, into it, or on into the next group. */
+  function nudgeNote(id: string, dir: 1 | -1) {
+    const me = notes.all.find((n) => n.id === id);
+    if (!me) return;
+    const list = noteSlots(me);
+    const sibs = notes.visible.filter((n) => n.group === me.group && (n.parent ?? '') === (me.parent ?? ''));
+    const i = sibs.findIndex((n) => n.id === id);
+    const at = list.findIndex((s) => s.group === me.group && s.parent === (me.parent ?? '') && s.before === (sibs[i + 1]?.id ?? null));
+    const t = list[at + dir];
+    if (at < 0 || !t) return;
+    if (t.parent) groups.unfold(t.parent); // show where it landed
+    notes.place(id, t.group, t.parent, t.before);
+    focusRow(`[data-note="${id}"]`);
+  }
+
+  /** ⌥→ tucks a note under the one above it (a sub-page); ⌥← lifts it back out to its parent's level. */
+  function nestNote(id: string, dir: 'in' | 'out') {
+    const me = notes.all.find((n) => n.id === id);
+    if (!me) return;
+    if (dir === 'out') {
+      const parent = me.parent ? notes.all.find((n) => n.id === me.parent) : null;
+      if (!parent) return;
+      notes.setParent(id, parent.parent ?? null);
     } else {
-      const g = nb.dataset.group!;
-      groups.expand(g);
-      notes.move(id, g, dir < 0 ? null : groups.notesIn(g)[0]?.id ?? null);
+      const rows = rowsNow();
+      const above = rows[rows.findIndex((r) => r.dataset.note === id) - 1]?.dataset.note;
+      // only a page of the same group can take it in, and never one of its own sub-pages
+      const host = above && notes.all.find((n) => n.id === above);
+      if (!host || host.group !== me.group || host.id === me.parent || notes.isAncestor(id, host.id)) return;
+      groups.unfold(host.id);
+      notes.setParent(id, host.id);
     }
     focusRow(`[data-note="${id}"]`);
   }
+
   /**
    * ⌥↑ / ⌥↓ walk a group through every visible slot in outline order — past siblings, out of its
    * parent, into (expanded) groups above — like dragging it one row at a time. Collapsed groups are
@@ -240,6 +291,7 @@
     if (e.altKey && e.key.startsWith('Arrow')) {
       e.preventDefault(); e.stopPropagation();
       if (noteId && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) nudgeNote(noteId, e.key === 'ArrowUp' ? -1 : 1);
+      else if (noteId) nestNote(noteId, e.key === 'ArrowRight' ? 'in' : 'out');
       else if (group) nudgeGroup(group, e.key);
       return;
     }
@@ -314,12 +366,14 @@
           <ul class="plus-menu" role="menu" style={plusStyle} transition:scale={{ start: 0.92, duration: 140 }}
             onkeydown={plusKey} onfocusout={(e) => { if (!(e.relatedTarget as HTMLElement | null)?.closest('.plus-wrap')) plusOpen = false; }}>
             {#each plusItems as it, i}
-              <li role="none">
-                <!-- one highlight only: the mouse moves focus instead of adding a hover state -->
+              <li role="none" class:sep={it.sep}>
+                <!-- one highlight only: the mouse moves focus instead of adding a hover state.
+                     mousedown is swallowed because WebKit does not focus a button that is clicked —
+                     it blurs the menu instead, which closed it before the click could ever land. -->
                 {#if i === 0}
-                  <button role="menuitem" use:autofocus onmouseenter={(e) => e.currentTarget.focus()} onclick={() => plusPick(i)}>{it.label}</button>
+                  <button role="menuitem" use:autofocus onmousedown={hold} onmouseenter={(e) => e.currentTarget.focus()} onclick={() => plusPick(i)}>{it.label}</button>
                 {:else}
-                  <button role="menuitem" onmouseenter={(e) => e.currentTarget.focus()} onclick={() => plusPick(i)}>{it.label}</button>
+                  <button role="menuitem" onmousedown={hold} onmouseenter={(e) => e.currentTarget.focus()} onclick={() => plusPick(i)}>{it.label}</button>
                 {/if}
               </li>
             {/each}
@@ -340,7 +394,7 @@
 
           {#if r.kind === 'note'}
             {@const n = r.n}
-            <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!n.path} ondragstart={(e) => !n.path && dragStartNote(e, n)} ondragend={dragEnd}
+            <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable="true" ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation">
               <button data-row data-note={n.id} class:active={n.id === notes.currentId} onclick={() => openNote(n)}>
                 <span class="title">
@@ -353,6 +407,10 @@
                   <span class="t">{titleOf(n)}</span>
                 </span>
               </button>
+              <!-- unfolds on hover, like a group's tools; the fold chevron keeps its place at the edge -->
+              <span class="tools">
+                <button class="icon mini tip-right" data-tip="Delete note" onclick={() => removeNote(n)}>×</button>
+              </span>
               {#if r.kids}
                 <button class="icon mini fold tip-right" aria-label={groups.isFolded(n.id) ? 'Expand' : 'Collapse'}
                   data-tip={groups.isFolded(n.id) ? 'Expand' : 'Collapse'} onclick={() => groups.fold(n.id)}>
@@ -436,6 +494,8 @@
     border: 0; background: none; color: inherit; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 5px; text-align: left; white-space: nowrap;
   }
   .plus-menu button:focus { background: var(--accent-soft); outline: none; }
+  /* files in and out, kept apart from what the menu creates */
+  .plus-menu li.sep { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--line); }
 
   .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 10px 8px; margin: 0; list-style: none; }
   .row { position: relative; padding-left: calc(var(--d) * 18px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
@@ -460,6 +520,7 @@
   .tools { display: flex; gap: 2px; width: 0; opacity: 0; overflow: hidden; transform: translateX(6px);
     transition: width 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.16s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
   .ghead:hover .tools, .tools:focus-within { width: 46px; opacity: 1; transform: none; }
+  .note-row:hover .tools, .note-row .tools:focus-within { width: 22px; opacity: 1; transform: none; }
   .tools .icon.mini, .fold { width: 22px; height: 22px; font-size: 14px; flex: none; }
   .fold { margin-left: 2px; }
   .tail { display: flex; align-items: center; cursor: default; }

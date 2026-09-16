@@ -69,8 +69,9 @@
     if (over?.colId !== col.id || over.index !== index) over = { colId: col.id, index };
   }
   function drop(e: DragEvent) {
+    if (!dragging) return; // a file dragged in from Finder belongs to the app's own drop handler
     e.preventDefault();
-    if (dragging && over) commit(view);
+    if (over) commit(view);
     dragEnd();
   }
   function dragEnd() { dragging = null; over = null; }

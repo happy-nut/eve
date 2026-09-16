@@ -8,6 +8,7 @@
   import { ui } from './lib/ui.svelte';
   import Suggest from './Suggest.svelte';
   import Outline from './Outline.svelte';
+  import TableTools from './TableTools.svelte';
 
   // a kanban card as a floating page (Notion "peek"): one markdown editor whose first line is the title,
   // like a note. One editing host, so a drag that starts in the title runs on into the body.
@@ -50,6 +51,8 @@
   </div>
   <Outline {scrollEl} {editor} />
 </div>
+<!-- outside the card: it is transformed, which would clip a fixed bar hanging over the table's top -->
+<TableTools {editor} />
 <Suggest bind:this={suggest} />
 
 <style>

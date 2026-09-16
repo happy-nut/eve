@@ -1,4 +1,6 @@
-import { storage, files } from './platform';
+import { storage } from './platform';
+import { appearance } from './appearance.svelte';
+import { RANDOM_ICONS } from './icons';
 import { plain } from './markdown';
 
 export { plain };
@@ -12,9 +14,10 @@ export interface Note {
   order: number; // manual sort rank within its group (ascending)
   parent?: string; // id of the page this one was created inside (sub-page; sits under it in the sidebar)
   icon?: string; // emoji shown in the sidebar (Notion-style)
-  /** set for external files opened via macOS: edited in place, not synced, not persisted in notes/ */
-  path?: string;
 }
+
+/** An icon for a note that was just made, unless the setting is off. */
+const autoIcon = () => (appearance.s.autoIcon ? RANDOM_ICONS[Math.floor(Math.random() * RANDOM_ICONS.length)] : undefined);
 
 export const newId = () =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -48,8 +51,7 @@ export function parse(text: string): Note | null {
 
 
 
-export function titleOf(n: Pick<Note, 'body' | 'path'>): string {
-  if (n.path) return n.path.split('/').pop() ?? n.path;
+export function titleOf(n: Pick<Note, 'body'>): string {
   const first = n.body.split('\n').find((l) => l.trim()) ?? '';
   return plain(first) || 'Untitled';
 }
@@ -132,10 +134,24 @@ class NotesStore {
 
   create(body = '', group = this.current?.group ?? '', parent?: string): Note {
     const first = this.visible.find((x) => x.group === group);
-    const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group, parent, order: first ? first.order - 1 : 0 };
+    const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group, parent, order: first ? first.order - 1 : 0, icon: autoIcon() };
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
     this.currentId = n.id;
+    void storage.write(n.id, serialize(n));
+    this.dirty++;
+    return n;
+  }
+
+  /**
+   * A note made by importing a file. It joins the end of its group (an import reads top to bottom)
+   * and leaves the open note alone — the file usually links itself into the page being written.
+   */
+  addImported(body: string, group = this.current?.group ?? ''): Note {
+    const last = this.visible.filter((x) => x.group === group).at(-1);
+    const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group, order: last ? last.order + 1 : 0, icon: autoIcon() };
+    this.all.push(n);
+    this.titles.set(n.id, titleOf(n));
     void storage.write(n.id, serialize(n));
     this.dirty++;
     return n;
@@ -157,8 +173,8 @@ class NotesStore {
     clearTimeout(this.timers.get(id));
     this.timers.delete(id);
     this.followRename(n);
-    if (n.path) void files.write(n.path, n.body);
-    else { void storage.write(n.id, serialize(n)); this.dirty++; }
+    void storage.write(n.id, serialize(n));
+    this.dirty++;
   }
 
   /** title as of the last flush, so a retitled page can take its [[links]] with it */
@@ -179,14 +195,24 @@ class NotesStore {
     }
   }
 
-  /** Open an external file in place (or focus it if already open). */
-  async openFile(path: string) {
-    const existing = this.all.find((n) => n.path === path);
-    if (existing) { this.currentId = existing.id; return; }
-    const body = await files.read(path);
-    const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group: '', order: 0, path };
-    this.all.push(n);
-    this.currentId = n.id;
+
+  /** Make a note a sub-page of `parent` (null = a page of its own). Refuses a loop. */
+  setParent(id: string, parent: string | null) {
+    const n = this.all.find((x) => x.id === id);
+    if (!n || (parent && (parent === id || this.isAncestor(id, parent)))) return;
+    n.parent = parent ?? undefined;
+    n.updatedAt = Date.now();
+    this.flush(id);
+  }
+
+  /** Is `id` somewhere above `other` in the sub-page chain? (a page cannot be tucked under its own child) */
+  isAncestor(id: string, other: string): boolean {
+    let cur = this.all.find((n) => n.id === other);
+    while (cur?.parent) {
+      if (cur.parent === id) return true;
+      cur = this.all.find((n) => n.id === cur!.parent);
+    }
+    return false;
   }
 
   setIcon(id: string, icon: string) {
@@ -218,7 +244,7 @@ class NotesStore {
    */
   move(id: string, group: string, beforeId: string | null) {
     const n = this.all.find((x) => x.id === id);
-    if (!n || id === beforeId || n.path) return;
+    if (!n || id === beforeId) return;
     const list = this.visible.filter((x) => x.group === group && x.id !== id);
     let order: number;
     if (beforeId) {
@@ -241,18 +267,50 @@ class NotesStore {
     if (from !== group) for (const kid of this.all) if (!kid.deleted && kid.parent === id) this.relabel(kid.id, group);
   }
 
-  /** Delete a note (tombstone). For an external file this only closes it; the file stays on disk. */
+  /**
+   * Put a note at an exact spot: a group, the page it belongs under ('' = top level of the group) and
+   * the sibling it goes in front of (null = last). This is what the sidebar's ⌥-arrow walk moves with,
+   * so a page can slide into another page as a sub-page instead of only stepping past it.
+   */
+  place(id: string, group: string, parent: string, before: string | null) {
+    const n = this.all.find((x) => x.id === id);
+    if (!n || id === before) return;
+    if (parent && (parent === id || this.isAncestor(id, parent))) return; // never under its own sub-page
+    const sibs = this.visible.filter((x) => x.group === group && (x.parent ?? '') === parent && x.id !== id);
+    let order: number;
+    if (before) {
+      const i = sibs.findIndex((x) => x.id === before);
+      if (i < 0) return;
+      const prev = sibs[i - 1], next = sibs[i];
+      order = prev ? (prev.order + next.order) / 2 : next.order - 1;
+    } else {
+      const last = sibs.at(-1);
+      order = last ? last.order + 1 : 0;
+    }
+    const from = n.group;
+    n.group = group;
+    n.parent = parent || undefined;
+    n.order = order;
+    n.updatedAt = Date.now();
+    this.flush(id);
+    if (from !== group) this.followIntoGroup(id, group); // its own sub-pages come along
+  }
+
+  private followIntoGroup(id: string, group: string) {
+    for (const kid of this.all) {
+      if (kid.deleted || kid.parent !== id) continue;
+      this.relabel(kid.id, group);
+      this.followIntoGroup(kid.id, group);
+    }
+  }
+
+  /** Delete a note (tombstone). */
   remove(id: string) {
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
-    if (n.path) {
-      clearTimeout(this.timers.get(id));
-      this.all = this.all.filter((x) => x.id !== id);
-    } else {
-      n.deleted = true;
-      n.updatedAt = Date.now();
-      this.flush(id);
-    }
+    n.deleted = true;
+    n.updatedAt = Date.now();
+    this.flush(id);
     if (this.currentId === id) this.currentId = this.visible[0]?.id ?? null;
     if (!this.currentId) this.create();
   }

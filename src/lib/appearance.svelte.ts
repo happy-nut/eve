@@ -12,8 +12,14 @@ export const FONTS: { id: string; label: string; stack: string }[] = [
 export const THEMES = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']] as const;
 export type Theme = (typeof THEMES)[number][0];
 
-interface Appearance { theme: Theme; font: string; custom: string; size: number; lineHeight: number; width: number }
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: 15, lineHeight: 1.6, width: 820 };
+interface Appearance {
+  theme: Theme; font: string; custom: string; size: number; lineHeight: number; width: number;
+  /** close the sidebar as soon as you start writing (typing or arrowing in the editor) */
+  hideSidebarOnEdit: boolean;
+  /** give a new or imported note an icon of its own, so the list reads at a glance */
+  autoIcon: boolean;
+}
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: 15, lineHeight: 1.6, width: 820, hideSidebarOnEdit: true, autoIcon: true };
 
 function load(): Appearance {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; } catch { return { ...DEFAULTS }; }

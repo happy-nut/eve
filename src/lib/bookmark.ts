@@ -1,6 +1,7 @@
 import { Node } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { fetchUrl, openUrl } from './platform';
+import { ui } from './ui.svelte';
 
 /**
  * Bookmark card: a URL on a line of its own renders as a compact preview (favicon, title, description,
@@ -13,6 +14,14 @@ export interface Meta { title: string; desc: string; image: string; icon: string
 
 const cache: Record<string, Meta> = (() => { try { return JSON.parse(localStorage.getItem(LS) ?? '{}'); } catch { return {}; } })();
 const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
+
+/** How long a link may be before the card shortens it. */
+const LINK_MAX = 20;
+/** The link as the card shows it: the address itself, minus the scheme, cut only when it runs long. */
+export const shortUrl = (u: string) => {
+  const bare = u.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  return bare.length > LINK_MAX ? `${bare.slice(0, LINK_MAX)}…` : bare;
+};
 
 /** og:/twitter:/plain <meta> out of a page; relative image/icon URLs resolved against the page. */
 export function parseMeta(html: string, url: string): Meta {
@@ -39,6 +48,16 @@ export async function linkMeta(url: string): Promise<Meta> {
   } catch {
     return { title: host(url), desc: '', image: '', icon: '' };
   }
+}
+
+/** What a pasted link becomes. Escape falls back to the plain link — nothing is lost that way. */
+function linkContent(href: string, how: 'card' | 'link' | 'both') {
+  const card = { type: 'bookmark', attrs: { href } };
+  const link = { type: 'paragraph', content: [{ type: 'text', marks: [{ type: 'link', attrs: { href } }], text: href }] };
+  const tail = { type: 'paragraph' };
+  if (how === 'card') return [card, tail];
+  if (how === 'link') return [link, tail];
+  return [link, card, tail];
 }
 
 const el = (tag: string, cls: string, text = '') => { const e = document.createElement(tag); e.className = cls; if (text) e.textContent = text; return e; };
@@ -72,7 +91,7 @@ export const Bookmark = Node.create({
       const site = el('span', 'bm-site');
       const ico = el('img', 'bm-ico') as HTMLImageElement;
       ico.alt = '';
-      site.append(ico, el('span', '', host(href)));
+      site.append(ico, el('span', 'bm-url', shortUrl(href))); // the address, not just the site name
       body.append(title, site);
       dom.append(body);
       dom.addEventListener('click', (e) => { e.preventDefault(); void openUrl(href); });
@@ -110,7 +129,7 @@ export const Bookmark = Node.create({
   },
 
   addProseMirrorPlugins() {
-    // a URL pasted into an empty top-level line becomes a card
+    // a URL pasted into an empty top-level line: card, plain link, or both — asked on the spot
     return [
       new Plugin({
         props: {
@@ -118,10 +137,12 @@ export const Bookmark = Node.create({
             const text = event.clipboardData?.getData('text/plain').trim() ?? '';
             const { $from, empty } = view.state.selection;
             if (!URL_RE.test(text) || !empty || $from.depth !== 1 || $from.parent.type.name !== 'paragraph' || $from.parent.content.size) return false;
-            this.editor.chain()
-              .insertContentAt({ from: $from.before(), to: $from.after() }, [{ type: 'bookmark', attrs: { href: text } }, { type: 'paragraph' }])
-              .focus()
-              .run();
+            const editor = this.editor;
+            const line = { from: $from.before(), to: $from.after() };
+            const c = view.coordsAtPos($from.pos);
+            void ui.pickLink(new DOMRect(c.left, c.top, 0, c.bottom - c.top)).then((how) => {
+              editor.chain().insertContentAt(line, linkContent(text, how ?? 'link')).focus().run();
+            });
             return true;
           },
         },
@@ -137,13 +158,25 @@ export const Bookmark = Node.create({
           state.closeBlock(node);
         },
         parse: {
-          // linkify turns a bare URL line into <p><a href=url>url</a></p>; that (top level only) is a card
+          /**
+           * Only a URL written bare on its line becomes a card. A link the markdown spells out —
+           * `[text](url)`, or the `<url>` angle form a plain link is saved as — stays a link, which is
+           * what keeps the "link" and "both" choices from turning into cards when the note is read back.
+           */
+          setup(md: any) {
+            const open = md.renderer.rules.link_open ?? ((t: any, i: number, o: any, _e: any, self: any) => self.renderToken(t, i, o));
+            md.renderer.rules.link_open = (tokens: any, i: number, opts: any, env: any, self: any) => {
+              if (tokens[i].markup === 'linkify') tokens[i].attrSet('data-bare', '');
+              return open(tokens, i, opts, env, self);
+            };
+          },
           updateDOM(root: HTMLElement) {
             for (const p of [...root.children]) {
               if (p.tagName !== 'P' || p.children.length !== 1) continue;
               const a = p.firstElementChild as HTMLAnchorElement;
               const href = a.getAttribute('href') ?? '';
-              if (a.tagName !== 'A' || !URL_RE.test(href) || trim(p.textContent?.trim() ?? '') !== trim(href)) continue;
+              if (a.tagName !== 'A' || !a.hasAttribute('data-bare')) continue;
+              if (!URL_RE.test(href) || trim(p.textContent?.trim() ?? '') !== trim(href)) continue;
               const b = document.createElement('div');
               b.setAttribute('data-bookmark', href);
               b.textContent = href;

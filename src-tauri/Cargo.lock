@@ -792,8 +792,9 @@ dependencies = [
 
 [[package]]
 name = "eve"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
+ "core-foundation",
  "serde",
  "tauri",
  "tauri-build",

@@ -1,6 +1,6 @@
 [package]
 name = "eve"
-version = "0.6.0"
+version = "0.6.1"
 description = "Fast, keyboard-first markdown notes"
 authors = ["happynut"]
 license = "MIT"
@@ -21,6 +21,10 @@ tauri = { version = "2", features = ["protocol-asset", "macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-autostart = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# LaunchServices: which app macOS opens a .md with
+core-foundation = "0.10"
 
 [profile.release]
 opt-level = "s"

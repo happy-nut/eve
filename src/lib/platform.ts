@@ -40,12 +40,17 @@ export function assetUrl(src: string | undefined): string | undefined {
 }
 let convertFileSrcSync: (p: string) => string = (p) => p; // set by storage.path()
 
-/** Save an image blob (paste / drop) next to the notes and return its relative path. Browser fallback: data URL. */
-export async function saveImage(file: Blob): Promise<string> {
+/** Save a pasted / dropped file (image, PDF) next to the notes and return its relative path. Browser fallback: data URL. */
+export async function saveAsset(file: File | Blob): Promise<string> {
   if (!isTauri) {
+    // a picture is stored inside the note, so it has to survive a reload; anything else only has to open
+    // (markdown links reject data: anyway — markdown-it drops the whole link)
+    if (!file.type.startsWith('image/')) return URL.createObjectURL(file);
     return new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsDataURL(file); });
   }
-  const ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+  // a file dragged in from Finder may arrive without a MIME type; its name still carries the extension
+  const named = file instanceof File ? /\.([a-z0-9]+)$/i.exec(file.name)?.[1].toLowerCase() : undefined;
+  const ext = named ?? (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg');
   const { invoke: inv } = await import('@tauri-apps/api/core');
   await storage.path();
   return inv<string>('save_asset', new Uint8Array(await file.arrayBuffer()), { headers: { 'x-ext': ext } });
@@ -73,6 +78,28 @@ export async function pickImage(): Promise<string | null> {
   return invoke<string>('import_asset', { src: path });
 }
 
+/** First page of a stored PDF as a PNG object URL (Quick Look, cached on disk). Null when unavailable. */
+export async function pdfThumb(src: string): Promise<string | null> {
+  const name = /^assets\//.test(src) ? src.slice('assets/'.length) : null;
+  if (!isTauri || !name) return null; // only a file of ours has a thumbnail to ask for
+  try {
+    const png = await invoke<ArrayBuffer>('pdf_thumb', { name });
+    return URL.createObjectURL(new Blob([png], { type: 'image/png' }));
+  } catch {
+    return null; // an encrypted or broken PDF: the card keeps its glyph
+  }
+}
+
+/** Pick a video, copy it next to the notes, return its relative path. Null if cancelled. */
+export async function pickVideo(): Promise<string | null> {
+  if (!isTauri) return null;
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const path = await open({ multiple: false, filters: [{ name: 'Videos', extensions: ['mp4', 'mov', 'm4v', 'webm'] }] });
+  if (!path) return null;
+  await storage.path();
+  return invoke<string>('import_asset', { src: path });
+}
+
 /** Images in notes/assets, for sync. Browser mode has none (images are data URLs there). */
 export const assets = {
   list: (): Promise<string[]> => (isTauri ? invoke<string[]>('list_assets') : Promise.resolve([])),
@@ -92,8 +119,53 @@ export const github = {
 /** Open a link in the default browser. */
 export const openUrl = (url: string) => (isTauri ? invoke<void>('open_url', { url }) : Promise.resolve(void window.open(url, '_blank')));
 
+/** Open a stored asset (a PDF, say) in the app that owns it; a web URL goes to the browser. */
+export async function openAsset(src: string): Promise<void> {
+  const name = /^assets\//.test(src) ? src.slice('assets/'.length) : null;
+  if (isTauri && name) return invoke('open_asset', { name });
+  await openUrl(src);
+}
+
 /** Page HTML for link previews. Browser mode: plain fetch (works only for CORS-friendly sites). */
 export const fetchUrl = (url: string) => (isTauri ? invoke<string>('fetch_url', { url }) : fetch(url).then((r) => r.text()));
+
+/** Pick files to import (Finder, multi-select). Null when cancelled. */
+export async function pickFiles(): Promise<string[] | null> {
+  if (!isTauri) return null;
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const picked = await open({
+    multiple: true,
+    filters: [{ name: 'Notes and attachments', extensions: ['md', 'markdown', 'mdx', 'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic'] }],
+  });
+  return picked === null ? null : (Array.isArray(picked) ? picked : [picked]);
+}
+
+/** Pick folders to import whole. Null when cancelled. */
+export async function pickFolders(): Promise<string[] | null> {
+  if (!isTauri) return null;
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const picked = await open({ directory: true, multiple: true });
+  return picked === null ? null : (Array.isArray(picked) ? picked : [picked]);
+}
+
+/** Every file under a folder, as paths relative to it. */
+export const listFolder = (root: string) => invoke<string[]>('list_folder', { root });
+
+/** Ask where to save an export. Null when cancelled. */
+export async function pickSavePath(name: string, ext: string): Promise<string | null> {
+  if (!isTauri) return null;
+  const { save } = await import('@tauri-apps/plugin-dialog');
+  return save({ defaultPath: `${name}.${ext}`, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
+}
+
+/** Copy a file into notes/assets (an import that keeps the original where it is). */
+export const importAsset = (src: string) => invoke<string>('import_asset', { src });
+
+/** The system print panel — "Save as PDF" in it is how a note leaves as a PDF. */
+export const printPage = () => invoke<void>('print_page');
+
+/** Render a standalone HTML page to a PNG at `out` (Quick Look does the drawing). */
+export const htmlToPng = (html: string, out: string) => invoke<void>('html_to_png', { html, out });
 
 /** External files opened through macOS (Open With / double-click). */
 export const files = {
@@ -107,6 +179,12 @@ export const files = {
     const pending = await invoke<string[]>('take_pending_files');
     if (pending.length) cb(pending);
   },
+};
+
+/** Which app macOS opens a .md with. macOS only; a browser reports false and refuses to change it. */
+export const defaultApp = {
+  get: () => (isTauri ? invoke<boolean>('is_default_for_markdown') : Promise.resolve(false)),
+  set: (on: boolean) => (isTauri ? invoke<void>('set_default_for_markdown', { on }) : Promise.reject(new Error('desktop only'))),
 };
 
 /** Launch at login, so the global hotkey works even after the app was quit. */
@@ -127,6 +205,15 @@ export const dock = {
   async set(hidden: boolean) {
     localStorage.setItem('eve.dock', hidden ? 'hidden' : 'shown');
     if (isTauri) await invoke('set_dock_hidden', { hidden });
+  },
+};
+
+/** Keep the window above every other app (⌘⇧P). Remembered across restarts, like the Dock setting. */
+export const pin = {
+  get on() { return localStorage.getItem('eve.pin') === '1'; },
+  async set(on: boolean) {
+    localStorage.setItem('eve.pin', on ? '1' : '0');
+    if (isTauri) await invoke('set_always_on_top', { on });
   },
 };
 
