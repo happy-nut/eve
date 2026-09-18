@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Editor as TipTap } from '@tiptap/core';
-  import { createEditor, applyKeymap, getMarkdown } from './lib/editor';
-  import { notes, titleOf, type Note } from './lib/notes.svelte';
+  import { createEditor, applyKeymap, getMarkdown, goToSection } from './lib/editor';
+  import { notes, type Note } from './lib/notes.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
   import { ui, hooks } from './lib/ui.svelte';
   import Icon from './Icon.svelte';
@@ -27,10 +27,20 @@
       element: el,
       content: note.body,
       onUpdate: (md) => notes.update(note.id, md),
-      onOpenNote: (title) => { notes.flush(note.id); notes.openByTitle(title); },
-      titles: () => notes.visible.filter((n) => n.id !== note.id).map(titleOf),
+      onOpenNote: (title) => {
+        notes.flush(note.id);
+        notes.openByTitle(title);
+        // a link into this very page: no navigation happens, so make the jump here
+        if (notes.section && notes.currentId === note.id) {
+          const s = notes.section;
+          notes.section = '';
+          goToSection(editor!, s);
+        }
+      },
+      targets: () => notes.visible,
       suggestionUI: suggest.ui,
-      cursor: notes.cursor.get(note.id),
+      // a [[Title#Section]] link says where to land, over wherever the caret was left last time
+      cursor: notes.section ? undefined : notes.cursor.get(note.id),
     });
     if (import.meta.env.DEV) (window as any).__editor = editor;
     // a file dropped outside the note (the sidebar, the margins) still attaches to the open one
@@ -43,7 +53,11 @@
       (last && last.content.size ? chain.splitBlock() : chain).insertContent(content).run();
     };
     hooks.noteHtml = () => editor?.getHTML() ?? '';
-    if (notes.selectTitle) {
+    const section = notes.section; // a [[Title#Section]] link brought us here
+    notes.section = '';
+    if (section) {
+      goToSection(editor, section);
+    } else if (notes.selectTitle) {
       // a brand-new page: its placeholder title is selected, so typing renames it right away
       notes.selectTitle = false;
       editor.commands.setTextSelection({ from: 1, to: 1 + (editor.state.doc.firstChild?.content.size ?? 0) });
@@ -68,10 +82,12 @@
   // rebind editor shortcuts live when the user changes them
   $effect(() => { shortcuts.actions; if (editor) applyKeymap(editor); });
 
-  // remote sync may replace the body under us
+  // remote sync may replace the body under us. Trailing newlines do not count as a difference: a note
+  // that ends in one (created from a template, imported from a file) would otherwise be re-set on every
+  // mount, throwing away where the caret was just put — the jump a [[Title#Section]] link makes, say.
   $effect(() => {
     const body = note.body;
-    if (editor && !editor.isFocused && getMarkdown(editor) !== body) {
+    if (editor && !editor.isFocused && getMarkdown(editor).trimEnd() !== body.trimEnd()) {
       editor.commands.setContent(body);
     }
   });

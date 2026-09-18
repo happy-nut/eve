@@ -3,7 +3,7 @@
   import { fade, scale } from 'svelte/transition';
   import type { Editor as TipTap } from '@tiptap/core';
   import { createEditor } from './lib/editor';
-  import { notes, titleOf } from './lib/notes.svelte';
+  import { notes } from './lib/notes.svelte';
   import { cardDoc, splitCard } from './lib/markdown';
   import { ui } from './lib/ui.svelte';
   import Suggest from './Suggest.svelte';
@@ -27,7 +27,7 @@
       content: cardDoc(req.title, req.body),
       onUpdate: (md) => req.onChange(splitCard(md)),
       onOpenNote: (t) => { close(); notes.openByTitle(t); },
-      titles: () => notes.visible.map(titleOf),
+      targets: () => notes.visible,
       suggestionUI: suggest.ui,
     });
     // caret at the end of the title line, so a long card opens at its top rather than scrolled to the end

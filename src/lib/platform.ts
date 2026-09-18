@@ -229,12 +229,25 @@ async function show() {
 }
 async function dismiss() {
   document.dispatchEvent(new Event('visibilitychange')); // closes tooltips/popovers on the way out
+  // a half-typed 한글 syllable would otherwise still be composing when the window comes back, and a
+  // composing view reads no keystroke at all (App ends it on the way in too, for the paths with no blur)
+  for (const pm of document.querySelectorAll('.tiptap')) pm.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));
   await invoke<void>('hide_app');
 }
 export const win = {
   toggle: async () => { if (!isTauri) return; (await invoke<boolean>('is_front')) ? dismiss() : show(); },
   hide: () => (isTauri ? dismiss() : Promise.resolve()),
 };
+
+/**
+ * The window became frontmost again (hotkey, a click, ⌘Tab, the Dock). Separate from the DOM 'focus'
+ * event, which stays silent when the webview held focus the whole time the app was in the background.
+ */
+export async function onWindowFocus(cb: () => void): Promise<() => void> {
+  if (!isTauri) return () => {};
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  return getCurrentWindow().onFocusChanged(({ payload }) => { if (payload) cb(); });
+}
 
 /** Register the global "summon" hotkey. Re-callable: unregisters everything first. */
 export async function setGlobalHotkey(keys: string): Promise<string | null> {

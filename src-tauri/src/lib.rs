@@ -349,7 +349,12 @@ fn show_window(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     app.show().map_err(|e| e.to_string())?;
     win.show().map_err(|e| e.to_string())?;
-    win.set_focus().map_err(|e| e.to_string())
+    win.set_focus().map_err(|e| e.to_string())?;
+    // set_focus only makes the *window* key; the webview can come back without being first responder,
+    // and then the page gets no keystrokes at all however the DOM focus looks.
+    let webview: &tauri::Webview<_> = win.as_ref();
+    let _ = webview.set_focus();
+    Ok(())
 }
 
 /// Show + focus the main window, or hide the whole app (returning focus to the previous app).

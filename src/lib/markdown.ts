@@ -11,6 +11,28 @@ export function plain(line: string): string {
 }
 
 /**
+ * The `## …` lines of a note, in order — its sections, for a `[[Title#Section]]` link. The first line
+ * is the note's title rather than a section of it, and a `#` inside a code fence is a comment, not a heading.
+ */
+export function headingsOf(body: string): string[] {
+  const out: string[] = [];
+  let fenced = false;
+  for (const line of body.split('\n').slice(1)) {
+    if (/^\s*(```|~~~)/.test(line)) { fenced = !fenced; continue; }
+    if (fenced || !/^#{1,6}\s+\S/.test(line)) continue;
+    const text = plain(line);
+    if (text) out.push(text);
+  }
+  return out;
+}
+
+/** `Title#Section` -> its two halves ('' when the link points at the page itself). */
+export function splitLink(link: string): [title: string, section: string] {
+  const i = link.indexOf('#');
+  return i < 0 ? [link.trim(), ''] : [link.slice(0, i).trim(), link.slice(i + 1).trim()];
+}
+
+/**
  * A kanban card as one document: its title is the leading `# …` line, its body the rest. The board file keeps
  * the two fields apart, so the card page composes the document when it opens and splits it back on every edit
  * — one editing host, so a drag that starts in the title runs on into the body.

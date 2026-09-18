@@ -7,7 +7,7 @@
   import { groups, MAX_DEPTH } from './lib/groups.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
-  import { setGlobalHotkey, win, files, autostart, dock, pin, isTauri } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, dock, pin, isTauri, onWindowFocus } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Settings from './Settings.svelte';
@@ -62,16 +62,38 @@ import CardPage from './CardPage.svelte';
       if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; }
     }));
     window.addEventListener('eve-summon', restoreFocus);
+    // coming back by click, ⌘Tab or the Dock fires no DOM 'focus' when the webview never let go of it
+    let unfocus: (() => void) | undefined;
+    onWindowFocus(restoreFocus).then((u) => (unfocus = u));
     const stopSync = sync.start();
-    return () => { window.removeEventListener('eve-summon', restoreFocus); clearTimeout(hintTimer); stopSync?.(); };
+    return () => { window.removeEventListener('eve-summon', restoreFocus); unfocus?.(); clearTimeout(hintTimer); stopSync?.(); };
   });
+
+  /**
+   * An IME composition (한글 조합 중 — the underlined syllable) that the window walked out on. macOS
+   * delivers no `compositionend` in that case, and ProseMirror ignores every DOM change while it believes
+   * one is still in flight: the note goes deaf to the keyboard for good. Ending it keeps what was already
+   * typed (the view flushes the DOM) and lets the next keystroke through. A view that is not composing
+   * takes no notice, so this is safe to fire on the way out and on the way back in.
+   */
+  function endComposition() {
+    for (const pm of document.querySelectorAll('.tiptap')) {
+      pm.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));
+    }
+  }
 
   /** Summoned back (⌘⇧Space, Dock, ⌘Tab): the caret goes where it was, the editor by default. */
   function restoreFocus() {
+    endComposition(); // before the blur below: blurring mid-composition is what wedges the view
     if (ui.pending || ui.emoji || settingsOpen) return; // a dialog owns focus
     const a = document.activeElement as HTMLElement | null;
     const keep = a && a.isConnected && a !== document.body && a.closest('aside, .card, input');
-    (keep ? a : document.querySelector<HTMLElement>(ui.card ? '.card .tiptap' : '.tiptap'))?.focus();
+    const el = keep ? a : document.querySelector<HTMLElement>(ui.card ? '.card .tiptap' : '.tiptap');
+    // Another app taking the window leaves the note still *being* activeElement while the webview has
+    // stopped delivering keys — and WebKit makes focus() on the already-focused element a no-op, so the
+    // keyboard would stay dead. Blur first: the focus then really lands and ProseMirror puts the caret back.
+    if (el && el === document.activeElement) el.blur();
+    el?.focus();
   }
 
   function step(delta: number) {
@@ -96,8 +118,10 @@ import CardPage from './CardPage.svelte';
     if (!n) return;
     if (await ui.ask(`Delete “${titleOf(n)}”?`)) notes.remove(n.id);
   }
-  const EDIT_KEYS = /^(Arrow|Backspace|Delete|Enter|Tab)/;
-  /** a keystroke that writes or moves the caret in the editor (not a shortcut, not the sidebar's own keys) */
+  // Arrows are not on this list: moving the caret is reading, not writing, and folding the list away
+  // under an arrow key takes the highlighted row off the screen just when it is being used to navigate.
+  const EDIT_KEYS = /^(Backspace|Delete|Enter|Tab)/;
+  /** a keystroke that writes in the editor (not a shortcut, not the sidebar's own keys) */
   function isWriting(e: KeyboardEvent) {
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
     if (!(document.activeElement as HTMLElement | null)?.closest('.tiptap')) return false;
@@ -147,9 +171,10 @@ import CardPage from './CardPage.svelte';
 
   function onKeydown(e: KeyboardEvent) {
     // ⌘ alone peeks at the numbers; ⌘ with anything else is a shortcut, so the icons come straight back
-    if (e.key === 'Meta') cmdDown();
+    // (including a modifier already held when ⌘ goes down — ⇧⌘ waiting for its third key is not a peek)
+    if (e.key === 'Meta' && !e.shiftKey && !e.altKey && !e.ctrlKey) cmdDown();
     else cmdUp();
-    // writing takes the window: the list folds away the moment you type or arrow inside the editor
+    // writing takes the window: the list folds away the moment you type inside the editor
     if (sidebarOpen && appearance.s.hideSidebarOnEdit && isWriting(e)) sidebarOpen = false;
     if (ui.pending || ui.emoji) return;
     // Escape puts away whatever is open over the note — the find bar, then the PDF panel — and only a
@@ -197,7 +222,7 @@ import CardPage from './CardPage.svelte';
   }
 </script>
 
-<svelte:window ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={cmdUp} onfocus={restoreFocus}
+<svelte:window ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={() => { cmdUp(); endComposition(); }} onfocus={restoreFocus}
   onmousedowncapture={() => (document.documentElement.dataset.input = 'mouse')}
   onkeydowncapture={() => (document.documentElement.dataset.input = 'keyboard')} />
 

@@ -1,7 +1,7 @@
 import { storage } from './platform';
 import { appearance } from './appearance.svelte';
 import { RANDOM_ICONS } from './icons';
-import { plain } from './markdown';
+import { plain, splitLink } from './markdown';
 
 export { plain };
 
@@ -90,6 +90,8 @@ class NotesStore {
   cursor = new Map<string, number>();
   /** set just before creating a page whose title is a placeholder: the editor selects it on open */
   selectTitle = false;
+  /** the heading a `[[Title#Section]]` link just aimed at; the editor scrolls there as the page opens */
+  section = '';
 
   get currentId() { return this._cur; }
   set currentId(id: string | null) {
@@ -187,7 +189,8 @@ class NotesStore {
     // ponytail: scans every body on a rename; fine for local notes, index the links if it ever bites
     for (const other of this.all) {
       if (other.deleted || other.id === n.id) continue;
-      const body = other.body.split(`[[${was}]]`).join(`[[${now}]]`);
+      // both shapes of the link: the page itself, and one of its sections
+      const body = other.body.split(`[[${was}]]`).join(`[[${now}]]`).split(`[[${was}#`).join(`[[${now}#`);
       if (body === other.body) continue;
       other.body = body;
       other.updatedAt = Date.now();
@@ -316,8 +319,11 @@ class NotesStore {
   }
 
   /** Open note by title, creating it if missing (used by [[wiki links]]). */
-  openByTitle(title: string) {
+  /** Follow a `[[link]]`. `Title#Section` opens the page at that heading (Editor reads `section`). */
+  openByTitle(link: string) {
+    const [title, section] = splitLink(link);
     const hit = this.visible.find((n) => titleOf(n).toLowerCase() === title.toLowerCase());
+    this.section = hit ? section : '';
     this.currentId = hit ? hit.id : this.create(`# ${title}\n\n`).id;
   }
 
