@@ -53,6 +53,14 @@
       (last && last.content.size ? chain.splitBlock() : chain).insertContent(content).run();
     };
     hooks.noteHtml = () => editor?.getHTML() ?? '';
+    // summoned back: the caret in the middle of the page, where it is comfortable to write from —
+    // not pinned to whichever edge the last scroll into view left it against
+    hooks.centerCaret = () => {
+      if (!editor || !scrollEl) return;
+      const caret = editor.view.coordsAtPos(editor.state.selection.head);
+      const box = scrollEl.getBoundingClientRect();
+      scrollEl.scrollBy({ top: caret.top - (box.top + box.height / 2) });
+    };
     const section = notes.section; // a [[Title#Section]] link brought us here
     notes.section = '';
     if (section) {
@@ -66,6 +74,7 @@
     return () => {
       hooks.attach = undefined;
       hooks.noteHtml = undefined;
+      hooks.centerCaret = undefined;
       if (editor) notes.cursor.set(id, editor.state.selection.from);
       editor?.destroy();
       // Svelte runs teardown with pre-update state visible, so a flush here would persist stale data

@@ -62,20 +62,19 @@ import CardPage from './CardPage.svelte';
       const first = await importPaths(paths);
       if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; }
     }));
-    window.addEventListener('eve-summon', restoreFocus);
+    window.addEventListener('eve-summon', onSummon);
     // coming back by click, ⌘Tab or the Dock fires no DOM 'focus' when the webview never let go of it
     let unfocus: (() => void) | undefined;
     onWindowFocus(restoreFocus).then((u) => (unfocus = u));
     const stopSync = sync.start();
-    return () => { window.removeEventListener('eve-summon', restoreFocus); unfocus?.(); clearTimeout(hintTimer); stopSync?.(); };
+    return () => { window.removeEventListener('eve-summon', onSummon); unfocus?.(); clearTimeout(hintTimer); stopSync?.(); };
   });
 
   /**
-   * An IME composition (한글 조합 중 — the underlined syllable) that the window walked out on. macOS
-   * delivers no `compositionend` in that case, and ProseMirror ignores every DOM change while it believes
-   * one is still in flight: the note goes deaf to the keyboard for good. Ending it keeps what was already
-   * typed (the view flushes the DOM) and lets the next keystroke through. A view that is not composing
-   * takes no notice, so this is safe to fire on the way out and on the way back in.
+   * End an IME composition on the way *out*. macOS delivers no `compositionend` when the window leaves
+   * mid-syllable, and a ProseMirror view that still believes one is in flight ignores what comes next.
+   * Only ever on the way out: doing this on the way back in cuts a syllable the user is typing right
+   * now in half (한글이 자모로 분리된다).
    */
   function endComposition() {
     for (const pm of document.querySelectorAll('.tiptap')) {
@@ -83,18 +82,23 @@ import CardPage from './CardPage.svelte';
     }
   }
 
-  /** Summoned back (⌘⇧Space, Dock, ⌘Tab): the caret goes where it was, the editor by default. */
+  /**
+   * Summoned back (⌘⇧Space, Dock, ⌘Tab): the caret goes to the note, but only when the window came back
+   * with nothing focused at all. Anything already holding focus is left strictly alone — this runs again
+   * on the window's own focus event, which can land a beat *after* the first keystroke, and re-focusing
+   * an element mid-composition is what splits a syllable into jamo.
+   */
   function restoreFocus() {
-    endComposition(); // before the blur below: blurring mid-composition is what wedges the view
-    if (ui.pending || ui.emoji || settingsOpen) return; // a dialog owns focus
+    if (ui.pending || ui.emoji || ui.menu || settingsOpen) return; // a dialog owns focus
     const a = document.activeElement as HTMLElement | null;
-    const keep = a && a.isConnected && a !== document.body && a.closest('aside, .card, input');
-    const el = keep ? a : document.querySelector<HTMLElement>(ui.card ? '.card .tiptap' : '.tiptap');
-    // Another app taking the window leaves the note still *being* activeElement while the webview has
-    // stopped delivering keys — and WebKit makes focus() on the already-focused element a no-op, so the
-    // keyboard would stay dead. Blur first: the focus then really lands and ProseMirror puts the caret back.
-    if (el && el === document.activeElement) el.blur();
-    el?.focus();
+    if (a && a.isConnected && a !== document.body) return;
+    document.querySelector<HTMLElement>(ui.card ? '.card .tiptap' : '.tiptap')?.focus();
+  }
+
+  /** The window called up by the hotkey: the caret belongs in the middle of the page, ready to write. */
+  function onSummon() {
+    restoreFocus();
+    hooks.centerCaret?.();
   }
 
   function step(delta: number) {
