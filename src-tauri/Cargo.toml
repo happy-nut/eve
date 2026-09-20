@@ -21,6 +21,8 @@ tauri = { version = "2", features = ["protocol-asset", "macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-autostart = "2"
+# the note's own Paste: WebKit blocks execCommand("paste") and the async clipboard API is not dependable here
+tauri-plugin-clipboard-manager = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # LaunchServices: which app macOS opens a .md with

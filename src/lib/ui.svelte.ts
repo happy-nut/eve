@@ -1,3 +1,6 @@
+/** One line of a right-click menu. `sep` starts a group above it; a `hide` item never makes the list. */
+export interface MenuItem { label: string; run?: () => void; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean }
+
 /** In-app confirm/prompt (WKWebView has no native JS dialogs). Rendered by Confirm.svelte. */
 interface Pending { message: string; input?: string; danger?: boolean; resolve: (v: string | null) => void }
 
@@ -31,6 +34,20 @@ class Ui {
     return new Promise((res) => { this.link = { x: at.left, y: at.bottom + 6, resolve: res }; });
   }
   linkDone(v: 'card' | 'link' | 'both' | null) { this.link?.resolve(v); this.link = null; }
+
+  /** a right-click menu at a point; the app draws its own everywhere, the webview's is suppressed */
+  menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  private menuFrom: HTMLElement | null = null;
+  openMenu(at: { clientX: number; clientY: number }, items: MenuItem[]) {
+    this.menuFrom = document.activeElement as HTMLElement | null;
+    this.menu = { x: at.clientX, y: at.clientY, items: items.filter((i) => !i.hide) };
+  }
+  /** Dismissed or picked: whatever had the keyboard gets it back (a picked item may take it again). */
+  closeMenu() {
+    this.menu = null;
+    if (this.menuFrom?.isConnected) this.menuFrom.focus();
+    this.menuFrom = null;
+  }
 
   /** the find bar over the open note (⌘F) */
   find = $state(false);

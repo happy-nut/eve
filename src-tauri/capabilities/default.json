@@ -19,6 +19,7 @@
     "global-shortcut:allow-is-registered",
     "dialog:allow-open",
     "dialog:allow-save",
-    "autostart:default"
+    "autostart:default",
+    "clipboard-manager:allow-read-text"
   ]
 }

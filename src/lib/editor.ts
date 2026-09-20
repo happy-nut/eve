@@ -22,11 +22,11 @@ import { Video } from './video';
 import { TableNodes } from './table';
 import { Find } from './find';
 import { Divider } from './divider';
-import { ui } from './ui.svelte';
+import { ui, type MenuItem } from './ui.svelte';
 import { notes, titleOf, type Note } from './notes.svelte';
 import { headingsOf, splitLink } from './markdown';
 import { isCustom } from './icons';
-import { pickImage, pickVideo, openUrl } from './platform';
+import { pickImage, pickVideo, openUrl, clipboardText } from './platform';
 import { fileMarkdown, isAsset } from './drop';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
@@ -342,6 +342,42 @@ export function goToSection(editor: Editor, section: string) {
   (editor.view.nodeDOM(at) as HTMLElement | null)?.scrollIntoView({ block: 'start' });
 }
 
+/**
+ * Right-click inside a note. The webview's own menu is Look Up / Translate / Speech / AutoFill — a wall
+ * of things a note cannot use — so the app draws this one instead: the clipboard, the marks that have
+ * keyboard shortcuts nobody remembers, and nothing else.
+ */
+function noteMenu(editor: Editor, event: MouseEvent) {
+  // a right-click outside the selection moves the caret there first, the way every editor behaves
+  const at = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+  const sel = editor.state.selection;
+  if (at && (at.pos < sel.from || at.pos > sel.to)) editor.commands.setTextSelection(at.pos);
+  const empty = editor.state.selection.empty;
+  const linked = editor.isActive('link');
+  /** execCommand is the one path that keeps ProseMirror's own clipboard serializer (markdown, nodes) */
+  const clip = (cmd: 'cut' | 'copy') => () => { editor.commands.focus(); document.execCommand(cmd); };
+  const items: MenuItem[] = [
+    { label: 'Cut', disabled: empty, run: clip('cut') },
+    { label: 'Copy', disabled: empty, run: clip('copy') },
+    { label: 'Paste', run: () => void clipboardText().then((t) => t && editor.view.pasteText(t)) },
+    { label: 'Bold', sep: true, disabled: empty, run: () => editor.chain().focus().toggleBold().run() },
+    { label: 'Italic', disabled: empty, run: () => editor.chain().focus().toggleItalic().run() },
+    { label: 'Code', disabled: empty, run: () => editor.chain().focus().toggleCode().run() },
+    linked
+      ? { label: 'Remove link', run: () => editor.chain().focus().unsetLink().run() }
+      : { label: 'Link…', disabled: empty, run: () => void linkSelection(editor) },
+    { label: 'Select all', sep: true, run: () => editor.chain().focus().selectAll().run() },
+  ];
+  ui.openMenu(event, items);
+}
+
+/** Ask for a URL and hang it on the selection (⌘K has no home in this editor). */
+async function linkSelection(editor: Editor) {
+  const href = (await ui.prompt('링크 주소', ''))?.trim();
+  if (!href) return editor.commands.focus();
+  editor.chain().focus().setLink({ href: /^[a-z]+:/i.test(href) ? href : `https://${href}` }).run();
+}
+
 export function createEditor(opts: {
   element: HTMLElement;
   content: string;
@@ -381,6 +417,7 @@ export function createEditor(opts: {
       },
       // links open in the browser: the editor's own webview must not navigate away from the app
       handleDOMEvents: {
+        contextmenu: (_view, event) => { event.preventDefault(); noteMenu(editor, event as MouseEvent); return true; },
         click: (_view, event) => {
           const a = (event.target as HTMLElement | null)?.closest?.('a[href]');
           if (!a || a.closest('.bookmark')) return false; // the bookmark card opens itself

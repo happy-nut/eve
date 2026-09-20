@@ -116,6 +116,14 @@ export const github = {
   post: (url: string, form: Record<string, string>) => invoke<string>('github_post', { url, form: Object.entries(form) }),
 };
 
+/**
+ * The clipboard as text, for the note's own Paste. WebKit blocks `execCommand('paste')` and the async
+ * clipboard API needs a gesture it will not always grant in a webview, so the desktop side reads it.
+ * Invoked by command name: the plugin's npm package would only wrap this one call.
+ */
+export const clipboardText = (): Promise<string> =>
+  (isTauri ? invoke<string>('plugin:clipboard-manager|read_text') : navigator.clipboard.readText()).catch(() => '');
+
 /** Open a link in the default browser. */
 export const openUrl = (url: string) => (isTauri ? invoke<void>('open_url', { url }) : Promise.resolve(void window.open(url, '_blank')));
 

@@ -16,6 +16,7 @@ import CardPage from './CardPage.svelte';
   import EmojiPicker from './EmojiPicker.svelte';
   import LinkChoice from './LinkChoice.svelte';
   import Tooltip from './Tooltip.svelte';
+  import Menu from './Menu.svelte';
   import { ui, hooks } from './lib/ui.svelte';
   import { fileMarkdown, droppedFiles, stem, TEXT_FILE } from './lib/drop';
   import { importPaths } from './lib/transfer';
@@ -176,6 +177,8 @@ import CardPage from './CardPage.svelte';
     else cmdUp();
     // writing takes the window: the list folds away the moment you type inside the editor
     if (sidebarOpen && appearance.s.hideSidebarOnEdit && isWriting(e)) sidebarOpen = false;
+    // the right-click menu takes the keyboard while it is up, wherever the focus actually sits
+    if (ui.menu) { if (e.key === 'Escape') { e.preventDefault(); ui.closeMenu(); } return; }
     if (ui.pending || ui.emoji) return;
     // Escape puts away whatever is open over the note — the find bar, then the PDF panel — and only a
     // bare note lets it through to hide the window. Tied to the key, not to the rebindable action:
@@ -222,7 +225,10 @@ import CardPage from './CardPage.svelte';
   }
 </script>
 
-<svelte:window ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={() => { cmdUp(); endComposition(); }} onfocus={restoreFocus}
+<!-- the webview's own menu is Reload / AutoFill / Speech — nothing a note can act on. The places worth
+     right-clicking open one of ours instead (a sidebar row, the note). A plain text box keeps the
+     system menu: cut/copy/paste there is exactly what it offers, and the app has nothing better. -->
+<svelte:window oncontextmenu={(e) => { if (!(e.target as HTMLElement).closest('input, textarea')) e.preventDefault(); }} ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={() => { cmdUp(); endComposition(); }} onfocus={restoreFocus}
   onmousedowncapture={() => (document.documentElement.dataset.input = 'mouse')}
   onkeydowncapture={() => (document.documentElement.dataset.input = 'keyboard')} />
 
@@ -279,6 +285,9 @@ import CardPage from './CardPage.svelte';
 {/if}
 {#if ui.emoji}
   <EmojiPicker />
+{/if}
+{#if ui.menu}
+  <Menu />
 {/if}
 {#if ui.link}
   <LinkChoice />
