@@ -169,8 +169,11 @@ export async function pickSavePath(name: string, ext: string): Promise<string | 
 /** Copy a file into notes/assets (an import that keeps the original where it is). */
 export const importAsset = (src: string) => invoke<string>('import_asset', { src });
 
-/** The system print panel — "Save as PDF" in it is how a note leaves as a PDF. */
-export const printPage = () => invoke<void>('print_page');
+/**
+ * Print the window to a PDF file. A print job that saves needs no printer and shows no panel, and the
+ * pages keep their text (a picture of the note is what "Export as image" is for). `margin` is in points.
+ */
+export const savePdf = (out: string, margin = 48) => invoke<void>('save_pdf', { out, margin });
 
 /** Render a standalone HTML page to a PNG at `out` (Quick Look does the drawing). */
 export const htmlToPng = (html: string, out: string) => invoke<void>('html_to_png', { html, out });

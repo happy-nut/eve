@@ -345,11 +345,13 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
   html, body, #app { height: auto; overflow: visible; background: #fff; border-radius: 0; }
   .shell { display: block; animation: none; }
   /* only the note is printed: no window chrome, no floating anything */
-  aside, .toolbar, .dragbar, .drop-hint, .pdf-panel, .tip, .plus-menu, .backdrop { display: none !important; }
+  aside, .toolbar, .dragbar, .drop-hint, .pdf-panel, .tip, .plus-menu, .backdrop,
+  .menu, .find, .outline, .suggest, .table-tools, .panel { display: none !important; }
   main { position: static; }
   .page { position: static; }
   .scroll { height: auto; overflow: visible; }
   .editor .tiptap { max-width: none; padding: 0; min-height: 0; }
+  /* the sheet's margin is the print job's (save_pdf sets it); nothing here adds a second one */
   .editor.has-head .tiptap { min-height: 0; }
   .page-head { display: none; }
   /* a card or a picture must not be split across two sheets */

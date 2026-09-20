@@ -268,10 +268,55 @@ fn write_file(path: String, text: String) -> Result<(), String> {
     fs::write(path, text).map_err(|e| e.to_string())
 }
 
-/// Open the system print panel for the window — "Save as PDF" in it is the app's PDF export.
-#[tauri::command]
-fn print_page(window: tauri::WebviewWindow) -> Result<(), String> {
-    window.print().map_err(|e| e.to_string())
+/// Export what the window shows as a PDF file, with margins and no panel in the way.
+///
+/// The note is printed, not screenshotted: a print job whose disposition is "save" writes the pages
+/// straight to `out`, so it needs no printer connected and the text stays text. `@media print` in the
+/// app's stylesheet is what strips the window chrome first.
+#[tauri::command(async)]
+fn save_pdf(window: tauri::WebviewWindow, out: String, margin: f64) -> Result<(), String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, out, margin);
+        return Err("PDF export is macOS only".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+    use objc2::rc::Retained;
+    use objc2::runtime::{AnyObject, ProtocolObject};
+    use objc2_app_kit::{NSPrintInfo, NSPrintJobSavingURL, NSPrintSaveJob};
+    use objc2_foundation::{NSString, NSURL};
+    use objc2_web_kit::WKWebView;
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    window
+        .with_webview(move |platform| {
+            let done = unsafe {
+                let webview: &WKWebView = &*(platform.inner() as *mut WKWebView);
+                let info = NSPrintInfo::new();
+                info.setTopMargin(margin);
+                info.setBottomMargin(margin);
+                info.setLeftMargin(margin);
+                info.setRightMargin(margin);
+                info.setJobDisposition(NSPrintSaveJob);
+                let url: Retained<NSURL> = NSURL::fileURLWithPath(&NSString::from_str(&out));
+                let target: &AnyObject = &url;
+                info.dictionary()
+                    .setObject_forKey(target, ProtocolObject::from_ref(NSPrintJobSavingURL));
+                let op = webview.printOperationWithPrintInfo(&info);
+                op.setShowsPrintPanel(false);
+                op.setShowsProgressPanel(false);
+                op.runOperation()
+            };
+            let _ = tx.send(done);
+        })
+        .map_err(|e| e.to_string())?;
+    match rx.recv_timeout(std::time::Duration::from_secs(60)) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err("the print job did not finish".into()),
+        Err(e) => Err(e.to_string()),
+    }
+    }
 }
 
 /// A standalone HTML page rendered to a PNG, by the same Quick Look that draws a PDF's first page.
@@ -493,7 +538,7 @@ pub fn run() {
             fetch_url,
             read_file,
             write_file,
-            print_page,
+            save_pdf,
             html_to_png,
             list_folder,
             take_pending_files,
