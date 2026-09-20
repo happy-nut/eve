@@ -1,6 +1,7 @@
 <script lang="ts">
   import { scale } from 'svelte/transition';
   import { ui, type MenuItem } from './lib/ui.svelte';
+  import { prettyKeys } from './lib/shortcuts.svelte';
 
   // the app's own right-click menu (the webview's is suppressed): App renders it, anyone opens it
   // through ui.openMenu. Keyboard-reachable like the "+" dropdown — the mouse moves the highlight.
@@ -43,7 +44,9 @@
   {#each req.items as it, i (i)}
     <li role="none" class:sep={it.sep}>
       <button role="menuitem" class:danger={it.danger} disabled={it.disabled}
-        onmousedown={hold} onmouseenter={(e) => e.currentTarget.focus()} onclick={() => pick(it)}>{it.label}</button>
+        onmousedown={hold} onmouseenter={(e) => e.currentTarget.focus()} onclick={() => pick(it)}>
+        <span class="label">{it.label}</span>{#if it.keys}<kbd>{prettyKeys(it.keys)}</kbd>{/if}
+      </button>
     </li>
   {/each}
 </ul>
@@ -56,9 +59,12 @@
     transform-origin: top left; outline: none;
   }
   .menu button {
-    width: 100%; border: 0; background: none; color: inherit; font: inherit; font-size: 13px;
-    padding: 6px 8px; border-radius: 5px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    border: 0; background: none; color: inherit; font: inherit; font-size: 13px;
+    padding: 6px 8px; border-radius: 5px; text-align: left; white-space: nowrap;
   }
+  .menu .label { overflow: hidden; text-overflow: ellipsis; }
+  .menu kbd { flex: none; color: var(--fg-dim); font: inherit; font-size: 11.5px; }
   .menu button:focus { background: var(--accent-soft); outline: none; }
   .menu button:disabled { color: var(--fg-dim); }
   .menu button.danger { color: #ff453a; }

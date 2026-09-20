@@ -1,5 +1,5 @@
 /** One line of a right-click menu. `sep` starts a group above it; a `hide` item never makes the list. */
-export interface MenuItem { label: string; run?: () => void; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean }
+export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean }
 
 /** In-app confirm/prompt (WKWebView has no native JS dialogs). Rendered by Confirm.svelte. */
 interface Pending { message: string; input?: string; danger?: boolean; resolve: (v: string | null) => void }
@@ -40,7 +40,9 @@ class Ui {
   private menuFrom: HTMLElement | null = null;
   openMenu(at: { clientX: number; clientY: number }, items: MenuItem[]) {
     this.menuFrom = document.activeElement as HTMLElement | null;
-    this.menu = { x: at.clientX, y: at.clientY, items: items.filter((i) => !i.hide) };
+    const shown = items.filter((i) => !i.hide);
+    // a group whose items all went away must not leave its divider at the top of the menu
+    this.menu = { x: at.clientX, y: at.clientY, items: shown.map((i, n) => (n === 0 && i.sep ? { ...i, sep: false } : i)) };
   }
   /** Dismissed or picked: whatever had the keyboard gets it back (a picked item may take it again). */
   closeMenu() {

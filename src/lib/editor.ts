@@ -28,6 +28,7 @@ import { headingsOf, splitLink } from './markdown';
 import { isCustom } from './icons';
 import { pickImage, pickVideo, openUrl, clipboardText } from './platform';
 import { fileMarkdown, isAsset } from './drop';
+import { exportCurrent } from './transfer';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
 
@@ -356,17 +357,22 @@ function noteMenu(editor: Editor, event: MouseEvent) {
   const linked = editor.isActive('link');
   /** execCommand is the one path that keeps ProseMirror's own clipboard serializer (markdown, nodes) */
   const clip = (cmd: 'cut' | 'copy') => () => { editor.commands.focus(); document.execCommand(cmd); };
+  const keys = (id: string) => shortcuts.keysFor(id);
+  // nothing greyed out: an item that cannot run is not on the list at all
   const items: MenuItem[] = [
-    { label: 'Cut', disabled: empty, run: clip('cut') },
-    { label: 'Copy', disabled: empty, run: clip('copy') },
-    { label: 'Paste', run: () => void clipboardText().then((t) => t && editor.view.pasteText(t)) },
-    { label: 'Bold', sep: true, disabled: empty, run: () => editor.chain().focus().toggleBold().run() },
-    { label: 'Italic', disabled: empty, run: () => editor.chain().focus().toggleItalic().run() },
-    { label: 'Code', disabled: empty, run: () => editor.chain().focus().toggleCode().run() },
+    { label: 'Cut', keys: 'Mod-x', hide: empty, run: clip('cut') },
+    { label: 'Copy', keys: 'Mod-c', hide: empty, run: clip('copy') },
+    { label: 'Paste', keys: 'Mod-v', run: () => void clipboardText().then((t) => t && editor.view.pasteText(t)) },
+    { label: 'Bold', sep: true, keys: keys('bold'), hide: empty, run: () => editor.chain().focus().toggleBold().run() },
+    { label: 'Italic', keys: keys('italic'), hide: empty, run: () => editor.chain().focus().toggleItalic().run() },
+    { label: 'Code', keys: keys('code'), hide: empty, run: () => editor.chain().focus().toggleCode().run() },
     linked
       ? { label: 'Remove link', run: () => editor.chain().focus().unsetLink().run() }
-      : { label: 'Link…', disabled: empty, run: () => void linkSelection(editor) },
-    { label: 'Select all', sep: true, run: () => editor.chain().focus().selectAll().run() },
+      : { label: 'Link…', keys: keys('link'), hide: empty, run: () => void linkSelection(editor) },
+    { label: 'Select all', sep: true, keys: 'Mod-a', run: () => editor.chain().focus().selectAll().run() },
+    { label: 'Export as Markdown…', sep: true, keys: keys('exportMd'), run: () => void exportCurrent('md') },
+    { label: 'Export as PDF…', keys: keys('exportPdf'), run: () => void exportCurrent('pdf') },
+    { label: 'Export as image…', keys: keys('exportPng'), run: () => void exportCurrent('png') },
   ];
   ui.openMenu(event, items);
 }

@@ -247,6 +247,13 @@ export const win = {
   hide: () => (isTauri ? dismiss() : Promise.resolve()),
 };
 
+/** The size the window opens at (Settings → Appearance). A browser window is the user's own business. */
+export async function setWindowSize(width: number, height: number): Promise<void> {
+  if (!isTauri) return;
+  const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window');
+  await getCurrentWindow().setSize(new LogicalSize(width, height));
+}
+
 /**
  * The window became frontmost again (hotkey, a click, ⌘Tab, the Dock). Separate from the DOM 'focus'
  * event, which stays silent when the webview held focus the whole time the app was in the background.

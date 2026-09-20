@@ -19,7 +19,7 @@ import CardPage from './CardPage.svelte';
   import Menu from './Menu.svelte';
   import { ui, hooks } from './lib/ui.svelte';
   import { fileMarkdown, droppedFiles, stem, TEXT_FILE } from './lib/drop';
-  import { importPaths } from './lib/transfer';
+  import { importPaths, exportCurrent } from './lib/transfer';
   import PdfViewer from './PdfViewer.svelte';
   import { titleOf } from './lib/notes.svelte';
 
@@ -218,6 +218,9 @@ import CardPage from './CardPage.svelte';
       case 'nextNote': step(1); break;
       case 'prevNote': step(-1); break;
       case 'deleteNote': deleteCurrent(); break;
+      case 'exportMd': void exportCurrent('md'); break;
+      case 'exportPdf': void exportCurrent('pdf'); break;
+      case 'exportPng': void exportCurrent('png'); break;
       case 'settings': settingsOpen = !settingsOpen; break;
       case 'hide': win.hide(); break;
       case 'pin': togglePin(); break;

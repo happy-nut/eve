@@ -78,13 +78,30 @@ export function step(editor: Editor, dir: 1 | -1) {
   show(editor, (index + dir + hits.length) % hits.length);
 }
 
+/**
+ * Bring the match into view. ProseMirror's own `scrollIntoView()` anchors on the DOM selection, which
+ * sits in the find box while you are typing — so it looks for a scroller around *that* and the note
+ * never moves. The element under the match is the anchor that always belongs to the note's scroller.
+ * It only scrolls when the match is not comfortably on screen: the bar covers the top of the note, and
+ * a page that jumps at every keystroke is worse than one that stays put.
+ */
+const BAR = 96; // the find bar's reach down the top of the note
+function reveal(editor: Editor, from: number) {
+  const box = editor.view.coordsAtPos(from);
+  if (box.top > BAR && box.bottom < window.innerHeight - 24) return;
+  const dom = editor.view.domAtPos(from).node;
+  const el = dom.nodeType === Node.TEXT_NODE ? dom.parentElement : (dom as HTMLElement);
+  el?.scrollIntoView({ block: 'center' });
+}
+
 /** Put the match on screen and select it, without taking the keyboard out of the find box. */
 function show(editor: Editor, index: number) {
   const { hits } = findState(editor);
   const hit = hits[index];
   const tr = editor.state.tr.setMeta(FIND, { index });
-  if (hit) tr.setSelection(TextSelection.create(tr.doc, hit.from, hit.to)).scrollIntoView();
+  if (hit) tr.setSelection(TextSelection.create(tr.doc, hit.from, hit.to));
   editor.view.dispatch(tr);
+  if (hit) reveal(editor, hit.from);
 }
 
 /**

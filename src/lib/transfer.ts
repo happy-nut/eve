@@ -4,6 +4,7 @@ import { files, importAsset, pickFiles, pickFolders, listFolder, pickSavePath, p
 import { TEXT_FILE, PDF_FILE, VIDEO_FILE } from './drop';
 import { commonDir, dirOf, groupFor, nameOf, stem } from './paths';
 import appCss from '../app.css?inline';
+import { ui, hooks } from './ui.svelte';
 
 /** Files this app takes in, by extension. */
 const IMPORTABLE = /\.(md|markdown|mdx|txt|pdf|png|jpe?g|gif|webp|svg|heic|mp4|mov|m4v|webm)$/i;
@@ -78,6 +79,20 @@ export async function exportNote(note: Note, as: ExportAs, html: () => string): 
   if (as === 'md') await files.write(path, note.body);
   else await htmlToPng(page(titleOf(note), html()), path);
   return path;
+}
+
+/**
+ * The open note, exported — what every menu and shortcut that offers it calls. A failure says so
+ * instead of quietly doing nothing (a save panel cancelled is not a failure: it returns null).
+ */
+export async function exportCurrent(as: ExportAs): Promise<void> {
+  const n = notes.current;
+  if (!n) return;
+  try {
+    await exportNote(n, as, hooks.noteHtml ?? (() => ''));
+  } catch (err) {
+    await ui.ask(String(err), false);
+  }
 }
 
 /** The webview's asset:// URLs mean nothing to a page outside the app; pictures travel as file paths. */
