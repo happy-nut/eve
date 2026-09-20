@@ -105,7 +105,8 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
 .tiptap h5 { font-size: 0.9em; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.04em; }
 .tiptap > h1:first-child { margin-top: 0; }
 .tiptap p { margin: 0; }
-.tiptap strong { font-weight: 600; }
+/* 700, not 600: the Korean face only steps up at Bold, and 600 reads the same as the text around it */
+.tiptap strong { font-weight: 700; }
 .tiptap p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: var(--fg-dim);
@@ -342,18 +343,37 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
 
 /* ---- printing (Export as PDF goes through the system print panel) ---- */
 @media print {
+  /* WebKit prints in "economy": every background and shading is dropped, which takes the code blocks,
+     callouts and table headers with it. The note is the document here, so print it as it reads. */
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   html, body, #app { height: auto; overflow: visible; background: #fff; border-radius: 0; }
+  /* the caret is the app's, not the note's: it printed as a stray bar at the end of the last line */
+  .tiptap { caret-color: transparent; }
   .shell { display: block; animation: none; }
   /* only the note is printed: no window chrome, no floating anything */
   aside, .toolbar, .dragbar, .drop-hint, .pdf-panel, .tip, .plus-menu, .backdrop,
   .menu, .find, .outline, .suggest, .table-tools, .panel { display: none !important; }
   main { position: static; }
   .page { position: static; }
-  .scroll { height: auto; overflow: visible; }
+  /* display:contents, not overflow:visible — the scroller keeps its scrollTop either way, and a note
+     scrolled halfway down would print with everything above the caret sliced off the first page */
+  .scroll { display: contents; }
   .editor .tiptap { max-width: none; padding: 0; min-height: 0; }
+  /* the selection-painting hack (overflow: clip on a fit-content box) is for the screen only — on paper
+     it can clip a line away to nothing */
+  .tiptap p, .tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 { overflow: visible; width: auto; max-width: none; }
   /* the sheet's margin is the print job's (save_pdf sets it); nothing here adds a second one */
   .editor.has-head .tiptap { min-height: 0; }
-  .page-head { display: none; }
+  /* the icon block stays: hiding it shifted the note up into a band at the top of the page that WebKit
+     lays out but never paints — the note's own title line vanished there. Left in place it prints the
+     icon, and every line of the note lands where it is drawn. */
+  .page-head { break-after: avoid; }
+  /* its contents would print half-cut inside that band, so only the space it takes survives */
+  .page-head > * { visibility: hidden; }
+  /* ponytail: the note's own title line (the first h1) comes out blank on paper — its glyphs are in the
+     PDF's text layer, at the right place and in the right colour, but nothing paints them. Printing the
+     live app page is what makes this hard to chase; rendering the standalone export page (the one the
+     picture export already builds) in a window of its own would sidestep it. */
   /* a card or a picture must not be split across two sheets */
   .tiptap img, .tiptap .pdf-card, .tiptap .bookmark, .tiptap pre, .tiptap blockquote, .tiptap .callout { break-inside: avoid; }
   .tiptap h1, .tiptap h2, .tiptap h3 { break-after: avoid; }

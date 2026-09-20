@@ -272,7 +272,8 @@ fn write_file(path: String, text: String) -> Result<(), String> {
 ///
 /// The note is printed, not screenshotted: a print job whose disposition is "save" writes the pages
 /// straight to `out`, so it needs no printer connected and the text stays text. `@media print` in the
-/// app's stylesheet is what strips the window chrome first.
+/// app's stylesheet is what strips the window chrome first. The job is started on the run loop and the
+/// call returns — a print operation that blocks the main thread never finishes, WebKit needs it.
 #[tauri::command(async)]
 fn save_pdf(window: tauri::WebviewWindow, out: String, margin: f64) -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
@@ -284,15 +285,16 @@ fn save_pdf(window: tauri::WebviewWindow, out: String, margin: f64) -> Result<()
     {
     use objc2::rc::Retained;
     use objc2::runtime::{AnyObject, ProtocolObject};
-    use objc2_app_kit::{NSPrintInfo, NSPrintJobSavingURL, NSPrintSaveJob};
+    use objc2_app_kit::{NSPrintInfo, NSPrintJobSavingURL, NSPrintSaveJob, NSWindow};
     use objc2_foundation::{NSString, NSURL};
     use objc2_web_kit::WKWebView;
 
     let (tx, rx) = std::sync::mpsc::channel();
     window
         .with_webview(move |platform| {
-            let done = unsafe {
+            unsafe {
                 let webview: &WKWebView = &*(platform.inner() as *mut WKWebView);
+                let host: &NSWindow = &*(platform.ns_window() as *mut NSWindow);
                 let info = NSPrintInfo::new();
                 info.setTopMargin(margin);
                 info.setBottomMargin(margin);
@@ -306,16 +308,21 @@ fn save_pdf(window: tauri::WebviewWindow, out: String, margin: f64) -> Result<()
                 let op = webview.printOperationWithPrintInfo(&info);
                 op.setShowsPrintPanel(false);
                 op.setShowsProgressPanel(false);
-                op.runOperation()
-            };
-            let _ = tx.send(done);
+                // Modal *for the window*, not for the thread: it returns at once and the job runs on the
+                // run loop. `runOperation()` instead deadlocks — it blocks the main thread while WebKit
+                // still needs it to lay the pages out, and the whole app stops with it.
+                op.runOperationModalForWindow_delegate_didRunSelector_contextInfo(
+                    host,
+                    None,
+                    None,
+                    std::ptr::null_mut(),
+                );
+            }
+            let _ = tx.send(());
         })
         .map_err(|e| e.to_string())?;
-    match rx.recv_timeout(std::time::Duration::from_secs(60)) {
-        Ok(true) => Ok(()),
-        Ok(false) => Err("the print job did not finish".into()),
-        Err(e) => Err(e.to_string()),
-    }
+    // only that the job was handed over — the pages are written as the run loop gets to them
+    rx.recv_timeout(std::time::Duration::from_secs(10)).map_err(|e| e.to_string())
     }
 }
 
