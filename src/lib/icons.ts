@@ -17,3 +17,9 @@ export const customUrl = (c: CustomIcon) =>
 
 /** a pleasant pool for "add icon" (Notion picks one at random too) */
 export const RANDOM_ICONS = ['📝', '📌', '📎', '📚', '📖', '📒', '📓', '🗂️', '🗒️', '💡', '🔥', '⭐', '✨', '🌟', '🎯', '🚀', '🛰️', '🧭', '🗺️', '🧩', '🧠', '🎨', '🎬', '🎧', '🎮', '🏗️', '🔧', '🛠️', '⚙️', '🔬', '🧪', '🧬', '💎', '🌱', '🌿', '🍀', '🌸', '🌊', '🌈', '☀️', '🌙', '⚡', '❄️', '🍎', '🍋', '🍉', '🥑', '🍕', '☕', '🍵', '🐢', '🐙', '🦊', '🐼', '🦉', '🐳', '🦋', '🏠', '🏔️', '🗽', '🎈', '🎁', '🏆', '🔑', '🔒', '💬', '📣', '🧲'];
+
+/** One at random, never the one already in place (a second roll should look like it did something). */
+export const randomIcon = (except = '') => {
+  const pool = RANDOM_ICONS.filter((e) => e !== except);
+  return pool[Math.floor(Math.random() * pool.length)];
+};

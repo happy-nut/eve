@@ -1,6 +1,6 @@
 import { storage } from './platform';
 import { appearance } from './appearance.svelte';
-import { RANDOM_ICONS } from './icons';
+import { randomIcon } from './icons';
 import { plain, splitLink } from './markdown';
 
 export { plain };
@@ -17,7 +17,7 @@ export interface Note {
 }
 
 /** An icon for a note that was just made, unless the setting is off. */
-const autoIcon = () => (appearance.s.autoIcon ? RANDOM_ICONS[Math.floor(Math.random() * RANDOM_ICONS.length)] : undefined);
+const autoIcon = () => (appearance.s.autoIcon ? randomIcon() : undefined);
 
 export const newId = () =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 8);

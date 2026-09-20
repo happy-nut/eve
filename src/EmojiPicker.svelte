@@ -3,7 +3,7 @@
   import dataSource from 'emoji-picker-element-data/en/emojibase/data.json?url';
   import { fade, scale } from 'svelte/transition';
   import { ui } from './lib/ui.svelte';
-  import { CUSTOM_ICONS, customUrl } from './lib/icons';
+  import { CUSTOM_ICONS, customUrl, randomIcon } from './lib/icons';
 
   const req = $derived(ui.emoji!);
   let el: HTMLElement & { i18n?: unknown };
@@ -62,7 +62,11 @@
 <div class="panel" style="left: {x}px; top: {y}px; width: {W}px" transition:scale={{ start: 0.96, duration: 140 }} role="dialog" aria-label="이모지 선택">
   <header>
     <span class="tab">이모지</span>
-    {#if req.current}<button class="remove" onclick={() => ui.emojiDone('')}>제거</button>{/if}
+    <span class="acts">
+      <!-- the same pool the "아이콘 추가" button rolls from, so a page can be given a face without choosing one -->
+      <button class="act" onclick={() => ui.emojiDone(randomIcon(req.current))}>랜덤</button>
+      {#if req.current}<button class="act" onclick={() => ui.emojiDone('')}>제거</button>{/if}
+    </span>
   </header>
   <emoji-picker bind:this={el} data-source={dataSource} skin-tone-emoji="✌️" onemoji-click={onPick}></emoji-picker>
 </div>
@@ -76,8 +80,9 @@
   }
   header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 6px; border-bottom: 1px solid var(--line); font-size: 13px; }
   .tab { font-weight: 600; }
-  .remove { border: 0; background: none; color: var(--fg-dim); font: inherit; font-size: 12.5px; }
-  .remove:hover { color: var(--fg); }
+  .acts { display: flex; gap: 10px; }
+  .act { border: 0; background: none; color: var(--fg-dim); font: inherit; font-size: 12.5px; padding: 0; }
+  .act:hover { color: var(--fg); }
   emoji-picker {
     width: 100%; height: 340px;
     --background: var(--bg-pop); --border-color: var(--line); --border-size: 0;
