@@ -10,7 +10,7 @@ export interface Action {
 }
 
 export const DEFAULTS: Action[] = [
-  { id: 'toggleWindow', label: 'Summon / dismiss Eve (system-wide)', scope: 'global', keys: 'Mod-Shift-Space' },
+  { id: 'toggleWindow', label: 'Summon / dismiss Eve (system-wide)', scope: 'global', keys: 'Mod-Shift-e' },
 
   { id: 'newNote', label: 'New note', scope: 'app', keys: 'Mod-n' },
   { id: 'search', label: 'Search notes', scope: 'app', keys: 'Mod-k' },
@@ -21,9 +21,10 @@ export const DEFAULTS: Action[] = [
   { id: 'nextNote', label: 'Next note', scope: 'app', keys: 'Mod-Shift-ArrowDown' },
   { id: 'prevNote', label: 'Previous note', scope: 'app', keys: 'Mod-Shift-ArrowUp' },
   { id: 'deleteNote', label: 'Delete current note', scope: 'app', keys: 'Mod-Shift-Backspace' },
-  { id: 'exportMd', label: 'Export note as Markdown…', scope: 'app', keys: 'Mod-Shift-s' },
-  { id: 'exportPdf', label: 'Export note as PDF… (the print panel saves it)', scope: 'app', keys: 'Mod-p' },
-  { id: 'exportPng', label: 'Export note as an image…', scope: 'app', keys: 'Mod-Shift-e' },
+  // not Mod-Shift-s: the editor's own strikethrough takes that one before the app ever sees it
+  { id: 'exportMd', label: 'Export note as Markdown…', scope: 'app', keys: 'Mod-Shift-m' },
+  { id: 'exportPdf', label: 'Export note as PDF…', scope: 'app', keys: 'Mod-p' },
+  { id: 'exportPng', label: 'Export note as an image…', scope: 'app', keys: 'Mod-Alt-p' },
   { id: 'settings', label: 'Settings', scope: 'app', keys: 'Mod-,' },
   { id: 'hide', label: 'Hide window', scope: 'app', keys: 'Escape' },
   { id: 'pin', label: 'Keep window on top', scope: 'app', keys: 'Mod-Shift-p' },

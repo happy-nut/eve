@@ -146,4 +146,16 @@
   .big-icon:hover { background: var(--bg-hover); }
   .big-icon:active { transform: scale(0.95); }
   .editor.has-head :global(.tiptap) { padding-top: 0; min-height: calc(100% - 72px); }
+
+  /* On paper the head is a fixed block that holds the icon below the band at the top of the printed
+     flow — WebKit lays that band out but never paints it, and the note's title used to vanish into it.
+     The icon prints as a picture (a colour glyph only ever draws in part), left-aligned with the text
+     rather than centred the way a button centres what it holds. */
+  @media print {
+    .page-head, .page-head.with-icon {
+      height: 150px; padding: 84px 0 0; box-sizing: border-box; max-width: none; margin: 0; break-after: avoid;
+    }
+    .big-icon { display: block; width: 56px; height: 56px; padding: 0; margin: 0; }
+    .add-icon { visibility: hidden; }
+  }
 </style>

@@ -34,7 +34,7 @@ export function emojiImage(ch: string, size = 56): string {
   const g = canvas.getContext('2d');
   let url = '';
   if (g) {
-    g.font = `${size * scale * 0.86}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
+    g.font = `${size * scale * 0.72}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`; // room around it: a glyph drawn to the edge comes out shaved
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(ch, canvas.width / 2, canvas.height / 2);

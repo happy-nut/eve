@@ -368,12 +368,7 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
      it). Hiding the icon block moved the note's own title into that band and it vanished; leaving the
      block as it is on screen put the icon half inside it, sliced. So the block keeps a fixed height and
      holds its icon *below* the band, where both the icon and the title land on paper as they read. */
-  /* The icon sits below the band at the top of the flow that WebKit lays out but never paints (80px of
-     it, measured): inside it, the icon — and before it the note's own title — simply never appeared.
-     The height is fixed so a note without an icon reserves the same band. */
-  .page-head, .page-head.with-icon { height: 156px; padding: 84px 0 0; box-sizing: border-box; break-after: avoid; }
-  .big-icon { padding: 0; margin: 0; }
-  .add-icon { visibility: hidden; }
+  /* the page head prints its own rules (Editor.svelte): scoped styles outrank anything written here */
   /* ponytail: the note's own title line (the first h1) comes out blank on paper — its glyphs are in the
      PDF's text layer, at the right place and in the right colour, but nothing paints them. Printing the
      live app page is what makes this hard to chase; rendering the standalone export page (the one the
