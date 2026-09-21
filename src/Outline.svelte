@@ -56,11 +56,15 @@
       // …and never more ticks than the rail can hold: a very long note stretches its stride instead
       const span = Math.max(320, sc.clientHeight * 0.8, sc.scrollHeight / 24);
       const blocks = [...root.children] as HTMLElement[];
+      // a tick marks a section, and a section is the note's own top level: the shallowest heading under
+      // the title line. The headings inside one do not each earn a tick — three sub-headings in a row are
+      // one place to scroll to, not three, and turning them into ticks makes a picket fence of the rail.
+      const level = Math.min(...blocks.slice(1).filter((el) => /^H[1-6]$/.test(el.tagName)).map((el) => +el.tagName[1]));
       const cuts: { el: HTMLElement; top: number }[] = [];
       let prev = -Infinity;
       for (const el of blocks) {
         const at = el.getBoundingClientRect().top - base;
-        if (!(prev === -Infinity || /^H[1-5]$/.test(el.tagName) || at - prev >= span)) continue;
+        if (!(prev === -Infinity || el.tagName === `H${level}` || at - prev >= span)) continue;
         cuts.push({ el, top: at });
         prev = at;
       }

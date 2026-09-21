@@ -116,6 +116,14 @@ export const github = {
   post: (url: string, form: Record<string, string>) => invoke<string>('github_post', { url, form: Object.entries(form) }),
 };
 
+/**
+ * The clipboard as text, for the note's own Paste. WebKit blocks `execCommand('paste')` and the async
+ * clipboard API needs a gesture it will not always grant in a webview, so the desktop side reads it.
+ * Invoked by command name: the plugin's npm package would only wrap this one call.
+ */
+export const clipboardText = (): Promise<string> =>
+  (isTauri ? invoke<string>('plugin:clipboard-manager|read_text') : navigator.clipboard.readText()).catch(() => '');
+
 /** Open a link in the default browser. */
 export const openUrl = (url: string) => (isTauri ? invoke<void>('open_url', { url }) : Promise.resolve(void window.open(url, '_blank')));
 
@@ -161,11 +169,14 @@ export async function pickSavePath(name: string, ext: string): Promise<string | 
 /** Copy a file into notes/assets (an import that keeps the original where it is). */
 export const importAsset = (src: string) => invoke<string>('import_asset', { src });
 
-/** The system print panel — "Save as PDF" in it is how a note leaves as a PDF. */
-export const printPage = () => invoke<void>('print_page');
+/**
+ * Print the window to a PDF file. A print job that saves needs no printer and shows no panel, and the
+ * pages keep their text (a picture of the note is what "Export as image" is for). `margin` is in points.
+ */
+export const savePdf = (out: string, margin = 24) => invoke<void>('save_pdf', { out, margin });
 
-/** Render a standalone HTML page to a PNG at `out` (Quick Look does the drawing). */
-export const htmlToPng = (html: string, out: string) => invoke<void>('html_to_png', { html, out });
+/** The same printed page, rasterised — how a note leaves as a picture. */
+export const savePng = (out: string, margin = 24, width = 1600) => invoke<void>('save_image', { out, margin, width });
 
 /** External files opened through macOS (Open With / double-click). */
 export const files = {
@@ -229,12 +240,32 @@ async function show() {
 }
 async function dismiss() {
   document.dispatchEvent(new Event('visibilitychange')); // closes tooltips/popovers on the way out
+  // a half-typed 한글 syllable would otherwise still be composing when the window comes back, and a
+  // composing view reads no keystroke at all (App ends it on the way in too, for the paths with no blur)
+  for (const pm of document.querySelectorAll('.tiptap')) pm.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));
   await invoke<void>('hide_app');
 }
 export const win = {
   toggle: async () => { if (!isTauri) return; (await invoke<boolean>('is_front')) ? dismiss() : show(); },
   hide: () => (isTauri ? dismiss() : Promise.resolve()),
 };
+
+/** The size the window opens at (Settings → Appearance). A browser window is the user's own business. */
+export async function setWindowSize(width: number, height: number): Promise<void> {
+  if (!isTauri) return;
+  const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window');
+  await getCurrentWindow().setSize(new LogicalSize(width, height));
+}
+
+/**
+ * The window became frontmost again (hotkey, a click, ⌘Tab, the Dock). Separate from the DOM 'focus'
+ * event, which stays silent when the webview held focus the whole time the app was in the background.
+ */
+export async function onWindowFocus(cb: () => void): Promise<() => void> {
+  if (!isTauri) return () => {};
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  return getCurrentWindow().onFocusChanged(({ payload }) => { if (payload) cb(); });
+}
 
 /** Register the global "summon" hotkey. Re-callable: unregisters everything first. */
 export async function setGlobalHotkey(keys: string): Promise<string | null> {

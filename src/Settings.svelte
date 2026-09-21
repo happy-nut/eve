@@ -149,6 +149,13 @@
         <label class="row"><span class="label">Width <span class="sub">{appearance.s.width}px</span></span>
           <input type="range" min="520" max="1400" step="20" value={appearance.s.width} oninput={(e) => appearance.set({ width: Number(e.currentTarget.value) })} /></label>
       </div>
+      <h3>Window</h3>
+      <div class="card">
+        <label class="row"><span class="label">Opening width <span class="sub">{appearance.s.winW}px</span></span>
+          <input type="range" min="640" max="1800" step="16" value={appearance.s.winW} oninput={(e) => appearance.set({ winW: Number(e.currentTarget.value) })} /></label>
+        <label class="row"><span class="label">Opening height <span class="sub">{appearance.s.winH}px</span></span>
+          <input type="range" min="400" max="1400" step="16" value={appearance.s.winH} oninput={(e) => appearance.set({ winH: Number(e.currentTarget.value) })} /></label>
+      </div>
       <p class="sample" style="font-family: {appearance.stack}; font-size: {appearance.s.size}px; line-height: {appearance.s.lineHeight}">
         The quick brown fox jumps over the lazy dog. 다람쥐 헌 쳇바퀴에 타고파. 0123456789
       </p>

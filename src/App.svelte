@@ -7,7 +7,7 @@
   import { groups, MAX_DEPTH } from './lib/groups.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
-  import { setGlobalHotkey, win, files, autostart, dock, pin, isTauri } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, dock, pin, isTauri, onWindowFocus } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Settings from './Settings.svelte';
@@ -16,9 +16,10 @@ import CardPage from './CardPage.svelte';
   import EmojiPicker from './EmojiPicker.svelte';
   import LinkChoice from './LinkChoice.svelte';
   import Tooltip from './Tooltip.svelte';
+  import Menu from './Menu.svelte';
   import { ui, hooks } from './lib/ui.svelte';
   import { fileMarkdown, droppedFiles, stem, TEXT_FILE } from './lib/drop';
-  import { importPaths } from './lib/transfer';
+  import { importPaths, exportCurrent } from './lib/transfer';
   import PdfViewer from './PdfViewer.svelte';
   import { titleOf } from './lib/notes.svelte';
 
@@ -61,17 +62,43 @@ import CardPage from './CardPage.svelte';
       const first = await importPaths(paths);
       if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; }
     }));
-    window.addEventListener('eve-summon', restoreFocus);
+    window.addEventListener('eve-summon', onSummon);
+    // coming back by click, ⌘Tab or the Dock fires no DOM 'focus' when the webview never let go of it
+    let unfocus: (() => void) | undefined;
+    onWindowFocus(restoreFocus).then((u) => (unfocus = u));
     const stopSync = sync.start();
-    return () => { window.removeEventListener('eve-summon', restoreFocus); clearTimeout(hintTimer); stopSync?.(); };
+    return () => { window.removeEventListener('eve-summon', onSummon); unfocus?.(); clearTimeout(hintTimer); stopSync?.(); };
   });
 
-  /** Summoned back (⌘⇧Space, Dock, ⌘Tab): the caret goes where it was, the editor by default. */
+  /**
+   * End an IME composition on the way *out*. macOS delivers no `compositionend` when the window leaves
+   * mid-syllable, and a ProseMirror view that still believes one is in flight ignores what comes next.
+   * Only ever on the way out: doing this on the way back in cuts a syllable the user is typing right
+   * now in half (한글이 자모로 분리된다).
+   */
+  function endComposition() {
+    for (const pm of document.querySelectorAll('.tiptap')) {
+      pm.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));
+    }
+  }
+
+  /**
+   * Summoned back (⌘⇧Space, Dock, ⌘Tab): the caret goes to the note, but only when the window came back
+   * with nothing focused at all. Anything already holding focus is left strictly alone — this runs again
+   * on the window's own focus event, which can land a beat *after* the first keystroke, and re-focusing
+   * an element mid-composition is what splits a syllable into jamo.
+   */
   function restoreFocus() {
-    if (ui.pending || ui.emoji || settingsOpen) return; // a dialog owns focus
+    if (ui.pending || ui.emoji || ui.menu || settingsOpen) return; // a dialog owns focus
     const a = document.activeElement as HTMLElement | null;
-    const keep = a && a.isConnected && a !== document.body && a.closest('aside, .card, input');
-    (keep ? a : document.querySelector<HTMLElement>(ui.card ? '.card .tiptap' : '.tiptap'))?.focus();
+    if (a && a.isConnected && a !== document.body) return;
+    document.querySelector<HTMLElement>(ui.card ? '.card .tiptap' : '.tiptap')?.focus();
+  }
+
+  /** The window called up by the hotkey: the caret belongs in the middle of the page, ready to write. */
+  function onSummon() {
+    restoreFocus();
+    hooks.centerCaret?.();
   }
 
   function step(delta: number) {
@@ -96,8 +123,10 @@ import CardPage from './CardPage.svelte';
     if (!n) return;
     if (await ui.ask(`Delete “${titleOf(n)}”?`)) notes.remove(n.id);
   }
-  const EDIT_KEYS = /^(Arrow|Backspace|Delete|Enter|Tab)/;
-  /** a keystroke that writes or moves the caret in the editor (not a shortcut, not the sidebar's own keys) */
+  // Arrows are not on this list: moving the caret is reading, not writing, and folding the list away
+  // under an arrow key takes the highlighted row off the screen just when it is being used to navigate.
+  const EDIT_KEYS = /^(Backspace|Delete|Enter|Tab)/;
+  /** a keystroke that writes in the editor (not a shortcut, not the sidebar's own keys) */
   function isWriting(e: KeyboardEvent) {
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
     if (!(document.activeElement as HTMLElement | null)?.closest('.tiptap')) return false;
@@ -147,10 +176,13 @@ import CardPage from './CardPage.svelte';
 
   function onKeydown(e: KeyboardEvent) {
     // ⌘ alone peeks at the numbers; ⌘ with anything else is a shortcut, so the icons come straight back
-    if (e.key === 'Meta') cmdDown();
+    // (including a modifier already held when ⌘ goes down — ⇧⌘ waiting for its third key is not a peek)
+    if (e.key === 'Meta' && !e.shiftKey && !e.altKey && !e.ctrlKey) cmdDown();
     else cmdUp();
-    // writing takes the window: the list folds away the moment you type or arrow inside the editor
+    // writing takes the window: the list folds away the moment you type inside the editor
     if (sidebarOpen && appearance.s.hideSidebarOnEdit && isWriting(e)) sidebarOpen = false;
+    // the right-click menu takes the keyboard while it is up, wherever the focus actually sits
+    if (ui.menu) { if (e.key === 'Escape') { e.preventDefault(); ui.closeMenu(); } return; }
     if (ui.pending || ui.emoji) return;
     // Escape puts away whatever is open over the note — the find bar, then the PDF panel — and only a
     // bare note lets it through to hide the window. Tied to the key, not to the rebindable action:
@@ -190,6 +222,9 @@ import CardPage from './CardPage.svelte';
       case 'nextNote': step(1); break;
       case 'prevNote': step(-1); break;
       case 'deleteNote': deleteCurrent(); break;
+      case 'exportMd': void exportCurrent('md'); break;
+      case 'exportPdf': void exportCurrent('pdf'); break;
+      case 'exportPng': void exportCurrent('png'); break;
       case 'settings': settingsOpen = !settingsOpen; break;
       case 'hide': win.hide(); break;
       case 'pin': togglePin(); break;
@@ -197,7 +232,10 @@ import CardPage from './CardPage.svelte';
   }
 </script>
 
-<svelte:window ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={cmdUp} onfocus={restoreFocus}
+<!-- the webview's own menu is Reload / AutoFill / Speech — nothing a note can act on. The places worth
+     right-clicking open one of ours instead (a sidebar row, the note). A plain text box keeps the
+     system menu: cut/copy/paste there is exactly what it offers, and the app has nothing better. -->
+<svelte:window oncontextmenu={(e) => { if (!(e.target as HTMLElement).closest('input, textarea')) e.preventDefault(); }} ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={() => { cmdUp(); endComposition(); }} onfocus={restoreFocus}
   onmousedowncapture={() => (document.documentElement.dataset.input = 'mouse')}
   onkeydowncapture={() => (document.documentElement.dataset.input = 'keyboard')} />
 
@@ -254,6 +292,9 @@ import CardPage from './CardPage.svelte';
 {/if}
 {#if ui.emoji}
   <EmojiPicker />
+{/if}
+{#if ui.menu}
+  <Menu />
 {/if}
 {#if ui.link}
   <LinkChoice />

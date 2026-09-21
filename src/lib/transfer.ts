@@ -1,9 +1,9 @@
 import { notes, titleOf, type Note } from './notes.svelte';
 import { groups, MAX_DEPTH } from './groups.svelte';
-import { files, importAsset, pickFiles, pickFolders, listFolder, pickSavePath, printPage, htmlToPng } from './platform';
+import { files, importAsset, pickFiles, pickFolders, listFolder, pickSavePath, savePdf, savePng } from './platform';
 import { TEXT_FILE, PDF_FILE, VIDEO_FILE } from './drop';
 import { commonDir, dirOf, groupFor, nameOf, stem } from './paths';
-import appCss from '../app.css?inline';
+import { ui } from './ui.svelte';
 
 /** Files this app takes in, by extension. */
 const IMPORTABLE = /\.(md|markdown|mdx|txt|pdf|png|jpe?g|gif|webp|svg|heic|mp4|mov|m4v|webm)$/i;
@@ -65,30 +65,29 @@ export async function importFromFolder(): Promise<Note | null> {
 export type ExportAs = 'md' | 'pdf' | 'png';
 
 /**
- * Save a note as a file. Markdown is the note itself; a picture is drawn from the same HTML the editor
- * shows; a PDF goes through the system print panel, where "Save as PDF" writes it wherever you like.
+ * Save a note as a file, picked in a save panel. Markdown is the note itself; the other two are the
+ * window printed to that file — paginated, its text still text, and no printer anywhere in it — with
+ * the picture being that page rasterised.
  */
-export async function exportNote(note: Note, as: ExportAs, html: () => string): Promise<string | null> {
-  if (as === 'pdf') {
-    await printPage();
-    return null;
-  }
+export async function exportNote(note: Note, as: ExportAs): Promise<string | null> {
   const path = await pickSavePath(titleOf(note), as);
   if (!path) return null;
   if (as === 'md') await files.write(path, note.body);
-  else await htmlToPng(page(titleOf(note), html()), path);
+  else if (as === 'pdf') await savePdf(path);
+  else await savePng(path);
   return path;
 }
 
-/** The webview's asset:// URLs mean nothing to a page outside the app; pictures travel as file paths. */
-const toFileUrls = (html: string) =>
-  html.replace(/asset:\/\/localhost\/([^"')\s]+)/g, (_, p) => `file://${decodeURIComponent(p)}`);
-
-/** The note on its own page: the app's stylesheet, no chrome, white paper. */
-function page(title: string, body: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${appCss}
-  :root { color-scheme: light; }
-  body { margin: 0; background: #fff; }
-  .sheet { width: 820px; padding: 56px 64px; box-sizing: border-box; }
-  </style></head><body><div class="sheet"><div class="tiptap prose">${toFileUrls(body)}</div></div></body></html>`;
+/**
+ * The open note, exported — what every menu and shortcut that offers it calls. A failure says so
+ * instead of quietly doing nothing (a save panel cancelled is not a failure: it returns null).
+ */
+export async function exportCurrent(as: ExportAs): Promise<void> {
+  const n = notes.current;
+  if (!n) return;
+  try {
+    await exportNote(n, as);
+  } catch (err) {
+    await ui.ask(String(err), false);
+  }
 }

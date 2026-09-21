@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Editor as TipTap } from '@tiptap/core';
-  import { createEditor, applyKeymap, getMarkdown } from './lib/editor';
-  import { notes, titleOf, type Note } from './lib/notes.svelte';
+  import { createEditor, applyKeymap, getMarkdown, goToSection } from './lib/editor';
+  import { notes, type Note } from './lib/notes.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
   import { ui, hooks } from './lib/ui.svelte';
   import Icon from './Icon.svelte';
@@ -10,7 +10,7 @@
   import Outline from './Outline.svelte';
   import TableTools from './TableTools.svelte';
   import Find from './Find.svelte';
-  import { RANDOM_ICONS } from './lib/icons';
+  import { randomIcon } from './lib/icons';
 
   let { note }: { note: Note } = $props();
 
@@ -27,10 +27,20 @@
       element: el,
       content: note.body,
       onUpdate: (md) => notes.update(note.id, md),
-      onOpenNote: (title) => { notes.flush(note.id); notes.openByTitle(title); },
-      titles: () => notes.visible.filter((n) => n.id !== note.id).map(titleOf),
+      onOpenNote: (title) => {
+        notes.flush(note.id);
+        notes.openByTitle(title);
+        // a link into this very page: no navigation happens, so make the jump here
+        if (notes.section && notes.currentId === note.id) {
+          const s = notes.section;
+          notes.section = '';
+          goToSection(editor!, s);
+        }
+      },
+      targets: () => notes.visible,
       suggestionUI: suggest.ui,
-      cursor: notes.cursor.get(note.id),
+      // a [[Title#Section]] link says where to land, over wherever the caret was left last time
+      cursor: notes.section ? undefined : notes.cursor.get(note.id),
     });
     if (import.meta.env.DEV) (window as any).__editor = editor;
     // a file dropped outside the note (the sidebar, the margins) still attaches to the open one
@@ -42,8 +52,19 @@
       const chain = e.chain().focus('end');
       (last && last.content.size ? chain.splitBlock() : chain).insertContent(content).run();
     };
-    hooks.noteHtml = () => editor?.getHTML() ?? '';
-    if (notes.selectTitle) {
+    // summoned back: the caret in the middle of the page, where it is comfortable to write from —
+    // not pinned to whichever edge the last scroll into view left it against
+    hooks.centerCaret = () => {
+      if (!editor || !scrollEl) return;
+      const caret = editor.view.coordsAtPos(editor.state.selection.head);
+      const box = scrollEl.getBoundingClientRect();
+      scrollEl.scrollBy({ top: caret.top - (box.top + box.height / 2) });
+    };
+    const section = notes.section; // a [[Title#Section]] link brought us here
+    notes.section = '';
+    if (section) {
+      goToSection(editor, section);
+    } else if (notes.selectTitle) {
       // a brand-new page: its placeholder title is selected, so typing renames it right away
       notes.selectTitle = false;
       editor.commands.setTextSelection({ from: 1, to: 1 + (editor.state.doc.firstChild?.content.size ?? 0) });
@@ -51,7 +72,7 @@
     } else if (ui.focusOwner !== 'sidebar') editor?.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
     return () => {
       hooks.attach = undefined;
-      hooks.noteHtml = undefined;
+      hooks.centerCaret = undefined;
       if (editor) notes.cursor.set(id, editor.state.selection.from);
       editor?.destroy();
       // Svelte runs teardown with pre-update state visible, so a flush here would persist stale data
@@ -68,10 +89,12 @@
   // rebind editor shortcuts live when the user changes them
   $effect(() => { shortcuts.actions; if (editor) applyKeymap(editor); });
 
-  // remote sync may replace the body under us
+  // remote sync may replace the body under us. Trailing newlines do not count as a difference: a note
+  // that ends in one (created from a template, imported from a file) would otherwise be re-set on every
+  // mount, throwing away where the caret was just put — the jump a [[Title#Section]] link makes, say.
   $effect(() => {
     const body = note.body;
-    if (editor && !editor.isFocused && getMarkdown(editor) !== body) {
+    if (editor && !editor.isFocused && getMarkdown(editor).trimEnd() !== body.trimEnd()) {
       editor.commands.setContent(body);
     }
   });
@@ -82,7 +105,7 @@
     {#if note.icon}
       <button class="big-icon" title="아이콘 변경" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={56} /></button>
     {:else}
-      <button class="add-icon" onclick={() => notes.setIcon(note.id, RANDOM_ICONS[Math.floor(Math.random() * RANDOM_ICONS.length)])}>
+      <button class="add-icon" onclick={() => notes.setIcon(note.id, randomIcon())}>
         <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 9.5c.6.9 1.5 1.5 2.5 1.5s1.9-.6 2.5-1.5M6 6.5h.01M10 6.5h.01"/></svg>
         아이콘 추가
       </button>
@@ -123,4 +146,16 @@
   .big-icon:hover { background: var(--bg-hover); }
   .big-icon:active { transform: scale(0.95); }
   .editor.has-head :global(.tiptap) { padding-top: 0; min-height: calc(100% - 72px); }
+
+  /* On paper the head is a fixed block that holds the icon below the band at the top of the printed
+     flow — WebKit lays that band out but never paints it, and the note's title used to vanish into it.
+     The icon prints as a picture (a colour glyph only ever draws in part), left-aligned with the text
+     rather than centred the way a button centres what it holds. */
+  @media print {
+    .page-head, .page-head.with-icon {
+      height: 150px; padding: 84px 0 0; box-sizing: border-box; max-width: none; margin: 0; break-after: avoid;
+    }
+    .big-icon { display: block; width: 56px; height: 56px; padding: 0; margin: 0; }
+    .add-icon { visibility: hidden; }
+  }
 </style>

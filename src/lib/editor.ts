@@ -22,11 +22,13 @@ import { Video } from './video';
 import { TableNodes } from './table';
 import { Find } from './find';
 import { Divider } from './divider';
-import { ui } from './ui.svelte';
-import { notes, titleOf } from './notes.svelte';
+import { ui, type MenuItem } from './ui.svelte';
+import { notes, titleOf, type Note } from './notes.svelte';
+import { headingsOf, splitLink } from './markdown';
 import { isCustom } from './icons';
-import { pickImage, pickVideo, openUrl } from './platform';
+import { pickImage, pickVideo, openUrl, clipboardText } from './platform';
 import { fileMarkdown, isAsset } from './drop';
+import { exportCurrent } from './transfer';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
 
@@ -207,7 +209,7 @@ export function applyKeymap(editor: Editor) {
   editor.registerPlugin(plugin, (p, all) => [p, ...all]);
 }
 
-export interface SuggestItem { label: string; hint?: string; icon?: string; noteIcon?: string; run?: (editor: Editor) => void }
+export interface SuggestItem { label: string; value?: string; hint?: string; icon?: string; noteIcon?: string; run?: (editor: Editor) => void }
 export interface SuggestionUI {
   show(items: SuggestItem[], rect: DOMRect | null, pick: (item: SuggestItem) => void): void;
   move(delta: number): void;
@@ -243,6 +245,7 @@ const ICONS = {
   video: '<rect x="1.5" y="3.5" width="9" height="9" rx="1.5"/><path d="M10.5 7.4l4-2.2v5.6l-4-2.2z"/>',
   wikiLink: '<path d="M6.4 3.5H4.3v9h2.1M11.7 3.5H9.6v9h2.1"/>',
   table: '<rect x="2.5" y="3.5" width="11" height="9" rx="1"/><path d="M2.5 6.6h11M6.5 6.6v5.9M10 6.6v5.9"/>',
+  section: '<path d="M6.4 2.9 4.8 13.1M11.2 2.9 9.6 13.1M3.3 6.1h9.4M2.8 9.9h9.4"/>',
   emoji: '<circle cx="8" cy="8" r="6"/><path d="M5.8 9.4c.6.9 1.3 1.4 2.2 1.4s1.6-.5 2.2-1.4"/><path d="M6.3 6.4h.01M9.7 6.4h.01"/>',
 };
 
@@ -324,16 +327,77 @@ function dropBlock(view: EditorView, event: DragEvent): number | undefined {
   return box && event.clientY < box.top + box.height / 2 ? before : $pos.after(1);
 }
 
+/**
+ * Open the page at one of its headings (a `[[Title#Section]]` link was followed): the caret lands on the
+ * heading and it comes to the top of the view. A heading since renamed away simply opens the page.
+ */
+export function goToSection(editor: Editor, section: string) {
+  let at = -1;
+  editor.state.doc.descendants((node, pos) => {
+    if (at >= 0) return false;
+    if (node.type.name === 'heading' && node.textContent.trim() === section) at = pos;
+    return at < 0;
+  });
+  if (at < 0) return void editor.commands.focus('start');
+  editor.chain().focus(at + 1).run();
+  (editor.view.nodeDOM(at) as HTMLElement | null)?.scrollIntoView({ block: 'start' });
+}
+
+/**
+ * Right-click inside a note. The webview's own menu is Look Up / Translate / Speech / AutoFill — a wall
+ * of things a note cannot use — so the app draws this one instead: the clipboard, the marks that have
+ * keyboard shortcuts nobody remembers, and nothing else.
+ */
+function noteMenu(editor: Editor, event: MouseEvent) {
+  // a right-click outside the selection moves the caret there first, the way every editor behaves
+  const at = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+  const sel = editor.state.selection;
+  if (at && (at.pos < sel.from || at.pos > sel.to)) editor.commands.setTextSelection(at.pos);
+  const empty = editor.state.selection.empty;
+  const linked = editor.isActive('link');
+  /** execCommand is the one path that keeps ProseMirror's own clipboard serializer (markdown, nodes) */
+  const clip = (cmd: 'cut' | 'copy') => () => { editor.commands.focus(); document.execCommand(cmd); };
+  const keys = (id: string) => shortcuts.keysFor(id);
+  // nothing greyed out: an item that cannot run is not on the list at all
+  const items: MenuItem[] = [
+    { label: 'Cut', keys: 'Mod-x', hide: empty, run: clip('cut') },
+    { label: 'Copy', keys: 'Mod-c', hide: empty, run: clip('copy') },
+    { label: 'Paste', keys: 'Mod-v', run: () => void clipboardText().then((t) => t && editor.view.pasteText(t)) },
+    { label: 'Bold', sep: true, keys: keys('bold'), hide: empty, run: () => editor.chain().focus().toggleBold().run() },
+    { label: 'Italic', keys: keys('italic'), hide: empty, run: () => editor.chain().focus().toggleItalic().run() },
+    { label: 'Code', keys: keys('code'), hide: empty, run: () => editor.chain().focus().toggleCode().run() },
+    linked
+      ? { label: 'Remove link', run: () => editor.chain().focus().unsetLink().run() }
+      : { label: 'Link…', keys: keys('link'), hide: empty, run: () => void linkSelection(editor) },
+    { label: 'Select all', sep: true, keys: 'Mod-a', run: () => editor.chain().focus().selectAll().run() },
+    { label: 'Export as Markdown…', sep: true, keys: keys('exportMd'), run: () => void exportCurrent('md') },
+    { label: 'Export as PDF…', keys: keys('exportPdf'), run: () => void exportCurrent('pdf') },
+    { label: 'Export as image…', keys: keys('exportPng'), run: () => void exportCurrent('png') },
+  ];
+  ui.openMenu(event, items);
+}
+
+/** Ask for a URL and hang it on the selection (⌘K has no home in this editor). */
+async function linkSelection(editor: Editor) {
+  const href = (await ui.prompt('링크 주소', ''))?.trim();
+  if (!href) return editor.commands.focus();
+  editor.chain().focus().setLink({ href: /^[a-z]+:/i.test(href) ? href : `https://${href}` }).run();
+}
+
 export function createEditor(opts: {
   element: HTMLElement;
   content: string;
   onUpdate: (markdown: string) => void;
   onOpenNote: (title: string) => void;
-  titles: () => string[];
+  /** the notes a `[[link]]` may point at: their titles, and the sections inside them */
+  targets: () => Note[];
   suggestionUI: SuggestionUI;
   cursor?: number;
 }) {
-  const iconOf = (title: string) => notes.visible.find((n) => titleOf(n).toLowerCase() === title.toLowerCase())?.icon ?? '';
+  const iconOf = (link: string) => {
+    const title = splitLink(link)[0].toLowerCase(); // a section link keeps the page's icon
+    return notes.visible.find((n) => titleOf(n).toLowerCase() === title)?.icon ?? '';
+  };
   const editor: Editor = new Editor({
     element: opts.element,
     autofocus: false, // Editor.svelte decides (the sidebar may own focus, e.g. after deleting from the list)
@@ -359,6 +423,7 @@ export function createEditor(opts: {
       },
       // links open in the browser: the editor's own webview must not navigate away from the app
       handleDOMEvents: {
+        contextmenu: (_view, event) => { event.preventDefault(); noteMenu(editor, event as MouseEvent); return true; },
         click: (_view, event) => {
           const a = (event.target as HTMLElement | null)?.closest?.('a[href]');
           if (!a || a.closest('.bookmark')) return false; // the bookmark card opens itself
@@ -490,16 +555,30 @@ export function createEditor(opts: {
           char: '[[',
           allowSpaces: true,
           startOfLine: false,
+          allowedPrefixes: null, // `[[` means a link wherever it is typed, not only after a space
           pluginKey: new PluginKey('wikiLinkSuggest'),
           items: ({ query }) => {
             const q = query.toLowerCase();
-            const hits = opts.titles().filter((t) => t.toLowerCase().includes(q)).slice(0, 8);
-            const items: SuggestItem[] = hits.map((label) => {
-              const icon = iconOf(label);
-              return icon ? { label, noteIcon: icon } : { label, icon: ICONS.note };
-            });
+            const pages: SuggestItem[] = [];
+            const sections: SuggestItem[] = [];
+            // the page being edited: no link to itself, but its own sections are fair game (a note that
+            // points at its own headings is how a contents list is written)
+            const self = editor.state.doc.firstChild?.textContent.trim();
+            for (const n of opts.targets()) {
+              const title = titleOf(n);
+              if (title !== self && title.toLowerCase().includes(q)) pages.push(n.icon ? { label: title, noteIcon: n.icon } : { label: title, icon: ICONS.note });
+              // a link can aim at a section of another page too; it stores `Title#Section` and shows the
+              // heading with its page beside it, so two notes with a "TODO" heading stay apart
+              for (const h of headingsOf(n.body)) {
+                const value = `${title}#${h}`;
+                if (value.toLowerCase().includes(q)) sections.push({ label: h, value, hint: title, icon: ICONS.section });
+              }
+            }
+            const items = [...pages, ...sections].slice(0, 8); // pages first: the sections fill what is left
             // a title nothing answers to yet: picking it links a page that gets created on the first visit
-            if (query && !hits.some((t) => t.toLowerCase() === q)) items.push({ label: query, hint: 'new page', icon: ICONS.page });
+            if (query && !query.includes('#') && !pages.some((p) => p.label.toLowerCase() === q)) {
+              items.push({ label: query, hint: 'new page', icon: ICONS.page });
+            }
             return items;
           },
           command: ({ editor, range, props }) =>
@@ -507,7 +586,7 @@ export function createEditor(opts: {
               .chain()
               .focus()
               .deleteRange(range)
-              .insertContent([{ type: 'wikiLink', attrs: { title: (props as SuggestItem).label } }, { type: 'text', text: ' ' }])
+              .insertContent([{ type: 'wikiLink', attrs: { title: (props as SuggestItem).value ?? (props as SuggestItem).label } }, { type: 'text', text: ' ' }])
               .run(),
           render: () => popup(opts.suggestionUI),
         },

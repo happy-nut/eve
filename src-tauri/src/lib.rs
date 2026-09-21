@@ -268,37 +268,108 @@ fn write_file(path: String, text: String) -> Result<(), String> {
     fs::write(path, text).map_err(|e| e.to_string())
 }
 
-/// Open the system print panel for the window — "Save as PDF" in it is the app's PDF export.
-#[tauri::command]
-fn print_page(window: tauri::WebviewWindow) -> Result<(), String> {
-    window.print().map_err(|e| e.to_string())
+/// A print job finishes on the run loop, so the file appears a moment after the call that started it.
+/// A PDF ends with its own end-of-file marker; until that is on disk the pages are still being written.
+fn wait_for_pdf(path: &std::path::Path, secs: u64) -> Result<(), String> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    while std::time::Instant::now() < deadline {
+        if let Ok(bytes) = fs::read(path) {
+            if bytes.len() > 400 && bytes.ends_with(b"%%EOF\n") {
+                return Ok(());
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(60));
+    }
+    Err("the print job did not finish".into())
 }
 
-/// A standalone HTML page rendered to a PNG, by the same Quick Look that draws a PDF's first page.
-/// Used to export a note as a picture; `out` is where the user asked for it.
-#[tauri::command]
-async fn html_to_png(app: AppHandle, html: String, out: String) -> Result<(), String> {
-    let dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|e| e.to_string())?
-        .join("export");
-    let _ = fs::remove_dir_all(&dir); // one export at a time; qlmanage names the file after the source
+/// Export what the window shows as a PDF file, with margins and no panel in the way.
+///
+/// The note is printed, not screenshotted: a print job whose disposition is "save" writes the pages
+/// straight to `out`, so it needs no printer connected and the text stays text. `@media print` in the
+/// app's stylesheet is what strips the window chrome first. The job is started on the run loop and the
+/// call returns — a print operation that blocks the main thread never finishes, WebKit needs it.
+#[tauri::command(async)]
+fn save_pdf(window: tauri::WebviewWindow, out: String, margin: f64) -> Result<(), String> {
+    print_pdf(&window, &out, margin)?;
+    wait_for_pdf(std::path::Path::new(&out), 60)
+}
+
+/// The note as a picture: the printed page, rasterised. Same margins, same pagination, same everything
+/// — a long note simply becomes its first page. (`qlmanage` used to draw a standalone HTML page here,
+/// on a square canvas that left half the picture empty.)
+#[tauri::command(async)]
+fn save_image(app: AppHandle, window: tauri::WebviewWindow, out: String, margin: f64, width: u32) -> Result<(), String> {
+    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("export");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let src = dir.join("note.html");
-    fs::write(&src, html).map_err(|e| e.to_string())?;
-    let res = std::process::Command::new("/usr/bin/qlmanage")
-        .args(["-t", "-s", "1600", "-o"])
-        .arg(&dir)
-        .arg(&src)
+    let pdf = dir.join("note.pdf");
+    let _ = fs::remove_file(&pdf);
+    print_pdf(&window, &pdf.to_string_lossy(), margin)?;
+    wait_for_pdf(&pdf, 60)?;
+    let res = std::process::Command::new("/usr/bin/sips")
+        .args(["-s", "format", "png", "--resampleWidth", &width.to_string()])
+        .arg(&pdf)
+        .arg("--out")
+        .arg(&out)
         .output()
         .map_err(|e| e.to_string())?;
-    let png = dir.join("note.html.png");
-    if !png.is_file() {
+    let _ = fs::remove_file(&pdf);
+    if !std::path::Path::new(&out).is_file() {
         return Err(format!("could not render: {}", String::from_utf8_lossy(&res.stderr)));
     }
-    fs::copy(&png, &out).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+fn print_pdf(window: &tauri::WebviewWindow, out: &str, margin: f64) -> Result<(), String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, out, margin);
+        return Err("PDF export is macOS only".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+    use objc2::rc::Retained;
+    use objc2::runtime::{AnyObject, ProtocolObject};
+    use objc2_app_kit::{NSPrintInfo, NSPrintJobSavingURL, NSPrintSaveJob, NSWindow};
+    use objc2_foundation::{NSString, NSURL};
+    use objc2_web_kit::WKWebView;
+
+    let out = out.to_string();
+    let (tx, rx) = std::sync::mpsc::channel();
+    window
+        .with_webview(move |platform| {
+            unsafe {
+                let webview: &WKWebView = &*(platform.inner() as *mut WKWebView);
+                let host: &NSWindow = &*(platform.ns_window() as *mut NSWindow);
+                let info = NSPrintInfo::new();
+                info.setTopMargin(margin);
+                info.setBottomMargin(margin);
+                info.setLeftMargin(margin);
+                info.setRightMargin(margin);
+                info.setJobDisposition(NSPrintSaveJob);
+                let url: Retained<NSURL> = NSURL::fileURLWithPath(&NSString::from_str(&out));
+                let target: &AnyObject = &url;
+                info.dictionary()
+                    .setObject_forKey(target, ProtocolObject::from_ref(NSPrintJobSavingURL));
+                let op = webview.printOperationWithPrintInfo(&info);
+                op.setShowsPrintPanel(false);
+                op.setShowsProgressPanel(false);
+                // Modal *for the window*, not for the thread: it returns at once and the job runs on the
+                // run loop. `runOperation()` instead deadlocks — it blocks the main thread while WebKit
+                // still needs it to lay the pages out, and the whole app stops with it.
+                op.runOperationModalForWindow_delegate_didRunSelector_contextInfo(
+                    host,
+                    None,
+                    None,
+                    std::ptr::null_mut(),
+                );
+            }
+            let _ = tx.send(());
+        })
+        .map_err(|e| e.to_string())?;
+    // only that the job was handed over — the pages are written as the run loop gets to them
+    rx.recv_timeout(std::time::Duration::from_secs(10)).map_err(|e| e.to_string())
+    }
 }
 
 /// Every file under a picked folder, as paths relative to it (hidden files skipped).
@@ -349,7 +420,12 @@ fn show_window(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     app.show().map_err(|e| e.to_string())?;
     win.show().map_err(|e| e.to_string())?;
-    win.set_focus().map_err(|e| e.to_string())
+    win.set_focus().map_err(|e| e.to_string())?;
+    // set_focus only makes the *window* key; the webview can come back without being first responder,
+    // and then the page gets no keystrokes at all however the DOM focus looks.
+    let webview: &tauri::Webview<_> = win.as_ref();
+    let _ = webview.set_focus();
+    Ok(())
 }
 
 /// Show + focus the main window, or hide the whole app (returning focus to the previous app).
@@ -471,6 +547,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Pending::default())
         .invoke_handler(tauri::generate_handler![
             list_notes,
@@ -487,8 +564,8 @@ pub fn run() {
             fetch_url,
             read_file,
             write_file,
-            print_page,
-            html_to_png,
+            save_pdf,
+            save_image,
             list_folder,
             take_pending_files,
             notes_path,

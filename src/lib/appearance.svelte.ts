@@ -1,4 +1,5 @@
 /** Theme + editor typography, applied on <html> (data-theme and CSS variables). Persisted locally. */
+import { setWindowSize } from './platform';
 const LS = 'eve.appearance';
 
 export const FONTS: { id: string; label: string; stack: string }[] = [
@@ -18,8 +19,11 @@ interface Appearance {
   hideSidebarOnEdit: boolean;
   /** give a new or imported note an icon of its own, so the list reads at a glance */
   autoIcon: boolean;
+  /** the size the window opens at; changing it resizes the window there and then, as a preview of itself */
+  winW: number; winH: number;
 }
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: 15, lineHeight: 1.6, width: 820, hideSidebarOnEdit: true, autoIcon: true };
+// the window's own defaults match tauri.conf.json, so a fresh install never resizes on launch
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: 15, lineHeight: 1.6, width: 820, hideSidebarOnEdit: true, autoIcon: true, winW: 1104, winH: 832 };
 
 function load(): Appearance {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; } catch { return { ...DEFAULTS }; }
@@ -40,6 +44,8 @@ class AppearanceStore {
       r.setProperty('--line-height', String(this.s.lineHeight));
       r.setProperty('--editor-width', `${this.s.width}px`);
     });
+    // the remembered window size, on every launch and again whenever it is changed
+    $effect(() => { void setWindowSize(this.s.winW, this.s.winH); });
   }
 }
 

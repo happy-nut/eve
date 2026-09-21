@@ -7,8 +7,8 @@
   import { groups, parentOf, leafOf, depthOf, MAX_DEPTH } from './lib/groups.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
-  import { ui, hooks } from './lib/ui.svelte';
-  import { importFromFinder, importFromFolder, exportNote, type ExportAs } from './lib/transfer';
+  import { ui, hooks, type MenuItem } from './lib/ui.svelte';
+  import { importFromFinder, importFromFolder, exportNote, exportCurrent, type ExportAs } from './lib/transfer';
   import Icon from './Icon.svelte';
 
   let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings }:
@@ -80,10 +80,7 @@
   const opened = (first: Note | null) => { if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; } };
   const importFiles = () => transfer(async () => opened(await importFromFinder()));
   const importFolder = () => transfer(async () => opened(await importFromFolder()));
-  const exportAs = (as: ExportAs) => () => transfer(async () => {
-    const n = notes.current;
-    if (n) await exportNote(n, as, hooks.noteHtml ?? (() => ''));
-  });
+  const exportAs = (as: ExportAs) => () => exportCurrent(as);
 
   const plusItems = $derived.by(() => {
     // a new note goes straight into the editor (deleting keeps focus in the list)
@@ -329,6 +326,61 @@
     if (target.note) notes.setIcon(target.note.id, v); else groups.setIcon(target.group!, v);
   }
 
+  /**
+   * A row's own export. Markdown is written straight from the note, but a PDF prints the window and a
+   * picture is drawn from the note on screen — so those two open the row's note first and let it render.
+   */
+  async function exportRow(n: Note, as: ExportAs) {
+    if (as === 'md') return transfer(() => exportNote(n, as));
+    if (notes.currentId !== n.id) {
+      await openNote(n);
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); // painted, not just mounted
+    }
+    await exportCurrent(as);
+  }
+
+  /**
+   * Right-click on a row: what the row can do, in one place. Everything here is a command the keyboard
+   * already has (⌥↑↓ moves, ⌥←→ nests, ⌫ deletes, `i` picks an icon) — the menu just makes them findable.
+   */
+  function rowMenu(e: MouseEvent) {
+    const row = (e.target as HTMLElement).closest<HTMLElement>('[data-row]');
+    if (!row) return; // empty space below the list: nothing of its own to offer
+    e.preventDefault();
+    e.stopPropagation();
+    row.focus();
+    ui.focusOwner = 'sidebar';
+    const g = row.dataset.group;
+    const n = row.dataset.note ? notes.all.find((x) => x.id === row.dataset.note) : undefined;
+    const items: MenuItem[] = g
+      ? [
+          { label: `New note in “${leafOf(g)}”`, run: () => { ui.focusOwner = 'editor'; notes.create('', g); } },
+          { label: 'New group inside', run: () => groups.create(g), hide: depthOf(g) >= MAX_DEPTH },
+          { label: 'Rename', sep: true, run: () => (groups.editing = g) },
+          { label: 'Change icon…', run: () => pickIcon({ group: g }) },
+          { label: 'Move up', sep: true, run: () => nudgeGroup(g, 'ArrowUp') },
+          { label: 'Move down', run: () => nudgeGroup(g, 'ArrowDown') },
+          { label: 'Move out', run: () => nudgeGroup(g, 'ArrowLeft'), hide: !parentOf(g) },
+          { label: 'Nest under previous', run: () => nudgeGroup(g, 'ArrowRight'), hide: !groups.prevSibling(g) },
+          { label: 'Delete group', sep: true, danger: true, run: () => removeGroup(g) },
+        ]
+      : n
+        ? [
+            { label: 'Open', run: () => openNote(n) },
+            { label: 'Change icon…', run: () => pickIcon({ note: n }) },
+            { label: 'Export as Markdown…', sep: true, keys: shortcuts.keysFor('exportMd'), run: () => exportRow(n, 'md') },
+            { label: 'Export as PDF…', keys: shortcuts.keysFor('exportPdf'), run: () => exportRow(n, 'pdf') },
+            { label: 'Export as image…', keys: shortcuts.keysFor('exportPng'), run: () => exportRow(n, 'png') },
+            { label: 'Move up', sep: true, run: () => nudgeNote(n.id, -1) },
+            { label: 'Move down', run: () => nudgeNote(n.id, 1) },
+            { label: 'Nest under previous', run: () => nestNote(n.id, 'in') },
+            { label: 'Move out', run: () => nestNote(n.id, 'out'), hide: !n.parent },
+            { label: 'Delete note', sep: true, danger: true, run: () => removeNote(n) },
+          ]
+        : [];
+    if (items.length) ui.openMenu(e, items);
+  }
+
   // ---- rename ----
   function renameKey(e: KeyboardEvent, g: string) {
     if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
@@ -383,7 +435,7 @@
     </div>
 
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <ul class="tree" role="tree" tabindex="-1" onkeydown={treeKey}
+    <ul class="tree" role="tree" tabindex="-1" onkeydown={treeKey} oncontextmenu={rowMenu}
       ondragover={(e) => overSection(e, '')} ondrop={drop}>
       {#each rows as r (r.key)}
         <li animate:flip={{ duration: 220, easing: cubicOut }} in:fade={{ duration: 140 }} out:slide={{ duration: 180, easing: cubicOut }}
