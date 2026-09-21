@@ -23,6 +23,9 @@ export const RANDOM_ICONS = ['📝', '📌', '📎', '📚', '📖', '📒', '�
  * wherever it sits — while a picture of one comes out whole, so the page header prints this instead.
  * Cached: the same icon is asked for on every render.
  */
+/** A glyph drawn to the edge of its canvas comes out shaved, so the picture is this much bigger than
+ *  the glyph inside it; the negative margin in Icon.svelte takes the difference back out of the layout. */
+export const EMOJI_PAD = 1.4;
 const painted = new Map<string, string>();
 export function emojiImage(ch: string, size = 56): string {
   const key = `${ch}@${size}`;
@@ -30,11 +33,11 @@ export function emojiImage(ch: string, size = 56): string {
   if (had !== undefined) return had;
   const scale = 3; // drawn large, shown small: it has to survive a print at 300dpi
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size * scale;
+  canvas.width = canvas.height = Math.round(size * EMOJI_PAD) * scale;
   const g = canvas.getContext('2d');
   let url = '';
   if (g) {
-    g.font = `${size * scale * 0.72}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`; // room around it: a glyph drawn to the edge comes out shaved
+    g.font = `${size * scale}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(ch, canvas.width / 2, canvas.height / 2);
