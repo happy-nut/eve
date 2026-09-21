@@ -268,6 +268,21 @@ fn write_file(path: String, text: String) -> Result<(), String> {
     fs::write(path, text).map_err(|e| e.to_string())
 }
 
+/// A print job finishes on the run loop, so the file appears a moment after the call that started it.
+/// A PDF ends with its own end-of-file marker; until that is on disk the pages are still being written.
+fn wait_for_pdf(path: &std::path::Path, secs: u64) -> Result<(), String> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    while std::time::Instant::now() < deadline {
+        if let Ok(bytes) = fs::read(path) {
+            if bytes.len() > 400 && bytes.ends_with(b"%%EOF\n") {
+                return Ok(());
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(60));
+    }
+    Err("the print job did not finish".into())
+}
+
 /// Export what the window shows as a PDF file, with margins and no panel in the way.
 ///
 /// The note is printed, not screenshotted: a print job whose disposition is "save" writes the pages
@@ -276,6 +291,36 @@ fn write_file(path: String, text: String) -> Result<(), String> {
 /// call returns — a print operation that blocks the main thread never finishes, WebKit needs it.
 #[tauri::command(async)]
 fn save_pdf(window: tauri::WebviewWindow, out: String, margin: f64) -> Result<(), String> {
+    print_pdf(&window, &out, margin)?;
+    wait_for_pdf(std::path::Path::new(&out), 60)
+}
+
+/// The note as a picture: the printed page, rasterised. Same margins, same pagination, same everything
+/// — a long note simply becomes its first page. (`qlmanage` used to draw a standalone HTML page here,
+/// on a square canvas that left half the picture empty.)
+#[tauri::command(async)]
+fn save_image(app: AppHandle, window: tauri::WebviewWindow, out: String, margin: f64, width: u32) -> Result<(), String> {
+    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("export");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let pdf = dir.join("note.pdf");
+    let _ = fs::remove_file(&pdf);
+    print_pdf(&window, &pdf.to_string_lossy(), margin)?;
+    wait_for_pdf(&pdf, 60)?;
+    let res = std::process::Command::new("/usr/bin/sips")
+        .args(["-s", "format", "png", "--resampleWidth", &width.to_string()])
+        .arg(&pdf)
+        .arg("--out")
+        .arg(&out)
+        .output()
+        .map_err(|e| e.to_string())?;
+    let _ = fs::remove_file(&pdf);
+    if !std::path::Path::new(&out).is_file() {
+        return Err(format!("could not render: {}", String::from_utf8_lossy(&res.stderr)));
+    }
+    Ok(())
+}
+
+fn print_pdf(window: &tauri::WebviewWindow, out: &str, margin: f64) -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (window, out, margin);
@@ -289,6 +334,7 @@ fn save_pdf(window: tauri::WebviewWindow, out: String, margin: f64) -> Result<()
     use objc2_foundation::{NSString, NSURL};
     use objc2_web_kit::WKWebView;
 
+    let out = out.to_string();
     let (tx, rx) = std::sync::mpsc::channel();
     window
         .with_webview(move |platform| {
@@ -324,33 +370,6 @@ fn save_pdf(window: tauri::WebviewWindow, out: String, margin: f64) -> Result<()
     // only that the job was handed over — the pages are written as the run loop gets to them
     rx.recv_timeout(std::time::Duration::from_secs(10)).map_err(|e| e.to_string())
     }
-}
-
-/// A standalone HTML page rendered to a PNG, by the same Quick Look that draws a PDF's first page.
-/// Used to export a note as a picture; `out` is where the user asked for it.
-#[tauri::command]
-async fn html_to_png(app: AppHandle, html: String, out: String) -> Result<(), String> {
-    let dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|e| e.to_string())?
-        .join("export");
-    let _ = fs::remove_dir_all(&dir); // one export at a time; qlmanage names the file after the source
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let src = dir.join("note.html");
-    fs::write(&src, html).map_err(|e| e.to_string())?;
-    let res = std::process::Command::new("/usr/bin/qlmanage")
-        .args(["-t", "-s", "1600", "-o"])
-        .arg(&dir)
-        .arg(&src)
-        .output()
-        .map_err(|e| e.to_string())?;
-    let png = dir.join("note.html.png");
-    if !png.is_file() {
-        return Err(format!("could not render: {}", String::from_utf8_lossy(&res.stderr)));
-    }
-    fs::copy(&png, &out).map_err(|e| e.to_string())?;
-    Ok(())
 }
 
 /// Every file under a picked folder, as paths relative to it (hidden files skipped).
@@ -546,7 +565,7 @@ pub fn run() {
             read_file,
             write_file,
             save_pdf,
-            html_to_png,
+            save_image,
             list_folder,
             take_pending_files,
             notes_path,

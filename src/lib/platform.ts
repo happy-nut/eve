@@ -175,8 +175,8 @@ export const importAsset = (src: string) => invoke<string>('import_asset', { src
  */
 export const savePdf = (out: string, margin = 48) => invoke<void>('save_pdf', { out, margin });
 
-/** Render a standalone HTML page to a PNG at `out` (Quick Look does the drawing). */
-export const htmlToPng = (html: string, out: string) => invoke<void>('html_to_png', { html, out });
+/** The same printed page, rasterised — how a note leaves as a picture. */
+export const savePng = (out: string, margin = 48, width = 1600) => invoke<void>('save_image', { out, margin, width });
 
 /** External files opened through macOS (Open With / double-click). */
 export const files = {

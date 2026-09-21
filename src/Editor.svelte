@@ -52,7 +52,6 @@
       const chain = e.chain().focus('end');
       (last && last.content.size ? chain.splitBlock() : chain).insertContent(content).run();
     };
-    hooks.noteHtml = () => editor?.getHTML() ?? '';
     // summoned back: the caret in the middle of the page, where it is comfortable to write from —
     // not pinned to whichever edge the last scroll into view left it against
     hooks.centerCaret = () => {
@@ -73,7 +72,6 @@
     } else if (ui.focusOwner !== 'sidebar') editor?.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
     return () => {
       hooks.attach = undefined;
-      hooks.noteHtml = undefined;
       hooks.centerCaret = undefined;
       if (editor) notes.cursor.set(id, editor.state.selection.from);
       editor?.destroy();

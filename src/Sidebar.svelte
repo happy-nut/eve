@@ -331,7 +331,7 @@
    * picture is drawn from the note on screen — so those two open the row's note first and let it render.
    */
   async function exportRow(n: Note, as: ExportAs) {
-    if (as === 'md') return transfer(() => exportNote(n, as, () => ''));
+    if (as === 'md') return transfer(() => exportNote(n, as));
     if (notes.currentId !== n.id) {
       await openNote(n);
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); // painted, not just mounted

@@ -75,8 +75,6 @@ export const hooks: {
   openPlus?: (anchor?: HTMLElement) => void;
   /** append markdown to the open note (a dropped attachment; registered by the editor) */
   attach?: (markdown: string) => void;
-  /** the open note as rendered HTML, for exporting it as a picture */
-  noteHtml?: () => string;
   /** put the caret in the middle of the page (the window coming back, not an edit) */
   centerCaret?: () => void;
 } = {};
