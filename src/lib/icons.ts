@@ -18,6 +18,32 @@ export const customUrl = (c: CustomIcon) =>
 /** a pleasant pool for "add icon" (Notion picks one at random too) */
 export const RANDOM_ICONS = ['📝', '📌', '📎', '📚', '📖', '📒', '📓', '🗂️', '🗒️', '💡', '🔥', '⭐', '✨', '🌟', '🎯', '🚀', '🛰️', '🧭', '🗺️', '🧩', '🧠', '🎨', '🎬', '🎧', '🎮', '🏗️', '🔧', '🛠️', '⚙️', '🔬', '🧪', '🧬', '💎', '🌱', '🌿', '🍀', '🌸', '🌊', '🌈', '☀️', '🌙', '⚡', '❄️', '🍎', '🍋', '🍉', '🥑', '🍕', '☕', '🍵', '🐢', '🐙', '🦊', '🐼', '🦉', '🐳', '🦋', '🏠', '🏔️', '🗽', '🎈', '🎁', '🏆', '🔑', '🔒', '💬', '📣', '🧲'];
 
+/**
+ * An emoji drawn into a PNG. Printing draws a colour emoji glyph only in part — the same slice of it
+ * wherever it sits — while a picture of one comes out whole, so the page header prints this instead.
+ * Cached: the same icon is asked for on every render.
+ */
+const painted = new Map<string, string>();
+export function emojiImage(ch: string, size = 56): string {
+  const key = `${ch}@${size}`;
+  const had = painted.get(key);
+  if (had !== undefined) return had;
+  const scale = 3; // drawn large, shown small: it has to survive a print at 300dpi
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size * scale;
+  const g = canvas.getContext('2d');
+  let url = '';
+  if (g) {
+    g.font = `${size * scale * 0.86}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(ch, canvas.width / 2, canvas.height / 2);
+    url = canvas.toDataURL('image/png');
+  }
+  painted.set(key, url);
+  return url;
+}
+
 /** One at random, never the one already in place (a second roll should look like it did something). */
 export const randomIcon = (except = '') => {
   const pool = RANDOM_ICONS.filter((e) => e !== except);

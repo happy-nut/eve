@@ -173,10 +173,10 @@ export const importAsset = (src: string) => invoke<string>('import_asset', { src
  * Print the window to a PDF file. A print job that saves needs no printer and shows no panel, and the
  * pages keep their text (a picture of the note is what "Export as image" is for). `margin` is in points.
  */
-export const savePdf = (out: string, margin = 32) => invoke<void>('save_pdf', { out, margin });
+export const savePdf = (out: string, margin = 24) => invoke<void>('save_pdf', { out, margin });
 
 /** The same printed page, rasterised — how a note leaves as a picture. */
-export const savePng = (out: string, margin = 32, width = 1600) => invoke<void>('save_image', { out, margin, width });
+export const savePng = (out: string, margin = 24, width = 1600) => invoke<void>('save_image', { out, margin, width });
 
 /** External files opened through macOS (Open With / double-click). */
 export const files = {
