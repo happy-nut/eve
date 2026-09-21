@@ -846,7 +846,7 @@ checksum = "0b5343afd4a8365a643ac588dab4cf234a190c7f6c88c9f6dd6ffe00837661b7"
 
 [[package]]
 name = "eve"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "core-foundation",
  "objc2",
