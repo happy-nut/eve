@@ -364,11 +364,15 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
   .tiptap p, .tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 { overflow: visible; width: auto; max-width: none; }
   /* the sheet's margin is the print job's (save_pdf sets it); nothing here adds a second one */
   .editor.has-head .tiptap { min-height: 0; }
-  /* the icon block stays: hiding it shifted the note up into a band at the top of the page that WebKit
-     lays out but never paints — the note's own title line vanished there. Left in place it prints the
-     icon, and every line of the note lands where it is drawn. */
-  .page-head { break-after: avoid; }
-  /* its contents would print half-cut inside that band, so only the space it takes survives */
+  /* The top of the printed flow falls in a band that WebKit lays out but never paints (about 80px of
+     it). Hiding the icon block moved the note's own title into that band and it vanished; leaving the
+     block as it is on screen put the icon half inside it, sliced. So the block keeps a fixed height and
+     holds its icon *below* the band, where both the icon and the title land on paper as they read. */
+  .page-head, .page-head.with-icon { height: 118px; padding: 0; box-sizing: border-box; break-after: avoid; }
+  /* The icon itself is left out: a colour emoji is a bitmap glyph, and this print path only ever draws
+     part of one — the same slice of it wherever on the page it sits, however much room it is given.
+     Its block stays as the fixed space it always was, which is also what keeps the note's title out of
+     the band at the top of the flow that WebKit lays out but never paints. */
   .page-head > * { visibility: hidden; }
   /* ponytail: the note's own title line (the first h1) comes out blank on paper — its glyphs are in the
      PDF's text layer, at the right place and in the right colour, but nothing paints them. Printing the
