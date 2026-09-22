@@ -183,7 +183,7 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
   border-top-color: var(--accent); box-shadow: var(--glow);
   outline: 6px solid var(--accent-soft); outline-offset: -1px; border-radius: 1px;
 }
-.tiptap a { color: var(--accent); text-decoration: none; }
+.tiptap a { color: var(--accent); text-decoration: none; cursor: pointer; }
 .tiptap a:hover { text-decoration: underline; }
 /* a link to another note reads as text with the note's icon and an underline — no pill, so nothing
    sticks out of the line box to be clipped, and the selected state is the plain selection colour */
