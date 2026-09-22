@@ -205,6 +205,8 @@ export function applyKeymap(editor: Editor) {
     },
   });
   editor.registerPlugin(guard, (p, all) => [p, ...all]);
+  // ⌥↩ opens the note's own menu, the one the right button opens (the sidebar answers to it too)
+  bindings['Alt-Enter'] = () => (noteMenu(editor, null), true);
   const plugin = new Plugin({ key: KEYMAP, props: { handleKeyDown: keydownHandler(bindings) } });
   editor.registerPlugin(plugin, (p, all) => [p, ...all]);
 }
@@ -348,11 +350,13 @@ export function goToSection(editor: Editor, section: string) {
  * of things a note cannot use — so the app draws this one instead: the clipboard, the marks that have
  * keyboard shortcuts nobody remembers, and nothing else.
  */
-function noteMenu(editor: Editor, event: MouseEvent) {
-  // a right-click outside the selection moves the caret there first, the way every editor behaves
-  const at = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
-  const sel = editor.state.selection;
-  if (at && (at.pos < sel.from || at.pos > sel.to)) editor.commands.setTextSelection(at.pos);
+function noteMenu(editor: Editor, event: MouseEvent | null) {
+  if (event) {
+    // a right-click outside the selection moves the caret there first, the way every editor behaves
+    const at = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+    const sel = editor.state.selection;
+    if (at && (at.pos < sel.from || at.pos > sel.to)) editor.commands.setTextSelection(at.pos);
+  }
   const empty = editor.state.selection.empty;
   const linked = editor.isActive('link');
   /** execCommand is the one path that keeps ProseMirror's own clipboard serializer (markdown, nodes) */
@@ -374,7 +378,9 @@ function noteMenu(editor: Editor, event: MouseEvent) {
     { label: 'Export as PDF…', keys: keys('exportPdf'), run: () => void exportCurrent('pdf') },
     { label: 'Export as image…', keys: keys('exportPng'), run: () => void exportCurrent('png') },
   ];
-  ui.openMenu(event, items);
+  // from the keyboard (⌥↩) there is no pointer: the menu opens under the caret instead
+  const caret = editor.view.coordsAtPos(editor.state.selection.head);
+  ui.openMenu(event ?? { clientX: Math.round(caret.left), clientY: Math.round(caret.bottom) }, items);
 }
 
 /** Ask for a URL and hang it on the selection (⌘K has no home in this editor). */
