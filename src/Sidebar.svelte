@@ -308,7 +308,10 @@
         done.then(() => focusRow(sel));
         break;
       }
-      case 'Enter': if (group) { groups.editing = group; break; } return;
+      case 'Enter':
+        if (e.altKey) { rowMenu(e, el); return; } // ⌥↩ is the right button, for people who are not holding one
+        if (group) { groups.editing = group; break; }
+        return;
       case 'i': if (group) pickIcon({ group }); else pickIcon({ note: notes.all.find((n) => n.id === noteId) }); break;
       case 'Escape': document.querySelector<HTMLElement>('.tiptap')?.focus(); break;
       default: return;
@@ -343,8 +346,8 @@
    * Right-click on a row: what the row can do, in one place. Everything here is a command the keyboard
    * already has (⌥↑↓ moves, ⌥←→ nests, ⌫ deletes, `i` picks an icon) — the menu just makes them findable.
    */
-  function rowMenu(e: MouseEvent) {
-    const row = (e.target as HTMLElement).closest<HTMLElement>('[data-row]');
+  function rowMenu(e: MouseEvent | KeyboardEvent, from?: HTMLElement) {
+    const row = from ?? (e.target as HTMLElement).closest<HTMLElement>('[data-row]');
     if (!row) return; // empty space below the list: nothing of its own to offer
     e.preventDefault();
     e.stopPropagation();
@@ -378,7 +381,10 @@
             { label: 'Delete note', sep: true, danger: true, run: () => removeNote(n) },
           ]
         : [];
-    if (items.length) ui.openMenu(e, items);
+    // from the keyboard there is no pointer to open at: the row's own corner stands in for one
+    const box = row.getBoundingClientRect();
+    const at = 'clientX' in e && e.clientX ? e : { clientX: Math.round(box.left + 12), clientY: Math.round(box.bottom) };
+    if (items.length) ui.openMenu(at, items);
   }
 
   // ---- rename ----
@@ -609,10 +615,13 @@
   .note-row > button:first-child:hover { background: var(--bg-hover); }
   .note-row > button:first-child:active { transform: scale(0.985); }
   .note-row > button.active { background: var(--bg-active); }
-  /* keyboard cursor: a soft accent tint; the open note stays neutral grey */
-  .note-row > [data-row]:focus { outline: none; background: color-mix(in srgb, var(--accent) 14%, transparent); }
-  .gname:focus { outline: none; }
-  .note-row > button.active:focus { background: color-mix(in srgb, var(--accent) 16%, var(--bg-active)); }
+  /* keyboard cursor: an accent tint the eye can follow while the arrow key is held down. A group row
+     used to take focus with nothing to show for it, so arrowing through the list kept losing the mark. */
+  .note-row > [data-row]:focus, .gname:focus {
+    outline: none; background: color-mix(in srgb, var(--accent) 22%, transparent);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .note-row > button.active:focus { background: color-mix(in srgb, var(--accent) 24%, var(--bg-active)); }
   .title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
