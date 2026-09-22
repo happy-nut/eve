@@ -615,13 +615,13 @@
   .note-row > button:first-child:hover { background: var(--bg-hover); }
   .note-row > button:first-child:active { transform: scale(0.985); }
   .note-row > button.active { background: var(--bg-active); }
-  /* keyboard cursor: an accent tint the eye can follow while the arrow key is held down. A group row
-     used to take focus with nothing to show for it, so arrowing through the list kept losing the mark. */
+  /* Keyboard cursor: the row's own background, and it appears at once. The rows fade their background
+     over 0.12s, which a held arrow key never gives them — focus moved on before the colour arrived, so
+     the list looked unmarked while scrolling through it. A group row had no focus colour at all. */
   .note-row > [data-row]:focus, .gname:focus {
-    outline: none; background: color-mix(in srgb, var(--accent) 22%, transparent);
-    box-shadow: inset 2px 0 0 var(--accent);
+    outline: none; transition: none; background: color-mix(in srgb, var(--accent) 22%, transparent);
   }
-  .note-row > button.active:focus { background: color-mix(in srgb, var(--accent) 24%, var(--bg-active)); }
+  .note-row > button.active:focus { transition: none; background: color-mix(in srgb, var(--accent) 24%, var(--bg-active)); }
   .title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
