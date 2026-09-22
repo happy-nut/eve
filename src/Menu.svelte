@@ -31,16 +31,19 @@
     e.preventDefault();
     e.stopPropagation();
   }
-  const autofocus = (node: HTMLElement) => node.focus();
+  const autofocus = (node: HTMLElement) => { if (!req.hover) node.focus(); };
   // WebKit does not focus a clicked button, it blurs the menu — which would close it mid-click
   const hold = (e: MouseEvent) => { e.preventDefault(); (e.currentTarget as HTMLElement).focus(); };
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="backdrop" onmousedown={() => ui.closeMenu()} oncontextmenu={(e) => { e.preventDefault(); ui.closeMenu(); }}></div>
+{#if !req.hover}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="backdrop" onmousedown={() => ui.closeMenu()} oncontextmenu={(e) => { e.preventDefault(); ui.closeMenu(); }}></div>
+{/if}
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <ul bind:this={el} class="menu" role="menu" tabindex="-1" use:autofocus style="left: {x}px; top: {y}px"
-  transition:scale={{ start: 0.94, duration: 110 }} onkeydown={onKey}>
+  transition:scale={{ start: 0.94, duration: 110 }} onkeydown={onKey}
+  onmouseenter={() => req.hover && ui.keepMenu()} onmouseleave={() => req.hover && ui.closeMenuSoon(120)}>
   {#each req.items as it, i (i)}
     <li role="none" class:sep={it.sep}>
       <button role="menuitem" class:danger={it.danger} disabled={it.disabled}

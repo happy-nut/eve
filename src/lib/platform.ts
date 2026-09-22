@@ -124,6 +124,10 @@ export const github = {
 export const clipboardText = (): Promise<string> =>
   (isTauri ? invoke<string>('plugin:clipboard-manager|read_text') : navigator.clipboard.readText()).catch(() => '');
 
+/** Put text on the clipboard (the desktop side, so it works without a gesture the webview approves of). */
+export const copyText = (text: string): Promise<void> =>
+  (isTauri ? invoke<void>('plugin:clipboard-manager|write_text', { label: null, text }) : navigator.clipboard.writeText(text)).catch(() => {});
+
 /** Open a link in the default browser. */
 export const openUrl = (url: string) => (isTauri ? invoke<void>('open_url', { url }) : Promise.resolve(void window.open(url, '_blank')));
 

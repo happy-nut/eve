@@ -26,7 +26,7 @@ import { ui, type MenuItem } from './ui.svelte';
 import { notes, titleOf, type Note } from './notes.svelte';
 import { headingsOf, splitLink } from './markdown';
 import { isCustom } from './icons';
-import { pickImage, pickVideo, openUrl, clipboardText } from './platform';
+import { pickImage, pickVideo, openUrl, clipboardText, copyText } from './platform';
 import { fileMarkdown, isAsset } from './drop';
 import { exportCurrent } from './transfer';
 import Suggestion from '@tiptap/suggestion';
@@ -383,6 +383,40 @@ function noteMenu(editor: Editor, event: MouseEvent | null) {
   ui.openMenu(event ?? { clientX: Math.round(caret.left), clientY: Math.round(caret.bottom) }, items);
 }
 
+/**
+ * Hovering a link: what there is to do with it, under the link itself. An address gets a message and a
+ * copy, a page gets opened or copied — the things you would otherwise select the text to do by hand.
+ * It takes no focus, so the caret stays where it was writing.
+ */
+let hovered = '';
+function linkMenu(editor: Editor, a: HTMLAnchorElement) {
+  const href = a.getAttribute('href') ?? '';
+  if (!href || (ui.menu?.hover && hovered === href)) return;
+  hovered = href;
+  const mail = href.startsWith('mailto:');
+  const address = mail ? href.slice('mailto:'.length) : href;
+  const unlink = () => {
+    const at = editor.view.posAtDOM(a, 0);
+    editor.chain().setTextSelection({ from: at, to: at + (a.textContent?.length ?? 0) }).unsetLink().setTextSelection(at).run();
+  };
+  const box = a.getBoundingClientRect();
+  ui.openMenu(
+    { clientX: Math.round(box.left), clientY: Math.round(box.bottom + 4) },
+    mail
+      ? [
+          { label: 'Send mail', run: () => void openUrl(href) },
+          { label: 'Copy address', run: () => void copyText(address) },
+          { label: 'Remove link', sep: true, run: unlink },
+        ]
+      : [
+          { label: 'Open link', run: () => void openUrl(href) },
+          { label: 'Copy link', run: () => void copyText(address) },
+          { label: 'Remove link', sep: true, run: unlink },
+        ],
+    true,
+  );
+}
+
 /** Ask for a URL and hang it on the selection (⌘K has no home in this editor). */
 async function linkSelection(editor: Editor) {
   const href = (await ui.prompt('링크 주소', ''))?.trim();
@@ -430,6 +464,16 @@ export function createEditor(opts: {
       // links open in the browser: the editor's own webview must not navigate away from the app
       handleDOMEvents: {
         contextmenu: (_view, event) => { event.preventDefault(); noteMenu(editor, event as MouseEvent); return true; },
+        // the pointer resting on a link brings up what can be done with it; leaving it puts that away
+        mouseover: (_view, event) => {
+          const a = (event.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+          if (a && !a.closest('.bookmark')) { ui.keepMenu(); linkMenu(editor, a); }
+          return false;
+        },
+        mouseout: (_view, event) => {
+          if ((event.target as HTMLElement | null)?.closest?.('a[href]')) { hovered = ''; ui.closeMenuSoon(); }
+          return false;
+        },
         click: (_view, event) => {
           const a = (event.target as HTMLElement | null)?.closest?.('a[href]');
           if (!a || a.closest('.bookmark')) return false; // the bookmark card opens itself

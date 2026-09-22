@@ -36,16 +36,27 @@ class Ui {
   linkDone(v: 'card' | 'link' | 'both' | null) { this.link?.resolve(v); this.link = null; }
 
   /** a right-click menu at a point; the app draws its own everywhere, the webview's is suppressed */
-  menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  menu = $state<{ x: number; y: number; items: MenuItem[]; hover?: boolean } | null>(null);
   private menuFrom: HTMLElement | null = null;
-  openMenu(at: { clientX: number; clientY: number }, items: MenuItem[]) {
-    this.menuFrom = document.activeElement as HTMLElement | null;
+  private menuCloser?: ReturnType<typeof setTimeout>;
+  openMenu(at: { clientX: number; clientY: number }, items: MenuItem[], hover = false) {
+    clearTimeout(this.menuCloser);
+    // a hover popover takes no focus: the caret stays in the note, and typing goes on
+    this.menuFrom = hover ? null : (document.activeElement as HTMLElement | null);
     const shown = items.filter((i) => !i.hide);
     // a group whose items all went away must not leave its divider at the top of the menu
-    this.menu = { x: at.clientX, y: at.clientY, items: shown.map((i, n) => (n === 0 && i.sep ? { ...i, sep: false } : i)) };
+    this.menu = { x: at.clientX, y: at.clientY, hover, items: shown.map((i, n) => (n === 0 && i.sep ? { ...i, sep: false } : i)) };
+  }
+  /** the pointer moved onto the popover (or back onto what opened it): it stays */
+  keepMenu() { clearTimeout(this.menuCloser); }
+  /** the pointer left: close, but late enough to cross the gap between the link and the popover */
+  closeMenuSoon(ms = 220) {
+    clearTimeout(this.menuCloser);
+    this.menuCloser = setTimeout(() => { if (this.menu?.hover) this.closeMenu(); }, ms);
   }
   /** Dismissed or picked: whatever had the keyboard gets it back (a picked item may take it again). */
   closeMenu() {
+    clearTimeout(this.menuCloser);
     this.menu = null;
     if (this.menuFrom?.isConnected) this.menuFrom.focus();
     this.menuFrom = null;
