@@ -7,6 +7,7 @@
   import { cardDoc, splitCard } from './lib/markdown';
   import { ui } from './lib/ui.svelte';
   import Suggest from './Suggest.svelte';
+  import DateMenu from './DateMenu.svelte';
   import Outline from './Outline.svelte';
   import TableTools from './TableTools.svelte';
 
@@ -16,6 +17,7 @@
   let el: HTMLDivElement;
   let scrollEl = $state<HTMLDivElement | null>(null);
   let suggest: ReturnType<typeof Suggest>;
+  let dateMenu: ReturnType<typeof DateMenu>;
   let editor = $state<TipTap | undefined>();
   const returnTo = document.activeElement as HTMLElement | null;
 
@@ -29,6 +31,7 @@
       onOpenNote: (t) => { close(); notes.openByTitle(t); },
       targets: () => notes.visible,
       suggestionUI: suggest.ui,
+      calendarUI: dateMenu.ui,
     });
     // caret at the end of the title line, so a long card opens at its top rather than scrolled to the end
     editor.commands.focus(editor.state.doc.firstChild!.nodeSize - 1);
@@ -54,6 +57,7 @@
 <!-- outside the card: it is transformed, which would clip a fixed bar hanging over the table's top -->
 <TableTools {editor} />
 <Suggest bind:this={suggest} />
+<DateMenu bind:this={dateMenu} />
 
 <style>
   .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); z-index: 30; }

@@ -229,6 +229,42 @@ export interface SuggestionUI {
   visible(): boolean;
 }
 
+/** The `@` calendar, driven the same way but by one day rather than a list of items. */
+export interface CalendarUI {
+  show(day: string | null, rect: DOMRect | null, pick: (iso: string) => void): void;
+  move(days: number): void;
+  month(delta: number): void;
+  select(): boolean;
+  hide(): void;
+  visible(): boolean;
+}
+
+/**
+ * `@` wiring: the popup is a month, so the arrows walk days and weeks instead of a list. A query that
+ * matches no day at all (`@sarah`) closes it, which is how typing past a date gets out of the way.
+ */
+function calendar(uiRef: CalendarUI) {
+  const day = (p: any) => (p.items as { iso: string }[])[0]?.iso ?? null;
+  const open = (p: any) => uiRef.show(day(p), p.clientRect?.() ?? null, (iso: string) => p.command({ value: iso }));
+  return {
+    onStart: open,
+    onUpdate: open,
+    onKeyDown: ({ event }: { event: KeyboardEvent }) => {
+      if (!uiRef.visible()) return false;
+      if (event.key === 'ArrowLeft') return (uiRef.move(-1), true);
+      if (event.key === 'ArrowRight') return (uiRef.move(1), true);
+      if (event.key === 'ArrowUp') return (uiRef.move(-7), true);
+      if (event.key === 'ArrowDown') return (uiRef.move(7), true);
+      if (event.key === 'PageUp') return (uiRef.month(-1), true);
+      if (event.key === 'PageDown') return (uiRef.month(1), true);
+      if (event.key === 'Enter' || event.key === 'Tab') return uiRef.select();
+      if (event.key === 'Escape') return (uiRef.hide(), true);
+      return false;
+    },
+    onExit: () => uiRef.hide(),
+  };
+}
+
 /** Shared suggestion popup wiring for [[ and / menus. */
 function popup(uiRef: SuggestionUI) {
   return {
@@ -259,7 +295,6 @@ const ICONS = {
   image: '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><circle cx="6" cy="6.8" r="1"/><path d="M3.2 11.8 6.4 8.7l2.3 2.1 2.1-2 2.5 2.8"/>',
   video: '<rect x="1.5" y="3.5" width="9" height="9" rx="1.5"/><path d="M10.5 7.4l4-2.2v5.6l-4-2.2z"/>',
   wikiLink: '<path d="M6.4 3.5H4.3v9h2.1M11.7 3.5H9.6v9h2.1"/>',
-  date: '<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.6h11M5.5 2v3M10.5 2v3"/>',
   table: '<rect x="2.5" y="3.5" width="11" height="9" rx="1"/><path d="M2.5 6.6h11M6.5 6.6v5.9M10 6.6v5.9"/>',
   section: '<path d="M6.4 2.9 4.8 13.1M11.2 2.9 9.6 13.1M3.3 6.1h9.4M2.8 9.9h9.4"/>',
   emoji: '<circle cx="8" cy="8" r="6"/><path d="M5.8 9.4c.6.9 1.3 1.4 2.2 1.4s1.6-.5 2.2-1.4"/><path d="M6.3 6.4h.01M9.7 6.4h.01"/>',
@@ -446,6 +481,7 @@ export function createEditor(opts: {
   /** the notes a `[[link]]` may point at: their titles, and the sections inside them */
   targets: () => Note[];
   suggestionUI: SuggestionUI;
+  calendarUI: CalendarUI;
   cursor?: number;
 }) {
   const iconOf = (link: string) => {
@@ -664,15 +700,16 @@ export function createEditor(opts: {
           char: '@',
           allowSpaces: false,
           pluginKey: new PluginKey('dateMention'),
-          items: ({ query }) => dayChoices(query).map((d) => ({ label: d.label, value: d.iso, hint: d.iso, icon: ICONS.date })),
+          // the days a query could mean; the calendar opens on the first and closes when there is none
+          items: ({ query }) => dayChoices(query),
           command: ({ editor, range, props }) =>
             editor
               .chain()
               .focus()
               .deleteRange(range)
-              .insertContent([{ type: 'dateMention', attrs: { date: (props as SuggestItem).value } }, { type: 'text', text: ' ' }])
+              .insertContent([{ type: 'dateMention', attrs: { date: (props as { value: string }).value } }, { type: 'text', text: ' ' }])
               .run(),
-          render: () => popup(opts.suggestionUI),
+          render: () => calendar(opts.calendarUI),
         },
       }),
       Callout,
@@ -712,7 +749,7 @@ export function createEditor(opts: {
     ],
     onUpdate: ({ editor }) => opts.onUpdate(getMarkdown(editor)),
   });
-  suggestionVisible = () => opts.suggestionUI.visible();
+  suggestionVisible = () => opts.suggestionUI.visible() || opts.calendarUI.visible();
   applyKeymap(editor);
   if (import.meta.env.DEV) (window as any).__eve = editor;
   return editor;

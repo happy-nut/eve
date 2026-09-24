@@ -7,6 +7,7 @@
   import { ui, hooks } from './lib/ui.svelte';
   import Icon from './Icon.svelte';
   import Suggest from './Suggest.svelte';
+  import DateMenu from './DateMenu.svelte';
   import Outline from './Outline.svelte';
   import TableTools from './TableTools.svelte';
   import Find from './Find.svelte';
@@ -20,6 +21,7 @@
   let scrollEl = $state<HTMLDivElement | null>(null);
 
   let suggest: ReturnType<typeof Suggest>; // [[ and / popup
+  let dateMenu: ReturnType<typeof DateMenu>; // the @ calendar
 
   onMount(() => {
     const id = note.id;
@@ -39,6 +41,7 @@
       },
       targets: () => notes.visible,
       suggestionUI: suggest.ui,
+      calendarUI: dateMenu.ui,
       // a [[Title#Section]] link says where to land, over wherever the caret was left last time
       cursor: notes.section ? undefined : notes.cursor.get(note.id),
     });
@@ -121,6 +124,7 @@
 {#if ui.find}<Find {editor} />{/if}
 
 <Suggest bind:this={suggest} />
+<DateMenu bind:this={dateMenu} />
 
 <style>
   .scroll { height: 100%; overflow-y: auto; scrollbar-width: none; }
