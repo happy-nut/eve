@@ -195,6 +195,9 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
 .tiptap .wl-ico { margin-right: 0.28em; font-size: 0.95em; line-height: 1; }
 .tiptap .wl-ico svg { width: 1em; height: 1em; vertical-align: -0.12em; }
 .tiptap .ProseMirror-selectednode.wikilink, .tiptap .wikilink.ProseMirror-selectednode { background: var(--sel); border-radius: 3px; }
+/* a day reads as part of the sentence, not as a control: tinted and rounded, nothing more */
+.tiptap .datechip { background: var(--accent-soft); border-radius: 4px; padding: 0 0.3em; white-space: nowrap; }
+.tiptap .datechip.ProseMirror-selectednode { background: var(--sel); }
 .tiptap ::selection { background: var(--sel); color: var(--fg); }
 /* A selection that runs past a line's end is painted out to the block's right edge by WebKit. Making each text
    block its own selection root (overflow: clip) shrunk to its content keeps the highlight on the text; the 2px

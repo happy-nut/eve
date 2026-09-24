@@ -12,6 +12,7 @@ import { canJoin } from '@tiptap/pm/transform';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
+import { DateMention, dayChoices } from './date';
 import { Callout } from './callout';
 import { LocalImage } from './image';
 import { Bookmark, URL_RE } from './bookmark';
@@ -258,6 +259,7 @@ const ICONS = {
   image: '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><circle cx="6" cy="6.8" r="1"/><path d="M3.2 11.8 6.4 8.7l2.3 2.1 2.1-2 2.5 2.8"/>',
   video: '<rect x="1.5" y="3.5" width="9" height="9" rx="1.5"/><path d="M10.5 7.4l4-2.2v5.6l-4-2.2z"/>',
   wikiLink: '<path d="M6.4 3.5H4.3v9h2.1M11.7 3.5H9.6v9h2.1"/>',
+  date: '<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.6h11M5.5 2v3M10.5 2v3"/>',
   table: '<rect x="2.5" y="3.5" width="11" height="9" rx="1"/><path d="M2.5 6.6h11M6.5 6.6v5.9M10 6.6v5.9"/>',
   section: '<path d="M6.4 2.9 4.8 13.1M11.2 2.9 9.6 13.1M3.3 6.1h9.4M2.8 9.9h9.4"/>',
   emoji: '<circle cx="8" cy="8" r="6"/><path d="M5.8 9.4c.6.9 1.3 1.4 2.2 1.4s1.6-.5 2.2-1.4"/><path d="M6.3 6.4h.01M9.7 6.4h.01"/>',
@@ -651,6 +653,24 @@ export function createEditor(opts: {
               .focus()
               .deleteRange(range)
               .insertContent([{ type: 'wikiLink', attrs: { title: (props as SuggestItem).value ?? (props as SuggestItem).label } }, { type: 'text', text: ' ' }])
+              .run(),
+          render: () => popup(opts.suggestionUI),
+        },
+      }),
+      // @ — a day, stored as the day and shown as it reads now. The trigger keeps the default
+      // prefixes (line start or after a space), which is what keeps an address out of it.
+      DateMention.configure({
+        suggestion: {
+          char: '@',
+          allowSpaces: false,
+          pluginKey: new PluginKey('dateMention'),
+          items: ({ query }) => dayChoices(query).map((d) => ({ label: d.label, value: d.iso, hint: d.iso, icon: ICONS.date })),
+          command: ({ editor, range, props }) =>
+            editor
+              .chain()
+              .focus()
+              .deleteRange(range)
+              .insertContent([{ type: 'dateMention', attrs: { date: (props as SuggestItem).value } }, { type: 'text', text: ' ' }])
               .run(),
           render: () => popup(opts.suggestionUI),
         },
