@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import MarkdownIt from 'markdown-it';
-import { isoDay, dayFrom, daysFrom, dateLabel, typedDay, dayChoices, dateMarkdown } from './date.ts';
+import { isoDay, dayFrom, daysFrom, dateLabel, typedDay, dayChoices, dateMarkdown,
+  shiftDays, shiftMonths, monthGrid, sameMonth, monthName, weekdayNames } from './date.ts';
 
 // a fixed "now", late enough in the day that a UTC-based answer would land on the next date
 const now = new Date(2026, 8, 24, 23, 30); // 2026-09-24, local
@@ -45,6 +46,43 @@ assert.deepEqual(isos('2001-01-01'), ['2001-01-01'], 'a day typed out that is no
 assert.deepEqual(isos('zzz'), [], 'nothing matches, so the popup does not open');
 
 assert.equal(dayChoices('', now, 'ko')[0].label, '오늘');
+
+// --- the calendar grid ---
+
+assert.equal(shiftDays('2026-09-24', 1), '2026-09-25');
+assert.equal(shiftDays('2026-09-30', 1), '2026-10-01', 'over a month boundary');
+assert.equal(shiftDays('2026-01-01', -1), '2025-12-31', 'over a year boundary');
+assert.equal(shiftDays('2026-09-24', -7), '2026-09-17', 'a week up');
+
+assert.equal(shiftMonths('2026-09-24', 1), '2026-10-24');
+assert.equal(shiftMonths('2026-03-31', -1), '2026-02-28', 'clamped, not rolled into March');
+assert.equal(shiftMonths('2024-03-31', -1), '2024-02-29', 'a leap February');
+assert.equal(shiftMonths('2026-01-15', -1), '2025-12-15', 'back over a year boundary');
+
+const grid = monthGrid('2026-09-24');
+assert.equal(grid.length, 6, 'always six weeks, so the popup never changes height');
+assert.ok(grid.every((w) => w.length === 7));
+assert.equal(grid[0][0].slice(-2) % 1, 0);
+assert.ok(new Date(...grid[0][0].split('-').map((n, i) => (i === 1 ? +n - 1 : +n))).getDay() === 0, 'starts on a Sunday');
+assert.ok(grid.flat().includes('2026-09-01') && grid.flat().includes('2026-09-30'), 'the whole month is in there');
+assert.deepEqual(grid.flat(), [...new Set(grid.flat())], 'no day appears twice');
+assert.deepEqual(
+  grid.flat(),
+  grid.flat().map((_, i) => shiftDays(grid[0][0], i)),
+  'the days run consecutively with no gap',
+);
+// a month that starts on a Sunday still gets its own six weeks, not a row of the month before
+const may = monthGrid('2026-02-15');
+assert.equal(may.length, 6);
+assert.ok(may.flat().includes('2026-02-01') && may.flat().includes('2026-02-28'));
+
+assert.equal(sameMonth('2026-09-01', '2026-09-30'), true);
+assert.equal(sameMonth('2026-09-30', '2026-10-01'), false);
+
+assert.equal(monthName('2026-09-24', 'en'), 'September 2026');
+assert.equal(monthName('2026-09-24', 'ko'), '2026년 9월');
+assert.deepEqual(weekdayNames('en'), ['S', 'M', 'T', 'W', 'T', 'F', 'S']);
+assert.deepEqual(weekdayNames('ko'), ['일', '월', '화', '수', '목', '금', '토']);
 
 // the markdown rule, against a real markdown-it: what becomes a chip on the way back in
 const md = new MarkdownIt();

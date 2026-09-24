@@ -71,6 +71,51 @@ export function dayChoices(query: string, now: Date = new Date(), locale?: strin
   return out;
 }
 
+/** That day, moved by whole days. */
+export const shiftDays = (iso: string, n: number): string => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return isoDay(new Date(y, m - 1, d + n));
+};
+
+/** That day, moved by whole months — 31 January back a month is 28 February, not 3 March. */
+export function shiftMonths(iso: string, n: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const last = new Date(y, m + n, 0).getDate(); // day 0 of the month after the target = its last day
+  return isoDay(new Date(y, m - 1 + n, Math.min(d, last)));
+}
+
+/**
+ * The month `iso` falls in, as six weeks of seven days starting on a Sunday. Always six, so the
+ * calendar is the same height whichever month it shows and the popup never jumps under the cursor.
+ * The days either side of the month are real days too — clicking one picks it.
+ */
+export function monthGrid(iso: string): string[][] {
+  const [y, m] = iso.split('-').map(Number);
+  const first = new Date(y, m - 1, 1);
+  const start = new Date(y, m - 1, 1 - first.getDay());
+  return Array.from({ length: 6 }, (_, w) =>
+    Array.from({ length: 7 }, (_, d) =>
+      isoDay(new Date(start.getFullYear(), start.getMonth(), start.getDate() + w * 7 + d))),
+  );
+}
+
+/** Whether two days are in the same month — the ones that are not are drawn faint. */
+export const sameMonth = (a: string, b: string): boolean => a.slice(0, 7) === b.slice(0, 7);
+
+/** "September 2026" / "2026년 9월", in the reader's language. */
+export const monthName = (iso: string, locale?: string): string => {
+  const [y, m] = iso.split('-').map(Number);
+  return new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long' }).format(new Date(y, m - 1, 1));
+};
+
+/** S M T W T F S / 일 월 화…, in the reader's language, starting on the Sunday the grid starts on. */
+export function weekdayNames(locale?: string): string[] {
+  const f = new Intl.DateTimeFormat(locale, { weekday: 'narrow' });
+  const sunday = new Date(2026, 0, 1);
+  sunday.setDate(sunday.getDate() - sunday.getDay());
+  return Array.from({ length: 7 }, (_, i) => f.format(new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() + i)));
+}
+
 /**
  * `@2026-09-24` in a file becomes a chip when the note is read back. Exported on its own so the one
  * part with a sharp edge — telling a date from the `@` in an address — can be tested against a real

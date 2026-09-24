@@ -304,3 +304,25 @@
   `<span class="datechip" data-date="2026-09-24" title="2026-09-24">오늘</span>`. A note written with
   four different days and reloaded cold rendered 어제 / 오늘 / 내일 / 2026.09.20, with
   compensation@toss.im left as an address.
+
+# GATES — @ opens a calendar (2026-09-24)
+
+- [x] G90 Frontend type-checks and builds
+  CHECK: npm run check && npm run build
+  EXPECT: built in
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "COMPLETED 245 FILES 0 ERRORS 0 WARNINGS" / "✓ built in 1.08s"
+- [x] G91 The grid is a real month: six stable weeks, Sunday first, month steps that do not overflow
+  CHECK: node --experimental-strip-types --no-warnings src/lib/date.test.mjs
+  EXPECT: DATE_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "DATE_OK" — the grid's 42 days run consecutively with no gap or
+  repeat and start on a Sunday; 31 March back one month is 28 February (29 in a leap year), not 3 March.
+- [x] G92 Nothing else regressed
+  CHECK: npm test 2>&1 | grep -c "_OK"
+  EXPECT: 7
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "7"
+- [x] G93 @ opens the calendar on today; arrows walk it, ↩ writes that day, and typing still jumps
+  EVIDENCE: manual, `npm run dev` in the in-app browser, console watched throughout (no errors).
+  Typing "마감 @" opened the month on 2026년 9월 with 24 highlighted and "오늘" under it; → moved to 25
+  ("내일"); ↓ moved a week on, which carried the calendar to 2026년 10월 with 2 highlighted
+  ("2026.10.02"); ↩ left the note holding "마감 @2026-10-02" and the chip reading 2026.10.02, and the
+  calendar closed. A query that names no day (`@sarah`) closes it instead.
