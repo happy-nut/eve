@@ -278,3 +278,29 @@
   one of them) and rotated the twisty; ↓ then ↩ left the note holding "[[Lock#2PL]] ", read back out
   of localStorage; ← folded Lock away again and put the cursor back on it (list read from the DOM:
   three pages, no child rows). A `#` typed into the query still reaches the flat section list.
+
+# GATES — @ mentions a date (2026-09-24)
+
+- [x] G80 Frontend type-checks and builds
+  CHECK: npm run check && npm run build
+  EXPECT: built in
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "COMPLETED 244 FILES 0 ERRORS 0 WARNINGS" / "✓ built in 668ms"
+- [x] G81 A stored date reads as the day it is, and the reading changes when the day does
+  CHECK: node --experimental-strip-types --no-warnings src/lib/date.test.mjs
+  EXPECT: DATE_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "DATE_OK" — one stored day (2026-09-24) read against four
+  different "now"s gives today / yesterday / tomorrow / 2026.09.24, in en and in ko; the local-day
+  conversion is checked at 23:30, where a UTC answer would be a day out.
+- [x] G82 Every suite still passes, including the markdown rule
+  CHECK: npm test 2>&1 | grep -c "_OK"
+  EXPECT: 7
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "7" — BOARD SYNC PATHS MARKDOWN QL SUGGEST DATE. The markdown
+  rule is driven by a real markdown-it: `@2026-09-24` becomes a chip mid-sentence, on its own line and
+  in brackets; `compensation@toss.im`, `2026@2026-09-24`, `@2026-13-01` and `@2026-09-240` do not.
+- [x] G83 Typing @ offers the days, picking one writes `@YYYY-MM-DD`, and the chip reads relatively
+  EVIDENCE: manual, `npm run dev` in the in-app browser (navigator.language "ko"). `@` listed 오늘 /
+  어제 / 내일 with 2026-09-24 / -23 / -25 beside them; ↩ on 오늘 left the file holding
+  "마감 @2026-09-24 까지" (read out of localStorage) and the editor holding
+  `<span class="datechip" data-date="2026-09-24" title="2026-09-24">오늘</span>`. A note written with
+  four different days and reloaded cold rendered 어제 / 오늘 / 내일 / 2026.09.20, with
+  compensation@toss.im left as an address.
