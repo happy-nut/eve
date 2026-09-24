@@ -4,21 +4,28 @@ export { stem } from './paths';
 /** Text files that are a note's worth of content: they land as markdown, not as an attachment. */
 export const TEXT_FILE = /\.(md|markdown|mdx|txt)$/i;
 export const PDF_FILE = /\.pdf$/i;
+/**
+ * Files a note shows as a card and opens in the floating viewer. The webview draws a PDF itself;
+ * a spreadsheet or a .hwp arrives as Quick Look's own preview of it, so no format is parsed here.
+ */
+export const DOC_FILE = /\.(pdf|xlsx|xls|hwp|hwpx)$/i;
+/** The one format nothing on macOS can preview: the viewer renders these itself (see lib/hwp.ts). */
+export const HWP_FILE = /\.hwpx?$/i;
 export const VIDEO_FILE = /\.(mp4|mov|m4v|webm)$/i;
 
-const isPdf = (f: File) => f.type === 'application/pdf' || PDF_FILE.test(f.name);
+const isDoc = (f: File) => f.type === 'application/pdf' || DOC_FILE.test(f.name);
 const isVideo = (f: File) => f.type.startsWith('video/') || VIDEO_FILE.test(f.name);
 /** a file that belongs *inside* a note, as an attachment. A text file is a note of its own instead. */
-export const isAsset = (f: File) => isPdf(f) || isVideo(f) || f.type.startsWith('image/');
+export const isAsset = (f: File) => isDoc(f) || isVideo(f) || f.type.startsWith('image/');
 
 /**
- * One dropped file as markdown, ready to be parsed into a note. Images and PDFs are copied next to the
- * notes first (a blob: URL would die on restart); a PDF is an ordinary link, so the file stays portable
- * and only this app's editor draws it as a card. Null = a file we don't take.
+ * One dropped file as markdown, ready to be parsed into a note. Images and documents are copied next to the
+ * notes first (a blob: URL would die on restart); a document is an ordinary link, so the file stays
+ * portable and only this app's editor draws it as a card. Null = a file we don't take.
  */
 export async function fileMarkdown(f: File): Promise<string | null> {
   if (TEXT_FILE.test(f.name)) return await f.text();
-  if (isPdf(f) || isVideo(f)) return `[${f.name.replace(/[[\]]/g, '')}](${await saveAsset(f)})`;
+  if (isDoc(f) || isVideo(f)) return `[${f.name.replace(/[[\]]/g, '')}](${await saveAsset(f)})`;
   if (f.type.startsWith('image/')) return `![](${await saveAsset(f)})`;
   return null;
 }

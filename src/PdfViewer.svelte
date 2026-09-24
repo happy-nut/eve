@@ -2,12 +2,52 @@
   import { scale } from 'svelte/transition';
   import { ui } from './lib/ui.svelte';
   import { pdfSrc } from './lib/pdf';
-  import { openAsset } from './lib/platform';
+  import { openAsset, qlPreview } from './lib/platform';
+  import { hwpPages } from './lib/hwp';
+  import { HWP_FILE, PDF_FILE } from './lib/drop';
 
   // A floating panel, not a dialog: no backdrop, nothing behind it blocked — a PDF can sit open beside
   // the text being written. Drag it by its bar, resize it by any edge or the corner.
   const req = ui.pdf!;
-  const src = pdfSrc(req.src);
+
+  // Three ways a document reaches the panel, in order of how little this app has to know about it:
+  // the webview draws a PDF itself; a spreadsheet arrives as Quick Look's own preview (plain HTML,
+  // exported once and cached); a .hwp is laid out here, because macOS ships nothing that can read one.
+  const match = (re: RegExp) => re.test(req.src) || re.test(req.name);
+  const kind = match(PDF_FILE) ? 'pdf' : match(HWP_FILE) ? 'hwp' : 'quicklook';
+
+  let src = $state(kind === 'pdf' ? pdfSrc(req.src) : ''); // a URL the iframe loads
+  let page = $state(''); // a whole document the iframe is handed instead
+  let failed = $state('');
+
+  /**
+   * The rendered pages as one document for the iframe. It goes in sandboxed and script-less: the SVG
+   * is built from a file that arrived from outside, and nothing in it needs to run.
+   */
+  const sheet = (pages: string[]) =>
+    `<!doctype html><meta charset="utf-8"><style>` +
+    `html{background:#f4f4f5}body{margin:0;padding:12px;display:flex;flex-direction:column;align-items:center;gap:12px}` +
+    `svg{max-width:100%;height:auto;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.22)}` +
+    `</style>${pages.join('')}`;
+
+  if (kind === 'quicklook') {
+    void qlPreview(req.src).then((u) => {
+      if (u) src = u;
+      else failed = 'Quick Look has no preview for this file on this Mac.';
+    });
+  }
+  if (kind === 'hwp') {
+    // ponytail: every page is laid out at once. A long document makes that felt; render on scroll
+    // (as the cards in a note already do) if it ever does.
+    void hwpPages(req.src)
+      .then((doc) => {
+        page = sheet(Array.from({ length: doc.count }, (_, i) => doc.page(i)));
+      })
+      .catch(() => {
+        failed = 'This file could not be read as a Hangul document.';
+      });
+  }
+
   const BAR = 33; // title bar height
   const EDGE = 7; // frame around the document: the grab handles live here, clear of the PDF view,
                   // which the webview draws itself and which swallows a press meant for the panel
@@ -87,12 +127,21 @@
       <svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></svg>
     </button>
   </div>
-  <div class="pdf-doc">
-    <!-- laid out at twice the panel's size and drawn at half scale: the webview's own zoom/share HUD is
-         a fixed size inside the document, so this is what keeps it from dwarfing the page. No title
-         attribute either — the webview turns one into a tooltip that follows the pointer over the page. -->
-    <!-- svelte-ignore a11y_missing_attribute -->
-    <iframe {src} style:width="{(w - EDGE * 2) * 2}px" style:height="{(h - BAR - EDGE) * 2}px"></iframe>
+  <div class="pdf-doc" class:plain={kind !== 'pdf'}>
+    {#if failed}
+      <p class="pdf-none">{failed}</p>
+    {:else if src || page}
+      <!-- a PDF is laid out at twice the panel's size and drawn at half scale: the webview's own
+           zoom/share HUD is a fixed size inside the document, so this is what keeps it from dwarfing
+           the page. The other two are ordinary HTML and take the panel's size as it is. No title
+           attribute either — the webview turns one into a tooltip that follows the pointer over the page. -->
+      <!-- svelte-ignore a11y_missing_attribute -->
+      <iframe src={src || undefined} srcdoc={page || undefined} sandbox={page ? '' : undefined}
+        style:width="{(w - EDGE * 2) * (kind === 'pdf' ? 2 : 1)}px"
+        style:height="{(h - BAR - EDGE) * (kind === 'pdf' ? 2 : 1)}px"></iframe>
+    {:else}
+      <p class="pdf-none">Preparing preview…</p>
+    {/if}
   </div>
   {#each HANDLES as sides}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -118,6 +167,8 @@
   .pdf-bar svg { width: 15px; height: 15px; display: block; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
   .pdf-doc { flex: 1; overflow: hidden; padding: 0 7px 7px; background: var(--bg-pop); }
   iframe { border: 0; display: block; transform: scale(0.5); transform-origin: 0 0; background: var(--bg); }
+  .pdf-doc.plain iframe { transform: none; }
+  .pdf-none { margin: 0; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 24px; color: var(--fg-dim); font-size: 12.5px; }
   /* a moved or resized panel must not hand the rest of the gesture to the document */
   .busy iframe { pointer-events: none; }
   /* grab frame: 7px edges, 18px corners — all of it panel chrome, never over the PDF view */

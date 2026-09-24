@@ -126,7 +126,8 @@ html[data-input='keyboard'] aside:focus-within, html[data-input='keyboard'] main
 /* checkbox centred on the first text line (line-height 1.6), so the text no longer floats above it */
 .tiptap ul[data-type='taskList'] li > label { flex: none; display: flex; align-items: center; height: 1.6em; margin: 0; }
 .tiptap ul[data-type='taskList'] li > div { flex: 1; }
-.tiptap ul[data-type='taskList'] li[data-checked='true'] > div { color: var(--fg-dim); text-decoration: line-through; }
+/* only the item's own text, not the > div's nested list: Notion strikes the checked line alone and leaves children be */
+.tiptap ul[data-type='taskList'] li[data-checked='true'] > div > p { color: var(--fg-dim); text-decoration: line-through; }
 .tiptap input[type='checkbox'] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
 .tiptap blockquote { border-left: 3px solid var(--line); margin: 0.5em 0; padding-left: 1em; color: var(--fg-dim); }
 .tiptap code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.88em; background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 4px; }

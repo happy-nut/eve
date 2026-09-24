@@ -211,11 +211,19 @@ export function applyKeymap(editor: Editor) {
   editor.registerPlugin(plugin, (p, all) => [p, ...all]);
 }
 
-export interface SuggestItem { label: string; value?: string; hint?: string; icon?: string; noteIcon?: string; run?: (editor: Editor) => void }
+export interface SuggestItem {
+  label: string; value?: string; hint?: string; icon?: string; noteIcon?: string;
+  /** the sections inside this one, for a page the picker can be opened into */
+  sections?: SuggestItem[];
+  run?: (editor: Editor) => void;
+}
 export interface SuggestionUI {
   show(items: SuggestItem[], rect: DOMRect | null, pick: (item: SuggestItem) => void): void;
   move(delta: number): void;
   select(): boolean;
+  /** open / fold the page under the cursor. False = nothing to do, so the key stays the editor's */
+  expand(): boolean;
+  collapse(): boolean;
   hide(): void;
   visible(): boolean;
 }
@@ -229,6 +237,10 @@ function popup(uiRef: SuggestionUI) {
       if (!uiRef.visible()) return false;
       if (event.key === 'ArrowDown') return (uiRef.move(1), true);
       if (event.key === 'ArrowUp') return (uiRef.move(-1), true);
+      // → opens the highlighted page into its sections, ← folds it back; when there is nothing to
+      // open the key falls through and moves the caret, as it always did
+      if (event.key === 'ArrowRight') return uiRef.expand();
+      if (event.key === 'ArrowLeft') return uiRef.collapse();
       if (event.key === 'Enter' || event.key === 'Tab') return uiRef.select();
       if (event.key === 'Escape') return (uiRef.hide(), true);
       return false;
@@ -616,13 +628,15 @@ export function createEditor(opts: {
             const self = editor.state.doc.firstChild?.textContent.trim();
             for (const n of opts.targets()) {
               const title = titleOf(n);
-              if (title !== self && title.toLowerCase().includes(q)) pages.push(n.icon ? { label: title, noteIcon: n.icon } : { label: title, icon: ICONS.note });
               // a link can aim at a section of another page too; it stores `Title#Section` and shows the
               // heading with its page beside it, so two notes with a "TODO" heading stay apart
-              for (const h of headingsOf(n.body)) {
-                const value = `${title}#${h}`;
-                if (value.toLowerCase().includes(q)) sections.push({ label: h, value, hint: title, icon: ICONS.section });
+              const inside = headingsOf(n.body).map((h) => ({ label: h, value: `${title}#${h}`, hint: title, icon: ICONS.section }));
+              // the same sections twice over, reached two ways: typed after a `#`, or by opening the
+              // page in the list with → when the headings are not what you remember
+              if (title !== self && title.toLowerCase().includes(q)) {
+                pages.push({ label: title, sections: inside, ...(n.icon ? { noteIcon: n.icon } : { icon: ICONS.note }) });
               }
+              for (const h of inside) if (h.value.toLowerCase().includes(q)) sections.push(h);
             }
             const items = [...pages, ...sections].slice(0, 8); // pages first: the sections fill what is left
             // a title nothing answers to yet: picking it links a page that gets created on the first visit

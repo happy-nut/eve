@@ -63,6 +63,9 @@
   }
 </script>
 
+<!-- the keys come from the fields and buttons inside, which are focusable on their own; the bar only
+     catches them once on the way up, so it needs no role of its own beyond the landmark -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="find" transition:fly={{ y: -8, duration: 140 }} onkeydown={onKey} role="search">
   <div class="line">
     <svg class="glass" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>

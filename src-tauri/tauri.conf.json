@@ -36,7 +36,8 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$APPDATA/notes/assets/**"
+          "$APPDATA/notes/assets/**",
+          "$APPCACHE/previews/**"
         ]
       }
     },
