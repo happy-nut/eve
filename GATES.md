@@ -252,10 +252,10 @@
   EVIDENCE: manual, screenshot of Eve 0.6.5+ with a note holding both: the .xlsx card carries a Quick
   Look thumbnail of the sheet and reads "XLSX · click to open", the .hwp card falls back to the page
   glyph and reads "HWP · click to open".
-- [ ] G67 Clicking a card opens the floating panel with the document rendered in it
-  NOT MET — not attempted. The Mac's screen locked partway through the in-app pass, and macOS blocks
-  window-level input while locked. Everything up to the click is verified (G62, G64, G66); the panel
-  itself has only been reasoned about, not seen. Re-run: open the test note, click each card.
+- [x] G67 Clicking a card opens the floating panel with the document rendered in it
+  EVIDENCE: manual, by the user, on the installed build: both cards in the test note open and render —
+  the .hwp first ("한글은 확인했었는데"), the .xlsx once the note was undeleted ("엑셀도 잘 뜨네").
+  This was the one gate the screen lock kept me from pressing myself.
 
 # GATES — the [[ picker opens a page into its sections (2026-09-24)
 
