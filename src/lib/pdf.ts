@@ -1,14 +1,16 @@
 import { Node } from '@tiptap/core';
 import { assetUrl, pdfThumb } from './platform';
-import { PDF_FILE } from './drop';
+import { DOC_FILE } from './drop';
 import { ui } from './ui.svelte';
 
 /**
- * A PDF dropped into a note. Its markdown form is an ordinary link — `[report.pdf](assets/17…-ab.pdf)` —
- * so a note read anywhere else is still a plain link; only this editor draws the card.
+ * A document dropped into a note — a PDF, a spreadsheet, a .hwp. Its markdown form is an ordinary
+ * link — `[report.pdf](assets/17…-ab.pdf)` — so a note read anywhere else is still a plain link;
+ * only this editor draws the card.
  *
  * Nothing of the document is loaded up front: the first page arrives when the card scrolls into view,
- * and the readable document only when the card is clicked (PdfViewer, a floating panel).
+ * and the readable document only when the card is clicked (PdfViewer, a floating panel). Both come
+ * from Quick Look, so a format this app knows nothing about still shows up.
  */
 export const Pdf = Node.create({
   name: 'pdf',
@@ -33,7 +35,8 @@ export const Pdf = Node.create({
   addNodeView() {
     return ({ node }) => {
       const src = node.attrs.src as string;
-      const name = (node.attrs.name as string) || 'PDF';
+      const name = (node.attrs.name as string) || 'Document';
+      const kind = (/\.([a-z0-9]+)$/i.exec(name)?.[1] ?? 'file').toUpperCase();
       const dom = document.createElement('div');
       dom.className = 'pdf-card';
       dom.contentEditable = 'false';
@@ -41,7 +44,7 @@ export const Pdf = Node.create({
 
       const thumb = document.createElement('div');
       thumb.className = 'pdf-thumb';
-      thumb.innerHTML = PAGE_GLYPH; // stays behind the preview, and is all a failed/blocked preview leaves
+      thumb.innerHTML = pageGlyph(kind); // stays behind the preview, and is all a failed/blocked preview leaves
 
       const body = document.createElement('div');
       body.className = 'pdf-body';
@@ -50,7 +53,7 @@ export const Pdf = Node.create({
       title.textContent = name;
       const sub = document.createElement('span');
       sub.className = 'pdf-sub';
-      sub.textContent = 'PDF · click to open';
+      sub.textContent = `${kind} · click to open`;
       body.append(title, sub);
 
       dom.append(thumb, body);
@@ -98,8 +101,8 @@ export const Pdf = Node.create({
               const a = p.firstElementChild as HTMLAnchorElement;
               const href = a.getAttribute('href') ?? '';
               const text = a.textContent?.trim() ?? '';
-              // the name carries the .pdf as reliably as the path does (and a dev-mode blob: URL has no name at all)
-              if (a.tagName !== 'A' || !(PDF_FILE.test(href) || PDF_FILE.test(text)) || p.textContent?.trim() !== text) continue;
+              // the name carries the extension as reliably as the path does (and a dev-mode blob: URL has no name at all)
+              if (a.tagName !== 'A' || !(DOC_FILE.test(href) || DOC_FILE.test(text)) || p.textContent?.trim() !== text) continue;
               const card = document.createElement('div');
               card.setAttribute('data-pdf', href);
               card.textContent = a.textContent;
@@ -115,4 +118,6 @@ export const Pdf = Node.create({
 /** The webview URL for a stored PDF, as the floating viewer loads it. */
 export const pdfSrc = (src: string) => assetUrl(src) ?? src;
 
-const PAGE_GLYPH = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h8l4 4v15H6z"/><path d="M14 2.5v4h4"/><text x="12" y="17" text-anchor="middle">PDF</text></svg>`;
+/** The page behind a card, labelled with the file's own extension — all that is left when Quick Look has no preview. */
+const pageGlyph = (kind: string) =>
+  `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h8l4 4v15H6z"/><path d="M14 2.5v4h4"/><text x="12" y="17" text-anchor="middle" textLength="11" lengthAdjust="spacingAndGlyphs">${kind}</text></svg>`;

@@ -212,3 +212,69 @@
   src and showed as a broken image (what the report showed; the file itself was on disk). `notes.load()`
   now awaits `storage.path()`, which also resolves `convertFileSrc` instead of racing a floating import.
   Checked in the app: the note that showed a broken picture renders it.
+
+# GATES — spreadsheet and .hwp viewer (2026-09-24)
+
+- [x] G60 Frontend type-checks and builds
+  CHECK: npm run check && npm run build
+  EXPECT: built in
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "COMPLETED 242 FILES 0 ERRORS 0 WARNINGS" / "✓ built in". The one error this
+  batch started with (src/lib/video.ts:66) was on HEAD too and is fixed here: `Node` in that file is
+  TipTap's, so the video player's `stopEvent` guard was false for every event and the editor was taking
+  clicks meant for the player's own controls. `globalThis.Node` is the DOM one. The lone warning
+  (Find.svelte:66) was the a11y lint misreading a container that only catches keys bubbling up from
+  the fields inside it; it is marked svelte-ignore with that reason.
+- [x] G61 Rust side compiles
+  CHECK: cd src-tauri && cargo check 2>&1 | tail -1
+  EXPECT: Finished
+  EVIDENCE: zsh, ~/repos/eve/src-tauri, exit 0, "Finished `dev` profile ... in 3.29s"
+- [x] G62 Quick Look exports an HTML preview for .xlsx — the file the floating viewer loads
+  CHECK: node src/lib/ql.test.mjs
+  EXPECT: QL_HTML_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "QL_HTML_OK". The test builds an .xlsx from scratch (zip written
+  by hand), runs qlmanage, and asserts the preview is a <table> holding both cell values.
+- [x] G63 A format Quick Look cannot preview fails fast instead of hanging the app
+  CHECK: cd src-tauri && cargo test --lib 2>&1 | tail -4
+  EXPECT: test result: ok
+  EVIDENCE: zsh, ~/repos/eve/src-tauri, exit 0, "2 passed; 0 failed" — run_with_deadline kills a child
+  that never exits and still returns a quick child's output. Measured premise: qlmanage on a .hwp with
+  no Hancom Office installed ran >3 min without producing anything, which is what the deadline is for.
+- [x] G64 rhwp renders a real .hwp, not just a toy one
+  EVIDENCE: manual, @rhwp/core 0.8.6 in node against the 전자소송 채권신고서 sample in ~/Downloads:
+  renderPageSvg(0) returned 151,228 bytes, 297 <text> and 23 <rect> nodes; rasterised through qlmanage
+  the page shows the form's merged table cells, Korean labels and ₩ signs laid out correctly.
+- [x] G65 The wasm is a lazy chunk, not part of the startup bundle
+  CHECK: grep -c "rhwp_bg-.*\.wasm" dist/assets/rhwp-*.js
+  EXPECT: 1
+  EVIDENCE: zsh, ~/repos/eve, exit 0 — the reference sits in its own chunk (rhwp-DJ2wR6ju.js), and the
+  installed app grew 5.4 MB → 8.4 MB (the 9.9 MB wasm compresses inside the bundle).
+- [x] G66 Both file types become cards in a real note, with the right label and thumbnail
+  EVIDENCE: manual, screenshot of Eve 0.6.5+ with a note holding both: the .xlsx card carries a Quick
+  Look thumbnail of the sheet and reads "XLSX · click to open", the .hwp card falls back to the page
+  glyph and reads "HWP · click to open".
+- [ ] G67 Clicking a card opens the floating panel with the document rendered in it
+  NOT MET — not attempted. The Mac's screen locked partway through the in-app pass, and macOS blocks
+  window-level input while locked. Everything up to the click is verified (G62, G64, G66); the panel
+  itself has only been reasoned about, not seen. Re-run: open the test note, click each card.
+
+# GATES — the [[ picker opens a page into its sections (2026-09-24)
+
+- [x] G70 Frontend type-checks and builds
+  CHECK: npm run check && npm run build
+  EXPECT: built in
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "COMPLETED 243 FILES 0 ERRORS 0 WARNINGS" / "✓ built in 675ms"
+- [x] G71 The row model survives rows appearing and vanishing under the cursor
+  CHECK: node --experimental-strip-types --no-warnings src/lib/suggest.test.mjs
+  EXPECT: SUGGEST_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "SUGGEST_OK" — covers the cursor holding its page on open, ←
+  from a section landing on that page, and ← from a page below two open ones still finding it.
+- [x] G72 Existing suggestion behaviour is untouched (flat list, typed `#`, slash menu)
+  CHECK: npm test
+  EXPECT: MARKDOWN_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0 — BOARD_OK SYNC_OK PATHS_OK MARKDOWN_OK QL_HTML_OK SUGGEST_OK
+- [x] G73 → opens the highlighted page into its sections, ↓ walks in, ↩ writes `[[Title#Section]]`
+  EVIDENCE: manual, `npm run dev` in the in-app browser against four seeded notes. `[[` listed the
+  pages with a twisty; → opened Lock to exactly its two headings (2PL, 데드락 — its own title is not
+  one of them) and rotated the twisty; ↓ then ↩ left the note holding "[[Lock#2PL]] ", read back out
+  of localStorage; ← folded Lock away again and put the cursor back on it (list read from the DOM:
+  three pages, no child rows). A `#` typed into the query still reaches the flat section list.

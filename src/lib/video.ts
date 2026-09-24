@@ -62,8 +62,10 @@ export const Video = Node.create({
           video.style.width = updated.attrs.width ? `${updated.attrs.width}px` : '';
           return true;
         },
-        // the player's own buttons belong to the player, not to the editor's selection handling
-        stopEvent: (e) => e.target instanceof Node && video.contains(e.target),
+        // the player's own buttons belong to the player, not to the editor's selection handling.
+        // globalThis.Node, because the Node imported up top is TipTap's — against that one the test
+        // is false for every event there is, and the editor swallows the click meant for Play.
+        stopEvent: (e) => e.target instanceof globalThis.Node && video.contains(e.target),
       };
     };
   },

@@ -90,6 +90,23 @@ export async function pdfThumb(src: string): Promise<string | null> {
   }
 }
 
+/**
+ * Quick Look's own preview of a stored document, as a URL the viewer's iframe can load — the
+ * spreadsheet laid out as a table, the same thing Finder draws on the space bar. Null when this Mac
+ * has no Quick Look generator for the format (a .hwp without Hancom Office is the usual one).
+ */
+export async function qlPreview(src: string): Promise<string | null> {
+  const name = /^assets\//.test(src) ? src.slice('assets/'.length) : null;
+  if (!isTauri || !name) return null;
+  try {
+    const path = await invoke<string>('ql_preview', { name });
+    await storage.path(); // resolves convertFileSrc, which the preview lives outside notes/ to need
+    return convertFileSrcSync(path);
+  } catch {
+    return null;
+  }
+}
+
 /** Pick a video, copy it next to the notes, return its relative path. Null if cancelled. */
 export async function pickVideo(): Promise<string | null> {
   if (!isTauri) return null;
@@ -147,7 +164,7 @@ export async function pickFiles(): Promise<string[] | null> {
   const { open } = await import('@tauri-apps/plugin-dialog');
   const picked = await open({
     multiple: true,
-    filters: [{ name: 'Notes and attachments', extensions: ['md', 'markdown', 'mdx', 'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic'] }],
+    filters: [{ name: 'Notes and attachments', extensions: ['md', 'markdown', 'mdx', 'txt', 'pdf', 'xlsx', 'xls', 'hwp', 'hwpx', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic'] }],
   });
   return picked === null ? null : (Array.isArray(picked) ? picked : [picked]);
 }

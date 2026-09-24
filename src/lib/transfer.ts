@@ -1,12 +1,12 @@
 import { notes, titleOf, type Note } from './notes.svelte';
 import { groups, MAX_DEPTH } from './groups.svelte';
 import { files, importAsset, pickFiles, pickFolders, listFolder, pickSavePath, savePdf, savePng } from './platform';
-import { TEXT_FILE, PDF_FILE, VIDEO_FILE } from './drop';
+import { TEXT_FILE, DOC_FILE, VIDEO_FILE } from './drop';
 import { commonDir, dirOf, groupFor, nameOf, stem } from './paths';
 import { ui } from './ui.svelte';
 
 /** Files this app takes in, by extension. */
-const IMPORTABLE = /\.(md|markdown|mdx|txt|pdf|png|jpe?g|gif|webp|svg|heic|mp4|mov|m4v|webm)$/i;
+const IMPORTABLE = /\.(md|markdown|mdx|txt|pdf|xlsx?|hwpx?|png|jpe?g|gif|webp|svg|heic|mp4|mov|m4v|webm)$/i;
 
 /** One file on disk as a note body: text files carry their own content, everything else is attached. */
 async function bodyOf(path: string): Promise<string | null> {
@@ -17,7 +17,7 @@ async function bodyOf(path: string): Promise<string | null> {
     return /^\s*#\s/.test(text) ? text : `# ${stem(name)}\n\n${text}`;
   }
   const src = await importAsset(path); // copied next to the notes, so the note survives the original moving
-  const link = PDF_FILE.test(name) || VIDEO_FILE.test(name) ? `[${name}](${src})` : `![](${src})`;
+  const link = DOC_FILE.test(name) || VIDEO_FILE.test(name) ? `[${name}](${src})` : `![](${src})`;
   return `# ${stem(name)}\n\n${link}\n`;
 }
 

@@ -50,8 +50,10 @@ fn assets_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 /// What may live in notes/assets: pictures, videos, and PDFs dropped into a note.
-const ASSET_EXTS: [&str; 12] = [
+const ASSET_EXTS: [&str; 16] = [
     "png", "jpg", "jpeg", "gif", "webp", "svg", "heic", "pdf", "mp4", "mov", "m4v", "webm",
+    // documents the webview cannot draw itself: the viewer shows Quick Look's preview of them
+    "xlsx", "xls", "hwp", "hwpx",
 ];
 
 fn safe_name(name: &str) -> Result<(), String> {
@@ -147,6 +149,70 @@ async fn pdf_thumb(app: AppHandle, name: String) -> Result<tauri::ipc::Response,
     Ok(tauri::ipc::Response::new(
         fs::read(&png).map_err(|e| e.to_string())?,
     ))
+}
+
+/// Run a command, but never wait on it forever: Quick Look hangs indefinitely on a format no
+/// generator on this Mac handles (a .hwp without Hancom Office does exactly that), and a hung
+/// child would hold the viewer open on a spinner for good.
+fn run_with_deadline(
+    mut cmd: std::process::Command,
+    deadline: std::time::Duration,
+) -> Result<std::process::Output, String> {
+    let mut child = cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait().map_err(|e| e.to_string())? {
+            Some(_) => return child.wait_with_output().map_err(|e| e.to_string()),
+            None if start.elapsed() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("timed out".into());
+            }
+            None => std::thread::sleep(std::time::Duration::from_millis(50)),
+        }
+    }
+}
+
+/// A stored document as HTML, for the floating viewer: Quick Look's own preview bundle — the one
+/// Finder draws on the space bar — exported once into the cache, which is why a spreadsheet arrives
+/// laid out as a table without this app knowing anything about the format. Returns the path of its
+/// Preview.html. A PDF never comes through here: the webview draws that itself.
+#[tauri::command]
+async fn ql_preview(app: AppHandle, name: String) -> Result<String, String> {
+    safe_name(&name)?;
+    let src = assets_dir(&app)?.join(&name);
+    if !src.is_file() {
+        return Err("no such asset".into());
+    }
+    let dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("previews");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    // qlmanage names the bundle after the whole file name, and puts Preview.html inside it
+    let html = dir.join(format!("{name}.qlpreview")).join("Preview.html");
+    if html.is_file() {
+        return Ok(html.to_string_lossy().into_owned());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = std::process::Command::new("/usr/bin/qlmanage");
+        cmd.args(["-p", "-o"]).arg(&dir).arg(&src);
+        let out = run_with_deadline(cmd, std::time::Duration::from_secs(20))?;
+        if !html.is_file() {
+            return Err(format!(
+                "no preview: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        Ok(html.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // ---- sync: the assets folder as a list of immutable named blobs -------------
@@ -555,6 +621,7 @@ pub fn run() {
             import_asset,
             save_asset,
             pdf_thumb,
+            ql_preview,
             list_assets,
             read_asset,
             write_asset,
@@ -605,4 +672,29 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    /// The deadline is the whole point of the helper: a child that never exits has to be killed,
+    /// not waited on. `yes` writes forever and never finishes on its own.
+    #[test]
+    fn run_with_deadline_kills_a_hung_child() {
+        let start = std::time::Instant::now();
+        let err = super::run_with_deadline(
+            std::process::Command::new("/usr/bin/yes"),
+            std::time::Duration::from_millis(300),
+        )
+        .unwrap_err();
+        assert_eq!(err, "timed out");
+        assert!(start.elapsed() < std::time::Duration::from_secs(5));
+    }
+
+    #[test]
+    fn run_with_deadline_returns_output_of_a_quick_child() {
+        let mut cmd = std::process::Command::new("/bin/echo");
+        cmd.arg("hi");
+        let out = super::run_with_deadline(cmd, std::time::Duration::from_secs(5)).unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "hi");
+    }
 }
