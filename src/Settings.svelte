@@ -3,7 +3,7 @@
   import { fade, scale } from 'svelte/transition';
   import { shortcuts, eventToKeys, type Scope } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
-  import { storage, autostart, dock, defaultApp, isTauri, isMobile } from './lib/platform';
+  import { storage, autostart, dock, defaultApp, isTauri, isMobile, copyText } from './lib/platform';
   import { ui } from './lib/ui.svelte';
   import { appearance, FONTS, THEMES, type Theme } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
@@ -39,6 +39,16 @@
     { scope: 'app', label: 'App' },
     { scope: 'editor', label: 'Editor' },
   ];
+  /** the device code a click away from the clipboard, with a moment of "Copied" to say it worked */
+  let copied = $state(false);
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+  async function copyCode(code: string) {
+    await copyText(code);
+    copied = true;
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => (copied = false), 1400);
+  }
+
   const tabs = ([['shortcuts', 'Shortcuts'], ['appearance', 'Appearance'], ['sync', 'Sync & app']] as const).filter(([id]) => !isMobile || id !== 'shortcuts');
 
   const syncText = $derived(
@@ -190,7 +200,7 @@
         {:else if sync.pending}
           <div class="device">
             <p class="sub">Enter this code on the GitHub page that just opened, then authorize Eve.</p>
-            <p class="devicecode">{sync.pending.code}</p>
+            <button class="devicecode" data-tip="Copy" onclick={() => copyCode(sync.pending!.code)}>{copied ? 'Copied' : sync.pending.code}</button>
             <div class="actions">
               <button class="btn" onclick={() => sync.cancelLogin()}>Cancel</button>
               <button class="btn" onclick={() => sync.openLogin()}>Open GitHub again</button>
@@ -214,7 +224,8 @@
           <div class="phone">
             <div class="qr">{@html renderSVG(sync.phone.link, { border: 2, whiteColor: '#fff', blackColor: '#111318' })}</div>
             <ol>
-              <li>On the GitHub page that just opened, paste <b class="mono">{sync.phone.code}</b> (it is on the clipboard) and authorize Eve.</li>
+              <li>On the GitHub page that just opened, paste this code and authorize Eve:
+                <button class="codechip mono" data-tip="Copy" onclick={() => copyCode(sync.phone!.code)}>{copied ? 'Copied' : sync.phone.code}</button></li>
               <li>Scan it with the phone's camera. Without Eve it downloads the app — install it and scan once more: the phone signs in and syncs by itself.</li>
             </ol>
           </div>
@@ -343,7 +354,7 @@
 
   .device { text-align: center; padding: 14px 0 12px; }
   .device .sub { display: block; margin: 0; }
-  .devicecode { font: 600 30px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.14em; margin: 14px 0 16px; user-select: all; }
+  .devicecode { display: block; border: 0; background: none; color: inherit; cursor: copy; font: 600 30px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.14em; margin: 14px auto 16px; user-select: all; -webkit-user-select: all; }
   .actions { display: flex; justify-content: center; gap: 8px; }
   .actions.pad { padding: 0 0 14px; }
   .phone { display: flex; gap: 18px; align-items: center; padding: 14px 16px; }
@@ -352,6 +363,12 @@
   .qr :global(svg) { display: block; width: 100%; height: 100%; }
   .phone ol { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--fg); }
   .phone li + li { margin-top: 8px; }
+  .codechip {
+    display: block; margin: 6px 0 2px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg-pop); color: var(--fg); font-size: 16px; font-weight: 600; letter-spacing: 0.12em;
+    min-width: 128px; text-align: center; cursor: copy; user-select: all; -webkit-user-select: all;
+  }
+  .codechip:hover { border-color: var(--accent); }
 
   .sample { margin: 12px 0 0; padding: 14px 16px; border-radius: 10px; background: var(--bg-input); color: var(--fg); }
 </style>
