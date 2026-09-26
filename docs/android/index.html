@@ -29,19 +29,19 @@
   <p class="dim" id="hint" hidden data-t="hint">Nothing happened? <a id="retry" href="#">Open Eve</a> · <a id="apk" href="#">Download</a></p>
 <script>
   // One QR, scanned twice: without Eve this starts the APK download; with Eve installed it opens
-  // Eve with the Mac's sign-in code (#c=…&u=…, the fragment never leaves the phone).
-  const q = new URLSearchParams(location.hash.slice(1));
-  const c = q.get('c'), u = q.get('u') || '';
+  // Eve with the Mac's ticket. The fragment never leaves the phone.
+  // the Mac's ticket (#h=…&p=…&k=…): handed to the app as is; the app checks it
+  const ticket = location.hash.slice(1);
   const android = /Android/i.test(navigator.userAgent);
   const LATEST = 'https://github.com/happy-nut/eve/releases/latest/download/Eve-android.apk';
 
   const ko = {
     opening: 'Eve 여는 중…', hint: '', desktop: '이 링크는 Android 폰에서 여세요 — Mac의 Eve 설정에 있는 QR을 폰 카메라로 찍으면 됩니다.',
-    downloading: 'Eve를 내려받고 있어요. 설치한 뒤 Mac의 QR을 한 번 더 찍으면 GitHub 연결까지 끝납니다.',
+    downloading: 'Eve를 내려받고 있어요. 설치한 뒤 Mac의 QR을 한 번 더 찍으면 로그인까지 끝납니다.',
   };
   const en = {
     desktop: "Open this on your Android phone — scan the QR in Eve's settings on your Mac with its camera.",
-    downloading: 'Downloading Eve. Install it, then scan the QR on your Mac once more to finish the GitHub sign-in.',
+    downloading: 'Downloading Eve. Install it, then scan the QR on your Mac once more to sign it in.',
   };
   const t = (k) => (/^ko/i.test(navigator.language) && ko[k]) || en[k];
   if (/^ko/i.test(navigator.language)) {
@@ -66,7 +66,7 @@
     if (!android) return (document.getElementById('msg').textContent = t('desktop'));
     const apk = await apkUrl();
     document.getElementById('apk').href = apk;
-    const code = c && /^[\w-]+$/.test(c) ? `c=${encodeURIComponent(c)}&u=${encodeURIComponent(u)}` : '';
+    const code = /^[\w=&%.:-]+$/.test(ticket) ? ticket : '';
     // Chrome opens the installed app straight away; without it, it follows the fallback: the APK
     const intent = `intent://connect${code ? '?' + code : ''}#Intent;scheme=eve;package=dev.happynut.eve;` +
       `S.browser_fallback_url=${encodeURIComponent(apk)};end`;

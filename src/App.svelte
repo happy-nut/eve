@@ -22,7 +22,7 @@ import CardPage from './CardPage.svelte';
   import { importPaths, exportCurrent } from './lib/transfer';
   import PdfViewer from './PdfViewer.svelte';
   import { titleOf } from './lib/notes.svelte';
-  import { parseConnect } from './lib/github';
+  import { parseTicket } from './lib/handoff';
 
   let sidebarOpen = $state(true);
   let settingsOpen = $state(false);
@@ -74,9 +74,9 @@ import CardPage from './CardPage.svelte';
         if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; }
       });
       widget.onOpen((ask) => {
-        // the phone-setup page: sign in with the code the Mac's QR carried
-        const connect = parseConnect(ask);
-        if (connect) { settingsOpen = true; void sync.claim(connect.device_code, connect.user_code); return; }
+        // the phone-setup page: take the sign-in the Mac's QR points at
+        const ticket = parseTicket(ask);
+        if (ticket) { settingsOpen = true; void sync.claim(ticket); return; }
         // the home-screen widget: straight into that note (or a new one), keyboard up
         const id = ask.startsWith('note:') ? ask.slice(5) : null;
         if (ask !== 'new' && !id) return;

@@ -1,6 +1,7 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
-import { assets, github, openUrl, isTauri, widget, copyText } from './platform';
-import { Repo, syncRound, blobSha, deviceLogin, ensureRepo, requestCode, pollToken, phoneLink, type LocalFile, type RemoteFile } from './github';
+import { assets, github, openUrl, isTauri, widget, share } from './platform';
+import { Repo, syncRound, blobSha, deviceLogin, ensureRepo, type LocalFile, type RemoteFile } from './github';
+import { seal, open, ticketLink, type Ticket } from './handoff';
 
 /**
  * Sync through a private GitHub repository (see github.ts). Layout mirrors the local notes dir:
@@ -60,52 +61,57 @@ class Sync {
       this.abort = undefined;
     }
   }
-  cancelLogin() { this.abort?.abort(); this.claiming = null; }
+  cancelLogin() { this.abort?.abort(); }
   /** re-open the device page (the browser tab may have been closed) */
   openLogin() { if (this.pending) void openUrl(this.pending.url); }
   /**
-   * Mac: set up a phone. A fresh device code goes into a QR; the phone polls with it and gets a token of
-   * its own once the code is authorized on GitHub (opened here, code on the clipboard). The Mac's token
-   * never leaves the Mac, and the QR is spent after one sign-in or 15 minutes.
+   * Mac: set up a phone. This Mac's sign-in, sealed with a one-time key, is served once on the local
+   * network; the QR carries the address and the key (handoff.ts). No GitHub step: the phone simply
+   * gets what this Mac already has. Closed after the phone takes it, or ten minutes.
    */
-  phone = $state<{ link: string; code: string; url: string; until: number } | null>(null);
+  phone = $state<{ link: string; until: number; done: boolean } | null>(null);
   private phoneTimer: ReturnType<typeof setTimeout> | undefined;
+  private phoneOff: (() => void) | undefined;
   async phoneSetup() {
     this.error = '';
     try {
-      const c = await requestCode(github.post);
-      this.phone = { link: phoneLink(c), code: c.user_code, url: c.verification_uri, until: Date.now() + c.expires_in * 1000 };
+      const { user, repo, token } = this.settings;
+      const s = await seal({ user, repo, token });
+      const host = await share.start(s.path, s.body);
+      this.phone = { link: ticketLink({ host, path: s.path, key: s.key }), until: Date.now() + 600_000, done: false };
+      this.phoneOff?.();
+      this.phoneOff = await share.onDone(() => { if (this.phone) this.phone.done = true; });
       clearTimeout(this.phoneTimer);
-      this.phoneTimer = setTimeout(() => (this.phone = null), c.expires_in * 1000);
-      void copyText(c.user_code);
-      void openUrl(c.verification_uri);
+      this.phoneTimer = setTimeout(() => this.phoneDone(), 600_000);
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     }
   }
-  openPhonePage() { if (this.phone) void openUrl(this.phone.url); }
-  phoneDone() { clearTimeout(this.phoneTimer); this.phone = null; }
+  phoneDone() {
+    clearTimeout(this.phoneTimer);
+    this.phoneOff?.();
+    this.phoneOff = undefined;
+    this.phone = null;
+    void share.stop();
+  }
 
-  /** Phone: the code the Mac's QR carried, waiting for it to be authorized on GitHub. */
-  claiming = $state<string | null>(null);
-  async claim(deviceCode: string, userCode: string) {
-    if (this.abort) this.abort.abort(); // a QR wins over a sign-in already under way
-    const abort = (this.abort = new AbortController());
-    this.claiming = userCode || '…';
+  /** Phone: taking the sign-in from the Mac whose QR was scanned. */
+  claiming = $state(false);
+  async claim(t: Ticket) {
+    this.claiming = true;
     this.error = '';
     try {
-      const token = await pollToken(github.post, deviceCode, 5, abort.signal);
-      const { user, repo } = await ensureRepo(token);
+      const { user, repo, token } = await open(await share.fetch(t.host, t.path), t.key);
       this.save({ token, user, repo });
-      this.claiming = null;
+      this.claiming = false;
       await this.now();
     } catch (e) {
-      if (abort.signal.aborted) return; // cancelled, or replaced by a newer QR (which set its own state)
-      this.claiming = null;
+      this.claiming = false;
       this.status = 'error';
-      this.error = e instanceof Error ? e.message : String(e);
-    } finally {
-      if (this.abort === abort) this.abort = undefined;
+      const msg = e instanceof Error ? e.message : String(e);
+      this.error = /timed out|refused|unreachable|connect|404|not found/i.test(msg)
+        ? 'Could not reach the Mac. Both on the same Wi-Fi? Show a new QR there and scan it again.'
+        : msg;
     }
   }
 

@@ -180,11 +180,7 @@
       <h3>GitHub sync</h3>
       <div class="card">
         {#if sync.claiming}
-          <div class="device">
-            <p class="sub">Waiting for your Mac. Authorize this code on GitHub there, and Eve signs in here by itself.</p>
-            <button class="devicecode" data-tip="Copy" onclick={() => copyCode(sync.claiming!)}>{copied ? 'Copied' : sync.claiming}</button>
-            <div class="actions"><button class="btn" onclick={() => sync.cancelLogin()}>Cancel</button></div>
-          </div>
+          <div class="device"><p class="sub">Signing in with your Mac…</p></div>
         {:else if sync.settings.token}
           <div class="row">
             <span class="label">@{sync.settings.user}
@@ -217,26 +213,27 @@
         {/if}
       </div>
 
-{#if !isMobile && (isTauri || import.meta.env.DEV) && sync.settings.token}
+{#if !isMobile && isTauri && sync.settings.token}
       <h3>Android phone</h3>
       <div class="card">
         {#if sync.phone}
           <div class="phone">
-            <div class="qr">{@html renderSVG(sync.phone.link, { border: 2, whiteColor: '#fff', blackColor: '#111318' })}</div>
-            <ol>
-              <li>On the GitHub page that just opened, paste this code and authorize Eve:
-                <button class="codechip mono" data-tip="Copy" onclick={() => copyCode(sync.phone!.code)}>{copied ? 'Copied' : sync.phone.code}</button></li>
-              <li>Scan it with the phone's camera. Without Eve it downloads the app — install it and scan once more: the phone signs in and syncs by itself.</li>
-            </ol>
+            <div class="qr" class:done={sync.phone.done}>{@html renderSVG(sync.phone.link, { border: 2, whiteColor: '#fff', blackColor: '#111318' })}</div>
+            {#if sync.phone.done}
+              <p class="took">✓ The phone is signed in.</p>
+            {:else}
+              <ol>
+                <li>Scan it with the phone's camera. Without Eve it downloads the app — install it.</li>
+                <li>Scan it again: Eve opens and signs in as <b>@{sync.settings.user}</b> by itself.</li>
+              </ol>
+            {/if}
           </div>
-          <div class="actions pad">
-            <button class="btn" onclick={() => sync.openPhonePage()}>Open GitHub again</button>
-            <button class="btn" onclick={() => sync.phoneDone()}>Done</button>
-          </div>
+          <p class="sub pad">The phone and this Mac need the same Wi-Fi. The code works once, for ten minutes.</p>
+          <div class="actions pad"><button class="btn" onclick={() => sync.phoneDone()}>Done</button></div>
         {:else}
           <div class="row">
             <span class="label">Set up a phone
-              <span class="sub">one QR: installs Eve on Android and signs it in to <span class="mono">{sync.settings.repo}</span> with a token of its own</span></span>
+              <span class="sub">one QR installs Eve on Android and signs it in to <span class="mono">{sync.settings.repo}</span></span></span>
             <button class="btn primary" onclick={() => sync.phoneSetup()}>Show QR</button>
           </div>
         {/if}
@@ -363,6 +360,9 @@
   .qr :global(svg) { display: block; width: 100%; height: 100%; }
   .phone ol { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--fg); }
   .phone li + li { margin-top: 8px; }
+  .qr.done { opacity: 0.25; }
+  .took { margin: 0; font-size: 14px; color: var(--fg); }
+  p.sub.pad { margin: 0; padding: 0 16px 10px; font-size: 12px; }
   .codechip {
     display: block; margin: 6px 0 2px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px;
     background: var(--bg-pop); color: var(--fg); font-size: 16px; font-weight: 600; letter-spacing: 0.12em;

@@ -273,6 +273,105 @@ async fn github_post(url: String, form: Vec<(String, String)>) -> Result<String,
     .map_err(|e| e.to_string())?
 }
 
+// ---- a phone set up from the Mac, over the local network (src/lib/handoff.ts) --------------
+/// Which hand-off is live; starting another (or finishing) retires the one before it.
+static SHARE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// This Mac's address on the local network: the interface a packet to the internet would leave from.
+/// (A UDP "connect" only picks the route; nothing is sent.)
+fn lan_ip() -> Result<std::net::IpAddr, String> {
+    let sock = std::net::UdpSocket::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
+    sock.connect("8.8.8.8:80").map_err(|e| e.to_string())?;
+    Ok(sock.local_addr().map_err(|e| e.to_string())?.ip())
+}
+
+/// Serve `body` (already sealed by the page) at `/<path>` on the LAN, to the first fetch only, for at
+/// most ten minutes. Returns "ip:port" for the QR. Emits "share-done" once the phone has it.
+#[tauri::command]
+fn share_start(app: AppHandle, path: String, body: String) -> Result<String, String> {
+    use std::sync::atomic::Ordering;
+    if path.len() != 32 || !path.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("bad path".into());
+    }
+    let ip = lan_ip()?;
+    let listener = std::net::TcpListener::bind((ip, 0)).map_err(|e| e.to_string())?;
+    let host = format!("{ip}:{}", listener.local_addr().map_err(|e| e.to_string())?.port());
+    let me = SHARE.fetch_add(1, Ordering::SeqCst) + 1;
+    std::thread::spawn(move || {
+        if serve_once(listener, &path, &body, me, std::time::Duration::from_secs(600)) {
+            let _ = app.emit("share-done", ());
+        }
+    });
+    Ok(host)
+}
+
+/// The hand-off's server loop: answer `GET /<path>` with `body` once and stop; anything else gets a
+/// 404 and the wait goes on, until `deadline` or until another hand-off (`SHARE` moved past `me`).
+/// True when the body was handed over.
+fn serve_once(listener: std::net::TcpListener, path: &str, body: &str, me: u64, deadline: std::time::Duration) -> bool {
+    use std::io::{Read, Write};
+    use std::sync::atomic::Ordering;
+    let _ = listener.set_nonblocking(true);
+    let until = std::time::Instant::now() + deadline;
+    let mut done = false;
+    while !done && SHARE.load(Ordering::SeqCst) == me && std::time::Instant::now() < until {
+        let Ok((mut conn, _)) = listener.accept() else {
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            continue;
+        };
+        let _ = conn.set_nonblocking(false);
+        let _ = conn.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+        let mut buf = [0u8; 1024];
+        let n = conn.read(&mut buf).unwrap_or(0);
+        done = String::from_utf8_lossy(&buf[..n]).starts_with(&format!("GET /{path} "));
+        let reply = if done {
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        } else {
+            "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
+        };
+        let _ = conn.write_all(reply.as_bytes());
+    }
+    // retire this hand-off, unless a newer one already took over
+    let _ = SHARE.compare_exchange(me, me + 1, Ordering::SeqCst, Ordering::SeqCst);
+    done
+}
+
+/// Retire the live hand-off (Done, or a new QR).
+#[tauri::command]
+fn share_stop() {
+    SHARE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Phone: fetch the sealed sign-in from the Mac. Plain HTTP to a private address only — the bytes are
+/// sealed, and the key never travels (it came in the QR).
+#[tauri::command]
+async fn lan_get(host: String, path: String) -> Result<String, String> {
+    let ip: std::net::SocketAddr = host.parse().map_err(|_| "bad host".to_string())?;
+    let private = match ip.ip() {
+        std::net::IpAddr::V4(v4) => v4.is_private(),
+        _ => false,
+    };
+    if !private || path.len() != 32 || !path.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("not a local address".into());
+    }
+    let url = format!("http://{host}/{path}");
+    tauri::async_runtime::spawn_blocking(move || {
+        let agent = ureq::Agent::config_builder()
+            .timeout_global(Some(std::time::Duration::from_secs(8)))
+            .build()
+            .new_agent();
+        agent
+            .get(&url)
+            .call()
+            .map_err(|e| e.to_string())?
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 fn is_web_url(url: &str) -> bool {
     url.starts_with("https://") || url.starts_with("http://")
 }
@@ -643,6 +742,9 @@ pub fn run() {
             read_asset,
             write_asset,
             github_post,
+            share_start,
+            share_stop,
+            lan_get,
             open_url,
             open_asset,
             fetch_url,
@@ -705,6 +807,31 @@ mod tests {
         .unwrap_err();
         assert_eq!(err, "timed out");
         assert!(start.elapsed() < std::time::Duration::from_secs(5));
+    }
+
+    /// The phone-setup server hands the sealed body to one right request, 404s anything else, and is
+    /// gone after that one hand-over.
+    #[test]
+    fn serve_once_answers_the_right_path_once() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let me = super::SHARE.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        let path = "0123456789abcdef0123456789abcdef";
+        let server = std::thread::spawn(move || super::serve_once(listener, path, "SEALED", me, std::time::Duration::from_secs(10)));
+        let get = |p: &str| {
+            let mut c = std::net::TcpStream::connect(addr)?;
+            c.write_all(format!("GET /{p} HTTP/1.1\r\nHost: x\r\n\r\n").as_bytes())?;
+            let mut out = String::new();
+            c.read_to_string(&mut out)?;
+            Ok::<_, std::io::Error>(out)
+        };
+        assert!(get("ffffffffffffffffffffffffffffffff").unwrap().starts_with("HTTP/1.1 404"));
+        let ok = get(path).unwrap();
+        assert!(ok.starts_with("HTTP/1.1 200") && ok.ends_with("SEALED"), "{ok}");
+        assert!(server.join().unwrap());
+        // one phone per QR: nothing listens any more
+        assert!(get(path).is_err());
     }
 
     #[test]
