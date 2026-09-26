@@ -182,7 +182,7 @@
         {#if sync.claiming}
           <div class="device">
             <p class="sub">Waiting for your Mac. Authorize this code on GitHub there, and Eve signs in here by itself.</p>
-            <p class="devicecode">{sync.claiming}</p>
+            <button class="devicecode" data-tip="Copy" onclick={() => copyCode(sync.claiming!)}>{copied ? 'Copied' : sync.claiming}</button>
             <div class="actions"><button class="btn" onclick={() => sync.cancelLogin()}>Cancel</button></div>
           </div>
         {:else if sync.settings.token}
