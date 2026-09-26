@@ -134,4 +134,11 @@ const expired = async () => '{"error":"expired_token","error_description":"This 
 await assert.rejects(pollToken(expired, 'd', 1, undefined, async () => {}), /expired/);
 assert.equal(await pollToken(async () => '{"access_token":"gho_phone"}', 'd', 1, undefined, async () => {}), 'gho_phone');
 
+// a request that fails (a phone cut off the network while the user is in the browser) is retried
+let calls = 0;
+const flaky = async () => { calls++; if (calls < 3) throw new Error('io: failed to lookup address information'); return '{"access_token":"gho_late"}'; };
+assert.equal(await pollToken(flaky, 'd', 1, undefined, async () => {}), 'gho_late');
+// ...but not forever
+await assert.rejects(pollToken(async () => { throw new Error('offline'); }, 'd', 5, undefined, async () => {}, 20), /expired/);
+
 console.log('SYNC_OK');

@@ -168,13 +168,22 @@ export async function requestCode(post: Post): Promise<DeviceCode> {
   return { device_code: a.device_code, user_code: a.user_code, verification_uri: a.verification_uri, interval: Number(a.interval) || 5, expires_in: Number(a.expires_in) || 900 };
 }
 
-/** Device flow, second half: poll until the code is authorized. Any device can do this with the device
- *  code — which is how a phone signs in with a code its Mac asked for. Resolves to the token. */
-export async function pollToken(post: Post, deviceCode: string, interval = 5, signal?: AbortSignal, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<string> {
-  for (;;) {
+/** Device flow, second half: poll until the code is authorized; resolves to the token. A failed request
+ *  is not the end: the user is in the browser meanwhile, and a phone may cut a background app off the
+ *  network for a while (DNS then fails). Only GitHub's own answer — denied, expired — or `expiresIn`
+ *  running out ends it. */
+export async function pollToken(post: Post, deviceCode: string, interval = 5, signal?: AbortSignal, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)), expiresIn = 900): Promise<string> {
+  for (let waited = 0; ; waited += interval) {
+    if (waited > expiresIn) throw new Error('the sign-in code expired; start again');
     await sleep(interval * 1000);
     if (signal?.aborted) throw new Error('sign-in cancelled');
-    const t = JSON.parse(await post(LOGIN + 'oauth/access_token', { client_id: CLIENT_ID, device_code: deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' }));
+    let reply: string;
+    try {
+      reply = await post(LOGIN + 'oauth/access_token', { client_id: CLIENT_ID, device_code: deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' });
+    } catch {
+      continue; // offline for a moment: ask again next round
+    }
+    const t = JSON.parse(reply);
     if (t.access_token) return t.access_token;
     if (t.error === 'slow_down') interval += 5;
     else if (t.error !== 'authorization_pending') throw new Error(t.error_description ?? t.error ?? 'sign-in failed');
@@ -188,7 +197,7 @@ export async function pollToken(post: Post, deviceCode: string, interval = 5, si
 export async function deviceLogin(post: Post, onCode: (code: string, url: string) => void, signal?: AbortSignal, sleep?: (ms: number) => Promise<unknown>): Promise<string> {
   const a = await requestCode(post);
   onCode(a.user_code, a.verification_uri);
-  return pollToken(post, a.device_code, a.interval, signal, sleep);
+  return pollToken(post, a.device_code, a.interval, signal, sleep, a.expires_in);
 }
 
 /** Who the token belongs to, and their private notes repo (created if missing). */

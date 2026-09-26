@@ -467,3 +467,17 @@
   scan, brought Eve up, which fetched it ("SERVED to 172.30.1.15"), opened it and showed @handoff-test /
   happy-nut/eve-sync-test, then "401 bad token" — the fake token, as expected. The real Mac button was
   not clicked through (the screen-control approval timed out); the owner tests that.
+
+# GATES — phone sign-in: see the code first, survive a network blip (2026-09-26)
+
+- [x] G118 A failed poll is retried; only GitHub's answer or expiry ends the sign-in
+  CHECK: node --experimental-strip-types --no-warnings src/lib/github.test.mjs
+  EXPECT: SYNC_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "SYNC_OK" — two "io: failed to lookup address information"
+  throws then a token → the token; a post that always throws → "expired" after expiresIn. (The owner's
+  phone showed that DNS error: Android can cut a background app off the network while the user is in
+  the browser authorizing, and the first failed poll used to end the whole sign-in.)
+- [x] G119 On the phone, Sign in shows and copies the code before any browser opens
+  EVIDENCE: manual, emulator (release APK): after "Sign in with GitHub" Eve stayed in front
+  (topResumed = dev.happynut.eve), the system clipboard chip read CD15-79B7, the text says to
+  long-press the first box → Paste on GitHub, and "Copy code & open GitHub" is the primary button.
