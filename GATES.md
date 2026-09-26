@@ -428,6 +428,25 @@
   page showed both steps and the code 4449-8E26; "Open Eve and connect" → intent:// → Eve came to the
   front on Settings → Sync showing "Waiting for your Mac…" and 4449-8E26 (read with uiautomator). This is
   the minified build, so the ProGuard keep rule for window.EveAndroid holds.
-- [ ] G111 Authorizing that code on the Mac signs the phone in and syncs, with no typing on the phone
+- [x] G111 Authorizing that code on the Mac signs the phone in and syncs, with no typing on the phone
+  EVIDENCE: manual, emulator (release APK): the owner authorized 4449-8E26 on github.com; the app, still on
+  the waiting screen, turned to @happy-nut / "Syncing…" and then "Synced at 08:28 PM" (uiautomator).
 - [ ] G112 A tagged release carries Eve-android.apk, and the published page serves at
   https://happy-nut.github.io/eve/android/
+  PARTIAL: Pages on (main /docs), the page answers 200 with the APK link. v0.7.0 tag pushed before the
+  owner asked to test first: the macOS job published, the Android job failed (`${{ env.ANDROID_NDK_LATEST_HOME }}`
+  is empty — runner variables are not in the env context; fixed locally, not pushed). The release was
+  turned back into a draft (latest = v0.6.6 again). Local Eve.app replaced with the 0.7.0 build for the
+  owner's test; 0.6.6 kept at ~/.eve-android/backup/Eve-0.6.6.app.
+
+# GATES — one QR, scanned twice, no page in between (2026-09-26)
+
+- [x] G113 Without Eve, the QR link goes straight to the APK download
+  EVIDENCE: manual, emulator with Eve uninstalled: the link opened Chrome, which followed the intent's
+  browser_fallback_url to .../releases/download/v0.7.0/Eve-android.apk ("Download Eve-android.apk
+  anyway?" — Chrome's own warning for any APK). v0.7.0 is a prerelease carrying the signed APK
+  (latest stays v0.6.6, so Homebrew is unchanged); the page picks the newest published release with it.
+- [x] G114 With Eve installed, the same link opens Eve waiting on the Mac's code
+  EVIDENCE: manual, emulator: after installing the signed APK, the same link (local, then the published
+  https://happy-nut.github.io/eve/android/#c=…) brought Eve to the front showing "Waiting for your Mac…"
+  and 6A1B-DFEF; no Shortcuts tab on the phone. Mac app rebuilt and reinstalled with the new QR text.
