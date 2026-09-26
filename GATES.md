@@ -450,3 +450,20 @@
   EVIDENCE: manual, emulator: after installing the signed APK, the same link (local, then the published
   https://happy-nut.github.io/eve/android/#c=…) brought Eve to the front showing "Waiting for your Mac…"
   and 6A1B-DFEF; no Shortcuts tab on the phone. Mac app rebuilt and reinstalled with the new QR text.
+
+# GATES — phone setup without GitHub: the Mac hands its sign-in over the LAN (2026-09-26)
+
+- [x] G115 Sealed hand-off: only the QR's key opens it, tampering is refused, links point only at a LAN
+  CHECK: node --experimental-strip-types --no-warnings src/lib/handoff.test.mjs
+  EXPECT: HANDOFF_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "HANDOFF_OK"; npm test now 8 × _OK.
+- [x] G116 The Mac's server answers the right path once, 404s others, and is gone after
+  CHECK: cd src-tauri && cargo test serve_once 2>&1 | tail -3
+  EXPECT: 1 passed
+  EVIDENCE: zsh, ~/repos/eve/src-tauri, exit 0, "test tests::serve_once_answers_the_right_path_once ... ok"
+- [x] G117 Scanning signs the phone in with no GitHub step
+  EVIDENCE: manual, emulator (release APK, signed out): a stand-in for share_start sealed a TEST account
+  (fake token) and served it on the Mac's LAN address 172.30.1.15; the ticket link, opened like a QR
+  scan, brought Eve up, which fetched it ("SERVED to 172.30.1.15"), opened it and showed @handoff-test /
+  happy-nut/eve-sync-test, then "401 bad token" — the fake token, as expected. The real Mac button was
+  not clicked through (the screen-control approval timed out); the owner tests that.

@@ -191,23 +191,6 @@ export async function deviceLogin(post: Post, onCode: (code: string, url: string
   return pollToken(post, a.device_code, a.interval, signal, sleep);
 }
 
-// ---- a phone set up from the Mac: one QR, install to signed in -------------------
-/** The page the QR opens on the phone (docs/android/): install the app, then hand it the code. */
-export const PHONE_PAGE = 'https://happy-nut.github.io/eve/android/';
-
-/** The QR's link. The codes ride in the fragment, which never leaves the phone's browser. */
-export const phoneLink = (c: Pick<DeviceCode, 'device_code' | 'user_code'>) =>
-  `${PHONE_PAGE}#c=${encodeURIComponent(c.device_code)}&u=${encodeURIComponent(c.user_code)}`;
-
-/** `eve://connect?c=…&u=…` (what the page opens the app with) -> the codes. Null for anything else. */
-export function parseConnect(url: string): { device_code: string; user_code: string } | null {
-  const m = /^eve:\/\/connect\?(.*)$/.exec(url);
-  if (!m) return null;
-  const q = new URLSearchParams(m[1]);
-  const c = q.get('c'), u = q.get('u');
-  return c && /^[\w-]+$/.test(c) ? { device_code: c, user_code: u ?? '' } : null;
-}
-
 /** Who the token belongs to, and their private notes repo (created if missing). */
 export async function ensureRepo(token: string, f: typeof fetch = (...a) => fetch(...a)): Promise<{ user: string; repo: string }> {
   const headers = { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' };

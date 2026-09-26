@@ -159,6 +159,18 @@ export const assets = {
   },
 };
 
+/** Phone setup over the local network (handoff.ts): the Mac serves the sealed sign-in once, the phone fetches it. */
+export const share = {
+  start: (path: string, body: string) => invoke<string>('share_start', { path, body }),
+  stop: () => invoke<void>('share_stop').catch(() => {}),
+  fetch: (host: string, path: string) => invoke<string>('lan_get', { host, path }),
+  /** the phone took it */
+  async onDone(cb: () => void) {
+    const { listen } = await import('@tauri-apps/api/event');
+    return listen('share-done', cb);
+  },
+};
+
 /** GitHub sign-in: github.com/login has no CORS, so the desktop side runs the two POSTs. */
 export const github = {
   post: (url: string, form: Record<string, string>) => invoke<string>('github_post', { url, form: Object.entries(form) }),
