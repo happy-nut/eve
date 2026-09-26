@@ -43,6 +43,26 @@ npm run bundle     # builds src-tauri/target/release/bundle/macos/Eve.app (~4 MB
 
 `npm run dev` runs the UI alone in a browser (notes go to localStorage) — handy for UI work.
 
+## Android
+
+The same app runs on Android (Tauri's Android target), syncing through the same `eve-notes` repository.
+Sign in from Settings → Sync on the phone too.
+
+- **Home-screen widget** — long-press the home screen → Widgets → Eve. It asks what to show: the newest notes,
+  or one note pinned and shown whole. Markdown is drawn as in the editor (to-dos, bold, code, links,
+  callouts, boards as a column count). Tap a note to open it ready to write, + for a new one, ↻ to sync now;
+  long-press → the pencil changes what it shows.
+- **Background sync** — every 15 minutes (Android's floor) while Eve is closed, notes changed elsewhere come
+  down and the widget redraws. The app pushes when it leaves the screen.
+- Back goes from a note to the list, and from the list out of the app.
+
+```bash
+npm run tauri -- android dev              # on a connected phone or emulator (needs ANDROID_HOME, NDK_HOME)
+npm run tauri -- android build --apk      # src-tauri/gen/android/app/build/outputs/apk/
+```
+
+Not on the phone: the global hotkey, Dock/login-item settings, PDF/image export, and Quick Look previews.
+
 ## Default shortcuts
 
 | Scope  | Action                          | Keys              |

@@ -7,7 +7,7 @@
   import { groups, MAX_DEPTH } from './lib/groups.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
-  import { setGlobalHotkey, win, files, autostart, dock, pin, isTauri, onWindowFocus } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, dock, pin, isTauri, isMobile, onWindowFocus, onBack, widget } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Settings from './Settings.svelte';
@@ -22,6 +22,7 @@ import CardPage from './CardPage.svelte';
   import { importPaths, exportCurrent } from './lib/transfer';
   import PdfViewer from './PdfViewer.svelte';
   import { titleOf } from './lib/notes.svelte';
+  import { parseConnect } from './lib/github';
 
   let sidebarOpen = $state(true);
   let settingsOpen = $state(false);
@@ -48,7 +49,16 @@ import CardPage from './CardPage.svelte';
     setGlobalHotkey(keys).then((err) => (hotkeyError = err));
   });
 
-  if (import.meta.env.DEV) (window as any).__notes = notes;
+  // Android back: a dialog closes, a note goes back to the list, and only the list leaves the app
+  $effect(() => {
+    if (!isMobile || !isTauri || (sidebarOpen && !settingsOpen)) return;
+    let off: (() => void) | undefined, gone = false;
+    onBack(() => { if (settingsOpen) settingsOpen = false; else sidebarOpen = true; })
+      .then((u) => (gone ? u() : (off = u)));
+    return () => { gone = true; off?.(); };
+  });
+
+  if (import.meta.env.DEV) Object.assign(window as any, { __notes: notes, __sync: sync });
   onMount(() => {
     // first run: launch at login so the summon hotkey is always available (toggle in Settings)
     if (isTauri && !localStorage.getItem('eve.autostart.init')) {
@@ -58,10 +68,25 @@ import CardPage from './CardPage.svelte';
     if (pinned) void pin.set(true); // the window forgets it across restarts; the setting does not
     // a file opened from Finder joins the notes like any import — it is a note from then on, movable
     // in the sidebar and synced (the file on disk is left as it was)
-    notes.load().then(() => files.onOpen(async (paths) => {
-      const first = await importPaths(paths);
-      if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; }
-    }));
+    notes.load().then(() => {
+      void files.onOpen(async (paths) => {
+        const first = await importPaths(paths);
+        if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; }
+      });
+      widget.onOpen((ask) => {
+        // the phone-setup page: sign in with the code the Mac's QR carried
+        const connect = parseConnect(ask);
+        if (connect) { settingsOpen = true; void sync.claim(connect.device_code, connect.user_code); return; }
+        // the home-screen widget: straight into that note (or a new one), keyboard up
+        const id = ask.startsWith('note:') ? ask.slice(5) : null;
+        if (ask !== 'new' && !id) return;
+        settingsOpen = false;
+        ui.focusOwner = 'editor';
+        if (id && notes.all.some((n) => n.id === id)) notes.currentId = id; else notes.create();
+        sidebarOpen = false;
+        widget.keyboard();
+      });
+    });
     window.addEventListener('eve-summon', onSummon);
     // coming back by click, ⌘Tab or the Dock fires no DOM 'focus' when the webview never let go of it
     let unfocus: (() => void) | undefined;
@@ -253,7 +278,7 @@ import CardPage from './CardPage.svelte';
     <button class="icon" aria-label="Forward" data-tip="Forward" data-keys={shortcuts.keysFor('forward')} disabled={!notes.canForward} onclick={() => notes.forward()}>
       <svg viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
     </button>
-    <button class="icon" class:on={pinned} aria-label="Keep on top" data-tip={pinned ? 'On top' : 'Keep on top'} data-keys={shortcuts.keysFor('pin')} onclick={togglePin}>
+    <button class="icon pin" class:on={pinned} aria-label="Keep on top" data-tip={pinned ? 'On top' : 'Keep on top'} data-keys={shortcuts.keysFor('pin')} onclick={togglePin}>
       <!-- a pushpin: head, shaft, point -->
       <svg viewBox="0 0 16 16"><path d="M6 1.8h4l-.6 3.4 2.2 2.2v1.2H4.4V7.4l2.2-2.2z"/><path d="M8 8.6V14"/></svg>
     </button>

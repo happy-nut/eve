@@ -3,16 +3,17 @@
   import { fade, scale } from 'svelte/transition';
   import { shortcuts, eventToKeys, type Scope } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
-  import { storage, autostart, dock, defaultApp, isTauri } from './lib/platform';
+  import { storage, autostart, dock, defaultApp, isTauri, isMobile } from './lib/platform';
   import { ui } from './lib/ui.svelte';
   import { appearance, FONTS, THEMES, type Theme } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
+  import { renderSVG } from 'uqr';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
 
   let recording = $state<string | null>(null);
   let conflict = $state<{ id: string; keys: string; with: string } | null>(null);
-  let tab = $state<'shortcuts' | 'appearance' | 'sync'>('shortcuts');
+  let tab = $state<'shortcuts' | 'appearance' | 'sync'>(isMobile ? 'sync' : 'shortcuts'); // a phone has no shortcuts to set
   let notesPath = $state('');
   let launchAtLogin = $state(false);
   let opensMarkdown = $state(false);
@@ -38,7 +39,7 @@
     { scope: 'app', label: 'App' },
     { scope: 'editor', label: 'Editor' },
   ];
-  const tabs = [['shortcuts', 'Shortcuts'], ['appearance', 'Appearance'], ['sync', 'Sync & app']] as const;
+  const tabs = ([['shortcuts', 'Shortcuts'], ['appearance', 'Appearance'], ['sync', 'Sync & app']] as const).filter(([id]) => !isMobile || id !== 'shortcuts');
 
   const syncText = $derived(
     sync.status === 'syncing' ? 'Syncing…'
@@ -120,10 +121,12 @@
           <input type="checkbox" class="switch" checked={appearance.s.autoIcon}
             onchange={(e) => appearance.set({ autoIcon: e.currentTarget.checked })} />
         </label>
+{#if !isMobile}
         <label class="row">
           <span class="label">Hide from Dock and ⌘Tab <span class="sub">like Raycast: only the hotkey and Finder open it</span></span>
           <input type="checkbox" class="switch" checked={dock.hidden} disabled={!isTauri} onchange={(e) => dock.set(e.currentTarget.checked)} />
         </label>
+      {/if}
       </div>
       <h3>Typeface</h3>
       <div class="card">
@@ -149,6 +152,7 @@
         <label class="row"><span class="label">Width <span class="sub">{appearance.s.width}px</span></span>
           <input type="range" min="520" max="1400" step="20" value={appearance.s.width} oninput={(e) => appearance.set({ width: Number(e.currentTarget.value) })} /></label>
       </div>
+{#if !isMobile}
       <h3>Window</h3>
       <div class="card">
         <label class="row"><span class="label">Opening width <span class="sub">{appearance.s.winW}px</span></span>
@@ -156,6 +160,7 @@
         <label class="row"><span class="label">Opening height <span class="sub">{appearance.s.winH}px</span></span>
           <input type="range" min="400" max="1400" step="16" value={appearance.s.winH} oninput={(e) => appearance.set({ winH: Number(e.currentTarget.value) })} /></label>
       </div>
+      {/if}
       <p class="sample" style="font-family: {appearance.stack}; font-size: {appearance.s.size}px; line-height: {appearance.s.lineHeight}">
         The quick brown fox jumps over the lazy dog. 다람쥐 헌 쳇바퀴에 타고파. 0123456789
       </p>
@@ -176,6 +181,12 @@
             <button class="btn primary" onclick={() => sync.now()} disabled={sync.status === 'syncing'}>Sync now</button>
           </div>
           {#if sync.status === 'error'}<p class="alert">{sync.error}</p>{/if}
+        {:else if sync.claiming}
+          <div class="device">
+            <p class="sub">Waiting for your Mac. Authorize this code on GitHub there, and Eve signs in here by itself.</p>
+            <p class="devicecode">{sync.claiming}</p>
+            <div class="actions"><button class="btn" onclick={() => sync.cancelLogin()}>Cancel</button></div>
+          </div>
         {:else if sync.pending}
           <div class="device">
             <p class="sub">Enter this code on the GitHub page that just opened, then authorize Eve.</p>
@@ -196,6 +207,32 @@
         {/if}
       </div>
 
+{#if !isMobile && (isTauri || import.meta.env.DEV) && sync.settings.token}
+      <h3>Android phone</h3>
+      <div class="card">
+        {#if sync.phone}
+          <div class="phone">
+            <div class="qr">{@html renderSVG(sync.phone.link, { border: 2, whiteColor: '#fff', blackColor: '#111318' })}</div>
+            <ol>
+              <li>On the GitHub page that just opened, paste <b class="mono">{sync.phone.code}</b> (it is on the clipboard) and authorize Eve.</li>
+              <li>Scan the code with the phone's camera. Install Eve, then tap <b>Connect</b> — the phone signs in and syncs by itself.</li>
+            </ol>
+          </div>
+          <div class="actions pad">
+            <button class="btn" onclick={() => sync.openPhonePage()}>Open GitHub again</button>
+            <button class="btn" onclick={() => sync.phoneDone()}>Done</button>
+          </div>
+        {:else}
+          <div class="row">
+            <span class="label">Set up a phone
+              <span class="sub">one QR: installs Eve on Android and signs it in to <span class="mono">{sync.settings.repo}</span> with a token of its own</span></span>
+            <button class="btn primary" onclick={() => sync.phoneSetup()}>Show QR</button>
+          </div>
+        {/if}
+      </div>
+{/if}
+
+{#if !isMobile}
       <h3>App</h3>
       <div class="card">
         <label class="row">
@@ -210,6 +247,7 @@
         </label>
         {#if defaultAppError}<p class="alert">{defaultAppError}</p>{/if}
       </div>
+      {/if}
 
       <h3>Storage</h3>
       <div class="card"><div class="row"><span class="label mono path">{notesPath}</span></div></div>
@@ -307,6 +345,13 @@
   .device .sub { display: block; margin: 0; }
   .devicecode { font: 600 30px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.14em; margin: 14px 0 16px; user-select: all; }
   .actions { display: flex; justify-content: center; gap: 8px; }
+  .actions.pad { padding: 0 0 14px; }
+  .phone { display: flex; gap: 18px; align-items: center; padding: 14px 16px; }
+  /* the code stays black on white in dark mode too: cameras read it best that way */
+  .qr { flex: none; width: 168px; height: 168px; border-radius: 10px; overflow: hidden; background: #fff; }
+  .qr :global(svg) { display: block; width: 100%; height: 100%; }
+  .phone ol { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--fg); }
+  .phone li + li { margin-top: 8px; }
 
   .sample { margin: 12px 0 0; padding: 14px 16px; border-radius: 10px; background: var(--bg-input); color: var(--fg); }
 </style>

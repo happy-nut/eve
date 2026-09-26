@@ -1,7 +1,7 @@
 // Sync engine self-check. Default: in-memory fake GitHub. Real API: EVE_TEST_REPO=owner/name EVE_TEST_TOKEN=... npm test
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
-import { Repo, syncRound, blobSha, deviceLogin } from './github.ts';
+import { Repo, syncRound, blobSha, deviceLogin, pollToken, phoneLink, parseConnect } from './github.ts';
 
 const gitSha = (buf) => createHash('sha1').update(`blob ${buf.length}\0`).update(buf).digest('hex');
 const rnd = () => randomBytes(20).toString('hex');
@@ -128,5 +128,17 @@ assert.deepEqual(shown, ['AB12-CD34', 'https://github.com/login/device']);
 assert.equal(posts.length, 4);
 const ac = new AbortController(); ac.abort();
 await assert.rejects(deviceLogin(post, () => {}, ac.signal, async () => {}), /cancelled/);
+
+// a phone polling with the Mac's code: expiry is an error, not a hang
+const expired = async () => '{"error":"expired_token","error_description":"This \'device_code\' has expired."}';
+await assert.rejects(pollToken(expired, 'd', 1, undefined, async () => {}), /expired/);
+assert.equal(await pollToken(async () => '{"access_token":"gho_phone"}', 'd', 1, undefined, async () => {}), 'gho_phone');
+
+// the QR's link and the app link agree on the codes; junk is refused
+const link = phoneLink({ device_code: '3584d83530557fdd1f46af8289938c8ef79f9dc5', user_code: 'WDJB-MJHT' });
+assert.match(link, /^https:\/\/happy-nut\.github\.io\/eve\/android\/#c=3584d8.*&u=WDJB-MJHT$/);
+assert.deepEqual(parseConnect('eve://connect?' + link.split('#')[1]), { device_code: '3584d83530557fdd1f46af8289938c8ef79f9dc5', user_code: 'WDJB-MJHT' });
+assert.equal(parseConnect('eve://connect?c=../../x'), null);
+assert.equal(parseConnect('https://evil.example/connect?c=abc'), null);
 
 console.log('SYNC_OK');

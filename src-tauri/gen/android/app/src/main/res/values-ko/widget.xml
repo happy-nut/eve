@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_name">Eve 노트</string>
+    <string name="widget_new">새 노트</string>
+    <string name="widget_empty">아직 노트가 없어요 — +를 눌러 써 보세요</string>
+    <string name="widget_now">방금</string>
+    <string name="widget_recent">최근 노트</string>
+    <string name="widget_pick">이 위젯에 보여줄 것</string>
+    <string name="widget_gone">노트가 삭제됐어요 — 위젯을 길게 눌러 다른 노트를 고르세요</string>
+    <string name="widget_blank">빈 노트예요 — 눌러서 쓰기</string>
+    <string name="widget_pull">지금 동기화</string>
+</resources>

@@ -73,9 +73,11 @@ fn stamp_name(ext: &str) -> String {
 }
 
 fn raw_body(request: &tauri::ipc::Request<'_>) -> Result<Vec<u8>, String> {
+    use serde::Deserialize;
     match request.body() {
         tauri::ipc::InvokeBody::Raw(b) => Ok(b.clone()),
-        _ => Err("expected raw bytes".into()),
+        // Android's IPC has no request bodies: the bytes come over as a JSON array of numbers
+        tauri::ipc::InvokeBody::Json(v) => Vec::<u8>::deserialize(v).map_err(|_| "expected raw bytes".into()),
     }
 }
 
@@ -251,23 +253,24 @@ fn write_asset(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<(), S
 }
 
 // ---- GitHub sign-in (device flow) -------------------------------------------
-/// github.com/login/* has no CORS headers, so the two device-flow POSTs run here through macOS's curl.
+/// github.com/login/* has no CORS headers, so the two device-flow POSTs run here.
 /// `form` = [[key, value], ...]. Async so the main thread never blocks.
 #[tauri::command]
 async fn github_post(url: String, form: Vec<(String, String)>) -> Result<String, String> {
     if !url.starts_with("https://github.com/login/") {
         return Err("url not allowed".into());
     }
-    let mut cmd = std::process::Command::new("curl");
-    cmd.args(["-sS", "-X", "POST", "-H", "Accept: application/json", &url]);
-    for (k, v) in &form {
-        cmd.args(["--data-urlencode", &format!("{k}={v}")]);
-    }
-    let out = cmd.output().map_err(|e| e.to_string())?;
-    if !out.status.success() {
-        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
-    }
-    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    tauri::async_runtime::spawn_blocking(move || {
+        ureq::post(&url)
+            .header("Accept", "application/json")
+            .send_form(form)
+            .map_err(|e| e.to_string())?
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn is_web_url(url: &str) -> bool {
@@ -276,12 +279,12 @@ fn is_web_url(url: &str) -> bool {
 
 /// Open a link in the default browser (device-flow page, bookmark cards).
 #[tauri::command]
-async fn open_url(url: String) -> Result<(), String> {
+async fn open_url(app: AppHandle, url: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
     if !is_web_url(&url) {
         return Err("url not allowed".into());
     }
-    let ok = std::process::Command::new("open").arg(&url).status().map_err(|e| e.to_string())?.success();
-    if ok { Ok(()) } else { Err("could not open the browser".into()) }
+    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
 /// Hand a stored asset to whatever app owns it (Preview, for a PDF). The asset protocol URL the
@@ -489,8 +492,11 @@ fn show_window(app: AppHandle) -> Result<(), String> {
     win.set_focus().map_err(|e| e.to_string())?;
     // set_focus only makes the *window* key; the webview can come back without being first responder,
     // and then the page gets no keystrokes at all however the DOM focus looks.
-    let webview: &tauri::Webview<_> = win.as_ref();
-    let _ = webview.set_focus();
+    #[cfg(desktop)]
+    {
+        let webview: &tauri::Webview<_> = win.as_ref();
+        let _ = webview.set_focus();
+    }
     Ok(())
 }
 
@@ -604,15 +610,26 @@ fn set_default_for_markdown(app: AppHandle, on: bool) -> Result<(), String> {
 #[tauri::command]
 fn set_always_on_top(app: AppHandle, on: bool) -> Result<(), String> {
     let win = app.get_webview_window("main").ok_or("no window")?;
-    win.set_always_on_top(on).map_err(|e| e.to_string())
+    #[cfg(desktop)]
+    return win.set_always_on_top(on).map_err(|e| e.to_string());
+    #[cfg(mobile)]
+    {
+        let _ = (win, on);
+        Ok(())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // a phone has no global hotkeys and no login items
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None));
+    builder
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Pending::default())
         .invoke_handler(tauri::generate_handler![

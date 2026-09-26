@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- the app's EVE palette: shell white, soft gray, visor ink, eye blue -->
+    <color name="widget_bg">#FFFFFFFF</color>
+    <color name="widget_row">#FFF2F3F5</color>
+    <color name="widget_fg">#FF33363D</color>
+    <color name="widget_dim">#FF7C8089</color>
+    <color name="widget_accent">#FF1E9BFF</color>
+    <string name="widget_name">Eve notes</string>
+    <string name="widget_new">New note</string>
+    <string name="widget_empty">No notes yet — tap + to write one</string>
+    <string name="widget_now">just now</string>
+    <string name="widget_recent">Newest notes</string>
+    <string name="widget_pick">Show in this widget</string>
+    <string name="widget_gone">This note is gone — long-press the widget to pick another</string>
+    <string name="widget_blank">This note is empty — tap to write</string>
+    <string name="widget_pull">Sync now</string>
+    <color name="widget_code">#0F111318</color>
+</resources>

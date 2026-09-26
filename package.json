@@ -43,6 +43,7 @@
     "emoji-picker-element": "^1.29.1",
     "emoji-picker-element-data": "^1.8.0",
     "lowlight": "^3.3.0",
-    "tiptap-markdown": "^0.9.0"
+    "tiptap-markdown": "^0.9.0",
+    "uqr": "^0.1.3"
   }
 }

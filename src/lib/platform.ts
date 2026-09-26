@@ -1,5 +1,8 @@
 // Thin layer over Tauri; falls back to localStorage so `npm run dev` works in a plain browser.
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+/** The Android / iOS build: no hotkey, no login item, no Dock, no window to size or hide. */
+export const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad/.test(navigator.userAgent);
+const desktop = isTauri && !isMobile;
 
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const { invoke } = await import('@tauri-apps/api/core');
@@ -18,7 +21,7 @@ export const storage = {
       .map((k) => localStorage.getItem(k)!);
   },
   async write(id: string, text: string): Promise<void> {
-    if (isTauri) return invoke('write_note', { id, text });
+    if (isTauri) return invoke<void>('write_note', { id, text }).then(widget.changed);
     localStorage.setItem(LS + id, text);
   },
   /** Where the notes live. Resolves the asset mapper too, so `assetUrl` is ready before anything renders. */
@@ -28,6 +31,34 @@ export const storage = {
     const { invoke: inv, convertFileSrc } = await import('@tauri-apps/api/core');
     convertFileSrcSync = convertFileSrc;
     return (notesDir = await inv<string>('notes_path'));
+  },
+};
+
+/** The Android home-screen widget, through `window.EveAndroid` (MainActivity.kt). A no-op anywhere else. */
+type Bridge = { takeIntent(): string; notesChanged(): void; showKeyboard(): void; account(repo: string, token: string): void };
+// looked up on every call: on a cold start the activity can inject it after this module has run
+const android = () => (globalThis as { EveAndroid?: Bridge }).EveAndroid;
+let widgetTimer: ReturnType<typeof setTimeout> | undefined;
+export const widget = {
+  /** a note file changed: the widget re-reads the folder (once per burst of writes) */
+  changed() {
+    if (!android()) return;
+    clearTimeout(widgetTimer);
+    widgetTimer = setTimeout(() => android()?.notesChanged(), 800);
+  },
+  /** the GitHub sign-in, for the background pull that runs while the app is closed */
+  account(repo: string, token: string) { android()?.account(repo, token); },
+  /** the caret is in the note: raise the on-screen keyboard with it */
+  keyboard() { android()?.showKeyboard(); },
+  /**
+   * What Android opened the app for: `note:<id>` / `new` from the widget, or the `eve://connect?…` link
+   * from the phone-setup page. Also drains the one that launched the app.
+   */
+  onOpen(cb: (ask: string) => void) {
+    if (!isMobile) return;
+    const drain = () => { const ask = android()?.takeIntent(); if (ask) cb(ask); };
+    drain();
+    window.addEventListener('eve-intent', drain);
   },
 };
 
@@ -215,15 +246,15 @@ export const files = {
 
 /** Which app macOS opens a .md with. macOS only; a browser reports false and refuses to change it. */
 export const defaultApp = {
-  get: () => (isTauri ? invoke<boolean>('is_default_for_markdown') : Promise.resolve(false)),
+  get: () => (desktop ? invoke<boolean>('is_default_for_markdown') : Promise.resolve(false)),
   set: (on: boolean) => (isTauri ? invoke<void>('set_default_for_markdown', { on }) : Promise.reject(new Error('desktop only'))),
 };
 
 /** Launch at login, so the global hotkey works even after the app was quit. */
 export const autostart = {
-  async get() { if (!isTauri) return false; return (await import('@tauri-apps/plugin-autostart')).isEnabled(); },
+  async get() { if (!desktop) return false; return (await import('@tauri-apps/plugin-autostart')).isEnabled(); },
   async set(on: boolean) {
-    if (!isTauri) return;
+    if (!desktop) return;
     const m = await import('@tauri-apps/plugin-autostart');
     await (on ? m.enable() : m.disable());
   },
@@ -236,7 +267,7 @@ export const dock = {
   get hidden() { return localStorage.getItem('eve.dock') !== 'shown'; },
   async set(hidden: boolean) {
     localStorage.setItem('eve.dock', hidden ? 'hidden' : 'shown');
-    if (isTauri) await invoke('set_dock_hidden', { hidden });
+    if (desktop) await invoke('set_dock_hidden', { hidden });
   },
 };
 
@@ -245,7 +276,7 @@ export const pin = {
   get on() { return localStorage.getItem('eve.pin') === '1'; },
   async set(on: boolean) {
     localStorage.setItem('eve.pin', on ? '1' : '0');
-    if (isTauri) await invoke('set_always_on_top', { on });
+    if (desktop) await invoke('set_always_on_top', { on });
   },
 };
 
@@ -267,13 +298,13 @@ async function dismiss() {
   await invoke<void>('hide_app');
 }
 export const win = {
-  toggle: async () => { if (!isTauri) return; (await invoke<boolean>('is_front')) ? dismiss() : show(); },
-  hide: () => (isTauri ? dismiss() : Promise.resolve()),
+  toggle: async () => { if (!desktop) return; (await invoke<boolean>('is_front')) ? dismiss() : show(); },
+  hide: () => (desktop ? dismiss() : Promise.resolve()),
 };
 
 /** The size the window opens at (Settings → Appearance). A browser window is the user's own business. */
 export async function setWindowSize(width: number, height: number): Promise<void> {
-  if (!isTauri) return;
+  if (!desktop) return;
   const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window');
   await getCurrentWindow().setSize(new LogicalSize(width, height));
 }
@@ -288,9 +319,16 @@ export async function onWindowFocus(cb: () => void): Promise<() => void> {
   return getCurrentWindow().onFocusChanged(({ payload }) => { if (payload) cb(); });
 }
 
+/** Android's back button. Only while `cb` is registered does back stay in the app; unregistered, it leaves. */
+export async function onBack(cb: () => void): Promise<() => void> {
+  const { onBackButtonPress } = await import('@tauri-apps/api/app');
+  const l = await onBackButtonPress(cb);
+  return () => void l.unregister();
+}
+
 /** Register the global "summon" hotkey. Re-callable: unregisters everything first. */
 export async function setGlobalHotkey(keys: string): Promise<string | null> {
-  if (!isTauri) return null;
+  if (!desktop) return null;
   const gs = await import('@tauri-apps/plugin-global-shortcut');
   await gs.unregisterAll();
   try {
