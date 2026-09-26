@@ -195,11 +195,13 @@
           {#if sync.status === 'error'}<p class="alert">{sync.error}</p>{/if}
         {:else if sync.pending}
           <div class="device">
-            <p class="sub">Enter this code on the GitHub page that just opened, then authorize Eve.</p>
+            <p class="sub">{isMobile
+              ? 'The code is copied. On GitHub, long-press the first box and choose Paste, then authorize Eve.'
+              : 'Enter this code on the GitHub page that just opened (it is on the clipboard), then authorize Eve.'}</p>
             <button class="devicecode" data-tip="Copy" onclick={() => copyCode(sync.pending!.code)}>{copied ? 'Copied' : sync.pending.code}</button>
             <div class="actions">
               <button class="btn" onclick={() => sync.cancelLogin()}>Cancel</button>
-              <button class="btn" onclick={() => sync.openLogin()}>Open GitHub again</button>
+              <button class="btn" class:primary={isMobile} onclick={() => sync.openLogin()}>{isMobile ? 'Copy code & open GitHub' : 'Open GitHub again'}</button>
             </div>
           </div>
         {:else}

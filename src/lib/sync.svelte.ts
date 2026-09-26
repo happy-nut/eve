@@ -1,5 +1,5 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
-import { assets, github, openUrl, isTauri, widget, share } from './platform';
+import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText } from './platform';
 import { Repo, syncRound, blobSha, deviceLogin, ensureRepo, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
 
@@ -48,7 +48,9 @@ class Sync {
     this.abort = new AbortController();
     this.error = '';
     try {
-      const token = await deviceLogin(github.post, (code, url) => { this.pending = { code, url }; void openUrl(url); }, this.abort.signal);
+      // the code goes on the clipboard first; a phone waits for the button, so the code is seen before
+      // the browser covers it
+      const token = await deviceLogin(github.post, (code, url) => { this.pending = { code, url }; void copyText(code); if (!isMobile) void openUrl(url); }, this.abort.signal);
       const { user, repo } = await ensureRepo(token);
       this.save({ token, user, repo });
       this.pending = null;
@@ -62,8 +64,8 @@ class Sync {
     }
   }
   cancelLogin() { this.abort?.abort(); }
-  /** re-open the device page (the browser tab may have been closed) */
-  openLogin() { if (this.pending) void openUrl(this.pending.url); }
+  /** copy the code and open the device page (again: the browser tab may have been closed) */
+  openLogin() { if (this.pending) { void copyText(this.pending.code); void openUrl(this.pending.url); } }
   /**
    * Mac: set up a phone. This Mac's sign-in, sealed with a one-time key, is served once on the local
    * network; the QR carries the address and the key (handoff.ts). No GitHub step: the phone simply
