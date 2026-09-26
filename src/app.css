@@ -68,6 +68,14 @@ button.icon:active { transform: scale(0.9); }
 .toolbar .icon { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
 .toolbar svg { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .toolbar .icon:disabled { opacity: 0.3; pointer-events: none; }
+/* a phone: no traffic lights to clear, no window to keep on top, and the list takes the whole screen */
+/* the page runs under Android's status and navigation bars (edge-to-edge); the insets keep it clear of both */
+html.mobile { --top: env(safe-area-inset-top, 0px); --bottom: env(safe-area-inset-bottom, 0px); }
+html.mobile, html.mobile body { background: var(--bg-side); }
+html.mobile #app { box-sizing: border-box; padding: var(--top) 0 var(--bottom); border-radius: 0; }
+html.mobile .toolbar { top: calc(var(--top) + 10px); left: 12px; }
+html.mobile .toolbar .pin { display: none; }
+html.mobile aside { position: fixed; inset: var(--top) 0 var(--bottom); width: auto; z-index: 5; }
 main { flex: 1; min-width: 0; position: relative; }
 /* the toolbar floats over the note (and with the sidebar closed it sits right on the text): a fade to
    the page colour keeps lines from running into the icons as they scroll past */

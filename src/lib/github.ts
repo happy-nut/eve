@@ -159,23 +159,53 @@ export const REPO_NAME = 'eve-notes';
 const LOGIN = 'https://github.com/login/';
 export type Post = (url: string, form: Record<string, string>) => Promise<string>;
 
-/**
- * Device flow: ask for a code, hand it to the user (onCode), poll until they authorize in the browser.
- * `post` does the two github.com POSTs (no CORS there, so the desktop side runs them). Resolves to the token.
- */
-export async function deviceLogin(post: Post, onCode: (code: string, url: string) => void, signal?: AbortSignal, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<string> {
+export interface DeviceCode { device_code: string; user_code: string; verification_uri: string; interval: number; expires_in: number }
+
+/** Device flow, first half: a code for the user to enter on GitHub, and the secret half to poll with. */
+export async function requestCode(post: Post): Promise<DeviceCode> {
   const a = JSON.parse(await post(LOGIN + 'device/code', { client_id: CLIENT_ID, scope: 'repo' }));
   if (!a.device_code) throw new Error(a.error_description ?? a.error ?? 'device code failed');
-  onCode(a.user_code, a.verification_uri);
-  let interval = Number(a.interval) || 5;
+  return { device_code: a.device_code, user_code: a.user_code, verification_uri: a.verification_uri, interval: Number(a.interval) || 5, expires_in: Number(a.expires_in) || 900 };
+}
+
+/** Device flow, second half: poll until the code is authorized. Any device can do this with the device
+ *  code — which is how a phone signs in with a code its Mac asked for. Resolves to the token. */
+export async function pollToken(post: Post, deviceCode: string, interval = 5, signal?: AbortSignal, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<string> {
   for (;;) {
     await sleep(interval * 1000);
     if (signal?.aborted) throw new Error('sign-in cancelled');
-    const t = JSON.parse(await post(LOGIN + 'oauth/access_token', { client_id: CLIENT_ID, device_code: a.device_code, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' }));
+    const t = JSON.parse(await post(LOGIN + 'oauth/access_token', { client_id: CLIENT_ID, device_code: deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' }));
     if (t.access_token) return t.access_token;
     if (t.error === 'slow_down') interval += 5;
     else if (t.error !== 'authorization_pending') throw new Error(t.error_description ?? t.error ?? 'sign-in failed');
   }
+}
+
+/**
+ * Device flow: ask for a code, hand it to the user (onCode), poll until they authorize in the browser.
+ * `post` does the two github.com POSTs (no CORS there, so the desktop side runs them). Resolves to the token.
+ */
+export async function deviceLogin(post: Post, onCode: (code: string, url: string) => void, signal?: AbortSignal, sleep?: (ms: number) => Promise<unknown>): Promise<string> {
+  const a = await requestCode(post);
+  onCode(a.user_code, a.verification_uri);
+  return pollToken(post, a.device_code, a.interval, signal, sleep);
+}
+
+// ---- a phone set up from the Mac: one QR, install to signed in -------------------
+/** The page the QR opens on the phone (docs/android/): install the app, then hand it the code. */
+export const PHONE_PAGE = 'https://happy-nut.github.io/eve/android/';
+
+/** The QR's link. The codes ride in the fragment, which never leaves the phone's browser. */
+export const phoneLink = (c: Pick<DeviceCode, 'device_code' | 'user_code'>) =>
+  `${PHONE_PAGE}#c=${encodeURIComponent(c.device_code)}&u=${encodeURIComponent(c.user_code)}`;
+
+/** `eve://connect?c=…&u=…` (what the page opens the app with) -> the codes. Null for anything else. */
+export function parseConnect(url: string): { device_code: string; user_code: string } | null {
+  const m = /^eve:\/\/connect\?(.*)$/.exec(url);
+  if (!m) return null;
+  const q = new URLSearchParams(m[1]);
+  const c = q.get('c'), u = q.get('u');
+  return c && /^[\w-]+$/.test(c) ? { device_code: c, user_code: u ?? '' } : null;
 }
 
 /** Who the token belongs to, and their private notes repo (created if missing). */

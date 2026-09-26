@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isMobile } from './lib/platform';
   import { flip } from 'svelte/animate';
   import { fade, slide, scale } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
@@ -408,6 +409,7 @@
   async function openNote(n: Note) {
     ui.focusOwner = 'editor';
     notes.currentId = n.id;
+    if (isMobile) open = false; // a phone shows the list or the note, never both
     await tick();
     document.querySelector<HTMLElement>('.tiptap')?.focus();
   }

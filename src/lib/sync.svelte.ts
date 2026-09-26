@@ -1,6 +1,6 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
-import { assets, github, openUrl, isTauri } from './platform';
-import { Repo, syncRound, blobSha, deviceLogin, ensureRepo, type LocalFile, type RemoteFile } from './github';
+import { assets, github, openUrl, isTauri, widget, copyText } from './platform';
+import { Repo, syncRound, blobSha, deviceLogin, ensureRepo, requestCode, pollToken, phoneLink, type LocalFile, type RemoteFile } from './github';
 
 /**
  * Sync through a private GitHub repository (see github.ts). Layout mirrors the local notes dir:
@@ -32,6 +32,7 @@ class Sync {
     if (patch.repo !== undefined && patch.repo !== this.settings.repo) Object.assign(patch, { head: '', tree: '', known: {}, lastSynced: 0 });
     Object.assign(this.settings, patch);
     localStorage.setItem(LS, JSON.stringify(this.settings));
+    widget.account(this.settings.repo, this.settings.token);
   }
 
   get enabled() { return /^[\w.-]+\/[\w.-]+$/.test(this.settings.repo) && !!this.settings.token; }
@@ -59,9 +60,55 @@ class Sync {
       this.abort = undefined;
     }
   }
-  cancelLogin() { this.abort?.abort(); }
+  cancelLogin() { this.abort?.abort(); this.claiming = null; }
   /** re-open the device page (the browser tab may have been closed) */
   openLogin() { if (this.pending) void openUrl(this.pending.url); }
+  /**
+   * Mac: set up a phone. A fresh device code goes into a QR; the phone polls with it and gets a token of
+   * its own once the code is authorized on GitHub (opened here, code on the clipboard). The Mac's token
+   * never leaves the Mac, and the QR is spent after one sign-in or 15 minutes.
+   */
+  phone = $state<{ link: string; code: string; url: string; until: number } | null>(null);
+  private phoneTimer: ReturnType<typeof setTimeout> | undefined;
+  async phoneSetup() {
+    this.error = '';
+    try {
+      const c = await requestCode(github.post);
+      this.phone = { link: phoneLink(c), code: c.user_code, url: c.verification_uri, until: Date.now() + c.expires_in * 1000 };
+      clearTimeout(this.phoneTimer);
+      this.phoneTimer = setTimeout(() => (this.phone = null), c.expires_in * 1000);
+      void copyText(c.user_code);
+      void openUrl(c.verification_uri);
+    } catch (e) {
+      this.error = e instanceof Error ? e.message : String(e);
+    }
+  }
+  openPhonePage() { if (this.phone) void openUrl(this.phone.url); }
+  phoneDone() { clearTimeout(this.phoneTimer); this.phone = null; }
+
+  /** Phone: the code the Mac's QR carried, waiting for it to be authorized on GitHub. */
+  claiming = $state<string | null>(null);
+  async claim(deviceCode: string, userCode: string) {
+    if (this.abort) this.abort.abort(); // a QR wins over a sign-in already under way
+    const abort = (this.abort = new AbortController());
+    this.claiming = userCode || '…';
+    this.error = '';
+    try {
+      const token = await pollToken(github.post, deviceCode, 5, abort.signal);
+      const { user, repo } = await ensureRepo(token);
+      this.save({ token, user, repo });
+      this.claiming = null;
+      await this.now();
+    } catch (e) {
+      if (abort.signal.aborted) return; // cancelled, or replaced by a newer QR (which set its own state)
+      this.claiming = null;
+      this.status = 'error';
+      this.error = e instanceof Error ? e.message : String(e);
+    } finally {
+      if (this.abort === abort) this.abort = undefined;
+    }
+  }
+
   /** Forget the token (it stays valid on GitHub until revoked at github.com/settings/applications). */
   logout() {
     this.save({ token: '', user: '', repo: '' });
@@ -114,9 +161,12 @@ class Sync {
   }
 
   start() {
+    widget.account(this.settings.repo, this.settings.token); // a sign-in from before the widget existed
     $effect(() => { notes.dirty; this.schedule(); });
     const iv = setInterval(() => this.now(), 60_000);
     window.addEventListener('focus', () => this.now());
+    // a phone: back from the background pulls, and leaving pushes before the OS may kill the app
+    document.addEventListener('visibilitychange', () => { if (document.hidden) notes.flushAll(); void this.now(); });
     return () => clearInterval(iv);
   }
 }

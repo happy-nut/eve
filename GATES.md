@@ -326,3 +326,108 @@
   ("내일"); ↓ moved a week on, which carried the calendar to 2026년 10월 with 2 highlighted
   ("2026.10.02"); ↩ left the note holding "마감 @2026-10-02" and the chip reading 2026.10.02, and the
   calendar closed. A query that names no day (`@sarah`) closes it instead.
+
+# GATES — Android build that syncs (2026-09-26)
+
+- [x] G94 Frontend type-checks and builds
+  CHECK: npm run check && npm run build
+  EXPECT: built in
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS 0 WARNINGS" / "✓ built in 658ms"
+- [x] G95 Nothing else regressed
+  CHECK: npm test 2>&1 | grep -c "_OK"
+  EXPECT: 7
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "7"
+- [x] G96 Desktop still compiles without curl/open for sign-in, with the hotkey plugins desktop-only
+  CHECK: cd src-tauri && cargo check 2>&1 | tail -1
+  EXPECT: Finished
+  EVIDENCE: zsh, ~/repos/eve/src-tauri, exit 0, "Finished `dev` profile"; cargo test 2 passed
+- [x] G97 Android APK builds (aarch64)
+  CHECK: npm run tauri -- android build --apk --target aarch64 --debug 2>&1 | tail -3
+  EXPECT: \.apk
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "Finished 1 APK at: …/app-universal-debug.apk"
+- [x] G98 On an Android emulator: app launches, device-flow code appears and GitHub opens, a note made on
+  the phone lands in eve-notes and a note from the repo shows up on the phone
+  PARTIAL: Pixel 7 emulator, Android 15 (API 35). Launched clear of the status bar; the list fills the
+  screen and tapping a note opens it; typing "Hello from Android" wrote notes/<id>.md in the app's data
+  dir (read back with run-as). Sign in with GitHub showed device code 337F-3D4A and opened Chrome on
+  github.com/login/device, so ureq's POST and the opener plugin both work. Authorizing needs the owner's
+  GitHub account, so the round trip through eve-notes is still open. Closed by G102.
+
+# GATES — home-screen widget, back button, sync that holds on Android (2026-09-26)
+
+- [x] G99 Pulled pictures and files can be written on Android (its IPC sends bytes as a JSON array)
+  EVIDENCE: manual, emulator via the WebView devtools socket: before the fix `write_asset` threw
+  "expected raw bytes" — one picture in eve-notes would have failed every sync round on the phone.
+  raw_body now takes both shapes; the same page also reported isSecureContext true, crypto.subtle
+  present, and a 200 from api.github.com (CORS open), which the sync engine needs.
+- [x] G100 The widget lists the newest notes, + writes a new one, a row opens that note, and it redraws
+  on the way back home
+  EVIDENCE: manual, Pixel 7 emulator, Android 15. Added from the launcher's widget sheet ("Eve notes",
+  4×3). + opened a new note with the caret in it and the keyboard up (mInputShown=true); typed
+  "Groceries / milk and eggs", back, back, and the widget listed "Groceries — milk and eggs". Tapping
+  that row opened it with the keyboard up; appending " and bread" and pressing Home left the widget
+  reading "milk and eggs and bread". (First version used a RemoteViewsService; the launcher dropped
+  notifyAppWidgetViewDataChanged while Eve was in front, so the widget now hands the system the whole
+  list — RemoteCollectionItems — which it keeps until the home screen is back.)
+- [x] G101 Android back: a note goes back to the list, the list leaves the app
+  EVIDENCE: manual, emulator: in a note, BACK (after the keyboard's own) showed the list; BACK again
+  left for the launcher (topResumedActivity = NexusLauncherActivity).
+- [x] G102 Real round trip through the owner's eve-notes: a note from the Mac appears on the phone (and in
+  the widget), a note written on the phone appears on the Mac
+  EVIDENCE: manual, emulator signed in as happy-nut (device flow, owner entered the code). First sync
+  pulled all of happy-nut/eve-notes: 45 notes + 17 assets on the phone, `known` = 63 = the repo's blob
+  count. Widget + → "Eve Android sync test / written on the phone" → Home: commit "eve: 1 file" landed
+  with notes/mui489734mlk09.md holding that text. That one file edited through the contents API
+  ("and edited from the Mac side"); opening Eve from the widget pulled it and the widget read it, "just
+  now". First sync took ~1–2 min (assets cross Android's IPC as JSON number arrays); later ones are
+  incremental.
+
+# GATES — background pull, pinned-note widget, markdown in the widget (2026-09-26)
+
+- [x] G103 Frontend type-checks, builds, and nothing regressed; desktop Rust compiles
+  CHECK: npm run check && npm run build && npm test 2>&1 | grep -c "_OK"
+  EXPECT: ^7$
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS 0 WARNINGS" / "✓ built in" / "7"; cargo check "Finished"
+- [x] G104 The background pull is scheduled by the app itself, and brings a remote edit down while Eve is
+  not running
+  EVIDENCE: manual, emulator. Job cancelled + app force-stopped → cold start → `cmd jobscheduler
+  get-job-state dev.happynut.eve 1` = "waiting" (first try failed: a connectivity-constrained job needs
+  ACCESS_NETWORK_STATE, and the page could run before the activity injected window.EveAndroid — the
+  bridge is now looked up per call). Then Home, `am kill` (pidof empty), the test note edited through the
+  contents API, `cmd jobscheduler run -f … 1`: notes/mui489734mlk09.md on the phone held the new text and
+  the widget showed it, with no Eve process started by hand.
+- [x] G105 The widget renders markdown and uses smaller type
+  EVIDENCE: manual, widget screenshot: `- [x]` as ☑ struck through and dimmed, `- [ ]` as a blue ☐,
+  **bold** bold, `code` monospace on a grey chip, ~~strike~~ struck, [[links]] in the accent blue, a
+  `> [!💡]` callout as its emoji, a ```kanban fence as "📋 To do 2 · Done 1". Card title 13sp, preview
+  12sp, time 11sp (were 15/13/12); in the list's previews a heading is bold, not bigger.
+- [x] G106 A widget can be pinned to one note, chosen when added and changed from a long-press
+  EVIDENCE: manual, emulator: long-press → the launcher's pencil ("Tap to change widget settings") opened
+  "Show in this widget" with Newest notes checked and every note below; picking "Eve Android sync test"
+  turned the widget into that note — its icon and title in the header, the body line by line under it.
+  Tapping a line with Eve killed opened that note with the keyboard up (cold start). The ↻ button
+  scheduled the one-off pull (job 2: active, then gone).
+
+# GATES — one QR from the Mac: install to signed in; signed release APK (2026-09-26)
+
+- [x] G107 Device flow split so a phone can finish a sign-in the Mac started; QR link and app link agree
+  CHECK: node --experimental-strip-types --no-warnings src/lib/github.test.mjs
+  EXPECT: SYNC_OK
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "SYNC_OK" — pollToken rejects expired_token instead of hanging,
+  phoneLink → parseConnect round-trips the codes, `../../x` and a non-eve:// URL are refused.
+- [x] G108 The QR the Mac draws decodes to the phone-setup link
+  EVIDENCE: jsQR 1.4.0 on uqr's matrix for a phoneLink(...) → "QR_OK" (decoded string === link). The
+  panel itself seen in `npm run dev` (Settings → Sync & app → Android phone): QR, the user code, two steps.
+- [x] G109 Signed release APK
+  EVIDENCE: `tauri android build --apk --target aarch64` → app-universal-release.apk, 13.3 MB;
+  apksigner: "Signer #1 certificate DN: CN=Eve, O=happynut", SHA-256 a8f3b476…e0be7d2; versionCode 6006.
+  Key: ~/.eve-android/eve-release.jks (PKCS12, RSA 4096), password in the login Keychain
+  (service eve-android-keystore); gradle reads src-tauri/gen/android/keystore.properties (gitignored).
+- [x] G110 The setup page opens the installed app with the code, and the app waits for the Mac
+  EVIDENCE: manual, emulator with the release APK freshly installed (no data): docs/ served locally, the
+  page showed both steps and the code 4449-8E26; "Open Eve and connect" → intent:// → Eve came to the
+  front on Settings → Sync showing "Waiting for your Mac…" and 4449-8E26 (read with uiautomator). This is
+  the minified build, so the ProGuard keep rule for window.EveAndroid holds.
+- [ ] G111 Authorizing that code on the Mac signs the phone in and syncs, with no typing on the phone
+- [ ] G112 A tagged release carries Eve-android.apk, and the published page serves at
+  https://happy-nut.github.io/eve/android/

@@ -169,6 +169,9 @@ class NotesStore {
     this.timers.set(id, setTimeout(() => this.flush(id), 300));
   }
 
+  /** write every edit still waiting on its debounce (the app is going to the background) */
+  flushAll() { for (const id of [...this.timers.keys()]) this.flush(id); }
+
   flush(id: string) {
     const n = this.all.find((x) => x.id === id);
     if (!n) return;

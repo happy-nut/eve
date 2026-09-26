@@ -1,4 +1,6 @@
-# Tag v* -> build Eve.app on an Apple-silicon runner -> GitHub release with Eve-macos-arm64.zip.
+# Tag v* -> build Eve.app on an Apple-silicon runner -> GitHub release with Eve-macos-arm64.zip,
+# then the signed Android APK is attached to that release as Eve-android.apk (the phone-setup page,
+# docs/android/, downloads releases/latest/download/Eve-android.apk).
 # The Homebrew cask (happy-nut/homebrew-tap) points at releases/latest, so nothing else to update.
 name: release
 on:
@@ -20,5 +22,38 @@ jobs:
       - run: npm run bundle
       - run: ditto -c -k --keepParent src-tauri/target/release/bundle/macos/Eve.app Eve-macos-arm64.zip
       - run: gh release create "$GITHUB_REF_NAME" Eve-macos-arm64.zip --title "Eve $GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  android:
+    needs: build # the release exists before the APK is attached to it
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - run: npm ci
+      # the release key: ANDROID_KEYSTORE = base64 of the .jks, ANDROID_KEYSTORE_PASSWORD = its password
+      - run: |
+          echo "$ANDROID_KEYSTORE" | base64 -d > "$RUNNER_TEMP/eve-release.jks"
+          printf 'storeFile=%s\npassword=%s\nkeyAlias=eve\n' "$RUNNER_TEMP/eve-release.jks" "$ANDROID_KEYSTORE_PASSWORD" > src-tauri/gen/android/keystore.properties
+        env:
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      - run: npm run tauri -- android build --apk --target aarch64
+        env:
+          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+      - run: |
+          cp src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk Eve-android.apk
+          gh release upload "$GITHUB_REF_NAME" Eve-android.apk
         env:
           GH_TOKEN: ${{ github.token }}
