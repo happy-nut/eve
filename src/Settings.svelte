@@ -169,7 +169,13 @@
     {:else}
       <h3>GitHub sync</h3>
       <div class="card">
-        {#if sync.settings.token}
+        {#if sync.claiming}
+          <div class="device">
+            <p class="sub">Waiting for your Mac. Authorize this code on GitHub there, and Eve signs in here by itself.</p>
+            <p class="devicecode">{sync.claiming}</p>
+            <div class="actions"><button class="btn" onclick={() => sync.cancelLogin()}>Cancel</button></div>
+          </div>
+        {:else if sync.settings.token}
           <div class="row">
             <span class="label">@{sync.settings.user}
               <span class="sub">private repository <span class="mono">{sync.settings.repo}</span></span></span>
@@ -181,12 +187,6 @@
             <button class="btn primary" onclick={() => sync.now()} disabled={sync.status === 'syncing'}>Sync now</button>
           </div>
           {#if sync.status === 'error'}<p class="alert">{sync.error}</p>{/if}
-        {:else if sync.claiming}
-          <div class="device">
-            <p class="sub">Waiting for your Mac. Authorize this code on GitHub there, and Eve signs in here by itself.</p>
-            <p class="devicecode">{sync.claiming}</p>
-            <div class="actions"><button class="btn" onclick={() => sync.cancelLogin()}>Cancel</button></div>
-          </div>
         {:else if sync.pending}
           <div class="device">
             <p class="sub">Enter this code on the GitHub page that just opened, then authorize Eve.</p>
@@ -215,7 +215,7 @@
             <div class="qr">{@html renderSVG(sync.phone.link, { border: 2, whiteColor: '#fff', blackColor: '#111318' })}</div>
             <ol>
               <li>On the GitHub page that just opened, paste <b class="mono">{sync.phone.code}</b> (it is on the clipboard) and authorize Eve.</li>
-              <li>Scan the code with the phone's camera. Install Eve, then tap <b>Connect</b> — the phone signs in and syncs by itself.</li>
+              <li>Scan it with the phone's camera. Without Eve it downloads the app — install it and scan once more: the phone signs in and syncs by itself.</li>
             </ol>
           </div>
           <div class="actions pad">

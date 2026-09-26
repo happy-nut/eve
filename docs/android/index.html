@@ -8,101 +8,76 @@
 <link rel="icon" href="../icon.svg">
 <style>
   /* the app's EVE palette: shell white, soft gray, visor ink, eye blue */
-  :root {
-    --fg: #33363d; --dim: #7c8089; --bg: #f2f3f5; --card: #fff; --line: rgba(17, 19, 24, .09);
-    --accent: #1e9bff; --on-accent: #fff; color-scheme: light dark;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --fg: #d3d6dc; --dim: #8b909a; --bg: #0b0c10; --card: #16181d; --line: rgba(255, 255, 255, .09); --accent: #3fc1ff; --on-accent: #0b0c10; }
-  }
-  * { box-sizing: border-box; }
+  :root { --fg: #33363d; --dim: #7c8089; --bg: #f2f3f5; --accent: #1e9bff; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #d3d6dc; --dim: #8b909a; --bg: #0b0c10; --accent: #3fc1ff; } }
   body {
     margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
     font: 16px/1.5 -apple-system, BlinkMacSystemFont, Roboto, 'Noto Sans KR', system-ui, sans-serif;
-    display: flex; justify-content: center; padding: max(32px, env(safe-area-inset-top)) 16px 32px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px 16px;
+    text-align: center;
   }
-  main { width: 100%; max-width: 440px; }
-  header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
-  header img { width: 48px; height: 48px; border-radius: 12px; }
-  h1 { font-size: 22px; margin: 0; }
-  header p { margin: 0; color: var(--dim); font-size: 14px; }
-  .step { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; margin-bottom: 12px; }
-  .step h2 { font-size: 15px; margin: 0 0 6px; display: flex; gap: 10px; align-items: center; }
-  .num {
-    flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--on-accent);
-    font-size: 13px; display: inline-flex; align-items: center; justify-content: center;
-  }
-  .step p { margin: 0 0 14px; color: var(--dim); font-size: 14px; }
-  a.btn {
-    display: block; text-align: center; text-decoration: none; font-weight: 600; font-size: 16px;
-    padding: 14px; border-radius: 12px; background: var(--accent); color: var(--on-accent);
-  }
-  a.btn.quiet { background: transparent; color: var(--accent); border: 1px solid var(--line); }
-  .code { font: 600 22px/1 ui-monospace, 'Roboto Mono', monospace; letter-spacing: .12em; color: var(--fg); }
-  .note { color: var(--dim); font-size: 13px; margin-top: 18px; }
+  img { width: 72px; height: 72px; border-radius: 16px; }
+  p { margin: 0; max-width: 340px; }
+  .dim { color: var(--dim); font-size: 14px; }
+  a { color: var(--accent); font-weight: 600; text-decoration: none; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <img src="../icon.svg" alt="">
-    <div><h1>Eve</h1><p data-t="tagline">Markdown notes, synced with your Mac</p></div>
-  </header>
-
-  <section class="step">
-    <h2><span class="num">1</span><span data-t="s1">Install Eve</span></h2>
-    <p data-t="s1p">Android asks once to allow installs from this browser — allow it, then install.</p>
-    <a class="btn" id="apk" href="https://github.com/happy-nut/eve/releases/latest/download/Eve-android.apk" data-t="s1b">Download Eve for Android</a>
-  </section>
-
-  <section class="step" id="connect-step">
-    <h2><span class="num">2</span><span data-t="s2">Connect to GitHub</span></h2>
-    <p data-t="s2p">Opens Eve with the code from your Mac. Once the code is authorized on GitHub there, the phone signs in and syncs by itself.</p>
-    <p class="code" id="code"></p>
-    <a class="btn" id="connect" href="#" data-t="s2b">Open Eve and connect</a>
-  </section>
-
-  <section class="step" id="no-code" hidden>
-    <h2><span class="num">2</span><span data-t="s2">Connect to GitHub</span></h2>
-    <p data-t="nocode">On your Mac: Eve → Settings → Sync &amp; app → Android phone → Show QR, then scan it with this phone.</p>
-  </section>
-
-  <p class="note" id="not-android" hidden data-t="desktop">Open this page on your Android phone — scan the QR in Eve's settings with its camera.</p>
-</main>
+  <img src="../icon.svg" alt="">
+  <p id="msg" data-t="opening">Opening Eve…</p>
+  <p class="dim" id="hint" hidden data-t="hint">Nothing happened? <a id="retry" href="#">Open Eve</a> · <a id="apk" href="#">Download</a></p>
 <script>
-  // The codes ride in the fragment (#c=…&u=…), which the browser never sends to this server.
+  // One QR, scanned twice: without Eve this starts the APK download; with Eve installed it opens
+  // Eve with the Mac's sign-in code (#c=…&u=…, the fragment never leaves the phone).
   const q = new URLSearchParams(location.hash.slice(1));
   const c = q.get('c'), u = q.get('u') || '';
-  const ok = c && /^[\w-]+$/.test(c);
   const android = /Android/i.test(navigator.userAgent);
+  const LATEST = 'https://github.com/happy-nut/eve/releases/latest/download/Eve-android.apk';
 
   const ko = {
-    tagline: 'Mac과 동기화되는 마크다운 노트',
-    s1: 'Eve 설치', s1p: '처음 한 번, 이 브라우저에서 앱 설치를 허용할지 물어봅니다. 허용한 뒤 설치하세요.',
-    s1b: 'Android용 Eve 받기',
-    s2: 'GitHub 연결', s2p: 'Mac이 준 코드로 Eve를 엽니다. Mac에서 GitHub에 이 코드를 승인하면 폰이 스스로 로그인하고 동기화합니다.',
-    s2b: 'Eve 열고 연결하기',
-    nocode: 'Mac에서: Eve → 설정 → Sync & app → Android phone → Show QR, 그리고 이 폰으로 QR을 찍으세요.',
-    desktop: '이 페이지는 Android 폰에서 여세요 — Eve 설정의 QR을 폰 카메라로 찍으면 됩니다.',
+    opening: 'Eve 여는 중…', hint: '', desktop: '이 링크는 Android 폰에서 여세요 — Mac의 Eve 설정에 있는 QR을 폰 카메라로 찍으면 됩니다.',
+    downloading: 'Eve를 내려받고 있어요. 설치한 뒤 Mac의 QR을 한 번 더 찍으면 GitHub 연결까지 끝납니다.',
   };
+  const en = {
+    desktop: "Open this on your Android phone — scan the QR in Eve's settings on your Mac with its camera.",
+    downloading: 'Downloading Eve. Install it, then scan the QR on your Mac once more to finish the GitHub sign-in.',
+  };
+  const t = (k) => (/^ko/i.test(navigator.language) && ko[k]) || en[k];
   if (/^ko/i.test(navigator.language)) {
     document.documentElement.lang = 'ko';
-    for (const el of document.querySelectorAll('[data-t]')) if (ko[el.dataset.t]) el.textContent = ko[el.dataset.t];
+    document.getElementById('msg').textContent = ko.opening;
+    document.getElementById('hint').innerHTML = '안 열리나요? <a id="retry" href="#">Eve 열기</a> · <a id="apk" href="#">내려받기</a>';
   }
 
-  if (ok) {
-    const query = `c=${encodeURIComponent(c)}&u=${encodeURIComponent(u)}`;
-    // Chrome opens intent:// links straight into the app (and says so if it is not installed yet)
-    document.getElementById('connect').href = android
-      ? `intent://connect?${query}#Intent;scheme=eve;package=dev.happynut.eve;end`
-      : `eve://connect?${query}`;
-    document.getElementById('code').textContent = u;
-  } else {
-    document.getElementById('connect-step').hidden = true;
-    document.getElementById('no-code').hidden = false;
+  /** The newest published release that carries the APK (a prerelease counts; a draft cannot be downloaded). */
+  async function apkUrl() {
+    try {
+      const rs = await (await fetch('https://api.github.com/repos/happy-nut/eve/releases?per_page=10')).json();
+      for (const r of rs) {
+        const a = !r.draft && r.assets?.find((x) => x.name === 'Eve-android.apk');
+        if (a) return a.browser_download_url;
+      }
+    } catch { /* offline or rate-limited: the latest release's link */ }
+    return LATEST;
   }
-  document.getElementById('not-android').hidden = android;
+
+  (async () => {
+    if (!android) return (document.getElementById('msg').textContent = t('desktop'));
+    const apk = await apkUrl();
+    document.getElementById('apk').href = apk;
+    const code = c && /^[\w-]+$/.test(c) ? `c=${encodeURIComponent(c)}&u=${encodeURIComponent(u)}` : '';
+    // Chrome opens the installed app straight away; without it, it follows the fallback: the APK
+    const intent = `intent://connect${code ? '?' + code : ''}#Intent;scheme=eve;package=dev.happynut.eve;` +
+      `S.browser_fallback_url=${encodeURIComponent(apk)};end`;
+    document.getElementById('retry').href = intent;
+    location.replace(intent);
+    // still here after a moment: the browser went for the download (or blocked the hand-off)
+    setTimeout(() => {
+      document.getElementById('msg').textContent = t('downloading');
+      document.getElementById('hint').hidden = false;
+    }, 1500);
+  })();
 </script>
 </body>
 </html>

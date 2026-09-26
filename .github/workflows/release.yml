@@ -49,9 +49,8 @@ jobs:
         env:
           ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      - run: npm run tauri -- android build --apk --target aarch64
-        env:
-          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+      # the runner's own NDK: a shell variable, not something the `env` context can see
+      - run: NDK_HOME="$ANDROID_NDK_LATEST_HOME" npm run tauri -- android build --apk --target aarch64
       - run: |
           cp src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk Eve-android.apk
           gh release upload "$GITHUB_REF_NAME" Eve-android.apk
