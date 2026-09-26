@@ -5,13 +5,14 @@ import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.os.Bundle
 import android.widget.ArrayAdapter
+import android.widget.Button
 import android.widget.ListView
 import android.widget.TextView
 import dev.happynut.eve.R
 
 /**
- * What a widget shows, asked when it is added and again from its long-press "Widget settings":
- * the newest notes, or one note pinned for good.
+ * What a widget shows, from its long-press "Widget settings" (Android 12+ adds the widget straight
+ * away as the newest notes): the newest notes, or one note pinned for good.
  */
 class PickNoteActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,9 +32,12 @@ class PickNoteActivity : Activity() {
     val list = findViewById<ListView>(R.id.pick_list)
     list.adapter = ArrayAdapter(this, R.layout.widget_pick_row, labels)
     list.choiceMode = ListView.CHOICE_MODE_SINGLE
-    list.setItemChecked(if (current == null) 0 else notes.indexOfFirst { it.id == current } + 1, true)
-    list.setOnItemClickListener { _, _, pos, _ ->
-      NotesWidget.pin(this, widgetId, if (pos == 0) null else notes[pos - 1].id)
+    list.setItemChecked(if (current == null) 0 else maxOf(0, notes.indexOfFirst { it.id == current } + 1), true)
+    // a tap only selects; OK applies it, Cancel (or back) leaves the widget as it was
+    findViewById<Button>(R.id.pick_cancel).setOnClickListener { finish() }
+    findViewById<Button>(R.id.pick_ok).setOnClickListener {
+      val pos = list.checkedItemPosition
+      NotesWidget.pin(this, widgetId, if (pos <= 0) null else notes[pos - 1].id)
       NotesWidget.refresh(this)
       setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
       finish()

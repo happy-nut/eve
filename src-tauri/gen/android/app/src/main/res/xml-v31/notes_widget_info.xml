@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+: added straight away as the newest notes; a long-press -> the pencil pins a note -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/widget_notes"
     android:previewLayout="@layout/widget_notes"
@@ -11,4 +12,6 @@
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen"
+    android:configure="dev.happynut.eve.widget.PickNoteActivity"
+    android:widgetFeatures="reconfigurable|configuration_optional"
     android:description="@string/widget_name" />

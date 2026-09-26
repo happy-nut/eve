@@ -481,3 +481,11 @@
   EVIDENCE: manual, emulator (release APK): after "Sign in with GitHub" Eve stayed in front
   (topResumed = dev.happynut.eve), the system clipboard chip read CD15-79B7, the text says to
   long-press the first box → Paste on GitHub, and "Copy code & open GitHub" is the primary button.
+
+# GATES — the widget lands as the newest notes; pinning is a choice made later (2026-09-26)
+
+- [x] G120 Adding the widget asks nothing (Android 12+), and the picker applies only on OK
+  EVIDENCE: manual, emulator (Android 15, release APK): Widgets → Eve → Add put the widget straight on
+  the home screen in newest-notes mode, no picker. Long-press → the pencil opened "Show in this widget"
+  with Newest notes checked and CANCEL / OK buttons (a tap on a row now only selects). Before Android 12
+  there is no configure step at all (xml/ vs xml-v31/), since nothing could reopen it there.
