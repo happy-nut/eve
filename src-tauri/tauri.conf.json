@@ -23,6 +23,7 @@
         "hiddenTitle": true,
         "alwaysOnTop": false,
         "dragDropEnabled": false,
+        "acceptFirstMouse": true,
         "transparent": true,
         "shadow": true,
         "trafficLightPosition": {
