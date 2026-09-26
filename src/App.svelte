@@ -13,6 +13,7 @@
   import Settings from './Settings.svelte';
   import Confirm from './Confirm.svelte';
 import CardPage from './CardPage.svelte';
+  import MobileBar from './MobileBar.svelte';
   import EmojiPicker from './EmojiPicker.svelte';
   import LinkChoice from './LinkChoice.svelte';
   import Tooltip from './Tooltip.svelte';
@@ -131,6 +132,14 @@ import CardPage from './CardPage.svelte';
     const i = list.findIndex((n) => n.id === notes.currentId);
     const next = list[(i + delta + list.length) % list.length];
     if (next) notes.currentId = next.id;
+  }
+
+  /** A phone's +: a new note, open, keyboard up. */
+  function newOnPhone() {
+    ui.focusOwner = 'editor';
+    notes.create();
+    sidebarOpen = false;
+    widget.keyboard();
   }
 
   /** ⌘\\: closed -> open + focus list; focus already in list -> close + back to editor; else focus list. */
@@ -286,7 +295,18 @@ import CardPage from './CardPage.svelte';
       <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
     </button>
   </div>
-  <Sidebar bind:open={sidebarOpen} bind:searchEl {cmdHeld} onSettings={() => (settingsOpen = true)} />
+  {#if isMobile && !sidebarOpen}
+    <!-- a phone: the note's own bar, back to the list on the left, a new note on the right -->
+    <header class="mhead">
+      <button class="mback" aria-label="Notes" onclick={() => (sidebarOpen = true)}>
+        <svg viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg><span>Notes</span>
+      </button>
+      <button class="mplus" aria-label="New note" onclick={newOnPhone}>
+        <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
+      </button>
+    </header>
+  {/if}
+  <Sidebar bind:open={sidebarOpen} bind:searchEl {cmdHeld} onSettings={() => (settingsOpen = true)} onNew={newOnPhone} />
   <main>
     {#if notes.loaded && notes.current}
       {#key notes.currentId}
@@ -298,6 +318,9 @@ import CardPage from './CardPage.svelte';
   </main>
 </div>
 
+{#if isMobile && !sidebarOpen}
+  <MobileBar />
+{/if}
 {#if settingsOpen}
   <Settings onClose={() => (settingsOpen = false)} {hotkeyError} />
 {/if}

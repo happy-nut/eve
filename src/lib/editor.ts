@@ -139,6 +139,9 @@ function hopOutOfList(
   return true;
 }
 
+/** Run one editor action by id (the phone's formatting bar uses these; a keyboard uses applyKeymap). */
+export const runEditorCommand = (editor: Editor, id: string): boolean => editorCommands(editor)[id]?.() ?? false;
+
 /** Editor-scoped actions, by id. Rebindable at runtime (see applyKeymap). */
 function editorCommands(editor: Editor): Record<string, () => boolean> {
   const c = () => editor.chain().focus();

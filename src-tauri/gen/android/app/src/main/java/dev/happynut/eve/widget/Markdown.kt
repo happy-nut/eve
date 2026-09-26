@@ -120,7 +120,8 @@ class Markdown(
       "|!\\[([^\\]]*)\\]\\([^)]*\\)" +           // 7 image / video / file
       "|\\[\\[([^\\]|]+)(?:\\|([^\\]]*))?\\]\\]" + // 8 note link, 9 its label
       "|\\[([^\\]]+)\\]\\([^)]*\\)" +            // 10 link
-      "|(?<![\\w@])@(\\d{4}-\\d{2}-\\d{2})(?!\\d)" // 11 a day
+      "|(?<![\\w@])@(\\d{4}-\\d{2}-\\d{2})(?!\\d)" + // 11 a day
+      "|<((?:https?://|mailto:)[^>\\s]+)>"            // 12 an autolink
   )
 
   private fun inline(sb: SpannableStringBuilder, text: String) {
@@ -157,6 +158,10 @@ class Markdown(
         }
         g[10].isNotEmpty() -> {
           sb.append(g[10])
+          sb.setSpan(ForegroundColorSpan(accent), start, sb.length, EX)
+        }
+        g[12].isNotEmpty() -> {
+          sb.append(g[12].removePrefix("mailto:"))
           sb.setSpan(ForegroundColorSpan(accent), start, sb.length, EX)
         }
         g[11].isNotEmpty() -> {

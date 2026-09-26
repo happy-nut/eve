@@ -489,3 +489,23 @@
   the home screen in newest-notes mode, no picker. Long-press → the pencil opened "Show in this widget"
   with Newest notes checked and CANCEL / OK buttons (a tap on a row now only selects). Before Android 12
   there is no configure step at all (xml/ vs xml-v31/), since nothing could reopen it there.
+
+# GATES — a phone layout, not a shrunken desktop (2026-09-27)
+
+- [x] G121 The real Mac's Show QR signs a phone in end to end, and pinning applies only on OK
+  EVIDENCE: manual. Mac Eve (0.7.0 build) → Show QR (no browser opened); the QR, captured with
+  screencapture and decoded (jsQR), opened on the emulator like a scan: Eve came up signed in as
+  @happy-nut, "Synced at 07:41 AM", and the Mac turned to "✓ The phone is signed in." The widget then
+  filled with the notes; long-press → pencil → tapping "Personal TODO" only selected it, OK pinned it.
+- [x] G122 Phone layout: list, note, bar, settings, menu
+  EVIDENCE: manual, emulator (release APK): the list has a large "Eve" title, "Search" (no Ctrl+K),
+  44px rows, a + button; a note opens under a solid "‹ Notes  +" bar with no keyboard
+  (mInputShown=false) and no outline ticks; tapping the text brings the keyboard with the formatting bar
+  on top of it and the page no longer scrolls up under the status bar (MainActivity shrinks the content by
+  the IME inset); settings fill the screen; the long-press menu has finger-sized rows. The bar's buttons
+  checked in `npm run dev` (Android UA, 375 wide): To-do made a task list, Indent nested it (2 lists),
+  Outdent undid it (1), and the caret stayed in the note throughout.
+- [x] G123 Nothing else regressed
+  CHECK: npm run check && npm test 2>&1 | grep -c "_OK"
+  EXPECT: ^8$
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS" / "8"; cargo check "Finished".
