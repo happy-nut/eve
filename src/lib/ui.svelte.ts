@@ -88,4 +88,6 @@ export const hooks: {
   attach?: (markdown: string) => void;
   /** put the caret in the middle of the page (the window coming back, not an edit) */
   centerCaret?: () => void;
+  /** run an editor action by id on the open note (the phone's formatting bar) */
+  command?: (id: string) => void;
 } = {};

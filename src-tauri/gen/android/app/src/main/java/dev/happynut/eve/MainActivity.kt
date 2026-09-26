@@ -2,6 +2,9 @@ package dev.happynut.eve
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.webkit.JavascriptInterface
 import android.view.inputmethod.InputMethodManager
 import android.webkit.WebView
@@ -23,6 +26,14 @@ class MainActivity : TauriActivity() {
     enableEdgeToEdge()
     remember(intent)
     super.onCreate(savedInstanceState)
+    // Edge to edge, the keyboard no longer shrinks the window: the page would be scrolled up under the
+    // status bar to show the caret instead. Shrink the content by the keyboard's height ourselves; the
+    // status and navigation bars stay the page's to handle (CSS safe-area insets).
+    val content = findViewById<View>(android.R.id.content)
+    ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
+      v.setPadding(0, 0, 0, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
+      insets
+    }
   }
 
   override fun onWebViewCreate(webView: WebView) {

@@ -12,8 +12,8 @@
   import { importFromFinder, importFromFolder, exportNote, exportCurrent, type ExportAs } from './lib/transfer';
   import Icon from './Icon.svelte';
 
-  let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings }:
-    { open: boolean; searchEl: HTMLInputElement | null; cmdHeld?: boolean; onSettings: () => void } = $props();
+  let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings, onNew }:
+    { open: boolean; searchEl: HTMLInputElement | null; cmdHeld?: boolean; onSettings: () => void; onNew?: () => void } = $props();
   /** ⌘ held: 1…9 badges on the notes in the order shown */
   const jumpNumbers = $derived.by(() => {
     const m = new Map<string, number>();
@@ -409,7 +409,7 @@
   async function openNote(n: Note) {
     ui.focusOwner = 'editor';
     notes.currentId = n.id;
-    if (isMobile) open = false; // a phone shows the list or the note, never both
+    if (isMobile) { open = false; return; } // a phone shows the list or the note, never both — and opens it to read
     await tick();
     document.querySelector<HTMLElement>('.tiptap')?.focus();
   }
@@ -417,9 +417,10 @@
 
 {#if open}
   <aside transition:slide={{ axis: 'x', duration: 220, easing: cubicOut }}>
+    {#if isMobile}<h1 class="mtitle">Eve</h1>{/if}
     <div class="top" data-tauri-drag-region>
       <input bind:this={searchEl} bind:value={query} onkeydown={onSearchKey}
-        placeholder="Search  {prettyKeys(shortcuts.keysFor('search'))}" spellcheck="false" />
+        placeholder={isMobile ? 'Search' : `Search  ${prettyKeys(shortcuts.keysFor('search'))}`} spellcheck="false" />
       <div class="plus-wrap">
         {#if plusOpen}
           <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -522,6 +523,9 @@
       {/each}
     </ul>
 
+    {#if isMobile && onNew}
+      <button class="fab" aria-label="New note" onclick={onNew}><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
+    {/if}
     <footer>
       <span class="sync {sync.status}" title={sync.error || (sync.enabled ? 'Synced' : 'Sync off')}>
         {sync.enabled ? (sync.status === 'error' ? 'sync error' : sync.status === 'syncing' ? 'syncing…' : 'synced') : 'local only'}

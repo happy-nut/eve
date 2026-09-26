@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Editor as TipTap } from '@tiptap/core';
-  import { createEditor, applyKeymap, getMarkdown, goToSection } from './lib/editor';
+  import { createEditor, applyKeymap, getMarkdown, goToSection, runEditorCommand } from './lib/editor';
+  import { isMobile } from './lib/platform';
   import { notes, type Note } from './lib/notes.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
   import { ui, hooks } from './lib/ui.svelte';
@@ -57,6 +58,16 @@
     };
     // summoned back: the caret in the middle of the page, where it is comfortable to write from —
     // not pinned to whichever edge the last scroll into view left it against
+    hooks.command = (id) => {
+      if (!editor) return;
+      // Tab and Shift-Tab, for a keyboard that has neither: a to-do first, then a plain list item
+      if (id === 'indent' || id === 'outdent') {
+        const lift = id === 'indent' ? 'sinkListItem' : 'liftListItem';
+        if (!editor.chain().focus()[lift]('taskItem').run()) editor.chain().focus()[lift]('listItem').run();
+        return;
+      }
+      runEditorCommand(editor, id);
+    };
     hooks.centerCaret = () => {
       if (!editor || !scrollEl) return;
       const caret = editor.view.coordsAtPos(editor.state.selection.head);
@@ -72,10 +83,12 @@
       notes.selectTitle = false;
       editor.commands.setTextSelection({ from: 1, to: 1 + (editor.state.doc.firstChild?.content.size ?? 0) });
       editor.commands.focus();
-    } else if (ui.focusOwner !== 'sidebar') editor?.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
+    } else if (ui.focusOwner !== 'sidebar' && !isMobile) editor?.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
+    // (a phone opens a note to read it: the keyboard comes up when the text is tapped, not before)
     return () => {
       hooks.attach = undefined;
       hooks.centerCaret = undefined;
+      hooks.command = undefined;
       if (editor) notes.cursor.set(id, editor.state.selection.from);
       editor?.destroy();
       // Svelte runs teardown with pre-update state visible, so a flush here would persist stale data

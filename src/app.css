@@ -73,9 +73,54 @@ button.icon:active { transform: scale(0.9); }
 html.mobile { --top: env(safe-area-inset-top, 0px); --bottom: env(safe-area-inset-bottom, 0px); }
 html.mobile, html.mobile body { background: var(--bg-side); }
 html.mobile #app { box-sizing: border-box; padding: var(--top) 0 var(--bottom); border-radius: 0; }
-html.mobile .toolbar { top: calc(var(--top) + 10px); left: 12px; }
-html.mobile .toolbar .pin { display: none; }
 html.mobile aside { position: fixed; inset: var(--top) 0 var(--bottom); width: auto; z-index: 5; }
+
+/* ---- a phone: touch-sized, no hover, no shortcuts --------------------------------------------- */
+/* the desktop toolbar (sidebar / back / forward / pin) gives way to a bar of the phone's own */
+html.mobile .toolbar, html.mobile main::before, html.mobile .outline, html.mobile .tip { display: none; }
+html.mobile .shell { position: relative; } /* the bars below place themselves inside the safe area */
+html.mobile .mhead {
+  position: absolute; top: 0; left: 0; right: 0; height: 52px; z-index: 6; display: flex; align-items: center;
+  justify-content: space-between; padding: 0 6px; background: var(--bg); border-bottom: 1px solid var(--line);
+}
+html.mobile .mhead button {
+  height: 44px; min-width: 44px; border: 0; background: none; color: var(--accent); font: inherit; font-size: 16px;
+  display: inline-flex; align-items: center; gap: 2px; padding: 0 8px; border-radius: 10px;
+}
+html.mobile .mhead button:active { background: var(--bg-active); }
+html.mobile .mhead svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+html.mobile .page { top: 52px; }
+/* the note: phone margins, room under the last line for the formatting bar */
+html.mobile .page-head { padding: 18px 20px 0 !important; }
+html.mobile .tiptap { padding-left: 20px !important; padding-right: 20px !important; padding-bottom: 160px !important; }
+/* the list: a title, then rows a thumb can hit */
+html.mobile aside .mtitle { margin: 0; padding: 18px 20px 6px; font-size: 28px; font-weight: 700; letter-spacing: -0.01em; color: var(--fg); }
+html.mobile aside .top { padding: 4px 16px 10px; }
+html.mobile aside .top input { font-size: 16px; padding: 10px 12px; border-radius: 10px; }
+html.mobile aside .tree { padding: 4px 10px 96px; }
+html.mobile aside [data-row] { min-height: 44px; font-size: 16px; }
+html.mobile aside .gname { font-size: 15px; min-height: 40px; }
+html.mobile aside .gname.static { font-size: 12px; min-height: 32px; }
+html.mobile aside .emoji { font-size: 17px; }
+html.mobile aside .ico-slot { width: 24px; height: 24px; }
+html.mobile aside .tools { display: none; } /* hover-only; a long-press opens the row's menu instead */
+html.mobile aside .fold { width: 36px; height: 36px; }
+html.mobile aside footer { padding: 8px 12px 10px 20px; font-size: 13px; }
+html.mobile aside footer .icon { width: 44px; height: 44px; }
+html.mobile aside .fab {
+  position: absolute; right: 20px; bottom: 72px; z-index: 2; width: 56px; height: 56px; border: 0; border-radius: 18px;
+  background: var(--accent); color: #fff; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+html.mobile aside .fab:active { transform: scale(0.96); }
+html.mobile aside .fab svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+/* a long-press menu: rows a finger can hit */
+html.mobile .menu button { min-height: 44px; font-size: 16px !important; padding-left: 12px !important; padding-right: 12px !important; }
+/* settings: a full screen of its own, not a floating panel */
+html.mobile .panel {
+  top: var(--top) !important; left: 0 !important; right: 0; bottom: var(--bottom); transform: none !important;
+  width: auto !important; max-height: none !important; border-radius: 0 !important;
+}
 main { flex: 1; min-width: 0; position: relative; }
 /* the toolbar floats over the note (and with the sidebar closed it sits right on the text): a fade to
    the page colour keeps lines from running into the icons as they scroll past */
