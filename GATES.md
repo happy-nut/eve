@@ -671,3 +671,8 @@
   EVIDENCE: emulator with one Eve widget: pin → toast "Widget now shows this note", no system dialog, the
   widget shows the note; pin again → "Widget shows the newest notes again", the list is back. With no
   widget, the launcher is asked to add one, as before. The note header's back is a chevron only.
+- [x] G154 The phone's list and settings read like Notion: one white page, grey captions, hairlines, no boxes
+  EVIDENCE: emulator screenshots (list, Sync & app, Appearance): white list with no counts or scrollbar,
+  dark round compose button; settings with underlined tabs, grey sentence-case captions, rows on hairlines,
+  outline buttons, plain selects, no grey band over the status bar. Every rule is under html.mobile, so the
+  Mac is untouched.
