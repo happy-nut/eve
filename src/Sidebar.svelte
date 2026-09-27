@@ -405,6 +405,47 @@
     if (e.key === 'Escape') { query = ''; searchEl?.blur(); e.preventDefault(); }
     if (e.key === 'Enter' && hits[0]) { notes.currentId = hits[0].id; searchEl?.blur(); e.preventDefault(); }
   }
+  /**
+   * On a phone the list is a drawer: it slides in from the left and out again, and a swipe to the left
+   * takes it away, following the finger (only when there is a note to go back to). The desktop keeps
+   * its sideways fold.
+   */
+  let pull = $state(0); // px the drawer is pulled left, while a finger holds it
+  let touch: { x: number; y: number; axis: '' | 'x' | 'y' } | null = null;
+  function drawer(node: HTMLElement) {
+    if (!isMobile) return slide(node, { axis: 'x', duration: 220, easing: cubicOut });
+    if (node.dataset.gone) return { duration: 0 }; // already swiped off-screen
+    return { duration: 240, easing: cubicOut, css: (t: number) => `transform: translateX(${(t - 1) * 100}%)` };
+  }
+  function pullStart(e: TouchEvent) {
+    if (!isMobile || !notes.current || e.touches.length !== 1) return;
+    if ((e.target as HTMLElement).closest('input, .fab, .menu, .plus-menu')) return;
+    touch = { x: e.touches[0].clientX, y: e.touches[0].clientY, axis: '' };
+  }
+  function pullMove(e: TouchEvent) {
+    if (!touch) return;
+    const dx = e.touches[0].clientX - touch.x, dy = e.touches[0].clientY - touch.y;
+    if (!touch.axis && Math.hypot(dx, dy) > 10) touch.axis = Math.abs(dx) > Math.abs(dy) * 1.4 && dx < 0 ? 'x' : 'y';
+    if (touch.axis === 'x') pull = Math.min(0, dx);
+  }
+  function pullEnd(e: TouchEvent) {
+    if (!touch) return;
+    const aside = (e.currentTarget as HTMLElement);
+    const far = pull < -Math.min(90, aside.offsetWidth * 0.25);
+    touch = null;
+    if (!far) { pull = 0; return; } // not far enough: it springs back (the inline style drops, the CSS eases it)
+    // the rest of the way out, from where the finger let go; then gone without a second animation
+    aside.style.transition = 'transform 0.18s ease-out';
+    aside.style.transform = 'translateX(-100%)';
+    aside.dataset.gone = '1';
+    pull = 0;
+    setTimeout(() => (open = false), 180);
+  }
+
+  const syncLabel = $derived(sync.enabled ? (sync.status === 'error' ? 'sync error' : sync.status === 'syncing' ? 'syncing…' : 'synced') : 'local only');
+  // a gear that reads as settings at a glance (the Lucide "settings" outline)
+  const GEAR = '<svg class="gear-i" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
+
   /** click or Enter on a note: open it and move into the editor */
   async function openNote(n: Note) {
     ui.focusOwner = 'editor';
@@ -416,8 +457,16 @@
 </script>
 
 {#if open}
-  <aside transition:slide={{ axis: 'x', duration: 220, easing: cubicOut }}>
-    {#if isMobile}<h1 class="mtitle">Eve</h1>{/if}
+  <aside transition:drawer style={pull ? `transform: translateX(${pull}px); transition: none` : undefined}
+    ontouchstart={pullStart} ontouchmove={pullMove} ontouchend={pullEnd} ontouchcancel={pullEnd}>
+    {#if isMobile}
+      <!-- a phone: the title, then sync and settings up here, so nothing sits over the bottom of the list -->
+      <div class="mtop">
+        <h1 class="mtitle">Eve</h1>
+        <span class="sync {sync.status}">{syncLabel}</span>
+        <button class="icon gear" aria-label="Settings" onclick={onSettings}>{@html GEAR}</button>
+      </div>
+    {/if}
     <div class="top" data-tauri-drag-region>
       <input bind:this={searchEl} bind:value={query} onkeydown={onSearchKey}
         placeholder={isMobile ? 'Search' : `Search  ${prettyKeys(shortcuts.keysFor('search'))}`} spellcheck="false" />
@@ -526,14 +575,16 @@
     {#if isMobile && onNew}
       <button class="fab" aria-label="New note" onclick={onNew}><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
     {/if}
+    {#if !isMobile}
     <footer>
       <span class="sync {sync.status}" title={sync.error || (sync.enabled ? 'Synced' : 'Sync off')}>
-        {sync.enabled ? (sync.status === 'error' ? 'sync error' : sync.status === 'syncing' ? 'syncing…' : 'synced') : 'local only'}
+        {syncLabel}
       </span>
       <button class="icon tip-up gear" aria-label="Settings" data-tip="Settings" data-keys={shortcuts.keysFor('settings')} onclick={onSettings}>
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/><circle cx="12" cy="12" r="7"/></svg>
+        <svg class="gear-i" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
     </footer>
+    {/if}
   </aside>
 {/if}
 
@@ -633,6 +684,7 @@
 
   .gear { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
   .gear svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
+  :global(.gear-i) { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   footer {
     display: flex; align-items: center; justify-content: space-between;
     padding: 6px 10px 8px 18px; font-size: 11.5px; color: var(--fg-dim); border-top: 1px solid var(--line);

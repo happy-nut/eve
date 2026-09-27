@@ -25,6 +25,19 @@ class NotesWidget : AppWidgetProvider() {
   companion object {
     const val EXTRA_OPEN = "dev.happynut.eve.OPEN"
     private const val ACTION_PULL = "dev.happynut.eve.PULL"
+    private const val ACTION_PINNED = "dev.happynut.eve.PINNED"
+    private const val EXTRA_NOTE = "dev.happynut.eve.NOTE"
+
+    /** Ask the launcher to add a widget showing one note; the new widget is pinned to it once placed. */
+    fun requestPin(context: Context, noteId: String): Boolean {
+      val mgr = AppWidgetManager.getInstance(context)
+      if (!mgr.isRequestPinAppWidgetSupported) return false
+      // the launcher adds EXTRA_APPWIDGET_ID to this before sending it, so it has to be mutable
+      val placed = PendingIntent.getBroadcast(context, noteId.hashCode(),
+        Intent(context, NotesWidget::class.java).setAction(ACTION_PINNED).putExtra(EXTRA_NOTE, noteId),
+        PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+      return mgr.requestPinAppWidget(ComponentName(context, NotesWidget::class.java), null, placed)
+    }
     /** the list widget shows this many of the newest notes */
     private const val MAX = 40
     private const val PREFS = "widgets"
@@ -125,6 +138,11 @@ class NotesWidget : AppWidgetProvider() {
   override fun onReceive(context: Context, intent: Intent) {
     super.onReceive(context, intent)
     if (intent.action == ACTION_PULL) PullJob.now(context)
+    if (intent.action == ACTION_PINNED) {
+      val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+      val note = intent.getStringExtra(EXTRA_NOTE)
+      if (id != AppWidgetManager.INVALID_APPWIDGET_ID && note != null) { pin(context, id, note); refresh(context) }
+    }
   }
 
   override fun onDeleted(context: Context, ids: IntArray) { for (id in ids) pin(context, id, null) }

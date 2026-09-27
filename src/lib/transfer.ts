@@ -1,6 +1,6 @@
 import { notes, titleOf, type Note } from './notes.svelte';
 import { groups, MAX_DEPTH } from './groups.svelte';
-import { files, importAsset, pickFiles, pickFolders, listFolder, pickSavePath, savePdf, savePng } from './platform';
+import { files, importAsset, pickFiles, pickFolders, listFolder, pickSavePath, savePdf, savePng, isMobile, widget } from './platform';
 import { TEXT_FILE, DOC_FILE, VIDEO_FILE } from './drop';
 import { commonDir, dirOf, groupFor, nameOf, stem } from './paths';
 import { ui } from './ui.svelte';
@@ -70,6 +70,11 @@ export type ExportAs = 'md' | 'pdf' | 'png';
  * the picture being that page rasterised.
  */
 export async function exportNote(note: Note, as: ExportAs): Promise<string | null> {
+  // a phone has no save panel: the note goes to the share sheet (Files, Drive, a chat…)
+  if (isMobile) {
+    if (!(await widget.export(as, titleOf(note), note.body))) throw new Error(`Could not export this note as ${as.toUpperCase()}.`);
+    return titleOf(note);
+  }
   const path = await pickSavePath(titleOf(note), as);
   if (!path) return null;
   if (as === 'md') await files.write(path, note.body);

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the picker's mark: the app's check in the eye blue when chosen, nothing otherwise (no platform radio) -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true">
+        <vector android:width="22dp" android:height="22dp" android:viewportWidth="16" android:viewportHeight="16">
+            <path android:pathData="M3.5,8.5l3,3l6,-7" android:strokeColor="@color/widget_accent" android:strokeWidth="1.8"
+                android:strokeLineCap="round" android:strokeLineJoin="round" />
+        </vector>
+    </item>
+    <item>
+        <shape android:shape="rectangle"><size android:width="22dp" android:height="22dp" /><solid android:color="@android:color/transparent" /></shape>
+    </item>
+</selector>

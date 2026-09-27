@@ -27,7 +27,7 @@ import { ui, type MenuItem } from './ui.svelte';
 import { notes, titleOf, type Note } from './notes.svelte';
 import { headingsOf, splitLink } from './markdown';
 import { isCustom } from './icons';
-import { pickImage, pickVideo, openUrl, clipboardText, copyText } from './platform';
+import { pickImage, pickVideo, openUrl, clipboardText, copyText, isMobile } from './platform';
 import { fileMarkdown, isAsset } from './drop';
 import { exportCurrent } from './transfer';
 import Suggestion from '@tiptap/suggestion';
@@ -649,7 +649,8 @@ export function createEditor(opts: {
         }],
       }),
       TaskItem.extend({ content: LIST_ITEM_CONTENT }).configure({ nested: true }),
-      Placeholder.configure({ placeholder: 'Start typing… `#` heading, `-` list, `[[` link' }),
+      // a phone's bar does the formatting; the markdown hint is for a keyboard
+      Placeholder.configure({ placeholder: isMobile ? 'Start writing…' : 'Start typing… `#` heading, `-` list, `[[` link' }),
       Markdown.configure({ html: true, transformPastedText: true, linkify: true, breaks: false }),
       WikiLink.configure({
         onOpen: opts.onOpenNote,

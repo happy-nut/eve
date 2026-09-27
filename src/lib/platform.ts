@@ -35,7 +35,7 @@ export const storage = {
 };
 
 /** The Android home-screen widget, through `window.EveAndroid` (MainActivity.kt). A no-op anywhere else. */
-type Bridge = { takeIntent(): string; notesChanged(): void; showKeyboard(): void; account(repo: string, token: string): void };
+type Bridge = { takeIntent(): string; notesChanged(): void; showKeyboard(): void; account(repo: string, token: string): void; export(kind: string, title: string, body: string): void; pinWidget(noteId: string): boolean };
 // looked up on every call: on a cold start the activity can inject it after this module has run
 const android = () => (globalThis as { EveAndroid?: Bridge }).EveAndroid;
 let widgetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -48,6 +48,18 @@ export const widget = {
   },
   /** the GitHub sign-in, for the background pull that runs while the app is closed */
   account(repo: string, token: string) { android()?.account(repo, token); },
+  /** Put a widget showing this note on the home screen. False when the launcher can't be asked. */
+  pin: (noteId: string): boolean => android()?.pinWidget(noteId) ?? false,
+  /** Export the open note to the share sheet (pdf/png are printed from the page). True once handed over. */
+  export(kind: 'md' | 'pdf' | 'png', title: string, body: string): Promise<boolean> {
+    const bridge = android();
+    if (!bridge) return Promise.resolve(false);
+    return new Promise((res) => {
+      const on = (e: Event) => { window.removeEventListener('eve-exported', on); res((e as CustomEvent<boolean>).detail); };
+      window.addEventListener('eve-exported', on);
+      bridge.export(kind, title, kind === 'md' ? body : '');
+    });
+  },
   /** the caret is in the note: raise the on-screen keyboard with it */
   keyboard() { android()?.showKeyboard(); },
   /**
