@@ -366,8 +366,8 @@
   {#if isMobile && !sidebarOpen}
     <!-- a phone: the note's own bar, back to the list on the left, a new note on the right -->
     <header class="mhead">
-      <button class="mback" aria-label="Notes" onclick={() => (sidebarOpen = true)}>
-        <svg viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg><span>Notes</span>
+      <button class="micon mback" aria-label="Notes" onclick={() => (sidebarOpen = true)}>
+        <svg viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg>
       </button>
       <span class="mgap"></span>
       <button class="micon" aria-label="Export" onclick={(e) => exportMenu(e.currentTarget)}>

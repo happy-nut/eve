@@ -6,9 +6,12 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.text.format.DateUtils
 import android.view.View
 import android.widget.RemoteViews
+import android.widget.Toast
 import androidx.core.widget.RemoteViewsCompat
 import dev.happynut.eve.MainActivity
 import dev.happynut.eve.R
@@ -28,9 +31,24 @@ class NotesWidget : AppWidgetProvider() {
     private const val ACTION_PINNED = "dev.happynut.eve.PINNED"
     private const val EXTRA_NOTE = "dev.happynut.eve.NOTE"
 
-    /** Ask the launcher to add a widget showing one note; the new widget is pinned to it once placed. */
+    /**
+     * The note's pin button. With an Eve widget already on the home screen, that widget shows the note
+     * (pressed again, it goes back to the newest notes) — no second widget, no system dialog. Only with
+     * none does the launcher get asked to add one, pinned to the note once placed.
+     */
     fun requestPin(context: Context, noteId: String): Boolean {
       val mgr = AppWidgetManager.getInstance(context)
+      val ids = mgr.getAppWidgetIds(ComponentName(context, NotesWidget::class.java))
+      if (ids.isNotEmpty()) {
+        val here = ids.filter { pinned(context, it) == noteId }
+        if (here.isNotEmpty()) here.forEach { pin(context, it, null) }
+        else pin(context, ids.firstOrNull { pinned(context, it) != null } ?: ids.first(), noteId)
+        refresh(context)
+        val said = if (here.isNotEmpty()) "Widget shows the newest notes again" else "Widget now shows this note"
+        // called from the page's bridge thread, which has no looper for a toast
+        Handler(Looper.getMainLooper()).post { Toast.makeText(context, said, Toast.LENGTH_SHORT).show() }
+        return true
+      }
       if (!mgr.isRequestPinAppWidgetSupported) return false
       // the launcher adds EXTRA_APPWIDGET_ID to this before sending it, so it has to be mutable
       val placed = PendingIntent.getBroadcast(context, noteId.hashCode(),
