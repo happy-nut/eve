@@ -657,12 +657,17 @@
   fix: whole syllables, but a stale marked-text underline under the syllable left mid-composition; after
   redrawing the caret's line on return: none. Browser: caret position and further typing survive the
   window blur/focus round trip, and the line's text node is rebuilt.
-- [ ] G151 android-v0.7.3 ships the lighter APK (lazy chunks, no Hangul reader, cached sync hashes) as its own release
+- [x] G151 android-v0.7.3 ships the lighter APK (lazy chunks, no Hangul reader, cached sync hashes) as its own release
   CHECK: gh release view android-v0.7.3 --json assets --jq '.assets[].name'
   EXPECT: Eve-android\.apk
+  EVIDENCE: run 36307128337: android=success; release android-v0.7.3 holds Eve-android.apk, Latest stays v0.7.2.
 - [x] G152 Swiping the phone's list away slides it out in one motion (no snap back, no sudden vanish)
   EVIDENCE: the hand-set closing transform was wiped by the style binding's next update (pull = 0 →
   style undefined), so the drawer sprang back and was then removed without animation. Now the closing
   state is part of the binding. Browser: after touchend the style stays translateX(-100%) until removal;
   a short pull springs back; reopening starts clean. Emulator screen recording: follows the finger, then
   slides out monotonically, then the note.
+- [x] G153 The pin button uses the widget already on the home screen; the back button is an icon
+  EVIDENCE: emulator with one Eve widget: pin → toast "Widget now shows this note", no system dialog, the
+  widget shows the note; pin again → "Widget shows the newest notes again", the list is back. With no
+  widget, the launcher is asked to add one, as before. The note header's back is a chevron only.
