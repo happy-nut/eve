@@ -35,7 +35,7 @@ export const storage = {
 };
 
 /** The Android home-screen widget, through `window.EveAndroid` (MainActivity.kt). A no-op anywhere else. */
-type Bridge = { takeIntent(): string; notesChanged(): void; showKeyboard(): void; account(repo: string, token: string): void; export(kind: string, title: string, body: string): void; pinWidget(noteId: string): boolean };
+type Bridge = { takeIntent(): string; notesChanged(): void; showKeyboard(): void; account(repo: string, token: string): void; export(kind: string, title: string, body: string): void; pinWidget(noteId: string): boolean; installUpdate(url: string): void };
 // looked up on every call: on a cold start the activity can inject it after this module has run
 const android = () => (globalThis as { EveAndroid?: Bridge }).EveAndroid;
 let widgetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -48,6 +48,8 @@ export const widget = {
   },
   /** the GitHub sign-in, for the background pull that runs while the app is closed */
   account(repo: string, token: string) { android()?.account(repo, token); },
+  /** Download an update and open the installer (MainActivity → Updater). */
+  installUpdate: (url: string) => android()?.installUpdate(url),
   /** Put a widget showing this note on the home screen. False when the launcher can't be asked. */
   pin: (noteId: string): boolean => android()?.pinWidget(noteId) ?? false,
   /** Export the open note to the share sheet (pdf/png are printed from the page). True once handed over. */

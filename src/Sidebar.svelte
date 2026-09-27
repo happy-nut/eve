@@ -1,6 +1,7 @@
 <script lang="ts">
   import { isMobile } from './lib/platform';
   import { hints } from './lib/hints.svelte';
+  import { updates } from './lib/updates.svelte';
   import { flip } from 'svelte/animate';
   import { fade, slide, scale } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
@@ -546,6 +547,18 @@
         <button class="icon gear" aria-label="Settings" onclick={onSettings}>{@html GEAR}</button>
       </div>
     {/if}
+    {#if isMobile && updates.available}
+      <!-- a newer Eve: one tap downloads it and opens Android's installer -->
+      <div class="update">
+        <span class="utext"><b>Eve {updates.available.version}</b>
+          <span class="usub">{updates.state === 'downloading' ? 'Downloading…'
+            : updates.state === 'installing' ? 'Tap Update on the next screen'
+            : updates.state === 'permission' ? 'Allow Eve to install apps, then tap Update again'
+            : updates.state === 'error' ? 'Download failed — try again'
+            : 'A new version is ready'}</span></span>
+        <button class="ubtn" disabled={updates.state === 'downloading'} onclick={() => updates.install()}>Update</button>
+      </div>
+    {/if}
     <div class="top" data-tauri-drag-region>
       <input bind:this={searchEl} bind:value={query} onkeydown={onSearchKey}
         onmousedown={() => { if (document.activeElement !== searchEl) hints.action('search', 'Search from anywhere'); }}
@@ -765,6 +778,14 @@
 
   .gear { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
   .gear svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
+  .update {
+    display: flex; align-items: center; gap: 12px; margin: 4px 16px 10px; padding: 10px 10px 10px 14px; border-radius: 14px;
+    background: var(--accent-soft); color: var(--fg);
+  }
+  .utext { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 15px; }
+  .usub { font-size: 13px; color: var(--fg-dim); }
+  .ubtn { flex: none; border: 0; border-radius: 10px; padding: 9px 16px; background: var(--accent); color: #fff; font: inherit; font-size: 15px; font-weight: 600; }
+  .ubtn:disabled { opacity: 0.5; }
   :global(.gear-i) { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   footer {
     display: flex; align-items: center; justify-content: space-between;

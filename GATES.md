@@ -570,3 +570,23 @@
   CHECK: npm run check && npm test 2>&1 | grep -c "_OK"
   EXPECT: ^8$
   EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS" / "8"; cargo check "Finished".
+
+# GATES — v0.7.1 released; one-tap phone updates; a widget that is only notes (2026-09-27)
+
+- [x] G137 v0.7.1 is the latest release, with the Mac zip and the signed APK
+  CHECK: gh release view v0.7.1 -R happy-nut/eve --json assets --jq '[.assets[].name]|sort|join(",")'
+  EXPECT: Eve-android.apk,Eve-macos-arm64.zip
+  EVIDENCE: release run 36294223239: build=success, android=success (the NDK fix held); latest = v0.7.1;
+  the CI APK's signer is a8f3b476…e0be7d2, the same key — it installed over a local build keeping notes,
+  groups and sign-in.
+- [x] G138 A newer release is offered in the phone's list, and Update starts the install
+  CHECK: node --experimental-strip-types --no-warnings src/lib/update.test.mjs
+  EXPECT: UPDATE_OK
+  EVIDENCE: "UPDATE_OK" (version order, newest APK wins, drafts and foreign hosts refused). Manual: a build
+  labelled 0.7.0 showed "Eve 0.7.1 · A new version is ready · Update"; Update opened Android's "Install
+  unknown apps" page for Eve (first time). That toggle is a device security setting, so it was not
+  flipped here; the download → installer step waits for the owner's phone.
+- [x] G139 The widget has no title bar; a pinned note starts with its icon and title; empty lines skipped
+  EVIDENCE: manual, emulator: the pinned widget shows "🧬 Personal TODO" then the to-dos directly, + at the
+  bottom right, no header. Notes store an empty line as U+00A0 (seen in happy-nut/eve-notes); those lines
+  no longer render in the widget.

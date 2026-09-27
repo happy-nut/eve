@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- the header (title, ↻), the list, and + floating at the bottom right over the list -->
+<!-- just the notes, and + floating at the bottom right over them -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@android:id/background"
     android:layout_width="match_parent"
@@ -11,36 +11,6 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="14dp"
-            android:paddingEnd="6dp">
-
-            <TextView
-                android:id="@+id/widget_title"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:gravity="center_vertical"
-                android:maxLines="1"
-                android:text="Eve"
-                android:textColor="@color/widget_fg"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-            <ImageButton
-                android:id="@+id/widget_pull"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:background="@android:color/transparent"
-                android:contentDescription="@string/widget_pull"
-                android:src="@drawable/widget_refresh" />
-        </LinearLayout>
 
         <FrameLayout
             android:layout_width="match_parent"
@@ -54,6 +24,7 @@
                 android:clipToPadding="false"
                 android:divider="@null"
                 android:dividerHeight="0dp"
+                android:paddingTop="6dp"
                 android:paddingBottom="64dp" />
 
             <TextView

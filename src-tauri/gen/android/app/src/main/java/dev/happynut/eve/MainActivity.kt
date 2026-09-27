@@ -102,6 +102,14 @@ class MainActivity : TauriActivity() {
       }
     }
 
+    /** Download a release APK and open the system installer; progress as 'eve-update' events. */
+    @JavascriptInterface
+    fun installUpdate(url: String) = runOnUiThread {
+      Updater.install(this@MainActivity, url) { state ->
+        webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('eve-update', { detail: '$state' }))", null)
+      }
+    }
+
     /** Put a widget pinned to this note on the home screen (the launcher asks where). False if it can't. */
     @JavascriptInterface
     fun pinWidget(noteId: String): Boolean = NotesWidget.requestPin(applicationContext, noteId)
