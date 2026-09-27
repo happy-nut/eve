@@ -43,7 +43,7 @@
   const rows = $derived.by((): Row[] => {
     if (q) return hits.length ? hits.map((n) => ({ kind: 'note', key: n.id, n, depth: 0 })) : [{ kind: 'empty', key: 'empty:search', text: 'No matches', g: '', depth: 0 }];
     const out: Row[] = [];
-    // Notes first, above the groups (the daily notes' calendar is one of them: it moves like a note, never into a group)
+    // Notes first, above the groups (the daily notes' calendar is one of them: it moves like a note)
     const root = nested(groups.notesIn(''), (id) => groups.isFolded(id));
     if (groups.names.length) out.push({ kind: 'label', key: 'label:root', text: 'Notes', g: '' });
     for (const { n, depth, kids } of root) out.push({ kind: 'note', key: n.id, n, depth, kids });
@@ -145,7 +145,6 @@
   /** empty area of a group / root: drop into it */
   function overSection(e: DragEvent, g: string) {
     if (!drag) return;
-    if (drag.note === CALENDAR_NOTE_ID && g) { e.stopPropagation(); return; } // the calendar's row stays in Notes
     if (drag.group !== undefined && !groups.canPlace(drag.group, g)) { e.stopPropagation(); return; } // don't let an ancestor accept it
     allow(e);
     dropAt = { into: g };
@@ -165,7 +164,6 @@
   /** over a group header: top third = before it (sibling), else = into it */
   function overGroup(e: DragEvent, g: string) {
     if (!drag || drag.group === g) return;
-    if (drag.note === CALENDAR_NOTE_ID) { e.stopPropagation(); return; }
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const before = drag.group !== undefined && e.clientY < r.top + r.height * 0.4;
     if (drag.group !== undefined && !groups.canPlace(drag.group, before ? parentOf(g) : g)) { e.stopPropagation(); return; }

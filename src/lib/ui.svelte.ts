@@ -5,7 +5,15 @@ export interface MenuItem { label: string; run?: () => void; keys?: string; sep?
 interface Pending { message: string; input?: string; danger?: boolean; yes?: string; resolve: (v: string | null) => void }
 
 /** a kanban card opened as a floating page; edits stream back through onChange */
-export interface CardReq { title: string; body: string; /** a line above the page (a template says what it is) */ note?: string; onChange: (c: { title: string; body: string }) => void; resolve: () => void }
+export interface CardReq {
+  title: string; body: string;
+  /** a line above the page (a template says what it is) */
+  note?: string;
+  onChange: (c: { title: string; body: string }) => void;
+  /** a whole note's markdown, edited as it is (a daily note: its first line need not be a title) */
+  markdown?: string; onMarkdown?: (md: string) => void;
+  resolve: () => void;
+}
 
 interface EmojiReq { x: number; y: number; current: string; resolve: (v: string | null) => void }
 
@@ -22,6 +30,10 @@ class Ui {
   /** Open a card as a floating page; resolves when it closes. */
   openCard(c: { title: string; body: string; note?: string }, onChange: CardReq['onChange']): Promise<void> {
     return new Promise((res) => { this.card = { ...c, onChange, resolve: res }; });
+  }
+  /** A note's markdown as a floating page (a day from the calendar, the daily template); resolves when it closes. */
+  openPage(markdown: string, onMarkdown: (md: string) => void, note?: string): Promise<void> {
+    return new Promise((res) => { this.card = { title: '', body: '', markdown, onMarkdown, note, onChange: () => {}, resolve: res }; });
   }
   closeCard() { this.card?.resolve(); this.card = null; }
   /** a PDF opened from a note, shown by PdfViewer.svelte as a floating panel (nothing modal about it) */

@@ -149,10 +149,10 @@ class NotesStore {
     void storage.write(n.id, serialize(n));
     this.dirty++;
   }
-  /** The calendar's row: made the first time daily notes are on, at the top of Notes. */
+  /** The calendar's row: made the first time daily notes are on, at the top of Notes (it moves like a note, groups included). */
   ensureCalendar(): Note {
     let n = this.all.find((x) => x.id === CALENDAR_NOTE_ID);
-    if (n) { if (n.group || n.parent) Object.assign(n, { group: '', parent: undefined }); return n; }
+    if (n) return n;
     const top = this.visible.filter((x) => x.group === '').reduce((m, x) => Math.min(m, x.order), 1);
     n = { id: CALENDAR_NOTE_ID, body: `# ${CALENDAR_NAME}\n`, updatedAt: Date.now(), deleted: false, group: '', order: top - 1, icon: '🗓️' };
     this.all.push(n);
@@ -167,32 +167,39 @@ class NotesStore {
     const t = this.all.find((n) => n.id === DAILY_TEMPLATE_ID && !n.deleted);
     return t ? t.body : DEFAULT_TEMPLATE;
   }
-  /** Open the daily template to edit it, making it from the default the first time. */
-  openDailyTemplate() {
+  /** The daily template's note, made from the default the first time. */
+  templateNote(): Note {
     let n = this.all.find((x) => x.id === DAILY_TEMPLATE_ID);
     if (!n) {
-      this.all.push((n = { id: DAILY_TEMPLATE_ID, body: DEFAULT_TEMPLATE, updatedAt: Date.now(), deleted: false, group: '', order: 0, icon: '🗓️' }));
+      this.all.push({ id: DAILY_TEMPLATE_ID, body: DEFAULT_TEMPLATE, updatedAt: Date.now(), deleted: false, group: '', order: 0, icon: '🗓️' });
+      n = this.all.at(-1)!;
       void storage.write(n.id, serialize(n));
       this.dirty++;
     } else if (n.deleted) Object.assign(n, { deleted: false, body: DEFAULT_TEMPLATE, updatedAt: Date.now() });
     this.titles.set(n.id, titleOf(n));
-    this.currentId = n.id;
+    return n;
   }
 
-  /** Open a day's note (today by default), starting it from the template when there is none yet. */
-  openDaily(key = dayKey(new Date())): Note {
+  /** A day's note (today by default), started from the template when there is none yet. */
+  dayNote(key = dayKey(new Date())): Note {
     const id = dailyId(key);
     let n = this.all.find((x) => x.id === id);
-    if (n && !n.deleted) { this.currentId = id; return n; }
+    if (n && !n.deleted) return n;
     const body = dailyBody(this.dailyTemplate, key);
     if (n) Object.assign(n, { deleted: false, body, updatedAt: Date.now() }); // a deleted day, begun again
-    else this.all.push((n = { id, body, updatedAt: Date.now(), deleted: false, group: '', order: 0, icon: '🗓️' }));
+    else { this.all.push({ id, body, updatedAt: Date.now(), deleted: false, group: '', order: 0, icon: '🗓️' }); n = this.all.at(-1)!; }
     this.titles.set(id, titleOf(n));
-    this.currentId = id;
     void storage.write(id, serialize(n));
     this.dirty++;
     return n;
   }
+  /** Open a day's note in the editor (to write today's, from the reminder or the phone's +). */
+  openDaily(key = dayKey(new Date())): Note {
+    const n = this.dayNote(key);
+    this.currentId = n.id;
+    return n;
+  }
+
   get current() {
     return this.all.find((n) => n.id === this.currentId) ?? null;
   }
@@ -323,7 +330,6 @@ class NotesStore {
    * ponytail: ranks can get arbitrarily close after thousands of moves; renormalize then.
    */
   move(id: string, group: string, beforeId: string | null) {
-    if (id === CALENDAR_NOTE_ID && group) return; // the calendar's row cannot join a group
     const n = this.all.find((x) => x.id === id);
     if (!n || id === beforeId) return;
     const list = this.visible.filter((x) => x.group === group && x.id !== id);
@@ -365,7 +371,7 @@ class NotesStore {
   }
 
   place(id: string, group: string, parent: string, before: string | null) {
-    if (id === CALENDAR_NOTE_ID && (group || parent)) return; // it stays in Notes, at the top level
+    if (id === CALENDAR_NOTE_ID && parent) return; // the calendar's row is never a sub-page
     if (parent === CALENDAR_NOTE_ID) return;
     const n = this.all.find((x) => x.id === id);
     if (!n || id === before) return;
