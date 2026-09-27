@@ -9,6 +9,7 @@
   import Keys from './Keys.svelte';
   import Select from './Select.svelte';
   import Slider from './Slider.svelte';
+  import { hints } from './lib/hints.svelte';
   import { renderSVG } from 'uqr';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
@@ -109,6 +110,13 @@
           {/each}
         </div>
       {/each}
+      <h3>Tips</h3>
+      <div class="card">
+        <label class="row">
+          <span class="label">Shortcut tips <span class="sub">after doing something the long way, a moment's note of the key that does it</span></span>
+          <input type="checkbox" class="switch" checked={hints.on} onchange={(e) => hints.setOn(e.currentTarget.checked)} />
+        </label>
+      </div>
       <div class="foot"><button class="link" onclick={() => shortcuts.reset()}>Reset all to defaults</button></div>
 
     {:else if tab === 'appearance'}

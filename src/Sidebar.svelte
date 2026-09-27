@@ -1,5 +1,6 @@
 <script lang="ts">
   import { isMobile } from './lib/platform';
+  import { hints } from './lib/hints.svelte';
   import { flip } from 'svelte/animate';
   import { fade, slide, scale } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
@@ -169,6 +170,7 @@
     dragEnd();
     if (!d || !at) return;
     const into = at.into ?? '';
+    if (!isMobile) hints.show('sidebarMove', 'Move notes from the keyboard: open the list, then ⌥↑↓', shortcuts.keysFor('focusSidebar'));
     if (d.note) { groups.remember(into); notes.move(d.note, into, at.beforeNote ?? null); }
     else if (d.group !== undefined) groups.move(d.group, into, at.beforeGroup ?? null);
   }
@@ -254,6 +256,7 @@
     if (await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`)) groups.remove(g);
   }
   async function removeNote(n: Note) {
+    if (n.id === notes.currentId) hints.action('deleteNote', 'Delete the open note');
     if (await ui.ask(`Delete “${titleOf(n)}”?`)) notes.remove(n.id);
   }
   const rowsNow = () => [...document.querySelectorAll<HTMLElement>('aside [data-row]')];
@@ -521,6 +524,9 @@
 
   /** click or Enter on a note: open it and move into the editor */
   async function openNote(n: Note) {
+    const list = groups.ordered(), from = list.findIndex((x) => x.id === notes.currentId), to = list.findIndex((x) => x.id === n.id);
+    if (from >= 0 && to === from + 1) hints.action('nextNote', 'The next note is a key away');
+    else if (from >= 0 && to === from - 1) hints.action('prevNote', 'The previous note is a key away');
     ui.focusOwner = 'editor';
     notes.currentId = n.id;
     if (isMobile) { open = false; return; } // a phone shows the list or the note, never both — and opens it to read
@@ -542,6 +548,7 @@
     {/if}
     <div class="top" data-tauri-drag-region>
       <input bind:this={searchEl} bind:value={query} onkeydown={onSearchKey}
+        onmousedown={() => { if (document.activeElement !== searchEl) hints.action('search', 'Search from anywhere'); }}
         placeholder={isMobile ? 'Search' : `Search  ${prettyKeys(shortcuts.keysFor('search'))}`} spellcheck="false" />
       <div class="plus-wrap">
         {#if plusOpen}
