@@ -73,16 +73,12 @@ button.icon:active { transform: scale(0.9); }
 html.mobile { --top: env(safe-area-inset-top, 0px); --bottom: env(safe-area-inset-bottom, 0px); }
 html.mobile, html.mobile body { background: var(--bg-side); }
 html.mobile #app { box-sizing: border-box; padding: var(--top) 0 var(--bottom); border-radius: 0; }
-html.mobile aside { position: fixed; inset: var(--top) 0 var(--bottom); width: auto; z-index: 5; transition: transform 0.2s ease-out; }
 
 /* ---- a phone: touch-sized, no hover, no shortcuts --------------------------------------------- */
 /* the desktop toolbar (sidebar / back / forward / pin) gives way to a bar of the phone's own */
 html.mobile .toolbar, html.mobile main::before, html.mobile .outline, html.mobile .tip { display: none; }
 html.mobile .shell { position: relative; } /* the bars below place themselves inside the safe area */
-html.mobile .mhead {
-  position: absolute; top: 0; left: 0; right: 0; height: 52px; z-index: 6; display: flex; align-items: center;
-  gap: 2px; padding: 0 6px; background: var(--bg); border-bottom: 1px solid var(--line);
-}
+
 html.mobile .mhead button {
   height: 44px; min-width: 44px; border: 0; background: none; color: var(--accent); font: inherit; font-size: 16px;
   display: inline-flex; align-items: center; gap: 2px; padding: 0 8px; border-radius: 10px;
@@ -92,7 +88,10 @@ html.mobile .mhead .mgap { flex: 1; }
 html.mobile .mhead .micon { width: 44px; padding: 0; justify-content: center; color: var(--fg); }
 html.mobile .mhead .micon svg { width: 21px; height: 21px; stroke-width: 1.4; }
 html.mobile .mhead .micon.danger { color: #ff453a; }
-html.mobile .mhead svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+html.mobile .mhead svg {
+  width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round;
+  stroke-linejoin: round;
+}
 html.mobile .page { top: 52px; }
 /* the note: phone margins, room under the last line for the formatting bar */
 @media screen {
@@ -100,45 +99,37 @@ html.mobile .page { top: 52px; }
   html.mobile .tiptap { padding-left: 20px !important; padding-right: 20px !important; padding-bottom: 160px !important; }
 }
 /* the list: a title, then rows a thumb can hit */
-html.mobile aside .mtop { display: flex; align-items: center; gap: 10px; padding: 12px 10px 4px 20px; }
-html.mobile aside .mtitle { flex: 1; margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.01em; color: var(--fg); }
+
 html.mobile aside .mtop .sync { font-size: 13px; color: var(--fg-dim); display: inline-flex; align-items: center; }
-html.mobile aside .mtop .gear { width: 44px; height: 44px; border-radius: 12px; color: var(--fg); display: inline-flex; align-items: center; justify-content: center; }
+
 html.mobile aside .mtop .gear:active { background: var(--bg-active); }
-html.mobile aside .mtop .gear-i { width: 23px; height: 23px; stroke-width: 1.6; }
-html.mobile aside .top { padding: 4px 16px 10px; }
-html.mobile aside .top input { font-size: 16px; padding: 10px 12px; border-radius: 10px; }
-html.mobile aside .tree { padding: 4px 10px 96px; }
-html.mobile aside [data-row] { min-height: 38px; font-size: 16px; }
-html.mobile aside .gname { font-size: 15px; min-height: 38px; }
-html.mobile aside .gname.static { font-size: 12px; min-height: 30px; }
-html.mobile aside .emoji { font-size: 17px; }
+
 html.mobile aside .ico-slot { width: 24px; height: 24px; }
 html.mobile aside .tools { display: none; } /* hover-only; a long-press opens the row's menu instead */
-html.mobile aside .fold { width: 36px; height: 36px; }
-html.mobile aside .note-row > button:first-child { padding-top: 4px; padding-bottom: 4px; }
+
 /* a row lifted by a long press, ready to move */
-html.mobile aside .row.dragging { opacity: 1; background: var(--bg-pop); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); transform: scale(1.02); }
-html.mobile aside { -webkit-touch-callout: none; }
-html.mobile aside .fab {
-  position: absolute; right: 20px; bottom: 24px; z-index: 2; width: 56px; height: 56px; border: 0; border-radius: 18px;
-  background: var(--accent); color: #fff; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
-  display: inline-flex; align-items: center; justify-content: center;
+html.mobile aside .row.dragging {
+  opacity: 1; background: var(--bg-pop); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  transform: scale(1.02);
 }
+html.mobile aside {
+  position: fixed; inset: var(--top) 0 var(--bottom); width: auto; z-index: 5;
+  transition: transform 0.2s ease-out; -webkit-touch-callout: none;
+}
+
 html.mobile aside .fab:active { transform: scale(0.96); }
-html.mobile aside .fab svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+html.mobile aside .fab svg {
+  width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round;
+}
 /* no shortcut hints anywhere: a phone has no keys to press */
 html.mobile kbd, html.mobile .keys, html.mobile .suggest .hint:empty { display: none !important; }
 /* type a phone can read: the desktop sizes are tuned for 14-inch screens at arm's length */
 html.mobile body { font-size: 16px; }
-html.mobile .panel .body { font-size: 16px; }
+
 html.mobile .panel .sub, html.mobile .panel .mono { font-size: 13.5px; }
-html.mobile .panel h3 { font-size: 12.5px; }
+
 html.mobile .panel .lead, html.mobile .panel .link, html.mobile .panel .alert { font-size: 14.5px; }
-html.mobile .panel .seg button { font-size: 15px; padding: 7px 14px; }
-html.mobile .panel .btn { font-size: 15px; padding: 9px 16px; border-radius: 10px; }
-html.mobile .panel .row { min-height: 56px; }
-html.mobile .panel .select { font-size: 15px; padding: 8px 10px 8px 13px; }
+
 html.mobile .panel input:not([type]) { font-size: 16px; padding: 9px 11px; }
 html.mobile .box, html.mobile .box input, html.mobile .box button { font-size: 16px !important; }
 html.mobile .box button { padding: 10px 16px !important; }
@@ -146,9 +137,9 @@ html.mobile .suggest { font-size: 16px !important; }
 html.mobile .suggest button, html.mobile .suggest li { min-height: 44px; }
 html.mobile .cal { font-size: 15px !important; }
 html.mobile .cal-wd, html.mobile .cal-foot { font-size: 13px !important; }
-html.mobile .choice button { font-size: 16px !important; padding: 10px 12px !important; }
+
 html.mobile .find input { font-size: 16px !important; }
-html.mobile aside [data-row] { font-size: 16.5px; }
+
 /* dialogs: a sheet from the bottom, the answer under the thumb */
 html.mobile .box {
   top: auto !important; bottom: 0 !important; left: 0 !important; right: 0; transform: none !important; width: auto !important;
@@ -159,47 +150,59 @@ html.mobile .box .mark svg { width: 19px; height: 19px; }
 html.mobile .box p { margin-top: 7px; }
 html.mobile .box input { font-size: 16px !important; padding: 12px 13px !important; border-radius: 12px !important; }
 html.mobile .box .actions { flex-direction: column-reverse; gap: 8px; margin-top: 20px; }
-html.mobile .box .actions button { justify-content: center; min-height: 50px; border-radius: 14px; font-size: 16px !important; font-weight: 600; }
+html.mobile .box .actions button {
+  justify-content: center; min-height: 50px; border-radius: 14px; font-size: 16px !important; font-weight: 600;
+}
 /* the link / page choice: the same sheet */
 html.mobile .choice {
   left: 0 !important; right: 0; top: auto !important; bottom: 0; border-radius: 20px 20px 0 0 !important;
   padding: 12px 10px calc(14px + var(--bottom)) !important; transform-origin: bottom center !important;
 }
-html.mobile .choice button { min-height: 52px; border-radius: 12px !important; }
+html.mobile .choice button {
+  font-size: 16px !important; padding: 10px 12px !important; min-height: 52px; border-radius: 12px !important;
+}
 /* a kanban card opens as a page of its own */
 html.mobile .card {
   top: var(--top) !important; bottom: var(--bottom) !important; left: 0 !important; right: 0; transform: none !important;
   width: auto !important; height: auto !important; border-radius: 0 !important; border: 0 !important;
 }
 /* settings: a full screen of its own, not a floating panel */
-html.mobile .panel {
-  top: var(--top) !important; left: 0 !important; right: 0; bottom: var(--bottom); transform: none !important;
-  width: auto !important; max-height: none !important; border-radius: 0 !important;
-}
 
 /* ---- a phone, Notion's way: one flat white page, grey type for everything secondary, hairlines
    instead of boxes, and colour only where something can be pressed ------------------------------ */
 html.mobile, html.mobile body, html.mobile aside { background: var(--bg); }
 /* the list */
-html.mobile aside .mtop { padding: 14px 8px 2px 20px; }
-html.mobile aside .mtitle { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
-html.mobile aside .mtop .gear { color: var(--fg-dim); }
+html.mobile aside .mtop { display: flex; align-items: center; gap: 10px; padding: 14px 8px 2px 20px; }
+html.mobile aside .mtitle {
+  flex: 1; margin: 0; color: var(--fg); font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+}
+html.mobile aside .mtop .gear {
+  width: 44px; height: 44px; border-radius: 12px; display: inline-flex; align-items: center;
+  justify-content: center; color: var(--fg-dim);
+}
 html.mobile aside .mtop .gear-i { width: 21px; height: 21px; stroke-width: 1.5; }
 html.mobile aside .top { padding: 6px 16px 8px; }
 html.mobile aside .top input { font-size: 15.5px; padding: 9px 12px; border-radius: 8px; background: var(--bg-input); }
-html.mobile aside .tree { padding: 2px 8px 96px; }
-html.mobile aside [data-row] { font-size: 15.5px; min-height: 36px; border-radius: 6px; }
-html.mobile aside .gname { font-size: 15.5px; font-weight: 600; min-height: 36px; }
-html.mobile aside .gname.static { font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; min-height: 34px; padding-top: 10px; }
+
+html.mobile aside .gname.static {
+  font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; min-height: 34px;
+  padding-top: 10px;
+}
 html.mobile aside .count { display: none; } /* Notion shows no counts; the chevron says there is more */
 html.mobile aside .chev { width: 13px; height: 13px; opacity: 0.7; }
 html.mobile aside .emoji { font-size: 16px; }
 html.mobile aside .fab {
-  width: 54px; height: 54px; border-radius: 50%; background: var(--fg); color: var(--bg);
+  position: absolute; right: 20px; bottom: 24px; z-index: 2; border: 0; display: inline-flex;
+  align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 50%;
+  background: var(--fg); color: var(--bg);
   box-shadow: 0 2px 6px rgba(15, 15, 15, 0.1), 0 8px 20px rgba(15, 15, 15, 0.16);
 }
 /* settings: a plain page — tabs underlined, sections as grey captions, rows on hairlines */
-html.mobile .panel { background: var(--bg); box-shadow: none; }
+html.mobile .panel {
+  top: var(--top) !important; left: 0 !important; right: 0; bottom: var(--bottom); transform: none !important;
+  width: auto !important; max-height: none !important; border-radius: 0 !important; background: var(--bg);
+  box-shadow: none;
+}
 html.mobile .panel header { padding: 4px 4px 0 12px; border-bottom: 1px solid var(--line); }
 html.mobile .panel .seg { background: none; padding: 0; gap: 4px; }
 html.mobile .panel .seg button {
@@ -208,16 +211,17 @@ html.mobile .panel .seg button {
 }
 html.mobile .panel .seg button.on { color: var(--fg); border-bottom-color: var(--fg); }
 html.mobile .panel header .icon { width: 44px; height: 44px; font-size: 17px; color: var(--fg-dim); }
-html.mobile .panel .body { padding: 0 0 24px; }
+html.mobile .panel .body { font-size: 16px; padding: 0 0 24px; }
 html.mobile .panel h3 {
-  font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--fg-dim); margin: 22px 20px 2px;
+  font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--fg-dim);
+  margin: 22px 20px 2px;
 }
 html.mobile .panel .card { background: none; border-radius: 0; padding: 0 20px; }
 html.mobile .panel .row { min-height: 52px; padding: 10px 0; }
 html.mobile .panel .mono { font-family: inherit; }
 html.mobile .panel .btn {
-  font-size: 14.5px; font-weight: 500; padding: 7px 14px; border-radius: 6px;
-  background: none; box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 14.5px; font-weight: 500; padding: 7px 14px; border-radius: 6px; background: none;
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 html.mobile .panel .btn.primary { background: var(--accent); color: #fff; box-shadow: none; }
 html.mobile .panel .sample { margin: 16px 20px 0; border-radius: 6px; }
@@ -225,17 +229,24 @@ html.mobile .panel .foot { margin: 14px 20px 0; }
 html.mobile .panel .path { font-size: 13.5px; }
 html.mobile .backdrop { background: var(--bg); } /* the page above the status bar is the settings page too */
 html.mobile .panel .switch { flex: none; }
-html.mobile .panel .select { background: none; color: var(--fg-dim); padding-right: 0; }
-html.mobile aside .tree { scrollbar-width: none; }
+html.mobile .panel .select {
+  font-size: 15px; padding: 8px 10px 8px 13px; background: none; color: var(--fg-dim); padding-right: 0;
+}
+html.mobile aside .tree { padding: 2px 8px 96px; scrollbar-width: none; }
 html.mobile aside .tree::-webkit-scrollbar { display: none; }
 /* the list, tighter: Notion's rows are a line of text and a little air, not a thumb-sized slab */
-html.mobile aside [data-row] { min-height: 32px; }
-html.mobile aside .gname { min-height: 32px; padding-top: 2px; padding-bottom: 2px; }
+html.mobile aside [data-row] { font-size: 15.5px; border-radius: 6px; min-height: 32px; }
+html.mobile aside .gname {
+  font-size: 15.5px; font-weight: 600; min-height: 32px; padding-top: 2px; padding-bottom: 2px;
+}
 html.mobile aside .fold { width: 32px; height: 32px; }
 html.mobile aside .note-row > button:first-child { padding-top: 2px; padding-bottom: 2px; }
 html.mobile aside .ghead { padding: 0; }
 /* the note: a flat bar of grey icons, and a page head sized for a phone */
-html.mobile .mhead { border-bottom: 0; }
+html.mobile .mhead {
+  position: absolute; top: 0; left: 0; right: 0; height: 52px; z-index: 6; display: flex; align-items: center;
+  gap: 2px; padding: 0 6px; background: var(--bg); border-bottom: 0;
+}
 html.mobile .mhead .micon, html.mobile .mhead .micon.danger { color: var(--fg-dim); }
 html.mobile .mhead .micon.on { color: var(--fg); }
 html.mobile .mhead .micon.on svg { fill: currentColor; }
@@ -539,7 +550,7 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
   .shell { display: block; animation: none; }
   /* only the note is printed: no window chrome, no floating anything */
   aside, .toolbar, .dragbar, .drop-hint, .pdf-panel, .tip, .plus-menu, .backdrop,
-  .menu, .find, .outline, .suggest, .table-tools, .panel,
+  .menu, .find, .outline, .suggest, .tbl-tools, .panel,
   .mhead, .mbar, .sheet, .scrim { display: none !important; }
   html.mobile #app { padding: 0 !important; }
   main { position: static; }

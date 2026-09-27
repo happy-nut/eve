@@ -688,3 +688,20 @@
   EVIDENCE: emulator: pin on DB → toast, the bar's pin filled, the widget lists DB first with "📌" before
   its time and the rest in date order; pin again → unpinned (outline icon); pin again → back on top, the
   note stays open. With no widget, the launcher is asked for a list widget. Pins live on the phone.
+
+# GATES — leaner start, one highlighter, one set of phone rules (2026-09-27)
+
+- [x] G158 highlight.js and lowlight are out of the start bundle (one copy, loaded with the first code block)
+  CHECK: npm run build
+  EXPECT: grammars-.*\.js
+  EVIDENCE: index-*.js 785.8 → 740.9 KB (gzip 260.0 → 249.5); the source map lists no highlight.js or
+  lowlight in the main chunk (there were two highlight.js cores, 11.12.0 via the tiptap extension and
+  11.11.2 via lowlight). The extension is replaced by the plain code block + a 40-line decoration plugin.
+  Browser: after a reload a block highlights with no edit; typing re-highlights; switching the language
+  to python re-colours it.
+- [x] G159 The phone's CSS has one rule per selector, with no visible change
+  EVIDENCE: 24 repeated html.mobile selectors merged into their last occurrence (122 → 94 rules). Computed
+  styles of every element (41 properties) on list / note / settings×2 at 375×812: 0 differences out of 469
+  elements; the same comparison flags a deliberate 20px change (positive control). Emulator screenshots
+  before/after, pixel diff: list, note, appearance identical; sync differs only in the "Synced at" time.
+  Print CSS named .table-tools, the toolbar is .tbl-tools: fixed.
