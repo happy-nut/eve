@@ -40,7 +40,7 @@
           goToSection(editor!, s);
         }
       },
-      targets: () => notes.visible,
+      targets: () => notes.pages,
       suggestionUI: suggest.ui,
       calendarUI: dateMenu.ui,
       // a [[Title#Section]] link says where to land, over wherever the caret was left last time

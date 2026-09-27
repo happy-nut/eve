@@ -1,5 +1,6 @@
 // Moving notes and groups one step at a time through the sidebar's outline (⌥ + arrows, the row menu).
 import { notes, type Note } from './notes.svelte';
+import { CALENDAR_NOTE_ID } from './daily';
 import { groups, parentOf } from './groups.svelte';
 
 /**
@@ -31,7 +32,8 @@ function noteSlots(me: Note): NoteSlot[] {
 export function nudgeNote(id: string, dir: 1 | -1): boolean {
   const me = notes.all.find((n) => n.id === id);
   if (!me) return false;
-  const list = noteSlots(me);
+  // the calendar's row only ever sits at the top level of Notes: it steps past pages, never into them
+  const list = noteSlots(me).filter((s) => me.id !== CALENDAR_NOTE_ID || (!s.group && !s.parent));
   const sibs = notes.visible.filter((n) => n.group === me.group && (n.parent ?? '') === (me.parent ?? ''));
   const i = sibs.findIndex((n) => n.id === id);
   const at = list.findIndex((s) => s.group === me.group && s.parent === (me.parent ?? '') && s.before === (sibs[i + 1]?.id ?? null));

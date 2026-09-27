@@ -2,7 +2,7 @@ import { storage } from './platform';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
 import { plain, splitLink } from './markdown';
-import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isCalendarOwn, isDailyId } from './daily';
+import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isDailyId } from './daily';
 
 export { plain };
 
@@ -125,8 +125,10 @@ class NotesStore {
   dirty = $state(0);
 
   /** the list's notes: everything but deleted ones and daily notes (those live in the calendar) */
+  /** the list's notes that are notes: the calendar's row is in `visible` (it moves like one) but opens the calendar */
+  get pages() { return this.visible.filter((n) => n.id !== CALENDAR_NOTE_ID); }
   get visible() {
-    return this.all.filter((n) => !n.deleted && !isDailyId(n.id) && !isCalendarOwn(n.id)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt);
+    return this.all.filter((n) => !n.deleted && !isDailyId(n.id) && n.id !== DAILY_TEMPLATE_ID && (n.id !== CALENDAR_NOTE_ID || appearance.s.dailyNotes)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt);
   }
   /** daily notes, newest day first */
   get daily() {
@@ -141,11 +143,23 @@ class NotesStore {
   setCalendar(patch: { name?: string; icon?: string }) {
     const cur = this.calendar;
     const name = (patch.name ?? cur.name).trim() || CALENDAR_NAME, icon = patch.icon ?? cur.icon;
-    let n = this.all.find((x) => x.id === CALENDAR_NOTE_ID);
-    if (!n) this.all.push((n = { id: CALENDAR_NOTE_ID, body: '', updatedAt: 0, deleted: false, group: '', order: 0 }));
+    const n = this.ensureCalendar();
     Object.assign(n, { body: `# ${name}\n`, icon: icon || undefined, deleted: false, updatedAt: Date.now() });
+    this.titles.set(n.id, titleOf(n));
     void storage.write(n.id, serialize(n));
     this.dirty++;
+  }
+  /** The calendar's row: made the first time daily notes are on, at the top of Notes. */
+  ensureCalendar(): Note {
+    let n = this.all.find((x) => x.id === CALENDAR_NOTE_ID);
+    if (n) { if (n.group || n.parent) Object.assign(n, { group: '', parent: undefined }); return n; }
+    const top = this.visible.filter((x) => x.group === '').reduce((m, x) => Math.min(m, x.order), 1);
+    n = { id: CALENDAR_NOTE_ID, body: `# ${CALENDAR_NAME}\n`, updatedAt: Date.now(), deleted: false, group: '', order: top - 1, icon: '🗓️' };
+    this.all.push(n);
+    this.titles.set(n.id, titleOf(n));
+    void storage.write(n.id, serialize(n));
+    this.dirty++;
+    return this.all.at(-1)!;
   }
 
   /** what a new day starts as: the template note, or the default until there is one */
@@ -188,7 +202,7 @@ class NotesStore {
     const texts = await storage.list();
     this.all = texts.map(parse).filter((n): n is Note => !!n);
     for (const n of this.all) this.titles.set(n.id, titleOf(n));
-    this.currentId = this.visible[0]?.id ?? null;
+    this.currentId = this.pages[0]?.id ?? null;
     if (!this.currentId) this.create();
     this.loaded = true;
   }
@@ -263,6 +277,7 @@ class NotesStore {
 
   /** Make a note a sub-page of `parent` (null = a page of its own). Refuses a loop. */
   setParent(id: string, parent: string | null) {
+    if (id === CALENDAR_NOTE_ID || parent === CALENDAR_NOTE_ID) return; // the calendar's row takes no sub-pages, is none
     const n = this.all.find((x) => x.id === id);
     if (!n || (parent && (parent === id || this.isAncestor(id, parent)))) return;
     n.parent = parent ?? undefined;
@@ -308,6 +323,7 @@ class NotesStore {
    * ponytail: ranks can get arbitrarily close after thousands of moves; renormalize then.
    */
   move(id: string, group: string, beforeId: string | null) {
+    if (id === CALENDAR_NOTE_ID && group) return; // the calendar's row cannot join a group
     const n = this.all.find((x) => x.id === id);
     if (!n || id === beforeId) return;
     const list = this.visible.filter((x) => x.group === group && x.id !== id);
@@ -316,7 +332,7 @@ class NotesStore {
       const i = list.findIndex((x) => x.id === beforeId);
       if (i < 0) return;
       const prev = list[i - 1], next = list[i];
-      order = prev ? (prev.order + next.order) / 2 : next.order - 1;
+      order = prev ? this.between(list, i) : next.order - 1;
     } else {
       const last = list.at(-1);
       order = last ? last.order + 1 : 0;
@@ -337,7 +353,20 @@ class NotesStore {
    * the sibling it goes in front of (null = last). This is what the sidebar's ⌥-arrow walk moves with,
    * so a page can slide into another page as a sub-page instead of only stepping past it.
    */
+  /**
+   * A rank between list[i - 1] and list[i]. Two notes can share a rank (imported, or older files): the
+   * midpoint would share it too and the move would not show, so the list is ranked 0, 1, 2… first.
+   */
+  private between(list: Note[], i: number): number {
+    if (list[i - 1].order >= list[i].order) {
+      list.forEach((x, j) => { if (x.order !== j) { x.order = j; x.updatedAt = Date.now(); this.flush(x.id); } });
+    }
+    return (list[i - 1].order + list[i].order) / 2;
+  }
+
   place(id: string, group: string, parent: string, before: string | null) {
+    if (id === CALENDAR_NOTE_ID && (group || parent)) return; // it stays in Notes, at the top level
+    if (parent === CALENDAR_NOTE_ID) return;
     const n = this.all.find((x) => x.id === id);
     if (!n || id === before) return;
     if (parent && (parent === id || this.isAncestor(id, parent))) return; // never under its own sub-page
@@ -347,7 +376,7 @@ class NotesStore {
       const i = sibs.findIndex((x) => x.id === before);
       if (i < 0) return;
       const prev = sibs[i - 1], next = sibs[i];
-      order = prev ? (prev.order + next.order) / 2 : next.order - 1;
+      order = prev ? this.between(sibs, i) : next.order - 1;
     } else {
       const last = sibs.at(-1);
       order = last ? last.order + 1 : 0;
@@ -376,7 +405,7 @@ class NotesStore {
     n.deleted = true;
     n.updatedAt = Date.now();
     this.flush(id);
-    if (this.currentId === id) this.currentId = this.visible[0]?.id ?? null;
+    if (this.currentId === id) this.currentId = this.pages[0]?.id ?? null;
     if (!this.currentId) this.create();
   }
 

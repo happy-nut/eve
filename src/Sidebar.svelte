@@ -7,7 +7,7 @@
   import { cubicOut } from 'svelte/easing';
   import { tick } from 'svelte';
   import { notes, nested, titleOf, CALENDAR, type Note } from './lib/notes.svelte';
-  import { isDailyId, DAILY_TEMPLATE_ID } from './lib/daily';
+  import { isDailyId, DAILY_TEMPLATE_ID, CALENDAR_NOTE_ID } from './lib/daily';
   import { groups, parentOf, leafOf, depthOf, MAX_DEPTH } from './lib/groups.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
@@ -39,17 +39,15 @@
     | { kind: 'group'; key: string; g: string; depth: number }
     | { kind: 'note'; key: string; n: Note; depth: number; kids?: boolean }
     | { kind: 'label'; key: string; text: string; g: string }
-    | { kind: 'empty'; key: string; text: string; g: string; depth: number }
-    | { kind: 'daily'; key: string };
+    | { kind: 'empty'; key: string; text: string; g: string; depth: number };
   const rows = $derived.by((): Row[] => {
     if (q) return hits.length ? hits.map((n) => ({ kind: 'note', key: n.id, n, depth: 0 })) : [{ kind: 'empty', key: 'empty:search', text: 'No matches', g: '', depth: 0 }];
     const out: Row[] = [];
-    // Notes first, above the groups: the daily notes' calendar (it cannot be grouped), then loose notes
+    // Notes first, above the groups (the daily notes' calendar is one of them: it moves like a note, never into a group)
     const root = nested(groups.notesIn(''), (id) => groups.isFolded(id));
     if (groups.names.length) out.push({ kind: 'label', key: 'label:root', text: 'Notes', g: '' });
-    if (appearance.s.dailyNotes) out.push({ kind: 'daily', key: 'daily' });
     for (const { n, depth, kids } of root) out.push({ kind: 'note', key: n.id, n, depth, kids });
-    if (!root.length && !appearance.s.dailyNotes) out.push({ kind: 'empty', key: 'empty:root', text: 'No notes', g: '', depth: 0 });
+    if (!root.length) out.push({ kind: 'empty', key: 'empty:root', text: 'No notes', g: '', depth: 0 });
     const walk = (parent: string, depth: number) => {
       for (const g of groups.children(parent)) {
         out.push({ kind: 'group', key: 'g:' + groups.id(g), g, depth });
@@ -147,6 +145,7 @@
   /** empty area of a group / root: drop into it */
   function overSection(e: DragEvent, g: string) {
     if (!drag) return;
+    if (drag.note === CALENDAR_NOTE_ID && g) { e.stopPropagation(); return; } // the calendar's row stays in Notes
     if (drag.group !== undefined && !groups.canPlace(drag.group, g)) { e.stopPropagation(); return; } // don't let an ancestor accept it
     allow(e);
     dropAt = { into: g };
@@ -166,6 +165,7 @@
   /** over a group header: top third = before it (sibling), else = into it */
   function overGroup(e: DragEvent, g: string) {
     if (!drag || drag.group === g) return;
+    if (drag.note === CALENDAR_NOTE_ID) { e.stopPropagation(); return; }
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const before = drag.group !== undefined && e.clientY < r.top + r.height * 0.4;
     if (drag.group !== undefined && !groups.canPlace(drag.group, before ? parentOf(g) : g)) { e.stopPropagation(); return; }
@@ -360,6 +360,7 @@
     ui.focusOwner = 'sidebar';
     const g = row.dataset.group;
     const n = row.dataset.note ? notes.all.find((x) => x.id === row.dataset.note) : undefined;
+    if (n?.id === CALENDAR_NOTE_ID) return; // the calendar's row has nothing to offer but moving (drag, ⌥↑↓)
     const items: MenuItem[] = g
       ? [
           { label: `New note in “${leafOf(g)}”`, run: () => { ui.focusOwner = 'editor'; notes.create('', g); } },
@@ -461,7 +462,10 @@
     await tick();
     document.querySelector<HTMLElement>('.calendar .day.cursor')?.focus(); // arrows move through the days from here
   }
+  /** the calendar, or one of its days or its template, is what the editor shows */
+  const onCalendar = $derived(notes.currentId === CALENDAR || !!(notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID)));
   async function openNote(n: Note) {
+    if (n.id === CALENDAR_NOTE_ID) return openCalendar(); // the calendar's row opens the calendar
     const list = groups.ordered(), from = list.findIndex((x) => x.id === notes.currentId), to = list.findIndex((x) => x.id === n.id);
     if (from >= 0 && to === from + 1) hints.action('nextNote', 'The next note is a key away');
     else if (from >= 0 && to === from - 1) hints.action('prevNote', 'The previous note is a key away');
@@ -529,24 +533,15 @@
       {#each rows as r (r.key)}
         <li animate:flip={{ duration: 220, easing: cubicOut }} in:fade={{ duration: 140 }} out:slide={{ duration: 180, easing: cubicOut }}
           class="row {r.kind}" style="--d: {'depth' in r ? r.depth : 0}"
-          class:over={r.kind !== 'note' && r.kind !== 'daily' && dropAt?.into === r.g && !dropAt.beforeNote && !dropAt.beforeGroup}
+          class:over={r.kind !== 'note' && dropAt?.into === r.g && !dropAt.beforeNote && !dropAt.beforeGroup}
           class:drop-before={(r.kind === 'note' && dropAt?.beforeNote === r.n.id) || (r.kind === 'group' && dropAt?.beforeGroup === r.g)}
           class:dragging={(r.kind === 'note' && drag?.note === r.n.id) || (r.kind === 'group' && drag?.group === r.g)}>
 
-          {#if r.kind === 'daily'}
-            <div class="note-row" role="presentation">
-              <button data-row data-daily class:active={notes.currentId === CALENDAR || !!(notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID))} onclick={openCalendar}>
-                <span class="title">
-                  <span class="ico-slot"><Icon icon={notes.calendar.icon} /></span>
-                  <span class="t">{notes.calendar.name}</span>
-                </span>
-              </button>
-            </div>
-          {:else if r.kind === 'note'}
+          {#if r.kind === 'note'}
             {@const n = r.n}
             <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!isMobile} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation">
-              <button data-row data-note={n.id} class:active={n.id === notes.currentId} onclick={() => openNote(n)}>
+              <button data-row data-note={n.id} class:active={n.id === CALENDAR_NOTE_ID ? onCalendar : n.id === notes.currentId} onclick={() => openNote(n)}>
                 <span class="title">
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ note: n }, e.currentTarget); }}>
@@ -558,9 +553,11 @@
                 </span>
               </button>
               <!-- unfolds on hover, like a group's tools; the fold chevron keeps its place at the edge -->
+              {#if n.id !== CALENDAR_NOTE_ID}
               <span class="tools">
                 <button class="icon mini tip-right" data-tip="Delete note" onclick={() => removeNote(n)}>×</button>
               </span>
+              {/if}
               {#if r.kids}
                 <button class="icon mini fold tip-right" aria-label={groups.isFolded(n.id) ? 'Expand' : 'Collapse'}
                   data-tip={groups.isFolded(n.id) ? 'Expand' : 'Collapse'} onclick={() => groups.fold(n.id)}>
