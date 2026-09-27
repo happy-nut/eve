@@ -167,7 +167,7 @@ fun readNotes(dir: File): List<Note> =
     .mapNotNull { runCatching { parseNote(it.readText()) }.getOrNull() }
     .filter { !it.second }
     .map { it.first }
-    .filter { it.id != "daily-template" } // the daily notes' template is not a note to read (lib/daily.ts)
+    .filter { it.id != "daily-template" && it.id != "daily-calendar" } // the calendar's own notes (lib/daily.ts)
     .sortedByDescending { it.updated }
 
 /** The note and whether it is a tombstone. */
