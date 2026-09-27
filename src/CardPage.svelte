@@ -50,6 +50,7 @@
 <div class="backdrop" transition:fade={{ duration: 120 }} onmousedown={close} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="card" transition:scale={{ start: 0.96, duration: 180 }} role="dialog" tabindex="-1" onkeydown={onKey}>
+  {#if req.note}<p class="tpl-note">{req.note}</p>{/if}
   <div class="card-scroll" bind:this={scrollEl}>
     <div class="card-body editor" bind:this={el}></div>
   </div>
@@ -75,5 +76,10 @@
   /* an untitled card still shows where the title goes (the editor's own placeholder is for paragraphs) */
   .card .card-body :global(.tiptap > h1:first-child:has(> br:only-child))::before {
     content: 'Untitled'; color: var(--fg-dim); float: left; height: 0; pointer-events: none;
+  }
+  /* a template, not a card: says so above it */
+  .tpl-note {
+    margin: 0; padding: 10px 18px; font-size: 12.5px; color: var(--fg-dim);
+    background: color-mix(in srgb, var(--accent) 7%, transparent); border-bottom: 1px solid var(--line);
   }
 </style>

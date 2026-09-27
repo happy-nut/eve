@@ -1,6 +1,6 @@
 // Kanban board file form <-> data self-check: node --experimental-strip-types src/lib/board.test.mjs
 import assert from 'node:assert/strict';
-import { parseBoard, serializeBoard, moveCard, moveColumn, patchCard } from './board.ts';
+import { parseBoard, parseTemplate, serializeBoard, moveCard, moveColumn, patchCard } from './board.ts';
 import { cardDoc, splitCard, plain } from './markdown.ts';
 
 const strip = (cols) => cols.map((c) => ({ title: c.title, cards: c.cards.map((k) => ({ title: k.title, body: k.body })) }));
@@ -47,5 +47,16 @@ assert.deepEqual(splitCard(cardDoc('', '')), { title: '', body: '' });
 assert.deepEqual(splitCard('plain line\n\nmore'), { title: '', body: 'plain line\n\nmore' }); // heading deleted
 assert.deepEqual(splitCard('## Not the title\n\nx'), { title: '', body: '## Not the title\n\nx' });
 assert.equal(plain('# **done** [[note]]'), 'done note');
+
+// a board's card template rides along in the same JSON; an empty one is not written; old boards have none
+{
+  const cols = parseBoard('{"columns":[{"title":"A","cards":[]}]}');
+  const text = serializeBoard(cols, { title: 'Bug: ', body: '## Steps\n- ' });
+  assert.deepEqual(parseTemplate(text), { title: 'Bug: ', body: '## Steps\n- ' });
+  assert.equal(parseTemplate(serializeBoard(cols)), null);
+  assert.equal(parseTemplate(serializeBoard(cols, { title: '', body: '' })), null);
+  assert.ok(!serializeBoard(cols, { title: 'x', body: '```\n`' }).split('\n').some((l) => /^\s{0,3}`/.test(l)), 'no line can close the fence');
+  assert.equal(parseTemplate('{"columns": [}'), null);
+}
 
 console.log('BOARD_OK');

@@ -10,6 +10,8 @@
  * ids are per-session only (keys for animation and focus), never written to the file.
  */
 export interface Card { id: string; title: string; body: string }
+/** what a new card on this board starts as (the board's own; {{date}} is filled in when a card is made) */
+export interface CardTemplate { title: string; body: string }
 export interface Column { id: string; title: string; cards: Card[] }
 
 export const uid = () => Math.random().toString(36).slice(2, 9);
@@ -28,8 +30,17 @@ export function parseBoard(text: string): Column[] | null {
   }));
 }
 
-export function serializeBoard(cols: Column[]): string {
-  return JSON.stringify({ columns: cols.map((c) => ({ title: c.title, cards: c.cards.map((k) => ({ title: k.title, body: k.body })) })) }, null, 2);
+/** The board's card template, when it has one. */
+export function parseTemplate(text: string): CardTemplate | null {
+  let t: any;
+  try { t = JSON.parse(text)?.template; } catch { return null; }
+  return t && typeof t === 'object' ? { title: str(t.title), body: str(t.body) } : null;
+}
+
+export function serializeBoard(cols: Column[], template: CardTemplate | null = null): string {
+  const columns = cols.map((c) => ({ title: c.title, cards: c.cards.map((k) => ({ title: k.title, body: k.body })) }));
+  const t = template && (template.title || template.body) ? { template: { title: template.title, body: template.body } } : {};
+  return JSON.stringify({ columns, ...t }, null, 2);
 }
 
 export const defaultBoard = (): Column[] => ['To do', 'In progress', 'Done'].map((title) => ({ id: uid(), title, cards: [] }));

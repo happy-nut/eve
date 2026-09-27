@@ -3,7 +3,7 @@ import { Selection, TextSelection } from '@tiptap/pm/state';
 import { ui } from './ui.svelte';
 import { mount, unmount } from 'svelte';
 import Board from '../Kanban.svelte';
-import { defaultBoard, parseBoard, serializeBoard, type Column } from './board';
+import { defaultBoard, parseBoard, parseTemplate, serializeBoard, type CardTemplate, type Column } from './board';
 
 /**
  * Kanban block: an atom node whose whole state is one attribute (the columns); the board UI is
@@ -36,13 +36,16 @@ export const Kanban = Node.create({
   selectable: false, // the board is entered, never selected as a block
 
   addAttributes() {
-    return { columns: { default: [] as Column[], parseHTML: (el) => parseBoard(el.textContent ?? '') ?? [], rendered: false } };
+    return {
+      columns: { default: [] as Column[], parseHTML: (el) => parseBoard(el.textContent ?? '') ?? [], rendered: false },
+      template: { default: null as CardTemplate | null, parseHTML: (el) => parseTemplate(el.textContent ?? ''), rendered: false },
+    };
   },
   parseHTML() {
     return [{ tag: 'div[data-kanban]' }];
   },
   renderHTML({ node }) {
-    return ['div', { 'data-kanban': '' }, serializeBoard(node.attrs.columns)];
+    return ['div', { 'data-kanban': '' }, serializeBoard(node.attrs.columns, node.attrs.template)];
   },
 
   addNodeView() {
@@ -55,7 +58,10 @@ export const Kanban = Node.create({
         target: dom,
         props: {
           columns: node.attrs.columns,
-          commit: (columns: Column[]) => editor.view.dispatch(editor.state.tr.setNodeMarkup(pos(), undefined, { columns })),
+          // every attribute is carried over: setNodeMarkup replaces them all
+          commit: (columns: Column[]) => editor.view.dispatch(editor.state.tr.setNodeMarkup(pos(), undefined, { ...editor.state.doc.nodeAt(pos())!.attrs, columns })),
+          template: (): CardTemplate | null => editor.state.doc.nodeAt(pos())?.attrs.template ?? null,
+          saveTemplate: (template: CardTemplate) => editor.view.dispatch(editor.state.tr.setNodeMarkup(pos(), undefined, { ...editor.state.doc.nodeAt(pos())!.attrs, template })),
           // leave to the text before / after the board (a paragraph is added after it when there is none)
           exit: (where: 'before' | 'after') => {
             const p = pos(), tr = editor.state.tr;
@@ -126,7 +132,7 @@ export const Kanban = Node.create({
           // JSON lines never start with a backtick, so a plain fence can't be closed early by a card body
           state.write('```kanban');
           state.ensureNewLine();
-          state.text(serializeBoard(node.attrs.columns), false);
+          state.text(serializeBoard(node.attrs.columns, node.attrs.template), false);
           state.ensureNewLine();
           state.write('```');
           state.closeBlock(node);

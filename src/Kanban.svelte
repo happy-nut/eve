@@ -3,9 +3,10 @@
   import { flip } from 'svelte/animate';
   import { crossfade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
-  import { moveCard, moveColumn, patchCard, uid, type Card, type Column } from './lib/board';
+  import { moveCard, moveColumn, patchCard, uid, type Card, type Column, type CardTemplate } from './lib/board';
   import { plain } from './lib/notes.svelte';
   import { ui } from './lib/ui.svelte';
+  import { dayKey, fillTemplate } from './lib/daily';
 
   /**
    * Notion-style board, mounted inside the `kanban` node view. Every change goes out through `commit`
@@ -13,8 +14,11 @@
    * Keys: ↑↓←→ move between headers / cards / "+ New"; ⌥↑↓←→ move the focused card, ⌥←→ the column;
    * Enter opens a card (renames a header), ⌫ deletes; Esc, ↑ on a header or ↓ on "+ New" go back to the text.
    */
-  let { columns: initial, commit, exit, remove, undo, redo }: {
-    columns: Column[]; commit: (c: Column[]) => void; exit: (where: 'before' | 'after') => void; remove: () => void; undo: () => void; redo: () => void;
+  let { columns: initial, commit, template, saveTemplate, exit, remove, undo, redo }: {
+    columns: Column[]; commit: (c: Column[]) => void;
+    /** what a new card starts as (this board's own template), and saving an edit to it */
+    template: () => CardTemplate | null; saveTemplate: (t: CardTemplate) => void;
+    exit: (where: 'before' | 'after') => void; remove: () => void; undo: () => void; redo: () => void;
   } = $props();
   // svelte-ignore state_referenced_locally
   let columns = $state.raw(initial);
@@ -87,11 +91,18 @@
     await ui.openCard(card, (patch) => commit(patchCard(columns, card.id, patch)));
   }
   async function addCard(col: Column) {
-    const card = { id: uid(), title: '', body: '' };
+    const t = template(), today = dayKey(new Date());
+    const card = { id: uid(), title: t ? fillTemplate(t.title, today) : '', body: t ? fillTemplate(t.body, today) : '' };
     commit(columns.map((c) => (c.id === col.id ? { ...c, cards: [...c.cards, card] } : c)));
     await tick();
     focusCard(col.id, card.id);
     await open(card);
+  }
+  /** The board's template, opened like a card: what every new card here starts as. */
+  async function editTemplate() {
+    let t = template() ?? { title: '', body: '' };
+    await ui.openCard({ ...t, note: 'Card template — every new card on this board starts like this. {{date}} and {{weekday}} are filled in.' },
+      (patch) => { t = { ...t, ...patch }; saveTemplate(t); });
   }
   function addColumn() {
     const col = { id: uid(), title: '', cards: [] };
@@ -225,6 +236,9 @@
   <!-- past the last column: + adds a column; below it a × (shown while hovering the board) deletes the board -->
   <div class="kb-end">
     <button class="icon kb-addcol" class:on={focused === 'addcol'} data-kb="addcol" aria-label="Add column" data-tip="Add column" onclick={addColumn}>+</button>
+    <button class="icon kb-tpl" tabindex="-1" aria-label="Card template" data-tip="Card template" onclick={editTemplate}>
+      <svg viewBox="0 0 16 16"><path d="M4 1.5h5L12.5 5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h3"/></svg>
+    </button>
     <button class="icon kb-x" class:on={focused === 'x'} data-kb="x" tabindex="-1" aria-label="Delete board" data-tip="Delete board" onclick={remove}>×</button>
   </div>
 </div>
@@ -234,6 +248,10 @@
   .kb-end { flex: none; display: flex; flex-direction: column; gap: 4px; }
   .kb-x { width: 28px; height: 28px; font-size: 16px; opacity: 0; transition: opacity 0.12s, background 0.12s; }
   .kb-wrap:hover .kb-x, .kb-x.on { opacity: 1; }
+  /* the card template: shown while hovering the board, like the ×; always there on a phone */
+  .kb-tpl { width: 28px; height: 28px; opacity: 0; transition: opacity 0.12s, background 0.12s; }
+  .kb-tpl svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+  .kb-wrap:hover .kb-tpl, :global(html.mobile) .kb-tpl { opacity: 1; }
   /* keyboard highlight from the tracked `focused` control, not :focus: WebKit's :focus-visible skips programmatic
      focus, and WebKit left :focus styling on the × after the focus had moved on to a header */
   .kb-end .icon:focus-visible { background: none; color: var(--fg-dim); }

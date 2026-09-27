@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { notes, CALENDAR } from './lib/notes.svelte';
-  import { isDailyId } from './lib/daily';
+  import { isDailyId, DAILY_TEMPLATE_ID } from './lib/daily';
   import { startReminder, syncPhoneReminder } from './lib/reminder';
   import CalendarPage from './CalendarPage.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
@@ -229,6 +229,11 @@
     sidebarOpen = false;
     widget.keyboard();
   }
+  /** The daily template, from the calendar: edited like a note. */
+  function openTemplate() {
+    ui.focusOwner = 'editor';
+    notes.openDailyTemplate();
+  }
   /** A day picked in the calendar: its note, in the editor. */
   function openDay(key: string) {
     ui.focusOwner = 'editor';
@@ -238,7 +243,7 @@
   /** A phone's back (the bar's chevron, or Android's): a day goes back to its calendar, anything else to the list. */
   function phoneBack() {
     if (settingsOpen) settingsOpen = false;
-    else if (notes.current && isDailyId(notes.current.id) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
+    else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
     else sidebarOpen = true;
   }
   // the phone's reminder alarm follows the settings
@@ -430,11 +435,15 @@
     {#if notes.loaded && notes.current}
       {#key notes.currentId}
         <div class="page" in:fade={{ duration: 160 }}>
+          {#if notes.current.id === DAILY_TEMPLATE_ID}
+            <p class="tpl-banner">Template — every new day starts like this. {'{{date}}'} and {'{{weekday}}'} are filled in.
+              <button onclick={() => (notes.currentId = CALENDAR)}>Back to calendar</button></p>
+          {/if}
           <Editor note={notes.current} />
         </div>
       {/key}
     {:else if notes.loaded && notes.currentId === CALENDAR}
-      <div class="page" in:fade={{ duration: 160 }}><CalendarPage onpick={openDay} /></div>
+      <div class="page" in:fade={{ duration: 160 }}><CalendarPage onpick={openDay} ontemplate={openTemplate} /></div>
     {/if}
   </main>
 </div>

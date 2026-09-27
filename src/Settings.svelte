@@ -13,7 +13,6 @@
   import { updates } from './lib/updates.svelte';
   import { renderSVG } from 'uqr';
   import { findUpdate } from './lib/update';
-  import { DEFAULT_TEMPLATE } from './lib/daily';
   import { askNotify } from './lib/reminder';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
@@ -154,12 +153,6 @@
             onchange={(e) => appearance.set({ dailyNotes: e.currentTarget.checked })} />
         </label>
         {#if appearance.s.dailyNotes}
-          <div class="row tmpl">
-            <span class="label">Template <span class="sub">how a new day starts; {'{{date}}'} and {'{{weekday}}'} are filled in</span></span>
-            <button class="link" onclick={() => appearance.set({ dailyTemplate: DEFAULT_TEMPLATE })}>Reset</button>
-          </div>
-          <textarea class="template" rows="5" spellcheck="false" value={appearance.s.dailyTemplate}
-            oninput={(e) => appearance.set({ dailyTemplate: e.currentTarget.value })}></textarea>
           <label class="row tmpl">
             <span class="label">Remind me <span class="sub">if today's note is still empty at this time</span></span>
             <input type="checkbox" class="switch" checked={appearance.s.dailyReminder}
@@ -458,12 +451,5 @@
   }
   .time:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   :global(html.mobile) .time { font-size: 16px; padding: 8px 10px; background: var(--bg-input); box-shadow: none; }
-  .template {
-    display: block; width: 100%; box-sizing: border-box; margin: 0 0 12px; padding: 8px 10px; resize: vertical;
-    border: 0; border-radius: 7px; outline: none; background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line);
-    font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-  }
-  .template:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
-  :global(html.mobile) .template { font-size: 15px; background: var(--bg-input); box-shadow: none; }
   .sample { margin: 12px 0 0; padding: 14px 16px; border-radius: 10px; background: var(--bg-input); color: var(--fg); }
 </style>

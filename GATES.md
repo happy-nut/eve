@@ -802,3 +802,12 @@
   CHECK: gh release view android-v0.7.8 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.8\.apk,Eve-android\.apk$
   EVIDENCE: runs 36327179490 / 36327179582 succeeded; v0.7.6 is Latest with the Mac zip.
+- [x] G177 Templates live where their items are made: the calendar's own, each board's own
+  CHECK: npm test
+  EXPECT: BOARD_OK
+  EVIDENCE: the settings' template box is gone. Calendar → Template opens the daily template as a note
+  (daily-template: synced, out of the list and the widget) under a "Template — every new day starts like
+  this" line with Back to calendar; a new day (the 15th) started as the edited template, date filled in.
+  A board's template sits in its own JSON ("template": {title, body}; tested round trip, old boards have
+  none); the board's template button opens it like a card with a note above; "+ New" made a card from it
+  ("Bug: / Steps / due 2026-09-28"). Browser screenshots; the APK builds.
