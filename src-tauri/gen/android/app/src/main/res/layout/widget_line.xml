@@ -3,8 +3,8 @@
     android:id="@+id/line"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingHorizontal="18dp"
-    android:paddingVertical="3dp"
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="2dp"
     android:lineSpacingMultiplier="1.2"
     android:textColor="@color/widget_fg"
     android:textSize="13sp" />

@@ -105,7 +105,7 @@ class NotesWidget : AppWidgetProvider() {
       views.setTextViewText(R.id.row_icon, n.icon.ifEmpty { "📝" })
       views.setTextViewText(R.id.row_title, blocks.firstOrNull()?.toString()?.trim().orEmpty().ifEmpty { "Untitled" })
       val preview = android.text.SpannableStringBuilder()
-      blocks.drop(1).take(3).forEachIndexed { i, b -> if (i > 0) preview.append('\n'); preview.append(b) }
+      blocks.drop(1).take(2).forEachIndexed { i, b -> if (i > 0) preview.append('\n'); preview.append(b) }
       views.setTextViewText(R.id.row_preview, preview)
       views.setViewVisibility(R.id.row_preview, if (preview.isEmpty()) View.GONE else View.VISIBLE)
       val now = System.currentTimeMillis()

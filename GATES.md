@@ -536,3 +536,17 @@
   CHECK: npm run check && npm test 2>&1 | grep -c "_OK"
   EXPECT: ^8$
   EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS" / "8"; cargo check "Finished".
+
+# GATES — group icons sync, touch reorder, tighter list, compact widget (2026-09-27)
+
+- [x] G130 Group icons and order reach the phone
+  EVIDENCE: the rebuilt Mac app pushed notes/groups.json to happy-nut/eve-notes (5 icons — Turtle 🐢,
+  개발 💻, 금융경제학 💸, Zoobox 🦄, 진리 — and the group order); the phone, opened after, drew every group
+  with its icon in that order. (Group icons used to live only in each device's localStorage.) A device
+  that never set an icon dates its copy 0, so it can't overwrite the Mac's.
+- [x] G131 Long-press lifts a row and moving it reorders; a lift without moving opens the row's menu
+  EVIDENCE: manual, emulator (motionevent DOWN, 0.7 s, MOVE…, UP): Lock lifted with a shadow, a blue line
+  showed the slot above OLAP, and on release Lock sat above OLAP; OLAP dragged back restored the order.
+- [x] G132 Widget: + floats at the bottom right; cards tighter (3dp apart, 2 preview lines)
+  EVIDENCE: manual, emulator: pinned Kafka and newest-notes modes both show the + at the bottom right;
+  the list mode fits ~4.5 cards in the 4×3 widget. Widget set back to Kafka afterwards.

@@ -2,13 +2,19 @@ import { notes, nested } from './notes.svelte';
 
 /**
  * Sidebar folders, nested up to MAX_DEPTH. A group is a path like "Work/Projects/Alpha";
- * each note stores its full group path (so membership syncs). Only sibling order,
- * collapsed state and still-empty groups are local.
+ * each note stores its full group path (so membership syncs). The groups' icons and their order
+ * sync too, as one small file in the repository (notes/groups.json, see shared()/takeRemote());
+ * which ones are folded stays with each device.
  */
 const LS = 'eve.groups';
 export const MAX_DEPTH = 3;
 
-interface Saved { order: string[]; collapsed: string[]; icons: Record<string, string>; folded: string[] }
+interface Saved { order: string[]; collapsed: string[]; icons: Record<string, string>; folded: string[]; sharedAt?: number }
+
+/** the synced half of a device's groups, as the repository keeps it */
+export interface SharedGroups { updated: number; icons: Record<string, string>; order: string[] }
+const sharedText = (icons: Record<string, string>, order: string[]) =>
+  JSON.stringify({ icons: Object.fromEntries(Object.entries(icons).sort(([a], [b]) => a.localeCompare(b))), order });
 
 function load(): Saved {
   try { return { order: [], collapsed: [], icons: {}, folded: [], ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; }
@@ -74,7 +80,39 @@ class Groups {
     return walk('');
   }
 
-  private persist() { localStorage.setItem(LS, JSON.stringify(this.saved)); }
+  /** what icons + order last looked like, to tell a change to them from a fold */
+  private lastShared = sharedText(this.saved.icons, this.saved.order);
+  private persist() {
+    const now = sharedText(this.saved.icons, this.saved.order);
+    if (now !== this.lastShared) { this.saved.sharedAt = Date.now(); this.lastShared = now; }
+    localStorage.setItem(LS, JSON.stringify(this.saved));
+  }
+
+  /** The synced half, for the repository. A device from before this existed dates what it has to now,
+   *  so icons made on it win over a phone that has none. */
+  shared(): SharedGroups {
+    if (this.saved.sharedAt === undefined) {
+      // only icons count: a phone that merely listed its groups must not outrank the Mac's icons
+      this.saved.sharedAt = Object.keys(this.saved.icons).length ? Date.now() : 0;
+      localStorage.setItem(LS, JSON.stringify(this.saved));
+    }
+    return { updated: this.saved.sharedAt, icons: this.saved.icons, order: this.saved.order };
+  }
+  /** The repository's copy: the later one wins; on a tie the same one wins on every device, so two
+   *  devices never hand the file back and forth. Order keeps any local group the remote lacks. */
+  takeRemote(r: SharedGroups) {
+    const mine = this.shared();
+    const theirs = sharedText(r.icons ?? {}, r.order ?? []), ours = sharedText(mine.icons, mine.order);
+    if (theirs === ours) return;
+    if (r.updated < mine.updated || (r.updated === mine.updated && theirs < ours)) return;
+    const order = [...(r.order ?? [])];
+    for (const g of this.saved.order) if (!order.includes(g)) order.push(g);
+    this.saved.icons = { ...(r.icons ?? {}) };
+    this.saved.order = order;
+    this.saved.sharedAt = r.updated;
+    this.lastShared = sharedText(this.saved.icons, this.saved.order);
+    localStorage.setItem(LS, JSON.stringify(this.saved));
+  }
 
   /** stable identity that survives renames and moves (sidebar row key, so rows animate instead of re-mounting).
    *  Plain Map, not $state: it is filled lazily from inside a $derived. */
