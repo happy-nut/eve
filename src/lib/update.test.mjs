@@ -19,4 +19,9 @@ assert.equal(await findUpdate('0.7.1', releases([{ ...apk('v0.7.2'), draft: true
 assert.equal(await findUpdate('0.7.1', releases([{ tag_name: 'v0.7.2', draft: false, assets: [{ name: 'Eve-android.apk', browser_download_url: 'https://evil.example/Eve-android.apk' }] }])), null);
 assert.equal(await findUpdate('0.7.1', async () => ({ ok: false })), null);
 
+// the phone's own tags
+assert.equal(newer('android-v0.7.2', '0.7.1'), true);
+assert.equal(newer('android-v0.7.2', '0.7.2'), false);
+assert.deepEqual((await findUpdate('0.7.1', releases([apk('android-v0.7.2')])))?.version, '0.7.2');
+
 console.log('UPDATE_OK');

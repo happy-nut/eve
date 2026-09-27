@@ -61,6 +61,10 @@ npm run tauri -- android dev              # on a connected phone or emulator (ne
 npm run tauri -- android build --apk      # src-tauri/gen/android/app/build/outputs/apk/
 ```
 
+The phone has its own version (`src-tauri/tauri.android.conf.json`) and its own releases: an `android-v*` tag
+builds only the signed APK (never marked Latest, so Homebrew keeps pointing at the Mac), a `v*` tag only the Mac
+app. Installed phones find newer APKs by themselves and update with one tap.
+
 Not on the phone: the global hotkey, Dock/login-item settings, PDF/image export, and Quick Look previews.
 
 ## Default shortcuts

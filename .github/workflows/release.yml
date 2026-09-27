@@ -1,15 +1,18 @@
-# Tag v* -> build Eve.app on an Apple-silicon runner -> GitHub release with Eve-macos-arm64.zip,
-# then the signed Android APK is attached to that release as Eve-android.apk (the phone-setup page,
-# docs/android/, downloads releases/latest/download/Eve-android.apk).
-# The Homebrew cask (happy-nut/homebrew-tap) points at releases/latest, so nothing else to update.
+# The Mac and the phone release on their own:
+#   tag v*          -> Eve.app on an Apple-silicon runner -> release with Eve-macos-arm64.zip (Latest;
+#                      the Homebrew cask, happy-nut/homebrew-tap, points at releases/latest)
+#   tag android-v*  -> the signed APK -> its own release with Eve-android.apk, never marked Latest (the
+#                      phone-setup page, docs/android/, and the app's updater look for the newest APK)
+# The phone's version is src-tauri/tauri.android.conf.json; the Mac's is tauri.conf.json.
 name: release
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', 'android-v*']
 permissions:
   contents: write
 jobs:
   build:
+    if: startsWith(github.ref_name, 'v')
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
@@ -26,7 +29,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   android:
-    needs: build # the release exists before the APK is attached to it
+    if: startsWith(github.ref_name, 'android-v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -53,6 +56,6 @@ jobs:
       - run: NDK_HOME="$ANDROID_NDK_LATEST_HOME" npm run tauri -- android build --apk --target aarch64
       - run: |
           cp src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk Eve-android.apk
-          gh release upload "$GITHUB_REF_NAME" Eve-android.apk
+          gh release create "$GITHUB_REF_NAME" Eve-android.apk --title "Eve for Android ${GITHUB_REF_NAME#android-v}" --generate-notes --latest=false
         env:
           GH_TOKEN: ${{ github.token }}
