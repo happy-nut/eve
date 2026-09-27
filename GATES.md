@@ -509,3 +509,30 @@
   CHECK: npm run check && npm test 2>&1 | grep -c "_OK"
   EXPECT: ^8$
   EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS" / "8"; cargo check "Finished".
+
+# GATES — phone polish: swipes, own controls, export, pin to home, sheets (2026-09-27)
+
+- [x] G124 Swipe right on a note opens the list; swipe left on the list closes it
+  EVIDENCE: manual, emulator (release APK): `input swipe 250→850` on Kafka showed the list; `850→150` on
+  the list slid it away back to Kafka.
+- [x] G125 No platform controls in Settings: Select (popover / bottom sheet) and Slider
+  EVIDENCE: manual. Phone: the Theme select opened a sheet (System ✓ / Light / Dark); Dark applied at
+  once, System restored it. Desktop (`npm run dev`, 1104×832): the popover lands under the button
+  (portalled to <body>: the transformed settings panel had swallowed it), Dark → data-theme="dark",
+  System → "system".
+- [x] G126 Phone export: Markdown, PDF, image, through the share sheet
+  EVIDENCE: manual, emulator: Export → PDF → the chooser offered "Kafka.pdf"; its print preview showed the
+  whole note over 2 pages. Export → Image → the chooser; the preview showed page one with icon and title
+  and no phone bar (the bar and phone-only margins are now screen-only).
+- [x] G127 Pin to home screen from a note
+  EVIDENCE: manual, emulator: the pin button raised the launcher's "Add to home screen"; adding it put a
+  widget on the home screen pinned to Kafka (the placed-callback stored the new widget id).
+- [x] G128 Dialogs as sheets, bigger type, no shortcut hints, settings/sync up top, new gear
+  EVIDENCE: manual, emulator: delete asks in a bottom sheet (Delete / Cancel, full width; cancelled);
+  the long-press and export menus are sheets; list header reads "Eve · synced · ⚙" with no footer;
+  body text 17px, settings rows 16px; no kbd/shortcut chips anywhere. The widget's picker has Eve's own
+  check mark, row highlight and rounded Cancel / OK. Desktop footer shows the new gear.
+- [x] G129 Nothing else regressed
+  CHECK: npm run check && npm test 2>&1 | grep -c "_OK"
+  EXPECT: ^8$
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS" / "8"; cargo check "Finished".

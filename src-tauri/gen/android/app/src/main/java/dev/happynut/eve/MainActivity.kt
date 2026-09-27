@@ -87,6 +87,25 @@ class MainActivity : TauriActivity() {
       }, 250)
     }
 
+    /**
+     * Export the open note: "md" (body is the Markdown), "pdf", or "png" (printed from the page).
+     * Ends in the share sheet; the page hears back through window.dispatchEvent('eve-exported').
+     */
+    @JavascriptInterface
+    fun export(kind: String, title: String, body: String) = runOnUiThread {
+      val view = webView ?: return@runOnUiThread
+      val done = { ok: Boolean -> view.evaluateJavascript("window.dispatchEvent(new CustomEvent('eve-exported', { detail: $ok }))", null); Unit }
+      when (kind) {
+        "md" -> { Exporter.markdown(this@MainActivity, title, body); done(true) }
+        "pdf" -> Exporter.pdf(this@MainActivity, view, title, done)
+        "png" -> Exporter.png(this@MainActivity, view, title, done)
+      }
+    }
+
+    /** Put a widget pinned to this note on the home screen (the launcher asks where). False if it can't. */
+    @JavascriptInterface
+    fun pinWidget(noteId: String): Boolean = NotesWidget.requestPin(applicationContext, noteId)
+
     /** the GitHub sign-in, so the background pull can run while the app is closed ("" = signed out) */
     @JavascriptInterface
     fun account(repo: String, token: String) = PullJob.account(applicationContext, repo, token)

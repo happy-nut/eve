@@ -134,6 +134,46 @@ import CardPage from './CardPage.svelte';
     if (next) notes.currentId = next.id;
   }
 
+  /** A phone: a swipe to the right on a note brings the list back in. */
+  let swipe: { x: number; y: number } | null = null;
+  function swipeStart(e: TouchEvent) {
+    swipe = null;
+    if (!isMobile || sidebarOpen || settingsOpen || ui.card || e.touches.length !== 1) return;
+    // things that scroll sideways themselves keep the gesture
+    if ((e.target as HTMLElement).closest('pre, table, .kanban, .mbar, .mhead, input, textarea, .menu, .suggest')) return;
+    swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }
+  function swipeEnd(e: TouchEvent) {
+    if (!swipe) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
+    swipe = null;
+    if (dx > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) {
+      (document.activeElement as HTMLElement | null)?.blur(); // the keyboard goes with the note
+      sidebarOpen = true;
+    }
+  }
+
+  /** A phone's note bar: export to the share sheet, a widget of this note on the home screen, delete. */
+  function exportMenu(from: HTMLElement) {
+    const r = from.getBoundingClientRect();
+    ui.openMenu({ clientX: r.right, clientY: r.bottom }, [
+      { label: 'Markdown (.md)', run: () => void exportCurrent('md') },
+      { label: 'PDF', run: () => void exportCurrent('pdf') },
+      { label: 'Image (.png)', run: () => void exportCurrent('png') },
+    ]);
+  }
+  function pinToHome() {
+    const n = notes.current;
+    if (n && !widget.pin(n.id)) void ui.ask('This home screen can\u2019t add a widget from an app. Long-press the home screen → Widgets → Eve, then pick this note from the widget\u2019s settings.', false);
+  }
+  async function deleteOnPhone() {
+    const n = notes.current;
+    if (!n || !(await ui.ask(`Delete “${titleOf(n)}”?`))) return;
+    notes.remove(n.id);
+    sidebarOpen = true; // back to the list, not into whichever note came next
+  }
+
   /** A phone's +: a new note, open, keyboard up. */
   function newOnPhone() {
     ui.focusOwner = 'editor';
@@ -274,7 +314,7 @@ import CardPage from './CardPage.svelte';
   onkeydowncapture={() => (document.documentElement.dataset.input = 'keyboard')} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="shell" onfocusin={(e) => (ui.focusOwner = (e.target as HTMLElement).closest('aside') ? 'sidebar' : 'editor')}>
+<div class="shell" ontouchstart={swipeStart} ontouchend={swipeEnd} onfocusin={(e) => (ui.focusOwner = (e.target as HTMLElement).closest('aside') ? 'sidebar' : 'editor')}>
   <div class="dragbar" data-tauri-drag-region></div>
   <!-- window toolbar, right of the traffic lights -->
   <div class="toolbar">
@@ -301,8 +341,15 @@ import CardPage from './CardPage.svelte';
       <button class="mback" aria-label="Notes" onclick={() => (sidebarOpen = true)}>
         <svg viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg><span>Notes</span>
       </button>
-      <button class="mplus" aria-label="New note" onclick={newOnPhone}>
-        <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
+      <span class="mgap"></span>
+      <button class="micon" aria-label="Export" onclick={(e) => exportMenu(e.currentTarget)}>
+        <svg viewBox="0 0 16 16"><path d="M8 10V2.5M5 5.5l3-3 3 3"/><path d="M4.5 8H4a1.5 1.5 0 00-1.5 1.5v3A1.5 1.5 0 004 14h8a1.5 1.5 0 001.5-1.5v-3A1.5 1.5 0 0012 8h-.5"/></svg>
+      </button>
+      <button class="micon" aria-label="Pin to home screen" onclick={pinToHome}>
+        <svg viewBox="0 0 16 16"><path d="M6 1.8h4l-.6 3.4 2.2 2.2v1.2H4.4V7.4l2.2-2.2z"/><path d="M8 8.6V14"/></svg>
+      </button>
+      <button class="micon danger" aria-label="Delete note" onclick={deleteOnPhone}>
+        <svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 9h5.8l.6-9M6.8 7v4.2M9.2 7v4.2"/></svg>
       </button>
     </header>
   {/if}

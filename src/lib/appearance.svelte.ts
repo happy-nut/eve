@@ -1,5 +1,5 @@
 /** Theme + editor typography, applied on <html> (data-theme and CSS variables). Persisted locally. */
-import { setWindowSize } from './platform';
+import { setWindowSize, isMobile } from './platform';
 const LS = 'eve.appearance';
 
 export const FONTS: { id: string; label: string; stack: string }[] = [
@@ -23,7 +23,9 @@ interface Appearance {
   winW: number; winH: number;
 }
 // the window's own defaults match tauri.conf.json, so a fresh install never resizes on launch
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: 15, lineHeight: 1.6, width: 820, hideSidebarOnEdit: true, autoIcon: true, winW: 1104, winH: 832 };
+// A phone starts from bigger type. Appearance lives in this device's localStorage and never syncs, so a
+// phone and a Mac each keep their own.
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, hideSidebarOnEdit: true, autoIcon: true, winW: 1104, winH: 832 };
 
 function load(): Appearance {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; } catch { return { ...DEFAULTS }; }

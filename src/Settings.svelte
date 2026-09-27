@@ -7,6 +7,8 @@
   import { ui } from './lib/ui.svelte';
   import { appearance, FONTS, THEMES, type Theme } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
+  import Select from './Select.svelte';
+  import Slider from './Slider.svelte';
   import { renderSVG } from 'uqr';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
@@ -112,20 +114,20 @@
     {:else if tab === 'appearance'}
       <h3>Theme</h3>
       <div class="card">
-        <label class="row">
-          <span class="label">Appearance <span class="sub">System follows macOS</span></span>
-          <select value={appearance.s.theme} onchange={(e) => appearance.set({ theme: e.currentTarget.value as Theme })}>
-            {#each THEMES as [id, label]}<option value={id}>{label}</option>{/each}
-          </select>
-        </label>
+        <div class="row">
+          <span class="label">Appearance <span class="sub">System follows {isMobile ? 'the phone' : 'macOS'}</span></span>
+          <Select label="Appearance" value={appearance.s.theme} options={THEMES} onchange={(v) => appearance.set({ theme: v as Theme })} />
+        </div>
       </div>
-      <h3>Window</h3>
+      <h3>{isMobile ? 'Notes' : 'Window'}</h3>
       <div class="card">
+{#if !isMobile}
         <label class="row">
           <span class="label">Close sidebar when you start writing <span class="sub">typing or arrowing in the editor folds the list away</span></span>
           <input type="checkbox" class="switch" checked={appearance.s.hideSidebarOnEdit}
             onchange={(e) => appearance.set({ hideSidebarOnEdit: e.currentTarget.checked })} />
         </label>
+{/if}
         <label class="row">
           <span class="label">Give new notes an icon <span class="sub">a random one on every new or imported note; you can always change it</span></span>
           <input type="checkbox" class="switch" checked={appearance.s.autoIcon}
@@ -140,12 +142,10 @@
       </div>
       <h3>Typeface</h3>
       <div class="card">
-        <label class="row">
+        <div class="row">
           <span class="label">Editor font</span>
-          <select value={appearance.s.font} onchange={(e) => appearance.set({ font: e.currentTarget.value })}>
-            {#each FONTS as f}<option value={f.id}>{f.label}</option>{/each}
-          </select>
-        </label>
+          <Select label="Editor font" value={appearance.s.font} options={FONTS.map((f) => [f.id, isMobile ? f.label.replace(/ \(SF [^)]*\)$/, '') : f.label] as const)} onchange={(v) => appearance.set({ font: v })} />
+        </div>
         {#if appearance.s.font === 'custom'}
           <label class="row">
             <span class="label">Font family <span class="sub">any CSS font-family</span></span>
@@ -156,19 +156,21 @@
       <h3>Text</h3>
       <div class="card">
         <label class="row"><span class="label">Size <span class="sub">{appearance.s.size}px</span></span>
-          <input type="range" min="12" max="24" step="1" value={appearance.s.size} oninput={(e) => appearance.set({ size: Number(e.currentTarget.value) })} /></label>
+          <Slider label="Size" min={12} max={24} value={appearance.s.size} oninput={(v) => appearance.set({ size: v })} /></label>
         <label class="row"><span class="label">Line height <span class="sub">{appearance.s.lineHeight}</span></span>
-          <input type="range" min="1.2" max="2.2" step="0.05" value={appearance.s.lineHeight} oninput={(e) => appearance.set({ lineHeight: Number(e.currentTarget.value) })} /></label>
+          <Slider label="Line height" min={1.2} max={2.2} step={0.05} value={appearance.s.lineHeight} oninput={(v) => appearance.set({ lineHeight: v })} /></label>
+{#if !isMobile}
         <label class="row"><span class="label">Width <span class="sub">{appearance.s.width}px</span></span>
-          <input type="range" min="520" max="1400" step="20" value={appearance.s.width} oninput={(e) => appearance.set({ width: Number(e.currentTarget.value) })} /></label>
+          <Slider label="Width" min={520} max={1400} step={20} value={appearance.s.width} oninput={(v) => appearance.set({ width: v })} /></label>
+{/if}
       </div>
 {#if !isMobile}
       <h3>Window</h3>
       <div class="card">
         <label class="row"><span class="label">Opening width <span class="sub">{appearance.s.winW}px</span></span>
-          <input type="range" min="640" max="1800" step="16" value={appearance.s.winW} oninput={(e) => appearance.set({ winW: Number(e.currentTarget.value) })} /></label>
+          <Slider label="Opening width" min={640} max={1800} step={16} value={appearance.s.winW} oninput={(v) => appearance.set({ winW: v })} /></label>
         <label class="row"><span class="label">Opening height <span class="sub">{appearance.s.winH}px</span></span>
-          <input type="range" min="400" max="1400" step="16" value={appearance.s.winH} oninput={(e) => appearance.set({ winH: Number(e.currentTarget.value) })} /></label>
+          <Slider label="Opening height" min={400} max={1400} step={16} value={appearance.s.winH} oninput={(v) => appearance.set({ winH: v })} /></label>
       </div>
       {/if}
       <p class="sample" style="font-family: {appearance.stack}; font-size: {appearance.s.size}px; line-height: {appearance.s.lineHeight}">
@@ -322,13 +324,12 @@
   .btn.primary { background: var(--accent); color: light-dark(#fff, #0b0c10); box-shadow: var(--glow); }
   .btn.primary:hover { filter: brightness(1.08); }
   .btn:disabled { opacity: 0.4; pointer-events: none; }
-  select, input:not([type]) {
+  input:not([type]) {
     font: inherit; font-size: 12.5px; padding: 5px 8px; border-radius: 7px; border: 0; outline: none;
     background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line); max-width: 240px;
   }
   input:not([type]) { flex: 1; }
   input:not([type]):focus { box-shadow: 0 0 0 2px var(--accent-soft); }
-  input[type='range'] { accent-color: var(--accent); width: 200px; }
   .switch {
     appearance: none; width: 34px; height: 20px; border-radius: 10px; margin: 0; position: relative;
     background: var(--bg-active); transition: background 0.2s;
