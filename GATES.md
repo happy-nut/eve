@@ -772,3 +772,7 @@
 - [x] G171 Each note on the widget is its own card again, still compact
   EVIDENCE: hairlines made the list read as one block. Rows are soft cards again (#F5F5F7, 12dp corners,
   5dp apart, 7dp side margins), lighter than the old grey cards. Emulator screenshot of the widget.
+- [x] G172 Widget cards sit concentric with the widget, closer together, the preview flush with the icon
+  EVIDENCE: cards 8dp in from the widget's edge with Android 12's system_app_widget_inner_radius (16dp
+  below 12, against the 24dp outside), 3dp apart; each row is now [icon · title · time] over a full-width
+  preview that starts at the icon's edge. Emulator screenshots before/after.
