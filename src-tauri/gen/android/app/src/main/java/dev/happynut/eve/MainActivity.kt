@@ -114,6 +114,16 @@ class MainActivity : TauriActivity() {
     @JavascriptInterface
     fun pinWidget(noteId: String): Boolean = NotesWidget.requestPin(applicationContext, noteId)
 
+    /** the daily note reminder (Reminder.kt); turned on, it asks for the permission to notify */
+    @JavascriptInterface
+    fun setReminder(on: Boolean, at: String, template: String) {
+      Reminder.set(applicationContext, on, at, template)
+      if (on && android.os.Build.VERSION.SDK_INT >= 33 &&
+        checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        runOnUiThread { requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 11) }
+      }
+    }
+
     /** the notes pinned to the top of the widget, comma-separated (the page shows the pin as on) */
     @JavascriptInterface
     fun widgetTop(): String = NotesWidget.top(applicationContext).joinToString(",")

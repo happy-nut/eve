@@ -1,4 +1,5 @@
 /** Theme + editor typography, applied on <html> (data-theme and CSS variables). Persisted locally. */
+import { DEFAULT_TEMPLATE } from './daily';
 import { setWindowSize, isMobile } from './platform';
 const LS = 'eve.appearance';
 
@@ -19,13 +20,17 @@ interface Appearance {
   hideSidebarOnEdit: boolean;
   /** give a new or imported note an icon of its own, so the list reads at a glance */
   autoIcon: boolean;
+  /** a note per day, opened from a calendar and kept out of the list (lib/daily.ts), and what a new one starts as */
+  dailyNotes: boolean; dailyTemplate: string;
+  /** a nudge at `reminderAt` (HH:MM, local) when today's daily note is still unwritten */
+  dailyReminder: boolean; reminderAt: string;
   /** the size the window opens at; changing it resizes the window there and then, as a preview of itself */
   winW: number; winH: number;
 }
 // the window's own defaults match tauri.conf.json, so a fresh install never resizes on launch
 // A phone starts from bigger type. Appearance lives in this device's localStorage and never syncs, so a
 // phone and a Mac each keep their own.
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, hideSidebarOnEdit: true, autoIcon: true, winW: 1104, winH: 832 };
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, hideSidebarOnEdit: true, autoIcon: true, dailyNotes: false, dailyTemplate: DEFAULT_TEMPLATE, dailyReminder: false, reminderAt: '21:00', winW: 1104, winH: 832 };
 
 function load(): Appearance {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; } catch { return { ...DEFAULTS }; }

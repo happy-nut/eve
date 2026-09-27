@@ -2,6 +2,7 @@ import { storage } from './platform';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
 import { plain, splitLink } from './markdown';
+import { dailyBody, dailyId, dayKey, isDailyId } from './daily';
 
 export { plain };
 
@@ -77,6 +78,9 @@ export function nested(list: Note[], folded?: (id: string) => boolean): { n: Not
   return out;
 }
 
+/** Not a note: the daily notes' calendar, opened in the editor's place and kept in back/forward history. */
+export const CALENDAR = 'calendar';
+
 // ---- reactive store --------------------------------------------------------
 class NotesStore {
   all = $state<Note[]>([]);
@@ -90,6 +94,8 @@ class NotesStore {
   cursor = new Map<string, number>();
   /** set just before creating a page whose title is a placeholder: the editor selects it on open */
   selectTitle = false;
+  /** set just before opening a note to write in it (today's daily note): the editor puts the caret at its end */
+  caretEnd = false;
   /** the heading a `[[Title#Section]]` link just aimed at; the editor scrolls there as the page opens */
   section = '';
 
@@ -108,8 +114,9 @@ class NotesStore {
   private step(d: number) {
     let i = this.hIndex + d;
     while (i >= 0 && i < this.history.length) {
-      const n = this.all.find((x) => x.id === this.history[i]);
-      if (n && !n.deleted) { this.hIndex = i; this._cur = n.id; return; }
+      const id = this.history[i];
+      const n = this.all.find((x) => x.id === id);
+      if ((n && !n.deleted) || (id === CALENDAR && appearance.s.dailyNotes)) { this.hIndex = i; this._cur = id; return; }
       i += d;
     }
   }
@@ -117,8 +124,28 @@ class NotesStore {
   /** bumps whenever a note changes locally; sync listens to it */
   dirty = $state(0);
 
+  /** the list's notes: everything but deleted ones and daily notes (those live in the calendar) */
   get visible() {
-    return this.all.filter((n) => !n.deleted).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt);
+    return this.all.filter((n) => !n.deleted && !isDailyId(n.id)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt);
+  }
+  /** daily notes, newest day first */
+  get daily() {
+    return this.all.filter((n) => !n.deleted && isDailyId(n.id)).sort((a, b) => (a.id < b.id ? 1 : -1));
+  }
+
+  /** Open a day's note (today by default), starting it from the template when there is none yet. */
+  openDaily(key = dayKey(new Date())): Note {
+    const id = dailyId(key);
+    let n = this.all.find((x) => x.id === id);
+    if (n && !n.deleted) { this.currentId = id; return n; }
+    const body = dailyBody(appearance.s.dailyTemplate, key);
+    if (n) Object.assign(n, { deleted: false, body, updatedAt: Date.now() }); // a deleted day, begun again
+    else this.all.push((n = { id, body, updatedAt: Date.now(), deleted: false, group: '', order: 0, icon: '🗓️' }));
+    this.titles.set(id, titleOf(n));
+    this.currentId = id;
+    void storage.write(id, serialize(n));
+    this.dirty++;
+    return n;
   }
   get current() {
     return this.all.find((n) => n.id === this.currentId) ?? null;

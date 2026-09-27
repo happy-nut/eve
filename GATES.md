@@ -776,3 +776,25 @@
   EVIDENCE: cards 8dp in from the widget's edge with Android 12's system_app_widget_inner_radius (16dp
   below 12, against the 24dp outside), 3dp apart; each row is now [icon · title · time] over a full-width
   preview that starts at the icon's edge. Emulator screenshots before/after.
+
+# GATES — daily notes, their calendar and reminder (2026-09-27)
+
+- [x] G173 Daily notes: off by default; on, a "Daily notes" row tops Notes (which now sits above the groups)
+  CHECK: npm test
+  EXPECT: DAILY_OK
+  EVIDENCE: a day's note is an ordinary synced note with a fixed id (daily-YYYY-MM-DD), kept out of the
+  tree and of [[link]] targets, found by search. The row opens a full-width month in the editor's place
+  (rounded days, a blue dot on days with a note, the first line under the title); a day opens its note,
+  started from the template ({{date}}, {{weekday}}; a heading-ending template gets a line to write on).
+  Back from a day returns to the month (history), on the phone too. Browser (Mac size) and emulator
+  screenshots; tests for keys, template filling, the month grid, isWritten.
+- [x] G174 The phone's + asks: a new note, or today's daily note (only while daily notes are on)
+  EVIDENCE: emulator: the sheet offers both; today's note opens with the keyboard up and the caret under
+  the title ("milk" landed there); back shows the month with the dot and the line on the 27th.
+- [x] G175 A reminder, under Daily notes: at a chosen time, if today's note is still unwritten
+  EVIDENCE: Android: an inexact alarm (10-min window) set from the page, again after reboot or update;
+  turning it on asks for the notification permission (emulator: the system prompt). dumpsys alarm shows
+  the next 21:00; firing the receiver with no note for today posted "Today's daily note", and tapping it
+  opened today's note from the template. Written = a line the template did not put there, the same rule
+  in daily.ts and Reminder.kt. Mac: tauri-plugin-notification, looked for every 30 s while Eve runs,
+  once a day; not exercised end to end here (the plugin builds and is registered).

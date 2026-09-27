@@ -13,6 +13,8 @@
   import { updates } from './lib/updates.svelte';
   import { renderSVG } from 'uqr';
   import { findUpdate } from './lib/update';
+  import { DEFAULT_TEMPLATE } from './lib/daily';
+  import { askNotify } from './lib/reminder';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
 
@@ -146,6 +148,31 @@
           <input type="checkbox" class="switch" checked={appearance.s.autoIcon}
             onchange={(e) => appearance.set({ autoIcon: e.currentTarget.checked })} />
         </label>
+        <label class="row">
+          <span class="label">Daily notes <span class="sub">a note for each day, written from the calendar at the top of the list</span></span>
+          <input type="checkbox" class="switch" checked={appearance.s.dailyNotes}
+            onchange={(e) => appearance.set({ dailyNotes: e.currentTarget.checked })} />
+        </label>
+        {#if appearance.s.dailyNotes}
+          <div class="row tmpl">
+            <span class="label">Template <span class="sub">how a new day starts; {'{{date}}'} and {'{{weekday}}'} are filled in</span></span>
+            <button class="link" onclick={() => appearance.set({ dailyTemplate: DEFAULT_TEMPLATE })}>Reset</button>
+          </div>
+          <textarea class="template" rows="5" spellcheck="false" value={appearance.s.dailyTemplate}
+            oninput={(e) => appearance.set({ dailyTemplate: e.currentTarget.value })}></textarea>
+          <label class="row tmpl">
+            <span class="label">Remind me <span class="sub">if today's note is still empty at this time</span></span>
+            <input type="checkbox" class="switch" checked={appearance.s.dailyReminder}
+              onchange={(e) => { appearance.set({ dailyReminder: e.currentTarget.checked }); if (e.currentTarget.checked) void askNotify(); }} />
+          </label>
+          {#if appearance.s.dailyReminder}
+            <div class="row">
+              <span class="label">Time</span>
+              <input type="time" class="time" value={appearance.s.reminderAt}
+                onchange={(e) => e.currentTarget.value && appearance.set({ reminderAt: e.currentTarget.value })} />
+            </div>
+          {/if}
+        {/if}
 {#if !isMobile}
         <label class="row">
           <span class="label">Hide from Dock and ⌘Tab <span class="sub">like Raycast: only the hotkey and Finder open it</span></span>
@@ -424,5 +451,19 @@
   }
   .codechip:hover { border-color: var(--accent); }
 
+  .row.tmpl { border-top: 1px solid var(--line); }
+  .time {
+    font: inherit; font-size: 13px; padding: 4px 8px; border: 0; border-radius: 7px; outline: none;
+    background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line); font-variant-numeric: tabular-nums;
+  }
+  .time:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
+  :global(html.mobile) .time { font-size: 16px; padding: 8px 10px; background: var(--bg-input); box-shadow: none; }
+  .template {
+    display: block; width: 100%; box-sizing: border-box; margin: 0 0 12px; padding: 8px 10px; resize: vertical;
+    border: 0; border-radius: 7px; outline: none; background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line);
+    font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .template:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
+  :global(html.mobile) .template { font-size: 15px; background: var(--bg-input); box-shadow: none; }
   .sample { margin: 12px 0 0; padding: 14px 16px; border-radius: 10px; background: var(--bg-input); color: var(--fg); }
 </style>

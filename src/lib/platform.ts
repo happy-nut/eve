@@ -35,7 +35,7 @@ export const storage = {
 };
 
 /** The Android home-screen widget, through `window.EveAndroid` (MainActivity.kt). A no-op anywhere else. */
-type Bridge = { takeIntent(): string; notesChanged(): void; showKeyboard(): void; account(repo: string, token: string): void; export(kind: string, title: string, body: string): void; pinWidget(noteId: string): boolean; widgetTop(): string; installUpdate(url: string): void };
+type Bridge = { takeIntent(): string; notesChanged(): void; showKeyboard(): void; account(repo: string, token: string): void; export(kind: string, title: string, body: string): void; pinWidget(noteId: string): boolean; widgetTop(): string; setReminder?(on: boolean, at: string, template: string): void; installUpdate(url: string): void };
 // looked up on every call: on a cold start the activity can inject it after this module has run
 const android = () => (globalThis as { EveAndroid?: Bridge }).EveAndroid;
 let widgetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -52,6 +52,8 @@ export const widget = {
   installUpdate: (url: string) => android()?.installUpdate(url),
   /** Put a widget showing this note on the home screen. False when the launcher can't be asked. */
   pin: (noteId: string): boolean => android()?.pinWidget(noteId) ?? false,
+  /** the daily note reminder's alarm (Reminder.kt); the permission to notify is asked when it goes on */
+  reminder: (on: boolean, at: string, template: string) => android()?.setReminder?.(on, at, template),
   /** notes pinned to the top of the widget's list */
   top: (): string[] => (android()?.widgetTop?.() ?? '').split(',').filter(Boolean),
   /** Export the open note to the share sheet (pdf/png are printed from the page). True once handed over. */
