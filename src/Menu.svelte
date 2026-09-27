@@ -4,6 +4,7 @@
   import { isMobile } from './lib/platform';
   import { ui, type MenuItem } from './lib/ui.svelte';
   import { prettyKeys } from './lib/shortcuts.svelte';
+  import { hints } from './lib/hints.svelte';
 
   // the app's own right-click menu (the webview's is suppressed): App renders it, anyone opens it
   // through ui.openMenu. Keyboard-reachable like the "+" dropdown — the mouse moves the highlight.
@@ -22,7 +23,11 @@
     if (m.y + r.height > window.innerHeight - 8) y = Math.max(8, m.y - r.height);
   });
 
-  function pick(it: MenuItem) { ui.closeMenu(); it.run?.(); }
+  function pick(it: MenuItem) {
+    ui.closeMenu();
+    it.run?.();
+    if (it.keys) hints.show('menu:' + it.label, `${it.label.replace(/…$/, '')} has a shortcut`, it.keys);
+  }
   function onKey(e: KeyboardEvent) {
     const items = [...(el?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
     const i = items.indexOf(document.activeElement as HTMLButtonElement);

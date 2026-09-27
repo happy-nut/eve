@@ -409,7 +409,13 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
 .tiptap .img-fig:hover .img-cap:empty::before,
 .tiptap .img-fig.ProseMirror-selectednode .img-cap:empty::before,
 .tiptap .img-cap:focus:empty::before { opacity: 0.6; }
-.tiptap .img-cap:focus { background: var(--bg-input); }
+/* the caption joins a text selection only while it is being written in; otherwise a drag across the note
+   passes over it, and the figure as a whole shows it is selected (the in-sel decoration, image.ts) */
+.tiptap .img-cap { user-select: none; -webkit-user-select: none; }
+.tiptap .img-cap.editing { user-select: text; -webkit-user-select: text; }
+.tiptap .img-fig img::selection, .tiptap .img-fig::selection { background: transparent; }
+.tiptap .img-fig.in-sel { background: var(--sel); border-radius: 10px; box-shadow: 0 0 0 4px var(--sel); }
+.tiptap .img-fig.in-sel .img-cap { color: var(--fg); }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; } /* height, or a sideways bar keeps WebKit's chunky default */
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }

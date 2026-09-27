@@ -28,6 +28,7 @@ import { notes, titleOf, type Note } from './notes.svelte';
 import { headingsOf, splitLink } from './markdown';
 import { isCustom } from './icons';
 import { pickImage, pickVideo, openUrl, clipboardText, copyText, isMobile } from './platform';
+import { hints } from './hints.svelte';
 import { fileMarkdown, isAsset } from './drop';
 import { exportCurrent } from './transfer';
 import Suggestion from '@tiptap/suggestion';
@@ -304,14 +305,17 @@ const ICONS = {
 };
 
 /** The "/" block menu, Notion-style. ``` and --- still make a code block / divider as you type. */
+/** a "/" item that a key also inserts: after it runs, say which key */
+const tip = (id: string, run: NonNullable<SuggestItem['run']>): SuggestItem['run'] => (e) => { run(e); hints.action(id); };
+
 const SLASH: SuggestItem[] = [
   { label: 'New page', hint: '📄 하위 페이지', icon: ICONS.page, run: newPage },
-  { label: 'Callout', hint: '💡 highlighted box', icon: ICONS.callout, run: (e) => e.chain().focus().toggleWrap('callout').run() },
+  { label: 'Callout', hint: '💡 highlighted box', icon: ICONS.callout, run: tip('callout', (e) => e.chain().focus().toggleWrap('callout').run()) },
   { label: 'Kanban', hint: '칸반 board', icon: ICONS.kanban, run: insertKanban },
   { label: 'Table', hint: '3×3, with a header row', icon: ICONS.table, run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-  { label: 'Image', hint: 'Pick a file', icon: ICONS.image, run: (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); } },
+  { label: 'Image', hint: 'Pick a file', icon: ICONS.image, run: tip('image', (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); }) },
   { label: 'Video', hint: 'Pick a file', icon: ICONS.video, run: (e) => { pickVideo().then((src) => src && e.chain().focus().insertContent({ type: 'video', attrs: { src, name: src.split('/').pop() } }).run()); } },
-  { label: 'Link to note', hint: '[[ another note', icon: ICONS.wikiLink, run: (e) => e.chain().focus().insertContent('[[').run() },
+  { label: 'Link to note', hint: '[[ another note', icon: ICONS.wikiLink, run: tip('wikiLink', (e) => e.chain().focus().insertContent('[[').run()) },
   {
     label: 'Emoji', hint: '😀 pick one', icon: ICONS.emoji,
     run: (e) => {
@@ -411,6 +415,14 @@ function noteMenu(editor: Editor, event: MouseEvent | null) {
   }
   const empty = editor.state.selection.empty;
   const linked = editor.isActive('link');
+  // the caret on a link (⌥↩ there, or a right-click on it): the link's own menu, the same one hovering shows
+  if (empty && linked) {
+    const href = editor.getAttributes('link').href ?? '';
+    const unlink = () => editor.chain().focus().extendMarkRange('link').unsetLink().run();
+    const caret = editor.view.coordsAtPos(editor.state.selection.head);
+    ui.openMenu(event ?? { clientX: Math.round(caret.left), clientY: Math.round(caret.bottom) }, linkItems(href, unlink));
+    return;
+  }
   /** execCommand is the one path that keeps ProseMirror's own clipboard serializer (markdown, nodes) */
   const clip = (cmd: 'cut' | 'copy') => () => { editor.commands.focus(); document.execCommand(cmd); };
   const keys = (id: string) => shortcuts.keysFor(id);
@@ -445,29 +457,26 @@ function linkMenu(editor: Editor, a: HTMLAnchorElement) {
   const href = a.getAttribute('href') ?? '';
   if (!href || (ui.menu?.hover && hovered === href)) return;
   hovered = href;
-  const mail = href.startsWith('mailto:');
-  const address = mail ? href.slice('mailto:'.length) : href;
   const unlink = () => {
     const at = editor.view.posAtDOM(a, 0);
     editor.chain().setTextSelection({ from: at, to: at + (a.textContent?.length ?? 0) }).unsetLink().setTextSelection(at).run();
   };
   const box = a.getBoundingClientRect();
-  ui.openMenu(
-    { clientX: Math.round(box.left), clientY: Math.round(box.bottom + 4) },
-    mail
-      ? [
-          { label: 'Send mail', run: () => void openUrl(href) },
-          { label: 'Copy address', run: () => void copyText(address) },
-          { label: 'Remove link', sep: true, run: unlink },
-        ]
-      : [
-          { label: 'Open link', run: () => void openUrl(href) },
-          { label: 'Copy link', run: () => void copyText(address) },
-          { label: 'Remove link', sep: true, run: unlink },
-        ],
-    true,
-  );
+  ui.openMenu({ clientX: Math.round(box.left), clientY: Math.round(box.bottom + 4) }, linkItems(href, unlink), true);
 }
+
+/** What a link offers, wherever it is asked: open (or write to) it, take the link off, copy it. */
+function linkItems(href: string, unlink: () => void): MenuItem[] {
+  const mail = href.startsWith('mailto:');
+  return [
+    { label: mail ? 'Send mail' : 'Open link', run: () => void openUrl(href) },
+    { label: 'Remove link', run: unlink },
+    // an address is copied bare: mailto: is of no use in a To: field
+    { label: 'Copy link', run: () => void copyText(mail ? href.slice('mailto:'.length) : href) },
+  ];
+}
+
+let lastCut = { text: '', at: 0 };
 
 /** Ask for a URL and hang it on the selection (⌘K has no home in this editor). */
 async function linkSelection(editor: Editor) {
@@ -516,6 +525,19 @@ export function createEditor(opts: {
       },
       // links open in the browser: the editor's own webview must not navigate away from the app
       handleDOMEvents: {
+        // cut, then paste the same text elsewhere: moving lines around, which ⌥↑↓ does in place
+        cut: (view) => {
+          const { from, to } = view.state.selection;
+          lastCut = { text: view.state.doc.textBetween(from, to, '\n').trim(), at: Date.now() };
+          return false;
+        },
+        paste: (_view, event) => {
+          const text = (event as ClipboardEvent).clipboardData?.getData('text/plain').trim();
+          if (text && lastCut.text && text === lastCut.text && Date.now() - lastCut.at < 120_000) {
+            hints.show('moveBlock', 'Move lines without cut and paste', [shortcuts.keysFor('moveBlockUp'), shortcuts.keysFor('moveBlockDown')]);
+          }
+          return false;
+        },
         contextmenu: (_view, event) => { event.preventDefault(); noteMenu(editor, event as MouseEvent); return true; },
         // the pointer resting on a link brings up what can be done with it; leaving it puts that away
         mouseover: (_view, event) => {

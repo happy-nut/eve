@@ -1,5 +1,6 @@
 import Image from '@tiptap/extension-image';
 import { Plugin, PluginKey, NodeSelection, TextSelection } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { assetUrl } from './platform';
 import { nameOf, sizeGrip, widthOf, withWidth } from './resize';
 
@@ -60,6 +61,24 @@ export const LocalImage = Image.extend({
         });
         return at === null || other ? null : state.tr.setSelection(NodeSelection.create(state.doc, at));
       },
+    }), new Plugin({
+      key: new PluginKey('imageInSelection'),
+      // A selection running across a picture and its caption: the browser paints its own blue into the
+      // picture and the caption in patches. Instead the whole figure is marked as selected, one clean
+      // block, and the pieces inside paint nothing (see .img-fig.in-sel in app.css).
+      props: {
+        decorations: (state) => {
+          const sel = state.selection;
+          if (sel.empty || sel instanceof NodeSelection) return null;
+          const marks: Decoration[] = [];
+          state.doc.nodesBetween(sel.from, sel.to, (node, pos) => {
+            if (node.type.name !== name) return true;
+            if (pos >= sel.from && pos + node.nodeSize <= sel.to) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: 'in-sel' }));
+            return false;
+          });
+          return marks.length ? DecorationSet.create(state.doc, marks) : null;
+        },
+      },
     })];
   },
 
@@ -104,8 +123,11 @@ export const LocalImage = Image.extend({
       // a click in the body has to land on the first press: the caption is its own editable island,
       // and the editor's own mousedown handling leaves the caret sitting in it otherwise
       const release = (e: MouseEvent) => { if (!owns(e.target)) cap.blur(); };
-      cap.addEventListener('focus', () => document.addEventListener('mousedown', release, true));
-      cap.addEventListener('blur', () => document.removeEventListener('mousedown', release, true));
+      cap.addEventListener('focus', () => { cap.classList.add('editing'); document.addEventListener('mousedown', release, true); });
+      cap.addEventListener('blur', () => { cap.classList.remove('editing'); document.removeEventListener('mousedown', release, true); });
+      // a drag across the note passes over the caption instead of starting a selection inside it; a
+      // press on the caption itself makes it writable before the caret lands
+      cap.addEventListener('mousedown', () => cap.classList.add('editing'));
       cap.addEventListener('keydown', (e) => {
         // ⌘A belongs to the caption while the caret is in it, not to the whole note
         if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {

@@ -14,6 +14,8 @@
   import Confirm from './Confirm.svelte';
 import CardPage from './CardPage.svelte';
   import MobileBar from './MobileBar.svelte';
+  import Hint from './Hint.svelte';
+  import { hints } from './lib/hints.svelte';
   import EmojiPicker from './EmojiPicker.svelte';
   import LinkChoice from './LinkChoice.svelte';
   import Tooltip from './Tooltip.svelte';
@@ -311,6 +313,12 @@ import CardPage from './CardPage.svelte';
      system menu: cut/copy/paste there is exactly what it offers, and the app has nothing better. -->
 <svelte:window oncontextmenu={(e) => { if (!(e.target as HTMLElement).closest('input, textarea')) e.preventDefault(); }} ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={() => { cmdUp(); endComposition(); }} onfocus={restoreFocus}
   onmousedowncapture={() => (document.documentElement.dataset.input = 'mouse')}
+  onclickcapture={(e) => {
+    // a button clicked with the mouse that a key also does: say which key
+    if (e.detail === 0) return; // Enter / Space on a focused button is already the keyboard
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-keys]');
+    if (b?.dataset.keys) hints.show('btn:' + (b.dataset.tip ?? b.dataset.keys), `${b.dataset.tip ?? 'This'} has a shortcut`, b.dataset.keys);
+  }}
   onkeydowncapture={() => (document.documentElement.dataset.input = 'keyboard')} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -368,6 +376,7 @@ import CardPage from './CardPage.svelte';
 {#if isMobile && !sidebarOpen}
   <MobileBar />
 {/if}
+<Hint />
 {#if settingsOpen}
   <Settings onClose={() => (settingsOpen = false)} {hotkeyError} />
 {/if}

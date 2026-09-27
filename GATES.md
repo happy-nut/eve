@@ -550,3 +550,23 @@
 - [x] G132 Widget: + floats at the bottom right; cards tighter (3dp apart, 2 preview lines)
   EVIDENCE: manual, emulator: pinned Kafka and newest-notes modes both show the + at the bottom right;
   the list mode fits ~4.5 cards in the 4×3 widget. Widget set back to Kafka afterwards.
+
+# GATES — image selection, one link menu, shortcut tips from what you did (2026-09-27)
+
+- [x] G133 A selection across a picture and its caption is one clean block
+  EVIDENCE: manual, `npm run dev` (1104×832): a real mouse drag from "Before" to "After" over an image
+  with a caption: the figure is marked in-sel (one rounded --sel block), the caption has no background of
+  its own and joins no text selection (user-select: none until it is being edited); no patchy blue.
+- [x] G134 Hover, ⌥↩ and right-click on a link show the same menu; plain text keeps Export
+  EVIDENCE: hover on a link → Open link / Remove link / Copy link; ⌥↩ with the caret on a mailto link →
+  Send mail / Remove link / Copy link; ⌥↩ on plain text → Cut … Export as Markdown / PDF / image.
+- [x] G135 Shortcut tips from actions
+  EVIDENCE: picking Bold from the ⌥↩ menu with the mouse → toast "Bold has a shortcut ⌘B"; cutting a line
+  and pasting the same text elsewhere → "Move lines without cut and paste ⌥↑ / ⌥↓". Also wired: toolbar
+  buttons with a shortcut (sidebar, back, forward, pin, new, settings), menu items with keys, "/" Callout /
+  Image / Link to note, clicking the next / previous note, deleting the open note with ×, dragging in the
+  list, clicking Search. Each tip at most 3 times, 25 s apart; off on a phone; Settings → Shortcuts → Tips.
+- [x] G136 Nothing else regressed
+  CHECK: npm run check && npm test 2>&1 | grep -c "_OK"
+  EXPECT: ^8$
+  EVIDENCE: zsh, ~/repos/eve, exit 0, "0 ERRORS" / "8"; cargo check "Finished".
