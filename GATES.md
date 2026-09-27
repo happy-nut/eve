@@ -590,3 +590,14 @@
   EVIDENCE: manual, emulator: the pinned widget shows "🧬 Personal TODO" then the to-dos directly, + at the
   bottom right, no header. Notes store an empty line as U+00A0 (seen in happy-nut/eve-notes); those lines
   no longer render in the widget.
+
+# GATES — the phone versions and releases on its own (2026-09-27)
+
+- [x] G140 The phone build takes its version from tauri.android.conf.json, the Mac keeps tauri.conf.json
+  EVIDENCE: `tauri android build` → aapt2: versionCode='7002' versionName='0.7.2' while tauri.conf.json
+  stays "0.7.1".
+- [x] G141 Separate release tags; the updater reads android-v tags
+  CHECK: node --experimental-strip-types --no-warnings src/lib/update.test.mjs
+  EXPECT: UPDATE_OK
+  EVIDENCE: "UPDATE_OK" incl. android-v0.7.2 > 0.7.1 and an android-v release found. release.yml: `v*` runs
+  only the Mac job (release = Latest), `android-v*` only the Android job (its own release, --latest=false).
