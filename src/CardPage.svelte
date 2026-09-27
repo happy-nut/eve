@@ -29,7 +29,7 @@
       content: cardDoc(req.title, req.body),
       onUpdate: (md) => req.onChange(splitCard(md)),
       onOpenNote: (t) => { close(); notes.openByTitle(t); },
-      targets: () => notes.visible,
+      targets: () => notes.pages,
       suggestionUI: suggest.ui,
       calendarUI: dateMenu.ui,
     });

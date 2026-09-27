@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { notes, CALENDAR } from './lib/notes.svelte';
-  import { isDailyId, DAILY_TEMPLATE_ID } from './lib/daily';
+  import { isDailyId, DAILY_TEMPLATE_ID, CALENDAR_NOTE_ID } from './lib/daily';
   import { startReminder, syncPhoneReminder } from './lib/reminder';
   import CalendarPage from './CalendarPage.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
@@ -246,10 +246,13 @@
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
     else sidebarOpen = true;
   }
+  // daily notes on: the calendar's row exists; and opening that row (⌘1–9, back, next note) shows the calendar
+  $effect(() => { if (appearance.s.dailyNotes && notes.loaded) notes.ensureCalendar(); });
+  $effect(() => { if (notes.currentId === CALENDAR_NOTE_ID) notes.currentId = CALENDAR; });
   // the phone's reminder alarm follows the settings
   $effect(() => { if (isMobile) syncPhoneReminder(); });
   // daily notes switched off while the calendar was up: back to a note
-  $effect(() => { if (!appearance.s.dailyNotes && notes.currentId === CALENDAR) notes.currentId = notes.visible[0]?.id ?? null; });
+  $effect(() => { if (!appearance.s.dailyNotes && notes.currentId === CALENDAR) notes.currentId = notes.pages[0]?.id ?? null; });
 
   /** ⌘\\: closed -> open + focus list; focus already in list -> close + back to editor; else focus list. */
   function focusSidebar() {

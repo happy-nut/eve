@@ -816,6 +816,15 @@
   widget); renaming to "하루 기록" renamed the sidebar row at once. The page starts where a note does, clear
   of the toolbar's fade (screenshot). Browser: opening focuses today (28); → 29; ↓ Oct 6; ⌘→ Nov 6; ⌘← Oct 6;
   Esc from the sidebar lands on the calendar's day. Enter opens a day (a button).
-- [ ] G179 v0.7.7 (Mac, Latest) and android-v0.7.9 are released
+- [x] G179 v0.7.7 (Mac, Latest) and android-v0.7.9 are released
   CHECK: gh release view android-v0.7.9 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.9\.apk,Eve-android\.apk$
+  EVIDENCE: runs 36356219286 / 36356219382 succeeded; v0.7.7 is Latest with the Mac zip.
+- [x] G180 The calendar's row moves like a note in Notes; notes can go above it; it never joins a group
+  EVIDENCE: the row is the calendar's own note (daily-calendar), in the list while daily notes are on and
+  opened as the calendar. Browser: Lock moved above it; ⌥↓ ×3 walked it past Lock, DB, OLAP; ⌥↑ back one;
+  move/place into a group and setParent under it were refused. Also fixed for every note: moving between
+  two notes of the same rank (older files) did not show; the list is re-ranked 0, 1, 2… first.
+- [ ] G181 v0.7.8 (Mac, Latest) and android-v0.7.10 are released
+  CHECK: gh release view android-v0.7.10 --json assets --jq '[.assets[].name] | sort | join(",")'
+  EXPECT: ^Eve-android-0\.7\.10\.apk,Eve-android\.apk$
