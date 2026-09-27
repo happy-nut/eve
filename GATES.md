@@ -721,3 +721,8 @@
   shows the newest phone version; its steps say an installed Eve (0.7.2+) offers that version at the top
   of the list when the scan opens it. The setup page still honours #install for a one-off link to move a
   phone older than the updater (≤ 0.7.1).
+- [x] G163 The phone's newest version sits in the middle of the Mac's QR, and the code still scans
+  EVIDENCE: a white "Eve 0.7.5" badge over the centre, the code rendered at ecc H (184px box). Decoded
+  with OpenCV: a same-length hand-off link with the badge-sized patch over the centre reads back exactly
+  at ecc H, and does not read at the default ecc (negative control). Not screenshotted in the Mac app
+  (the screen-takeover prompt went unanswered).
