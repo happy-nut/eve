@@ -6,6 +6,11 @@
 export const DEFAULT_TEMPLATE = '# {{date}} {{weekday}}\n\n';
 /** The daily template is a note of its own (edited from the calendar, synced like any note), out of the list. */
 export const DAILY_TEMPLATE_ID = 'daily-template';
+/** The calendar's own name and icon, as a note (synced, out of the list): renamed from the calendar's title. */
+export const CALENDAR_NOTE_ID = 'daily-calendar';
+export const CALENDAR_NAME = 'Daily notes';
+/** notes the calendar keeps for itself: never in the list, the widget, or [[link]] targets */
+export const isCalendarOwn = (id: string) => id === DAILY_TEMPLATE_ID || id === CALENDAR_NOTE_ID;
 
 const pad = (n: number) => String(n).padStart(2, '0');
 /** 2026-09-27, in local time */

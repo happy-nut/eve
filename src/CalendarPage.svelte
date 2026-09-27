@@ -1,51 +1,95 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { notes } from './lib/notes.svelte';
   import { plain } from './lib/markdown';
+  import { ui } from './lib/ui.svelte';
   import { dayKey, keyOfDaily, monthGrid } from './lib/daily';
+  import Icon from './Icon.svelte';
 
   /**
-   * The daily notes as a month, in the editor's place and as wide as it: each day shows the first
-   * line written under its title. A day opens its note (started from the template if there is none).
+   * The daily notes as a month, in the editor's place and as wide as it, under a head like a note's (its
+   * icon and name, both editable; the name is the sidebar's too). Each day shows the first line written
+   * under its title; a day opens its note. Keys: arrows move a day / a week, ⌘← ⌘→ a month, Enter opens.
    */
   let { onpick, ontemplate }: { onpick: (key: string) => void; ontemplate: () => void } = $props();
 
   const today = dayKey(new Date());
-  let shown = $state(new Date());
-  const year = $derived(shown.getFullYear());
-  const month = $derived(shown.getMonth());
+  let cursor = $state(today); // the day under the keyboard
+  const parse = (k: string) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
+  const year = $derived(parse(cursor).getFullYear());
+  const month = $derived(parse(cursor).getMonth());
   const cells = $derived(monthGrid(year, month));
-  const title = $derived(shown.toLocaleDateString(undefined, { year: 'numeric', month: 'long' }));
+  const title = $derived(new Date(year, month, 1).toLocaleDateString(undefined, { year: 'numeric', month: 'long' }));
   const weekdays = Array.from({ length: 7 }, (_, i) => new Date(2026, 8, 27 + i).toLocaleDateString(undefined, { weekday: 'short' }));
 
   /** what a day says, under its title: the first line that has any text */
   const lines = $derived.by(() => {
     const m = new Map<string, string>();
     for (const n of notes.daily) {
-      const first = n.body.split('\n').slice(1).map((l) => plain(l).trim()).find((l) => l && l !== ' ');
+      const first = n.body.split('\n').slice(1).map((l) => plain(l).trim()).find((l) => l && l !== '\u00a0');
       m.set(keyOfDaily(n.id), first ?? '');
     }
     return m;
   });
 
-  const step = (d: number) => (shown = new Date(year, month + d, 1));
+  let grid: HTMLDivElement;
+  async function moveTo(key: string, focus = true) {
+    cursor = key;
+    await tick();
+    if (focus) grid?.querySelector<HTMLElement>('.day.cursor')?.focus();
+  }
+  const shift = (days: number) => { const d = parse(cursor); d.setDate(d.getDate() + days); return dayKey(d); };
+  /** the same day in another month, or its last day when it has fewer */
+  const shiftMonth = (by: number) => {
+    const d = parse(cursor), last = new Date(d.getFullYear(), d.getMonth() + by + 1, 0).getDate();
+    return dayKey(new Date(d.getFullYear(), d.getMonth() + by, Math.min(d.getDate(), last)));
+  };
+  function onKey(e: KeyboardEvent) {
+    const mod = e.metaKey || e.ctrlKey;
+    const to =
+      e.key === 'ArrowLeft' ? (mod ? shiftMonth(-1) : shift(-1)) :
+      e.key === 'ArrowRight' ? (mod ? shiftMonth(1) : shift(1)) :
+      e.key === 'ArrowUp' && !mod ? shift(-7) :
+      e.key === 'ArrowDown' && !mod ? shift(7) : null;
+    if (!to) return;
+    e.preventDefault();
+    e.stopPropagation(); // ⌘← / ⌘→ are the app's back / forward everywhere else
+    void moveTo(to);
+  }
+
+  // the head: name and icon, like a note's
+  let renaming = $state(notes.calendar.name);
+  $effect(() => { renaming = notes.calendar.name; });
+  function rename() { if (renaming.trim() !== notes.calendar.name) notes.setCalendar({ name: renaming }); }
+  async function changeIcon(anchor: HTMLElement) {
+    const v = await ui.pickEmoji(anchor, notes.calendar.icon);
+    if (v !== null) notes.setCalendar({ icon: v || '🗓️' });
+  }
 </script>
 
 <div class="calendar">
-  <header>
-    <h1>{title}</h1>
+  <div class="head">
+    <button class="big-icon" title="아이콘 변경" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={notes.calendar.icon} size={44} /></button>
+    <input class="name" bind:value={renaming} onblur={rename} spellcheck="false" aria-label="Name"
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); if (e.key === 'Escape') renaming = notes.calendar.name; else rename(); void moveTo(cursor); } }} />
+  </div>
+  <div class="bar">
+    <span class="month">{title}</span>
     <span class="gap"></span>
     <button class="tpl" onclick={ontemplate} data-tip="What a new day starts as">
       <svg viewBox="0 0 16 16"><path d="M4 1.5h5L12.5 5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h3"/></svg>
       Template
     </button>
-    <button class="nav" aria-label="Previous month" onclick={() => step(-1)}><svg viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg></button>
-    <button class="today-btn" onclick={() => (shown = new Date())}>Today</button>
-    <button class="nav" aria-label="Next month" onclick={() => step(1)}><svg viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>
-  </header>
-  <div class="grid">
+    <button class="nav" aria-label="Previous month" data-tip="Previous month" data-keys="Mod-ArrowLeft" onclick={() => moveTo(shiftMonth(-1), false)}><svg viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg></button>
+    <button class="today-btn" onclick={() => moveTo(today)}>Today</button>
+    <button class="nav" aria-label="Next month" data-tip="Next month" data-keys="Mod-ArrowRight" onclick={() => moveTo(shiftMonth(1), false)}><svg viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>
+  </div>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="grid" bind:this={grid} onkeydown={onKey}>
     {#each weekdays as w, i (i)}<span class="wd">{w}</span>{/each}
     {#each cells as c (c.key)}
-      <button class="day" class:out={!c.inMonth} class:today={c.key === today} class:has={lines.has(c.key)} onclick={() => onpick(c.key)}>
+      <button class="day" class:out={!c.inMonth} class:today={c.key === today} class:has={lines.has(c.key)} class:cursor={c.key === cursor}
+        tabindex={c.key === cursor ? 0 : -1} onclick={() => { cursor = c.key; onpick(c.key); }}>
         <span class="num">{Number(c.key.slice(8))}</span>
         {#if lines.get(c.key)}<span class="line">{lines.get(c.key)}</span>{/if}
       </button>
@@ -54,9 +98,21 @@
 </div>
 
 <style>
-  .calendar { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; padding: 44px clamp(16px, 4vw, 48px) 24px; }
-  header { display: flex; align-items: center; gap: 2px; margin-bottom: 14px; }
-  h1 { margin: 0; font-size: 1.6em; font-weight: 700; letter-spacing: -0.02em; color: var(--fg); }
+  /* the same top as a note's page, below the toolbar's fade */
+  .calendar { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; padding: 60px clamp(16px, 4vw, 48px) 24px; }
+  /* a head like a note's: the icon, then the name as the page's title */
+  .head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 18px; }
+  .big-icon {
+    border: 0; background: none; line-height: 1; padding: 4px; margin-left: -4px; border-radius: 10px; transition: background 0.12s, transform 0.12s;
+  }
+  .big-icon:hover { background: var(--bg-hover); }
+  .big-icon:active { transform: scale(0.95); }
+  .name {
+    width: 100%; border: 0; outline: none; background: none; padding: 0; color: var(--fg);
+    font: inherit; font-size: 1.9em; font-weight: 700; letter-spacing: -0.02em;
+  }
+  .bar { display: flex; align-items: center; gap: 2px; margin-bottom: 10px; }
+  .month { font-size: 15px; font-weight: 600; color: var(--fg); }
   .gap { flex: 1; }
   .nav, .today-btn {
     height: 30px; border: 0; border-radius: 8px; background: none; color: var(--fg-dim); font: inherit; font-size: 13px;
@@ -84,6 +140,8 @@
     transition: background 0.14s, transform 0.14s;
   }
   .day:hover { background: var(--bg-hover); }
+  .day:focus { outline: none; }
+  .day.cursor:focus-visible { box-shadow: inset 0 0 0 2px var(--accent-soft); }
   .day:active { transform: scale(0.98); }
   /* a day with its note: a small blue dot beside the number */
   .num { position: relative; }
@@ -103,7 +161,9 @@
   }
   /* a phone: the month fits the screen, a day shows its number and a line */
   :global(html.mobile) .calendar { padding: 12px 12px 16px; }
-  :global(html.mobile) h1 { font-size: 22px; }
+  :global(html.mobile) .calendar { padding-top: 14px; }
+  :global(html.mobile) .name { font-size: 1.65em; }
+  :global(html.mobile) .month { font-size: 16px; }
   :global(html.mobile) .nav { width: 40px; height: 40px; border-radius: 12px; }
   :global(html.mobile) .today-btn { height: 36px; font-size: 14px; border-radius: 10px; }
   :global(html.mobile) .grid { gap: 4px; }

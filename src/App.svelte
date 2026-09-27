@@ -43,7 +43,7 @@
     if (!note) return;
     ui.focusOwner = 'editor';
     notes.currentId = note.id;
-    queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap')?.focus());
+    queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus());
   }
 
   // global hotkey follows the shortcut store live
@@ -255,7 +255,7 @@
   function focusSidebar() {
     if (sidebarOpen && document.activeElement?.closest('aside')) {
       sidebarOpen = false;
-      queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap')?.focus());
+      queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus());
       return;
     }
     sidebarOpen = true;
@@ -332,7 +332,7 @@
     // closing the thing on top is what Escape means everywhere in the app.
     if (e.key === 'Escape' && (ui.find || ui.pdf)) {
       e.preventDefault();
-      if (ui.find) { ui.find = false; queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap')?.focus()); }
+      if (ui.find) { ui.find = false; queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus()); }
       else ui.closePdf();
       return;
     }
@@ -357,7 +357,7 @@
       case 'search': sidebarOpen = true; queueMicrotask(() => searchEl?.focus()); break;
       case 'find': // pressing it again puts the bar away and hands the note back the caret
         ui.find = !ui.find;
-        if (!ui.find) queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap')?.focus());
+        if (!ui.find) queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus());
         break;
       case 'focusSidebar': focusSidebar(); break;
       case 'back': notes.back(); break;

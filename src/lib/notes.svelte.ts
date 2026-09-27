@@ -2,7 +2,7 @@ import { storage } from './platform';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
 import { plain, splitLink } from './markdown';
-import { DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isDailyId } from './daily';
+import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isCalendarOwn, isDailyId } from './daily';
 
 export { plain };
 
@@ -126,11 +126,26 @@ class NotesStore {
 
   /** the list's notes: everything but deleted ones and daily notes (those live in the calendar) */
   get visible() {
-    return this.all.filter((n) => !n.deleted && !isDailyId(n.id) && n.id !== DAILY_TEMPLATE_ID).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt);
+    return this.all.filter((n) => !n.deleted && !isDailyId(n.id) && !isCalendarOwn(n.id)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt);
   }
   /** daily notes, newest day first */
   get daily() {
     return this.all.filter((n) => !n.deleted && isDailyId(n.id)).sort((a, b) => (a.id < b.id ? 1 : -1));
+  }
+
+  /** the calendar's name and icon (its own little note, made on the first rename or icon change) */
+  get calendar() {
+    const n = this.all.find((x) => x.id === CALENDAR_NOTE_ID && !x.deleted);
+    return { name: n ? titleOf(n) : CALENDAR_NAME, icon: n?.icon ?? '🗓️' };
+  }
+  setCalendar(patch: { name?: string; icon?: string }) {
+    const cur = this.calendar;
+    const name = (patch.name ?? cur.name).trim() || CALENDAR_NAME, icon = patch.icon ?? cur.icon;
+    let n = this.all.find((x) => x.id === CALENDAR_NOTE_ID);
+    if (!n) this.all.push((n = { id: CALENDAR_NOTE_ID, body: '', updatedAt: 0, deleted: false, group: '', order: 0 }));
+    Object.assign(n, { body: `# ${name}\n`, icon: icon || undefined, deleted: false, updatedAt: Date.now() });
+    void storage.write(n.id, serialize(n));
+    this.dirty++;
   }
 
   /** what a new day starts as: the template note, or the default until there is one */

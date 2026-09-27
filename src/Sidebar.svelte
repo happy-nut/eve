@@ -94,7 +94,7 @@
 
   const plusItems = $derived.by(() => {
     // a new note goes straight into the editor (deleting keeps focus in the list)
-    const newNote = (g: string) => async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap')?.focus(); };
+    const newNote = (g: string) => async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus(); };
     const items: { label: string; run: () => void; sep?: boolean }[] = [
       { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', run: newNote(ctxGroup) },
       { label: ctxGroup && depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : 'New group', run: () => groups.create(ctxGroup) },
@@ -318,7 +318,7 @@
         if (group) { groups.editing = group; break; }
         return;
       case 'i': if (group) pickIcon({ group }); else pickIcon({ note: notes.all.find((n) => n.id === noteId) }); break;
-      case 'Escape': document.querySelector<HTMLElement>('.tiptap')?.focus(); break;
+      case 'Escape': document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus(); break;
       default: return;
     }
     e.preventDefault();
@@ -455,9 +455,11 @@
 
   /** click or Enter on a note: open it and move into the editor */
   /** the daily notes' calendar, in the editor's place */
-  function openCalendar() {
+  async function openCalendar() {
     notes.currentId = CALENDAR;
-    if (isMobile) open = false;
+    if (isMobile) { open = false; return; }
+    await tick();
+    document.querySelector<HTMLElement>('.calendar .day.cursor')?.focus(); // arrows move through the days from here
   }
   async function openNote(n: Note) {
     const list = groups.ordered(), from = list.findIndex((x) => x.id === notes.currentId), to = list.findIndex((x) => x.id === n.id);
@@ -467,7 +469,7 @@
     notes.currentId = n.id;
     if (isMobile) { open = false; return; } // a phone shows the list or the note, never both — and opens it to read
     await tick();
-    document.querySelector<HTMLElement>('.tiptap')?.focus();
+    document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus();
   }
 </script>
 
@@ -535,8 +537,8 @@
             <div class="note-row" role="presentation">
               <button data-row data-daily class:active={notes.currentId === CALENDAR || !!(notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID))} onclick={openCalendar}>
                 <span class="title">
-                  <span class="ico-slot"><Icon icon="🗓️" /></span>
-                  <span class="t">Daily notes</span>
+                  <span class="ico-slot"><Icon icon={notes.calendar.icon} /></span>
+                  <span class="t">{notes.calendar.name}</span>
                 </span>
               </button>
             </div>
@@ -592,7 +594,7 @@
                 </span>
                 <!-- on hover the tools unfold between the count and the chevron; the chevron stays at the edge -->
                 <span class="tools">
-                  <button class="icon mini tip-right" data-tip="New note here" onclick={async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap')?.focus(); }}>+</button>
+                  <button class="icon mini tip-right" data-tip="New note here" onclick={async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus(); }}>+</button>
                   <button class="icon mini tip-right" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
                 </span>
                 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->

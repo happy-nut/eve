@@ -811,3 +811,11 @@
   A board's template sits in its own JSON ("template": {title, body}; tested round trip, old boards have
   none); the board's template button opens it like a card with a note above; "+ New" made a card from it
   ("Bug: / Steps / due 2026-09-28"). Browser screenshots; the APK builds.
+- [x] G178 The calendar has a note's head (icon, name) and moves with the keyboard
+  EVIDENCE: the name and icon are the calendar's own note (daily-calendar: synced, out of the list and the
+  widget); renaming to "하루 기록" renamed the sidebar row at once. The page starts where a note does, clear
+  of the toolbar's fade (screenshot). Browser: opening focuses today (28); → 29; ↓ Oct 6; ⌘→ Nov 6; ⌘← Oct 6;
+  Esc from the sidebar lands on the calendar's day. Enter opens a day (a button).
+- [ ] G179 v0.7.7 (Mac, Latest) and android-v0.7.9 are released
+  CHECK: gh release view android-v0.7.9 --json assets --jq '[.assets[].name] | sort | join(",")'
+  EXPECT: ^Eve-android-0\.7\.9\.apk,Eve-android\.apk$
