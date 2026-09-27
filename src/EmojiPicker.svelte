@@ -64,8 +64,14 @@
     <span class="tab">이모지</span>
     <span class="acts">
       <!-- the same pool the "아이콘 추가" button rolls from, so a page can be given a face without choosing one -->
-      <button class="act" onclick={() => ui.emojiDone(randomIcon(req.current))}>랜덤</button>
-      {#if req.current}<button class="act" onclick={() => ui.emojiDone('')}>제거</button>{/if}
+      <button class="act" aria-label="랜덤" title="랜덤" onclick={() => ui.emojiDone(randomIcon(req.current))}>
+        <svg viewBox="0 0 16 16"><path d="M2 4.5h2.2c1.3 0 2.4.7 3 1.8l1.6 3.4c.6 1.1 1.7 1.8 3 1.8H14M2 11.5h2.2c.9 0 1.8-.4 2.4-1.1M9.4 5.6c.6-.7 1.5-1.1 2.4-1.1H14M12.3 2.8 14 4.5l-1.7 1.7M12.3 9.8 14 11.5l-1.7 1.7"/></svg>
+      </button>
+      {#if req.current}
+        <button class="act" aria-label="제거" title="제거" onclick={() => ui.emojiDone('')}>
+          <svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9"/></svg>
+        </button>
+      {/if}
     </span>
   </header>
   <emoji-picker bind:this={el} data-source={dataSource} skin-tone-emoji="✌️" onemoji-click={onPick}></emoji-picker>
@@ -80,9 +86,17 @@
   }
   header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 6px; border-bottom: 1px solid var(--line); font-size: 13px; }
   .tab { font-weight: 600; }
-  .acts { display: flex; gap: 10px; }
-  .act { border: 0; background: none; color: var(--fg-dim); font: inherit; font-size: 12.5px; padding: 0; }
-  .act:hover { color: var(--fg); }
+  .acts { display: flex; gap: 2px; margin-right: -6px; }
+  .act {
+    width: 28px; height: 28px; border: 0; border-radius: 7px; background: none; color: var(--fg-dim); padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .act:hover { color: var(--fg); background: var(--bg-hover); }
+  .act:active { background: var(--bg-active); }
+  .act svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+  /* a thumb, not a pointer */
+  :global(html.mobile) .act { width: 44px; height: 44px; border-radius: 12px; }
+  :global(html.mobile) .act svg { width: 22px; height: 22px; }
   emoji-picker {
     width: 100%; height: 340px;
     --background: var(--bg-pop); --border-color: var(--line); --border-size: 0;
