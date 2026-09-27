@@ -97,28 +97,36 @@
   });
 
   /**
-   * End an IME composition on the way *out*. macOS delivers no `compositionend` when the window leaves
-   * mid-syllable, and a ProseMirror view that still believes one is in flight ignores what comes next.
-   * Only ever on the way out: doing this on the way back in cuts a syllable the user is typing right
-   * now in half (한글이 자모로 분리된다).
+   * Leaving the window mid-syllable (⌘Tab, a click in another app): take the focus out of the note, so
+   * WebKit itself confirms the Hangul syllable and ProseMirror hears a real compositionend. A faked
+   * compositionend (what this used to do) told ProseMirror the syllable was done while the input method
+   * still had it open; ProseMirror then redrew the text under it, and the first syllable typed after
+   * coming back fell apart into jamo (ㅈㅣ정가).
    */
-  function endComposition() {
-    for (const pm of document.querySelectorAll('.tiptap')) {
-      pm.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));
-    }
+  let away: HTMLElement | null = null;
+  function leaveWindow() {
+    const a = document.activeElement as HTMLElement | null;
+    if (!a?.closest('.tiptap')) return;
+    away = a.closest<HTMLElement>('.tiptap');
+    away?.blur();
   }
 
   /**
-   * Summoned back (⌘⇧Space, Dock, ⌘Tab): the caret goes to the note, but only when the window came back
-   * with nothing focused at all. Anything already holding focus is left strictly alone — this runs again
-   * on the window's own focus event, which can land a beat *after* the first keystroke, and re-focusing
-   * an element mid-composition is what splits a syllable into jamo.
+   * Summoned back (⌘⇧Space, Dock, ⌘Tab): the note that had the caret gets it back, where it was; with
+   * nothing to go back to, the caret goes to the note. Anything already holding focus is left strictly
+   * alone — this runs again on the window's own focus event, which can land a beat *after* the first
+   * keystroke, and re-focusing an element mid-composition is what splits a syllable into jamo.
    */
   function restoreFocus() {
+    const back = away;
+    away = null;
     if (ui.pending || ui.emoji || ui.menu || settingsOpen) return; // a dialog owns focus
     const a = document.activeElement as HTMLElement | null;
     if (a && a.isConnected && a !== document.body) return;
-    document.querySelector<HTMLElement>(ui.card ? '.card .tiptap' : '.tiptap')?.focus();
+    const el = back?.isConnected ? back : document.querySelector<HTMLElement>(ui.card ? '.card .tiptap' : '.tiptap');
+    // the view's own focus puts its selection back in the same step, not 20 ms later under a keystroke
+    const view = (el as { editor?: { view: { focus(): void } } } | null)?.editor?.view;
+    if (view) view.focus(); else el?.focus();
   }
 
   /** The window called up by the hotkey: the caret belongs in the middle of the page, ready to write. */
@@ -309,7 +317,7 @@
 <!-- the webview's own menu is Reload / AutoFill / Speech — nothing a note can act on. The places worth
      right-clicking open one of ours instead (a sidebar row, the note). A plain text box keeps the
      system menu: cut/copy/paste there is exactly what it offers, and the app has nothing better. -->
-<svelte:window oncontextmenu={(e) => { if (!(e.target as HTMLElement).closest('input, textarea')) e.preventDefault(); }} ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={() => { cmdUp(); endComposition(); }} onfocus={restoreFocus}
+<svelte:window oncontextmenu={(e) => { if (!(e.target as HTMLElement).closest('input, textarea')) e.preventDefault(); }} ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={() => { cmdUp(); leaveWindow(); }} onfocus={restoreFocus}
   onmousedowncapture={() => (document.documentElement.dataset.input = 'mouse')}
   onclickcapture={(e) => {
     // a button clicked with the mouse that a key also does: say which key
