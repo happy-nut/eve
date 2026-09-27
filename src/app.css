@@ -237,6 +237,8 @@ html.mobile aside .ghead { padding: 0; }
 /* the note: a flat bar of grey icons, and a page head sized for a phone */
 html.mobile .mhead { border-bottom: 0; }
 html.mobile .mhead .micon, html.mobile .mhead .micon.danger { color: var(--fg-dim); }
+html.mobile .mhead .micon.on { color: var(--fg); }
+html.mobile .mhead .micon.on svg { fill: currentColor; }
 html.mobile .page-head { height: 36px; }
 html.mobile .page-head.with-icon { height: 80px; }
 html.mobile .big-icon { font-size: 44px; }
