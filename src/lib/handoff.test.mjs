@@ -19,6 +19,7 @@ const t = { host: '192.168.0.12:51234', path: s.path, key: s.key };
 const link = ticketLink(t);
 assert.match(link, /^https:\/\/happy-nut\.github\.io\/eve\/android\/#h=/);
 assert.deepEqual(parseTicket('eve://connect?' + link.split('#')[1]), t);
+assert.deepEqual(parseTicket('eve://signin?' + link.split('#')[1]), t);
 assert.deepEqual(parseTicket(`eve://connect?h=10.0.0.5:8080&p=${s.path}&k=${s.key}`)?.host, '10.0.0.5:8080');
 assert.deepEqual(parseTicket(`eve://connect?h=172.20.1.1:80&p=${s.path}&k=${s.key}`)?.host, '172.20.1.1:80');
 

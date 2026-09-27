@@ -76,7 +76,7 @@
       widget.onOpen((ask) => {
         // the phone-setup page: take the sign-in the Mac's QR points at
         const ticket = parseTicket(ask);
-        if (ticket) { settingsOpen = true; void sync.claim(ticket); return; }
+        if (ticket) { settingsOpen = true; void sync.claim(ticket).then(offerUpdate); return; }
         // the home-screen widget: straight into that note (or a new one), keyboard up
         const id = ask.startsWith('note:') ? ask.slice(5) : null;
         if (ask !== 'new' && !id) return;
@@ -185,6 +185,13 @@
       { label: 'Image (.png)', run: () => void exportCurrent('png') },
     ]);
   }
+  /** Opened from the Mac's QR: a newer Eve is asked about there and then, not left to a banner. */
+  async function offerUpdate() {
+    await updates.check(true);
+    const v = updates.available?.version;
+    if (v && (await ui.ask(`Eve ${v} is ready. Update now?`, false, 'Update'))) updates.install();
+  }
+
   /** notes pinned to the top of the home-screen widget (the pin in the note's bar shows it) */
   let widgetTop = $state(widget.top());
   function pinToHome() {

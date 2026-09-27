@@ -114,7 +114,7 @@ class Sync {
       this.claiming = false;
       this.status = 'error';
       const msg = e instanceof Error ? e.message : String(e);
-      this.error = /timed out|refused|unreachable|connect|404|not found/i.test(msg)
+      this.error = /timed? ?out|refused|unreachable|connect|404|not found/i.test(msg)
         ? 'Could not reach the Mac. Both on the same Wi-Fi? Show a new QR there and scan it again.'
         : msg;
     }

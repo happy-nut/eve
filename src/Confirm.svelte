@@ -36,6 +36,8 @@
     <span class="mark" class:danger={p.danger && p.input === undefined}>
       {#if p.input !== undefined}
         <svg viewBox="0 0 16 16"><path d="M11.5 2.5 13.5 4.5 6 12H4v-2z"/><path d="M2.5 14h11"/></svg>
+      {:else if !p.danger}
+        <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.6M8 5.2h.01"/></svg>
       {:else}
         <svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9M6.6 6.8v4.4M9.4 6.8v4.4"/></svg>
       {/if}
@@ -50,7 +52,7 @@
     {#if p.input !== undefined}
       <button class="primary" onclick={() => done(value)}>OK<kbd>↩</kbd></button>
     {:else}
-      <button class="primary" class:danger={p.danger} use:focus onclick={() => done('yes')}>Delete<kbd>↩</kbd></button>
+      <button class="primary" class:danger={p.danger} use:focus onclick={() => done('yes')}>{p.yes ?? (p.danger ? 'Delete' : 'OK')}<kbd>↩</kbd></button>
     {/if}
   </div>
 </div>

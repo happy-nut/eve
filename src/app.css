@@ -227,7 +227,6 @@ html.mobile .panel .btn.primary { background: var(--accent); color: #fff; box-sh
 html.mobile .panel .sample { margin: 16px 20px 0; border-radius: 6px; }
 html.mobile .panel .foot { margin: 14px 20px 0; }
 html.mobile .panel .path { font-size: 13.5px; }
-html.mobile .backdrop { background: var(--bg); } /* the page above the status bar is the settings page too */
 html.mobile .panel .switch { flex: none; }
 html.mobile .panel .select {
   font-size: 15px; padding: 8px 10px 8px 13px; background: none; color: var(--fg-dim); padding-right: 0;

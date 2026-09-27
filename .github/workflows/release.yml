@@ -55,7 +55,10 @@ jobs:
       # the runner's own NDK: a shell variable, not something the `env` context can see
       - run: NDK_HOME="$ANDROID_NDK_LATEST_HOME" npm run tauri -- android build --apk --target aarch64
       - run: |
-          cp src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk Eve-android.apk
-          gh release create "$GITHUB_REF_NAME" Eve-android.apk --title "Eve for Android ${GITHUB_REF_NAME#android-v}" --generate-notes --latest=false
+          V="${GITHUB_REF_NAME#android-v}"
+          cp src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk "Eve-android-$V.apk"
+          # the same file under the plain name, which the updaters in 0.7.2 - 0.7.6 look for
+          cp "Eve-android-$V.apk" Eve-android.apk
+          gh release create "$GITHUB_REF_NAME" "Eve-android-$V.apk" Eve-android.apk --title "Eve for Android $V" --generate-notes --latest=false
         env:
           GH_TOKEN: ${{ github.token }}

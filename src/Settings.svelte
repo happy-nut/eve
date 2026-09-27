@@ -302,6 +302,8 @@
 
 <style>
   .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.22); z-index: 20; }
+  /* a phone: settings is a page, and the strip above the status bar is part of it */
+  :global(html.mobile) .backdrop { background: var(--bg); }
   .panel {
     position: fixed; z-index: 21; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: min(560px, 92vw); max-height: 82vh; display: flex; flex-direction: column; overflow: hidden;

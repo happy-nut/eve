@@ -726,3 +726,15 @@
   with OpenCV: a same-length hand-off link with the badge-sized patch over the centre reads back exactly
   at ecc H, and does not read at the default ecc (negative control). Not screenshotted in the Mac app
   (the screen-takeover prompt went unanswered).
+- [x] G164 One QR installs, updates or signs in, whatever Eve the phone has; the APK carries its version
+  EVIDENCE: the page opens eve://signin, which only this Eve and later answer; an older one (connect only)
+  cannot take it, so Chrome follows the fallback, the newest APK (emulator, 0.7.2 installed: an eve://signin
+  intent fell back to its fallback URL). Opened by the QR, Eve checks for a newer version and asks
+  "Eve 0.7.5 is ready. Update now?" (emulator build tagged 0.7.4). Releases carry Eve-android-<v>.apk plus
+  the same file as Eve-android.apk for the updaters in 0.7.2 - 0.7.6; the page and the updater hand out
+  the versioned one (tests). Also: non-delete confirms no longer show a bin and "Delete" (info mark, OK or
+  a given label); the white phone backdrop meant for Settings had covered every dialog's backdrop
+  (released in 0.7.5), now Settings only; a hand-off timeout says to check the Wi-Fi.
+- [ ] G165 v0.7.4 (Mac, Latest) and android-v0.7.6 (both APK names) are released
+  CHECK: gh release view android-v0.7.6 --json assets --jq '[.assets[].name] | sort | join(",")'
+  EXPECT: ^Eve-android-0\.7\.6\.apk,Eve-android\.apk$

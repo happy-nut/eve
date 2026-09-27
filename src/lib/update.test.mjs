@@ -27,4 +27,11 @@ assert.deepEqual((await findUpdate('0.7.1', releases([apk('android-v0.7.2')])))?
 // the Latest (Mac) release comes first in the API's list; the highest version still wins
 assert.deepEqual((await findUpdate('0.7.1', releases([apk('v0.7.1'), apk('android-v0.7.3'), apk('android-v0.7.2')])))?.version, '0.7.3');
 
+// the versioned file is the one handed out; the plain name alone still counts
+const both = (tag, v) => ({ tag_name: tag, draft: false, assets: [
+  { name: 'Eve-android.apk', browser_download_url: `https://github.com/happy-nut/eve/releases/download/${tag}/Eve-android.apk` },
+  { name: `Eve-android-${v}.apk`, browser_download_url: `https://github.com/happy-nut/eve/releases/download/${tag}/Eve-android-${v}.apk` }] });
+assert.equal((await findUpdate('0.7.5', releases([both('android-v0.7.6', '0.7.6')])))?.url, 'https://github.com/happy-nut/eve/releases/download/android-v0.7.6/Eve-android-0.7.6.apk');
+assert.equal((await findUpdate('0.7.5', releases([{ tag_name: 'android-v0.7.6', draft: false, assets: [{ name: 'Eve-android-backup.zip', browser_download_url: 'https://github.com/happy-nut/eve/releases/download/x/y' }] }]))), null);
+
 console.log('UPDATE_OK');

@@ -44,9 +44,9 @@ export async function open(body: string, key: string): Promise<Account> {
 export const ticketLink = (t: Ticket) =>
   `${PHONE_PAGE}#h=${encodeURIComponent(t.host)}&p=${t.path}&k=${t.key}`;
 
-/** `eve://connect?h=…&p=…&k=…` (how the page opens the app) -> the ticket. Null for anything else. */
+/** `eve://signin?h=…&p=…&k=…` (how the page opens the app; `connect` from older pages) -> the ticket. Null for anything else. */
 export function parseTicket(url: string): Ticket | null {
-  const m = /^eve:\/\/connect\?(.*)$/.exec(url);
+  const m = /^eve:\/\/(?:signin|connect)\?(.*)$/.exec(url);
   if (!m) return null;
   const q = new URLSearchParams(m[1]);
   const host = q.get('h') ?? '', path = q.get('p') ?? '', key = q.get('k') ?? '';

@@ -59,9 +59,9 @@ class MainActivity : TauriActivity() {
   }
 
   private fun remember(intent: Intent?): Boolean {
-    // the widget's extra, or the phone-setup page's eve://connect?c=…&u=… link
+    // the widget's extra, or the phone-setup page's eve://signin?… link (eve://connect?… from older pages)
     val ask = intent?.getStringExtra(NotesWidget.EXTRA_OPEN)
-      ?: intent?.dataString?.takeIf { it.startsWith("eve://connect?") }
+      ?: intent?.dataString?.takeIf { it.startsWith("eve://signin?") || it.startsWith("eve://connect?") }
       ?: return false
     pending = ask
     return true
