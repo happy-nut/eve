@@ -114,6 +114,10 @@ class MainActivity : TauriActivity() {
     @JavascriptInterface
     fun pinWidget(noteId: String): Boolean = NotesWidget.requestPin(applicationContext, noteId)
 
+    /** the notes pinned to the top of the widget, comma-separated (the page shows the pin as on) */
+    @JavascriptInterface
+    fun widgetTop(): String = NotesWidget.top(applicationContext).joinToString(",")
+
     /** the GitHub sign-in, so the background pull can run while the app is closed ("" = signed out) */
     @JavascriptInterface
     fun account(repo: String, token: String) = PullJob.account(applicationContext, repo, token)

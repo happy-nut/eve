@@ -28,34 +28,34 @@ class NotesWidget : AppWidgetProvider() {
   companion object {
     const val EXTRA_OPEN = "dev.happynut.eve.OPEN"
     private const val ACTION_PULL = "dev.happynut.eve.PULL"
-    private const val ACTION_PINNED = "dev.happynut.eve.PINNED"
-    private const val EXTRA_NOTE = "dev.happynut.eve.NOTE"
 
     /**
-     * The note's pin button. With an Eve widget already on the home screen, that widget shows the note
-     * (pressed again, it goes back to the newest notes) — no second widget, no system dialog. Only with
-     * none does the launcher get asked to add one, pinned to the note once placed.
+     * The note's pin button: the note goes to the top of the widget's list (pressed again, back into
+     * date order). Pins belong to the phone, not to one widget. With no Eve widget on the home screen
+     * yet, the launcher is asked to add one. False = none there and the launcher cannot add one.
      */
     fun requestPin(context: Context, noteId: String): Boolean {
       val mgr = AppWidgetManager.getInstance(context)
-      val ids = mgr.getAppWidgetIds(ComponentName(context, NotesWidget::class.java))
-      if (ids.isNotEmpty()) {
-        val here = ids.filter { pinned(context, it) == noteId }
-        if (here.isNotEmpty()) here.forEach { pin(context, it, null) }
-        else pin(context, ids.firstOrNull { pinned(context, it) != null } ?: ids.first(), noteId)
-        refresh(context)
-        val said = if (here.isNotEmpty()) "Widget shows the newest notes again" else "Widget now shows this note"
-        // called from the page's bridge thread, which has no looper for a toast
-        Handler(Looper.getMainLooper()).post { Toast.makeText(context, said, Toast.LENGTH_SHORT).show() }
-        return true
+      val now = top(context).toMutableList()
+      val on = noteId !in now
+      if (on) now.add(0, noteId) else now.remove(noteId)
+      context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("top", now.joinToString(",")).apply()
+      if (mgr.getAppWidgetIds(ComponentName(context, NotesWidget::class.java)).isEmpty()) {
+        if (!on) return true
+        if (!mgr.isRequestPinAppWidgetSupported) return false
+        return mgr.requestPinAppWidget(ComponentName(context, NotesWidget::class.java), null, null)
       }
-      if (!mgr.isRequestPinAppWidgetSupported) return false
-      // the launcher adds EXTRA_APPWIDGET_ID to this before sending it, so it has to be mutable
-      val placed = PendingIntent.getBroadcast(context, noteId.hashCode(),
-        Intent(context, NotesWidget::class.java).setAction(ACTION_PINNED).putExtra(EXTRA_NOTE, noteId),
-        PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-      return mgr.requestPinAppWidget(ComponentName(context, NotesWidget::class.java), null, placed)
+      refresh(context)
+      val said = if (on) "Pinned to the top of the widget" else "Unpinned from the widget"
+      // called from the page's bridge thread, which has no looper for a toast
+      Handler(Looper.getMainLooper()).post { Toast.makeText(context, said, Toast.LENGTH_SHORT).show() }
+      return true
     }
+
+    /** The notes pinned to the top of the list, most recently pinned first. */
+    fun top(context: Context): List<String> =
+      context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("top", "").orEmpty().split(',').filter { it.isNotEmpty() }
+
     /** the list widget shows this many of the newest notes */
     private const val MAX = 40
     private const val PREFS = "widgets"
@@ -93,7 +93,10 @@ class NotesWidget : AppWidgetProvider() {
       if (pinnedId == null) {
         views.setTextViewText(R.id.widget_empty, context.getString(R.string.widget_empty))
         views.setOnClickPendingIntent(R.id.widget_empty, open(context, "new", 3))
-        for (n in notes.filter { it.body.isNotBlank() }.take(MAX)) items.addItem(n.id.hashCode().toLong(), card(context, n, md))
+        val top = top(context)
+        val pinnedFirst = top.mapNotNull { id -> notes.find { it.id == id } } + notes.filter { it.id !in top }
+        for (n in pinnedFirst.filter { it.body.isNotBlank() }.take(MAX))
+          items.addItem(n.id.hashCode().toLong(), card(context, n, md, n.id in top))
       } else {
         val note = notes.find { it.id == pinnedId }
         views.setTextViewText(R.id.widget_empty, context.getString(if (note == null) R.string.widget_gone else R.string.widget_blank))
@@ -112,7 +115,7 @@ class NotesWidget : AppWidgetProvider() {
       return views
     }
 
-    private fun card(context: Context, n: Note, md: Markdown): RemoteViews {
+    private fun card(context: Context, n: Note, md: Markdown, pinnedTop: Boolean): RemoteViews {
       val views = RemoteViews(context.packageName, R.layout.widget_note_row)
       val blocks = md.blocks(n.body)
       views.setTextViewText(R.id.row_icon, n.icon.ifEmpty { "📝" })
@@ -122,9 +125,9 @@ class NotesWidget : AppWidgetProvider() {
       views.setTextViewText(R.id.row_preview, preview)
       views.setViewVisibility(R.id.row_preview, if (preview.isEmpty()) View.GONE else View.VISIBLE)
       val now = System.currentTimeMillis()
-      views.setTextViewText(R.id.row_time,
-        if (now - n.updated < DateUtils.MINUTE_IN_MILLIS) context.getString(R.string.widget_now)
-        else DateUtils.getRelativeTimeSpanString(n.updated, now, DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE))
+      val time = if (now - n.updated < DateUtils.MINUTE_IN_MILLIS) context.getString(R.string.widget_now)
+        else DateUtils.getRelativeTimeSpanString(n.updated, now, DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE)
+      views.setTextViewText(R.id.row_time, if (pinnedTop) "📌 $time" else time)
       views.setOnClickFillInIntent(R.id.row, Intent().putExtra(EXTRA_OPEN, "note:${n.id}"))
       return views
     }
@@ -151,11 +154,6 @@ class NotesWidget : AppWidgetProvider() {
   override fun onReceive(context: Context, intent: Intent) {
     super.onReceive(context, intent)
     if (intent.action == ACTION_PULL) PullJob.now(context)
-    if (intent.action == ACTION_PINNED) {
-      val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
-      val note = intent.getStringExtra(EXTRA_NOTE)
-      if (id != AppWidgetManager.INVALID_APPWIDGET_ID && note != null) { pin(context, id, note); refresh(context) }
-    }
   }
 
   override fun onDeleted(context: Context, ids: IntArray) { for (id in ids) pin(context, id, null) }

@@ -185,9 +185,12 @@
       { label: 'Image (.png)', run: () => void exportCurrent('png') },
     ]);
   }
+  /** notes pinned to the top of the home-screen widget (the pin in the note's bar shows it) */
+  let widgetTop = $state(widget.top());
   function pinToHome() {
     const n = notes.current;
-    if (n && !widget.pin(n.id)) void ui.ask('This home screen can\u2019t add a widget from an app. Long-press the home screen → Widgets → Eve, then pick this note from the widget\u2019s settings.', false);
+    if (n && !widget.pin(n.id)) void ui.ask('This home screen can\u2019t add a widget from an app. Long-press the home screen → Widgets → Eve; pinned notes sit at the top of its list.', false);
+    widgetTop = widget.top();
   }
   async function deleteOnPhone() {
     const n = notes.current;
@@ -373,7 +376,7 @@
       <button class="micon" aria-label="Export" onclick={(e) => exportMenu(e.currentTarget)}>
         <svg viewBox="0 0 16 16"><path d="M8 10V2.5M5 5.5l3-3 3 3"/><path d="M4.5 8H4a1.5 1.5 0 00-1.5 1.5v3A1.5 1.5 0 004 14h8a1.5 1.5 0 001.5-1.5v-3A1.5 1.5 0 0012 8h-.5"/></svg>
       </button>
-      <button class="micon" aria-label="Pin to home screen" onclick={pinToHome}>
+      <button class="micon" class:on={!!notes.current && widgetTop.includes(notes.current.id)} aria-label="Pin to the top of the widget" onclick={pinToHome}>
         <svg viewBox="0 0 16 16"><path d="M6 1.8h4l-.6 3.4 2.2 2.2v1.2H4.4V7.4l2.2-2.2z"/><path d="M8 8.6V14"/></svg>
       </button>
       <button class="micon danger" aria-label="Delete note" onclick={deleteOnPhone}>

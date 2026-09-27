@@ -680,6 +680,11 @@
   EVIDENCE: emulator screenshots: list rows ~32px (were ~38 + padding); note bar flat with grey icons,
   44px page icon, smaller headings; widget rows on white with inset hairlines (no grey cards), medium
   titles, a dark round + button. All app CSS under html.mobile; the widget is Android-only.
-- [ ] G156 android-v0.7.4 ships the swipe fix, pin-to-existing-widget, the icon back button and the Notion-style phone UI
+- [x] G156 android-v0.7.4 ships the swipe fix, pin-to-existing-widget, the icon back button and the Notion-style phone UI
   CHECK: gh release view android-v0.7.4 --json assets --jq '.assets[].name'
   EXPECT: Eve-android\.apk
+  EVIDENCE: run 36309168835: android=success; android-v0.7.4 holds Eve-android.apk; Latest stays v0.7.2.
+- [x] G157 A pinned note sits at the top of the widget's list; the pin button shows and toggles it
+  EVIDENCE: emulator: pin on DB → toast, the bar's pin filled, the widget lists DB first with "📌" before
+  its time and the rest in date order; pin again → unpinned (outline icon); pin again → back on top, the
+  note stays open. With no widget, the launcher is asked for a list widget. Pins live on the phone.
