@@ -235,7 +235,11 @@
       <div class="card">
         {#if sync.phone}
           <div class="phone">
-            <div class="qr" class:done={sync.phone.done}>{@html renderSVG(sync.phone.link, { border: 2, whiteColor: '#fff', blackColor: '#111318' })}</div>
+            <!-- the newest phone version sits in the middle; ecc H keeps the code readable under it -->
+            <div class="qr" class:done={sync.phone.done}>
+              {@html renderSVG(sync.phone.link, { ecc: 'H', border: 2, whiteColor: '#fff', blackColor: '#111318' })}
+              {#if phoneApp}<span class="qrver">Eve<b>{phoneApp.version}</b></span>{/if}
+            </div>
             {#if sync.phone.done}
               <p class="took">✓ The phone is signed in.</p>
             {:else}
@@ -388,8 +392,14 @@
   .actions.pad { padding: 0 0 14px; }
   .phone { display: flex; gap: 18px; align-items: center; padding: 14px 16px; }
   /* the code stays black on white in dark mode too: cameras read it best that way */
-  .qr { flex: none; width: 168px; height: 168px; border-radius: 10px; overflow: hidden; background: #fff; }
+  .qr { position: relative; flex: none; width: 184px; height: 184px; border-radius: 10px; overflow: hidden; background: #fff; }
   .qr :global(svg) { display: block; width: 100%; height: 100%; }
+  .qrver {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column;
+    align-items: center; padding: 4px 7px; border-radius: 7px; background: #fff; color: #111318;
+    font-size: 9px; font-weight: 600; line-height: 1.15; letter-spacing: 0.02em; box-shadow: 0 0 0 3px #fff;
+  }
+  .qrver b { font-size: 12px; font-weight: 700; letter-spacing: 0; }
   .phone ol { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--fg); }
   .phone li + li { margin-top: 8px; }
   .qr.done { opacity: 0.25; }
