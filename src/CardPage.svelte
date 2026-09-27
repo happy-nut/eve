@@ -26,15 +26,17 @@
   onMount(() => {
     editor = createEditor({
       element: el,
-      content: cardDoc(req.title, req.body),
-      onUpdate: (md) => req.onChange(splitCard(md)),
+      content: req.markdown ?? cardDoc(req.title, req.body),
+      onUpdate: (md) => (req.onMarkdown ? req.onMarkdown(md) : req.onChange(splitCard(md))),
       onOpenNote: (t) => { close(); notes.openByTitle(t); },
       targets: () => notes.pages,
       suggestionUI: suggest.ui,
       calendarUI: dateMenu.ui,
     });
-    // caret at the end of the title line, so a long card opens at its top rather than scrolled to the end
-    editor.commands.focus(editor.state.doc.firstChild!.nodeSize - 1);
+    // a card: caret at the end of its title line, so a long card opens at its top rather than scrolled to
+    // the end. A day's note opens to be written in: under whatever is there.
+    if (req.markdown !== undefined) editor.commands.focus('end');
+    else editor.commands.focus(editor.state.doc.firstChild!.nodeSize - 1);
     editor.view.focus();
     return () => editor?.destroy();
   });

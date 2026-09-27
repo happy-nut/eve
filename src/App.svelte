@@ -229,16 +229,16 @@
     sidebarOpen = false;
     widget.keyboard();
   }
-  /** The daily template, from the calendar: edited like a note. */
+  /** The daily template, from the calendar: a floating page over it, like a board's card template. */
   function openTemplate() {
-    ui.focusOwner = 'editor';
-    notes.openDailyTemplate();
+    const n = notes.templateNote();
+    void ui.openPage(n.body, (md) => notes.update(n.id, md),
+      'Template — every new day starts like this. {{date}} and {{weekday}} are filled in.').then(() => notes.flush(n.id));
   }
-  /** A day picked in the calendar: its note, in the editor. */
+  /** A day picked in the calendar: its note, floating over the calendar like a board's card. */
   function openDay(key: string) {
-    ui.focusOwner = 'editor';
-    notes.caretEnd = true;
-    notes.openDaily(key);
+    const n = notes.dayNote(key);
+    void ui.openPage(n.body, (md) => notes.update(n.id, md)).then(() => notes.flush(n.id));
   }
   /** A phone's back (the bar's chevron, or Android's): a day goes back to its calendar, anything else to the list. */
   function phoneBack() {
@@ -438,10 +438,6 @@
     {#if notes.loaded && notes.current}
       {#key notes.currentId}
         <div class="page" in:fade={{ duration: 160 }}>
-          {#if notes.current.id === DAILY_TEMPLATE_ID}
-            <p class="tpl-banner">Template — every new day starts like this. {'{{date}}'} and {'{{weekday}}'} are filled in.
-              <button onclick={() => (notes.currentId = CALENDAR)}>Back to calendar</button></p>
-          {/if}
           <Editor note={notes.current} />
         </div>
       {/key}

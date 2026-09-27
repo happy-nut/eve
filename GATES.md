@@ -829,3 +829,12 @@
   CHECK: gh release view android-v0.7.10 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.10\.apk,Eve-android\.apk$
   EVIDENCE: runs 36356842008 / 36356842067 succeeded; v0.7.8 is Latest.
+- [x] G182 A day opens floating over the calendar (Enter or click); the calendar's row can join groups
+  EVIDENCE: the card page takes a whole note's markdown (ui.openPage), so a day opens like a board's card
+  and the calendar stays; the template opens the same way (with its note). Browser: → then Enter on the 29th
+  opened it floating (currentId stayed "calendar"); typing saved to daily-2026-09-29; Esc closed it with the
+  29th focused again; the Template opened floating; moving the row into "Work" was kept. It still never
+  becomes a sub-page. Screenshot of the floating day.
+- [ ] G183 v0.7.9 (Mac, Latest) and android-v0.7.11 are released
+  CHECK: gh release view android-v0.7.11 --json assets --jq '[.assets[].name] | sort | join(",")'
+  EXPECT: ^Eve-android-0\.7\.11\.apk,Eve-android\.apk$

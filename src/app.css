@@ -576,14 +576,3 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
   .tiptap img, .tiptap .pdf-card, .tiptap .bookmark, .tiptap pre, .tiptap blockquote, .tiptap .callout { break-inside: avoid; }
   .tiptap h1, .tiptap h2, .tiptap h3 { break-after: avoid; }
 }
-
-/* editing the daily template: a line that says so, over the top of the page */
-.tpl-banner {
-  position: absolute; z-index: 5; top: 8px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px);
-  margin: 0; padding: 6px 8px 6px 14px; border-radius: 10px; font-size: 12.5px; color: var(--fg-dim);
-  background: var(--bg-pop); box-shadow: 0 0 0 0.5px var(--line), 0 4px 14px rgba(0, 0, 0, 0.08);
-  display: flex; align-items: center; gap: 10px; white-space: nowrap;
-}
-.tpl-banner button { border: 0; border-radius: 7px; padding: 4px 8px; background: var(--bg-input); color: var(--fg); font: inherit; font-size: 12px; flex: none; }
-html.mobile .tpl-banner { white-space: normal; font-size: 13px; width: calc(100% - 32px); box-sizing: border-box; }
-@media print { .tpl-banner { display: none; } }
