@@ -835,6 +835,7 @@
   opened it floating (currentId stayed "calendar"); typing saved to daily-2026-09-29; Esc closed it with the
   29th focused again; the Template opened floating; moving the row into "Work" was kept. It still never
   becomes a sub-page. Screenshot of the floating day.
-- [ ] G183 v0.7.9 (Mac, Latest) and android-v0.7.11 are released
+- [x] G183 v0.7.9 (Mac, Latest) and android-v0.7.11 are released
   CHECK: gh release view android-v0.7.11 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.11\.apk,Eve-android\.apk$
+  EVIDENCE: runs 36359749637 / 36359749976 succeeded; v0.7.9 is Latest.
