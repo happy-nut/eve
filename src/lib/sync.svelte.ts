@@ -77,13 +77,14 @@ class Sync {
   phone = $state<{ link: string; until: number; done: boolean } | null>(null);
   private phoneTimer: ReturnType<typeof setTimeout> | undefined;
   private phoneOff: (() => void) | undefined;
-  async phoneSetup() {
+  /** `version`: the newest phone release, which the QR's page then downloads directly */
+  async phoneSetup(version?: string) {
     this.error = '';
     try {
       const { user, repo, token } = this.settings;
       const s = await seal({ user, repo, token });
       const host = await share.start(s.path, s.body);
-      this.phone = { link: ticketLink({ host, path: s.path, key: s.key }), until: Date.now() + 600_000, done: false };
+      this.phone = { link: ticketLink({ host, path: s.path, key: s.key }, version), until: Date.now() + 600_000, done: false };
       this.phoneOff?.();
       this.phoneOff = await share.onDone(() => { if (this.phone) this.phone.done = true; });
       clearTimeout(this.phoneTimer);
