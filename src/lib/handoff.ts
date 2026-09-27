@@ -41,12 +41,14 @@ export async function open(body: string, key: string): Promise<Account> {
 }
 
 /**
- * The QR's link. The ticket rides in the fragment, which never leaves the phone. The query is only a
- * fresh value per QR (nothing secret) so the phone never gets a copy of the page GitHub Pages cached
- * (ten minutes) from before a change to it.
+ * The QR's link. The ticket rides in the fragment, which never leaves the phone. The query carries the
+ * newest phone version the Mac found (the page downloads exactly that APK, asking GitHub nothing — a
+ * phone's browser had served a day-old copy of the releases list) and a fresh value per QR, so no copy of
+ * the page GitHub Pages cached from before a change is used. Nothing of the ticket is in the query.
  */
-export const ticketLink = (t: Ticket) =>
-  `${PHONE_PAGE}?${Date.now().toString(36)}#h=${encodeURIComponent(t.host)}&p=${t.path}&k=${t.key}`;
+export const ticketLink = (t: Ticket, version?: string) =>
+  `${PHONE_PAGE}?${version && /^\d+(\.\d+){1,3}$/.test(version) ? `v=${version}&` : ''}t=${Date.now().toString(36)}` +
+  `#h=${encodeURIComponent(t.host)}&p=${t.path}&k=${t.key}`;
 
 /** `eve://signin?h=…&p=…&k=…` (how the page opens the app; `connect` from older pages) -> the ticket. Null for anything else. */
 export function parseTicket(url: string): Ticket | null {

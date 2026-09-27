@@ -17,7 +17,9 @@ await assert.rejects(open(flipped, s.key));
 // the QR link carries the ticket in its fragment, and the app link gives it back
 const t = { host: '192.168.0.12:51234', path: s.path, key: s.key };
 const link = ticketLink(t);
-assert.match(link, /^https:\/\/happy-nut\.github\.io\/eve\/android\/\?[0-9a-z]+#h=/);
+assert.match(link, /^https:\/\/happy-nut\.github\.io\/eve\/android\/\?t=[0-9a-z]+#h=/);
+assert.match(ticketLink(t, '0.7.6'), /\/android\/\?v=0\.7\.6&t=[0-9a-z]+#h=/);
+assert.doesNotMatch(ticketLink(t, '0.7.6"><x'), /v=/); // only a plain version goes in
 assert.doesNotMatch(link.split('#')[0], new RegExp(s.path + '|' + s.key)); // nothing of the ticket before the fragment
 assert.deepEqual(parseTicket('eve://connect?' + link.split('#')[1]), t);
 assert.deepEqual(parseTicket('eve://signin?' + link.split('#')[1]), t);

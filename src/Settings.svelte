@@ -256,7 +256,7 @@
           <div class="row">
             <span class="label">Set up a phone
               <span class="sub">one QR installs Eve on Android and signs it in to <span class="mono">{sync.settings.repo}</span>{phoneApp ? ` · newest phone app ${phoneApp.version}` : ''}</span></span>
-            <button class="btn primary" onclick={() => sync.phoneSetup()}>Show QR</button>
+            <button class="btn primary" onclick={() => sync.phoneSetup(phoneApp?.version)}>Show QR</button>
           </div>
         {/if}
       </div>

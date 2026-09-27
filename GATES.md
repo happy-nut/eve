@@ -751,3 +751,11 @@
   EVIDENCE: the page is served with max-age=600; a phone that scanned within ten minutes of a page change
   got the old page, which hands out the plain Eve-android.apk. The link now carries a per-QR value in the
   query (nothing from the ticket: tested), so each scan loads the page anew.
+- [x] G168 The QR carries the newest phone version; the page downloads exactly that APK
+  CHECK: node --experimental-strip-types --no-warnings src/lib/handoff.test.mjs
+  EXPECT: HANDOFF_OK
+  EVIDENCE: a phone showed "Download Eve 0.7.0": its browser answered the releases API from a day-old copy.
+  The Mac now puts the version it found (the QR badge's) in the link, ?v=0.7.6 (plain versions only:
+  tested), and the page builds the android-v<v>/Eve-android-<v>.apk URL from it without calling GitHub;
+  without v it asks with cache: no-store. Emulator: ?v=0.7.6 → "Download Eve 0.7.6" and the fallback
+  downloads Eve-android-0.7.6.apk.
