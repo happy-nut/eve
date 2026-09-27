@@ -50,14 +50,19 @@
     document.getElementById('hint').innerHTML = '안 열리나요? <a id="retry" href="#">Eve 열기</a> · <a id="apk" href="#">내려받기</a>';
   }
 
-  /** The newest published release that carries the APK (a prerelease counts; a draft cannot be downloaded). */
+  /** The highest-versioned published release that carries the APK (a prerelease counts; a draft cannot be downloaded). */
   async function apkUrl() {
     try {
       const rs = await (await fetch('https://api.github.com/repos/happy-nut/eve/releases?per_page=10')).json();
+      // the highest version, not the first: the API puts the Latest release (the Mac's) first
+      const v = (t) => (/\d+(?:\.\d+)*/.exec(t)?.[0] ?? '0').split('.').map(Number);
+      const higher = (a, b) => { for (let i = 0; i < 4; i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0); return false; };
+      let best = null;
       for (const r of rs) {
         const a = !r.draft && r.assets?.find((x) => x.name === 'Eve-android.apk');
-        if (a) return a.browser_download_url;
+        if (a && (!best || higher(v(r.tag_name), best.v))) best = { v: v(r.tag_name), url: a.browser_download_url };
       }
+      if (best) return best.url;
     } catch { /* offline or rate-limited: the latest release's link */ }
     return LATEST;
   }

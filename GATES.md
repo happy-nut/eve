@@ -601,3 +601,16 @@
   EXPECT: UPDATE_OK
   EVIDENCE: "UPDATE_OK" incl. android-v0.7.2 > 0.7.1 and an android-v release found. release.yml: `v*` runs
   only the Mac job (release = Latest), `android-v*` only the Android job (its own release, --latest=false).
+
+# GATES — android-v0.7.2 released on its own (2026-09-27)
+
+- [x] G142 The android-v tag builds only the APK into its own, non-Latest release
+  CHECK: gh api repos/happy-nut/eve/releases/latest --jq .tag_name
+  EXPECT: ^v0\.7\.1$
+  EVIDENCE: run 36298111314: android=success, build=skipped. Release "Eve for Android 0.7.2" holds only
+  Eve-android.apk (signer a8f3b476…e0be7d2, versionCode 7002, versionName 0.7.2); Latest stays v0.7.1.
+- [x] G143 Updates are found by version, not by list order
+  EVIDENCE: the API lists the Latest (Mac) release first, and the first-APK rule picked v0.7.1. findUpdate
+  and the setup page now take the highest version (test added; against the live API: 0.7.1 → 0.7.2).
+  v0.7.1's copy of the APK was detached (Mac zip kept; the file is kept locally) so the 0.7.2 already
+  released, which still reads the first APK, lands on android-v0.7.2 and its successors.
