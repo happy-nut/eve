@@ -765,6 +765,7 @@
   over several frames. Check: spinner and "Checking…" for at least 600 ms, then "✓ Up to date" (or "Could
   not check — offline?"), recording. Emoji picker: shuffle and bin icons, 28px on the Mac, 44px on the
   phone (screenshots of both).
-- [ ] G170 v0.7.5 (Mac, Latest) and android-v0.7.7 (both APK names) are released
+- [x] G170 v0.7.5 (Mac, Latest) and android-v0.7.7 (both APK names) are released
   CHECK: gh release view android-v0.7.7 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.7\.apk,Eve-android\.apk$
+  EVIDENCE: runs 36324784975 / 36324785405 succeeded; v0.7.5 is Latest with the Mac zip.
