@@ -124,6 +124,10 @@ class MainActivity : TauriActivity() {
       }
     }
 
+    /** Settings → Daily notes → Show in widget */
+    @JavascriptInterface
+    fun widgetDaily(on: Boolean) = NotesWidget.setShowDaily(applicationContext, on)
+
     /** the notes pinned to the top of the widget, comma-separated (the page shows the pin as on) */
     @JavascriptInterface
     fun widgetTop(): String = NotesWidget.top(applicationContext).joinToString(",")
