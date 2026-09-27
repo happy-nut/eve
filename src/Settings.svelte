@@ -13,7 +13,6 @@
   import { updates } from './lib/updates.svelte';
   import { renderSVG } from 'uqr';
   import { findUpdate } from './lib/update';
-  import { PHONE_PAGE } from './lib/handoff';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
 
@@ -24,9 +23,8 @@
   let launchAtLogin = $state(false);
   let opensMarkdown = $state(false);
   let defaultAppError = $state<string | null>(null);
-  /** the newest phone release, and which QR is up: the sign-in, or one that only (re)installs the app */
+  /** the newest phone release, shown beside the QR (a phone on 0.7.2 or later offers it itself once opened) */
   let phoneApp = $state<{ version: string } | null>(null);
-  let qrFor = $state<'signin' | 'install'>('signin');
   onMount(() => {
     if (!isMobile) findUpdate('0').then((r) => (phoneApp = r), () => {});
     storage.path().then((p) => (notesPath = p));
@@ -236,27 +234,19 @@
       <h3>Android phone</h3>
       <div class="card">
         {#if sync.phone}
-          <div class="qrtabs">
-            <button class:on={qrFor === 'signin'} onclick={() => (qrFor = 'signin')}>Sign in</button>
-            <button class:on={qrFor === 'install'} onclick={() => (qrFor = 'install')}>Install or update{phoneApp ? ` ${phoneApp.version}` : ''}</button>
-          </div>
           <div class="phone">
-            <div class="qr" class:done={qrFor === 'signin' && sync.phone.done}>{@html renderSVG(qrFor === 'install' ? PHONE_PAGE + '#install' : sync.phone.link, { border: 2, whiteColor: '#fff', blackColor: '#111318' })}</div>
-            {#if qrFor === 'install'}
-              <ol>
-                <li>Scan it with the phone's camera: it downloads the newest Eve{phoneApp ? ` (${phoneApp.version})` : ''}, even with an older one installed.</li>
-                <li>Open the download and tap Install (or Update). Notes and the sign-in stay.</li>
-              </ol>
-            {:else if sync.phone.done}
+            <div class="qr" class:done={sync.phone.done}>{@html renderSVG(sync.phone.link, { border: 2, whiteColor: '#fff', blackColor: '#111318' })}</div>
+            {#if sync.phone.done}
               <p class="took">✓ The phone is signed in.</p>
             {:else}
               <ol>
                 <li>Scan it with the phone's camera. Without Eve it downloads the app — install it.</li>
                 <li>Scan it again: Eve opens and signs in as <b>@{sync.settings.user}</b> by itself.</li>
+                <li>Already have Eve? The same scan opens it, and it offers {phoneApp ? phoneApp.version : 'the newest version'} at the top of the list.</li>
               </ol>
             {/if}
           </div>
-          {#if qrFor === 'signin'}<p class="sub pad">The phone and this Mac need the same Wi-Fi. The code works once, for ten minutes.</p>{/if}
+          <p class="sub pad">The phone and this Mac need the same Wi-Fi. The code works once, for ten minutes.</p>
           <div class="actions pad"><button class="btn" onclick={() => sync.phoneDone()}>Done</button></div>
         {:else}
           <div class="row">
@@ -398,11 +388,6 @@
   .actions.pad { padding: 0 0 14px; }
   .phone { display: flex; gap: 18px; align-items: center; padding: 14px 16px; }
   /* the code stays black on white in dark mode too: cameras read it best that way */
-  .qrtabs { display: flex; gap: 2px; margin: 12px 16px 0; padding: 3px; border-radius: 9px; background: var(--bg-pop); width: fit-content; }
-  .qrtabs button {
-    border: 0; background: none; color: var(--fg-dim); font: inherit; font-size: 12.5px; font-weight: 500; padding: 4px 12px; border-radius: 7px;
-  }
-  .qrtabs button.on { background: var(--bg-input); color: var(--fg); }
   .qr { flex: none; width: 168px; height: 168px; border-radius: 10px; overflow: hidden; background: #fff; }
   .qr :global(svg) { display: block; width: 100%; height: 100%; }
   .phone ol { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--fg); }

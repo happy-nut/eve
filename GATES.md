@@ -716,3 +716,8 @@
   Sign in | Install or update 0.7.5 switch; the install QR is the setup page with #install, which goes
   straight to the newest APK. Emulator Chrome with Eve installed, #install: download of the 9.88 MB APK
   starts, the app is not opened. Mac screenshot of both QR tabs.
+- [x] G162 One QR again: it installs, or opens and signs in; an installed Eve offers its own update
+  EVIDENCE: the split (Sign in | Install or update) was inconvenient. The Mac keeps one sign-in QR and
+  shows the newest phone version; its steps say an installed Eve (0.7.2+) offers that version at the top
+  of the list when the scan opens it. The setup page still honours #install for a one-off link to move a
+  phone older than the updater (≤ 0.7.1).
