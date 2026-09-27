@@ -825,6 +825,7 @@
   opened as the calendar. Browser: Lock moved above it; ⌥↓ ×3 walked it past Lock, DB, OLAP; ⌥↑ back one;
   move/place into a group and setParent under it were refused. Also fixed for every note: moving between
   two notes of the same rank (older files) did not show; the list is re-ranked 0, 1, 2… first.
-- [ ] G181 v0.7.8 (Mac, Latest) and android-v0.7.10 are released
+- [x] G181 v0.7.8 (Mac, Latest) and android-v0.7.10 are released
   CHECK: gh release view android-v0.7.10 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.10\.apk,Eve-android\.apk$
+  EVIDENCE: runs 36356842008 / 36356842067 succeeded; v0.7.8 is Latest.
