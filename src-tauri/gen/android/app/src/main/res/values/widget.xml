@@ -2,7 +2,7 @@
 <resources>
     <!-- the app's EVE palette: shell white, soft gray, visor ink, eye blue -->
     <color name="widget_bg">#FFFFFFFF</color>
-    <color name="widget_row">#FFF2F3F5</color>
+    <color name="widget_row">#FFF5F5F7</color>
     <color name="widget_line">#17111318</color>
     <color name="widget_fg">#FF33363D</color>
     <color name="widget_dim">#FF7C8089</color>
