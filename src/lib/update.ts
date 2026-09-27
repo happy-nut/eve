@@ -17,14 +17,17 @@ export function newer(a: string, b: string): boolean {
   return false;
 }
 
-/** The newest published release that carries the APK, if it is newer than `current`. */
+/** The highest-versioned published release that carries the APK, if it is newer than `current`. (The
+ *  API lists the Latest release first, and that is the Mac's — so order says nothing about versions.) */
 export async function findUpdate(current: string, f: typeof fetch = (...a) => fetch(...a)): Promise<{ version: string; url: string } | null> {
   const res = await f(RELEASES, { headers: { accept: 'application/vnd.github+json' }, cache: 'no-store' });
   if (!res.ok) return null;
+  let best: { version: string; url: string } | null = null;
   for (const r of (await res.json()) as { tag_name: string; draft: boolean; assets?: { name: string; browser_download_url: string }[] }[]) {
     const apk = !r.draft && r.assets?.find((a) => a.name === 'Eve-android.apk');
     if (!apk || !apk.browser_download_url.startsWith(APK_PREFIX)) continue;
-    return newer(r.tag_name, current) ? { version: /\d+(?:\.\d+)*/.exec(r.tag_name)?.[0] ?? r.tag_name, url: apk.browser_download_url } : null;
+    const version = /\d+(?:\.\d+)*/.exec(r.tag_name)?.[0] ?? r.tag_name;
+    if (!best || newer(version, best.version)) best = { version, url: apk.browser_download_url };
   }
-  return null;
+  return best && newer(best.version, current) ? best : null;
 }

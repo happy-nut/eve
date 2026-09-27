@@ -24,4 +24,7 @@ assert.equal(newer('android-v0.7.2', '0.7.1'), true);
 assert.equal(newer('android-v0.7.2', '0.7.2'), false);
 assert.deepEqual((await findUpdate('0.7.1', releases([apk('android-v0.7.2')])))?.version, '0.7.2');
 
+// the Latest (Mac) release comes first in the API's list; the highest version still wins
+assert.deepEqual((await findUpdate('0.7.1', releases([apk('v0.7.1'), apk('android-v0.7.3'), apk('android-v0.7.2')])))?.version, '0.7.3');
+
 console.log('UPDATE_OK');
