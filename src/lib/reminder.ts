@@ -13,7 +13,7 @@ const LAST = 'eve.reminder.last'; // the day the Mac last looked after the time
 /** Phone: the alarm follows the settings (call from an $effect). */
 export function syncPhoneReminder() {
   const s = appearance.s;
-  widget.reminder(s.dailyNotes && s.dailyReminder, s.reminderAt, s.dailyTemplate);
+  widget.reminder(s.dailyNotes && s.dailyReminder, s.reminderAt, notes.dailyTemplate);
 }
 
 async function look() {
@@ -24,7 +24,7 @@ async function look() {
   if (now.getHours() * 60 + now.getMinutes() < h * 60 + m) return;
   try { if (localStorage.getItem(LAST) === key) return; localStorage.setItem(LAST, key); } catch { return; }
   const n = notes.all.find((x) => x.id === dailyId(key) && !x.deleted);
-  if (n && isWritten(n.body, s.dailyTemplate, key)) return;
+  if (n && isWritten(n.body, notes.dailyTemplate, key)) return;
   const { sendNotification, isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification');
   if (!(await isPermissionGranted()) && (await requestPermission()) !== 'granted') return;
   sendNotification({ title: "Today's daily note", body: 'Nothing written yet today. A line or two?' });

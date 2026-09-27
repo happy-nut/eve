@@ -7,7 +7,7 @@
    * The daily notes as a month, in the editor's place and as wide as it: each day shows the first
    * line written under its title. A day opens its note (started from the template if there is none).
    */
-  let { onpick }: { onpick: (key: string) => void } = $props();
+  let { onpick, ontemplate }: { onpick: (key: string) => void; ontemplate: () => void } = $props();
 
   const today = dayKey(new Date());
   let shown = $state(new Date());
@@ -34,6 +34,10 @@
   <header>
     <h1>{title}</h1>
     <span class="gap"></span>
+    <button class="tpl" onclick={ontemplate} data-tip="What a new day starts as">
+      <svg viewBox="0 0 16 16"><path d="M4 1.5h5L12.5 5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h3"/></svg>
+      Template
+    </button>
     <button class="nav" aria-label="Previous month" onclick={() => step(-1)}><svg viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg></button>
     <button class="today-btn" onclick={() => (shown = new Date())}>Today</button>
     <button class="nav" aria-label="Next month" onclick={() => step(1)}><svg viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>
@@ -59,6 +63,12 @@
     display: inline-flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s;
   }
   .nav { width: 30px; }
+  .tpl {
+    height: 30px; padding: 0 10px 0 8px; margin-right: 8px; border: 0; border-radius: 8px; background: none; color: var(--fg-dim);
+    font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 5px;
+  }
+  .tpl:hover { background: var(--bg-hover); color: var(--fg); }
+  :global(html.mobile) .tpl { height: 36px; font-size: 14px; margin-right: 2px; }
   .today-btn { padding: 0 12px; background: var(--bg-input); color: var(--fg); font-weight: 500; margin: 0 4px; }
   .nav:hover, .today-btn:hover { background: var(--bg-active); color: var(--fg); }
   svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }

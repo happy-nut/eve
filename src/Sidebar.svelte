@@ -7,7 +7,7 @@
   import { cubicOut } from 'svelte/easing';
   import { tick } from 'svelte';
   import { notes, nested, titleOf, CALENDAR, type Note } from './lib/notes.svelte';
-  import { isDailyId } from './lib/daily';
+  import { isDailyId, DAILY_TEMPLATE_ID } from './lib/daily';
   import { groups, parentOf, leafOf, depthOf, MAX_DEPTH } from './lib/groups.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
@@ -533,7 +533,7 @@
 
           {#if r.kind === 'daily'}
             <div class="note-row" role="presentation">
-              <button data-row data-daily class:active={notes.currentId === CALENDAR || !!(notes.current && isDailyId(notes.current.id))} onclick={openCalendar}>
+              <button data-row data-daily class:active={notes.currentId === CALENDAR || !!(notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID))} onclick={openCalendar}>
                 <span class="title">
                   <span class="ico-slot"><Icon icon="🗓️" /></span>
                   <span class="t">Daily notes</span>

@@ -4,6 +4,8 @@
  * merged by sync like any other. Pure: runs in Node for tests.
  */
 export const DEFAULT_TEMPLATE = '# {{date}} {{weekday}}\n\n';
+/** The daily template is a note of its own (edited from the calendar, synced like any note), out of the list. */
+export const DAILY_TEMPLATE_ID = 'daily-template';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 /** 2026-09-27, in local time */

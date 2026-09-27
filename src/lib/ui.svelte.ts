@@ -5,7 +5,7 @@ export interface MenuItem { label: string; run?: () => void; keys?: string; sep?
 interface Pending { message: string; input?: string; danger?: boolean; yes?: string; resolve: (v: string | null) => void }
 
 /** a kanban card opened as a floating page; edits stream back through onChange */
-export interface CardReq { title: string; body: string; onChange: (c: { title: string; body: string }) => void; resolve: () => void }
+export interface CardReq { title: string; body: string; /** a line above the page (a template says what it is) */ note?: string; onChange: (c: { title: string; body: string }) => void; resolve: () => void }
 
 interface EmojiReq { x: number; y: number; current: string; resolve: (v: string | null) => void }
 
@@ -20,7 +20,7 @@ class Ui {
   emojiDone(v: string | null) { this.emoji?.resolve(v); this.emoji = null; }
   card = $state<CardReq | null>(null);
   /** Open a card as a floating page; resolves when it closes. */
-  openCard(c: { title: string; body: string }, onChange: CardReq['onChange']): Promise<void> {
+  openCard(c: { title: string; body: string; note?: string }, onChange: CardReq['onChange']): Promise<void> {
     return new Promise((res) => { this.card = { ...c, onChange, resolve: res }; });
   }
   closeCard() { this.card?.resolve(); this.card = null; }

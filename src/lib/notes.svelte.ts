@@ -2,7 +2,7 @@ import { storage } from './platform';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
 import { plain, splitLink } from './markdown';
-import { dailyBody, dailyId, dayKey, isDailyId } from './daily';
+import { DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isDailyId } from './daily';
 
 export { plain };
 
@@ -126,11 +126,28 @@ class NotesStore {
 
   /** the list's notes: everything but deleted ones and daily notes (those live in the calendar) */
   get visible() {
-    return this.all.filter((n) => !n.deleted && !isDailyId(n.id)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt);
+    return this.all.filter((n) => !n.deleted && !isDailyId(n.id) && n.id !== DAILY_TEMPLATE_ID).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt);
   }
   /** daily notes, newest day first */
   get daily() {
     return this.all.filter((n) => !n.deleted && isDailyId(n.id)).sort((a, b) => (a.id < b.id ? 1 : -1));
+  }
+
+  /** what a new day starts as: the template note, or the default until there is one */
+  get dailyTemplate(): string {
+    const t = this.all.find((n) => n.id === DAILY_TEMPLATE_ID && !n.deleted);
+    return t ? t.body : DEFAULT_TEMPLATE;
+  }
+  /** Open the daily template to edit it, making it from the default the first time. */
+  openDailyTemplate() {
+    let n = this.all.find((x) => x.id === DAILY_TEMPLATE_ID);
+    if (!n) {
+      this.all.push((n = { id: DAILY_TEMPLATE_ID, body: DEFAULT_TEMPLATE, updatedAt: Date.now(), deleted: false, group: '', order: 0, icon: '🗓️' }));
+      void storage.write(n.id, serialize(n));
+      this.dirty++;
+    } else if (n.deleted) Object.assign(n, { deleted: false, body: DEFAULT_TEMPLATE, updatedAt: Date.now() });
+    this.titles.set(n.id, titleOf(n));
+    this.currentId = n.id;
   }
 
   /** Open a day's note (today by default), starting it from the template when there is none yet. */
@@ -138,7 +155,7 @@ class NotesStore {
     const id = dailyId(key);
     let n = this.all.find((x) => x.id === id);
     if (n && !n.deleted) { this.currentId = id; return n; }
-    const body = dailyBody(appearance.s.dailyTemplate, key);
+    const body = dailyBody(this.dailyTemplate, key);
     if (n) Object.assign(n, { deleted: false, body, updatedAt: Date.now() }); // a deleted day, begun again
     else this.all.push((n = { id, body, updatedAt: Date.now(), deleted: false, group: '', order: 0, icon: '🗓️' }));
     this.titles.set(id, titleOf(n));
