@@ -10,21 +10,17 @@
   import { setGlobalHotkey, win, files, autostart, dock, pin, isTauri, isMobile, onWindowFocus, onBack, widget } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
-  import Settings from './Settings.svelte';
   import Confirm from './Confirm.svelte';
-import CardPage from './CardPage.svelte';
   import MobileBar from './MobileBar.svelte';
   import Hint from './Hint.svelte';
   import { hints } from './lib/hints.svelte';
   import { updates } from './lib/updates.svelte';
-  import EmojiPicker from './EmojiPicker.svelte';
   import LinkChoice from './LinkChoice.svelte';
   import Tooltip from './Tooltip.svelte';
   import Menu from './Menu.svelte';
   import { ui, hooks } from './lib/ui.svelte';
   import { fileMarkdown, droppedFiles, stem, TEXT_FILE } from './lib/drop';
   import { importPaths, exportCurrent } from './lib/transfer';
-  import PdfViewer from './PdfViewer.svelte';
   import { titleOf } from './lib/notes.svelte';
   import { parseTicket } from './lib/handoff';
 
@@ -379,14 +375,15 @@ import CardPage from './CardPage.svelte';
   <MobileBar />
 {/if}
 <Hint />
+<!-- rarely opened: each arrives as its own chunk the first time, not with the app's start -->
 {#if settingsOpen}
-  <Settings onClose={() => (settingsOpen = false)} {hotkeyError} />
+  {#await import('./Settings.svelte') then { default: Settings }}<Settings onClose={() => (settingsOpen = false)} {hotkeyError} />{/await}
 {/if}
 {#if ui.card}
-  <CardPage />
+  {#await import('./CardPage.svelte') then { default: CardPage }}<CardPage />{/await}
 {/if}
 {#if ui.pdf}
-  <PdfViewer />
+  {#await import('./PdfViewer.svelte') then { default: PdfViewer }}<PdfViewer />{/await}
 {/if}
 {#if dropHint}
   <div class="drop-hint" transition:fade={{ duration: 90 }}>
@@ -397,7 +394,7 @@ import CardPage from './CardPage.svelte';
   <Confirm />
 {/if}
 {#if ui.emoji}
-  <EmojiPicker />
+  {#await import('./EmojiPicker.svelte') then { default: EmojiPicker }}<EmojiPicker />{/await}
 {/if}
 {#if ui.menu}
   <Menu />

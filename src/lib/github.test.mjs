@@ -1,7 +1,7 @@
 // Sync engine self-check. Default: in-memory fake GitHub. Real API: EVE_TEST_REPO=owner/name EVE_TEST_TOKEN=... npm test
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
-import { Repo, syncRound, blobSha, deviceLogin, pollToken } from './github.ts';
+import { Repo, FileHashes, syncRound, blobSha, deviceLogin, pollToken } from './github.ts';
 
 const gitSha = (buf) => createHash('sha1').update(`blob ${buf.length}\0`).update(buf).digest('hex');
 const rnd = () => randomBytes(20).toString('hex');
@@ -140,5 +140,16 @@ const flaky = async () => { calls++; if (calls < 3) throw new Error('io: failed 
 assert.equal(await pollToken(flaky, 'd', 1, undefined, async () => {}), 'gho_late');
 // ...but not forever
 await assert.rejects(pollToken(async () => { throw new Error('offline'); }, 'd', 5, undefined, async () => {}, 20), /expired/);
+
+// a remembered sha follows the text: same text reuses it, changed text is hashed again
+{
+  const h = new FileHashes(), enc = new TextEncoder();
+  const a = await h.file('notes/x.md', 'one');
+  assert.equal(a.sha, await blobSha(enc.encode('one')));
+  assert.equal((await h.file('notes/x.md', 'one')).sha, a.sha);
+  const b = await h.file('notes/x.md', 'two');
+  assert.equal(b.sha, await blobSha(enc.encode('two')));
+  assert.equal((await h.file('notes/y.md', 'one')).sha, a.sha); // per path, not confused across paths
+}
 
 console.log('SYNC_OK');

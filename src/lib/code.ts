@@ -1,7 +1,33 @@
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
-import { common, createLowlight } from 'lowlight';
+import type { Editor } from '@tiptap/core';
+import { createLowlight } from 'lowlight';
 
-const lowlight = createLowlight(common);
+const lowlight = createLowlight();
+
+/**
+ * The grammars are about an eighth of the app's script and most notes have no code, so they load with
+ * the first code block shown; until then it draws plain, then every waiting editor repaints once.
+ */
+let loading: Promise<void> | null = null;
+const waiting = new Set<Editor>();
+function withGrammars(editor: Editor) {
+  if (lowlight.listLanguages().length) return;
+  waiting.add(editor);
+  loading ??= import('./grammars').then(({ common }) => {
+    lowlight.register(common);
+    for (const e of waiting) repaint(e);
+    waiting.clear();
+  }, () => { loading = null; }); // offline or failed: the next code block tries again
+}
+/** The highlight plugin recomputes only when a code block itself changes: rewrite one in place, same attrs, outside undo. */
+function repaint(editor: Editor) {
+  if (editor.isDestroyed) return;
+  let at = -1;
+  editor.state.doc.descendants((n, pos) => { if (at < 0 && n.type.name === 'codeBlock') at = pos; return at < 0; });
+  if (at < 0) return;
+  const node = editor.state.doc.nodeAt(at)!;
+  editor.view.dispatch(editor.state.tr.setNodeMarkup(at, undefined, node.attrs).setMeta('addToHistory', false));
+}
 
 /** Languages offered by the chip, in menu order. Anything lowlight knows still highlights. */
 const LANGUAGES: [value: string, label: string][] = [
@@ -39,6 +65,7 @@ const labelOf = (language: string | null) => LANGUAGES.find(([v]) => v === (lang
 export const CodeBlock = CodeBlockLowlight.extend({
   addNodeView() {
     return ({ node, editor, getPos }) => {
+      withGrammars(editor);
       const dom = document.createElement('div');
       dom.className = 'code-block';
       const pre = document.createElement('pre');

@@ -29,7 +29,9 @@ function measurer() {
 function loader(): Promise<(bytes: Uint8Array) => Pages> {
   return (pending ??= (async () => {
     (globalThis as any).measureTextWidth = measurer();
-    const rhwp = await import('@rhwp/core');
+    // not on the phone: the reader is ~3 MB of the APK for a file a phone almost never opens
+    const rhwp = import.meta.env.TAURI_ENV_PLATFORM === 'android' ? null : await import('@rhwp/core');
+    if (!rhwp) throw new Error('Hangul documents open on the Mac');
     await rhwp.default();
     return (bytes: Uint8Array) => {
       const doc = new rhwp.HwpDocument(bytes);

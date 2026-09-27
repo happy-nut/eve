@@ -614,3 +614,21 @@
   and the setup page now take the highest version (test added; against the live API: 0.7.1 → 0.7.2).
   v0.7.1's copy of the APK was detached (Mac zip kept; the file is kept locally) so the 0.7.2 already
   released, which still reads the first APK, lands on android-v0.7.2 and its successors.
+
+# GATES — lighter start, lighter APK, cheaper sync (2026-09-27)
+
+- [x] G144 The app's start script no longer carries the code grammars, Settings, emoji picker, card page or PDF viewer
+  CHECK: npm run build
+  EXPECT: grammars-.*\.js
+  EVIDENCE: index-*.js 1,060 KB → 785 KB (gzip 357 → 260). Browser preview: a code block highlights after a
+  reload with no edit (1 .hljs-keyword); Settings and the emoji picker open from their own chunks; on the
+  emulator Settings opens.
+- [x] G145 A phone build leaves the Hangul reader out
+  CHECK: TAURI_ENV_PLATFORM=android npm run build && ls dist/assets
+  EVIDENCE: no .wasm in the android build, rhwp_bg-*.wasm (9.9 MB) still in the desktop build. Release APK
+  13,383,572 → 10,361,156 bytes; installed on the emulator, it starts, lists notes and syncs.
+- [x] G146 A sync round hashes only the notes whose text changed since the last round
+  CHECK: npm test
+  EXPECT: SYNC_OK
+  EVIDENCE: FileHashes test (same text reuses the sha, changed text re-hashes, per path); emulator synced
+  against the real repo afterwards.
