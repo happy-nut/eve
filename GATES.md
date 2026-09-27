@@ -735,6 +735,8 @@
   the versioned one (tests). Also: non-delete confirms no longer show a bin and "Delete" (info mark, OK or
   a given label); the white phone backdrop meant for Settings had covered every dialog's backdrop
   (released in 0.7.5), now Settings only; a hand-off timeout says to check the Wi-Fi.
-- [ ] G165 v0.7.4 (Mac, Latest) and android-v0.7.6 (both APK names) are released
+- [x] G165 v0.7.4 (Mac, Latest) and android-v0.7.6 (both APK names) are released
   CHECK: gh release view android-v0.7.6 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.6\.apk,Eve-android\.apk$
+  EVIDENCE: runs 36318282051 / 36318282112 succeeded; v0.7.4 is Latest with the Mac zip. Live page on the
+  emulator with the old 0.7.2 installed: the QR link went to the download of Eve-android-0.7.6.apk.
