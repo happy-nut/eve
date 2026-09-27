@@ -112,6 +112,19 @@
   }
 
   /**
+   * The syllable is confirmed, but WebKit can leave its marked-text underline painted under it. Drawing
+   * the line that had the caret afresh (new text nodes) takes the stale underline with the old ones.
+   * Only while nothing is being composed: the caret has not come back yet.
+   */
+  type View = { focus(): void; state: any; updateState(s: any): void; docView: { markDirty(from: number, to: number): void } };
+  function redrawCaretLine(view: View) {
+    const at = view.state.selection.$from;
+    if (!at.parent.isTextblock || at.depth < 1) return;
+    view.docView.markDirty(at.before(), at.after()); // the whole line, so it is built anew
+    view.updateState(view.state);
+  }
+
+  /**
    * Summoned back (⌘⇧Space, Dock, ⌘Tab): the note that had the caret gets it back, where it was; with
    * nothing to go back to, the caret goes to the note. Anything already holding focus is left strictly
    * alone — this runs again on the window's own focus event, which can land a beat *after* the first
@@ -125,7 +138,8 @@
     if (a && a.isConnected && a !== document.body) return;
     const el = back?.isConnected ? back : document.querySelector<HTMLElement>(ui.card ? '.card .tiptap' : '.tiptap');
     // the view's own focus puts its selection back in the same step, not 20 ms later under a keystroke
-    const view = (el as { editor?: { view: { focus(): void } } } | null)?.editor?.view;
+    const view = (el as { editor?: { view: View } } | null)?.editor?.view;
+    if (view && back) redrawCaretLine(view);
     if (view) view.focus(); else el?.focus();
   }
 
