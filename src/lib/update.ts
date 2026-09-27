@@ -24,7 +24,9 @@ export async function findUpdate(current: string, f: typeof fetch = (...a) => fe
   if (!res.ok) return null;
   let best: { version: string; url: string } | null = null;
   for (const r of (await res.json()) as { tag_name: string; draft: boolean; assets?: { name: string; browser_download_url: string }[] }[]) {
-    const apk = !r.draft && r.assets?.find((a) => a.name === 'Eve-android.apk');
+    // Eve-android-0.7.6.apk (the version in the name); Eve-android.apk is the same file for older updaters
+    const apks = r.draft ? [] : (r.assets ?? []).filter((a) => /^Eve-android(-[\d.]+)?\.apk$/.test(a.name));
+    const apk = apks.find((a) => a.name !== 'Eve-android.apk') ?? apks[0];
     if (!apk || !apk.browser_download_url.startsWith(APK_PREFIX)) continue;
     const version = /\d+(?:\.\d+)*/.exec(r.tag_name)?.[0] ?? r.tag_name;
     if (!best || newer(version, best.version)) best = { version, url: apk.browser_download_url };

@@ -2,7 +2,7 @@
 export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean }
 
 /** In-app confirm/prompt (WKWebView has no native JS dialogs). Rendered by Confirm.svelte. */
-interface Pending { message: string; input?: string; danger?: boolean; resolve: (v: string | null) => void }
+interface Pending { message: string; input?: string; danger?: boolean; yes?: string; resolve: (v: string | null) => void }
 
 /** a kanban card opened as a floating page; edits stream back through onChange */
 export interface CardReq { title: string; body: string; onChange: (c: { title: string; body: string }) => void; resolve: () => void }
@@ -68,9 +68,9 @@ class Ui {
   /** which pane owns keyboard focus; dialogs don't change it, so focus can return there afterwards */
   focusOwner = $state<'editor' | 'sidebar'>('editor');
 
-  /** Yes/no. `danger` colors the confirm button red. */
-  ask(message: string, danger = true): Promise<boolean> {
-    return new Promise((res) => { this.pending = { message, danger, resolve: (v) => res(v !== null) }; });
+  /** Yes/no. `danger` is a deletion: a bin, a red "Delete". Anything else confirms with `yes` (default "OK"). */
+  ask(message: string, danger = true, yes?: string): Promise<boolean> {
+    return new Promise((res) => { this.pending = { message, danger, yes, resolve: (v) => res(v !== null) }; });
   }
   /** Text input; resolves null on cancel. */
   prompt(message: string, initial = ''): Promise<string | null> {

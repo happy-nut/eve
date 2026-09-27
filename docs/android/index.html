@@ -28,7 +28,9 @@
   <p id="msg" data-t="opening">Opening Eve…</p>
   <p class="dim" id="hint" hidden data-t="hint">Nothing happened? <a id="retry" href="#">Open Eve</a> · <a id="apk" href="#">Download</a></p>
 <script>
-  // One QR, scanned twice (#install instead: only the download): without Eve this starts the APK download; with Eve installed it opens
+  // One QR: without Eve, or with one too old to update itself, it downloads the newest APK; with a
+  // current Eve it opens it with the Mac's ticket, and Eve offers any newer version itself.
+  // (#install instead: only the download.) without Eve this starts the APK download; with Eve installed it opens
   // Eve with the Mac's ticket. The fragment never leaves the phone.
   // the Mac's ticket (#h=…&p=…&k=…): handed to the app as is; the app checks it
   const ticket = location.hash.slice(1);
@@ -61,7 +63,9 @@
       const higher = (a, b) => { for (let i = 0; i < 4; i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0); return false; };
       let best = null;
       for (const r of rs) {
-        const a = !r.draft && r.assets?.find((x) => x.name === 'Eve-android.apk');
+        // the file with the version in its name (Eve-android.apk is the same file, for older updaters)
+        const apks = r.draft ? [] : (r.assets ?? []).filter((x) => /^Eve-android(-[\d.]+)?\.apk$/.test(x.name));
+        const a = apks.find((x) => x.name !== 'Eve-android.apk') ?? apks[0];
         if (a && (!best || higher(v(r.tag_name), best.v))) best = { v: v(r.tag_name), url: a.browser_download_url };
       }
       if (best) return best.url;
@@ -80,7 +84,8 @@
     }
     const code = /^[\w=&%.:-]+$/.test(ticket) ? ticket : '';
     // Chrome opens the installed app straight away; without it, it follows the fallback: the APK
-    const intent = `intent://connect${code ? '?' + code : ''}#Intent;scheme=eve;package=dev.happynut.eve;` +
+    // "signin" is answered only by an Eve that updates itself; an older one falls back to the newest APK
+    const intent = `intent://signin${code ? '?' + code : ''}#Intent;scheme=eve;package=dev.happynut.eve;` +
       `S.browser_fallback_url=${encodeURIComponent(apk)};end`;
     document.getElementById('retry').href = intent;
     location.replace(intent);

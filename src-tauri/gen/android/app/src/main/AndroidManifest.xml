@@ -27,12 +27,15 @@
                 <!-- AndroidTV support -->
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
-            <!-- eve://connect?c=…&u=…: the phone-setup page hands over the Mac's sign-in code -->
+            <!-- eve://signin?h=…&p=…&k=…: the phone-setup page hands over the Mac's sign-in. Only an Eve that
+                 offers its own update answers "signin": an older one (connect only) does not, so the page's
+                 fallback, the newest APK, is what it gets -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="eve" android:host="connect" />
+                <data android:scheme="eve" android:host="signin" />
             </intent-filter>
             <!-- tauri-file-associations. AUTO-GENERATED. DO NOT REMOVE. -->
             <intent-filter>
