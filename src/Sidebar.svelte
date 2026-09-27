@@ -13,6 +13,7 @@
   import { ui, hooks, type MenuItem } from './lib/ui.svelte';
   import { importFromFinder, importFromFolder, exportNote, exportCurrent, type ExportAs } from './lib/transfer';
   import Icon from './Icon.svelte';
+  import * as moves from './lib/moves';
 
   let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings, onNew }:
     { open: boolean; searchEl: HTMLInputElement | null; cmdHeld?: boolean; onSettings: () => void; onNew?: () => void } = $props();
@@ -267,95 +268,14 @@
   }
   const groupSel = (g: string) => `[data-group="${CSS.escape(g)}"]`;
 
-  /**
-   * Every spot the moving note could take, in the order the sidebar stacks them: before each page,
-   * inside an unfolded page as a sub-page, at the end of each list, and on through the groups. ⌥↑ / ⌥↓
-   * step through this list, so a page slides *into* the one above instead of hopping over it.
-   */
-  type NoteSlot = { group: string; parent: string; before: string | null };
-  function noteSlots(me: Note): NoteSlot[] {
-    const out: NoteSlot[] = [];
-    const pages = (group: string, parent: string) => {
-      for (const p of notes.visible) {
-        if (p.group !== group || (p.parent ?? '') !== parent) continue;
-        if (p.id === me.id || notes.isAncestor(me.id, p.id)) continue; // itself and its own sub-pages
-        out.push({ group, parent, before: p.id });
-        if (!groups.isFolded(p.id)) pages(group, p.id); // an open page can take it in
-      }
-      out.push({ group, parent, before: null });
-    };
-    const walk = (g: string) => {
-      for (const c of groups.children(g)) if (!groups.isCollapsed(c)) walk(c); // subgroups first, as the tree shows them
-      pages(g, '');
-    };
-    walk('');
-    return out;
-  }
-
-  /** ⌥↑ / ⌥↓ on a note: one slot up/down — past a page, into it, or on into the next group. */
-  function nudgeNote(id: string, dir: 1 | -1) {
-    const me = notes.all.find((n) => n.id === id);
-    if (!me) return;
-    const list = noteSlots(me);
-    const sibs = notes.visible.filter((n) => n.group === me.group && (n.parent ?? '') === (me.parent ?? ''));
-    const i = sibs.findIndex((n) => n.id === id);
-    const at = list.findIndex((s) => s.group === me.group && s.parent === (me.parent ?? '') && s.before === (sibs[i + 1]?.id ?? null));
-    const t = list[at + dir];
-    if (at < 0 || !t) return;
-    if (t.parent) groups.unfold(t.parent); // show where it landed
-    notes.place(id, t.group, t.parent, t.before);
-    focusRow(`[data-note="${id}"]`);
-  }
-
-  /** ⌥→ tucks a note under the one above it (a sub-page); ⌥← lifts it back out to its parent's level. */
+  // ⌥ + arrows (lib/moves.ts), then the moved row keeps the focus
+  function nudgeNote(id: string, dir: 1 | -1) { if (moves.nudgeNote(id, dir)) focusRow(`[data-note="${id}"]`); }
   function nestNote(id: string, dir: 'in' | 'out') {
-    const me = notes.all.find((n) => n.id === id);
-    if (!me) return;
-    if (dir === 'out') {
-      const parent = me.parent ? notes.all.find((n) => n.id === me.parent) : null;
-      if (!parent) return;
-      notes.setParent(id, parent.parent ?? null);
-    } else {
-      const rows = rowsNow();
-      const above = rows[rows.findIndex((r) => r.dataset.note === id) - 1]?.dataset.note;
-      // only a page of the same group can take it in, and never one of its own sub-pages
-      const host = above && notes.all.find((n) => n.id === above);
-      if (!host || host.group !== me.group || host.id === me.parent || notes.isAncestor(id, host.id)) return;
-      groups.unfold(host.id);
-      notes.setParent(id, host.id);
-    }
-    focusRow(`[data-note="${id}"]`);
+    const rows = rowsNow();
+    const above = rows[rows.findIndex((r) => r.dataset.note === id) - 1]?.dataset.note;
+    if (moves.nestNote(id, dir, above)) focusRow(`[data-note="${id}"]`);
   }
-
-  /**
-   * ⌥↑ / ⌥↓ walk a group through every visible slot in outline order — past siblings, out of its
-   * parent, into (expanded) groups above — like dragging it one row at a time. Collapsed groups are
-   * skipped as targets and the moved group keeps its own fold state. ⌥← / ⌥→ un-nest / nest directly.
-   */
-  type Slot = { parent: string; before: string | null };
-  function slots(g: string, parent: string): Slot[] {
-    const out: Slot[] = [];
-    for (const c of groups.children(parent)) {
-      if (c === g) continue;
-      out.push({ parent, before: c });
-      if (!groups.isCollapsed(c) && groups.canPlace(g, c)) out.push(...slots(g, c));
-    }
-    out.push({ parent, before: null });
-    return out.filter((s) => groups.canPlace(g, s.parent));
-  }
-  function nudgeGroup(g: string, key: string) {
-    let np: string | null = null;
-    if (key === 'ArrowUp' || key === 'ArrowDown') {
-      const list = slots(g, '');
-      const cur: Slot = { parent: parentOf(g), before: groups.nextSibling(g) };
-      const i = list.findIndex((s) => s.parent === cur.parent && s.before === cur.before);
-      const t = list[i + (key === 'ArrowDown' ? 1 : -1)];
-      if (t) np = groups.move(g, t.parent, t.before);
-    }
-    if (key === 'ArrowLeft' && parentOf(g)) { const par = parentOf(g); np = groups.move(g, parentOf(par), groups.nextSibling(par)); }
-    if (key === 'ArrowRight') { const prev = groups.prevSibling(g); if (prev) np = groups.move(g, prev, null); }
-    if (np) focusRow(groupSel(np));
-  }
+  function nudgeGroup(g: string, key: string) { const np = moves.nudgeGroup(g, key); if (np) focusRow(groupSel(np)); }
   function treeKey(e: KeyboardEvent) {
     if (ui.pending) return;
     const rows = rowsNow();

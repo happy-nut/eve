@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
-  import type { SuggestItem, SuggestionUI } from './lib/editor';
+  import type { SuggestItem, SuggestionUI } from './lib/slash';
   import { rows, expand, collapse } from './lib/suggest';
   import Icon from './Icon.svelte';
 
