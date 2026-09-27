@@ -10,6 +10,7 @@
   import Select from './Select.svelte';
   import Slider from './Slider.svelte';
   import { hints } from './lib/hints.svelte';
+  import { updates } from './lib/updates.svelte';
   import { renderSVG } from 'uqr';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
@@ -268,6 +269,21 @@
         {#if defaultAppError}<p class="alert">{defaultAppError}</p>{/if}
       </div>
       {/if}
+
+{#if isMobile && isTauri}
+      <h3>Version</h3>
+      <div class="card">
+        <div class="row">
+          <span class="label">Eve {updates.current}
+            <span class="sub">{updates.available ? `${updates.available.version} is available` : 'Up to date'}</span></span>
+          {#if updates.available}
+            <button class="btn primary" onclick={() => updates.install()}>Update</button>
+          {:else}
+            <button class="btn" onclick={() => updates.check(true)}>Check</button>
+          {/if}
+        </div>
+      </div>
+{/if}
 
       <h3>Storage</h3>
       <div class="card"><div class="row"><span class="label mono path">{notesPath}</span></div></div>

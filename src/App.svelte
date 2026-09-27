@@ -16,6 +16,7 @@ import CardPage from './CardPage.svelte';
   import MobileBar from './MobileBar.svelte';
   import Hint from './Hint.svelte';
   import { hints } from './lib/hints.svelte';
+  import { updates } from './lib/updates.svelte';
   import EmojiPicker from './EmojiPicker.svelte';
   import LinkChoice from './LinkChoice.svelte';
   import Tooltip from './Tooltip.svelte';
@@ -95,6 +96,7 @@ import CardPage from './CardPage.svelte';
     let unfocus: (() => void) | undefined;
     onWindowFocus(restoreFocus).then((u) => (unfocus = u));
     const stopSync = sync.start();
+    updates.start();
     return () => { window.removeEventListener('eve-summon', onSummon); unfocus?.(); clearTimeout(hintTimer); stopSync?.(); };
   });
 

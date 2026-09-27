@@ -50,9 +50,10 @@ class Markdown(
   fun title(body: String): String = blocks(body).firstOrNull()?.toString()?.trim() ?: ""
 
   private fun block(raw: String): CharSequence? {
-    if (raw.isBlank()) return null
+    // the editor keeps an empty line as a no-break space (or &nbsp;); it is still an empty line
+    if (raw.replace("&nbsp;", "").all { it.isWhitespace() || it == '\u00a0' || it == '\\' }) return null
     val indent = raw.length - raw.trimStart().length
-    var line = raw.trim()
+    var line = raw.replace('\u00a0', ' ').trim()
     val pad = "  ".repeat(indent / 2)
     val sb = SpannableStringBuilder()
 

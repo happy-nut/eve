@@ -73,27 +73,22 @@ class NotesWidget : AppWidgetProvider() {
       val items = RemoteViewsCompat.RemoteCollectionItems.Builder().setHasStableIds(true).setViewTypeCount(2)
       val pinnedId = pinned(context, widgetId)
       if (pinnedId == null) {
-        views.setTextViewText(R.id.widget_title, "Eve")
-        views.setOnClickPendingIntent(R.id.widget_title, open(context, "", 2))
         views.setTextViewText(R.id.widget_empty, context.getString(R.string.widget_empty))
         views.setOnClickPendingIntent(R.id.widget_empty, open(context, "new", 3))
         for (n in notes.filter { it.body.isNotBlank() }.take(MAX)) items.addItem(n.id.hashCode().toLong(), card(context, n, md))
       } else {
         val note = notes.find { it.id == pinnedId }
-        views.setTextViewText(R.id.widget_title, note?.let { "${it.icon.ifEmpty { "📝" }}  ${md.title(it.body).ifEmpty { "Untitled" }}" } ?: "Eve")
-        views.setOnClickPendingIntent(R.id.widget_title, open(context, "note:$pinnedId", 100 + widgetId))
         views.setTextViewText(R.id.widget_empty, context.getString(if (note == null) R.string.widget_gone else R.string.widget_blank))
         views.setOnClickPendingIntent(R.id.widget_empty, open(context, "note:$pinnedId", 100 + widgetId))
-        // the title is already in the header
-        note?.let { md.blocks(it.body).drop(1) }?.forEachIndexed { i, block ->
-          items.addItem(i.toLong(), line(context, block, pinnedId))
+        // no header: the note's icon and title are its first line, the body right under it
+        note?.let { md.blocks(it.body) }?.forEachIndexed { i, block ->
+          val text = if (i == 0) android.text.SpannableStringBuilder("${note.icon.ifEmpty { "📝" }}  ").append(block) else block
+          items.addItem(i.toLong(), line(context, text, pinnedId))
         }
       }
       RemoteViewsCompat.setRemoteAdapter(context, views, widgetId, R.id.widget_list, items.build())
       views.setEmptyView(R.id.widget_list, R.id.widget_empty)
       views.setOnClickPendingIntent(R.id.widget_new, open(context, "new", 1))
-      views.setOnClickPendingIntent(R.id.widget_pull, PendingIntent.getBroadcast(context, 5,
-        Intent(context, NotesWidget::class.java).setAction(ACTION_PULL), PendingIntent.FLAG_IMMUTABLE))
       // rows fill in "note:<id>" on this template
       views.setPendingIntentTemplate(R.id.widget_list, open(context, "", 4, mutable = true))
       return views
