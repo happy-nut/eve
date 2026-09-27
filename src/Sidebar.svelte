@@ -6,13 +6,15 @@
   import { fade, slide, scale } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { tick } from 'svelte';
-  import { notes, nested, titleOf, type Note } from './lib/notes.svelte';
+  import { notes, nested, titleOf, CALENDAR, type Note } from './lib/notes.svelte';
+  import { isDailyId } from './lib/daily';
   import { groups, parentOf, leafOf, depthOf, MAX_DEPTH } from './lib/groups.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { ui, hooks, type MenuItem } from './lib/ui.svelte';
   import { importFromFinder, importFromFolder, exportNote, exportCurrent, type ExportAs } from './lib/transfer';
   import Icon from './Icon.svelte';
+  import { appearance } from './lib/appearance.svelte';
   import * as moves from './lib/moves';
 
   let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings, onNew }:
@@ -26,7 +28,8 @@
 
   let query = $state('');
   const q = $derived(query.trim().toLowerCase());
-  const hits = $derived(notes.visible.filter((n) => n.body.toLowerCase().includes(q)));
+  // daily notes stay out of the tree, but a search still finds them
+  const hits = $derived([...notes.visible, ...notes.daily].filter((n) => n.body.toLowerCase().includes(q)));
 
   /**
    * One flat, keyed list of rows (groups, notes, labels, placeholders). A single {#each} lets
@@ -36,10 +39,17 @@
     | { kind: 'group'; key: string; g: string; depth: number }
     | { kind: 'note'; key: string; n: Note; depth: number; kids?: boolean }
     | { kind: 'label'; key: string; text: string; g: string }
-    | { kind: 'empty'; key: string; text: string; g: string; depth: number };
+    | { kind: 'empty'; key: string; text: string; g: string; depth: number }
+    | { kind: 'daily'; key: string };
   const rows = $derived.by((): Row[] => {
     if (q) return hits.length ? hits.map((n) => ({ kind: 'note', key: n.id, n, depth: 0 })) : [{ kind: 'empty', key: 'empty:search', text: 'No matches', g: '', depth: 0 }];
     const out: Row[] = [];
+    // Notes first, above the groups: the daily notes' calendar (it cannot be grouped), then loose notes
+    const root = nested(groups.notesIn(''), (id) => groups.isFolded(id));
+    if (groups.names.length) out.push({ kind: 'label', key: 'label:root', text: 'Notes', g: '' });
+    if (appearance.s.dailyNotes) out.push({ kind: 'daily', key: 'daily' });
+    for (const { n, depth, kids } of root) out.push({ kind: 'note', key: n.id, n, depth, kids });
+    if (!root.length && !appearance.s.dailyNotes) out.push({ kind: 'empty', key: 'empty:root', text: 'No notes', g: '', depth: 0 });
     const walk = (parent: string, depth: number) => {
       for (const g of groups.children(parent)) {
         out.push({ kind: 'group', key: 'g:' + groups.id(g), g, depth });
@@ -50,10 +60,6 @@
       }
     };
     walk('', 0);
-    const root = nested(groups.notesIn(''), (id) => groups.isFolded(id));
-    if (groups.names.length) out.push({ kind: 'label', key: 'label:root', text: 'Notes', g: '' });
-    for (const { n, depth, kids } of root) out.push({ kind: 'note', key: n.id, n, depth, kids });
-    if (!root.length) out.push({ kind: 'empty', key: 'empty:root', text: 'No notes', g: '', depth: 0 });
     return out;
   });
 
@@ -94,6 +100,7 @@
       { label: ctxGroup && depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : 'New group', run: () => groups.create(ctxGroup) },
     ];
     if (ctxGroup) items.push({ label: 'New note at top level', run: newNote('') }, { label: 'New group at top level', run: () => groups.create('') });
+    if (appearance.s.dailyNotes) items.push({ label: "Today's daily note", run: () => { ui.focusOwner = 'editor'; notes.caretEnd = true; notes.openDaily(); } });
     items.push(
       { label: 'Import files…', run: importFiles, sep: true },
       { label: 'Import folder…', run: importFolder },
@@ -447,6 +454,11 @@
   const GEAR = '<svg class="gear-i" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
 
   /** click or Enter on a note: open it and move into the editor */
+  /** the daily notes' calendar, in the editor's place */
+  function openCalendar() {
+    notes.currentId = CALENDAR;
+    if (isMobile) open = false;
+  }
   async function openNote(n: Note) {
     const list = groups.ordered(), from = list.findIndex((x) => x.id === notes.currentId), to = list.findIndex((x) => x.id === n.id);
     if (from >= 0 && to === from + 1) hints.action('nextNote', 'The next note is a key away');
@@ -515,11 +527,20 @@
       {#each rows as r (r.key)}
         <li animate:flip={{ duration: 220, easing: cubicOut }} in:fade={{ duration: 140 }} out:slide={{ duration: 180, easing: cubicOut }}
           class="row {r.kind}" style="--d: {'depth' in r ? r.depth : 0}"
-          class:over={r.kind !== 'note' && dropAt?.into === r.g && !dropAt.beforeNote && !dropAt.beforeGroup}
+          class:over={r.kind !== 'note' && r.kind !== 'daily' && dropAt?.into === r.g && !dropAt.beforeNote && !dropAt.beforeGroup}
           class:drop-before={(r.kind === 'note' && dropAt?.beforeNote === r.n.id) || (r.kind === 'group' && dropAt?.beforeGroup === r.g)}
           class:dragging={(r.kind === 'note' && drag?.note === r.n.id) || (r.kind === 'group' && drag?.group === r.g)}>
 
-          {#if r.kind === 'note'}
+          {#if r.kind === 'daily'}
+            <div class="note-row" role="presentation">
+              <button data-row data-daily class:active={notes.currentId === CALENDAR || !!(notes.current && isDailyId(notes.current.id))} onclick={openCalendar}>
+                <span class="title">
+                  <span class="ico-slot"><Icon icon="🗓️" /></span>
+                  <span class="t">Daily notes</span>
+                </span>
+              </button>
+            </div>
+          {:else if r.kind === 'note'}
             {@const n = r.n}
             <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!isMobile} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation">

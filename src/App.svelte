@@ -1,7 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { notes } from './lib/notes.svelte';
+  import { notes, CALENDAR } from './lib/notes.svelte';
+  import { isDailyId } from './lib/daily';
+  import { startReminder, syncPhoneReminder } from './lib/reminder';
+  import CalendarPage from './CalendarPage.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { groups, MAX_DEPTH } from './lib/groups.svelte';
@@ -53,7 +56,7 @@
   $effect(() => {
     if (!isMobile || !isTauri || (sidebarOpen && !settingsOpen)) return;
     let off: (() => void) | undefined, gone = false;
-    onBack(() => { if (settingsOpen) settingsOpen = false; else sidebarOpen = true; })
+    onBack(phoneBack)
       .then((u) => (gone ? u() : (off = u)));
     return () => { gone = true; off?.(); };
   });
@@ -77,6 +80,8 @@
         // the phone-setup page: take the sign-in the Mac's QR points at
         const ticket = parseTicket(ask);
         if (ticket) { settingsOpen = true; void sync.claim(ticket).then(offerUpdate); return; }
+        // the reminder's notification: today's note
+        if (ask === 'daily') { settingsOpen = false; writeToday(); return; }
         // the home-screen widget: straight into that note (or a new one), keyboard up
         const id = ask.startsWith('note:') ? ask.slice(5) : null;
         if (ask !== 'new' && !id) return;
@@ -92,8 +97,9 @@
     let unfocus: (() => void) | undefined;
     onWindowFocus(restoreFocus).then((u) => (unfocus = u));
     const stopSync = sync.start();
+    const stopReminder = startReminder();
     updates.start();
-    return () => { window.removeEventListener('eve-summon', onSummon); unfocus?.(); clearTimeout(hintTimer); stopSync?.(); };
+    return () => { window.removeEventListener('eve-summon', onSummon); unfocus?.(); clearTimeout(hintTimer); stopSync?.(); stopReminder?.(); };
   });
 
   /**
@@ -206,13 +212,39 @@
     sidebarOpen = true; // back to the list, not into whichever note came next
   }
 
-  /** A phone's +: a new note, open, keyboard up. */
+  /** A phone's +: a new note, open, keyboard up — or, with daily notes on, the choice of that or today's. */
   function newOnPhone() {
+    const write = (open: () => void) => () => { ui.focusOwner = 'editor'; open(); sidebarOpen = false; widget.keyboard(); };
+    if (!appearance.s.dailyNotes) return write(() => notes.create())();
+    ui.openMenu({ clientX: 0, clientY: 0 }, [
+      { label: 'New note', run: write(() => notes.create()) },
+      { label: "Today's daily note", run: writeToday },
+    ]);
+  }
+  /** Today's note, to write in: caret under the template, keyboard up on a phone. */
+  function writeToday() {
     ui.focusOwner = 'editor';
-    notes.create();
+    notes.caretEnd = true;
+    notes.openDaily();
     sidebarOpen = false;
     widget.keyboard();
   }
+  /** A day picked in the calendar: its note, in the editor. */
+  function openDay(key: string) {
+    ui.focusOwner = 'editor';
+    notes.caretEnd = true;
+    notes.openDaily(key);
+  }
+  /** A phone's back (the bar's chevron, or Android's): a day goes back to its calendar, anything else to the list. */
+  function phoneBack() {
+    if (settingsOpen) settingsOpen = false;
+    else if (notes.current && isDailyId(notes.current.id) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
+    else sidebarOpen = true;
+  }
+  // the phone's reminder alarm follows the settings
+  $effect(() => { if (isMobile) syncPhoneReminder(); });
+  // daily notes switched off while the calendar was up: back to a note
+  $effect(() => { if (!appearance.s.dailyNotes && notes.currentId === CALENDAR) notes.currentId = notes.visible[0]?.id ?? null; });
 
   /** ⌘\\: closed -> open + focus list; focus already in list -> close + back to editor; else focus list. */
   function focusSidebar() {
@@ -376,10 +408,11 @@
   {#if isMobile && !sidebarOpen}
     <!-- a phone: the note's own bar, back to the list on the left, a new note on the right -->
     <header class="mhead">
-      <button class="micon mback" aria-label="Notes" onclick={() => (sidebarOpen = true)}>
+      <button class="micon mback" aria-label="Back" onclick={phoneBack}>
         <svg viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg>
       </button>
       <span class="mgap"></span>
+      {#if notes.current}
       <button class="micon" aria-label="Export" onclick={(e) => exportMenu(e.currentTarget)}>
         <svg viewBox="0 0 16 16"><path d="M8 10V2.5M5 5.5l3-3 3 3"/><path d="M4.5 8H4a1.5 1.5 0 00-1.5 1.5v3A1.5 1.5 0 004 14h8a1.5 1.5 0 001.5-1.5v-3A1.5 1.5 0 0012 8h-.5"/></svg>
       </button>
@@ -389,6 +422,7 @@
       <button class="micon danger" aria-label="Delete note" onclick={deleteOnPhone}>
         <svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 9h5.8l.6-9M6.8 7v4.2M9.2 7v4.2"/></svg>
       </button>
+      {/if}
     </header>
   {/if}
   <Sidebar bind:open={sidebarOpen} bind:searchEl {cmdHeld} onSettings={() => (settingsOpen = true)} onNew={newOnPhone} />
@@ -399,6 +433,8 @@
           <Editor note={notes.current} />
         </div>
       {/key}
+    {:else if notes.loaded && notes.currentId === CALENDAR}
+      <div class="page" in:fade={{ duration: 160 }}><CalendarPage onpick={openDay} /></div>
     {/if}
   </main>
 </div>

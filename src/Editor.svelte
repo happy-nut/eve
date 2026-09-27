@@ -83,6 +83,9 @@
       notes.selectTitle = false;
       editor.commands.setTextSelection({ from: 1, to: 1 + (editor.state.doc.firstChild?.content.size ?? 0) });
       editor.commands.focus();
+    } else if (notes.caretEnd) {
+      notes.caretEnd = false; // opened to write in: under whatever the template put there
+      editor.commands.focus('end');
     } else if (ui.focusOwner !== 'sidebar' && !isMobile) editor?.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
     // (a phone opens a note to read it: the keyboard comes up when the text is tapped, not before)
     return () => {
