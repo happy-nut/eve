@@ -740,3 +740,8 @@
   EXPECT: ^Eve-android-0\.7\.6\.apk,Eve-android\.apk$
   EVIDENCE: runs 36318282051 / 36318282112 succeeded; v0.7.4 is Latest with the Mac zip. Live page on the
   emulator with the old 0.7.2 installed: the QR link went to the download of Eve-android-0.7.6.apk.
+- [x] G166 When Eve does not open, the setup page shows one big "Download Eve <version>" button
+  EVIDENCE: from 0.7.0 on the emulator, the live QR link downloaded Eve-android-0.7.6.apk and installing it
+  over 0.7.0 gave versionName 0.7.6 (signatures of 0.7.0, 0.7.1 and 0.7.6 match: a8f3b476…e0be7d2). The page
+  now shows the next step and a big versioned download button whenever the app did not open (a browser
+  that ignores Chrome's fallback still has an obvious way on). Emulator screenshot.
