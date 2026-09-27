@@ -710,3 +710,9 @@
   EXPECT: ^v0\.7\.3$
   EVIDENCE: runs 36315218854 (build=success) and 36315219350 (android=success); v0.7.3 holds
   Eve-macos-arm64.zip and is Latest; android-v0.7.5 holds Eve-android.apk.
+- [x] G161 The Mac shows the newest phone version and a QR that installs or updates Eve even over an older one
+  EVIDENCE: with Eve installed the setup page opens the app (sign-in only), so a phone on 0.7.1 never
+  updated from the QR. Now: Settings → Android phone shows "newest phone app 0.7.5"; the QR has a
+  Sign in | Install or update 0.7.5 switch; the install QR is the setup page with #install, which goes
+  straight to the newest APK. Emulator Chrome with Eve installed, #install: download of the 9.88 MB APK
+  starts, the app is not opened. Mac screenshot of both QR tabs.

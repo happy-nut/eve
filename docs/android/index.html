@@ -28,7 +28,7 @@
   <p id="msg" data-t="opening">Opening Eve…</p>
   <p class="dim" id="hint" hidden data-t="hint">Nothing happened? <a id="retry" href="#">Open Eve</a> · <a id="apk" href="#">Download</a></p>
 <script>
-  // One QR, scanned twice: without Eve this starts the APK download; with Eve installed it opens
+  // One QR, scanned twice (#install instead: only the download): without Eve this starts the APK download; with Eve installed it opens
   // Eve with the Mac's ticket. The fragment never leaves the phone.
   // the Mac's ticket (#h=…&p=…&k=…): handed to the app as is; the app checks it
   const ticket = location.hash.slice(1);
@@ -38,10 +38,12 @@
   const ko = {
     opening: 'Eve 여는 중…', hint: '', desktop: '이 링크는 Android 폰에서 여세요 — Mac의 Eve 설정에 있는 QR을 폰 카메라로 찍으면 됩니다.',
     downloading: 'Eve를 내려받고 있어요. 설치한 뒤 Mac의 QR을 한 번 더 찍으면 로그인까지 끝납니다.',
+    installing: '최신 Eve를 내려받고 있어요. 받은 파일을 열어 설치(업데이트)하면 노트와 로그인은 그대로예요.',
   };
   const en = {
     desktop: "Open this on your Android phone — scan the QR in Eve's settings on your Mac with its camera.",
     downloading: 'Downloading Eve. Install it, then scan the QR on your Mac once more to sign it in.',
+    installing: 'Downloading the newest Eve. Open it and tap Install (or Update); notes and the sign-in stay.',
   };
   const t = (k) => (/^ko/i.test(navigator.language) && ko[k]) || en[k];
   if (/^ko/i.test(navigator.language)) {
@@ -71,6 +73,11 @@
     if (!android) return (document.getElementById('msg').textContent = t('desktop'));
     const apk = await apkUrl();
     document.getElementById('apk').href = apk;
+    // the Mac's "Install or update" QR: always the newest APK, even with (an older) Eve installed
+    if (ticket === 'install') {
+      document.getElementById('msg').textContent = t('installing');
+      return location.replace(apk);
+    }
     const code = /^[\w=&%.:-]+$/.test(ticket) ? ticket : '';
     // Chrome opens the installed app straight away; without it, it follows the fallback: the APK
     const intent = `intent://connect${code ? '?' + code : ''}#Intent;scheme=eve;package=dev.happynut.eve;` +
