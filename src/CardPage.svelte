@@ -40,7 +40,8 @@
   });
 
   function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape' && !suggest.ui.visible()) { e.preventDefault(); e.stopPropagation(); close(); }
+    // a popup's Esc has already been taken by the editor (and closed the popup) by the time it gets here
+    if (e.key === 'Escape' && (!e.defaultPrevented || (e as any).eveApp)) { e.preventDefault(); e.stopPropagation(); close(); }
     // Tab indents a list (the editor marks those handled); anywhere else it must not walk focus out of the page
     if (e.key === 'Tab' && !e.defaultPrevented) e.preventDefault();
   }
