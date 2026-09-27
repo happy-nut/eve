@@ -251,6 +251,7 @@
   $effect(() => { if (notes.currentId === CALENDAR_NOTE_ID) notes.currentId = CALENDAR; });
   // the phone's reminder alarm follows the settings
   $effect(() => { if (isMobile) syncPhoneReminder(); });
+  $effect(() => { if (isMobile) widget.daily(appearance.s.dailyNotes && appearance.s.dailyInWidget); });
   // daily notes switched off while the calendar was up: back to a note
   $effect(() => { if (!appearance.s.dailyNotes && notes.currentId === CALENDAR) notes.currentId = notes.pages[0]?.id ?? null; });
 

@@ -71,13 +71,20 @@ class NotesWidget : AppWidgetProvider() {
 
     fun notesDir(context: Context) = File(context.applicationInfo.dataDir, "notes")
 
+    /** Settings → Daily notes → Show in widget (off by default): the page sets it, the widget follows. */
+    fun showDaily(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("daily", false)
+    fun setShowDaily(context: Context, on: Boolean) {
+      context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("daily", on).apply()
+      refresh(context)
+    }
+
     /** Redraw every Eve widget from the note files. The system keeps what it is handed and shows it
      *  when the home screen comes back, so a change made while Eve is in front is not lost. */
     fun refresh(context: Context) {
       val mgr = AppWidgetManager.getInstance(context)
       val ids = mgr.getAppWidgetIds(ComponentName(context, NotesWidget::class.java))
       if (ids.isEmpty()) return
-      val notes = readNotes(notesDir(context))
+      val notes = readNotes(notesDir(context), showDaily(context))
       val full = markdown(context, sized = true)
       val compact = markdown(context, sized = false)
       for (id in ids) mgr.updateAppWidget(id, views(context, id, notes, if (pinned(context, id) == null) compact else full))
@@ -162,12 +169,14 @@ class NotesWidget : AppWidgetProvider() {
 data class Note(val id: String, val icon: String, val body: String, val updated: Long)
 
 /** The notes folder, newest first. Same files the app writes: `---` frontmatter, then markdown. */
-fun readNotes(dir: File): List<Note> =
+/** Daily notes (daily-2026-09-28) are left out unless the settings put them in the widget. */
+fun readNotes(dir: File, daily: Boolean = false): List<Note> =
   (dir.listFiles { f -> f.extension == "md" } ?: emptyArray())
     .mapNotNull { runCatching { parseNote(it.readText()) }.getOrNull() }
     .filter { !it.second }
     .map { it.first }
     .filter { it.id != "daily-template" && it.id != "daily-calendar" } // the calendar's own notes (lib/daily.ts)
+    .filter { daily || !Regex("^daily-\\d{4}-\\d{2}-\\d{2}$").matches(it.id) }
     .sortedByDescending { it.updated }
 
 /** The note and whether it is a tombstone. */

@@ -24,7 +24,7 @@ class PickNoteActivity : Activity() {
 
     setContentView(R.layout.widget_pick)
     val md = Markdown(0, 0, 0)
-    val notes = readNotes(NotesWidget.notesDir(this)).filter { it.body.isNotBlank() }
+    val notes = readNotes(NotesWidget.notesDir(this), NotesWidget.showDaily(this)).filter { it.body.isNotBlank() }
     val current = NotesWidget.pinned(this, widgetId)
     val labels = listOf("🕘  " + getString(R.string.widget_recent)) +
       notes.map { "${it.icon.ifEmpty { "📝" }}  ${md.title(it.body).ifEmpty { "Untitled" }}" }

@@ -148,11 +148,18 @@
             onchange={(e) => appearance.set({ autoIcon: e.currentTarget.checked })} />
         </label>
         <label class="row">
-          <span class="label">Daily notes <span class="sub">a note for each day, written from the calendar at the top of the list</span></span>
+          <span class="label">Daily notes <span class="sub">a note for each day, written from its calendar in the list</span></span>
           <input type="checkbox" class="switch" checked={appearance.s.dailyNotes}
             onchange={(e) => appearance.set({ dailyNotes: e.currentTarget.checked })} />
         </label>
         {#if appearance.s.dailyNotes}
+          {#if isMobile}
+            <label class="row tmpl">
+              <span class="label">Show in widget <span class="sub">daily notes in the home-screen widget's list too</span></span>
+              <input type="checkbox" class="switch" checked={appearance.s.dailyInWidget}
+                onchange={(e) => appearance.set({ dailyInWidget: e.currentTarget.checked })} />
+            </label>
+          {/if}
           <label class="row tmpl">
             <span class="label">Remind me <span class="sub">if today's note is still empty at this time</span></span>
             <input type="checkbox" class="switch" checked={appearance.s.dailyReminder}

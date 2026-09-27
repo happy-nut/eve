@@ -839,3 +839,13 @@
   CHECK: gh release view android-v0.7.11 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.11\.apk,Eve-android\.apk$
   EVIDENCE: runs 36359749637 / 36359749976 succeeded; v0.7.9 is Latest.
+- [x] G184 Daily notes stay out of the widget unless Settings says otherwise; no focus flash on a phone
+  EVIDENCE: Settings → Daily notes → Show in widget (phone only, off by default) → widgetDaily bridge →
+  the widget's list and its note picker leave daily-YYYY-MM-DD out. Emulator: off, the 27th and 28th were
+  not listed; on, "2026-09-28 월요일" was. The keyboard focus flash (a Mac aid) matched a phone's on-screen
+  keys and flashed the page on a backspace; computed animation with data-input=keyboard and the note
+  focused: phone "none", Mac "focus-in". Also: on a phone the calendar showed fine (0.7.11, daily notes on):
+  its switch is per device.
+- [ ] G185 v0.7.10 (Mac, Latest) and android-v0.7.12 are released
+  CHECK: gh release view android-v0.7.12 --json assets --jq '[.assets[].name] | sort | join(",")'
+  EXPECT: ^Eve-android-0\.7\.12\.apk,Eve-android\.apk$

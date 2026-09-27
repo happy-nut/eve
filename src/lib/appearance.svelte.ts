@@ -23,13 +23,15 @@ interface Appearance {
   dailyNotes: boolean;
   /** a nudge at `reminderAt` (HH:MM, local) when today's daily note is still unwritten */
   dailyReminder: boolean; reminderAt: string;
+  /** a phone's widget lists the daily notes too (off: only notes) */
+  dailyInWidget: boolean;
   /** the size the window opens at; changing it resizes the window there and then, as a preview of itself */
   winW: number; winH: number;
 }
 // the window's own defaults match tauri.conf.json, so a fresh install never resizes on launch
 // A phone starts from bigger type. Appearance lives in this device's localStorage and never syncs, so a
 // phone and a Mac each keep their own.
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, hideSidebarOnEdit: true, autoIcon: true, dailyNotes: false, dailyReminder: false, reminderAt: '21:00', winW: 1104, winH: 832 };
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, hideSidebarOnEdit: true, autoIcon: true, dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
 
 function load(): Appearance {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; } catch { return { ...DEFAULTS }; }
