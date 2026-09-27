@@ -769,3 +769,6 @@
   CHECK: gh release view android-v0.7.7 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.7\.apk,Eve-android\.apk$
   EVIDENCE: runs 36324784975 / 36324785405 succeeded; v0.7.5 is Latest with the Mac zip.
+- [x] G171 Each note on the widget is its own card again, still compact
+  EVIDENCE: hairlines made the list read as one block. Rows are soft cards again (#F5F5F7, 12dp corners,
+  5dp apart, 7dp side margins), lighter than the old grey cards. Emulator screenshot of the widget.

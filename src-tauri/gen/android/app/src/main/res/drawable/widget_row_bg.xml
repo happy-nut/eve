@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- a row on the widget's own white, Notion-style: no card, a pressed tint, and a hairline under it -->
-<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/widget_row">
-    <item android:gravity="bottom" android:left="14dp" android:right="14dp">
-        <shape><solid android:color="@color/widget_line" /><size android:height="1dp" /></shape>
-    </item>
+<!-- each note its own soft card: a light fill, round corners, a darker tint while pressed -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/widget_line">
+    <item><shape><solid android:color="@color/widget_row" /><corners android:radius="12dp" /></shape></item>
 </ripple>
