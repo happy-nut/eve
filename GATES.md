@@ -660,3 +660,9 @@
 - [ ] G151 android-v0.7.3 ships the lighter APK (lazy chunks, no Hangul reader, cached sync hashes) as its own release
   CHECK: gh release view android-v0.7.3 --json assets --jq '.assets[].name'
   EXPECT: Eve-android\.apk
+- [x] G152 Swiping the phone's list away slides it out in one motion (no snap back, no sudden vanish)
+  EVIDENCE: the hand-set closing transform was wiped by the style binding's next update (pull = 0 →
+  style undefined), so the drawer sprang back and was then removed without animation. Now the closing
+  state is part of the binding. Browser: after touchend the style stays translateX(-100%) until removal;
+  a short pull springs back; reopening starts clean. Emulator screen recording: follows the finger, then
+  slides out monotonically, then the note.
