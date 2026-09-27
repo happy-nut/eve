@@ -109,13 +109,17 @@ html.mobile aside .mtop .gear-i { width: 23px; height: 23px; stroke-width: 1.6; 
 html.mobile aside .top { padding: 4px 16px 10px; }
 html.mobile aside .top input { font-size: 16px; padding: 10px 12px; border-radius: 10px; }
 html.mobile aside .tree { padding: 4px 10px 96px; }
-html.mobile aside [data-row] { min-height: 44px; font-size: 16px; }
-html.mobile aside .gname { font-size: 15px; min-height: 40px; }
-html.mobile aside .gname.static { font-size: 12px; min-height: 32px; }
+html.mobile aside [data-row] { min-height: 38px; font-size: 16px; }
+html.mobile aside .gname { font-size: 15px; min-height: 38px; }
+html.mobile aside .gname.static { font-size: 12px; min-height: 30px; }
 html.mobile aside .emoji { font-size: 17px; }
 html.mobile aside .ico-slot { width: 24px; height: 24px; }
 html.mobile aside .tools { display: none; } /* hover-only; a long-press opens the row's menu instead */
 html.mobile aside .fold { width: 36px; height: 36px; }
+html.mobile aside .note-row > button:first-child { padding-top: 4px; padding-bottom: 4px; }
+/* a row lifted by a long press, ready to move */
+html.mobile aside .row.dragging { opacity: 1; background: var(--bg-pop); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); transform: scale(1.02); }
+html.mobile aside { -webkit-touch-callout: none; }
 html.mobile aside .fab {
   position: absolute; right: 20px; bottom: 24px; z-index: 2; width: 56px; height: 56px; border: 0; border-radius: 18px;
   background: var(--accent); color: #fff; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
@@ -144,7 +148,7 @@ html.mobile .cal { font-size: 15px !important; }
 html.mobile .cal-wd, html.mobile .cal-foot { font-size: 13px !important; }
 html.mobile .choice button { font-size: 16px !important; padding: 10px 12px !important; }
 html.mobile .find input { font-size: 16px !important; }
-html.mobile aside [data-row] { font-size: 17px; }
+html.mobile aside [data-row] { font-size: 16.5px; }
 /* dialogs: a sheet from the bottom, the answer under the thumb */
 html.mobile .box {
   top: auto !important; bottom: 0 !important; left: 0 !important; right: 0; transform: none !important; width: auto !important;

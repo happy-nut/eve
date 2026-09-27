@@ -174,6 +174,79 @@
   }
   function dragEnd() { drag = null; dropAt = null; }
 
+  /**
+   * A phone has no mouse to drag with: a long press lifts the row; move the finger and it goes where
+   * the mouse would have dropped it (the same overNote / overGroup / drop as above), or let go without
+   * moving and the row's menu opens. Auto-scrolls near the top and bottom of the list.
+   */
+  function touchReorder(tree: HTMLElement) {
+    if (!isMobile) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let start: { x: number; y: number; row: HTMLElement } | null = null;
+    let lifted = false, moved = false, x = 0, y = 0;
+    const as = (el: HTMLElement) => ({
+      clientX: x, clientY: y, currentTarget: el, target: el,
+      preventDefault() {}, stopPropagation() {}, dataTransfer: { dropEffect: '' },
+    }) as unknown as DragEvent;
+    const down = (e: TouchEvent) => {
+      const t = e.target as HTMLElement;
+      const row = t.closest<HTMLElement>('[data-row]');
+      if (!row || e.touches.length !== 1 || t.closest('.fold, input')) return;
+      x = e.touches[0].clientX; y = e.touches[0].clientY;
+      start = { x, y, row }; lifted = moved = false;
+      timer = setTimeout(() => {
+        lifted = true;
+        const n = row.dataset.note, g = row.dataset.group;
+        drag = n ? { note: n } : g !== undefined ? { group: g } : null;
+      }, 420);
+    };
+    const move = (e: TouchEvent) => {
+      if (!start) return;
+      x = e.touches[0].clientX; y = e.touches[0].clientY;
+      if (!lifted) {
+        if (Math.hypot(x - start.x, y - start.y) > 8) { clearTimeout(timer); start = null; } // a scroll
+        return;
+      }
+      e.preventDefault(); // the list stays put under a lifted row
+      if (Math.hypot(x - start.x, y - start.y) > 8) moved = true;
+      const el = document.elementFromPoint(x, y) as HTMLElement | null;
+      const noteRow = el?.closest<HTMLElement>('.note-row');
+      const gname = el?.closest<HTMLElement>('.gname');
+      if (noteRow) {
+        const id = noteRow.querySelector<HTMLElement>('[data-note]')?.dataset.note;
+        const n = notes.all.find((m) => m.id === id);
+        if (n) overNote(as(noteRow), n);
+      } else if (gname?.dataset.group !== undefined) overGroup(as(gname), gname.dataset.group);
+      else if (el && tree.contains(el)) overSection(as(tree), '');
+      const r = tree.getBoundingClientRect();
+      if (y < r.top + 56) tree.scrollTop -= 14;
+      else if (y > r.bottom - 56) tree.scrollTop += 14;
+    };
+    const up = (e: TouchEvent) => {
+      clearTimeout(timer);
+      if (!start) return;
+      const row = start.row;
+      start = null;
+      if (!lifted) return; // a tap: the row's own click handles it
+      e.preventDefault(); // and no click after a lift
+      if (moved && dropAt) { drop(as(tree)); (document.activeElement as HTMLElement | null)?.blur(); } // no focus ring left behind
+      else { dragEnd(); rowMenu(as(row) as unknown as MouseEvent, row); }
+    };
+    const cancel = () => { clearTimeout(timer); start = null; dragEnd(); };
+    tree.addEventListener('touchstart', down, { passive: true });
+    tree.addEventListener('touchmove', move, { passive: false });
+    tree.addEventListener('touchend', up);
+    tree.addEventListener('touchcancel', cancel);
+    return {
+      destroy() {
+        tree.removeEventListener('touchstart', down);
+        tree.removeEventListener('touchmove', move);
+        tree.removeEventListener('touchend', up);
+        tree.removeEventListener('touchcancel', cancel);
+      },
+    };
+  }
+
   // ---- keyboard ----
   async function removeGroup(g: string) {
     const n = groups.notesIn(g, true).length, sub = groups.subtree(g).length - 1;
@@ -493,7 +566,8 @@
     </div>
 
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <ul class="tree" role="tree" tabindex="-1" onkeydown={treeKey} oncontextmenu={rowMenu}
+    <ul class="tree" role="tree" tabindex="-1" onkeydown={treeKey} use:touchReorder
+      oncontextmenu={(e) => { if (isMobile) e.preventDefault(); else rowMenu(e); }}
       ondragover={(e) => overSection(e, '')} ondrop={drop}>
       {#each rows as r (r.key)}
         <li animate:flip={{ duration: 220, easing: cubicOut }} in:fade={{ duration: 140 }} out:slide={{ duration: 180, easing: cubicOut }}
@@ -504,7 +578,7 @@
 
           {#if r.kind === 'note'}
             {@const n = r.n}
-            <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable="true" ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
+            <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!isMobile} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation">
               <button data-row data-note={n.id} class:active={n.id === notes.currentId} onclick={() => openNote(n)}>
                 <span class="title">
@@ -536,7 +610,7 @@
                 <input class="rename" value={leafOf(g)} use:focusInput onkeydown={(e) => renameKey(e, g)}
                   onblur={(e) => finishRename(g, e.currentTarget.value)} spellcheck="false" />
               {:else}
-                <button class="gname" data-row data-group={g} draggable="true"
+                <button class="gname" data-row data-group={g} draggable={!isMobile}
                   ondragstart={(e) => dragStartGroup(e, g)} ondragend={dragEnd} ondragover={(e) => overGroup(e, g)} ondrop={drop}
                   onclick={() => groups.toggle(g)}>
                   <!-- svelte-ignore a11y_click_events_have_key_events -->

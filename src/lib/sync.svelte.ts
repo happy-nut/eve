@@ -1,4 +1,5 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
+import { groups } from './groups.svelte';
 import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText } from './platform';
 import { Repo, syncRound, blobSha, deviceLogin, ensureRepo, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
@@ -11,6 +12,7 @@ import { seal, open, ticketLink, type Ticket } from './handoff';
  */
 const LS = 'eve.sync';
 const ASSETS = 'notes/assets/';
+const GROUPS = 'notes/groups.json';
 
 interface Settings { user: string; repo: string; token: string; head: string; tree: string; known: Record<string, string>; lastSynced: number }
 
@@ -139,6 +141,8 @@ class Sync {
     try {
       await syncRound(repo, async () => {
         const out: LocalFile[] = notes.all.map((n) => ({ path: `notes/${n.id}.md`, data: enc.encode(serialize(n)) }));
+        // the groups' icons and order (not a .md: older versions of the app leave it alone)
+        out.push({ path: GROUPS, data: enc.encode(JSON.stringify(groups.shared(), null, 1)) });
         // images never change once written, so only unknown names need reading
         for (const name of await assets.list()) if (!(ASSETS + name in repo.s.known)) out.push({ path: ASSETS + name, data: await assets.read(name) });
         return out;
@@ -146,6 +150,7 @@ class Sync {
         const lww: Note[] = [], force: Note[] = [];
         for (const f of files) {
           if (f.path.startsWith(ASSETS)) { await assets.write(f.path.slice(ASSETS.length), f.data); continue; }
+          if (f.path === GROUPS) { try { groups.takeRemote(JSON.parse(dec.decode(f.data))); } catch { /* a hand-edited file that no longer parses */ } continue; }
           if (!f.path.endsWith('.md')) continue;
           const r = parse(dec.decode(f.data));
           if (!r) continue;
