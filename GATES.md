@@ -705,6 +705,8 @@
   elements; the same comparison flags a deliberate 20px change (positive control). Emulator screenshots
   before/after, pixel diff: list, note, appearance identical; sync differs only in the "Synced at" time.
   Print CSS named .table-tools, the toolbar is .tbl-tools: fixed.
-- [ ] G160 v0.7.3 (Mac, Latest) and android-v0.7.5 (APK) are released
+- [x] G160 v0.7.3 (Mac, Latest) and android-v0.7.5 (APK) are released
   CHECK: gh api repos/happy-nut/eve/releases/latest --jq .tag_name
   EXPECT: ^v0\.7\.3$
+  EVIDENCE: runs 36315218854 (build=success) and 36315219350 (android=success); v0.7.3 holds
+  Eve-macos-arm64.zip and is Latest; android-v0.7.5 holds Eve-android.apk.
