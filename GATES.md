@@ -798,6 +798,7 @@
   opened today's note from the template. Written = a line the template did not put there, the same rule
   in daily.ts and Reminder.kt. Mac: tauri-plugin-notification, looked for every 30 s while Eve runs,
   once a day; not exercised end to end here (the plugin builds and is registered).
-- [ ] G176 v0.7.6 (Mac, Latest) and android-v0.7.8 are released
+- [x] G176 v0.7.6 (Mac, Latest) and android-v0.7.8 are released
   CHECK: gh release view android-v0.7.8 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.8\.apk,Eve-android\.apk$
+  EVIDENCE: runs 36327179490 / 36327179582 succeeded; v0.7.6 is Latest with the Mac zip.
