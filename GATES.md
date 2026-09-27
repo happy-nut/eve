@@ -680,3 +680,6 @@
   EVIDENCE: emulator screenshots: list rows ~32px (were ~38 + padding); note bar flat with grey icons,
   44px page icon, smaller headings; widget rows on white with inset hairlines (no grey cards), medium
   titles, a dark round + button. All app CSS under html.mobile; the widget is Android-only.
+- [ ] G156 android-v0.7.4 ships the swipe fix, pin-to-existing-widget, the icon back button and the Notion-style phone UI
+  CHECK: gh release view android-v0.7.4 --json assets --jq '.assets[].name'
+  EXPECT: Eve-android\.apk
