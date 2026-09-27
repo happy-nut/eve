@@ -648,3 +648,12 @@
   calendar up: the same on main, so not from this change.)
 - [x] G149 Sidebar moves notes and groups through lib/moves.ts
   EVIDENCE: Sidebar.svelte 802 → 722. Browser: row menu "Move down" and ⌥↑ reorder, focus stays on the row.
+
+# GATES — Hangul after ⌘Tab; v0.7.2 (Mac) (2026-09-27)
+
+- [x] G150 Coming back to the window does not split the first Hangul syllable, and leaves no IME underline
+  EVIDENCE: manual, on the user's Mac with the 2-set Korean input (the automated IME harness could not
+  send keys through the input method: no Accessibility grant). Before: "ㅈㅣ정가". After the blur-on-leave
+  fix: whole syllables, but a stale marked-text underline under the syllable left mid-composition; after
+  redrawing the caret's line on return: none. Browser: caret position and further typing survive the
+  window blur/focus round trip, and the line's text node is rebuilt.
