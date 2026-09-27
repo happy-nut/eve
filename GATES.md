@@ -657,3 +657,6 @@
   fix: whole syllables, but a stale marked-text underline under the syllable left mid-composition; after
   redrawing the caret's line on return: none. Browser: caret position and further typing survive the
   window blur/focus round trip, and the line's text node is rebuilt.
+- [ ] G151 android-v0.7.3 ships the lighter APK (lazy chunks, no Hangul reader, cached sync hashes) as its own release
+  CHECK: gh release view android-v0.7.3 --json assets --jq '.assets[].name'
+  EXPECT: Eve-android\.apk
