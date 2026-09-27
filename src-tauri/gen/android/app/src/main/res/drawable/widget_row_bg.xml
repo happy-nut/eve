@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="@color/widget_row" />
-    <corners android:radius="14dp" />
-</shape>
+<!-- a row on the widget's own white, Notion-style: no card, a pressed tint, and a hairline under it -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/widget_row">
+    <item android:gravity="bottom" android:left="14dp" android:right="14dp">
+        <shape><solid android:color="@color/widget_line" /><size android:height="1dp" /></shape>
+    </item>
+</ripple>

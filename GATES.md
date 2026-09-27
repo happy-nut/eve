@@ -676,3 +676,7 @@
   dark round compose button; settings with underlined tabs, grey sentence-case captions, rows on hairlines,
   outline buttons, plain selects, no grey band over the status bar. Every rule is under html.mobile, so the
   Mac is untouched.
+- [x] G155 The note screen and the widget match; the phone's list rows are tighter
+  EVIDENCE: emulator screenshots: list rows ~32px (were ~38 + padding); note bar flat with grey icons,
+  44px page icon, smaller headings; widget rows on white with inset hairlines (no grey cards), medium
+  titles, a dark round + button. All app CSS under html.mobile; the widget is Android-only.
