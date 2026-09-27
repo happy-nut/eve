@@ -21,12 +21,17 @@
   .dim { color: var(--dim); font-size: 14px; }
   a { color: var(--accent); font-weight: 600; text-decoration: none; }
   [hidden] { display: none !important; }
+  .get {
+    display: inline-block; margin-top: 6px; padding: 14px 26px; border-radius: 14px; background: var(--accent); color: #fff;
+    font-size: 17px; font-weight: 600;
+  }
 </style>
 </head>
 <body>
   <img src="../icon.svg" alt="">
   <p id="msg" data-t="opening">Opening Eve…</p>
-  <p class="dim" id="hint" hidden data-t="hint">Nothing happened? <a id="retry" href="#">Open Eve</a> · <a id="apk" href="#">Download</a></p>
+  <a class="get" id="get" hidden href="#"></a>
+  <p class="dim" id="hint" hidden data-t="hint">Already updated? <a id="retry" href="#">Open Eve</a></p>
 <script>
   // One QR: without Eve, or with one too old to update itself, it downloads the newest APK; with a
   // current Eve it opens it with the Mac's ticket, and Eve offers any newer version itself.
@@ -39,19 +44,19 @@
 
   const ko = {
     opening: 'Eve 여는 중…', hint: '', desktop: '이 링크는 Android 폰에서 여세요 — Mac의 Eve 설정에 있는 QR을 폰 카메라로 찍으면 됩니다.',
-    downloading: 'Eve를 내려받고 있어요. 설치한 뒤 Mac의 QR을 한 번 더 찍으면 로그인까지 끝납니다.',
     installing: '최신 Eve를 내려받고 있어요. 받은 파일을 열어 설치(업데이트)하면 노트와 로그인은 그대로예요.',
+    get: 'Eve 내려받기', after: '받은 파일을 열어 설치(업데이트)를 누르세요. 노트와 로그인은 그대로예요. 그다음 Mac의 QR을 한 번 더 찍으면 로그인까지 끝납니다.',
   };
   const en = {
     desktop: "Open this on your Android phone — scan the QR in Eve's settings on your Mac with its camera.",
-    downloading: 'Downloading Eve. Install it, then scan the QR on your Mac once more to sign it in.',
     installing: 'Downloading the newest Eve. Open it and tap Install (or Update); notes and the sign-in stay.',
+    get: 'Download Eve', after: 'Open the download and tap Install (or Update); notes and the sign-in stay. Then scan the QR on your Mac once more to sign in.',
   };
   const t = (k) => (/^ko/i.test(navigator.language) && ko[k]) || en[k];
   if (/^ko/i.test(navigator.language)) {
     document.documentElement.lang = 'ko';
     document.getElementById('msg').textContent = ko.opening;
-    document.getElementById('hint').innerHTML = '안 열리나요? <a id="retry" href="#">Eve 열기</a> · <a id="apk" href="#">내려받기</a>';
+    document.getElementById('hint').innerHTML = '이미 업데이트했나요? <a id="retry" href="#">Eve 열기</a>';
   }
 
   /** The highest-versioned published release that carries the APK (a prerelease counts; a draft cannot be downloaded). */
@@ -68,15 +73,17 @@
         const a = apks.find((x) => x.name !== 'Eve-android.apk') ?? apks[0];
         if (a && (!best || higher(v(r.tag_name), best.v))) best = { v: v(r.tag_name), url: a.browser_download_url };
       }
-      if (best) return best.url;
+      if (best) return { url: best.url, version: best.v.join('.') };
     } catch { /* offline or rate-limited: the latest release's link */ }
-    return LATEST;
+    return { url: LATEST, version: '' };
   }
 
   (async () => {
     if (!android) return (document.getElementById('msg').textContent = t('desktop'));
-    const apk = await apkUrl();
-    document.getElementById('apk').href = apk;
+    const { url: apk, version } = await apkUrl();
+    const get = document.getElementById('get');
+    get.href = apk;
+    get.textContent = t('get') + (version ? ' ' + version : '');
     // the Mac's "Install or update" QR: always the newest APK, even with (an older) Eve installed
     if (ticket === 'install') {
       document.getElementById('msg').textContent = t('installing');
@@ -89,9 +96,13 @@
       `S.browser_fallback_url=${encodeURIComponent(apk)};end`;
     document.getElementById('retry').href = intent;
     location.replace(intent);
-    // still here after a moment: the browser went for the download (or blocked the hand-off)
+    // still here after a moment: Eve did not open — none installed, or one too old to update itself. The
+    // browser may already be downloading (Chrome's fallback) or may have ignored it (other browsers):
+    // either way, one big button for the newest APK and what to do with it
     setTimeout(() => {
-      document.getElementById('msg').textContent = t('downloading');
+      if (document.hidden) return; // Eve opened
+      document.getElementById('msg').textContent = t('after');
+      get.hidden = false;
       document.getElementById('hint').hidden = false;
     }, 1500);
   })();
