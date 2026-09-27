@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- the + button: the app's rounded square, in the eye blue -->
+<!-- the + button: the app's dark round compose button -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#33FFFFFF">
-    <item><shape><solid android:color="@color/widget_accent" /><corners android:radius="16dp" /></shape></item>
+    <item><shape android:shape="oval"><solid android:color="@color/widget_fg" /></shape></item>
 </ripple>

@@ -228,6 +228,21 @@ html.mobile .panel .switch { flex: none; }
 html.mobile .panel .select { background: none; color: var(--fg-dim); padding-right: 0; }
 html.mobile aside .tree { scrollbar-width: none; }
 html.mobile aside .tree::-webkit-scrollbar { display: none; }
+/* the list, tighter: Notion's rows are a line of text and a little air, not a thumb-sized slab */
+html.mobile aside [data-row] { min-height: 32px; }
+html.mobile aside .gname { min-height: 32px; padding-top: 2px; padding-bottom: 2px; }
+html.mobile aside .fold { width: 32px; height: 32px; }
+html.mobile aside .note-row > button:first-child { padding-top: 2px; padding-bottom: 2px; }
+html.mobile aside .ghead { padding: 0; }
+/* the note: a flat bar of grey icons, and a page head sized for a phone */
+html.mobile .mhead { border-bottom: 0; }
+html.mobile .mhead .micon, html.mobile .mhead .micon.danger { color: var(--fg-dim); }
+html.mobile .page-head { height: 36px; }
+html.mobile .page-head.with-icon { height: 80px; }
+html.mobile .big-icon { font-size: 44px; }
+html.mobile .tiptap h1 { font-size: 1.65em; font-weight: 700; }
+html.mobile .tiptap h2 { font-size: 1.3em; }
+html.mobile .tiptap h3 { font-size: 1.1em; }
 main { flex: 1; min-width: 0; position: relative; }
 /* the toolbar floats over the note (and with the sidebar closed it sits right on the text): a fade to
    the page colour keeps lines from running into the icons as they scroll past */

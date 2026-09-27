@@ -3,12 +3,10 @@
     android:id="@+id/row"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginHorizontal="6dp"
-    android:layout_marginBottom="3dp"
     android:background="@drawable/widget_row_bg"
     android:orientation="horizontal"
-    android:paddingHorizontal="10dp"
-    android:paddingVertical="6dp">
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="7dp">
 
     <TextView
         android:id="@+id/row_icon"
@@ -35,8 +33,8 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:textColor="@color/widget_fg"
-                android:textSize="13sp"
-                android:textStyle="bold" />
+                android:fontFamily="sans-serif-medium"
+                android:textSize="13.5sp" />
 
             <TextView
                 android:id="@+id/row_time"
