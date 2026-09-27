@@ -69,7 +69,9 @@ const BlankLine = Paragraph.extend({
 
 const KEYMAP = new PluginKey('eve-keymap');
 const APP_GUARD = new PluginKey('eve-app-guard');
-let suggestionVisible: () => boolean = () => false;
+// per editor: the note and an open card page each have their own popups, and one shared variable
+// would leave the note asking the closed card's popups — then Esc hides the window, not the calendar
+const suggestionVisible = new WeakMap<Editor, () => boolean>();
 
 export const getMarkdown = (editor: Editor): string => (editor.storage as any).markdown.getMarkdown();
 
@@ -201,7 +203,7 @@ export function applyKeymap(editor: Editor) {
     key: APP_GUARD,
     props: {
       handleKeyDown: (_view, e) => {
-        if (suggestionVisible()) return false;
+        if (suggestionVisible.get(editor)?.()) return false;
         const a = shortcuts.match(e, ['app']);
         if (!a) return false;
         (e as any).eveApp = true;
@@ -560,7 +562,7 @@ export function createEditor(opts: {
     ],
     onUpdate: ({ editor }) => opts.onUpdate(getMarkdown(editor)),
   });
-  suggestionVisible = () => opts.suggestionUI.visible() || opts.calendarUI.visible();
+  suggestionVisible.set(editor, () => opts.suggestionUI.visible() || opts.calendarUI.visible());
   applyKeymap(editor);
   if (import.meta.env.DEV) (window as any).__eve = editor;
   return editor;
