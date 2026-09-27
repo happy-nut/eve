@@ -409,7 +409,8 @@
    */
   let pull = $state(0); // px the drawer is pulled left, while a finger holds it
   let leaving = $state(false); // let go far enough: sliding the rest of the way out
-  $effect(() => { if (open) leaving = false; });
+  // before the drawer mounts again: its slide-in and its style must not see the last swipe's "leaving"
+  $effect.pre(() => { if (open) leaving = false; });
   let touch: { x: number; y: number; axis: '' | 'x' | 'y' } | null = null;
   function drawer(node: HTMLElement) {
     if (!isMobile) return slide(node, { axis: 'x', duration: 220, easing: cubicOut });

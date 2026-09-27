@@ -759,3 +759,9 @@
   tested), and the page builds the android-v<v>/Eve-android-<v>.apk URL from it without calling GitHub;
   without v it asks with cache: no-store. Emulator: ?v=0.7.6 → "Download Eve 0.7.6" and the fallback
   downloads Eve-android-0.7.6.apk.
+- [x] G169 Reopening the phone's list slides in; Check shows it is checking; random/remove are icon buttons
+  EVIDENCE: after a swipe-close the "leaving" flag was cleared by an $effect that ran after the drawer's
+  intro had been created (duration 0); $effect.pre clears it first. Emulator recording: the list slides in
+  over several frames. Check: spinner and "Checking…" for at least 600 ms, then "✓ Up to date" (or "Could
+  not check — offline?"), recording. Emoji picker: shuffle and bin icons, 28px on the Mac, 44px on the
+  phone (screenshots of both).

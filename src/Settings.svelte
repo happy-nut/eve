@@ -284,11 +284,15 @@
       <div class="card">
         <div class="row">
           <span class="label">Eve {updates.current}
-            <span class="sub">{updates.available ? `${updates.available.version} is available` : 'Up to date'}</span></span>
+            <span class="sub">{updates.checking ? 'Checking…'
+              : updates.available ? `${updates.available.version} is available`
+              : updates.failed ? 'Could not check — offline?' : '✓ Up to date'}</span></span>
           {#if updates.available}
             <button class="btn primary" onclick={() => updates.install()}>Update</button>
           {:else}
-            <button class="btn" onclick={() => updates.check(true)}>Check</button>
+            <button class="btn" disabled={updates.checking} onclick={() => updates.check(true)}>
+              {#if updates.checking}<span class="spin" aria-hidden="true"></span>{/if}Check
+            </button>
           {/if}
         </div>
       </div>
@@ -359,6 +363,12 @@
   .btn.primary { background: var(--accent); color: light-dark(#fff, #0b0c10); box-shadow: var(--glow); }
   .btn.primary:hover { filter: brightness(1.08); }
   .btn:disabled { opacity: 0.4; pointer-events: none; }
+  .btn:has(.spin):disabled { opacity: 0.75; }
+  .spin {
+    display: inline-block; width: 12px; height: 12px; margin: 0 7px -2px 0; border-radius: 50%;
+    border: 1.8px solid var(--line); border-top-color: var(--fg-dim); animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
   input:not([type]) {
     font: inherit; font-size: 12.5px; padding: 5px 8px; border-radius: 7px; border: 0; outline: none;
     background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line); max-width: 240px;
