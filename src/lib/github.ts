@@ -8,7 +8,8 @@
  * ref update is refused (422) and the caller pulls again (see syncRound).
  */
 export interface RepoState { repo: string; token: string; head: string; tree: string; known: Record<string, string> }
-export interface LocalFile { path: string; data: Uint8Array }
+/** `sha`, when given, is the blob sha of `data` (see FileHashes), so push need not hash it again. */
+export interface LocalFile { path: string; data: Uint8Array; sha?: string }
 /** `prev` = the blob sha we had for this path before the pull (undefined = new file). */
 export interface RemoteFile { path: string; data: Uint8Array; prev?: string }
 
@@ -45,6 +46,21 @@ async function chunked<T, R>(xs: T[], fn: (x: T) => Promise<R>, n = 20): Promise
   const out: R[] = [];
   for (let i = 0; i < xs.length; i += n) out.push(...(await Promise.all(xs.slice(i, i + n).map(fn))));
   return out;
+}
+
+/**
+ * Every sync round offers every note; most have not changed since the last one. Remember each path's
+ * last text and its blob sha, and hash again only when the text differs.
+ */
+export class FileHashes {
+  private last = new Map<string, { text: string; sha: string }>();
+  private enc = new TextEncoder();
+  async file(path: string, text: string): Promise<LocalFile> {
+    const data = this.enc.encode(text);
+    let h = this.last.get(path);
+    if (h?.text !== text) this.last.set(path, (h = { text, sha: await blobSha(data) }));
+    return { path, data, sha: h.sha };
+  }
 }
 
 export class Repo {
@@ -110,7 +126,7 @@ export class Repo {
   async push(files: LocalFile[]): Promise<boolean> {
     const changed: (LocalFile & { sha: string })[] = [];
     for (const f of files) {
-      const sha = await blobSha(f.data);
+      const sha = f.sha ?? await blobSha(f.data);
       if (sha !== this.s.known[f.path]) changed.push({ ...f, sha });
     }
     if (!changed.length) return true;

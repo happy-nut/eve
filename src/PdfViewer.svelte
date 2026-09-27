@@ -44,7 +44,9 @@
         page = sheet(Array.from({ length: doc.count }, (_, i) => doc.page(i)));
       })
       .catch(() => {
-        failed = 'This file could not be read as a Hangul document.';
+        failed = import.meta.env.TAURI_ENV_PLATFORM === 'android'
+          ? 'Hangul documents open on the Mac.'
+          : 'This file could not be read as a Hangul document.';
       });
   }
 

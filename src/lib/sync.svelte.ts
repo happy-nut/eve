@@ -1,7 +1,7 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
 import { groups } from './groups.svelte';
 import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText } from './platform';
-import { Repo, syncRound, blobSha, deviceLogin, ensureRepo, type LocalFile, type RemoteFile } from './github';
+import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
 
 /**
@@ -29,6 +29,7 @@ class Sync {
   status = $state<'idle' | 'syncing' | 'ok' | 'error'>('idle');
   error = $state('');
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private hashes = new FileHashes();
 
   save(patch: Partial<Settings>) {
     // a different repository = start over
@@ -140,7 +141,7 @@ class Sync {
     const repo = new Repo(this.settings);
     try {
       await syncRound(repo, async () => {
-        const out: LocalFile[] = notes.all.map((n) => ({ path: `notes/${n.id}.md`, data: enc.encode(serialize(n)) }));
+        const out: LocalFile[] = await Promise.all(notes.all.map((n) => this.hashes.file(`notes/${n.id}.md`, serialize(n))));
         // the groups' icons and order (not a .md: older versions of the app leave it alone)
         out.push({ path: GROUPS, data: enc.encode(JSON.stringify(groups.shared(), null, 1)) });
         // images never change once written, so only unknown names need reading
@@ -155,7 +156,7 @@ class Sync {
           const r = parse(dec.decode(f.data));
           if (!r) continue;
           const local = notes.all.find((n) => n.id === r.id);
-          const untouched = local && f.prev && (await blobSha(enc.encode(serialize(local)))) === f.prev;
+          const untouched = local && f.prev && (await this.hashes.file(f.path, serialize(local))).sha === f.prev;
           (untouched ? force : lww).push(r);
         }
         notes.mergeRemote(lww);
