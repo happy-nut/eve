@@ -408,10 +408,12 @@
    * its sideways fold.
    */
   let pull = $state(0); // px the drawer is pulled left, while a finger holds it
+  let leaving = $state(false); // let go far enough: sliding the rest of the way out
+  $effect(() => { if (open) leaving = false; });
   let touch: { x: number; y: number; axis: '' | 'x' | 'y' } | null = null;
   function drawer(node: HTMLElement) {
     if (!isMobile) return slide(node, { axis: 'x', duration: 220, easing: cubicOut });
-    if (node.dataset.gone) return { duration: 0 }; // already swiped off-screen
+    if (leaving) return { duration: 0 }; // already swiped off-screen
     return { duration: 240, easing: cubicOut, css: (t: number) => `transform: translateX(${(t - 1) * 100}%)` };
   }
   function pullStart(e: TouchEvent) {
@@ -427,17 +429,17 @@
   }
   function pullEnd(e: TouchEvent) {
     if (!touch) return;
-    const aside = (e.currentTarget as HTMLElement);
-    const far = pull < -Math.min(90, aside.offsetWidth * 0.25);
+    const far = pull < -Math.min(90, (e.currentTarget as HTMLElement).offsetWidth * 0.25);
     touch = null;
-    if (!far) { pull = 0; return; } // not far enough: it springs back (the inline style drops, the CSS eases it)
-    // the rest of the way out, from where the finger let go; then gone without a second animation
-    aside.style.transition = 'transform 0.18s ease-out';
-    aside.style.transform = 'translateX(-100%)';
-    aside.dataset.gone = '1';
+    // not far enough: it springs back (the inline style drops, the CSS eases it). Far enough: the rest
+    // of the way out from where the finger let go, then gone without a second animation. Both through
+    // the style binding: a style set by hand here would be wiped by the binding's next update.
+    if (far) { leaving = true; setTimeout(() => (open = false), 180); }
     pull = 0;
-    setTimeout(() => (open = false), 180);
   }
+  const drawerStyle = $derived(
+    leaving ? 'transform: translateX(-100%); transition: transform 0.18s ease-out'
+    : pull ? `transform: translateX(${pull}px); transition: none` : undefined);
 
   const syncLabel = $derived(sync.enabled ? (sync.status === 'error' ? 'sync error' : sync.status === 'syncing' ? 'syncing…' : 'synced') : 'local only');
   // a gear that reads as settings at a glance (the Lucide "settings" outline)
@@ -457,7 +459,7 @@
 </script>
 
 {#if open}
-  <aside transition:drawer style={pull ? `transform: translateX(${pull}px); transition: none` : undefined}
+  <aside transition:drawer style={drawerStyle}
     ontouchstart={pullStart} ontouchmove={pullMove} ontouchend={pullEnd} ontouchcancel={pullEnd}>
     {#if isMobile}
       <!-- a phone: the title, then sync and settings up here, so nothing sits over the bottom of the list -->
