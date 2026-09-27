@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
-  import type { CalendarUI } from './lib/editor';
+  import type { CalendarUI } from './lib/slash';
   import { dateLabel, isoDay, monthGrid, monthName, sameMonth, shiftDays, shiftMonths, weekdayNames } from './lib/date';
 
   // the calendar behind `@`: one month, a cursor on a day. The editor drives it through `ui`

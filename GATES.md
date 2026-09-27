@@ -632,3 +632,19 @@
   EXPECT: SYNC_OK
   EVIDENCE: FileHashes test (same text reuses the sha, changed text re-hashes, per path); emulator synced
   against the real repo afterwards.
+
+# GATES — the same app in smaller pieces (2026-09-27)
+
+- [x] G147 lib.rs is split by concern (files / mac / net / window), with no warnings on either target
+  CHECK: cd src-tauri && cargo build 2>&1 && cargo test 2>&1
+  EXPECT: test result: ok\. 3 passed
+  EVIDENCE: lib.rs 844 → 141 lines (run + pending files + tests); the Android release build compiles with
+  no warnings, installs, opens a note.
+- [x] G148 editor.ts keeps the editor; the typed popups and the note's own menus live beside it
+  CHECK: npm run check
+  EXPECT: 0 ERRORS 0 WARNINGS
+  EVIDENCE: editor.ts 782 → 567 (+ slash.ts 141, noteMenu.ts 91). Browser: "/" lists the blocks, "@" opens
+  the calendar, right-click shows Paste / Select all / Export. (Esc, then Backspace, leaves the "@"
+  calendar up: the same on main, so not from this change.)
+- [x] G149 Sidebar moves notes and groups through lib/moves.ts
+  EVIDENCE: Sidebar.svelte 802 → 722. Browser: row menu "Move down" and ⌥↑ reorder, focus stays on the row.

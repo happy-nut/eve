@@ -1,721 +1,18 @@
-use std::{fs, path::PathBuf, sync::Mutex};
-use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+use std::sync::Mutex;
+use tauri::{Emitter, Manager, WindowEvent};
+
+mod files;
+mod mac;
+mod net;
+mod window;
 
 /// Files macOS asked us to open before the frontend was listening.
 #[derive(Default)]
 struct Pending(Mutex<Vec<String>>);
 
-fn notes_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("notes");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir)
-}
-
-fn safe_id(id: &str) -> Result<(), String> {
-    if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
-        return Err("invalid note id".into());
-    }
-    Ok(())
-}
-
-/// Returns raw file contents of every note; parsing happens in the frontend.
-#[tauri::command]
-fn list_notes(app: AppHandle) -> Result<Vec<String>, String> {
-    let dir = notes_dir(&app)?;
-    let mut out = Vec::new();
-    for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
-        let path = entry.map_err(|e| e.to_string())?.path();
-        if path.extension().and_then(|e| e.to_str()) == Some("md") {
-            out.push(fs::read_to_string(path).map_err(|e| e.to_string())?);
-        }
-    }
-    Ok(out)
-}
-
-#[tauri::command]
-fn write_note(app: AppHandle, id: String, text: String) -> Result<(), String> {
-    safe_id(&id)?;
-    let path = notes_dir(&app)?.join(format!("{id}.md"));
-    write_atomic(&path, text.as_bytes())
-}
-
-fn assets_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = notes_dir(app)?.join("assets");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir)
-}
-
-/// What may live in notes/assets: pictures, videos, and PDFs dropped into a note.
-const ASSET_EXTS: [&str; 16] = [
-    "png", "jpg", "jpeg", "gif", "webp", "svg", "heic", "pdf", "mp4", "mov", "m4v", "webm",
-    // documents the webview cannot draw itself: the viewer shows Quick Look's preview of them
-    "xlsx", "xls", "hwp", "hwpx",
-];
-
-fn safe_name(name: &str) -> Result<(), String> {
-    let ok = !name.is_empty()
-        && name.len() <= 64
-        && !name.starts_with('.')
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.');
-    if ok { Ok(()) } else { Err("invalid asset name".into()) }
-}
-
-fn stamp_name(ext: &str) -> String {
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    format!("{stamp:x}.{ext}")
-}
-
-fn raw_body(request: &tauri::ipc::Request<'_>) -> Result<Vec<u8>, String> {
-    use serde::Deserialize;
-    match request.body() {
-        tauri::ipc::InvokeBody::Raw(b) => Ok(b.clone()),
-        // Android's IPC has no request bodies: the bytes come over as a JSON array of numbers
-        tauri::ipc::InvokeBody::Json(v) => Vec::<u8>::deserialize(v).map_err(|_| "expected raw bytes".into()),
-    }
-}
-
-fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
-    let tmp = path.with_extension("tmp");
-    fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
-    fs::rename(tmp, path).map_err(|e| e.to_string())
-}
-
-/// Copy a file picked by the user into notes/assets and return its note-relative path.
-#[tauri::command]
-fn import_asset(app: AppHandle, src: String) -> Result<String, String> {
-    let src = PathBuf::from(src);
-    let ext = src
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_ascii_lowercase())
-        .filter(|e| ASSET_EXTS.contains(&e.as_str()))
-        .ok_or("unsupported file type")?;
-    let name = stamp_name(&ext);
-    fs::copy(&src, assets_dir(&app)?.join(&name)).map_err(|e| e.to_string())?;
-    Ok(format!("assets/{name}"))
-}
-
-/// File bytes from the clipboard / a drop, saved into notes/assets. Body = raw bytes, header x-ext = extension.
-#[tauri::command]
-fn save_asset(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<String, String> {
-    let ext = request
-        .headers()
-        .get("x-ext")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("png")
-        .to_ascii_lowercase();
-    if !ASSET_EXTS.contains(&ext.as_str()) {
-        return Err("unsupported file type".into());
-    }
-    let name = stamp_name(&ext);
-    fs::write(assets_dir(&app)?.join(&name), raw_body(&request)?).map_err(|e| e.to_string())?;
-    Ok(format!("assets/{name}"))
-}
-
-/// First page of a stored PDF as a PNG, for the card in a note. Rendered by Quick Look (the same
-/// picture Finder shows) and cached, so a note full of PDFs costs one render each, once.
-/// ponytail: runs qlmanage on the async runtime; if a huge PDF ever makes that felt, move it to
-/// spawn_blocking.
-#[tauri::command]
-async fn pdf_thumb(app: AppHandle, name: String) -> Result<tauri::ipc::Response, String> {
-    safe_name(&name)?;
-    let src = assets_dir(&app)?.join(&name);
-    if !src.is_file() {
-        return Err("no such asset".into());
-    }
-    let dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|e| e.to_string())?
-        .join("thumbs");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let png = dir.join(format!("{name}.png")); // qlmanage names it after the whole file name
-    if !png.is_file() {
-        let out = std::process::Command::new("/usr/bin/qlmanage")
-            .args(["-t", "-s", "320", "-o"])
-            .arg(&dir)
-            .arg(&src)
-            .output()
-            .map_err(|e| e.to_string())?;
-        if !png.is_file() {
-            return Err(format!("no thumbnail: {}", String::from_utf8_lossy(&out.stderr)));
-        }
-    }
-    Ok(tauri::ipc::Response::new(
-        fs::read(&png).map_err(|e| e.to_string())?,
-    ))
-}
-
-/// Run a command, but never wait on it forever: Quick Look hangs indefinitely on a format no
-/// generator on this Mac handles (a .hwp without Hancom Office does exactly that), and a hung
-/// child would hold the viewer open on a spinner for good.
-fn run_with_deadline(
-    mut cmd: std::process::Command,
-    deadline: std::time::Duration,
-) -> Result<std::process::Output, String> {
-    let mut child = cmd
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    let start = std::time::Instant::now();
-    loop {
-        match child.try_wait().map_err(|e| e.to_string())? {
-            Some(_) => return child.wait_with_output().map_err(|e| e.to_string()),
-            None if start.elapsed() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err("timed out".into());
-            }
-            None => std::thread::sleep(std::time::Duration::from_millis(50)),
-        }
-    }
-}
-
-/// A stored document as HTML, for the floating viewer: Quick Look's own preview bundle — the one
-/// Finder draws on the space bar — exported once into the cache, which is why a spreadsheet arrives
-/// laid out as a table without this app knowing anything about the format. Returns the path of its
-/// Preview.html. A PDF never comes through here: the webview draws that itself.
-#[tauri::command]
-async fn ql_preview(app: AppHandle, name: String) -> Result<String, String> {
-    safe_name(&name)?;
-    let src = assets_dir(&app)?.join(&name);
-    if !src.is_file() {
-        return Err("no such asset".into());
-    }
-    let dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|e| e.to_string())?
-        .join("previews");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    // qlmanage names the bundle after the whole file name, and puts Preview.html inside it
-    let html = dir.join(format!("{name}.qlpreview")).join("Preview.html");
-    if html.is_file() {
-        return Ok(html.to_string_lossy().into_owned());
-    }
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut cmd = std::process::Command::new("/usr/bin/qlmanage");
-        cmd.args(["-p", "-o"]).arg(&dir).arg(&src);
-        let out = run_with_deadline(cmd, std::time::Duration::from_secs(20))?;
-        if !html.is_file() {
-            return Err(format!(
-                "no preview: {}",
-                String::from_utf8_lossy(&out.stderr).trim()
-            ));
-        }
-        Ok(html.to_string_lossy().into_owned())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-// ---- sync: the assets folder as a list of immutable named blobs -------------
-#[tauri::command]
-fn list_assets(app: AppHandle) -> Result<Vec<String>, String> {
-    let mut out = Vec::new();
-    for entry in fs::read_dir(assets_dir(&app)?).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if safe_name(&name).is_ok() && entry.path().is_file() {
-            out.push(name);
-        }
-    }
-    Ok(out)
-}
-
-/// Raw bytes of one asset (arrives in JS as an ArrayBuffer).
-#[tauri::command]
-fn read_asset(app: AppHandle, name: String) -> Result<tauri::ipc::Response, String> {
-    safe_name(&name)?;
-    let bytes = fs::read(assets_dir(&app)?.join(&name)).map_err(|e| e.to_string())?;
-    Ok(tauri::ipc::Response::new(bytes))
-}
-
-/// An asset pulled from sync. Body = raw bytes, header x-name = file name.
-#[tauri::command]
-fn write_asset(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<(), String> {
-    let name = request
-        .headers()
-        .get("x-name")
-        .and_then(|v| v.to_str().ok())
-        .ok_or("missing x-name")?
-        .to_string();
-    safe_name(&name)?;
-    write_atomic(&assets_dir(&app)?.join(&name), &raw_body(&request)?)
-}
-
-// ---- GitHub sign-in (device flow) -------------------------------------------
-/// github.com/login/* has no CORS headers, so the two device-flow POSTs run here.
-/// `form` = [[key, value], ...]. Async so the main thread never blocks.
-#[tauri::command]
-async fn github_post(url: String, form: Vec<(String, String)>) -> Result<String, String> {
-    if !url.starts_with("https://github.com/login/") {
-        return Err("url not allowed".into());
-    }
-    tauri::async_runtime::spawn_blocking(move || {
-        ureq::post(&url)
-            .header("Accept", "application/json")
-            .send_form(form)
-            .map_err(|e| e.to_string())?
-            .body_mut()
-            .read_to_string()
-            .map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-// ---- a phone set up from the Mac, over the local network (src/lib/handoff.ts) --------------
-/// Which hand-off is live; starting another (or finishing) retires the one before it.
-static SHARE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-/// This Mac's address on the local network: the interface a packet to the internet would leave from.
-/// (A UDP "connect" only picks the route; nothing is sent.)
-fn lan_ip() -> Result<std::net::IpAddr, String> {
-    let sock = std::net::UdpSocket::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
-    sock.connect("8.8.8.8:80").map_err(|e| e.to_string())?;
-    Ok(sock.local_addr().map_err(|e| e.to_string())?.ip())
-}
-
-/// Serve `body` (already sealed by the page) at `/<path>` on the LAN, to the first fetch only, for at
-/// most ten minutes. Returns "ip:port" for the QR. Emits "share-done" once the phone has it.
-#[tauri::command]
-fn share_start(app: AppHandle, path: String, body: String) -> Result<String, String> {
-    use std::sync::atomic::Ordering;
-    if path.len() != 32 || !path.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("bad path".into());
-    }
-    let ip = lan_ip()?;
-    let listener = std::net::TcpListener::bind((ip, 0)).map_err(|e| e.to_string())?;
-    let host = format!("{ip}:{}", listener.local_addr().map_err(|e| e.to_string())?.port());
-    let me = SHARE.fetch_add(1, Ordering::SeqCst) + 1;
-    std::thread::spawn(move || {
-        if serve_once(listener, &path, &body, me, std::time::Duration::from_secs(600)) {
-            let _ = app.emit("share-done", ());
-        }
-    });
-    Ok(host)
-}
-
-/// The hand-off's server loop: answer `GET /<path>` with `body` once and stop; anything else gets a
-/// 404 and the wait goes on, until `deadline` or until another hand-off (`SHARE` moved past `me`).
-/// True when the body was handed over.
-fn serve_once(listener: std::net::TcpListener, path: &str, body: &str, me: u64, deadline: std::time::Duration) -> bool {
-    use std::io::{Read, Write};
-    use std::sync::atomic::Ordering;
-    let _ = listener.set_nonblocking(true);
-    let until = std::time::Instant::now() + deadline;
-    let mut done = false;
-    while !done && SHARE.load(Ordering::SeqCst) == me && std::time::Instant::now() < until {
-        let Ok((mut conn, _)) = listener.accept() else {
-            std::thread::sleep(std::time::Duration::from_millis(150));
-            continue;
-        };
-        let _ = conn.set_nonblocking(false);
-        let _ = conn.set_read_timeout(Some(std::time::Duration::from_secs(5)));
-        let mut buf = [0u8; 1024];
-        let n = conn.read(&mut buf).unwrap_or(0);
-        done = String::from_utf8_lossy(&buf[..n]).starts_with(&format!("GET /{path} "));
-        let reply = if done {
-            format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
-        } else {
-            "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
-        };
-        let _ = conn.write_all(reply.as_bytes());
-    }
-    // retire this hand-off, unless a newer one already took over
-    let _ = SHARE.compare_exchange(me, me + 1, Ordering::SeqCst, Ordering::SeqCst);
-    done
-}
-
-/// Retire the live hand-off (Done, or a new QR).
-#[tauri::command]
-fn share_stop() {
-    SHARE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-}
-
-/// Phone: fetch the sealed sign-in from the Mac. Plain HTTP to a private address only — the bytes are
-/// sealed, and the key never travels (it came in the QR).
-#[tauri::command]
-async fn lan_get(host: String, path: String) -> Result<String, String> {
-    let ip: std::net::SocketAddr = host.parse().map_err(|_| "bad host".to_string())?;
-    let private = match ip.ip() {
-        std::net::IpAddr::V4(v4) => v4.is_private(),
-        _ => false,
-    };
-    if !private || path.len() != 32 || !path.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("not a local address".into());
-    }
-    let url = format!("http://{host}/{path}");
-    tauri::async_runtime::spawn_blocking(move || {
-        let agent = ureq::Agent::config_builder()
-            .timeout_global(Some(std::time::Duration::from_secs(8)))
-            .build()
-            .new_agent();
-        agent
-            .get(&url)
-            .call()
-            .map_err(|e| e.to_string())?
-            .body_mut()
-            .read_to_string()
-            .map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-fn is_web_url(url: &str) -> bool {
-    url.starts_with("https://") || url.starts_with("http://")
-}
-
-/// Open a link in the default browser (device-flow page, bookmark cards).
-#[tauri::command]
-async fn open_url(app: AppHandle, url: String) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    if !is_web_url(&url) {
-        return Err("url not allowed".into());
-    }
-    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
-}
-
-/// Hand a stored asset to whatever app owns it (Preview, for a PDF). The asset protocol URL the
-/// webview renders means nothing to the rest of the system, so the file itself is opened by path.
-#[tauri::command]
-async fn open_asset(app: AppHandle, name: String) -> Result<(), String> {
-    safe_name(&name)?;
-    let path = assets_dir(&app)?.join(&name);
-    if !path.is_file() {
-        return Err("no such asset".into());
-    }
-    let ok = std::process::Command::new("open")
-        .arg(&path)
-        .status()
-        .map_err(|e| e.to_string())?
-        .success();
-    if ok { Ok(()) } else { Err("could not open the file".into()) }
-}
-
-/// Page HTML for link previews (og:* tags). curl keeps the webview's cookies and CORS out of it; the
-/// body is cut at 300k chars, plenty for <head>.
-#[tauri::command]
-async fn fetch_url(url: String) -> Result<String, String> {
-    if !is_web_url(&url) {
-        return Err("url not allowed".into());
-    }
-    let out = std::process::Command::new("curl")
-        .args(["-sSL", "--max-time", "8", "--max-filesize", "5000000", "--compressed", "-A",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", &url])
-        .output()
-        .map_err(|e| e.to_string())?;
-    let mut html = String::from_utf8_lossy(&out.stdout).into_owned();
-    if html.is_empty() {
-        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
-    }
-    if let Some((i, _)) = html.char_indices().nth(300_000) {
-        html.truncate(i);
-    }
-    Ok(html)
-}
-
-/// External files (opened via Finder / "Open With"). Edited in place, never synced.
-#[tauri::command]
-fn read_file(path: String) -> Result<String, String> {
-    fs::read_to_string(path).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn write_file(path: String, text: String) -> Result<(), String> {
-    fs::write(path, text).map_err(|e| e.to_string())
-}
-
-/// A print job finishes on the run loop, so the file appears a moment after the call that started it.
-/// A PDF ends with its own end-of-file marker; until that is on disk the pages are still being written.
-fn wait_for_pdf(path: &std::path::Path, secs: u64) -> Result<(), String> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
-    while std::time::Instant::now() < deadline {
-        if let Ok(bytes) = fs::read(path) {
-            if bytes.len() > 400 && bytes.ends_with(b"%%EOF\n") {
-                return Ok(());
-            }
-        }
-        std::thread::sleep(std::time::Duration::from_millis(60));
-    }
-    Err("the print job did not finish".into())
-}
-
-/// Export what the window shows as a PDF file, with margins and no panel in the way.
-///
-/// The note is printed, not screenshotted: a print job whose disposition is "save" writes the pages
-/// straight to `out`, so it needs no printer connected and the text stays text. `@media print` in the
-/// app's stylesheet is what strips the window chrome first. The job is started on the run loop and the
-/// call returns — a print operation that blocks the main thread never finishes, WebKit needs it.
-#[tauri::command(async)]
-fn save_pdf(window: tauri::WebviewWindow, out: String, margin: f64) -> Result<(), String> {
-    print_pdf(&window, &out, margin)?;
-    wait_for_pdf(std::path::Path::new(&out), 60)
-}
-
-/// The note as a picture: the printed page, rasterised. Same margins, same pagination, same everything
-/// — a long note simply becomes its first page. (`qlmanage` used to draw a standalone HTML page here,
-/// on a square canvas that left half the picture empty.)
-#[tauri::command(async)]
-fn save_image(app: AppHandle, window: tauri::WebviewWindow, out: String, margin: f64, width: u32) -> Result<(), String> {
-    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("export");
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let pdf = dir.join("note.pdf");
-    let _ = fs::remove_file(&pdf);
-    print_pdf(&window, &pdf.to_string_lossy(), margin)?;
-    wait_for_pdf(&pdf, 60)?;
-    let res = std::process::Command::new("/usr/bin/sips")
-        .args(["-s", "format", "png", "--resampleWidth", &width.to_string()])
-        .arg(&pdf)
-        .arg("--out")
-        .arg(&out)
-        .output()
-        .map_err(|e| e.to_string())?;
-    let _ = fs::remove_file(&pdf);
-    if !std::path::Path::new(&out).is_file() {
-        return Err(format!("could not render: {}", String::from_utf8_lossy(&res.stderr)));
-    }
-    Ok(())
-}
-
-fn print_pdf(window: &tauri::WebviewWindow, out: &str, margin: f64) -> Result<(), String> {
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (window, out, margin);
-        return Err("PDF export is macOS only".into());
-    }
-    #[cfg(target_os = "macos")]
-    {
-    use objc2::rc::Retained;
-    use objc2::runtime::{AnyObject, ProtocolObject};
-    use objc2_app_kit::{NSPrintInfo, NSPrintJobSavingURL, NSPrintSaveJob, NSWindow};
-    use objc2_foundation::{NSString, NSURL};
-    use objc2_web_kit::WKWebView;
-
-    let out = out.to_string();
-    let (tx, rx) = std::sync::mpsc::channel();
-    window
-        .with_webview(move |platform| {
-            unsafe {
-                let webview: &WKWebView = &*(platform.inner() as *mut WKWebView);
-                let host: &NSWindow = &*(platform.ns_window() as *mut NSWindow);
-                let info = NSPrintInfo::new();
-                info.setTopMargin(margin);
-                info.setBottomMargin(margin);
-                info.setLeftMargin(margin);
-                info.setRightMargin(margin);
-                info.setJobDisposition(NSPrintSaveJob);
-                let url: Retained<NSURL> = NSURL::fileURLWithPath(&NSString::from_str(&out));
-                let target: &AnyObject = &url;
-                info.dictionary()
-                    .setObject_forKey(target, ProtocolObject::from_ref(NSPrintJobSavingURL));
-                let op = webview.printOperationWithPrintInfo(&info);
-                op.setShowsPrintPanel(false);
-                op.setShowsProgressPanel(false);
-                // Modal *for the window*, not for the thread: it returns at once and the job runs on the
-                // run loop. `runOperation()` instead deadlocks — it blocks the main thread while WebKit
-                // still needs it to lay the pages out, and the whole app stops with it.
-                op.runOperationModalForWindow_delegate_didRunSelector_contextInfo(
-                    host,
-                    None,
-                    None,
-                    std::ptr::null_mut(),
-                );
-            }
-            let _ = tx.send(());
-        })
-        .map_err(|e| e.to_string())?;
-    // only that the job was handed over — the pages are written as the run loop gets to them
-    rx.recv_timeout(std::time::Duration::from_secs(10)).map_err(|e| e.to_string())
-    }
-}
-
-/// Every file under a picked folder, as paths relative to it (hidden files skipped).
-#[tauri::command]
-fn list_folder(root: String) -> Result<Vec<String>, String> {
-    let root = PathBuf::from(&root);
-    let mut out = Vec::new();
-    let mut stack = vec![root.clone()];
-    while let Some(dir) = stack.pop() {
-        for entry in fs::read_dir(&dir).map_err(|e| e.to_string())? {
-            let path = entry.map_err(|e| e.to_string())?.path();
-            if path.file_name().and_then(|n| n.to_str()).is_none_or(|n| n.starts_with('.')) {
-                continue;
-            }
-            if path.is_dir() {
-                stack.push(path);
-            } else if let Ok(rel) = path.strip_prefix(&root) {
-                out.push(rel.to_string_lossy().into_owned());
-            }
-        }
-    }
-    out.sort();
-    Ok(out)
-}
-
 #[tauri::command]
 fn take_pending_files(pending: tauri::State<Pending>) -> Vec<String> {
     std::mem::take(&mut *pending.0.lock().unwrap())
-}
-
-#[tauri::command]
-fn notes_path(app: AppHandle) -> Result<String, String> {
-    Ok(notes_dir(&app)?.to_string_lossy().into_owned())
-}
-
-/// Is the main window currently visible and frontmost? (the frontend decides whether to summon or dismiss)
-#[tauri::command]
-fn is_front(app: AppHandle) -> bool {
-    app.get_webview_window("main")
-        .map(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false))
-        .unwrap_or(false)
-}
-
-/// Show + focus the main window.
-#[tauri::command]
-fn show_window(app: AppHandle) -> Result<(), String> {
-    let win = app.get_webview_window("main").ok_or("no main window")?;
-    #[cfg(target_os = "macos")]
-    app.show().map_err(|e| e.to_string())?;
-    win.show().map_err(|e| e.to_string())?;
-    win.set_focus().map_err(|e| e.to_string())?;
-    // set_focus only makes the *window* key; the webview can come back without being first responder,
-    // and then the page gets no keystrokes at all however the DOM focus looks.
-    #[cfg(desktop)]
-    {
-        let webview: &tauri::Webview<_> = win.as_ref();
-        let _ = webview.set_focus();
-    }
-    Ok(())
-}
-
-/// Show + focus the main window, or hide the whole app (returning focus to the previous app).
-#[tauri::command]
-fn toggle_window(app: AppHandle) -> Result<(), String> {
-    if is_front(app.clone()) { hide_app(app) } else { show_window(app) }
-}
-
-#[tauri::command]
-fn hide_app(app: AppHandle) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    return app.hide().map_err(|e| e.to_string());
-    #[cfg(not(target_os = "macos"))]
-    app.get_webview_window("main")
-        .ok_or("no main window")?
-        .hide()
-        .map_err(|e| e.to_string())
-}
-
-/// Like Raycast: no Dock icon and no ⌘Tab entry (Settings → Hide from Dock). The window is still summoned by
-/// the hotkey, Finder "Open With" or `open -a Eve`; key equivalents (⌘C/V/Z/Q…) still route through the hidden menu.
-#[tauri::command]
-fn set_dock_hidden(app: AppHandle, hidden: bool) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    return app
-        .set_activation_policy(if hidden { tauri::ActivationPolicy::Accessory } else { tauri::ActivationPolicy::Regular })
-        .map_err(|e| e.to_string());
-    #[cfg(not(target_os = "macos"))]
-    Ok(())
-}
-
-/// Whether macOS opens .md files with this app, and the switch that claims them.
-///
-/// LaunchServices keeps one handler per content type; `duti` and friends are just wrappers around
-/// these two calls, so the app makes them itself.
-#[cfg(target_os = "macos")]
-mod default_app {
-    use core_foundation::base::{CFRelease, TCFType};
-    use core_foundation::string::{CFString, CFStringRef};
-
-    // .md / .markdown, and the plain-text family a .txt falls into
-    pub const TYPES: [&str; 2] = ["net.daringfireball.markdown", "public.plain-text"];
-    const ALL_ROLES: u32 = 0xFFFF_FFFF;
-
-    #[link(name = "CoreServices", kind = "framework")]
-    unsafe extern "C" {
-        fn LSCopyDefaultRoleHandlerForContentType(content_type: CFStringRef, role: u32) -> CFStringRef;
-        fn LSSetDefaultRoleHandlerForContentType(content_type: CFStringRef, role: u32, handler: CFStringRef) -> i32;
-    }
-
-    pub fn handler(content_type: &str) -> Option<String> {
-        let ty = CFString::new(content_type);
-        unsafe {
-            let raw = LSCopyDefaultRoleHandlerForContentType(ty.as_concrete_TypeRef(), ALL_ROLES);
-            if raw.is_null() {
-                return None;
-            }
-            let id = CFString::wrap_under_get_rule(raw).to_string();
-            CFRelease(raw as *const _);
-            Some(id)
-        }
-    }
-
-    pub fn set(content_type: &str, bundle_id: &str) -> Result<(), String> {
-        let ty = CFString::new(content_type);
-        let handler = CFString::new(bundle_id);
-        let status = unsafe {
-            LSSetDefaultRoleHandlerForContentType(ty.as_concrete_TypeRef(), ALL_ROLES, handler.as_concrete_TypeRef())
-        };
-        if status == 0 { Ok(()) } else { Err(format!("LaunchServices refused ({status})")) }
-    }
-}
-
-/// Is this app what macOS opens a .md with?
-#[tauri::command]
-fn is_default_for_markdown(app: AppHandle) -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        let me = app.config().identifier.to_lowercase();
-        return default_app::TYPES
-            .iter()
-            .all(|t| default_app::handler(t).map(|h| h.to_lowercase() == me).unwrap_or(false));
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = app;
-        false
-    }
-}
-
-/// Claim (or hand back) .md and .txt. Handing back picks TextEdit, the system's own editor.
-#[tauri::command]
-fn set_default_for_markdown(app: AppHandle, on: bool) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        let id = if on { app.config().identifier.clone() } else { "com.apple.TextEdit".to_string() };
-        for t in default_app::TYPES {
-            default_app::set(t, &id)?;
-        }
-        return Ok(());
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (app, on);
-        Err("macOS only".into())
-    }
-}
-
-/// Keep the window above other apps (⌘⇧P). Notes stay readable while you work in another window.
-#[tauri::command]
-fn set_always_on_top(app: AppHandle, on: bool) -> Result<(), String> {
-    let win = app.get_webview_window("main").ok_or("no window")?;
-    #[cfg(desktop)]
-    return win.set_always_on_top(on).map_err(|e| e.to_string());
-    #[cfg(mobile)]
-    {
-        let _ = (win, on);
-        Ok(())
-    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -732,43 +29,43 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Pending::default())
         .invoke_handler(tauri::generate_handler![
-            list_notes,
-            write_note,
-            import_asset,
-            save_asset,
-            pdf_thumb,
-            ql_preview,
-            list_assets,
-            read_asset,
-            write_asset,
-            github_post,
-            share_start,
-            share_stop,
-            lan_get,
-            open_url,
-            open_asset,
-            fetch_url,
-            read_file,
-            write_file,
-            save_pdf,
-            save_image,
-            list_folder,
+            files::list_notes,
+            files::write_note,
+            files::import_asset,
+            files::save_asset,
+            mac::pdf_thumb,
+            mac::ql_preview,
+            files::list_assets,
+            files::read_asset,
+            files::write_asset,
+            net::github_post,
+            net::share_start,
+            net::share_stop,
+            net::lan_get,
+            net::open_url,
+            mac::open_asset,
+            net::fetch_url,
+            files::read_file,
+            files::write_file,
+            mac::save_pdf,
+            mac::save_image,
+            files::list_folder,
             take_pending_files,
-            notes_path,
-            toggle_window,
-            is_front,
-            show_window,
-            hide_app,
-            set_dock_hidden,
-            is_default_for_markdown,
-            set_default_for_markdown,
-            set_always_on_top
+            files::notes_path,
+            window::toggle_window,
+            window::is_front,
+            window::show_window,
+            window::hide_app,
+            window::set_dock_hidden,
+            mac::is_default_for_markdown,
+            mac::set_default_for_markdown,
+            window::set_always_on_top
         ])
         .on_window_event(|window, event| {
             // Closing the window keeps the app alive so the global hotkey still works.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = hide_app(window.app_handle().clone());
+                let _ = window::hide_app(window.app_handle().clone());
             }
         })
         .build(tauri::generate_context!())
@@ -800,7 +97,7 @@ mod tests {
     #[test]
     fn run_with_deadline_kills_a_hung_child() {
         let start = std::time::Instant::now();
-        let err = super::run_with_deadline(
+        let err = super::mac::run_with_deadline(
             std::process::Command::new("/usr/bin/yes"),
             std::time::Duration::from_millis(300),
         )
@@ -816,9 +113,9 @@ mod tests {
         use std::io::{Read, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
-        let me = super::SHARE.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        let me = super::net::SHARE.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
         let path = "0123456789abcdef0123456789abcdef";
-        let server = std::thread::spawn(move || super::serve_once(listener, path, "SEALED", me, std::time::Duration::from_secs(10)));
+        let server = std::thread::spawn(move || super::net::serve_once(listener, path, "SEALED", me, std::time::Duration::from_secs(10)));
         let get = |p: &str| {
             let mut c = std::net::TcpStream::connect(addr)?;
             c.write_all(format!("GET /{p} HTTP/1.1\r\nHost: x\r\n\r\n").as_bytes())?;
@@ -838,7 +135,7 @@ mod tests {
     fn run_with_deadline_returns_output_of_a_quick_child() {
         let mut cmd = std::process::Command::new("/bin/echo");
         cmd.arg("hi");
-        let out = super::run_with_deadline(cmd, std::time::Duration::from_secs(5)).unwrap();
+        let out = super::mac::run_with_deadline(cmd, std::time::Duration::from_secs(5)).unwrap();
         assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "hi");
     }
 }
