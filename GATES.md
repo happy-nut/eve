@@ -745,3 +745,9 @@
   over 0.7.0 gave versionName 0.7.6 (signatures of 0.7.0, 0.7.1 and 0.7.6 match: a8f3b476…e0be7d2). The page
   now shows the next step and a big versioned download button whenever the app did not open (a browser
   that ignores Chrome's fallback still has an obvious way on). Emulator screenshot.
+- [x] G167 Every QR fetches a fresh setup page, not one GitHub Pages cached from before a change
+  CHECK: node --experimental-strip-types --no-warnings src/lib/handoff.test.mjs
+  EXPECT: HANDOFF_OK
+  EVIDENCE: the page is served with max-age=600; a phone that scanned within ten minutes of a page change
+  got the old page, which hands out the plain Eve-android.apk. The link now carries a per-QR value in the
+  query (nothing from the ticket: tested), so each scan loads the page anew.
