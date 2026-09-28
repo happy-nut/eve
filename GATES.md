@@ -872,6 +872,7 @@
   app. Now back closes the sheet first and stays registered while one is up. Emulator: today's day rose as
   a sheet (handle, 20px margins like a note); back ×1 (keyboard up) hid the keyboard, back → calendar,
   back → list, Eve still in front. The Mac's floating page is unchanged. A tapped day keeps no hover grey.
-- [ ] G191 android-v0.7.15 is released
+- [x] G191 android-v0.7.15 is released
   CHECK: gh release view android-v0.7.15 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.15\.apk,Eve-android\.apk$
+  EVIDENCE: the android-v0.7.15 run succeeded; Latest stays the Mac's.
