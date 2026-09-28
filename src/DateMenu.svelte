@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { placeAt } from './lib/popup';
   import { fly } from 'svelte/transition';
   import type { CalendarUI } from './lib/slash';
   import { dateLabel, isoDay, monthGrid, monthName, sameMonth, shiftDays, shiftMonths, weekdayNames } from './lib/date';
@@ -7,7 +8,7 @@
   // (bind:this to reach it), the same way the [[ and / popup is driven.
   let day = $state(''); // the day under the cursor — '' is how this popup is closed
   let today = $state('');
-  let pos = $state({ x: 0, y: 0 });
+  let place = $state(''); // its left/top-or-bottom/max-height (lib/popup.ts)
   let pick: (iso: string) => void = () => {};
 
   const names = weekdayNames();
@@ -18,7 +19,7 @@
       day = iso ?? '';
       today = isoDay(new Date()); // read on every open, so an app left running overnight still knows
       pick = cb;
-      if (rect) pos = { x: rect.left, y: rect.bottom + 4 };
+      if (rect) place = placeAt(rect, 290, 250);
     },
     move: (n) => { if (day) day = shiftDays(day, n); },
     month: (n) => { if (day) day = shiftMonths(day, n); },
@@ -32,7 +33,7 @@
 </script>
 
 {#if day}
-  <div class="cal" style="left:{pos.x}px; top:{pos.y}px" transition:fly={{ y: 4, duration: 120 }}>
+  <div class="cal" style={place} transition:fly={{ y: 4, duration: 120 }}>
     <div class="cal-bar">
       <button class="cal-step" aria-label="Previous month" onmousedown={grab(() => ui.month(-1))}>
         <svg viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg>
@@ -64,6 +65,7 @@
   .cal {
     position: fixed;
     z-index: 40;
+    overflow-y: auto; /* cut to the room over or under the caret (lib/popup.ts) */
     padding: 6px;
     background: var(--bg-pop);
     border: 1px solid var(--line);

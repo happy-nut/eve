@@ -3,12 +3,13 @@
   import type { SuggestItem, SuggestionUI } from './lib/slash';
   import { rows, expand, collapse } from './lib/suggest';
   import Icon from './Icon.svelte';
+  import { placeAt } from './lib/popup';
 
   // popup for the [[ and / menus; the editor drives it through `ui` (bind:this to reach it)
   let items = $state<SuggestItem[]>([]);
   let open = $state<ReadonlySet<number>>(new Set()); // pages showing their sections ([[ only)
   let sel = $state(0);
-  let pos = $state({ x: 0, y: 0 });
+  let place = $state(''); // its left/top-or-bottom/max-height (lib/popup.ts)
   let pick: (t: SuggestItem) => void = () => {};
 
   // what is actually on screen: the items, with the sections of an opened page folded in after it
@@ -19,7 +20,7 @@
       // a keystroke rebuilds the list, so nothing stays open across one: the page under row 3 is not
       // the page that was there before the letter was typed
       items = list; open = new Set(); sel = 0; pick = cb;
-      if (rect) pos = { x: rect.left, y: rect.bottom + 4 };
+      if (rect) place = placeAt(rect, 300, 200);
     },
     move: (d) => { sel = (sel + d + shown.length) % shown.length; },
     select: () => { if (!shown.length) return false; pick(shown[sel].item); return true; },
@@ -43,7 +44,7 @@
 </script>
 
 {#if items.length}
-  <ul class="suggest" bind:this={list} style="left:{pos.x}px; top:{pos.y}px" transition:fly={{ y: 4, duration: 120 }}>
+  <ul class="suggest" bind:this={list} style={place} transition:fly={{ y: 4, duration: 120 }}>
     {#each shown as row, i (`${row.top}-${row.child}-${row.item.value ?? row.item.label}`)}
       {@const t = row.item}
       <li class:sel={i === sel} class:child={row.child}>
