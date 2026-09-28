@@ -897,3 +897,8 @@
   CHECK: gh release view android-v0.7.17 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.17\.apk,Eve-android\.apk$
   EVIDENCE: the android-v0.7.17 run succeeded.
+- [x] G196 On a phone with the keyboard up, the `/` menu and the date picker are never hidden
+  EVIDENCE: Suggest and DateMenu placed themselves below the caret whatever the room; both now go through
+  lib/popup.ts placeAt: below when it fits, else above the caret, capped to the room between the note bar
+  and the formatting bar, and scrolling inside. Emulator: 14 lines down, keyboard up, "/" → the menu opens
+  above the caret, every item visible. The Mac keeps opening it below (room below ≥ 160px).
