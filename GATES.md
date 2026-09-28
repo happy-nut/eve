@@ -902,3 +902,7 @@
   lib/popup.ts placeAt: below when it fits, else above the caret, capped to the room between the note bar
   and the formatting bar, and scrolling inside. Emulator: 14 lines down, keyboard up, "/" → the menu opens
   above the caret, every item visible. The Mac keeps opening it below (room below ≥ 160px).
+- [x] G197 android-v0.7.18 is released
+  CHECK: gh release view android-v0.7.18 --json assets --jq '[.assets[].name] | sort | join(",")'
+  EXPECT: ^Eve-android-0\.7\.18\.apk,Eve-android\.apk$
+  EVIDENCE: the android-v0.7.18 run succeeded.
