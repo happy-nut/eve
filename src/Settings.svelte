@@ -312,10 +312,16 @@
         <div class="row">
           <span class="label">Eve {updates.current}
             <span class="sub">{updates.checking ? 'Checking…'
+              : updates.state === 'downloading' ? `Downloading ${updates.available?.version ?? ''}…${updates.progress >= 0 ? ` ${updates.progress}%` : ''}`
+              : updates.state === 'installing' ? 'Tap Update on the next screen'
+              : updates.state === 'permission' ? 'Allow Eve to install apps, then tap Update again'
+              : updates.state === 'error' ? 'Download failed — try again'
               : updates.available ? `${updates.available.version} is available`
               : updates.failed ? 'Could not check — offline?' : '✓ Up to date'}</span></span>
           {#if updates.available}
-            <button class="btn primary" onclick={() => updates.install()}>Update</button>
+            <button class="btn primary" disabled={updates.state === 'downloading'} onclick={() => updates.install()}>
+              {#if updates.state === 'downloading'}<span class="spin light" aria-hidden="true"></span>{/if}Update
+            </button>
           {:else}
             <button class="btn" disabled={updates.checking} onclick={() => updates.check(true)}>
               {#if updates.checking}<span class="spin" aria-hidden="true"></span>{/if}Check
@@ -395,6 +401,8 @@
     display: inline-block; width: 12px; height: 12px; margin: 0 7px -2px 0; border-radius: 50%;
     border: 1.8px solid var(--line); border-top-color: var(--fg-dim); animation: spin 0.7s linear infinite;
   }
+  .spin.light { border-color: rgba(255, 255, 255, 0.45); border-top-color: #fff; }
+  .btn.primary:has(.spin):disabled { opacity: 0.85; }
   @keyframes spin { to { transform: rotate(360deg); } }
   input:not([type]) {
     font: inherit; font-size: 12.5px; padding: 5px 8px; border-radius: 7px; border: 0; outline: none;

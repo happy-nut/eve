@@ -876,3 +876,12 @@
   CHECK: gh release view android-v0.7.15 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.15\.apk,Eve-android\.apk$
   EVIDENCE: the android-v0.7.15 run succeeded; Latest stays the Mac's.
+- [x] G192 Tapping Update shows it is working: a spinner in the button and the download's percent
+  EVIDENCE: Updater.kt reports "downloading:<percent>" every 5% (on the UI thread); the page shows a
+  spinner in the banner's button and in Settings' Update, disabled while downloading, and "Downloading… 35%".
+  Browser (phone size) with synthetic eve-update events: tap → spinner, disabled, "Downloading…"; 35% →
+  "Downloading… 35%"; installing → "Tap Update on the next screen", no spinner. The APK builds; the real
+  download was not run on the emulator (it needs "install unknown apps", a device setting left alone).
+- [ ] G193 android-v0.7.16 is released
+  CHECK: gh release view android-v0.7.16 --json assets --jq '[.assets[].name] | sort | join(",")'
+  EXPECT: ^Eve-android-0\.7\.16\.apk,Eve-android\.apk$
