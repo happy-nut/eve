@@ -867,3 +867,11 @@
   CHECK: gh release view android-v0.7.14 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.14\.apk,Eve-android\.apk$
   EVIDENCE: the android-v0.7.14 run succeeded; Latest stays v0.7.11 (Mac).
+- [x] G190 On a phone a card or a day is a sheet from the bottom, with the note's margins, and back closes it
+  EVIDENCE: back while a sheet was up opened the list behind it, and the next back (list open) left the
+  app. Now back closes the sheet first and stays registered while one is up. Emulator: today's day rose as
+  a sheet (handle, 20px margins like a note); back ×1 (keyboard up) hid the keyboard, back → calendar,
+  back → list, Eve still in front. The Mac's floating page is unchanged. A tapped day keeps no hover grey.
+- [ ] G191 android-v0.7.15 is released
+  CHECK: gh release view android-v0.7.15 --json assets --jq '[.assets[].name] | sort | join(",")'
+  EXPECT: ^Eve-android-0\.7\.15\.apk,Eve-android\.apk$

@@ -162,9 +162,11 @@ html.mobile .choice button {
   font-size: 16px !important; padding: 10px 12px !important; min-height: 52px; border-radius: 12px !important;
 }
 /* a kanban card opens as a page of its own */
+/* a kanban card or a day on a phone: a sheet up from the bottom (the Mac floats it in the middle) */
 html.mobile .card {
-  top: var(--top) !important; bottom: var(--bottom) !important; left: 0 !important; right: 0; transform: none !important;
-  width: auto !important; height: auto !important; border-radius: 0 !important; border: 0 !important;
+  top: calc(var(--top) + 28px) !important; bottom: 0 !important; left: 0 !important; right: 0; transform: none !important;
+  width: auto !important; height: auto !important; border-radius: 20px 20px 0 0 !important; border: 0 !important;
+  padding-bottom: var(--bottom); box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18) !important;
 }
 /* settings: a full screen of its own, not a floating panel */
 

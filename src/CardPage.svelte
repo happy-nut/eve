@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fade, scale } from 'svelte/transition';
+  import { fade, fly, scale } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
+  import { isMobile } from './lib/platform';
   import type { Editor as TipTap } from '@tiptap/core';
   import { createEditor } from './lib/editor';
   import { notes } from './lib/notes.svelte';
@@ -41,6 +43,10 @@
     return () => editor?.destroy();
   });
 
+  /** a sheet slides up on a phone; the Mac's floating page grows in place */
+  const appear = (node: HTMLElement) =>
+    isMobile ? fly(node, { y: window.innerHeight, duration: 280, easing: cubicOut }) : scale(node, { start: 0.96, duration: 180 });
+
   function onKey(e: KeyboardEvent) {
     // a popup's Esc has already been taken by the editor (and closed the popup) by the time it gets here
     if (e.key === 'Escape' && (!e.defaultPrevented || (e as any).eveApp)) { e.preventDefault(); e.stopPropagation(); close(); }
@@ -51,7 +57,8 @@
 
 <div class="backdrop" transition:fade={{ duration: 120 }} onmousedown={close} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="card" transition:scale={{ start: 0.96, duration: 180 }} role="dialog" tabindex="-1" onkeydown={onKey}>
+<div class="card" transition:appear role="dialog" tabindex="-1" onkeydown={onKey}>
+  {#if isMobile}<div class="grip" aria-hidden="true"></div>{/if}
   {#if req.note}<p class="tpl-note">{req.note}</p>{/if}
   <div class="card-scroll" bind:this={scrollEl}>
     <div class="card-body editor" bind:this={el}></div>
@@ -73,6 +80,9 @@
   /* the scroller sits inside the card so the outline rail can stay put while the page scrolls */
   .card-scroll { flex: 1; padding: 40px 56px 0; overflow-y: auto; scrollbar-width: none; }
   .card-scroll::-webkit-scrollbar { display: none; }
+  /* a phone: the note's own 20px margins, no card margin on top of them; a handle says it is a sheet */
+  :global(html.mobile) .card-scroll { padding: 8px 0 0; }
+  .grip { flex: none; width: 36px; height: 4px; border-radius: 2px; margin: 8px auto 2px; background: var(--bg-active); }
   .card-body { flex: 1; }
   .card .card-body :global(.tiptap) { padding: 0 0 120px; max-width: none; min-height: 100%; }
   /* an untitled card still shows where the title goes (the editor's own placeholder is for paragraphs) */
