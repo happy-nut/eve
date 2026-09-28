@@ -893,6 +893,7 @@
   bottom on a phone (emulator: typing at the end of a long note stays above the bar). Holding backspace
   was recorded on the emulator in English and Korean (Gboard 두벌식), long and short notes, offline and
   signed out: no jump and no stray blank line reproduced; the note file matched what was left.
-- [ ] G195 android-v0.7.17 is released
+- [x] G195 android-v0.7.17 is released
   CHECK: gh release view android-v0.7.17 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.17\.apk,Eve-android\.apk$
+  EVIDENCE: the android-v0.7.17 run succeeded.
