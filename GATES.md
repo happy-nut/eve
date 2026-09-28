@@ -886,3 +886,13 @@
   CHECK: gh release view android-v0.7.16 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.16\.apk,Eve-android\.apk$
   EVIDENCE: the android-v0.7.16 run succeeded.
+- [x] G194 A phone's caret and handles are Eve's blue; the caret never hides under the formatting bar
+  EVIDENCE: the Android theme set no colours, so Material's teal drew the caret handles; the theme now
+  sets Eve's blue (day #1E9BFF, night #3FC1FF) and the phone's caret-color follows --accent (emulator: the
+  handle is blue). The last line's caret sat under MobileBar; ProseMirror now keeps 90px clear at the
+  bottom on a phone (emulator: typing at the end of a long note stays above the bar). Holding backspace
+  was recorded on the emulator in English and Korean (Gboard 두벌식), long and short notes, offline and
+  signed out: no jump and no stray blank line reproduced; the note file matched what was left.
+- [ ] G195 android-v0.7.17 is released
+  CHECK: gh release view android-v0.7.17 --json assets --jq '[.assets[].name] | sort | join(",")'
+  EXPECT: ^Eve-android-0\.7\.17\.apk,Eve-android\.apk$
