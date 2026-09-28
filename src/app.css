@@ -319,6 +319,8 @@ aside.focus-flash, main.focus-flash { animation: focus-in 0.7s ease-out; }
 /* only the item's own text, not the > div's nested list: Notion strikes the checked line alone and leaves children be */
 .tiptap ul[data-type='taskList'] li[data-checked='true'] > div > p { color: var(--fg-dim); text-decoration: line-through; }
 .tiptap input[type='checkbox'] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+/* a phone's caret in the app's blue (its WebView would draw the Android theme's teal); the Mac keeps its own */
+html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(--accent); }
 .tiptap blockquote { border-left: 3px solid var(--line); margin: 0.5em 0; padding-left: 1em; color: var(--fg-dim); }
 .tiptap code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.88em; background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 4px; }
 .tiptap pre { background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; margin: 0.6em 0; }

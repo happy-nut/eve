@@ -293,6 +293,9 @@ export function createEditor(opts: {
     content: opts.content,
     editorProps: {
       attributes: { class: 'prose', spellcheck: 'true' },
+      // a phone's formatting bar (MobileBar, ~50px) sits over the bottom of the page: the caret is kept
+      // clear of it, and scrolled to a little early, instead of typing (or deleting) out of sight
+      ...(isMobile ? { scrollMargin: { top: 16, bottom: 90, left: 0, right: 0 }, scrollThreshold: { top: 16, bottom: 90, left: 0, right: 0 } } : {}),
       // images pasted or dropped in are stored as files (blob: URLs would die on restart)
       handlePaste: (view, event): boolean => {
         if (insertFiles(editor, event.clipboardData?.files)) return true;

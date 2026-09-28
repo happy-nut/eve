@@ -1,6 +1,12 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.eve" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <!-- Eve's blue for what Android draws itself in the page (the text cursor's handles, selection),
+             not Material's default teal -->
+        <item name="colorPrimary">#FF3FC1FF</item>
+        <item name="colorSecondary">#FF3FC1FF</item>
+        <item name="colorAccent">#FF3FC1FF</item>
+        <item name="colorControlActivated">#FF3FC1FF</item>
+        <item name="android:textColorHighlight">#551E9BFF</item>
     </style>
 </resources>
