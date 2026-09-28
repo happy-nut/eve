@@ -863,6 +863,7 @@
 - [x] G188 A widget card shows up to five lines under its title, and a short note stays short
   EVIDENCE: the preview takes five blocks (was two) with maxLines 5; cards still wrap their content.
   Emulator before/after: DB now shows five lines, Personal four; one-line notes keep their height.
-- [ ] G189 android-v0.7.14 is released (the Mac is unchanged)
+- [x] G189 android-v0.7.14 is released (the Mac is unchanged)
   CHECK: gh release view android-v0.7.14 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.14\.apk,Eve-android\.apk$
+  EVIDENCE: the android-v0.7.14 run succeeded; Latest stays v0.7.11 (Mac).
