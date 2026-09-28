@@ -54,7 +54,7 @@
 
   // Android back: a dialog closes, a note goes back to the list, and only the list leaves the app
   $effect(() => {
-    if (!isMobile || !isTauri || (sidebarOpen && !settingsOpen)) return;
+    if (!isMobile || !isTauri || (sidebarOpen && !settingsOpen && !ui.card)) return;
     let off: (() => void) | undefined, gone = false;
     onBack(phoneBack)
       .then((u) => (gone ? u() : (off = u)));
@@ -260,7 +260,8 @@
 
   /** A phone's back (the bar's chevron, or Android's): a day goes back to its calendar, anything else to the list. */
   function phoneBack() {
-    if (settingsOpen) settingsOpen = false;
+    if (ui.card) ui.closeCard(); // a sheet (a card, a day) closes first
+    else if (settingsOpen) settingsOpen = false;
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
     else sidebarOpen = true;
   }

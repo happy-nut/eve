@@ -167,6 +167,7 @@
   :global(html.mobile) .nav { width: 40px; height: 40px; border-radius: 12px; }
   :global(html.mobile) .today-btn { height: 36px; font-size: 14px; border-radius: 10px; }
   :global(html.mobile) .grid { gap: 4px; }
+  :global(html.mobile) .day:hover { background: none; } /* a tap leaves no hover behind */
   :global(html.mobile) .day { min-height: 0; padding: 5px 3px; gap: 2px; border-radius: 10px; align-items: center; }
   :global(html.mobile) .wd { padding: 0; font-size: 11px; text-align: center; }
   :global(html.mobile) .num { margin: 0; width: 26px; height: 26px; line-height: 26px; font-size: 13.5px; }
