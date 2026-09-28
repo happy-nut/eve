@@ -240,6 +240,24 @@
     const n = notes.dayNote(key);
     void ui.openPage(n.body, (md) => notes.update(n.id, md)).then(() => notes.flush(n.id));
   }
+  /**
+   * Where is the keyboard? The pane it just moved to (the list ↔ the note) flashes blue once. Only on a
+   * move between panes made from the keyboard: typing in a note, or its caret coming back to the same
+   * pane, tells the user nothing they don't know. Never on a phone (its on-screen keys count as keys).
+   */
+  let lastPane: Element | null = null;
+  function flashPane(e: FocusEvent) {
+    const pane = (e.target as HTMLElement | null)?.closest?.('aside, main');
+    if (!pane || pane === lastPane) return;
+    const moved = lastPane !== null;
+    lastPane = pane;
+    if (!moved || isMobile || document.documentElement.dataset.input !== 'keyboard') return;
+    pane.classList.remove('focus-flash');
+    void (pane as HTMLElement).offsetWidth; // restart the animation
+    pane.classList.add('focus-flash');
+    setTimeout(() => pane.classList.remove('focus-flash'), 700);
+  }
+
   /** A phone's back (the bar's chevron, or Android's): a day goes back to its calendar, anything else to the list. */
   function phoneBack() {
     if (settingsOpen) settingsOpen = false;
@@ -390,7 +408,8 @@
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-keys]');
     if (b?.dataset.keys) hints.show('btn:' + (b.dataset.tip ?? b.dataset.keys), `${b.dataset.tip ?? 'This'} has a shortcut`, b.dataset.keys);
   }}
-  onkeydowncapture={() => (document.documentElement.dataset.input = 'keyboard')} />
+  onkeydowncapture={() => (document.documentElement.dataset.input = 'keyboard')}
+  onfocusin={flashPane} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="shell" ontouchstart={swipeStart} ontouchend={swipeEnd} onfocusin={(e) => (ui.focusOwner = (e.target as HTMLElement).closest('aside') ? 'sidebar' : 'editor')}>

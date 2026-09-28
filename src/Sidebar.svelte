@@ -29,7 +29,8 @@
   let query = $state('');
   const q = $derived(query.trim().toLowerCase());
   // daily notes stay out of the tree, but a search still finds them
-  const hits = $derived([...notes.visible, ...notes.daily].filter((n) => n.body.toLowerCase().includes(q)));
+  // …only while daily notes are on here: off on this device, they are nowhere on it (list, search, widget)
+  const hits = $derived([...notes.visible, ...(appearance.s.dailyNotes ? notes.daily : [])].filter((n) => n.body.toLowerCase().includes(q)));
 
   /**
    * One flat, keyed list of rows (groups, notes, labels, placeholders). A single {#each} lets
