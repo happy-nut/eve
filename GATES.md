@@ -882,6 +882,7 @@
   Browser (phone size) with synthetic eve-update events: tap → spinner, disabled, "Downloading…"; 35% →
   "Downloading… 35%"; installing → "Tap Update on the next screen", no spinner. The APK builds; the real
   download was not run on the emulator (it needs "install unknown apps", a device setting left alone).
-- [ ] G193 android-v0.7.16 is released
+- [x] G193 android-v0.7.16 is released
   CHECK: gh release view android-v0.7.16 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.16\.apk,Eve-android\.apk$
+  EVIDENCE: the android-v0.7.16 run succeeded.
