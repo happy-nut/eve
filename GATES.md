@@ -846,6 +846,7 @@
   keys and flashed the page on a backspace; computed animation with data-input=keyboard and the note
   focused: phone "none", Mac "focus-in". Also: on a phone the calendar showed fine (0.7.11, daily notes on):
   its switch is per device.
-- [ ] G185 v0.7.10 (Mac, Latest) and android-v0.7.12 are released
+- [x] G185 v0.7.10 (Mac, Latest) and android-v0.7.12 are released
   CHECK: gh release view android-v0.7.12 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.12\.apk,Eve-android\.apk$
+  EVIDENCE: runs 36360537802 / 36360537940 succeeded; v0.7.10 is Latest.
