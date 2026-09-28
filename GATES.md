@@ -856,6 +856,7 @@
   the widget lists none even with Show in widget on. The blue flash now comes from App.svelte, only when
   the keyboard moves focus from the list to the note or back: synthetic focusin — same pane false, typing
   false, list by keys true, note by keys true, by mouse false; never on a phone.
-- [ ] G187 v0.7.11 (Mac, Latest) and android-v0.7.13 are released
+- [x] G187 v0.7.11 (Mac, Latest) and android-v0.7.13 are released
   CHECK: gh release view android-v0.7.13 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.13\.apk,Eve-android\.apk$
+  EVIDENCE: runs 36361383689 / 36361383892 succeeded; v0.7.11 is Latest.
