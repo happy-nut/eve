@@ -10,6 +10,8 @@ const EVERY = 3 * 60 * 60 * 1000;
 class Updates {
   available = $state<{ version: string; url: string } | null>(null);
   state = $state<'' | 'permission' | 'downloading' | 'installing' | 'error'>('');
+  /** how much of the APK is down while downloading (-1 until the first report) */
+  progress = $state(-1);
   current = $state('');
   /** Settings' Check button: busy while asking, then what came of it */
   checking = $state(false);
@@ -33,11 +35,16 @@ class Updates {
   install() {
     if (!this.available) return;
     this.state = 'downloading';
+    this.progress = -1;
     widget.installUpdate(this.available.url);
   }
   start() {
     if (!isMobile) return;
-    window.addEventListener('eve-update', (e) => { this.state = (e as CustomEvent<Updates['state']>).detail; });
+    window.addEventListener('eve-update', (e) => {
+      const [state, pct] = String((e as CustomEvent<string>).detail).split(':');
+      this.state = state as Updates['state'];
+      this.progress = pct === undefined ? -1 : Number(pct);
+    });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) void this.check(); });
     void this.check(true);
   }

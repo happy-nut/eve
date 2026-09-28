@@ -491,12 +491,14 @@
       <!-- a newer Eve: one tap downloads it and opens Android's installer -->
       <div class="update">
         <span class="utext"><b>Eve {updates.available.version}</b>
-          <span class="usub">{updates.state === 'downloading' ? 'Downloading…'
+          <span class="usub">{updates.state === 'downloading' ? `Downloading…${updates.progress >= 0 ? ` ${updates.progress}%` : ''}`
             : updates.state === 'installing' ? 'Tap Update on the next screen'
             : updates.state === 'permission' ? 'Allow Eve to install apps, then tap Update again'
             : updates.state === 'error' ? 'Download failed — try again'
             : 'A new version is ready'}</span></span>
-        <button class="ubtn" disabled={updates.state === 'downloading'} onclick={() => updates.install()}>Update</button>
+        <button class="ubtn" disabled={updates.state === 'downloading'} onclick={() => updates.install()}>
+          {#if updates.state === 'downloading'}<span class="uspin" aria-hidden="true"></span>{/if}Update
+        </button>
       </div>
     {/if}
     <div class="top" data-tauri-drag-region>
@@ -727,7 +729,7 @@
   .utext { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 15px; }
   .usub { font-size: 13px; color: var(--fg-dim); }
   .ubtn { flex: none; border: 0; border-radius: 10px; padding: 9px 16px; background: var(--accent); color: #fff; font: inherit; font-size: 15px; font-weight: 600; }
-  .ubtn:disabled { opacity: 0.5; }
+  .ubtn:disabled { opacity: 0.85; }
   :global(.gear-i) { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   footer {
     display: flex; align-items: center; justify-content: space-between;
@@ -741,4 +743,10 @@
   .sync.error::before { background: #ff453a; }
   .sync.syncing::before { background: var(--accent); animation: pulse 1s infinite; }
   @keyframes pulse { 50% { opacity: 0.3; } }
+  /* downloading: the button spins, so a slow download never looks like a tap that did nothing */
+  .uspin {
+    display: inline-block; width: 13px; height: 13px; margin: 0 7px -2px 0; border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.45); border-top-color: #fff; animation: uspin 0.7s linear infinite;
+  }
+  @keyframes uspin { to { transform: rotate(360deg); } }
 </style>

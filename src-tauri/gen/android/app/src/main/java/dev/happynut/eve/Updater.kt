@@ -18,7 +18,7 @@ import java.net.URL
 object Updater {
   private const val PREFIX = "https://github.com/happy-nut/eve/releases/download/"
 
-  /** state goes to `report`: "permission", "downloading", "installing", or "error" */
+  /** state goes to `report`: "permission", "downloading", "downloading:<percent>", "installing", or "error" */
   fun install(activity: Activity, url: String, report: (String) -> Unit) {
     if (!url.startsWith(PREFIX) || !url.endsWith(".apk")) return report("error")
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !activity.packageManager.canRequestPackageInstalls()) {
@@ -39,7 +39,23 @@ object Updater {
           conn = URL(next).openConnection() as HttpURLConnection
         }
         if (conn.responseCode != 200) error("HTTP ${conn.responseCode}")
-        conn.inputStream.use { input -> apk.outputStream().use { input.copyTo(it) } }
+        // the page shows how far it is (every 5%), so a slow connection doesn't look like a dead button
+        val total = conn.contentLengthLong
+        conn.inputStream.use { input ->
+          apk.outputStream().use { out ->
+            val buf = ByteArray(64 * 1024)
+            var done = 0L
+            var shown = -1
+            while (true) {
+              val n = input.read(buf)
+              if (n < 0) break
+              out.write(buf, 0, n)
+              done += n
+              val p = if (total > 0) (done * 100 / total).toInt() else -1
+              if (p >= 0 && p / 5 != shown / 5) { shown = p; activity.runOnUiThread { report("downloading:$p") } }
+            }
+          }
+        }
         conn.disconnect()
       }.isSuccess
       activity.runOnUiThread {
