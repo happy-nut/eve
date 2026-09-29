@@ -986,3 +986,24 @@
   release, which is Latest with Eve-macos-arm64.zip (6.7 MB). The zip's Eve.app: CFBundleShortVersionString
   0.7.12, executable Contents/MacOS/eve (arm64), the MCP tools inside. That is also the first Mac build
   with mcp.rs / mcp_setup.rs in it. The cask is `version :latest`, so `brew reinstall --cask eve` takes it.
+
+# GATES — the Mac updates itself, like the phone (2026-09-29)
+
+- [x] G208 The Mac finds a newer Mac release and only one it can check
+  CHECK: node --experimental-strip-types --no-warnings src/lib/update.test.mjs
+  EXPECT: UPDATE_OK
+  EVIDENCE: findUpdate(current, fetch, 'mac') takes the highest v* release carrying Eve-macos-arm64.zip with a
+  sha256 digest, hosted in this repository's releases; android-v* releases, drafts, pre-releases, zips with
+  no digest or hosted elsewhere are never offered; the phone's lookups are unchanged (all earlier cases pass).
+- [x] G209 The Mac's installer takes only a checked Eve and puts it where the old one was
+  CHECK: cd src-tauri && cargo test --lib update
+  EXPECT: test result: ok
+  EVIDENCE: update.rs: the url must be this repository's Mac zip (https, no ".."), the digest 64 hex, the app
+  a real …/X.app/Contents/MacOS/eve (a dev build or a translocated copy is refused with what to do). The
+  install downloads next to the app, compares shasum -a 256, unpacks with ditto, checks CFBundleIdentifier
+  and the version with plutil, then swaps by two renames (the old app put back if the second fails) and
+  starts the new copy once this process has gone. 3 unit tests ok; cargo check clean (only the 5 old
+  macOS-only warnings). npm run check: 0 errors. Browser, a fake 0.7.13 set on the store: the banner sits
+  over the Mac sidebar's footer at 12.5px (the title bar owns the top), with progress and an error that
+  wraps; the phone keeps its banner up top and its Update button while Android's installer is up.
+- [ ] G210 On a Mac, 0.7.13 (installed with brew) updates itself to the next release from the sidebar

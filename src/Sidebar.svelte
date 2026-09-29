@@ -477,6 +477,16 @@
 </script>
 
 {#if open}
+{#snippet updateBanner()}
+  <!-- a newer Eve: one tap downloads it and opens Android's installer, or on the Mac installs it and restarts -->
+  <div class="update" class:mac={!isMobile}>
+    <span class="utext"><b>Eve {updates.available?.version}</b>
+      <span class="usub">{updates.doing || 'A new version is ready'}</span></span>
+    <button class="ubtn" disabled={updates.busy} onclick={() => updates.install()}>
+      {#if updates.busy}<span class="uspin" aria-hidden="true"></span>{/if}Update
+    </button>
+  </div>
+{/snippet}
   <aside transition:drawer style={drawerStyle}
     ontouchstart={pullStart} ontouchmove={pullMove} ontouchend={pullEnd} ontouchcancel={pullEnd}>
     {#if isMobile}
@@ -487,20 +497,7 @@
         <button class="icon gear" aria-label="Settings" onclick={onSettings}>{@html GEAR}</button>
       </div>
     {/if}
-    {#if isMobile && updates.available}
-      <!-- a newer Eve: one tap downloads it and opens Android's installer -->
-      <div class="update">
-        <span class="utext"><b>Eve {updates.available.version}</b>
-          <span class="usub">{updates.state === 'downloading' ? `Downloading…${updates.progress >= 0 ? ` ${updates.progress}%` : ''}`
-            : updates.state === 'installing' ? 'Tap Update on the next screen'
-            : updates.state === 'permission' ? 'Allow Eve to install apps, then tap Update again'
-            : updates.state === 'error' ? 'Download failed — try again'
-            : 'A new version is ready'}</span></span>
-        <button class="ubtn" disabled={updates.state === 'downloading'} onclick={() => updates.install()}>
-          {#if updates.state === 'downloading'}<span class="uspin" aria-hidden="true"></span>{/if}Update
-        </button>
-      </div>
-    {/if}
+    {#if isMobile && updates.available}{@render updateBanner()}{/if}
     <div class="top" data-tauri-drag-region>
       <input bind:this={searchEl} bind:value={query} onkeydown={onSearchKey}
         onmousedown={() => { if (document.activeElement !== searchEl) hints.action('search', 'Search from anywhere'); }}
@@ -614,6 +611,8 @@
       <button class="fab" aria-label="New note" onclick={onNew}><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
     {/if}
     {#if !isMobile}
+    <!-- the Mac's top is the window's title bar: its update sits down here, over the footer -->
+    {#if updates.available}{@render updateBanner()}{/if}
     <footer>
       <span class="sync {sync.status}" title={sync.error || (sync.enabled ? 'Synced' : 'Sync off')}>
         {syncLabel}
@@ -730,6 +729,11 @@
   .usub { font-size: 13px; color: var(--fg-dim); }
   .ubtn { flex: none; border: 0; border-radius: 10px; padding: 9px 16px; background: var(--accent); color: #fff; font: inherit; font-size: 15px; font-weight: 600; }
   .ubtn:disabled { opacity: 0.85; }
+  /* the Mac's sidebar is 13px type: the same banner, smaller */
+  .update.mac { gap: 8px; margin: 6px 10px 8px; padding: 7px 7px 7px 10px; border-radius: 9px; }
+  .update.mac .utext { font-size: 12.5px; }
+  .update.mac .usub { font-size: 11.5px; }
+  .update.mac .ubtn { border-radius: 7px; padding: 5px 11px; font-size: 12.5px; }
   :global(.gear-i) { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   footer {
     display: flex; align-items: center; justify-content: space-between;

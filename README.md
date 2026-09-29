@@ -31,7 +31,10 @@ brew install --cask happy-nut/tap/eve
 ```
 
 Apple silicon only. The app is ad-hoc signed, not notarized; the cask strips the quarantine flag so it opens
-without a Gatekeeper detour. New versions: `brew reinstall --cask eve`.
+without a Gatekeeper detour. New versions arrive in the app, as on the phone: when one is out, the sidebar and
+Settings → Version offer **Update**, which downloads the release's zip, checks it against the SHA-256 GitHub lists
+for it, puts the new Eve.app in place of the old one and restarts (`brew reinstall --cask eve` does the same by hand;
+0.7.12 and older need it once).
 Releases are built by `.github/workflows/release.yml` from a `v*` tag; the cask lives in [happy-nut/homebrew-tap](https://github.com/happy-nut/homebrew-tap).
 
 ## Run from source
@@ -143,6 +146,7 @@ src/                Svelte UI
 src-tauri/          Rust: file/asset storage commands, window toggle, global-shortcut plugin
   src/mcp.rs              `eve mcp`: read-only MCP server over stdio
   src/mcp_setup.rs        Settings → Claude: register it with Claude Desktop / Claude Code
+  src/update.rs           the Mac updating itself from a release
 ```
 
 MIT.

@@ -34,4 +34,19 @@ const both = (tag, v) => ({ tag_name: tag, draft: false, assets: [
 assert.equal((await findUpdate('0.7.5', releases([both('android-v0.7.6', '0.7.6')])))?.url, 'https://github.com/happy-nut/eve/releases/download/android-v0.7.6/Eve-android-0.7.6.apk');
 assert.equal((await findUpdate('0.7.5', releases([{ tag_name: 'android-v0.7.6', draft: false, assets: [{ name: 'Eve-android-backup.zip', browser_download_url: 'https://github.com/happy-nut/eve/releases/download/x/y' }] }]))), null);
 
+// the Mac: a v* release's zip, with the digest GitHub lists for it
+const HEX = 'e6456e9b9438864be87090eeef3b4bc2c50c2c9ae171119659c381048b2cc5d8';
+const zip = (tag, digest = `sha256:${HEX}`) => ({ tag_name: tag, draft: false, assets: [
+  { name: 'Eve-macos-arm64.zip', browser_download_url: `https://github.com/happy-nut/eve/releases/download/${tag}/Eve-macos-arm64.zip`, digest }] });
+assert.deepEqual(await findUpdate('0.7.12', releases([apk('android-v0.7.19'), zip('v0.7.13'), zip('v0.7.12')]), 'mac'),
+  { version: '0.7.13', url: 'https://github.com/happy-nut/eve/releases/download/v0.7.13/Eve-macos-arm64.zip', sha256: `sha256:${HEX}` });
+assert.equal(await findUpdate('0.7.13', releases([zip('v0.7.13')]), 'mac'), null);
+// no digest, nothing to check the download against: not offered
+assert.equal(await findUpdate('0.7.12', releases([zip('v0.7.13', null)]), 'mac'), null);
+// a phone release never updates the Mac, nor the Mac's zip the phone; pre-releases are skipped
+assert.equal(await findUpdate('0.7.12', releases([apk('android-v0.7.30')]), 'mac'), null);
+assert.equal(await findUpdate('0.7.12', releases([zip('v0.7.30')])), null);
+assert.equal(await findUpdate('0.7.12', releases([{ ...zip('v0.7.13'), prerelease: true }]), 'mac'), null);
+assert.equal(await findUpdate('0.7.12', releases([{ tag_name: 'v0.7.13', draft: false, assets: [{ name: 'Eve-macos-arm64.zip', browser_download_url: 'https://evil.example/Eve-macos-arm64.zip', digest: `sha256:${HEX}` }] }]), 'mac'), null);
+
 console.log('UPDATE_OK');

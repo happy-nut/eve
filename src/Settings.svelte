@@ -344,21 +344,18 @@
       </div>
 {/if}
 
-{#if isMobile && isTauri}
+{#if isTauri}
       <h3>Version</h3>
       <div class="card">
         <div class="row">
           <span class="label">Eve {updates.current}
             <span class="sub">{updates.checking ? 'Checking…'
-              : updates.state === 'downloading' ? `Downloading ${updates.available?.version ?? ''}…${updates.progress >= 0 ? ` ${updates.progress}%` : ''}`
-              : updates.state === 'installing' ? 'Tap Update on the next screen'
-              : updates.state === 'permission' ? 'Allow Eve to install apps, then tap Update again'
-              : updates.state === 'error' ? 'Download failed — try again'
+              : updates.doing ? updates.doing
               : updates.available ? `${updates.available.version} is available`
               : updates.failed ? 'Could not check — offline?' : '✓ Up to date'}</span></span>
           {#if updates.available}
-            <button class="btn primary" disabled={updates.state === 'downloading'} onclick={() => updates.install()}>
-              {#if updates.state === 'downloading'}<span class="spin light" aria-hidden="true"></span>{/if}Update
+            <button class="btn primary" disabled={updates.busy} onclick={() => updates.install()}>
+              {#if updates.busy}<span class="spin light" aria-hidden="true"></span>{/if}Update
             </button>
           {:else}
             <button class="btn" disabled={updates.checking} onclick={() => updates.check(true)}>
