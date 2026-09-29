@@ -14,6 +14,7 @@ import type { EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
 import { DateMention, dayChoices } from './date';
 import { Callout } from './callout';
+import { Highlight } from './highlight';
 import { LocalImage } from './image';
 import { Bookmark, URL_RE } from './bookmark';
 import { Kanban } from './kanban';
@@ -161,6 +162,7 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     italic: () => c().toggleItalic().run(),
     underline: () => c().toggleUnderline().run(),
     strike: () => c().toggleStrike().run(),
+    highlight: () => c().toggleMark('highlight').run(),
     code: () => c().toggleCode().run(),
     link: () => {
       const prev = editor.getAttributes('link').href as string | undefined;
@@ -529,6 +531,7 @@ export function createEditor(opts: {
         },
       }),
       Callout,
+      Highlight,
       Extension.create({
         name: 'arrows',
         addInputRules: () => [

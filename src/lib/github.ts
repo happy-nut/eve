@@ -7,15 +7,34 @@
  * and restarts are free. Pushes are one commit on top of `head`; if someone else pushed first the
  * ref update is refused (422) and the caller pulls again (see syncRound).
  */
-export interface RepoState { repo: string; token: string; head: string; tree: string; known: Record<string, string> }
+/** `host`: the GitHub server ('' = github.com; see apiBase) */
+export interface RepoState { repo: string; token: string; head: string; tree: string; known: Record<string, string>; host?: string }
 /** `sha`, when given, is the blob sha of `data` (see FileHashes), so push need not hash it again. */
 export interface LocalFile { path: string; data: Uint8Array; sha?: string }
 /** `prev` = the blob sha we had for this path before the pull (undefined = new file). */
 export interface RemoteFile { path: string; data: Uint8Array; prev?: string }
 
-const API = 'https://api.github.com/repos/';
 const BRANCH = 'main';
 const PREFIX = 'notes/';
+
+// ---- which GitHub: github.com, GitHub Enterprise Cloud with data residency (NAME.ghe.com), or a
+// GitHub Enterprise Server of one's own (github.example.com). GitHub Enterprise Cloud on github.com
+// itself is github.com: an organization there is only a different owner (see ensureRepo).
+
+/** What the user typed as their GitHub (a URL or a bare host, maybe with a port) as a host; '' = github.com. */
+export function normHost(input: string): string {
+  const h = input.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  if (!h || h === 'github.com' || h === 'www.github.com' || h === 'api.github.com') return '';
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d{1,5})?$/.test(h)) throw new Error(`"${input.trim()}" is not a server address`);
+  return h;
+}
+/** The server's web pages (sign-in, settings): https://github.com or https://HOST */
+export const webBase = (host = '') => `https://${host || 'github.com'}`;
+/** Its REST API: api.github.com, api.NAME.ghe.com, or HOST/api/v3 on a server of one's own */
+export function apiBase(host = ''): string {
+  if (!host) return 'https://api.github.com';
+  return host.endsWith('.ghe.com') ? `https://api.${host}` : `https://${host}/api/v3`;
+}
 
 /** git's blob id: sha1("blob <len>\0" + data). Same as what the tree listing reports. */
 export async function blobSha(data: Uint8Array): Promise<string> {
@@ -69,7 +88,7 @@ export class Repo {
   constructor(s: RepoState, f: typeof fetch = (...a) => fetch(...a)) { this.s = s; this.f = f; }
 
   private api(method: string, path: string, body?: unknown) {
-    return this.f(API + this.s.repo + path, {
+    return this.f(`${apiBase(this.s.host)}/repos/${this.s.repo}${path}`, {
       method,
       cache: 'no-store', // WebKit would happily serve GitHub's max-age=60 replies after our own push
       headers: {
@@ -169,17 +188,20 @@ export async function syncRound(
 }
 
 // ---- sign-in: OAuth device flow + the notes repo ------------------------------
-/** GitHub OAuth App "Eve" (device flow enabled). Public by design; device flow needs no secret. */
+/** GitHub OAuth App "Eve" (device flow enabled), on github.com. Public by design; device flow needs no
+ *  secret. Another server needs an OAuth App of its own (its admin registers one), or a token instead. */
 export const CLIENT_ID = 'Ov23liUjviaVeQmqYvUk';
 export const REPO_NAME = 'eve-notes';
-const LOGIN = 'https://github.com/login/';
+/** which OAuth App on which server a device-flow sign-in goes through */
+export interface Login { host?: string; clientId?: string }
+const loginUrl = (l: Login, path: string) => `${webBase(l.host)}/login/${path}`;
 export type Post = (url: string, form: Record<string, string>) => Promise<string>;
 
 export interface DeviceCode { device_code: string; user_code: string; verification_uri: string; interval: number; expires_in: number }
 
 /** Device flow, first half: a code for the user to enter on GitHub, and the secret half to poll with. */
-export async function requestCode(post: Post): Promise<DeviceCode> {
-  const a = JSON.parse(await post(LOGIN + 'device/code', { client_id: CLIENT_ID, scope: 'repo' }));
+export async function requestCode(post: Post, l: Login = {}): Promise<DeviceCode> {
+  const a = JSON.parse(await post(loginUrl(l, 'device/code'), { client_id: l.clientId || CLIENT_ID, scope: 'repo' }));
   if (!a.device_code) throw new Error(a.error_description ?? a.error ?? 'device code failed');
   return { device_code: a.device_code, user_code: a.user_code, verification_uri: a.verification_uri, interval: Number(a.interval) || 5, expires_in: Number(a.expires_in) || 900 };
 }
@@ -188,14 +210,14 @@ export async function requestCode(post: Post): Promise<DeviceCode> {
  *  is not the end: the user is in the browser meanwhile, and a phone may cut a background app off the
  *  network for a while (DNS then fails). Only GitHub's own answer — denied, expired — or `expiresIn`
  *  running out ends it. */
-export async function pollToken(post: Post, deviceCode: string, interval = 5, signal?: AbortSignal, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)), expiresIn = 900): Promise<string> {
+export async function pollToken(post: Post, deviceCode: string, interval = 5, signal?: AbortSignal, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)), expiresIn = 900, l: Login = {}): Promise<string> {
   for (let waited = 0; ; waited += interval) {
     if (waited > expiresIn) throw new Error('the sign-in code expired; start again');
     await sleep(interval * 1000);
     if (signal?.aborted) throw new Error('sign-in cancelled');
     let reply: string;
     try {
-      reply = await post(LOGIN + 'oauth/access_token', { client_id: CLIENT_ID, device_code: deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' });
+      reply = await post(loginUrl(l, 'oauth/access_token'), { client_id: l.clientId || CLIENT_ID, device_code: deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' });
     } catch {
       continue; // offline for a moment: ask again next round
     }
@@ -210,24 +232,40 @@ export async function pollToken(post: Post, deviceCode: string, interval = 5, si
  * Device flow: ask for a code, hand it to the user (onCode), poll until they authorize in the browser.
  * `post` does the two github.com POSTs (no CORS there, so the desktop side runs them). Resolves to the token.
  */
-export async function deviceLogin(post: Post, onCode: (code: string, url: string) => void, signal?: AbortSignal, sleep?: (ms: number) => Promise<unknown>): Promise<string> {
-  const a = await requestCode(post);
+export async function deviceLogin(post: Post, onCode: (code: string, url: string) => void, signal?: AbortSignal, sleep?: (ms: number) => Promise<unknown>, l: Login = {}): Promise<string> {
+  const a = await requestCode(post, l);
   onCode(a.user_code, a.verification_uri);
-  return pollToken(post, a.device_code, a.interval, signal, sleep, a.expires_in);
+  return pollToken(post, a.device_code, a.interval, signal, sleep, a.expires_in, l);
 }
 
-/** Who the token belongs to, and their private notes repo (created if missing). */
-export async function ensureRepo(token: string, f: typeof fetch = (...a) => fetch(...a)): Promise<{ user: string; repo: string }> {
+/**
+ * Who the token belongs to, and the private notes repo (created if missing): `owner/eve-notes`, where
+ * owner is the signed-in user or, given, an organization they belong to (a company's rules may want the
+ * notes kept inside it). On `host` when not github.com.
+ */
+export async function ensureRepo(token: string, f: typeof fetch = (...a) => fetch(...a), opts: { host?: string; owner?: string } = {}): Promise<{ user: string; repo: string }> {
+  const api = apiBase(opts.host);
   const headers = { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' };
-  const me = await f('https://api.github.com/user', { headers });
+  let me: Response;
+  try {
+    me = await f(`${api}/user`, { headers });
+  } catch {
+    throw new Error(`Could not reach ${webBase(opts.host)}. On a company network or VPN?`);
+  }
   if (!me.ok) throw new Error(await explain(me));
   const user: string = (await me.json()).login;
-  const repo = `${user}/${REPO_NAME}`;
-  const r = await f(API + repo, { headers });
+  const owner = opts.owner?.trim() || user;
+  if (!/^[\w.-]+$/.test(owner)) throw new Error(`"${owner}" is not a user or organization name`);
+  const repo = `${owner}/${REPO_NAME}`;
+  const r = await f(`${api}/repos/${repo}`, { headers });
   if (r.ok) {
-    if (!(await r.json()).private) throw new Error(`${repo} exists but is public — make it private or rename it`);
+    // private only: "internal" (a GitHub Enterprise visibility) shows the notes to everyone in the company
+    const j = await r.json();
+    const seen: string = j.visibility ?? (j.private ? 'private' : 'public');
+    if (seen !== 'private') throw new Error(`${repo} exists but is ${seen} — make it private or rename it`);
   } else if (r.status === 404) {
-    const c = await f('https://api.github.com/user/repos', { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ name: REPO_NAME, private: true, description: 'Eve notes (synced by the app)' }) });
+    const into = owner.toLowerCase() === user.toLowerCase() ? `${api}/user/repos` : `${api}/orgs/${owner}/repos`;
+    const c = await f(into, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ name: REPO_NAME, private: true, description: 'Eve notes (synced by the app)' }) });
     if (!c.ok) throw new Error(await explain(c));
   } else throw new Error(await explain(r));
   return { user, repo };

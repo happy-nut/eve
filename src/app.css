@@ -421,6 +421,17 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
 .tiptap .callout-emoji svg { width: 1.2em; height: 1.2em; vertical-align: -0.2em; }
 .tiptap .callout-body { flex: 1; min-width: 0; }
 .tiptap .callout-body > * + * { margin-top: 0.4em; }
+/* the text on the marker's line ([!warning] Watch out) is the callout's title */
+.tiptap .callout[data-titled] .callout-body > p:first-child { font-weight: 600; }
+/* an Obsidian type ([!warning], [!tip]…) tints the box its colour */
+.tiptap .callout[data-color='blue'] { background: light-dark(rgba(30, 155, 255, 0.1), rgba(63, 193, 255, 0.12)); }
+.tiptap .callout[data-color='cyan'] { background: light-dark(rgba(0, 170, 190, 0.1), rgba(0, 200, 220, 0.12)); }
+.tiptap .callout[data-color='green'] { background: light-dark(rgba(52, 170, 90, 0.11), rgba(60, 200, 110, 0.12)); }
+.tiptap .callout[data-color='orange'] { background: light-dark(rgba(255, 150, 0, 0.12), rgba(255, 170, 40, 0.13)); }
+.tiptap .callout[data-color='red'] { background: light-dark(rgba(255, 69, 58, 0.1), rgba(255, 90, 80, 0.13)); }
+.tiptap .callout[data-color='purple'] { background: light-dark(rgba(140, 90, 230, 0.1), rgba(170, 130, 255, 0.13)); }
+/* ==highlight== */
+.tiptap mark { background: light-dark(rgba(255, 214, 10, 0.45), rgba(255, 214, 10, 0.3)); color: inherit; border-radius: 3px; padding: 0 1px; }
 /* bookmark card: a URL on its own line */
 .tiptap .bookmark {
   display: flex; align-items: stretch; gap: 14px; margin: 0.6em 0; padding: 10px 12px; max-height: 88px; overflow: hidden;

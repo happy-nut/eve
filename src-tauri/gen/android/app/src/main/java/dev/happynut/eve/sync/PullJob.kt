@@ -32,13 +32,21 @@ class PullJob : JobService() {
     private const val PERIODIC = 1
     private const val ONCE = 2
     private const val PREFS = "sync"
-    private const val API = "https://api.github.com/repos/"
+    private val HOST = Regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\\d{1,5})?$")
 
-    /** The app's sign-in, handed over by the page (sign-out passes ""). Starts or stops the schedule. */
-    fun account(context: Context, repo: String, token: String) {
+    /** The server's REST API, as github.ts apiBase: github.com, NAME.ghe.com, or a server of one's own. */
+    fun apiBase(host: String): String = when {
+      host.isEmpty() || !HOST.matches(host) -> "https://api.github.com"
+      host.endsWith(".ghe.com") -> "https://api.$host"
+      else -> "https://$host/api/v3"
+    }
+
+    /** The app's sign-in, handed over by the page (sign-out passes ""). Starts or stops the schedule.
+     *  `host`: its GitHub Enterprise server, "" for github.com. */
+    fun account(context: Context, repo: String, token: String, host: String) {
       val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
       val jobs = context.getSystemService(JobScheduler::class.java)
-      val same = prefs.getString("repo", "") == repo && prefs.getString("token", "") == token
+      val same = prefs.getString("repo", "") == repo && prefs.getString("token", "") == token && prefs.getString("host", "") == host
       if (same && (token.isEmpty() || jobs.getPendingJob(PERIODIC) != null)) return
       if (token.isEmpty()) jobs.cancelAll()
       else jobs.schedule(
@@ -50,7 +58,7 @@ class PullJob : JobService() {
       )
       // saved once scheduled, so a refusal is tried again on the next call
       // (another account starts its record of the remote over)
-      if (!same) prefs.edit().clear().putString("repo", repo).putString("token", token).apply()
+      if (!same) prefs.edit().clear().putString("repo", repo).putString("token", token).putString("host", host).apply()
     }
 
     /** Pull as soon as there is a network (the widget's ↻). */
@@ -80,7 +88,7 @@ class PullJob : JobService() {
       if (repo.isEmpty() || token.isEmpty()) return false
 
       fun get(path: String): JSONObject {
-        val c = URL(API + repo + path).openConnection() as HttpURLConnection
+        val c = URL("${apiBase(prefs.getString("host", "").orEmpty())}/repos/$repo$path").openConnection() as HttpURLConnection
         c.connectTimeout = 15_000
         c.readTimeout = 30_000
         c.useCaches = false

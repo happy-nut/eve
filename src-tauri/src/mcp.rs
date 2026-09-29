@@ -92,28 +92,24 @@ pub fn plain(line: &str) -> String {
     } else if s.starts_with("[ ]") || s.starts_with("[x]") {
         s = s[3..].trim_start();
     }
-    // \x -> x, then drop the emphasis marks, then [[Title]] -> Title
-    let mut out = String::with_capacity(s.len());
+    // \x -> x, ==marked== -> marked, the emphasis marks dropped, then [[Title]] -> Title (or its alias)
+    let mut unescaped = String::with_capacity(s.len());
     let mut chars = s.chars();
     while let Some(c) = chars.next() {
-        if c == '\\' {
-            // unescaped first, stripped after: `\*` shows as nothing, as in the app
-            match chars.next() {
-                Some(n) if !matches!(n, '*' | '_' | '`' | '~') => out.push(n),
-                Some(_) => {}
-                None => out.push(c),
-            }
-        } else if !matches!(c, '*' | '_' | '`' | '~') {
-            out.push(c);
+        match (c, c == '\\') {
+            (_, true) => unescaped.push(chars.next().unwrap_or(c)),
+            _ => unescaped.push(c),
         }
     }
-    let mut linked = String::with_capacity(out.len());
-    let mut rest = out.as_str();
+    let unmarked: String = highlights_off(&unescaped).chars().filter(|c| !matches!(c, '*' | '_' | '`' | '~')).collect();
+    let mut linked = String::with_capacity(unmarked.len());
+    let mut rest = unmarked.as_str();
     while let Some(i) = rest.find("[[") {
         match rest[i + 2..].find("]]").filter(|&j| j > 0) {
             Some(j) => {
+                let (title, alias) = split_alias(&rest[i + 2..i + 2 + j]);
                 linked.push_str(&rest[..i]);
-                linked.push_str(&rest[i + 2..i + 2 + j]);
+                linked.push_str(if alias.is_empty() { title } else { alias });
                 rest = &rest[i + 4 + j..];
             }
             None => break,
@@ -121,6 +117,41 @@ pub fn plain(line: &str) -> String {
     }
     linked.push_str(rest);
     linked.trim().to_string()
+}
+
+/** `==text==` -> `text`, as markdown.ts's `/==(?=\S)(.+?)==/g`: the text starts with no space. */
+fn highlights_off(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        let rest = &s[i..];
+        if let Some(after) = rest.strip_prefix("==") {
+            if let Some(first) = after.chars().next().filter(|c| !c.is_whitespace() && *c != '\n') {
+                let from = 2 + first.len_utf8();
+                let line_end = rest.find('\n').unwrap_or(rest.len());
+                if let Some(j) = rest[from..].find("==").map(|j| from + j).filter(|&j| j < line_end) {
+                    out.push_str(&rest[2..j]);
+                    i += j + 2;
+                    continue;
+                }
+            }
+        }
+        let c = rest.chars().next().unwrap_or_default();
+        out.push(c);
+        i += c.len_utf8().max(1);
+    }
+    out
+}
+
+/// markdown.ts's `splitAlias`: `Title|alias` (the bar maybe escaped, as in a table) -> (title, alias).
+pub fn split_alias(inner: &str) -> (&str, &str) {
+    match inner.find('|') {
+        None => (inner.trim(), ""),
+        Some(bar) => {
+            let end = if inner[..bar].ends_with('\\') { bar - 1 } else { bar };
+            (inner[..end].trim(), inner[bar + 1..].trim())
+        }
+    }
 }
 
 /// `titleOf`: the first non-blank line, as text.
@@ -566,7 +597,7 @@ fn cursor_at(cursor: &str, note: &Note, text: &str) -> Result<usize, String> {
 
 pub fn read_note(notes: &[Note], args: &Value) -> Result<String, String> {
     let (id, title) = (arg_str(args, "id"), arg_str(args, "title"));
-    let title = title.trim_start_matches("[[").trim_end_matches("]]");
+    let title = split_alias(title.trim_start_matches("[[").trim_end_matches("]]")).0;
     // a [[Title#Section]] link given whole
     let (title, linked) = match title.split_once('#') {
         Some((t, s)) if !t.is_empty() => (t.trim(), s.trim()),
@@ -823,6 +854,12 @@ mod tests {
         assert_eq!(title_of("a\\*b"), "ab");
         assert_eq!(title_of("   \n"), "Untitled");
         assert_eq!(title_of("회의록 2026"), "회의록 2026");
+        // the same as markdown.test.mjs: aliases, an escaped bar, highlights
+        assert_eq!(title_of("- see [[DB|데이터베이스]] and [[Plan]]"), "see 데이터베이스 and Plan");
+        assert_eq!(title_of("| [[DB\\|db]] |"), "| db |");
+        assert_eq!(title_of("# ==Important== plan"), "Important plan");
+        assert_eq!(title_of("a == b"), "a == b");
+        assert_eq!(split_alias("a|b|c"), ("a", "b|c"));
     }
 
     #[test]
@@ -881,6 +918,7 @@ mod tests {
         let body = "# Plan\nintro\n## Goals\none\n### Detail\ntwo\n```\n## not a heading\n```\n## Risks\nthree";
         let notes = vec![note("p", 2, "", body), note("q", 1, "", "# Planning\nx")];
         assert!(read_note(&notes, &json!({ "title": "plan" })).unwrap().ends_with(body));
+        assert!(read_note(&notes, &json!({ "title": "[[Plan|the plan]]" })).unwrap().ends_with(body));
         assert!(read_note(&notes, &json!({ "id": "q" })).unwrap().ends_with("# Planning\nx"));
         let goals = read_note(&notes, &json!({ "title": "[[Plan#Goals]]" })).unwrap();
         assert!(goals.ends_with("## Goals\none\n### Detail\ntwo\n```\n## not a heading\n```"), "{goals}");

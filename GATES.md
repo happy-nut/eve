@@ -1007,3 +1007,70 @@
   over the Mac sidebar's footer at 12.5px (the title bar owns the top), with progress and an error that
   wraps; the phone keeps its banner up top and its Update button while Android's installer is up.
 - [ ] G210 On a Mac, 0.7.13 (installed with brew) updates itself to the next release from the sidebar
+
+# GATES — the calendar shows its keyboard day, and a day's note can be deleted (2026-09-29)
+
+- [x] G211 The day the arrows are on is plain to see, and a day's note can be deleted from the calendar
+  EVIDENCE: the cursor day was marked only on :focus-visible, which WebKit does not set after a focus()
+  from script (how the arrows move it), and in accent-soft; it now gets the accent ring and a soft fill
+  whenever the keyboard is in the month. ⌫ / Delete asks "Delete the note for October 1, 2026?" and
+  tombstones it; a right-click (a long press on a phone) on a day with a note offers Delete, on a day
+  without one nothing. Browser (Chromium, dev server): → → from today lands on Oct 1, ringed; ⌫, Enter:
+  its dot is gone and the keyboard is still on Oct 1; a right-click on Sep 29 shown dimmed in October opens
+  the menu without turning the page, Delete + Enter removes it and October stays; an empty day: no menu.
+  npm run check: 0 errors.
+
+# GATES — Obsidian's syntax in the editor: alias links, callout types, highlights (2026-09-29)
+
+- [x] G212 `[[Note|alias]]`, `> [!type] Title` and `==highlight==` read, show and save back unchanged
+  CHECK: node --experimental-strip-types --no-warnings src/lib/markdown.test.mjs && cd src-tauri && cargo test --lib mcp
+  EXPECT: MARKDOWN_OK / test result: ok
+  EVIDENCE: splitAlias (the bar escaped in a table too), plain() reading a link as its alias and ==x== as x
+  (a spaced "a == b" left alone), calloutKind for Obsidian's 13 types in any case; mcp.rs's title_of gives
+  the same titles (19 tests ok). Browser, the real editor: a note with aliases (plain, section, in a table
+  as [[DB\|db]]), ==really **important**==, "a == b", > [!warning]- Watch out + body, > [!tip], > [!💡] and
+  a table read back identical but for the newline the table serializer always ends with; six more cases
+  (Eve's own > [!💡] Title, a title alone, a list under a callout with and without a title, a bold title,
+  a highlighted link) read back identical and stay so on a second pass. Shown: aliases as their text, the
+  highlight as a marker, warning orange with ⚠️, tip cyan with 🔥, a title in bold. Before, the text on a
+  callout's marker line was merged into its first paragraph on save; now it stays the title. Renaming a
+  note rewrites [[Old|…]] and [[Old\|…]] too. The widget draws ==x== and a type's icon (its regex checked
+  in java.util.regex; the Kotlin is not compiled here). ⌘⇧H toggles the highlight (rebindable).
+  Found meanwhile, not changed: TableTools sets state inside a derived when a table gets the caret
+  (state_unsafe_mutation in the console) — on main too.
+
+# GATES — Settings → Claude says what Claude Code says (2026-09-29)
+
+- [x] G213 A `claude` that is a shell alias is found, and "connected" means `claude mcp get eve` agrees
+  CHECK: cd src-tauri && cargo test --lib mcp_setup
+  EXPECT: test result: ok
+  EVIDENCE: reported: Connect said connected, `claude mcp list` had no eve. Cause: Claude Code counted as
+  installed only when `command -v claude` printed a path; the local installer makes `claude` a zsh alias,
+  for which it prints `alias claude=…` (reproduced: zsh -ilc with such a .zshrc), so Claude Code was
+  dropped from the list without a word and Claude Desktop alone showed as connected. Now: `command -v`
+  only decides whether there is a claude at all, status comes from `claude mcp get eve` (its Command: line),
+  a Connect is checked the same way afterwards (else the CLI's own words and the command to run by hand),
+  and Settings names every app, "not found" included. Same zsh + alias setup, the real CLI (2.1.284):
+  before connected=false, after Connect connected=true, from another path stale=true, after Disconnect
+  connected=false. 5 unit tests ok (command_in reads get's output); npm run check 0 errors.
+
+# GATES — sync through GitHub Enterprise, an organization, or a token (2026-09-29)
+
+- [x] G214 The sync runs against another GitHub server, owner or sign-in, and nothing of it goes to github.com
+  CHECK: npm test (github, handoff) && cd src-tauri && cargo test --lib login_tests
+  EXPECT: SYNC_OK / HANDOFF_OK / test result: ok
+  EVIDENCE: github.ts: normHost (a URL or host, maybe with a port; github.com = ''), apiBase (api.github.com,
+  api.NAME.ghe.com, HOST/api/v3), device flow against HOST/login with a given Client ID, ensureRepo under the
+  user or an organization (POST /orgs/ORG/repos), refusing an existing internal or public repo, and naming
+  the server when it cannot be reached. The whole fake-GitHub sync run again through https://github.acme.com
+  /api/v3: push, pull by a second client, every request to that base. The QR hand-off carries the server
+  (a bad one refused; a Mac from before sends none = github.com). net.rs POSTs only the two device-flow paths,
+  on any https host with a dot (tests: github.com, a GHES, a ghe.com with a port; not http, a query, another
+  path, user@host, localhost). Android: PullJob keeps the host with the sign-in and asks HOST's API (same
+  rules as apiBase); an upgrade finds no host = github.com, so nothing restarts. Browser, Chromium with a
+  stand-in for Tauri and a fake GHES at github.acme.com: Settings → GitHub Enterprise… → server
+  "https://github.acme.com/" shows the Client ID field; Sign in with GitHub without one says to paste a token
+  or a Client ID; with a token the button reads "Sign in with token", the repo is made under the user, the
+  notes and groups.json are committed there, status ok, the row reads "private repository
+  hyungsun/eve-notes on github.acme.com"; the only github.com requests were the update check's.
+  Not run: a real GitHub Enterprise Server (CORS on its API is assumed as on api.github.com), the Kotlin.

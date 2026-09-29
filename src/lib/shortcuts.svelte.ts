@@ -33,6 +33,7 @@ export const DEFAULTS: Action[] = [
   { id: 'italic', label: 'Italic', scope: 'editor', keys: 'Mod-i' },
   { id: 'underline', label: 'Underline', scope: 'editor', keys: 'Mod-u' },
   { id: 'strike', label: 'Strikethrough', scope: 'editor', keys: 'Mod-Shift-x' },
+  { id: 'highlight', label: 'Highlight (==)', scope: 'editor', keys: 'Mod-Shift-h' },
   { id: 'code', label: 'Inline code', scope: 'editor', keys: 'Mod-e' },
   { id: 'link', label: 'Link', scope: 'editor', keys: 'Mod-Shift-k' },
   { id: 'wikiLink', label: 'Link to note ([[)', scope: 'editor', keys: 'Mod-Shift-l' },

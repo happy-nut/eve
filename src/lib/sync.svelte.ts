@@ -1,26 +1,31 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
 import { groups } from './groups.svelte';
 import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText } from './platform';
-import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, type LocalFile, type RemoteFile } from './github';
+import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
 
 /**
  * Sync through a private GitHub repository (see github.ts). Layout mirrors the local notes dir:
  * notes/<id>.md (frontmatter included) and notes/assets/*. Conflicts resolve last-writer-wins on
  * updatedAt (notes.mergeRemote); a note untouched locally since the last sync takes the remote
- * version unconditionally, so edits made on github.com come through too.
+ * version unconditionally, so edits made on github.com come through too. The GitHub is github.com or,
+ * `host` set, a GitHub Enterprise one (NAME.ghe.com, or a server of the company's own).
  */
 const LS = 'eve.sync';
 const ASSETS = 'notes/assets/';
 const GROUPS = 'notes/groups.json';
 
-interface Settings { user: string; repo: string; token: string; head: string; tree: string; known: Record<string, string>; lastSynced: number }
+/** `host`: '' = github.com, else the GitHub Enterprise server (see github.ts normHost) */
+interface Settings { user: string; repo: string; token: string; host: string; head: string; tree: string; known: Record<string, string>; lastSynced: number }
+
+/** Where to sign in, for GitHub Enterprise or an organization: all optional. `token` skips the browser. */
+export interface SignIn { host?: string; owner?: string; clientId?: string; token?: string }
 
 function load(): Settings {
-  const d: Settings = { user: '', repo: '', token: '', head: '', tree: '', known: {}, lastSynced: 0 };
+  const d: Settings = { user: '', repo: '', token: '', host: '', head: '', tree: '', known: {}, lastSynced: 0 };
   try {
     const s = { ...d, ...JSON.parse(localStorage.getItem(LS) ?? '{}') };
-    return { user: s.user, repo: s.repo, token: s.token, head: s.head, tree: s.tree, known: s.known, lastSynced: s.lastSynced };
+    return { user: s.user, repo: s.repo, token: s.token, host: s.host ?? '', head: s.head, tree: s.tree, known: s.known, lastSynced: s.lastSynced };
   } catch { return d; }
 }
 
@@ -32,11 +37,12 @@ class Sync {
   private hashes = new FileHashes();
 
   save(patch: Partial<Settings>) {
-    // a different repository = start over
-    if (patch.repo !== undefined && patch.repo !== this.settings.repo) Object.assign(patch, { head: '', tree: '', known: {}, lastSynced: 0 });
+    // a different repository (or the same name on another server) = start over
+    const moved = (patch.repo !== undefined && patch.repo !== this.settings.repo) || (patch.host !== undefined && patch.host !== this.settings.host);
+    if (moved) Object.assign(patch, { head: '', tree: '', known: {}, lastSynced: 0 });
     Object.assign(this.settings, patch);
     localStorage.setItem(LS, JSON.stringify(this.settings));
-    widget.account(this.settings.repo, this.settings.token);
+    widget.account(this.settings.repo, this.settings.token, this.settings.host);
   }
 
   get enabled() { return /^[\w.-]+\/[\w.-]+$/.test(this.settings.repo) && !!this.settings.token; }
@@ -45,17 +51,25 @@ class Sync {
   pending = $state<{ code: string; url: string } | null>(null);
   private abort: AbortController | undefined;
 
-  /** Sign in with GitHub (device flow), then create/find the private notes repo and sync. */
-  async login() {
+  /**
+   * Sign in with GitHub, then create/find the private notes repo and sync. By default the browser's
+   * device flow on github.com; `a` points it at a GitHub Enterprise server (whose own OAuth App,
+   * `clientId`, the device flow then needs) or an organization, or hands a token so no browser is needed.
+   */
+  async login(a: SignIn = {}) {
     if (!isTauri || this.abort) return; // one sign-in at a time
     this.abort = new AbortController();
     this.error = '';
     try {
+      const host = normHost(a.host ?? '');
+      const clientId = a.clientId?.trim();
+      let token = a.token?.trim();
+      if (!token && host && !clientId) throw new Error('For this server, paste a token, or the Client ID of an OAuth App its admin set up for Eve.');
       // the code goes on the clipboard first; a phone waits for the button, so the code is seen before
       // the browser covers it
-      const token = await deviceLogin(github.post, (code, url) => { this.pending = { code, url }; void copyText(code); if (!isMobile) void openUrl(url); }, this.abort.signal);
-      const { user, repo } = await ensureRepo(token);
-      this.save({ token, user, repo });
+      token ||= await deviceLogin(github.post, (code, url) => { this.pending = { code, url }; void copyText(code); if (!isMobile) void openUrl(url); }, this.abort.signal, undefined, { host, clientId });
+      const { user, repo } = await ensureRepo(token, undefined, { host, owner: a.owner });
+      this.save({ token, user, repo, host });
       this.pending = null;
       await this.now();
     } catch (e) {
@@ -81,10 +95,10 @@ class Sync {
   async phoneSetup(version?: string) {
     this.error = '';
     try {
-      const { user, repo, token } = this.settings;
-      const s = await seal({ user, repo, token });
-      const host = await share.start(s.path, s.body);
-      this.phone = { link: ticketLink({ host, path: s.path, key: s.key }, version), until: Date.now() + 600_000, done: false };
+      const { user, repo, token, host } = this.settings;
+      const s = await seal({ user, repo, token, host });
+      const lan = await share.start(s.path, s.body); // this Mac's address on the local network
+      this.phone = { link: ticketLink({ host: lan, path: s.path, key: s.key }, version), until: Date.now() + 600_000, done: false };
       this.phoneOff?.();
       this.phoneOff = await share.onDone(() => { if (this.phone) this.phone.done = true; });
       clearTimeout(this.phoneTimer);
@@ -107,8 +121,8 @@ class Sync {
     this.claiming = true;
     this.error = '';
     try {
-      const { user, repo, token } = await open(await share.fetch(t.host, t.path), t.key);
-      this.save({ token, user, repo });
+      const { user, repo, token, host } = await open(await share.fetch(t.host, t.path), t.key);
+      this.save({ token, user, repo, host });
       this.claiming = false;
       await this.now();
     } catch (e) {
@@ -176,7 +190,7 @@ class Sync {
   }
 
   start() {
-    widget.account(this.settings.repo, this.settings.token); // a sign-in from before the widget existed
+    widget.account(this.settings.repo, this.settings.token, this.settings.host); // a sign-in from before the widget existed
     $effect(() => { notes.dirty; this.schedule(); });
     const iv = setInterval(() => this.now(), 60_000);
     window.addEventListener('focus', () => this.now());

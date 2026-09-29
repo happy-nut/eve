@@ -3,13 +3,14 @@
   import { notes } from './lib/notes.svelte';
   import { plain } from './lib/markdown';
   import { ui } from './lib/ui.svelte';
-  import { dayKey, keyOfDaily, monthGrid } from './lib/daily';
+  import { dailyId, dayKey, keyOfDaily, monthGrid } from './lib/daily';
   import Icon from './Icon.svelte';
 
   /**
    * The daily notes as a month, in the editor's place and as wide as it, under a head like a note's (its
    * icon and name, both editable; the name is the sidebar's too). Each day shows the first line written
-   * under its title; a day opens its note. Keys: arrows move a day / a week, ⌘← ⌘→ a month, Enter opens.
+   * under its title; a day opens its note. Keys: arrows move a day / a week, ⌘← ⌘→ a month, Enter opens,
+   * ⌫ deletes the day's note (asked first); a right-click (a long press on a phone) offers the same.
    */
   let { onpick, ontemplate }: { onpick: (key: string) => void; ontemplate: () => void } = $props();
 
@@ -44,7 +45,27 @@
     const d = parse(cursor), last = new Date(d.getFullYear(), d.getMonth() + by + 1, 0).getDate();
     return dayKey(new Date(d.getFullYear(), d.getMonth() + by, Math.min(d.getDate(), last)));
   };
+  /** Delete a day's note, once asked; the keyboard goes back where it was. A day with no note has nothing to delete. */
+  async function remove(key: string) {
+    const n = notes.daily.find((x) => x.id === dailyId(key));
+    if (!n) return;
+    const when = parse(key).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    if (await ui.ask(`Delete the note for ${when}?`)) notes.remove(n.id);
+    void moveTo(cursor);
+  }
+  /** A day's own menu: only a day with a note has one. It leaves the cursor alone, so a day of the month
+   *  before or after does not turn the page under the menu. */
+  function dayMenu(e: MouseEvent, key: string) {
+    e.preventDefault();
+    if (lines.has(key)) ui.openMenu(e, [{ label: 'Delete', danger: true, run: () => void remove(key) }]);
+  }
   function onKey(e: KeyboardEvent) {
+    if ((e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      void remove(cursor);
+      return;
+    }
     const mod = e.metaKey || e.ctrlKey;
     const to =
       e.key === 'ArrowLeft' ? (mod ? shiftMonth(-1) : shift(-1)) :
@@ -89,7 +110,7 @@
     {#each weekdays as w, i (i)}<span class="wd">{w}</span>{/each}
     {#each cells as c (c.key)}
       <button class="day" class:out={!c.inMonth} class:today={c.key === today} class:has={lines.has(c.key)} class:cursor={c.key === cursor}
-        tabindex={c.key === cursor ? 0 : -1} onclick={() => { cursor = c.key; onpick(c.key); }}>
+        tabindex={c.key === cursor ? 0 : -1} onclick={() => { cursor = c.key; onpick(c.key); }} oncontextmenu={(e) => dayMenu(e, c.key)}>
         <span class="num">{Number(c.key.slice(8))}</span>
         {#if lines.get(c.key)}<span class="line">{lines.get(c.key)}</span>{/if}
       </button>
@@ -141,7 +162,9 @@
   }
   .day:hover { background: var(--bg-hover); }
   .day:focus { outline: none; }
-  .day.cursor:focus-visible { box-shadow: inset 0 0 0 2px var(--accent-soft); }
+  /* the day under the keyboard, whenever the keyboard is in the month (focus-visible is not dependable in
+     WebKit after a focus() from script, which is how the arrows move it) */
+  .grid:focus-within .day.cursor { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
   .day:active { transform: scale(0.98); }
   /* a day with its note: a small blue dot beside the number */
   .num { position: relative; }

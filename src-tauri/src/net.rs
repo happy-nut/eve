@@ -2,11 +2,20 @@
 use tauri::{AppHandle, Emitter};
 
 // ---- GitHub sign-in (device flow) -------------------------------------------
-/// github.com/login/* has no CORS headers, so the two device-flow POSTs run here.
+/// The two device-flow endpoints, on github.com or a GitHub Enterprise server: nothing else may be POSTed.
+pub(crate) fn login_url_ok(url: &str) -> bool {
+    let Some((host, path)) = url.strip_prefix("https://").and_then(|r| r.split_once('/')) else { return false };
+    let host_ok = !host.is_empty()
+        && host.contains('.')
+        && host.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == ':');
+    host_ok && matches!(path, "login/device/code" | "login/oauth/access_token")
+}
+
+/// GitHub's login/* has no CORS headers, so the two device-flow POSTs run here.
 /// `form` = [[key, value], ...]. Async so the main thread never blocks.
 #[tauri::command]
 pub(crate) async fn github_post(url: String, form: Vec<(String, String)>) -> Result<String, String> {
-    if !url.starts_with("https://github.com/login/") {
+    if !login_url_ok(&url) {
         return Err("url not allowed".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
@@ -155,4 +164,21 @@ pub(crate) async fn fetch_url(url: String) -> Result<String, String> {
         html.truncate(i);
     }
     Ok(html)
+}
+
+#[cfg(test)]
+mod login_tests {
+    #[test]
+    fn only_the_device_flow_endpoints() {
+        use super::login_url_ok as ok;
+        assert!(ok("https://github.com/login/device/code"));
+        assert!(ok("https://github.com/login/oauth/access_token"));
+        assert!(ok("https://github.acme.com/login/device/code"));
+        assert!(ok("https://octocorp.ghe.com:8443/login/oauth/access_token"));
+        assert!(!ok("http://github.com/login/device/code"));
+        assert!(!ok("https://github.com/login/device/code?x=1"));
+        assert!(!ok("https://github.com/api/v3/user"));
+        assert!(!ok("https://user@evil.com/login/device/code"));
+        assert!(!ok("https://localhost/login/device/code"));
+    }
 }

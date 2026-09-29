@@ -134,7 +134,7 @@ class MainActivity : TauriActivity() {
 
     /** the GitHub sign-in, so the background pull can run while the app is closed ("" = signed out) */
     @JavascriptInterface
-    fun account(repo: String, token: String) = PullJob.account(applicationContext, repo, token)
+    fun account(repo: String, token: String, host: String) = PullJob.account(applicationContext, repo, token, host)
 
     /** a note was written: the widget reads the folder again */
     @JavascriptInterface

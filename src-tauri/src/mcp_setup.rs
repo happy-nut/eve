@@ -232,16 +232,20 @@ fn shell(line: &str) -> Result<std::process::Output, String> {
     crate::mac::run_with_deadline(cmd, std::time::Duration::from_secs(30))
 }
 
-fn claude_cli() -> bool {
-    shell("command -v claude").is_ok_and(|o| {
-        o.status.success() && String::from_utf8_lossy(&o.stdout).lines().any(|l| l.trim_start().starts_with('/'))
-    })
+/// The command `claude mcp get eve` reports for Eve ("  Command: /Applications/Eve.app/…/eve").
+pub(crate) fn command_in(get: &str) -> Option<String> {
+    get.lines().find_map(|l| l.trim().strip_prefix("Command:")).map(|c| c.trim().to_string()).filter(|c| !c.is_empty())
 }
 
+/// What Claude Code itself says: whether its CLI runs here, and what it would start for `eve`. Asked of the
+/// CLI rather than read from ~/.claude.json, so it is what `claude mcp list` shows, wherever the CLI keeps
+/// its config. `command -v` only says whether there is a `claude` at all: an alias (the local installer
+/// makes one) counts, where a path check would miss it.
 fn code(me: &str) -> Client {
-    // user-scoped servers sit at the top of ~/.claude.json
-    let command = std::fs::read_to_string(home().join(".claude.json")).ok().and_then(|c| registered(&c));
-    let (installed, connected, stale) = status(claude_cli(), command, me);
+    let asked = shell(&format!("command -v claude >/dev/null 2>&1 || exit 127; claude mcp get {NAME}"));
+    let installed = asked.as_ref().is_ok_and(|o| o.status.code() != Some(127));
+    let command = asked.ok().filter(|o| o.status.success()).and_then(|o| command_in(&String::from_utf8_lossy(&o.stdout)));
+    let (installed, connected, stale) = status(installed, command, me);
     Client { id: "code", name: "Claude Code", installed, connected, stale }
 }
 
@@ -254,12 +258,20 @@ fn code_set(on: bool, me: &str) -> Result<(), String> {
         line += " true";
     }
     let out = shell(&line)?;
-    if out.status.success() {
+    // believe the CLI, not the exit code: what `claude mcp get` says now is what the user will see
+    let now = code(me);
+    if now.connected == on && !(!on && now.stale) {
         return Ok(());
     }
-    let err = String::from_utf8_lossy(&out.stderr);
-    let last = err.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("claude mcp add failed");
-    Err(format!("Claude Code: {}", last.trim()))
+    let said = [String::from_utf8_lossy(&out.stderr), String::from_utf8_lossy(&out.stdout)]
+        .iter()
+        .flat_map(|t| t.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect::<Vec<_>>())
+        .last()
+        .unwrap_or_else(|| "no output".into());
+    Err(format!(
+        "Claude Code did not take it ({said}). Run it yourself: claude mcp add --scope user {NAME} -- {} mcp",
+        quote(me)
+    ))
 }
 
 // ---- commands -----------------------------------------------------------------------
@@ -326,6 +338,14 @@ mod tests {
         assert!(with_eve("{ not json", Some("/e")).is_err());
         assert!(with_eve("[]", Some("/e")).is_err());
         assert!(with_eve(r#"{ "mcpServers": 3 }"#, Some("/e")).is_err());
+    }
+
+    #[test]
+    fn reads_what_claude_mcp_get_says() {
+        let out = "eve:\n  Scope: User config (available in all your projects)\n  Status: ✓ Connected\n  Type: stdio\n  Command: /Applications/Eve.app/Contents/MacOS/eve\n  Args: mcp\n";
+        assert_eq!(command_in(out).as_deref(), Some("/Applications/Eve.app/Contents/MacOS/eve"));
+        assert_eq!(command_in("No MCP server named \"eve\". Configured servers: x"), None);
+        assert_eq!(command_in("  Command:   \n"), None);
     }
 
     #[test]
