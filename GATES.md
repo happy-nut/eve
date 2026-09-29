@@ -1007,3 +1007,15 @@
   over the Mac sidebar's footer at 12.5px (the title bar owns the top), with progress and an error that
   wraps; the phone keeps its banner up top and its Update button while Android's installer is up.
 - [ ] G210 On a Mac, 0.7.13 (installed with brew) updates itself to the next release from the sidebar
+
+# GATES — the calendar shows its keyboard day, and a day's note can be deleted (2026-09-29)
+
+- [x] G211 The day the arrows are on is plain to see, and a day's note can be deleted from the calendar
+  EVIDENCE: the cursor day was marked only on :focus-visible, which WebKit does not set after a focus()
+  from script (how the arrows move it), and in accent-soft; it now gets the accent ring and a soft fill
+  whenever the keyboard is in the month. ⌫ / Delete asks "Delete the note for October 1, 2026?" and
+  tombstones it; a right-click (a long press on a phone) on a day with a note offers Delete, on a day
+  without one nothing. Browser (Chromium, dev server): → → from today lands on Oct 1, ringed; ⌫, Enter:
+  its dot is gone and the keyboard is still on Oct 1; a right-click on Sep 29 shown dimmed in October opens
+  the menu without turning the page, Delete + Enter removes it and October stays; an empty day: no menu.
+  npm run check: 0 errors.
