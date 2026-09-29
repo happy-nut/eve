@@ -978,6 +978,11 @@
   existing macOS-only paths, none in mcp.rs / mcp_setup.rs); cargo test --lib: 22 passed (19 new + 3 old).
   target/debug/eve registered with Claude Code 2.1.284 in a scratch HOME: `claude mcp list` -> "eve: …/eve
   mcp - √ Connected" (no window: `eve mcp` returns before Tauri starts). The Mac build and G201 stay open.
-- [ ] G207 v0.7.12 (Mac, Latest) is released, so `brew reinstall --cask eve` installs the MCP server
+- [x] G207 v0.7.12 (Mac, Latest) is released, so `brew reinstall --cask eve` installs the MCP server
   CHECK: gh release view v0.7.12 --json assets,isLatest --jq '[.isLatest, (.assets[].name)] | join(",")'
   EXPECT: ^true,Eve-macos-arm64\.zip$
+  EVIDENCE: the tag could not be pushed from the session, so release.yml gained workflow_dispatch (#98);
+  run 36577362676 (Run workflow, tag v0.7.12, main at 92ba83d) succeeded in 4 min and made the tag and the
+  release, which is Latest with Eve-macos-arm64.zip (6.7 MB). The zip's Eve.app: CFBundleShortVersionString
+  0.7.12, executable Contents/MacOS/eve (arm64), the MCP tools inside. That is also the first Mac build
+  with mcp.rs / mcp_setup.rs in it. The cask is `version :latest`, so `brew reinstall --cask eve` takes it.
