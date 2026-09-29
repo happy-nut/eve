@@ -15,8 +15,12 @@ use std::path::{Path, PathBuf};
 /// Same as tauri.conf.json's identifier: the app data folder is named after it.
 const IDENTIFIER: &str = "dev.happynut.eve";
 const PROTOCOLS: [&str; 4] = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
-/// A note body longer than this is cut, so one huge note cannot flood the client's context.
-const MAX_BODY: usize = 100_000;
+/// What one answer may hold, in estimated tokens (see `tokens`). Claude Code warns past 10,000 tokens of
+/// tool output and moves anything past 25,000 out of the conversation into a file; this stays under the
+/// warning even if the estimate is off by 2.5x. A longer answer ends with a cursor to continue from.
+const BUDGET: usize = 9_000;
+/// A note file past this is read only this far (a pasted log, a runaway export): the rest is never loaded.
+const MAX_FILE: u64 = 8 << 20;
 
 /// Where the app keeps its notes (Tauri's app_data_dir + "notes"). `EVE_NOTES_DIR` overrides it.
 pub fn notes_dir() -> PathBuf {
@@ -41,6 +45,8 @@ pub struct Note {
     pub deleted: bool,
     pub group: String,
     pub parent: Option<String>,
+    /// the file was bigger than MAX_FILE and only its start was read
+    pub clipped: bool,
 }
 
 /// `parse` in notes.svelte.ts: `---\n<key: value lines>\n---\n<body>`, an id required.
@@ -69,7 +75,7 @@ pub fn parse(text: &str) -> Option<Note> {
         }
     }
     let id = id.filter(|s| !s.is_empty())?;
-    Some(Note { id, body: body.to_string(), updated, deleted, group, parent })
+    Some(Note { id, body: body.to_string(), updated, deleted, group, parent, clipped: false })
 }
 
 /// `plain` in markdown.ts: a line of markdown as the text it shows.
@@ -124,20 +130,126 @@ pub fn title_of(body: &str) -> String {
     if t.is_empty() { "Untitled".into() } else { t }
 }
 
+/// One note file as text: at most MAX_FILE bytes, and bytes that are not UTF-8 shown as U+FFFD instead
+/// of the note going missing.
+fn read_text(path: &Path) -> Option<(String, bool)> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).ok()?;
+    let clipped = file.metadata().is_ok_and(|m| m.len() > MAX_FILE);
+    let mut bytes = Vec::new();
+    file.take(MAX_FILE).read_to_end(&mut bytes).ok()?;
+    Some((String::from_utf8_lossy(&bytes).into_owned(), clipped))
+}
+
 /// Every live note in the folder (tombstones left out), newest first.
-pub fn load(dir: &Path) -> Vec<Note> {
-    let mut out: Vec<Note> = std::fs::read_dir(dir)
-        .into_iter()
-        .flatten()
+pub fn load(dir: &Path) -> Result<Vec<Note>, String> {
+    let entries = std::fs::read_dir(dir).map_err(|e| {
+        format!(
+            "Eve's notes folder could not be read at {} ({e}). Is Eve installed, and opened once on this Mac? \
+EVE_NOTES_DIR points the server at another folder.",
+            dir.display()
+        )
+    })?;
+    let mut out: Vec<Note> = entries
         .flatten()
         .map(|e| e.path())
         .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("md"))
-        .filter_map(|p| std::fs::read_to_string(p).ok())
-        .filter_map(|t| parse(&t))
+        .filter_map(|p| read_text(&p))
+        .filter_map(|(t, clipped)| parse(&t).map(|n| Note { clipped, ..n }))
         // the daily template and the calendar's name are the calendar's, not notes (daily.ts isCalendarOwn)
         .filter(|n| !n.deleted && n.id != "daily-template" && n.id != "daily-calendar")
         .collect();
     out.sort_by(|a, b| b.updated.cmp(&a.updated).then_with(|| a.id.cmp(&b.id)));
+    Ok(out)
+}
+
+// ---- size: what fits in one answer ------------------------------------------------
+/// Tokens a model will likely spend on `s`, on the high side: ~3 ASCII chars a token, and 1.5 tokens
+/// for any other char (Hangul, CJK and emoji cost about one to two each).
+pub fn tokens(s: &str) -> usize {
+    let (ascii, other) = s.chars().fold((0, 0), |(a, o), c| if c.is_ascii() { (a + 1, o) } else { (a, o + 1) });
+    ascii / 3 + other * 3 / 2 + 1
+}
+
+/// How far past `from` the text can go within `budget` tokens: whole lines while they fit, and at least
+/// one character. A single line too long for the budget is cut between characters.
+pub fn fit(text: &str, from: usize, budget: usize) -> usize {
+    let mut end = from;
+    let mut used = 0;
+    for line in text[from..].split_inclusive('\n') {
+        let t = tokens(line);
+        if used + t <= budget {
+            used += t;
+            end += line.len();
+            continue;
+        }
+        if end > from {
+            return end;
+        }
+        // not even one line: as many characters as fit, counted in half-tokens (ASCII 1, others 3)
+        let mut half = 0;
+        for (i, c) in line.char_indices() {
+            half += if c.is_ascii() { 1 } else { 3 };
+            if half > budget * 2 && i > 0 {
+                return from + i;
+            }
+        }
+        return from + line.len();
+    }
+    end
+}
+
+/// The fence a piece of markdown leaves open (``` or ~~~), so a cut can close it: otherwise everything
+/// after the cut would read as code.
+fn open_fence(text: &str) -> Option<&'static str> {
+    let mut open = None;
+    for line in text.lines() {
+        let l = line.trim_start();
+        let mark = if l.starts_with("```") {
+            "```"
+        } else if l.starts_with("~~~") {
+            "~~~"
+        } else {
+            continue;
+        };
+        open = match open {
+            None => Some(mark),
+            Some(m) if m == mark => None,
+            other => other,
+        };
+    }
+    open
+}
+
+/// A piece of a note as sent: closed off if it stops inside a code block.
+fn piece(text: &str) -> String {
+    let text = text.trim_end_matches('\n');
+    match open_fence(text) {
+        Some(mark) => format!("{text}\n{mark}"),
+        None => text.to_string(),
+    }
+}
+
+/// The note's section headings outside code blocks (the title line left out); 40 at most.
+fn outline(body: &str) -> Vec<String> {
+    let mut fenced = false;
+    let mut out = Vec::new();
+    for line in body.lines().skip(1) {
+        let l = line.trim_start();
+        if l.starts_with("```") || l.starts_with("~~~") {
+            fenced = !fenced;
+            continue;
+        }
+        let level = line.chars().take_while(|&c| c == '#').count();
+        if !fenced && (1..=6).contains(&level) && line[level..].starts_with([' ', '\t']) {
+            out.push(plain(line));
+        }
+    }
+    if out.len() > 40 {
+        let more = out.len() - 40;
+        out.truncate(40);
+        out.push(format!("… {more} more"));
+    }
     out
 }
 
@@ -266,6 +378,9 @@ fn describe(n: &Note, notes: &[Note]) -> String {
     if let Some(c) = created(n).filter(|&c| stamp(c)[..10] != stamp(n.updated)[..10]) {
         s += &format!(" · created: {}", &stamp(c)[..10]);
     }
+    if n.clipped {
+        s += &format!(" · only the first {} MB of the file are read", MAX_FILE >> 20);
+    }
     s + &format!(" · updated: {})", stamp(n.updated))
 }
 
@@ -306,22 +421,24 @@ fn tools() -> Value {
         {
             "name": "read_note",
             "title": "Read a note",
-            "description": "Returns one note as markdown. Give its title (as in a [[wiki link]]) or its id. Give a section to get just that heading and what sits under it. Notes link to each other with [[Title]] or [[Title#Section]]; follow a link by reading that title.",
+            "description": "Returns one note as markdown. Give its title (as in a [[wiki link]]) or its id. Give a section to get just that heading and what sits under it. A long note comes in parts: the answer then ends with a cursor to pass back for the next part, and the note's sections. Notes link to each other with [[Title]] or [[Title#Section]]; follow a link by reading that title.",
             "inputSchema": { "type": "object", "properties": {
                 "title": { "type": "string", "description": "The note's title (its first line)" },
                 "id": { "type": "string", "description": "The note's id, from list_notes or search_notes" },
-                "section": { "type": "string", "description": "A heading inside the note" }
+                "section": { "type": "string", "description": "A heading inside the note" },
+                "cursor": { "type": "string", "description": "Where the last answer stopped, when it said the note continues" }
             } },
             "annotations": read_only
         },
         {
             "name": "read_period",
             "title": "Read a period",
-            "description": "Returns every note made or changed in a period, in full, oldest first: daily notes (daily-2026-09-05) and pages alike. Made for looking back over a month or a week in one call. Only the last change of a note is known, so a note edited in the period and again later counts for the later date.",
+            "description": "Returns every note made or changed in a period, oldest first: daily notes (daily-2026-09-05) and pages alike. Made for looking back over a month or a week. A long period comes in parts: keep calling with the cursor the answer ends with until it gives none. A very long note is shown as its start and its sections; read the rest with read_note. Only the last change of a note is known, so a note edited in the period and again later counts for the later date.",
             "inputSchema": { "type": "object", "properties": {
                 "from": { "type": "string", "description": "First month or day: 2026-09 or 2026-09-01 (local time)" },
                 "to": { "type": "string", "description": "Last month or day, inclusive (default: same as from)" },
-                "group": { "type": "string", "description": "Only this folder and its subfolders" }
+                "group": { "type": "string", "description": "Only this folder and its subfolders" },
+                "cursor": { "type": "string", "description": "Where the last answer stopped, when it said there is more" }
             }, "required": ["from"] },
             "annotations": read_only
         }
@@ -344,11 +461,28 @@ pub fn list_notes(notes: &[Note], args: &Value) -> Result<String, String> {
     if hits.is_empty() {
         return Ok(if group.is_empty() && when.is_none() { "No notes yet.".into() } else { "No notes there.".into() });
     }
-    let mut out = format!("{} note(s){}:\n", hits.len(), if hits.len() > limit { format!(", newest {limit}") } else { String::new() });
-    for n in hits.iter().take(limit) {
-        out += &format!("- {}\n", describe(n, notes));
+    let lines: Vec<String> = hits.iter().take(limit).map(|n| format!("- {}\n", describe(n, notes))).collect();
+    Ok(budgeted(format!("{} note(s), newest first:\n", hits.len()), &lines, hits.len(), "list_notes"))
+}
+
+/// `head` and as many `lines` as the budget holds, then what was left out of `total` and how to get less.
+fn budgeted(head: String, lines: &[String], total: usize, tool: &str) -> String {
+    let mut out = head;
+    let mut used = tokens(&out);
+    let mut shown = 0;
+    for line in lines {
+        let t = tokens(line);
+        if used + t > BUDGET {
+            break;
+        }
+        used += t;
+        out += line;
+        shown += 1;
     }
-    Ok(out)
+    if shown < total {
+        out += &format!("[{} more not shown. Call {tool} again with a group, from / to, or more words to narrow it down.]\n", total - shown);
+    }
+    out
 }
 
 /// `around` chars either side of byte offset `at`, on one line.
@@ -389,11 +523,8 @@ pub fn search_notes(notes: &[Note], args: &Value) -> Result<String, String> {
         return Ok(format!("No notes match \"{query}\"."));
     }
     hits.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.updated.cmp(&a.1.updated)));
-    let mut out = format!("{} match(es){}:\n", hits.len(), if hits.len() > limit { format!(", first {limit}") } else { String::new() });
-    for (_, n, s) in hits.iter().take(limit) {
-        out += &format!("- {}\n  {}\n", describe(n, notes), s);
-    }
-    Ok(out)
+    let lines: Vec<String> = hits.iter().take(limit).map(|(_, n, s)| format!("- {}\n  {}\n", describe(n, notes), s)).collect();
+    Ok(budgeted(format!("{} match(es), best first:\n", hits.len()), &lines, hits.len(), "search_notes"))
 }
 
 /// The heading line whose text is `name`, and everything up to the next heading of its level or above.
@@ -423,6 +554,20 @@ fn section<'a>(body: &'a str, name: &str) -> Option<&'a str> {
     start.map(|(s, _)| body[s..].trim_end())
 }
 
+/// `offset~updated`: where the last answer stopped, in the version of the note it read.
+fn cursor_at(cursor: &str, note: &Note, len: usize) -> Result<usize, String> {
+    const BAD: &str = "That cursor is not one read_note gave out.";
+    let (at, version) = cursor.split_once('~').ok_or(BAD)?;
+    let at: usize = at.parse().map_err(|_| BAD)?;
+    if version != note.updated.to_string() {
+        return Err("The note changed since that cursor was given; read it again from the start.".into());
+    }
+    if at > len {
+        return Err("That cursor is past the end of the note.".into());
+    }
+    Ok(at)
+}
+
 pub fn read_note(notes: &[Note], args: &Value) -> Result<String, String> {
     let (id, title) = (arg_str(args, "id"), arg_str(args, "title"));
     let title = title.trim_start_matches("[[").trim_end_matches("]]");
@@ -433,13 +578,18 @@ pub fn read_note(notes: &[Note], args: &Value) -> Result<String, String> {
     };
     let wanted = arg_str(args, "section");
     let wanted = if wanted.is_empty() { linked } else { wanted };
+    let mut twins = Vec::new();
     let note = if !id.is_empty() {
         notes.iter().find(|n| n.id == id).ok_or_else(|| format!("No note with id \"{id}\"."))?
     } else if !title.is_empty() {
         let low = title.to_lowercase();
         // newest first already, so the first exact title is the one a [[link]] would open
-        match notes.iter().find(|n| title_of(&n.body).to_lowercase() == low) {
-            Some(n) => n,
+        let mut same = notes.iter().filter(|n| title_of(&n.body).to_lowercase() == low);
+        match same.next() {
+            Some(n) => {
+                twins = same.map(|n| format!("{} (updated {})", n.id, stamp(n.updated))).collect();
+                n
+            }
             None => {
                 let near: Vec<String> = notes
                     .iter()
@@ -462,20 +612,35 @@ pub fn read_note(notes: &[Note], args: &Value) -> Result<String, String> {
     } else {
         section(&note.body, wanted).ok_or_else(|| format!("\"{}\" has no section \"{wanted}\".", title_of(&note.body)))?
     };
-    let mut text = body.to_string();
-    if text.len() > MAX_BODY {
-        let mut cut = MAX_BODY;
-        while !text.is_char_boundary(cut) {
-            cut -= 1;
-        }
-        text.truncate(cut);
-        text += "\n\n[… cut here: the note goes on. Ask for a section to read the rest.]";
+    let cursor = arg_str(args, "cursor");
+    let from = if cursor.is_empty() { 0 } else { cursor_at(cursor, note, body.len())? };
+    let mut out = format!("<!-- {} -->\n", describe(note, notes));
+    if !twins.is_empty() && from == 0 {
+        out += &format!("<!-- {} other note(s) share this title; read them by id: {} -->\n", twins.len(), twins.join(", "));
     }
-    Ok(format!("<!-- {} -->\n{}", describe(note, notes), text))
+    if from > 0 {
+        out += &format!("[… continued from {}%]\n", from * 100 / body.len().max(1));
+    }
+    let heads = if wanted.is_empty() && from == 0 { outline(&note.body) } else { Vec::new() };
+    // room for the closing line: the cursor, and on the first part the note's sections
+    let tail = 120 + heads.iter().map(|h| tokens(h) + 1).sum::<usize>();
+    let end = fit(body, from, BUDGET.saturating_sub(tokens(&out) + tail));
+    out += &piece(&body[from..end]);
+    if end < body.len() {
+        let section = if wanted.is_empty() { String::new() } else { format!(", section \"{wanted}\"") };
+        out += &format!(
+            "\n\n[Continues ({}% read). Call read_note with id \"{}\"{section} and cursor \"{end}~{}\" for the next part",
+            end * 100 / body.len(),
+            note.id,
+            note.updated
+        );
+        if !heads.is_empty() {
+            out += &format!(", or read one section: {}", heads.join(" | "));
+        }
+        out += ".]";
+    }
+    Ok(out)
 }
-
-/// All of a period's notes in one answer, up to this much text; the rest are named, not sent.
-const MAX_PERIOD: usize = 200_000;
 
 pub fn read_period(notes: &[Note], args: &Value) -> Result<String, String> {
     let from = arg_str(args, "from");
@@ -491,19 +656,61 @@ pub fn read_period(notes: &[Note], args: &Value) -> Result<String, String> {
     if hits.is_empty() {
         return Ok(format!("No notes made or changed in {label}."));
     }
+    // a cursor names the note the last part stopped before
+    let cursor = arg_str(args, "cursor");
+    let start = if cursor.is_empty() {
+        0
+    } else {
+        hits.iter()
+            .position(|n| n.id == cursor)
+            .ok_or("The notes of this period changed since that cursor was given; start again without it.")?
+    };
     let days = hits.iter().filter(|n| n.id.starts_with("daily-")).count();
     let mut out = format!("{} note(s) made or changed in {label} ({days} daily, {} other), oldest first.\n", hits.len(), hits.len() - days);
-    let mut left = Vec::new();
-    for n in &hits {
-        let part = format!("\n=== {} ===\n{}\n", describe(n, notes), n.body.trim_end());
-        if out.len() + part.len() > MAX_PERIOD {
-            left.push(format!("\"{}\"", title_of(&n.body)));
-        } else {
-            out += &part;
-        }
+    if start > 0 {
+        out += &format!("[… continued from note {}]\n", start + 1);
     }
-    if !left.is_empty() {
-        out += &format!("\n[Too long to send whole. Not included, read them with read_note or ask for a shorter period: {}]\n", left.join(", "));
+    const CLOSING: usize = 120;
+    let mut next = None;
+    for (i, n) in hits.iter().enumerate().skip(start) {
+        let head = format!("\n=== {} ===\n", describe(n, notes));
+        let room = BUDGET.saturating_sub(tokens(&out) + CLOSING);
+        let whole = tokens(&head) + tokens(&n.body);
+        let part = if whole <= room && whole <= BUDGET / 3 {
+            format!("{head}{}\n", n.body.trim_end())
+        } else if whole <= BUDGET / 3 {
+            // fits a part of its own: the next one
+            next = Some(i);
+            break;
+        } else {
+            // one big note would crowd out the rest of the period: its start and its sections stand in
+            let heads = outline(&n.body);
+            let listed: usize = heads.iter().map(|h| tokens(h) + 1).sum();
+            let share = (BUDGET / 6).min(room.saturating_sub(tokens(&head) + listed + 80));
+            if i > start && share < BUDGET / 12 {
+                next = Some(i);
+                break;
+            }
+            let end = fit(&n.body, 0, share.max(40));
+            let mut part = format!(
+                "{head}{}\n[… the note goes on ({}% shown). Read the rest with read_note id \"{}\"",
+                piece(&n.body[..end]),
+                end * 100 / n.body.len().max(1),
+                n.id
+            );
+            if !heads.is_empty() {
+                part += &format!("; its sections: {}", heads.join(" | "));
+            }
+            part + ".]\n"
+        };
+        out += &part;
+    }
+    if let Some(i) = next {
+        out += &format!(
+            "\n[{i} of {} notes so far. Call read_period again with the same from / to and cursor \"{}\" for the rest.]\n",
+            hits.len(),
+            hits[i].id
+        );
     }
     Ok(out)
 }
@@ -531,7 +738,7 @@ fn prompts() -> Value {
 }
 
 const GROUNDING: &str = "Stick to what the notes say and name the notes you draw on as [[Title]]; mark a guess as a guess. \
-If the answer says notes were left out for length, read the ones that matter with read_note. \
+If read_period ends with a cursor, call it again with that cursor until it has given everything. \
 Write in the language the notes are written in.";
 
 fn this_month() -> String {
@@ -598,7 +805,10 @@ fn call(dir: &Path, params: &Value) -> Value {
     let empty = json!({});
     let args = params.get("arguments").unwrap_or(&empty);
     // read on every call: the app may have written since the last one
-    let notes = load(dir);
+    let notes = match load(dir) {
+        Ok(notes) => notes,
+        Err(e) => return json!({ "content": [{ "type": "text", "text": e }], "isError": true }),
+    };
     let result = match name {
         "list_notes" => list_notes(&notes, args),
         "search_notes" => search_notes(&notes, args),
@@ -672,7 +882,7 @@ mod tests {
     use super::*;
 
     fn note(id: &str, updated: i64, group: &str, body: &str) -> Note {
-        Note { id: id.into(), body: body.into(), updated, deleted: false, group: group.into(), parent: None }
+        Note { id: id.into(), body: body.into(), updated, deleted: false, group: group.into(), parent: None, clipped: false }
     }
 
     fn text(v: &Value) -> &str {
@@ -740,7 +950,7 @@ mod tests {
         assert!(out.contains("A (id: a") && out.contains("B (id: b"));
         assert!(!out.contains("id: c") && !out.contains("id: d"), "{out}");
         let out = list_notes(&notes, &json!({ "limit": 1 })).unwrap();
-        assert!(out.starts_with("4 note(s), newest 1:") && out.contains("id: a") && !out.contains("id: b"));
+        assert!(out.starts_with("4 note(s), newest first:") && out.contains("id: a") && !out.contains("id: b"));
     }
 
     #[test]
@@ -816,6 +1026,149 @@ mod tests {
         assert!(get_prompt(&json!({ "name": "retrospective", "arguments": {} })).is_err());
         assert!(get_prompt(&json!({ "name": "monthly_review", "arguments": { "month": "soon" } })).is_err());
         assert!(get_prompt(&json!({ "name": "nope" })).is_err());
+    }
+
+    /// The cursor an answer ends with, if it goes on.
+    fn next_cursor(out: &str) -> Option<String> {
+        let at = out.rfind("cursor \"")? + 8;
+        Some(out[at..at + out[at..].find('"')?].to_string())
+    }
+
+    fn big_body() -> String {
+        let mut b = String::from("# Big\n");
+        for i in 0..3000 {
+            b += &match i % 5 {
+                0 => format!("## Part {i}\n"),
+                1 => format!("line {i}: 한글과 English가 섞인 줄입니다 🚀\n"),
+                2 => "```rust\nfn main() {}\n".to_string(),
+                3 => "```\n".to_string(),
+                _ => format!("line {i}: {}\n", "plain words ".repeat(8)),
+            };
+        }
+        b + &"긴줄".repeat(20_000) + "\nthe end"
+    }
+
+    #[test]
+    fn parts_put_back_together_are_the_note() {
+        let body = big_body();
+        let (mut from, mut parts) = (0, 0);
+        let mut again = String::new();
+        while from < body.len() {
+            let end = fit(&body, from, 1_000);
+            assert!(end > from && body.is_char_boundary(end));
+            assert!(tokens(&body[from..end]) <= 1_000 || !body[from..end].contains('\n'), "a part over budget");
+            again += &body[from..end];
+            from = end;
+            parts += 1;
+        }
+        assert_eq!(again, body);
+        assert!(parts > 10);
+        // a part that stops inside a code block is closed off
+        assert_eq!(piece("a\n```js\nx\n"), "a\n```js\nx\n```");
+        assert_eq!(piece("```\nx\n```\n"), "```\nx\n```");
+        assert_eq!(piece("~~~\n```\n"), "~~~\n```\n~~~");
+    }
+
+    #[test]
+    fn a_long_note_comes_in_parts_under_budget() {
+        let body = big_body();
+        let notes = vec![note("big", 7, "", &body)];
+        let mut args = json!({ "title": "Big" });
+        let (mut answers, mut seen) = (0, String::new());
+        loop {
+            let out = read_note(&notes, &args).unwrap();
+            assert!(tokens(&out) <= BUDGET, "answer {answers} is {} tokens", tokens(&out));
+            answers += 1;
+            seen += &out;
+            match next_cursor(&out) {
+                Some(c) => args = json!({ "id": "big", "cursor": c }),
+                None => break,
+            }
+            assert!(answers < 200);
+        }
+        assert!(answers > 3, "{answers}");
+        for i in (1..3000).step_by(5) {
+            assert_eq!(seen.matches(&format!("line {i}:")).count(), 1, "line {i}");
+        }
+        assert!(seen.contains("the end"));
+        // the first part names the sections to jump to
+        let first = read_note(&notes, &json!({ "id": "big" })).unwrap();
+        assert!(first.contains("or read one section: Part 0 | Part 5"), "{}", &first[first.len() - 300..]);
+        // a cursor from an older version, or made up, is refused
+        let c = next_cursor(&first).unwrap();
+        let newer = vec![note("big", 8, "", &body)];
+        assert!(read_note(&newer, &json!({ "id": "big", "cursor": c })).unwrap_err().contains("changed"));
+        assert!(read_note(&notes, &json!({ "id": "big", "cursor": "x" })).is_err());
+        assert!(read_note(&notes, &json!({ "id": "big", "cursor": "999999999~7" })).is_err());
+    }
+
+    #[test]
+    fn a_long_period_comes_in_parts_and_big_notes_as_their_start() {
+        let day = |d: i64| day_start(2026, 9, d);
+        let mut notes: Vec<Note> = (1..=30)
+            .map(|d| note(&format!("daily-2026-09-{d:02}"), day(d) + 1, "", &format!("# day {d}\n{}", "오늘 한 일을 적는다. ".repeat(60))))
+            .collect();
+        notes.push(note("huge", day(15) + 2, "", &big_body()));
+        let mut args = json!({ "from": "2026-09" });
+        let (mut answers, mut seen) = (0, String::new());
+        loop {
+            let out = read_period(&notes, &args).unwrap();
+            assert!(tokens(&out) <= BUDGET, "answer {answers} is {} tokens", tokens(&out));
+            answers += 1;
+            seen += &out;
+            match next_cursor(&out) {
+                Some(c) => args = json!({ "from": "2026-09", "cursor": c }),
+                None => break,
+            }
+            assert!(answers < 50);
+        }
+        assert!(answers > 1);
+        for d in 1..=30 {
+            assert_eq!(seen.matches(&format!("# day {d}\n")).count(), 1, "day {d}");
+        }
+        assert_eq!(seen.matches("=== Big (id: huge").count(), 1);
+        assert!(seen.contains("Read the rest with read_note id \"huge\"; its sections: Part 0 | Part 5"));
+        assert!(!seen.contains("the end"));
+        assert!(read_period(&notes, &json!({ "from": "2026-09", "cursor": "gone" })).is_err());
+    }
+
+    #[test]
+    fn long_lists_stop_at_the_budget() {
+        let notes: Vec<Note> = (0..3000).map(|i| note(&format!("n{i}"), i, "Work", &format!("# 노트 {i}\nsame words"))).collect();
+        let out = list_notes(&notes, &json!({ "limit": 500 })).unwrap();
+        assert!(tokens(&out) <= BUDGET && out.contains("more not shown"), "{}", tokens(&out));
+        let out = search_notes(&notes, &json!({ "query": "same", "limit": 100 })).unwrap();
+        assert!(tokens(&out) <= BUDGET, "{}", tokens(&out));
+    }
+
+    #[test]
+    fn same_titles_are_named() {
+        let notes = vec![note("new", 2, "", "# Todo\nb"), note("old", 1, "", "# Todo\na")];
+        let out = read_note(&notes, &json!({ "title": "todo" })).unwrap();
+        assert!(out.contains("1 other note(s) share this title; read them by id: old"), "{out}");
+        assert!(out.ends_with("# Todo\nb"));
+    }
+
+    #[test]
+    fn odd_files_still_read() {
+        let dir = std::env::temp_dir().join(format!("eve-mcp-odd-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut bad = b"---\nid: bad\nupdated: 1\n---\n# Broken \xff\xfe bytes\n".to_vec();
+        std::fs::write(dir.join("bad.md"), &bad).unwrap();
+        bad.clear();
+        bad.extend_from_slice(b"---\nid: huge\nupdated: 2\n---\n# Huge\n");
+        bad.resize(MAX_FILE as usize + 1000, b'x');
+        std::fs::write(dir.join("huge.md"), &bad).unwrap();
+        let notes = load(&dir).unwrap();
+        assert_eq!(notes.len(), 2);
+        let broken = notes.iter().find(|n| n.id == "bad").unwrap();
+        assert!(broken.body.contains("Broken \u{fffd}\u{fffd} bytes"));
+        let huge = notes.iter().find(|n| n.id == "huge").unwrap();
+        assert!(huge.clipped && huge.body.len() < MAX_FILE as usize);
+        assert!(list_notes(&notes, &json!({})).unwrap().contains("only the first 8 MB"));
+        std::fs::remove_dir_all(&dir).unwrap();
+        let err = load(&dir.join("missing")).unwrap_err();
+        assert!(err.contains("eve-mcp-odd") && err.contains("EVE_NOTES_DIR"), "{err}");
     }
 
     #[test]

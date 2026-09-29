@@ -939,3 +939,24 @@
   group and day ranges narrow it; the daily template is never a note. Prompts name read_period with the
   month (default: this month) or range + focus; a bad month is refused (-32602). Over stdio: prompts/list,
   read_period on Korean notes.
+- [x] G203 Nothing Eve's MCP server answers floods the client, and every long answer can be read to the end
+  CHECK: cd src-tauri && cargo test mcp
+  EXPECT: test result: ok
+  EVIDENCE: Claude Code's limits (code.claude.com/docs/en/mcp): a warning past 10,000 tokens, past 25,000 the
+  result goes to a file. Budget 9,000 by a high-side estimate (ASCII/3 + 1.5 per other char). Scratch crate,
+  17 mcp tests ok, clippy clean: a 3,000-line note of Korean, English, emoji, code fences and a 40,000-char
+  line comes in 6 parts, each under budget, cut between lines, the parts put back together byte for byte;
+  a part ending inside ``` is closed off; part 1 lists the sections; a cursor from an older version or a
+  made-up one is refused. A month of 30 daily notes plus that note: every part under budget, each day
+  exactly once, the big note as its start + sections. 3,000 notes: list and search stop at the budget and
+  say how many more. Invalid UTF-8 reads with U+FFFD; an 8 MB+ file is read to 8 MB and says so; two notes
+  with one title name each other; a missing folder names its path. 3,000 notes (15 MB), release build,
+  process start included: search 119 ms, read_period 41 ms, list 50 ms, so no cache.
+- [x] G204 Connecting keeps Claude Desktop's config as it was, in order, and backs it up once
+  CHECK: cd src-tauri && cargo test mcp_setup
+  EXPECT: test result: ok
+  EVIDENCE: an order-keeping JSON type (no serde_json preserve_order, which Cargo would switch on for Tauri
+  too): a config read and written back compacts to the same bytes; eve is added last among the servers, a
+  new path replaces it in place, off gives the original back. Scratch HOME: the 4-space original is saved as
+  claude_desktop_config.json.eve-backup on the first write and never overwritten; connecting twice with the
+  same path or disconnecting when not connected leaves the file untouched (mtime unchanged).

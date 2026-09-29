@@ -107,7 +107,8 @@ in-memory fake; `EVE_TEST_REPO=owner/name EVE_TEST_TOKEN=… npm test` runs it a
 
 Settings → Sync & app → Claude → **Connect** lets Claude read your notes. One click registers Eve's
 read-only [MCP](https://modelcontextprotocol.io) server with every Claude app on the Mac: it adds `eve` to
-Claude Desktop's `claude_desktop_config.json` (the rest of the file kept), and runs
+Claude Desktop's `claude_desktop_config.json` (every other key kept, in its order; the file as it was before is
+saved once as `claude_desktop_config.json.eve-backup`), and runs
 `claude mcp add --scope user eve -- …/Eve.app/Contents/MacOS/eve mcp` for Claude Code. Restart Claude Desktop
 after connecting.
 
@@ -118,6 +119,13 @@ local time); `read_note` (by title or id, a `[[Title#Section]]` link, or one sec
 note made or changed in a month or a range, in full and oldest first, for looking back in one call. A note's
 creation time comes from its id (a day's note is its day). Only a note's last change is known, so a note edited
 in September and again in October counts for October. Deleted notes and the calendar's own are left out.
+
+Every answer stays under ~9,000 tokens (Claude Code warns past 10,000 and sets anything past 25,000 aside in a
+file). A longer note comes in parts, cut between lines, a code block cut open closed off, the first part listing
+its sections; the answer ends with a `cursor` to pass back, refused if the note changed meanwhile. A long period
+comes in parts the same way, and one very long note in it as its start and sections. Long lists name how many
+were left out. A note file past 8 MB is read that far; bytes that are not UTF-8 show as `�` rather than the note
+going missing; a title two notes share names the other; a missing notes folder names the path it looked in.
 
 Two prompts start the looking back (Claude Code: `/mcp__eve__monthly_review 2026-09`; Claude Desktop: the + menu):
 `monthly_review` (what you did, decided and learned, what is still open, three things to try next month) and

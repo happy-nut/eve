@@ -1,10 +1,11 @@
 //! Settings → Claude: one click registers `eve mcp` (mcp.rs) with the Claude apps on this Mac.
 //!
-//! Claude Desktop reads its servers from a JSON file we edit in place (every other key kept).
+//! Claude Desktop reads its servers from a JSON file we edit in place: every other key kept, in its
+//! order, and the file as it was before Eve first touched it saved beside it.
 //! Claude Code keeps its own in ~/.claude.json, a file it rewrites constantly, so that one goes
 //! through its CLI (`claude mcp add --scope user`) instead of being edited under its feet.
-use serde::Serialize;
-use serde_json::{json, Map, Value};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 const NAME: &str = "eve";
@@ -47,25 +48,129 @@ pub(crate) fn registered(config: &str) -> Option<String> {
     v.get("mcpServers")?.get(NAME)?.get("command")?.as_str().map(str::to_string)
 }
 
-/// `config` with `mcpServers.eve` set to run `exe mcp` (or removed), everything else as it was.
-pub(crate) fn with_eve(config: &str, exe: Option<&str>) -> Result<String, String> {
-    let mut root: Value = if config.trim().is_empty() {
-        json!({})
+/// JSON that keeps the order of an object's keys as written. serde_json's own Map sorts them unless its
+/// `preserve_order` feature is on, and Cargo would turn that on for Tauri's JSON too; this stays local.
+#[derive(Debug, Clone, PartialEq)]
+enum Json {
+    Null,
+    Bool(bool),
+    Num(serde_json::Number),
+    Str(String),
+    Arr(Vec<Json>),
+    Obj(Vec<(String, Json)>),
+}
+
+impl<'de> Deserialize<'de> for Json {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> de::Visitor<'de> for V {
+            type Value = Json;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("JSON")
+            }
+            fn visit_unit<E>(self) -> Result<Json, E> {
+                Ok(Json::Null)
+            }
+            fn visit_bool<E>(self, b: bool) -> Result<Json, E> {
+                Ok(Json::Bool(b))
+            }
+            fn visit_i64<E>(self, n: i64) -> Result<Json, E> {
+                Ok(Json::Num(n.into()))
+            }
+            fn visit_u64<E>(self, n: u64) -> Result<Json, E> {
+                Ok(Json::Num(n.into()))
+            }
+            fn visit_f64<E: de::Error>(self, n: f64) -> Result<Json, E> {
+                serde_json::Number::from_f64(n).map(Json::Num).ok_or_else(|| E::custom("not a finite number"))
+            }
+            fn visit_str<E>(self, s: &str) -> Result<Json, E> {
+                Ok(Json::Str(s.to_string()))
+            }
+            fn visit_string<E>(self, s: String) -> Result<Json, E> {
+                Ok(Json::Str(s))
+            }
+            fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Json, A::Error> {
+                let mut out = Vec::new();
+                while let Some(v) = seq.next_element()? {
+                    out.push(v);
+                }
+                Ok(Json::Arr(out))
+            }
+            fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Json, A::Error> {
+                let mut out = Vec::new();
+                while let Some(kv) = map.next_entry()? {
+                    out.push(kv);
+                }
+                Ok(Json::Obj(out))
+            }
+        }
+        d.deserialize_any(V)
+    }
+}
+
+impl Serialize for Json {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::{SerializeMap, SerializeSeq};
+        match self {
+            Json::Null => s.serialize_unit(),
+            Json::Bool(b) => s.serialize_bool(*b),
+            Json::Num(n) => n.serialize(s),
+            Json::Str(v) => s.serialize_str(v),
+            Json::Arr(items) => {
+                let mut seq = s.serialize_seq(Some(items.len()))?;
+                for v in items {
+                    seq.serialize_element(v)?;
+                }
+                seq.end()
+            }
+            Json::Obj(pairs) => {
+                let mut map = s.serialize_map(Some(pairs.len()))?;
+                for (k, v) in pairs {
+                    map.serialize_entry(k, v)?;
+                }
+                map.end()
+            }
+        }
+    }
+}
+
+/// `config` with `mcpServers.eve` set to run `exe mcp` (or removed); None when that changes nothing.
+/// Every other key stays where it was; a new `eve` goes last among the servers.
+pub(crate) fn with_eve(config: &str, exe: Option<&str>) -> Result<Option<String>, String> {
+    let mut root = if config.trim().is_empty() {
+        Json::Obj(Vec::new())
     } else {
         serde_json::from_str(config).map_err(|e| format!("Claude's config is not valid JSON ({e}); fix or remove it first."))?
     };
-    let obj = root.as_object_mut().ok_or("Claude's config is not a JSON object.")?;
-    let servers = obj.entry("mcpServers").or_insert_with(|| Value::Object(Map::new()));
-    let servers = servers.as_object_mut().ok_or("mcpServers in Claude's config is not an object.")?;
-    match exe {
-        Some(exe) => {
-            servers.insert(NAME.into(), json!({ "command": exe, "args": ["mcp"] }));
-        }
+    let Json::Obj(top) = &mut root else { return Err("Claude's config is not a JSON object.".into()) };
+    let at = match top.iter().position(|(k, _)| k == "mcpServers") {
+        Some(i) => i,
+        None if exe.is_none() => return Ok(None),
         None => {
-            servers.remove(NAME);
+            top.push(("mcpServers".into(), Json::Obj(Vec::new())));
+            top.len() - 1
+        }
+    };
+    let Json::Obj(servers) = &mut top[at].1 else { return Err("mcpServers in Claude's config is not an object.".into()) };
+    let mine = servers.iter().position(|(k, _)| k == NAME);
+    match (exe, mine) {
+        (None, None) => return Ok(None),
+        (None, Some(i)) => {
+            servers.remove(i);
+        }
+        (Some(exe), mine) => {
+            let entry = Json::Obj(vec![
+                ("command".into(), Json::Str(exe.into())),
+                ("args".into(), Json::Arr(vec![Json::Str("mcp".into())])),
+            ]);
+            match mine {
+                Some(i) if servers[i].1 == entry => return Ok(None),
+                Some(i) => servers[i].1 = entry,
+                None => servers.push((NAME.into(), entry)),
+            }
         }
     }
-    serde_json::to_string_pretty(&root).map(|s| s + "\n").map_err(|e| e.to_string())
+    serde_json::to_string_pretty(&root).map(|s| Some(s + "\n")).map_err(|e| e.to_string())
 }
 
 fn status(installed: bool, command: Option<String>, me: &str) -> (bool, bool, bool) {
@@ -91,12 +196,14 @@ fn desktop_set(on: bool, me: &str) -> Result<(), String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e.to_string()),
     };
-    if old.is_empty() && !on {
-        return Ok(());
-    }
-    let new = with_eve(&old, on.then_some(me))?;
+    let Some(new) = with_eve(&old, on.then_some(me))? else { return Ok(()) };
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    // the file as it was before Eve ever changed it: kept once, never overwritten
+    let backup = path.with_file_name("claude_desktop_config.json.eve-backup");
+    if !old.is_empty() && !backup.exists() {
+        std::fs::write(&backup, &old).map_err(|e| format!("Could not back up Claude's config: {e}"))?;
     }
     crate::files::write_atomic(&path, new.as_bytes())
 }
@@ -189,22 +296,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn adds_and_removes_eve_keeping_the_rest() {
-        let config = r#"{ "globalShortcut": "Alt+Space", "mcpServers": { "other": { "command": "x" } } }"#;
-        let on = with_eve(config, Some("/Applications/Eve.app/Contents/MacOS/eve")).unwrap();
+    fn adds_and_removes_eve_keeping_the_rest_in_order() {
+        let config = r#"{"zeta":1,"mcpServers":{"other":{"command":"x","env":{"Z":"1","A":"2"}}},"alpha":[1.5,true,null,{"y":0,"b":-3}],"k":"한글"}"#;
+        // read and written back unchanged, key order included
+        assert_eq!(serde_json::to_string(&serde_json::from_str::<Json>(config).unwrap()).unwrap(), config);
+        let on = with_eve(config, Some("/Applications/Eve.app/Contents/MacOS/eve")).unwrap().unwrap();
         assert_eq!(registered(&on).as_deref(), Some("/Applications/Eve.app/Contents/MacOS/eve"));
-        let v: Value = serde_json::from_str(&on).unwrap();
-        assert_eq!(v["globalShortcut"], "Alt+Space");
-        assert_eq!(v["mcpServers"]["other"]["command"], "x");
-        assert_eq!(v["mcpServers"]["eve"]["args"], json!(["mcp"]));
-        let off = with_eve(&on, None).unwrap();
-        assert_eq!(registered(&off), None);
-        assert_eq!(serde_json::from_str::<Value>(&off).unwrap()["mcpServers"]["other"]["command"], "x");
+        let compact = serde_json::to_string(&serde_json::from_str::<Json>(&on).unwrap()).unwrap();
+        assert_eq!(
+            compact,
+            r#"{"zeta":1,"mcpServers":{"other":{"command":"x","env":{"Z":"1","A":"2"}},"eve":{"command":"/Applications/Eve.app/Contents/MacOS/eve","args":["mcp"]}},"alpha":[1.5,true,null,{"y":0,"b":-3}],"k":"한글"}"#
+        );
+        // the same entry again changes nothing; another path replaces it where it is
+        assert_eq!(with_eve(&on, Some("/Applications/Eve.app/Contents/MacOS/eve")).unwrap(), None);
+        let moved = with_eve(&on, Some("/new/eve")).unwrap().unwrap();
+        assert_eq!(registered(&moved).as_deref(), Some("/new/eve"));
+        assert!(moved.find("\"other\"").unwrap() < moved.find("\"eve\"").unwrap());
+        // off: back to the original, byte for byte once compacted
+        let off = with_eve(&on, None).unwrap().unwrap();
+        assert_eq!(serde_json::to_string(&serde_json::from_str::<Json>(&off).unwrap()).unwrap(), config);
+        assert_eq!(with_eve(config, None).unwrap(), None);
+        assert_eq!(with_eve(r#"{"a":1}"#, None).unwrap(), None);
     }
 
     #[test]
     fn starts_a_missing_config_and_refuses_a_broken_one() {
-        assert_eq!(registered(&with_eve("", Some("/e")).unwrap()).as_deref(), Some("/e"));
+        assert_eq!(registered(&with_eve("", Some("/e")).unwrap().unwrap()).as_deref(), Some("/e"));
+        assert_eq!(with_eve("", None).unwrap(), None);
         assert!(with_eve("{ not json", Some("/e")).is_err());
         assert!(with_eve("[]", Some("/e")).is_err());
         assert!(with_eve(r#"{ "mcpServers": 3 }"#, Some("/e")).is_err());
