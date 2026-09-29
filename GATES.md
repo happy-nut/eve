@@ -906,3 +906,26 @@
   CHECK: gh release view android-v0.7.18 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.18\.apk,Eve-android\.apk$
   EVIDENCE: the android-v0.7.18 run succeeded.
+
+# GATES — Claude reads the notes: read-only MCP server + one-click connect (2026-09-29)
+
+- [x] G198 `eve mcp` parses notes like the app and answers list / search / read
+  CHECK: cd src-tauri && cargo test mcp
+  EXPECT: test result: ok
+  EVIDENCE: Linux container has no webkit, so the full crate does not build there; mcp.rs and
+  mcp_setup.rs compiled alone with serde_json: 7 + 4 tests ok (frontmatter incl. a `---` divider in the body,
+  titles as `titleOf`/`plain` give them, group filter, every-word search with title hits first, Korean,
+  [[Title#Section]] incl. a fenced `## `, tombstones and .tmp files skipped, JSON-RPC initialize /
+  notification / tools/list / tools/call / unknown method). clippy clean. Over stdio: initialize,
+  search "읽기", read [[회의록#결정]], garbage line -> -32700.
+- [x] G199 A real MCP client connects
+  EVIDENCE: Claude Code 2.1.284 in a scratch HOME: `claude mcp add --scope user eve -- <binary> mcp`, then
+  `claude mcp list` -> "eve: … mcp - √ Connected".
+- [x] G200 Connect registers Eve with both Claude apps, Disconnect removes it, nothing else is touched
+  EVIDENCE: mcp_setup through a login shell (bash -ilc) with a bare PATH, scratch HOME, the real `claude`
+  CLI: ~/.claude.json got mcpServers.eve {command: "/Apps/Eve's.app/eve", args: ["mcp"]} (apostrophe
+  quoted through the shell); claude_desktop_config.json kept "k" and server "x" beside eve; off removed eve
+  from both. A config that is not JSON is refused, not overwritten. `npm run check` 0 errors, `npm run build` ok.
+- [ ] G201 On the Mac: Settings → Claude finds Claude Desktop / Claude Code, Connect, restart Claude Desktop,
+  "search my Eve notes for …" answers from the notes; Disconnect; the setting survives a move of Eve.app
+  (shows "points at another copy of Eve" until reconnected)

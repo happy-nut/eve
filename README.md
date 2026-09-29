@@ -103,6 +103,20 @@ fork: register an OAuth App with *Device Flow* enabled and paste its client id).
 through macOS's `curl` from Rust because github.com/login has no CORS. `npm test` runs the sync engine against an
 in-memory fake; `EVE_TEST_REPO=owner/name EVE_TEST_TOKEN=… npm test` runs it against a real repo.
 
+## Claude (MCP)
+
+Settings → Sync & app → Claude → **Connect** lets Claude read your notes. One click registers Eve's
+read-only [MCP](https://modelcontextprotocol.io) server with every Claude app on the Mac: it adds `eve` to
+Claude Desktop's `claude_desktop_config.json` (the rest of the file kept), and runs
+`claude mcp add --scope user eve -- …/Eve.app/Contents/MacOS/eve mcp` for Claude Code. Restart Claude Desktop
+after connecting.
+
+The server is the app's own binary started as `eve mcp` (no window, no Tauri): it reads `notes/*.md` from disk,
+so it works while Eve is closed. Three tools, none of which writes: `list_notes` (optionally one group),
+`search_notes` (every word must match; title hits first) and `read_note` (by title or id, a `[[Title#Section]]`
+link, or one section). Deleted notes are left out. By hand, from any MCP client: command
+`/Applications/Eve.app/Contents/MacOS/eve`, args `["mcp"]`; `EVE_NOTES_DIR` points it at another folder.
+
 ## Layout
 
 ```
@@ -114,6 +128,8 @@ src/                Svelte UI
   lib/sync.svelte.ts      sync client (notes + images <-> GitHub)
   lib/github.ts           GitHub REST sync engine (pure, tested in Node)
 src-tauri/          Rust: file/asset storage commands, window toggle, global-shortcut plugin
+  src/mcp.rs              `eve mcp`: read-only MCP server over stdio
+  src/mcp_setup.rs        Settings → Claude: register it with Claude Desktop / Claude Code
 ```
 
 MIT.
