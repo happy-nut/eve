@@ -1053,3 +1053,24 @@
   and Settings names every app, "not found" included. Same zsh + alias setup, the real CLI (2.1.284):
   before connected=false, after Connect connected=true, from another path stale=true, after Disconnect
   connected=false. 5 unit tests ok (command_in reads get's output); npm run check 0 errors.
+
+# GATES — sync through GitHub Enterprise, an organization, or a token (2026-09-29)
+
+- [x] G214 The sync runs against another GitHub server, owner or sign-in, and nothing of it goes to github.com
+  CHECK: npm test (github, handoff) && cd src-tauri && cargo test --lib login_tests
+  EXPECT: SYNC_OK / HANDOFF_OK / test result: ok
+  EVIDENCE: github.ts: normHost (a URL or host, maybe with a port; github.com = ''), apiBase (api.github.com,
+  api.NAME.ghe.com, HOST/api/v3), device flow against HOST/login with a given Client ID, ensureRepo under the
+  user or an organization (POST /orgs/ORG/repos), refusing an existing internal or public repo, and naming
+  the server when it cannot be reached. The whole fake-GitHub sync run again through https://github.acme.com
+  /api/v3: push, pull by a second client, every request to that base. The QR hand-off carries the server
+  (a bad one refused; a Mac from before sends none = github.com). net.rs POSTs only the two device-flow paths,
+  on any https host with a dot (tests: github.com, a GHES, a ghe.com with a port; not http, a query, another
+  path, user@host, localhost). Android: PullJob keeps the host with the sign-in and asks HOST's API (same
+  rules as apiBase); an upgrade finds no host = github.com, so nothing restarts. Browser, Chromium with a
+  stand-in for Tauri and a fake GHES at github.acme.com: Settings → GitHub Enterprise… → server
+  "https://github.acme.com/" shows the Client ID field; Sign in with GitHub without one says to paste a token
+  or a Client ID; with a token the button reads "Sign in with token", the repo is made under the user, the
+  notes and groups.json are committed there, status ok, the row reads "private repository
+  hyungsun/eve-notes on github.acme.com"; the only github.com requests were the update check's.
+  Not run: a real GitHub Enterprise Server (CORS on its API is assumed as on api.github.com), the Kotlin.

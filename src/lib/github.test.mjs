@@ -1,7 +1,7 @@
 // Sync engine self-check. Default: in-memory fake GitHub. Real API: EVE_TEST_REPO=owner/name EVE_TEST_TOKEN=... npm test
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
-import { Repo, FileHashes, syncRound, blobSha, deviceLogin, pollToken } from './github.ts';
+import { Repo, FileHashes, syncRound, blobSha, deviceLogin, pollToken, normHost, apiBase, webBase, ensureRepo } from './github.ts';
 
 const gitSha = (buf) => createHash('sha1').update(`blob ${buf.length}\0`).update(buf).digest('hex');
 const rnd = () => randomBytes(20).toString('hex');
@@ -150,6 +150,61 @@ await assert.rejects(pollToken(async () => { throw new Error('offline'); }, 'd',
   const b = await h.file('notes/x.md', 'two');
   assert.equal(b.sha, await blobSha(enc.encode('two')));
   assert.equal((await h.file('notes/y.md', 'one')).sha, a.sha); // per path, not confused across paths
+}
+
+// ---- GitHub Enterprise: the server is a setting ------------------------------------------------
+assert.equal(normHost(''), '');
+assert.equal(normHost(' https://GitHub.com/ '), '');
+assert.equal(normHost('https://github.acme.com/some/page'), 'github.acme.com');
+assert.equal(normHost('octocorp.ghe.com'), 'octocorp.ghe.com');
+assert.equal(normHost('git.local:8443'), 'git.local:8443');
+assert.throws(() => normHost('not a host'), /not a server address/);
+assert.throws(() => normHost('localhost'), /not a server address/);
+assert.equal(apiBase(''), 'https://api.github.com');
+assert.equal(apiBase('octocorp.ghe.com'), 'https://api.octocorp.ghe.com');
+assert.equal(apiBase('github.acme.com'), 'https://github.acme.com/api/v3');
+assert.equal(webBase('github.acme.com'), 'https://github.acme.com');
+
+if (fake) {
+  // the whole sync, pointed at a GitHub Enterprise Server: every request goes to its /api/v3, none elsewhere
+  const ghes = fakeGitHub(), hosts = new Set();
+  const viaGhes = (url, init) => {
+    const u = new URL(url);
+    hosts.add(u.origin + u.pathname.slice(0, 7));
+    assert.equal(u.origin + u.pathname.slice(0, 7), 'https://github.acme.com/api/v3');
+    return ghes.fetch('https://api.github.com' + u.pathname.slice(7), init);
+  };
+  const E = new Repo({ repo: 'me/eve-notes', token: 'tok', head: '', tree: '', known: {}, host: 'github.acme.com' }, viaGhes);
+  const eFiles = { 'notes/x.md': v1 };
+  await syncRound(E, () => entries(eFiles), (p) => merge(eFiles, p));
+  const E2 = new Repo({ repo: 'me/eve-notes', token: 'tok', head: '', tree: '', known: {}, host: 'github.acme.com' }, viaGhes), e2 = {};
+  await syncRound(E2, () => [], (p) => merge(e2, p));
+  assert.equal(dec.decode(bytes(e2, 'notes/x.md')), dec.decode(v1));
+  assert.equal(hosts.size, 1);
+
+  // device flow against that server, with its own OAuth App
+  const ePosts = [];
+  const ePost = async (url, form) => { ePosts.push([url, form.client_id]); return url.endsWith('device/code') ? '{"device_code":"d","user_code":"X","verification_uri":"https://github.acme.com/login/device","interval":1}' : '{"access_token":"ghu_e"}'; };
+  assert.equal(await deviceLogin(ePost, () => {}, undefined, async () => {}, { host: 'github.acme.com', clientId: 'Iv1.acme' }), 'ghu_e');
+  assert.deepEqual(ePosts, [['https://github.acme.com/login/device/code', 'Iv1.acme'], ['https://github.acme.com/login/oauth/access_token', 'Iv1.acme']]);
+
+  // the notes repo: made under the user, or an organization; an internal one is refused
+  const made = [];
+  const api = (repos) => async (url, init = {}) => {
+    const u = new URL(url), m = init.method ?? 'GET', j = (st, b) => new Response(JSON.stringify(b), { status: st });
+    if (u.pathname === '/api/v3/user') return j(200, { login: 'me' });
+    if (m === 'GET' && u.pathname.startsWith('/api/v3/repos/')) { const r = repos[u.pathname.slice(14)]; return r ? j(200, r) : j(404, {}); }
+    if (m === 'POST') { made.push(u.pathname); return j(201, {}); }
+    return j(404, {});
+  };
+  assert.deepEqual(await ensureRepo('t', api({}), { host: 'github.acme.com' }), { user: 'me', repo: 'me/eve-notes' });
+  assert.deepEqual(await ensureRepo('t', api({}), { host: 'github.acme.com', owner: 'Acme' }), { user: 'me', repo: 'Acme/eve-notes' });
+  assert.deepEqual(made, ['/api/v3/user/repos', '/api/v3/orgs/Acme/repos']);
+  assert.deepEqual(await ensureRepo('t', api({ 'me/eve-notes': { private: true, visibility: 'private' } }), { host: 'github.acme.com' }), { user: 'me', repo: 'me/eve-notes' });
+  await assert.rejects(ensureRepo('t', api({ 'me/eve-notes': { private: true, visibility: 'internal' } }), { host: 'github.acme.com' }), /is internal/);
+  await assert.rejects(ensureRepo('t', api({ 'me/eve-notes': { private: false } }), { host: 'github.acme.com' }), /is public/);
+  await assert.rejects(ensureRepo('t', async () => { throw new TypeError('Load failed'); }, { host: 'github.acme.com' }), /Could not reach https:\/\/github\.acme\.com/);
+  await assert.rejects(ensureRepo('t', api({}), { host: 'github.acme.com', owner: 'a/b' }), /not a user or organization/);
 }
 
 console.log('SYNC_OK');

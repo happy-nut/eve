@@ -1,8 +1,8 @@
 # The Mac and the phone release on their own:
 #   tag v*          -> Eve.app on an Apple-silicon runner -> release with Eve-macos-arm64.zip (Latest;
 #                      the Homebrew cask, happy-nut/homebrew-tap, points at releases/latest)
-#   Run workflow (workflow_dispatch) with tag v<version> -> the same Mac release from the branch it runs on,
-#                      the tag made along with it: for when a tag cannot be pushed
+#   Run workflow (workflow_dispatch) with tag v<version> or android-v<version> -> the same release from the
+#                      branch it runs on, the tag made along with it: for when a tag cannot be pushed
 #   tag android-v*  -> the signed APK -> its own release with Eve-android.apk, never marked Latest (the
 #                      phone-setup page, docs/android/, and the app's updater look for the newest APK)
 # The phone's version is src-tauri/tauri.android.conf.json; the Mac's is tauri.conf.json.
@@ -13,13 +13,13 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Mac release to make: v + the version in src-tauri/tauri.conf.json (e.g. v0.7.12)'
+        description: 'Release to make: v + tauri.conf.json''s version (Mac), or android-v + tauri.android.conf.json''s (phone)'
         required: true
 permissions:
   contents: write
 jobs:
   build:
-    if: startsWith(github.ref_name, 'v') || github.event_name == 'workflow_dispatch'
+    if: startsWith(github.ref_name, 'v') || (github.event_name == 'workflow_dispatch' && startsWith(inputs.tag, 'v'))
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
@@ -46,10 +46,18 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
 
   android:
-    if: startsWith(github.ref_name, 'android-v')
+    if: startsWith(github.ref_name, 'android-v') || (github.event_name == 'workflow_dispatch' && startsWith(inputs.tag, 'android-v'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # run by hand: the tag must be the phone's own version, and not taken yet
+      - if: github.event_name == 'workflow_dispatch'
+        run: |
+          V="android-v$(node -p "require('./src-tauri/tauri.android.conf.json').version")"
+          [ "$TAG" = "$V" ] || { echo "::error::$TAG is not the phone's version ($V)"; exit 1; }
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then echo "::error::$TAG exists already"; exit 1; fi
+        env:
+          TAG: ${{ inputs.tag }}
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -72,10 +80,12 @@ jobs:
       # the runner's own NDK: a shell variable, not something the `env` context can see
       - run: NDK_HOME="$ANDROID_NDK_LATEST_HOME" npm run tauri -- android build --apk --target aarch64
       - run: |
-          V="${GITHUB_REF_NAME#android-v}"
+          V="${TAG#android-v}"
           cp src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk "Eve-android-$V.apk"
           # the same file under the plain name, which the updaters in 0.7.2 - 0.7.6 look for
           cp "Eve-android-$V.apk" Eve-android.apk
-          gh release create "$GITHUB_REF_NAME" "Eve-android-$V.apk" Eve-android.apk --title "Eve for Android $V" --generate-notes --latest=false
+          # a pushed tag is there already; run by hand, the release makes it at the commit just built
+          gh release create "$TAG" "Eve-android-$V.apk" Eve-android.apk --title "Eve for Android $V" --generate-notes --latest=false --target "$GITHUB_SHA"
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}

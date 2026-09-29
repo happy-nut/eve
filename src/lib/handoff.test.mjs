@@ -5,7 +5,13 @@ const account = { user: 'happy-nut', repo: 'happy-nut/eve-notes', token: 'gho_ex
 
 // round trip: what the Mac seals, the phone opens with the QR's key
 const s = await seal(account);
-assert.deepEqual(await open(s.body, s.key), account);
+assert.deepEqual(await open(s.body, s.key), { ...account, host: account.host ?? '' });
+// a GitHub Enterprise sign-in carries its server; a bad one is refused
+const ghes = { user: 'me', repo: 'me/eve-notes', token: 'ghp_x', host: 'github.acme.com' };
+const g = await seal(ghes);
+assert.deepEqual(await open(g.body, g.key), ghes);
+const bad = await seal({ ...ghes, host: 'evil host/x' });
+await assert.rejects(open(bad.body, bad.key), /not a server address/);
 assert.doesNotMatch(s.body, /gho_example/); // the served bytes do not carry the token in the clear
 
 // a wrong key or a flipped byte is refused, not misread

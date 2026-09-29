@@ -1,14 +1,15 @@
 /**
  * A signed-in Mac hands its sign-in to a phone over the local network, with no GitHub step.
  *
- * The Mac seals { user, repo, token } with a fresh AES-GCM key and serves the sealed bytes, once, at a
+ * The Mac seals { user, repo, token, host } with a fresh AES-GCM key and serves the sealed bytes, once, at a
  * random path on its LAN address (lib.rs share_start). The QR carries the address, the path and the key
  * — in the link's fragment, which no server sees. The phone fetches the bytes and opens them with the
  * key; the token itself never crosses the network in the clear and never sits in the QR. The Mac stops
  * serving after the first fetch or ten minutes.
  * Pure (WebCrypto only), so it runs in Node for tests.
  */
-export interface Account { user: string; repo: string; token: string }
+/** `host`: the GitHub Enterprise server the repo is on ('' or absent = github.com) */
+export interface Account { user: string; repo: string; token: string; host?: string }
 export interface Ticket { host: string; path: string; key: string }
 
 /** The phone-setup page (docs/android/): downloads Eve, or opens it with the ticket. */
@@ -37,7 +38,11 @@ export async function open(body: string, key: string): Promise<Account> {
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.subarray(0, 12) }, k, bytes.subarray(12));
   const a = JSON.parse(new TextDecoder().decode(pt));
   if (typeof a.token !== 'string' || !/^[\w.-]+\/[\w.-]+$/.test(a.repo)) throw new Error('not an Eve sign-in');
-  return { user: String(a.user ?? ''), repo: a.repo, token: a.token };
+  // a Mac from before servers were a setting sends none: github.com. The Mac sends it normalized
+  // (github.ts normHost); anything else is not a host (no import here: this file stays standalone)
+  const host = typeof a.host === 'string' ? a.host : '';
+  if (host && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d{1,5})?$/.test(host)) throw new Error(`"${host}" is not a server address`);
+  return { user: String(a.user ?? ''), repo: a.repo, token: a.token, host };
 }
 
 /**

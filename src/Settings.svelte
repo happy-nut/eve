@@ -3,7 +3,8 @@
   import { fade, scale } from 'svelte/transition';
   import { shortcuts, eventToKeys, type Scope } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
-  import { storage, autostart, dock, defaultApp, mcp, isTauri, isMobile, copyText, type McpClient } from './lib/platform';
+  import { storage, autostart, dock, defaultApp, mcp, isTauri, isMobile, copyText, openUrl, type McpClient } from './lib/platform';
+  import { normHost, webBase } from './lib/github';
   import { ui } from './lib/ui.svelte';
   import { appearance, FONTS, THEMES, type Theme } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
@@ -67,6 +68,13 @@
     { scope: 'editor', label: 'Editor' },
   ];
   /** the device code a click away from the clipboard, with a moment of "Copied" to say it worked */
+  /** sign-in elsewhere: a GitHub Enterprise server, an organization as the notes' owner, a token instead of the browser */
+  let elsewhere = $state(false);
+  let signIn = $state({ host: sync.settings.host, owner: '', token: '', clientId: '' });
+  /** the server as typed, if it reads as one ('' = github.com, or not yet a host) */
+  const signHost = $derived.by(() => { try { return normHost(signIn.host); } catch { return ''; } });
+  /** a token page on that server: a classic token with the repo scope, named for Eve */
+  const tokenPage = $derived(`${webBase(signHost)}/settings/tokens/new?scopes=repo&description=Eve%20notes`);
   let copied = $state(false);
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
   async function copyCode(code: string) {
@@ -244,7 +252,7 @@
         {:else if sync.settings.token}
           <div class="row">
             <span class="label">@{sync.settings.user}
-              <span class="sub">private repository <span class="mono">{sync.settings.repo}</span></span></span>
+              <span class="sub">private repository <span class="mono">{sync.settings.repo}</span>{#if sync.settings.host}{' on '}<span class="mono">{sync.settings.host}</span>{/if}</span></span>
             <button class="btn" onclick={() => sync.logout()}>Sign out</button>
           </div>
           <div class="row">
@@ -268,10 +276,35 @@
           <div class="row">
             <span class="label">Not signed in
               <span class="sub">Notes sync to a private <span class="mono">eve-notes</span> repository in your account.</span></span>
-            <button class="btn primary" onclick={() => sync.login()} disabled={!isTauri}>Sign in with GitHub</button>
+            <button class="btn primary" onclick={() => sync.login(elsewhere ? signIn : {})} disabled={!isTauri}>{elsewhere && signIn.token.trim() ? 'Sign in with token' : 'Sign in with GitHub'}</button>
           </div>
+          {#if elsewhere}
+            <!-- GitHub Enterprise (NAME.ghe.com, or a company's own server), an organization, or a token -->
+            <label class="row">
+              <span class="label">Server <span class="sub">blank for github.com</span></span>
+              <input bind:value={signIn.host} placeholder="github.acme.com · acme.ghe.com" spellcheck="false" autocapitalize="off" />
+            </label>
+            <label class="row">
+              <span class="label">Owner <span class="sub">blank for your account, or an organization</span></span>
+              <input bind:value={signIn.owner} placeholder="your account" spellcheck="false" autocapitalize="off" />
+            </label>
+            <label class="row">
+              <span class="label">Token
+                <span class="sub">instead of the browser; <button class="link small" onclick={(e) => { e.preventDefault(); void openUrl(tokenPage); }}>create one</button> with the <span class="mono">repo</span> scope</span></span>
+              <input type="password" bind:value={signIn.token} placeholder="ghp_…" spellcheck="false" autocomplete="off" />
+            </label>
+            {#if signHost && !signIn.token.trim()}
+              <label class="row">
+                <span class="label">OAuth App Client ID <span class="sub">for browser sign-in on this server: an app its admin registered for Eve, with Device Flow on</span></span>
+                <input bind:value={signIn.clientId} placeholder="Iv1.…" spellcheck="false" autocapitalize="off" />
+              </label>
+            {/if}
+          {/if}
           {#if !isTauri}<p class="alert dim">Sign-in needs the desktop app.</p>
           {:else if sync.status === 'error'}<p class="alert">{sync.error}</p>{/if}
+          {#if isTauri}
+            <div class="row"><button class="link" onclick={() => (elsewhere = !elsewhere)}>{elsewhere ? 'Back to github.com' : 'GitHub Enterprise, an organization, or a token…'}</button></div>
+          {/if}
         {/if}
       </div>
 
@@ -440,12 +473,13 @@
   .spin.light { border-color: rgba(255, 255, 255, 0.45); border-top-color: #fff; }
   .btn.primary:has(.spin):disabled { opacity: 0.85; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  input:not([type]) {
+  input:not([type]), input[type='password'] {
     font: inherit; font-size: 12.5px; padding: 5px 8px; border-radius: 7px; border: 0; outline: none;
     background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line); max-width: 240px;
   }
-  input:not([type]) { flex: 1; }
-  input:not([type]):focus { box-shadow: 0 0 0 2px var(--accent-soft); }
+  input:not([type]), input[type='password'] { flex: 1; }
+  input:not([type]):focus, input[type='password']:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
+  .link.small { font-size: inherit; }
   .switch {
     appearance: none; width: 34px; height: 20px; border-radius: 10px; margin: 0; position: relative;
     background: var(--bg-active); transition: background 0.2s;

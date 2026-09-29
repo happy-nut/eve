@@ -104,6 +104,16 @@ one `main` head lookup; changed files are fetched by blob and pushed as a single
 (no git binary). Conflicts resolve last-writer-wins by `updatedAt`; deletes are tombstones; a note untouched
 locally since the last sync takes the remote version, so edits made on github.com win.
 
+**GitHub Enterprise, an organization, or a token**: under the Sign in button, *GitHub Enterprise, an
+organization, or a token…* takes a server (`acme.ghe.com` for Enterprise Cloud with data residency, or a
+company's own GitHub Enterprise Server such as `github.acme.com`; blank for github.com, Enterprise Cloud
+included), an owner (blank for your account, or an organization, where a company may want the notes kept),
+and either a token (a classic one with the `repo` scope; *create one* opens that server's page for it) or,
+for browser sign-in on another server, the Client ID of an OAuth App its admin registered for Eve with
+Device Flow on. The repository must be private: an existing `internal` or public one is refused. The phone
+set up from the Mac, and its background sync, use the same server. A server inside a company network needs
+that network (VPN) on the phone too.
+
 Sign-in is the OAuth device flow of the "Eve" OAuth App (`CLIENT_ID` in `src/lib/github.ts`; running your own
 fork: register an OAuth App with *Device Flow* enabled and paste its client id). The two github.com calls go
 through macOS's `curl` from Rust because github.com/login has no CORS. `npm test` runs the sync engine against an
