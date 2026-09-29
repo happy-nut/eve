@@ -113,24 +113,21 @@ saved once as `claude_desktop_config.json.eve-backup`), and runs
 after connecting.
 
 The server is the app's own binary started as `eve mcp` (no window, no Tauri): it reads `notes/*.md` from disk,
-so it works while Eve is closed. Nothing it offers writes. Tools: `list_notes` and `search_notes` (every word
-must match; title hits first), both narrowed by group and by period (`from` / `to`: `2026-09` or `2026-09-05`,
-local time); `read_note` (by title or id, a `[[Title#Section]]` link, or one section); and `read_period`, every
-note made or changed in a month or a range, in full and oldest first, for looking back in one call. A note's
-creation time comes from its id (a day's note is its day). Only a note's last change is known, so a note edited
-in September and again in October counts for October. Deleted notes and the calendar's own are left out.
+so it works while Eve is closed. It only hands over the notes, exactly as written; what to do with them is up to
+Claude and you. Nothing it offers writes. Tools: `list_notes` and `search_notes` (every word must match; title
+hits first) find notes, narrowed by group and by the dates a note was made or last changed (`from` / `to`:
+`2026-09` or `2026-09-05`, local time); `read_note` returns one (by title or id, a `[[Title#Section]]` link, or
+one section) and `read_notes` several, by id, in the order given. A note's creation time comes from its id (a
+day's note is its day); only its last change is known, so a note edited in September and again in October is
+found under October. Deleted notes and the calendar's own are left out.
 
 Every answer stays under ~9,000 tokens (Claude Code warns past 10,000 and sets anything past 25,000 aside in a
-file). A longer note comes in parts, cut between lines, a code block cut open closed off, the first part listing
-its sections; the answer ends with a `cursor` to pass back, refused if the note changed meanwhile. A long period
-comes in parts the same way, and one very long note in it as its start and sections. Long lists name how many
-were left out. A note file past 8 MB is read that far; bytes that are not UTF-8 show as `�` rather than the note
-going missing; a title two notes share names the other; a missing notes folder names the path it looked in.
-
-Two prompts start the looking back (Claude Code: `/mcp__eve__monthly_review 2026-09`; Claude Desktop: the + menu):
-`monthly_review` (what you did, decided and learned, what is still open, three things to try next month) and
-`retrospective` (Keep / Problem / Try over any range, optionally about one thing). By hand, from any MCP client:
-command `/Applications/Eve.app/Contents/MacOS/eve`, args `["mcp"]`; `EVE_NOTES_DIR` points it at another folder.
+file). What does not fit continues in the next answer, never shortened: a note is cut between lines (a code block
+cut open is closed off), the first part of a long note lists its sections, and the answer ends with a `cursor` to
+pass back, refused if the note changed meanwhile. Long lists name how many were left out. A note file past 8 MB
+is read that far; bytes that are not UTF-8 show as `�` rather than the note going missing; a title two notes
+share names the other; a missing notes folder names the path it looked in. By hand, from any MCP client: command
+`/Applications/Eve.app/Contents/MacOS/eve`, args `["mcp"]`; `EVE_NOTES_DIR` points it at another folder.
 
 ## Layout
 
@@ -143,7 +140,7 @@ src/                Svelte UI
   lib/sync.svelte.ts      sync client (notes + images <-> GitHub)
   lib/github.ts           GitHub REST sync engine (pure, tested in Node)
 src-tauri/          Rust: file/asset storage commands, window toggle, global-shortcut plugin
-  src/mcp.rs              `eve mcp`: read-only MCP server over stdio (tools + review prompts)
+  src/mcp.rs              `eve mcp`: read-only MCP server over stdio
   src/mcp_setup.rs        Settings → Claude: register it with Claude Desktop / Claude Code
 ```
 

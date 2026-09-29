@@ -960,3 +960,14 @@
   new path replaces it in place, off gives the original back. Scratch HOME: the 4-space original is saved as
   claude_desktop_config.json.eve-backup on the first write and never overwritten; connecting twice with the
   same path or disconnecting when not connected leaves the file untouched (mtime unchanged).
+- [x] G205 The server delivers notes and nothing use-case shaped: no prompts, read_period replaced by read_notes
+  CHECK: cd src-tauri && cargo test mcp
+  EXPECT: test result: ok
+  EVIDENCE: monthly_review / retrospective prompts and the prompts capability are gone (prompts/list ->
+  -32601). read_period (review order, daily/other counts, a long note shortened to its start) replaced by
+  read_notes(ids): the notes asked for, in that order, whole; a note too long for one answer continues in the
+  next. Scratch crate, 20 tests ok, clippy clean: 30 daily notes + the 3,000-line note + a missing id + a
+  repeat, in reverse order -> every answer under budget, order as asked, each note once, every line of the
+  big note and its last line there, the missing id named; cursors made up, pointing inside a character,
+  from an older version, or past the ids are refused. list_notes sorts newest first itself. Periods stay as
+  filters on list_notes / search_notes.
