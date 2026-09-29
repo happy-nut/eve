@@ -1074,3 +1074,10 @@
   notes and groups.json are committed there, status ok, the row reads "private repository
   hyungsun/eve-notes on github.acme.com"; the only github.com requests were the update check's.
   Not run: a real GitHub Enterprise Server (CORS on its API is assumed as on api.github.com), the Kotlin.
+- [x] G215 v0.7.14 (Mac, Latest) and android-v0.7.19 are released, both made by Run workflow
+  CHECK: gh release view v0.7.14 --json isLatest,assets --jq '[.isLatest, (.assets[].name)] | join(",")'; gh release view android-v0.7.19 --json assets --jq '[.assets[].name] | sort | join(",")'
+  EXPECT: ^true,Eve-macos-arm64\.zip$ / ^Eve-android-0\.7\.19\.apk,Eve-android\.apk$
+  EVIDENCE: runs 36599856583 / 36599859826 (workflow_dispatch, main at 099da42) succeeded in 7 min; the
+  android job ran from a dispatch for the first time and made its tag. The Mac zip's Info.plist says
+  0.7.14 and it carries a sha256 digest (what 0.7.13's updater needs to offer it); the APK compiled the
+  Kotlin changed in #101 (its dex holds the /api/v3 of PullJob.apiBase). Latest stays the Mac's.
