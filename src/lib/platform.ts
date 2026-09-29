@@ -282,6 +282,14 @@ export const defaultApp = {
   set: (on: boolean) => (isTauri ? invoke<void>('set_default_for_markdown', { on }) : Promise.reject(new Error('desktop only'))),
 };
 
+/** A Claude app that can start `eve mcp` (src-tauri/src/mcp.rs), the read-only notes server. */
+export interface McpClient { id: string; name: string; installed: boolean; connected: boolean; stale: boolean }
+/** Settings → Claude: find the Claude apps on this Mac and register Eve with all of them in one go. Desktop only. */
+export const mcp = {
+  clients: () => (desktop ? invoke<McpClient[]>('mcp_clients') : Promise.resolve([] as McpClient[])),
+  connect: (on: boolean) => (desktop ? invoke<McpClient[]>('mcp_connect', { on }) : Promise.reject(new Error('desktop only'))),
+};
+
 /** Launch at login, so the global hotkey works even after the app was quit. */
 export const autostart = {
   async get() { if (!desktop) return false; return (await import('@tauri-apps/plugin-autostart')).isEnabled(); },

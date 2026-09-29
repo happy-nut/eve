@@ -3,6 +3,8 @@ use tauri::{Emitter, Manager, WindowEvent};
 
 mod files;
 mod mac;
+pub mod mcp;
+mod mcp_setup;
 mod net;
 mod window;
 
@@ -60,7 +62,9 @@ pub fn run() {
             window::set_dock_hidden,
             mac::is_default_for_markdown,
             mac::set_default_for_markdown,
-            window::set_always_on_top
+            window::set_always_on_top,
+            mcp_setup::mcp_clients,
+            mcp_setup::mcp_connect
         ])
         .on_window_event(|window, event| {
             // Closing the window keeps the app alive so the global hotkey still works.

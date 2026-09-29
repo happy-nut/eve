@@ -906,3 +906,75 @@
   CHECK: gh release view android-v0.7.18 --json assets --jq '[.assets[].name] | sort | join(",")'
   EXPECT: ^Eve-android-0\.7\.18\.apk,Eve-android\.apk$
   EVIDENCE: the android-v0.7.18 run succeeded.
+
+# GATES — Claude reads the notes: read-only MCP server + one-click connect (2026-09-29)
+
+- [x] G198 `eve mcp` parses notes like the app and answers list / search / read
+  CHECK: cd src-tauri && cargo test mcp
+  EXPECT: test result: ok
+  EVIDENCE: Linux container has no webkit, so the full crate does not build there; mcp.rs and
+  mcp_setup.rs compiled alone with serde_json: 7 + 4 tests ok (frontmatter incl. a `---` divider in the body,
+  titles as `titleOf`/`plain` give them, group filter, every-word search with title hits first, Korean,
+  [[Title#Section]] incl. a fenced `## `, tombstones and .tmp files skipped, JSON-RPC initialize /
+  notification / tools/list / tools/call / unknown method). clippy clean. Over stdio: initialize,
+  search "읽기", read [[회의록#결정]], garbage line -> -32700.
+- [x] G199 A real MCP client connects
+  EVIDENCE: Claude Code 2.1.284 in a scratch HOME: `claude mcp add --scope user eve -- <binary> mcp`, then
+  `claude mcp list` -> "eve: … mcp - √ Connected".
+- [x] G200 Connect registers Eve with both Claude apps, Disconnect removes it, nothing else is touched
+  EVIDENCE: mcp_setup through a login shell (bash -ilc) with a bare PATH, scratch HOME, the real `claude`
+  CLI: ~/.claude.json got mcpServers.eve {command: "/Apps/Eve's.app/eve", args: ["mcp"]} (apostrophe
+  quoted through the shell); claude_desktop_config.json kept "k" and server "x" beside eve; off removed eve
+  from both. A config that is not JSON is refused, not overwritten. `npm run check` 0 errors, `npm run build` ok.
+- [ ] G201 On the Mac: Settings → Claude finds Claude Desktop / Claude Code, Connect, restart Claude Desktop,
+  "search my Eve notes for …" answers from the notes; Disconnect; the setting survives a move of Eve.app
+  (shows "points at another copy of Eve" until reconnected)
+- [x] G202 Looking back over a month: period filters, read_period, and the monthly_review / retrospective prompts
+  CHECK: cd src-tauri && cargo test mcp
+  EXPECT: test result: ok
+  EVIDENCE: scratch crate as in G198, 10 + 4 tests ok, clippy clean at rust-version 1.77.2. Days are local
+  (tests pin +09:00: September starts 2026-08-31 15:00 UTC; a note at 23:00 on Aug 31 stays in August).
+  Creation time from the id (newId's base-36 ms; daily-YYYY-MM-DD is its day). read_period over 2026-09:
+  daily note, a page made 09-03 and changed 09-20, a page changed 09-10, in that order; Aug/Oct left out;
+  group and day ranges narrow it; the daily template is never a note. Prompts name read_period with the
+  month (default: this month) or range + focus; a bad month is refused (-32602). Over stdio: prompts/list,
+  read_period on Korean notes.
+- [x] G203 Nothing Eve's MCP server answers floods the client, and every long answer can be read to the end
+  CHECK: cd src-tauri && cargo test mcp
+  EXPECT: test result: ok
+  EVIDENCE: Claude Code's limits (code.claude.com/docs/en/mcp): a warning past 10,000 tokens, past 25,000 the
+  result goes to a file. Budget 9,000 by a high-side estimate (ASCII/3 + 1.5 per other char). Scratch crate,
+  17 mcp tests ok, clippy clean: a 3,000-line note of Korean, English, emoji, code fences and a 40,000-char
+  line comes in 6 parts, each under budget, cut between lines, the parts put back together byte for byte;
+  a part ending inside ``` is closed off; part 1 lists the sections; a cursor from an older version or a
+  made-up one is refused. A month of 30 daily notes plus that note: every part under budget, each day
+  exactly once, the big note as its start + sections. 3,000 notes: list and search stop at the budget and
+  say how many more. Invalid UTF-8 reads with U+FFFD; an 8 MB+ file is read to 8 MB and says so; two notes
+  with one title name each other; a missing folder names its path. 3,000 notes (15 MB), release build,
+  process start included: search 119 ms, read_period 41 ms, list 50 ms, so no cache.
+- [x] G204 Connecting keeps Claude Desktop's config as it was, in order, and backs it up once
+  CHECK: cd src-tauri && cargo test mcp_setup
+  EXPECT: test result: ok
+  EVIDENCE: an order-keeping JSON type (no serde_json preserve_order, which Cargo would switch on for Tauri
+  too): a config read and written back compacts to the same bytes; eve is added last among the servers, a
+  new path replaces it in place, off gives the original back. Scratch HOME: the 4-space original is saved as
+  claude_desktop_config.json.eve-backup on the first write and never overwritten; connecting twice with the
+  same path or disconnecting when not connected leaves the file untouched (mtime unchanged).
+- [x] G205 The server delivers notes and nothing use-case shaped: no prompts, read_period replaced by read_notes
+  CHECK: cd src-tauri && cargo test mcp
+  EXPECT: test result: ok
+  EVIDENCE: monthly_review / retrospective prompts and the prompts capability are gone (prompts/list ->
+  -32601). read_period (review order, daily/other counts, a long note shortened to its start) replaced by
+  read_notes(ids): the notes asked for, in that order, whole; a note too long for one answer continues in the
+  next. Scratch crate, 20 tests ok, clippy clean: 30 daily notes + the 3,000-line note + a missing id + a
+  repeat, in reverse order -> every answer under budget, order as asked, each note once, every line of the
+  big note and its last line there, the missing id named; cursors made up, pointing inside a character,
+  from an older version, or past the ids are refused. list_notes sorts newest first itself. Periods stay as
+  filters on list_notes / search_notes.
+- [x] G206 The whole crate builds with the MCP server in it, and the real binary serves MCP
+  CHECK: cd src-tauri && cargo check 2>&1 | tail -1 && cargo test --lib 2>&1 | grep "test result"
+  EXPECT: Finished / test result: ok
+  EVIDENCE: Linux container with webkit2gtk-4.1 installed: cargo check "Finished" (the 5 warnings are the
+  existing macOS-only paths, none in mcp.rs / mcp_setup.rs); cargo test --lib: 22 passed (19 new + 3 old).
+  target/debug/eve registered with Claude Code 2.1.284 in a scratch HOME: `claude mcp list` -> "eve: …/eve
+  mcp - √ Connected" (no window: `eve mcp` returns before Tauri starts). The Mac build and G201 stay open.

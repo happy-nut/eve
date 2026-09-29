@@ -3,7 +3,7 @@
   import { fade, scale } from 'svelte/transition';
   import { shortcuts, eventToKeys, type Scope } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
-  import { storage, autostart, dock, defaultApp, isTauri, isMobile, copyText } from './lib/platform';
+  import { storage, autostart, dock, defaultApp, mcp, isTauri, isMobile, copyText, type McpClient } from './lib/platform';
   import { ui } from './lib/ui.svelte';
   import { appearance, FONTS, THEMES, type Theme } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
@@ -31,7 +31,24 @@
     storage.path().then((p) => (notesPath = p));
     autostart.get().then((v) => (launchAtLogin = v));
     defaultApp.get().then((v) => (opensMarkdown = v));
+    if (isTauri && !isMobile) mcp.clients().then((c) => (claude = c), (e) => (claudeError = String(e)));
   });
+  /** Claude apps found on this Mac (null while looking), and the one-click register / unregister */
+  let claude = $state<McpClient[] | null>(isTauri && !isMobile ? null : []);
+  let claudeBusy = $state(false);
+  let claudeError = $state<string | null>(null);
+  const claudeFound = $derived((claude ?? []).filter((c) => c.installed));
+  const claudeOn = $derived(claudeFound.length > 0 && claudeFound.every((c) => c.connected));
+  const claudeText = $derived(
+    claude === null ? 'Looking for Claude…'
+    : !claudeFound.length ? 'Install Claude Desktop or Claude Code first'
+    : claudeFound.map((c) => `${c.name}: ${c.connected ? '✓ connected' : c.stale ? 'points at another copy of Eve' : 'not connected'}`).join(' · '));
+  async function connectClaude(on: boolean) {
+    claudeBusy = true;
+    claudeError = null;
+    try { claude = await mcp.connect(on); } catch (err) { claudeError = String(err); claude = await mcp.clients().catch(() => claude); }
+    claudeBusy = false;
+  }
   async function claimMarkdown(on: boolean) {
     defaultAppError = null;
     try {
@@ -305,6 +322,27 @@
         {#if defaultAppError}<p class="alert">{defaultAppError}</p>{/if}
       </div>
       {/if}
+
+{#if !isMobile}
+      <h3>Claude</h3>
+      <div class="card">
+        <div class="row">
+          <span class="label">Let Claude read your notes
+            <span class="sub">{isTauri ? claudeText : 'Needs the desktop app.'}</span></span>
+          {#if claudeOn}
+            <button class="btn" disabled={claudeBusy} onclick={() => connectClaude(false)}>
+              {#if claudeBusy}<span class="spin" aria-hidden="true"></span>{/if}Disconnect
+            </button>
+          {:else}
+            <button class="btn primary" disabled={claudeBusy || !claudeFound.length} onclick={() => connectClaude(true)}>
+              {#if claudeBusy}<span class="spin light" aria-hidden="true"></span>{/if}Connect
+            </button>
+          {/if}
+        </div>
+        {#if claudeError}<p class="alert">{claudeError}</p>
+        {:else if claudeOn}<p class="alert dim">Read-only: Claude can list, search and read notes, never change them. Restart Claude Desktop to pick it up; Claude Code sees it in its next session.</p>{/if}
+      </div>
+{/if}
 
 {#if isMobile && isTauri}
       <h3>Version</h3>

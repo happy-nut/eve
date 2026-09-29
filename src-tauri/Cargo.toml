@@ -17,6 +17,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+# `eve mcp` speaks JSON-RPC, and Settings edits Claude Desktop's JSON config (already in the tree via tauri)
+serde_json = "1"
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"

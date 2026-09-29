@@ -22,6 +22,7 @@ type Notion-style markdown, link notes with `[[wiki links]]`, and sync through a
 - **Opens .md files** — Eve registers as a Markdown editor, so it shows up in Finder's *Open With*. Such files are edited in place and listed under *Open files* (not synced; ⌫ closes them).
 - **Plain files** — each note is a `.md` with a tiny frontmatter (id, updated, group) in `~/Library/Application Support/dev.happynut.eve/notes/`.
 - **Sync without a server** — a private GitHub repository is the backend: one commit per change, last-writer-wins, images included. Edit a note on github.com and it comes back to the app.
+- **Claude reads your notes** — Settings → Claude → Connect registers Eve's read-only MCP server with Claude Desktop and Claude Code in one click; Claude can then list, search and read your notes, never change them (see [Claude (MCP)](#claude-mcp)).
 
 ## Install
 
@@ -103,6 +104,32 @@ fork: register an OAuth App with *Device Flow* enabled and paste its client id).
 through macOS's `curl` from Rust because github.com/login has no CORS. `npm test` runs the sync engine against an
 in-memory fake; `EVE_TEST_REPO=owner/name EVE_TEST_TOKEN=… npm test` runs it against a real repo.
 
+## Claude (MCP)
+
+Settings → Sync & app → Claude → **Connect** lets Claude read your notes. One click registers Eve's
+read-only [MCP](https://modelcontextprotocol.io) server with every Claude app on the Mac: it adds `eve` to
+Claude Desktop's `claude_desktop_config.json` (every other key kept, in its order; the file as it was before is
+saved once as `claude_desktop_config.json.eve-backup`), and runs
+`claude mcp add --scope user eve -- …/Eve.app/Contents/MacOS/eve mcp` for Claude Code. Restart Claude Desktop
+after connecting.
+
+The server is the app's own binary started as `eve mcp` (no window, no Tauri): it reads `notes/*.md` from disk,
+so it works while Eve is closed. It only hands over the notes, exactly as written; what to do with them is up to
+Claude and you. Nothing it offers writes. Tools: `list_notes` and `search_notes` (every word must match; title
+hits first) find notes, narrowed by group and by the dates a note was made or last changed (`from` / `to`:
+`2026-09` or `2026-09-05`, local time); `read_note` returns one (by title or id, a `[[Title#Section]]` link, or
+one section) and `read_notes` several, by id, in the order given. A note's creation time comes from its id (a
+day's note is its day); only its last change is known, so a note edited in September and again in October is
+found under October. Deleted notes and the calendar's own are left out.
+
+Every answer stays under ~9,000 tokens (Claude Code warns past 10,000 and sets anything past 25,000 aside in a
+file). What does not fit continues in the next answer, never shortened: a note is cut between lines (a code block
+cut open is closed off), the first part of a long note lists its sections, and the answer ends with a `cursor` to
+pass back, refused if the note changed meanwhile. Long lists name how many were left out. A note file past 8 MB
+is read that far; bytes that are not UTF-8 show as `�` rather than the note going missing; a title two notes
+share names the other; a missing notes folder names the path it looked in. By hand, from any MCP client: command
+`/Applications/Eve.app/Contents/MacOS/eve`, args `["mcp"]`; `EVE_NOTES_DIR` points it at another folder.
+
 ## Layout
 
 ```
@@ -114,6 +141,8 @@ src/                Svelte UI
   lib/sync.svelte.ts      sync client (notes + images <-> GitHub)
   lib/github.ts           GitHub REST sync engine (pure, tested in Node)
 src-tauri/          Rust: file/asset storage commands, window toggle, global-shortcut plugin
+  src/mcp.rs              `eve mcp`: read-only MCP server over stdio
+  src/mcp_setup.rs        Settings → Claude: register it with Claude Desktop / Claude Code
 ```
 
 MIT.
