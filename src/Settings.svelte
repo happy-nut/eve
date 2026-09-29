@@ -42,7 +42,8 @@
   const claudeText = $derived(
     claude === null ? 'Looking for Claude…'
     : !claudeFound.length ? 'Install Claude Desktop or Claude Code first'
-    : claudeFound.map((c) => `${c.name}: ${c.connected ? '✓ connected' : c.stale ? 'points at another copy of Eve' : 'not connected'}`).join(' · '));
+    // every app, found or not: one missing must not pass for connected
+    : (claude ?? []).map((c) => `${c.name}: ${!c.installed ? 'not found' : c.connected ? '✓ connected' : c.stale ? 'points at another copy of Eve' : 'not connected'}`).join(' · '));
   async function connectClaude(on: boolean) {
     claudeBusy = true;
     claudeError = null;

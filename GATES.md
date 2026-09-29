@@ -1038,3 +1038,18 @@
   in java.util.regex; the Kotlin is not compiled here). ⌘⇧H toggles the highlight (rebindable).
   Found meanwhile, not changed: TableTools sets state inside a derived when a table gets the caret
   (state_unsafe_mutation in the console) — on main too.
+
+# GATES — Settings → Claude says what Claude Code says (2026-09-29)
+
+- [x] G213 A `claude` that is a shell alias is found, and "connected" means `claude mcp get eve` agrees
+  CHECK: cd src-tauri && cargo test --lib mcp_setup
+  EXPECT: test result: ok
+  EVIDENCE: reported: Connect said connected, `claude mcp list` had no eve. Cause: Claude Code counted as
+  installed only when `command -v claude` printed a path; the local installer makes `claude` a zsh alias,
+  for which it prints `alias claude=…` (reproduced: zsh -ilc with such a .zshrc), so Claude Code was
+  dropped from the list without a word and Claude Desktop alone showed as connected. Now: `command -v`
+  only decides whether there is a claude at all, status comes from `claude mcp get eve` (its Command: line),
+  a Connect is checked the same way afterwards (else the CLI's own words and the command to run by hand),
+  and Settings names every app, "not found" included. Same zsh + alias setup, the real CLI (2.1.284):
+  before connected=false, after Connect connected=true, from another path stale=true, after Disconnect
+  connected=false. 5 unit tests ok (command_in reads get's output); npm run check 0 errors.
