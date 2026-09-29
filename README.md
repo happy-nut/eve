@@ -22,6 +22,7 @@ type Notion-style markdown, link notes with `[[wiki links]]`, and sync through a
 - **Opens .md files** — Eve registers as a Markdown editor, so it shows up in Finder's *Open With*. Such files are edited in place and listed under *Open files* (not synced; ⌫ closes them).
 - **Plain files** — each note is a `.md` with a tiny frontmatter (id, updated, group) in `~/Library/Application Support/dev.happynut.eve/notes/`.
 - **Sync without a server** — a private GitHub repository is the backend: one commit per change, last-writer-wins, images included. Edit a note on github.com and it comes back to the app.
+- **Claude reads your notes** — Settings → Claude → Connect registers Eve's read-only MCP server with Claude Desktop and Claude Code in one click; Claude can then list, search and read your notes, never change them (see [Claude (MCP)](#claude-mcp)).
 
 ## Install
 

@@ -971,3 +971,10 @@
   big note and its last line there, the missing id named; cursors made up, pointing inside a character,
   from an older version, or past the ids are refused. list_notes sorts newest first itself. Periods stay as
   filters on list_notes / search_notes.
+- [x] G206 The whole crate builds with the MCP server in it, and the real binary serves MCP
+  CHECK: cd src-tauri && cargo check 2>&1 | tail -1 && cargo test --lib 2>&1 | grep "test result"
+  EXPECT: Finished / test result: ok
+  EVIDENCE: Linux container with webkit2gtk-4.1 installed: cargo check "Finished" (the 5 warnings are the
+  existing macOS-only paths, none in mcp.rs / mcp_setup.rs); cargo test --lib: 22 passed (19 new + 3 old).
+  target/debug/eve registered with Claude Code 2.1.284 in a scratch HOME: `claude mcp list` -> "eve: …/eve
+  mcp - √ Connected" (no window: `eve mcp` returns before Tauri starts). The Mac build and G201 stay open.
