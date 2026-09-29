@@ -6,6 +6,7 @@ mod mac;
 pub mod mcp;
 mod mcp_setup;
 mod net;
+mod update;
 mod window;
 
 /// Files macOS asked us to open before the frontend was listening.
@@ -64,7 +65,8 @@ pub fn run() {
             mac::set_default_for_markdown,
             window::set_always_on_top,
             mcp_setup::mcp_clients,
-            mcp_setup::mcp_connect
+            mcp_setup::mcp_connect,
+            update::install_update
         ])
         .on_window_event(|window, event| {
             // Closing the window keeps the app alive so the global hotkey still works.
