@@ -978,3 +978,6 @@
   existing macOS-only paths, none in mcp.rs / mcp_setup.rs); cargo test --lib: 22 passed (19 new + 3 old).
   target/debug/eve registered with Claude Code 2.1.284 in a scratch HOME: `claude mcp list` -> "eve: …/eve
   mcp - √ Connected" (no window: `eve mcp` returns before Tauri starts). The Mac build and G201 stay open.
+- [ ] G207 v0.7.12 (Mac, Latest) is released, so `brew reinstall --cask eve` installs the MCP server
+  CHECK: gh release view v0.7.12 --json assets,isLatest --jq '[.isLatest, (.assets[].name)] | join(",")'
+  EXPECT: ^true,Eve-macos-arm64\.zip$
