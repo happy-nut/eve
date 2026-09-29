@@ -1019,3 +1019,22 @@
   its dot is gone and the keyboard is still on Oct 1; a right-click on Sep 29 shown dimmed in October opens
   the menu without turning the page, Delete + Enter removes it and October stays; an empty day: no menu.
   npm run check: 0 errors.
+
+# GATES — Obsidian's syntax in the editor: alias links, callout types, highlights (2026-09-29)
+
+- [x] G212 `[[Note|alias]]`, `> [!type] Title` and `==highlight==` read, show and save back unchanged
+  CHECK: node --experimental-strip-types --no-warnings src/lib/markdown.test.mjs && cd src-tauri && cargo test --lib mcp
+  EXPECT: MARKDOWN_OK / test result: ok
+  EVIDENCE: splitAlias (the bar escaped in a table too), plain() reading a link as its alias and ==x== as x
+  (a spaced "a == b" left alone), calloutKind for Obsidian's 13 types in any case; mcp.rs's title_of gives
+  the same titles (19 tests ok). Browser, the real editor: a note with aliases (plain, section, in a table
+  as [[DB\|db]]), ==really **important**==, "a == b", > [!warning]- Watch out + body, > [!tip], > [!💡] and
+  a table read back identical but for the newline the table serializer always ends with; six more cases
+  (Eve's own > [!💡] Title, a title alone, a list under a callout with and without a title, a bold title,
+  a highlighted link) read back identical and stay so on a second pass. Shown: aliases as their text, the
+  highlight as a marker, warning orange with ⚠️, tip cyan with 🔥, a title in bold. Before, the text on a
+  callout's marker line was merged into its first paragraph on save; now it stays the title. Renaming a
+  note rewrites [[Old|…]] and [[Old\|…]] too. The widget draws ==x== and a type's icon (its regex checked
+  in java.util.regex; the Kotlin is not compiled here). ⌘⇧H toggles the highlight (rebindable).
+  Found meanwhile, not changed: TableTools sets state inside a derived when a table gets the caret
+  (state_unsafe_mutation in the console) — on main too.

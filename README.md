@@ -13,9 +13,10 @@ type Notion-style markdown, link notes with `[[wiki links]]`, and sync through a
 - **Global hotkey** — `⌘⇧Space` (default) shows/hides Eve over any app; focus returns to where you were. Like Raycast, Eve stays out of the Dock and ⌘Tab (toggle in Settings → Sync & app). Eve launches at login (toggle in Settings); closing the window only hides it, so the hotkey keeps working. `⌘Q` quits.
 - **Live markdown** — `# `, `- `, `1. `, `[ ] `, `> `, ` ``` `, `**bold**`, `` `code` ``… render as you type.
 - **Every shortcut is rebindable** live in Settings (`⌘,`): system hotkey, app actions, editor formatting.
-- **Notes link to notes** — type `[[` for a picker; click a link to jump (creates the note if missing). `⌘[` / `⌘]` go back and forward through the notes you visited, restoring the cursor.
+- **Notes link to notes** — type `[[` for a picker; click a link to jump (creates the note if missing). `[[Note|shown as]]` links under another name, as in Obsidian. `⌘[` / `⌘]` go back and forward through the notes you visited, restoring the cursor.
 - **Link cards** — paste a URL on an empty line (or type one and press Enter) and it becomes a compact preview card: favicon, title, description, thumbnail; click opens the browser. The file keeps just the bare URL.
 - **Section outline** instead of a scrollbar — when a note is taller than the window, one tick per heading sits at the left edge, dark for the sections on screen; hover to see the titles, click to jump.
+- **Obsidian's syntax** — `[[Note|alias]]` links, `==highlights==` (`⌘⇧H`), and callouts by type: `> [!warning] Title` shows the type's icon and colour, the text on its line as the title; the fold mark (`-`/`+`) is kept. A vault's notes read and save back unchanged.
 - **`/` block menu** — callouts (`> [!💡]` in markdown), code blocks, dividers, images (copied into `notes/assets/`), note links, kanban boards. Headings and lists come from markdown shortcuts (`# `, `- `, `1. `, `[ ] `, `> `).
 - **Kanban** — `/kanban` drops a Notion-style board into the note. Drag cards between columns, or drive it from the keyboard: ↑↓←→ move between cards, ⌥↑↓←→ move a card (⌥←→ a column), Enter opens the card as a floating page with its own markdown body, ⌫ deletes. ↓ from the line above (↑ from the line below) steps into the board; Esc steps back out. The + past the last column adds one; hovering the board shows a × under it that deletes the board (or press ⌫ at the start of the line after it). The file keeps a ```` ```kanban ```` fence holding JSON (`{ "columns": [{ "title", "cards": [{ "title", "body" }] }] }`); a fence that fails to parse is shown as a plain code block, so a bad edit never loses cards.
 - **Sidebar** with search (`⌘K`), emoji icons for notes and groups (picker above the title, like Notion), hold `⌘` to number the visible notes and `⌘1`…`⌘9` to jump, collapsible **groups** (folders, nested up to 3 levels). Drag notes or whole groups to reorder or move them; `⌘\` opens and focuses the list (press again from the list to close it and return to the editor) (↑↓ move, `i` sets an emoji icon, ⌥↑↓ move notes or groups one row at a time (groups walk out of and into other groups), ⌥← ⌥→ un-nest / nest a group, Space or ← → fold, ⌫ deletes with confirmation, Esc back).
@@ -82,6 +83,7 @@ Not on the phone: the global hotkey, Dock/login-item settings, PDF/image export,
 | app    | Delete note / Settings / Hide   | `⌘⇧⌫` `⌘,` `Esc`  |
 | editor | Bold / Italic / Underline       | `⌘B` `⌘I` `⌘U`    |
 | editor | Strike / Code / Link / `[[`     | `⌘⇧X` `⌘E` `⌘⇧K` `⌘⇧L` |
+| editor | Highlight (`==`)                | `⌘⇧H`             |
 | editor | `/` menu / Callout / Image       | `⌘/` `⌘⇧C` `⌘⇧I` |
 | editor | Text / H1 … H5                  | `⌘⌥0` `⌘⌥1` … `⌘⌥5` |
 | editor | Bullets / Numbers / To-dos      | `⌘⇧8` `⌘⇧7` `⌘⇧9` |

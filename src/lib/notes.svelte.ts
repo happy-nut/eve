@@ -272,8 +272,10 @@ class NotesStore {
     // ponytail: scans every body on a rename; fine for local notes, index the links if it ever bites
     for (const other of this.all) {
       if (other.deleted || other.id === n.id) continue;
-      // both shapes of the link: the page itself, and one of its sections
-      const body = other.body.split(`[[${was}]]`).join(`[[${now}]]`).split(`[[${was}#`).join(`[[${now}#`);
+      // every shape of the link: the page itself, one of its sections, and either under an alias
+      // (`[[Title|shown as]]`, its bar escaped inside a table)
+      let body = other.body;
+      for (const end of [']]', '#', '|', '\\|']) body = body.split(`[[${was}${end}`).join(`[[${now}${end}`);
       if (body === other.body) continue;
       other.body = body;
       other.updatedAt = Date.now();

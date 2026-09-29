@@ -72,9 +72,10 @@ class Markdown(
       cells.forEachIndexed { k, c -> if (k > 0) sb.append("   ", ForegroundColorSpan(dim), EX); inline(sb, c) }
       return sb
     }
-    // callout: > [!💡] text
-    Regex("^>\\s?\\[!([^\\]]*)\\]\\s*(.*)").find(line)?.let { m ->
-      sb.append(m.groupValues[1].ifBlank { "💡" }).append(" ")
+    // callout: > [!💡] text, or one of Obsidian's types (> [!warning]- text) as its icon
+    Regex("^>\\s?\\[!([^\\]]*)\\][+-]?\\s*(.*)").find(line)?.let { m ->
+      val icon = m.groupValues[1]
+      sb.append(KINDS[icon.trim().lowercase()] ?: icon.ifBlank { "💡" }).append(" ")
       inline(sb, m.groupValues[2])
       return sb
     }
@@ -122,7 +123,8 @@ class Markdown(
       "|\\[\\[([^\\]|]+)(?:\\|([^\\]]*))?\\]\\]" + // 8 note link, 9 its label
       "|\\[([^\\]]+)\\]\\([^)]*\\)" +            // 10 link
       "|(?<![\\w@])@(\\d{4}-\\d{2}-\\d{2})(?!\\d)" + // 11 a day
-      "|<((?:https?://|mailto:)[^>\\s]+)>"            // 12 an autolink
+      "|<((?:https?://|mailto:)[^>\\s]+)>" +          // 12 an autolink
+      "|==(?!\\s)(.+?)(?<!\\s)=="                     // 13 ==highlight==
   )
 
   private fun inline(sb: SpannableStringBuilder, text: String) {
@@ -169,6 +171,10 @@ class Markdown(
           sb.append(day(g[11]))
           sb.setSpan(ForegroundColorSpan(accent), start, sb.length, EX)
         }
+        g[13].isNotEmpty() -> {
+          inline(sb, g[13])
+          sb.setSpan(BackgroundColorSpan(MARK), start, sb.length, EX)
+        }
         else -> sb.append(m.value)
       }
     }
@@ -200,5 +206,15 @@ class Markdown(
 
   private companion object {
     const val EX = Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+    /** the marker pen behind ==highlighted== text, as in the editor */
+    const val MARK = 0x73FFD60A
+    /** Obsidian's callout types, as the editor draws them (src/lib/calloutKind.ts) */
+    val KINDS = mapOf(
+      "note" to "✏️", "abstract" to "📋", "summary" to "📋", "tldr" to "📋", "info" to "ℹ️", "todo" to "☑️",
+      "tip" to "🔥", "hint" to "🔥", "important" to "🔥", "success" to "✅", "check" to "✅", "done" to "✅",
+      "question" to "❓", "help" to "❓", "faq" to "❓", "warning" to "⚠️", "caution" to "⚠️", "attention" to "⚠️",
+      "failure" to "❌", "fail" to "❌", "missing" to "❌", "danger" to "⚡", "error" to "⚡", "bug" to "🐛",
+      "example" to "📑", "quote" to "💬", "cite" to "💬",
+    )
   }
 }

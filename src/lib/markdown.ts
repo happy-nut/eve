@@ -5,9 +5,18 @@ export function plain(line: string): string {
   return line
     .replace(/^[#>\-*+\s]+|^\d+\.\s+|^\[[ x]\]\s*/g, '')
     .replace(/\\(.)/g, '$1')
+    .replace(/==(?=\S)(.+?)==/g, '$1')
     .replace(/[*_`~]/g, '')
-    .replace(/\[\[(.+?)\]\]/g, '$1')
+    // a link reads as its alias when it has one
+    .replace(/\[\[(.+?)\]\]/g, (_, inner: string) => { const [title, alias] = splitAlias(inner); return alias || title; })
     .trim();
+}
+
+/** `Title|alias` inside a `[[…]]` (the bar maybe escaped, as in a table cell) -> [title, alias] ('' = none) */
+export function splitAlias(inner: string): [string, string] {
+  const bar = inner.search(/\\?\|/);
+  if (bar < 0) return [inner.trim(), ''];
+  return [inner.slice(0, bar).trim(), inner.slice(inner.indexOf('|', bar) + 1).trim()];
 }
 
 /**

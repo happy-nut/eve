@@ -3,11 +3,16 @@ import Suggestion, { type SuggestionOptions } from '@tiptap/suggestion';
 import { NodeSelection, TextSelection, PluginKey } from '@tiptap/pm/state';
 import { customIcon } from './icons';
 import type MarkdownIt from 'markdown-it';
+import { splitAlias } from './markdown';
 
 /**
  * [[Note title]] — an inline atom that links to another note by title.
- * Markdown: serialized/parsed as `[[Title]]`. Typing `[[` opens a suggestion popup.
+ * Markdown: serialized/parsed as `[[Title]]`, or `[[Title|shown as]]` (Obsidian's alias: the link opens
+ * Title and reads as the alias; inside a table the bar is escaped, `[[Title\|shown as]]`). Typing `[[`
+ * opens a suggestion popup.
  */
+
+
 export interface WikiLinkOptions {
   onOpen: (title: string) => void;
   /** the linked note's icon, so a link reads like its row in the sidebar ('' = none) */
@@ -27,7 +32,10 @@ export const WikiLink = Node.create<WikiLinkOptions>({
   },
 
   addAttributes() {
-    return { title: { default: '', parseHTML: (el) => el.getAttribute('data-wikilink') } };
+    return {
+      title: { default: '', parseHTML: (el) => el.getAttribute('data-wikilink') },
+      alias: { default: '', parseHTML: (el) => el.getAttribute('data-alias') ?? '' },
+    };
   },
 
   parseHTML() {
@@ -37,8 +45,8 @@ export const WikiLink = Node.create<WikiLinkOptions>({
   renderHTML({ node, HTMLAttributes }) {
     return [
       'span',
-      mergeAttributes(HTMLAttributes, { 'data-wikilink': node.attrs.title, class: 'wikilink' }),
-      node.attrs.title,
+      mergeAttributes(HTMLAttributes, { 'data-wikilink': node.attrs.title, ...(node.attrs.alias ? { 'data-alias': node.attrs.alias } : {}), class: 'wikilink' }),
+      node.attrs.alias || node.attrs.title,
     ];
   },
 
@@ -58,7 +66,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
       }
       const text = document.createElement('span');
       text.className = 'wl-t';
-      text.textContent = title;
+      text.textContent = node.attrs.alias || title;
       dom.append(text);
       dom.addEventListener('mousedown', (e) => {
         e.preventDefault();
@@ -99,7 +107,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
     return {
       markdown: {
         serialize(state: any, node: any) {
-          state.write(`[[${node.attrs.title}]]`);
+          state.write(`[[${node.attrs.title}${node.attrs.alias ? `|${node.attrs.alias}` : ''}]]`);
         },
         parse: {
           setup(md: MarkdownIt) {
@@ -108,15 +116,21 @@ export const WikiLink = Node.create<WikiLinkOptions>({
               if (src.charCodeAt(state.pos) !== 0x5b || src.charCodeAt(state.pos + 1) !== 0x5b) return false;
               const end = src.indexOf(']]', state.pos + 2);
               if (end < 0) return false;
-              const title = src.slice(state.pos + 2, end).trim();
-              if (!title || title.includes('\n')) return false;
-              if (!silent) state.push('wikilink', '', 0).content = title;
+              const inner = src.slice(state.pos + 2, end);
+              const [title, alias] = splitAlias(inner);
+              if (!title || inner.includes('\n')) return false;
+              if (!silent) {
+                const t = state.push('wikilink', '', 0);
+                t.content = title;
+                t.meta = { alias };
+              }
               state.pos = end + 2;
               return true;
             });
             md.renderer.rules.wikilink = (tokens, i) => {
-              const t = tokens[i].content.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-              return `<span data-wikilink="${t}">${t}</span>`;
+              const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+              const t = esc(tokens[i].content), a = esc(tokens[i].meta?.alias ?? '');
+              return a ? `<span data-wikilink="${t}" data-alias="${a}">${a}</span>` : `<span data-wikilink="${t}">${t}</span>`;
             };
           },
         },
