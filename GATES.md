@@ -929,3 +929,13 @@
 - [ ] G201 On the Mac: Settings → Claude finds Claude Desktop / Claude Code, Connect, restart Claude Desktop,
   "search my Eve notes for …" answers from the notes; Disconnect; the setting survives a move of Eve.app
   (shows "points at another copy of Eve" until reconnected)
+- [x] G202 Looking back over a month: period filters, read_period, and the monthly_review / retrospective prompts
+  CHECK: cd src-tauri && cargo test mcp
+  EXPECT: test result: ok
+  EVIDENCE: scratch crate as in G198, 10 + 4 tests ok, clippy clean at rust-version 1.77.2. Days are local
+  (tests pin +09:00: September starts 2026-08-31 15:00 UTC; a note at 23:00 on Aug 31 stays in August).
+  Creation time from the id (newId's base-36 ms; daily-YYYY-MM-DD is its day). read_period over 2026-09:
+  daily note, a page made 09-03 and changed 09-20, a page changed 09-10, in that order; Aug/Oct left out;
+  group and day ranges narrow it; the daily template is never a note. Prompts name read_period with the
+  month (default: this month) or range + focus; a bad month is refused (-32602). Over stdio: prompts/list,
+  read_period on Korean notes.

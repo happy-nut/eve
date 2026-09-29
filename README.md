@@ -112,10 +112,17 @@ Claude Desktop's `claude_desktop_config.json` (the rest of the file kept), and r
 after connecting.
 
 The server is the app's own binary started as `eve mcp` (no window, no Tauri): it reads `notes/*.md` from disk,
-so it works while Eve is closed. Three tools, none of which writes: `list_notes` (optionally one group),
-`search_notes` (every word must match; title hits first) and `read_note` (by title or id, a `[[Title#Section]]`
-link, or one section). Deleted notes are left out. By hand, from any MCP client: command
-`/Applications/Eve.app/Contents/MacOS/eve`, args `["mcp"]`; `EVE_NOTES_DIR` points it at another folder.
+so it works while Eve is closed. Nothing it offers writes. Tools: `list_notes` and `search_notes` (every word
+must match; title hits first), both narrowed by group and by period (`from` / `to`: `2026-09` or `2026-09-05`,
+local time); `read_note` (by title or id, a `[[Title#Section]]` link, or one section); and `read_period`, every
+note made or changed in a month or a range, in full and oldest first, for looking back in one call. A note's
+creation time comes from its id (a day's note is its day). Only a note's last change is known, so a note edited
+in September and again in October counts for October. Deleted notes and the calendar's own are left out.
+
+Two prompts start the looking back (Claude Code: `/mcp__eve__monthly_review 2026-09`; Claude Desktop: the + menu):
+`monthly_review` (what you did, decided and learned, what is still open, three things to try next month) and
+`retrospective` (Keep / Problem / Try over any range, optionally about one thing). By hand, from any MCP client:
+command `/Applications/Eve.app/Contents/MacOS/eve`, args `["mcp"]`; `EVE_NOTES_DIR` points it at another folder.
 
 ## Layout
 
@@ -128,7 +135,7 @@ src/                Svelte UI
   lib/sync.svelte.ts      sync client (notes + images <-> GitHub)
   lib/github.ts           GitHub REST sync engine (pure, tested in Node)
 src-tauri/          Rust: file/asset storage commands, window toggle, global-shortcut plugin
-  src/mcp.rs              `eve mcp`: read-only MCP server over stdio
+  src/mcp.rs              `eve mcp`: read-only MCP server over stdio (tools + review prompts)
   src/mcp_setup.rs        Settings → Claude: register it with Claude Desktop / Claude Code
 ```
 
