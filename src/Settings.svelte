@@ -374,7 +374,7 @@
           {/if}
         </div>
         {#if claudeError}<p class="alert">{claudeError}</p>
-        {:else if claudeOn}<p class="alert dim">Read-only: Claude can list, search and read notes, never change them. Restart Claude Desktop to pick it up; Claude Code sees it in its next session.</p>{/if}
+        {:else if claudeOn}<p class="alert dim">Claude can list, search and read notes, and open one here for you — never change them. Restart Claude Desktop to pick it up; Claude Code sees it in its next session.</p>{/if}
       </div>
 {/if}
 

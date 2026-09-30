@@ -23,7 +23,7 @@ type Notion-style markdown, link notes with `[[wiki links]]`, and sync through a
 - **Opens .md files** — Eve registers as a Markdown editor, so it shows up in Finder's *Open With*. Such files are edited in place and listed under *Open files* (not synced; ⌫ closes them).
 - **Plain files** — each note is a `.md` with a tiny frontmatter (id, updated, group) in `~/Library/Application Support/dev.happynut.eve/notes/`.
 - **Sync without a server** — a private GitHub repository is the backend: one commit per change, last-writer-wins, images included. Edit a note on github.com and it comes back to the app.
-- **Claude reads your notes** — Settings → Claude → Connect registers Eve's read-only MCP server with Claude Desktop and Claude Code in one click; Claude can then list, search and read your notes, never change them (see [Claude (MCP)](#claude-mcp)).
+- **Claude reads your notes** — Settings → Claude → Connect registers Eve's MCP server with Claude Desktop and Claude Code in one click; Claude can then list, search and read your notes, and open one in Eve for you, never change them (see [Claude (MCP)](#claude-mcp)). The same commands work in a terminal: `eve help` (see [Command line](#command-line)).
 
 ## Install
 
@@ -133,7 +133,11 @@ so it works while Eve is closed. It only hands over the notes, exactly as writte
 Claude and you. Nothing it offers writes. Tools: `list_notes` and `search_notes` (every word must match; title
 hits first) find notes, narrowed by group and by the dates a note was made or last changed (`from` / `to`:
 `2026-09` or `2026-09-05`, local time); `read_note` returns one (by title or id, a `[[Title#Section]]` link, or
-one section) and `read_notes` several, by id, in the order given. A note's creation time comes from its id (a
+one section) and `read_notes` several, by id, in the order given. `open_note` shows one in Eve — the running
+app comes to the front with that note open, at a section if one is named (Eve starts if it was not running):
+"find last week's meeting notes and open them". It hands macOS an `eve://open?id=…&section=…` link, which Eve
+registers; such a link only ever shows a note, an unknown id is ignored, and nothing is created or changed.
+Being the one tool that is not read-only, Claude asks before its first use. A note's creation time comes from its id (a
 day's note is its day); only its last change is known, so a note edited in September and again in October is
 found under October. Deleted notes and the calendar's own are left out.
 
@@ -144,6 +148,24 @@ pass back, refused if the note changed meanwhile. Long lists name how many were 
 is read that far; bytes that are not UTF-8 show as `�` rather than the note going missing; a title two notes
 share names the other; a missing notes folder names the path it looked in. By hand, from any MCP client: command
 `/Applications/Eve.app/Contents/MacOS/eve`, args `["mcp"]`; `EVE_NOTES_DIR` points it at another folder.
+
+## Command line
+
+Every tool is also a command, the same code with the same answers (`src-tauri/src/core.rs` holds them once;
+the MCP server and the command line only translate):
+
+```bash
+eve help                       # the commands; eve help <command> for one in full
+eve list --group Work --from 2026-09
+eve search 회의 결정 --limit 5
+eve read "Weekly plan" --section Goals
+eve read-many <id> <id>        # several, whole, in order
+eve open "Weekly plan"         # show it in the running Eve
+```
+
+Homebrew links `eve` onto the PATH (the cask's `binary`); otherwise it is `/Applications/Eve.app/Contents/MacOS/eve`.
+Bare words go to the command's main argument (the query, the title, the ids); the rest are `--name value`. Long
+answers end with a cursor, passed back as `--cursor`. `eve` with no command starts the app, as before.
 
 ## Layout
 
@@ -156,7 +178,9 @@ src/                Svelte UI
   lib/sync.svelte.ts      sync client (notes + images <-> GitHub)
   lib/github.ts           GitHub REST sync engine (pure, tested in Node)
 src-tauri/          Rust: file/asset storage commands, window toggle, global-shortcut plugin
-  src/mcp.rs              `eve mcp`: read-only MCP server over stdio
+  src/core.rs             the notes' commands (list, search, read, open) and their help, read from disk
+  src/mcp.rs              `eve mcp`: those commands as an MCP server over stdio
+  src/cli.rs              `eve <command>`: the same commands in a terminal
   src/mcp_setup.rs        Settings → Claude: register it with Claude Desktop / Claude Code
   src/update.rs           the Mac updating itself from a release
 ```

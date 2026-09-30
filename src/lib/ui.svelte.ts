@@ -102,4 +102,6 @@ export const hooks: {
   centerCaret?: () => void;
   /** run an editor action by id on the open note (the phone's formatting bar) */
   command?: (id: string) => void;
+  /** go to one of the open note's headings (an eve:// link into the note already open) */
+  section?: (heading: string) => void;
 } = {};
