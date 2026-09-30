@@ -7,7 +7,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
-import { Plugin, PluginKey, Selection, type Command } from '@tiptap/pm/state';
+import { Plugin, PluginKey, Selection, TextSelection, type Command } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
@@ -187,6 +187,28 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     codeBlock: () => c().toggleCodeBlock().run(),
     divider: () => c().setHorizontalRule().run(),
   };
+}
+
+/**
+ * ⇧↓ / ⇧↑ from a line into a picture (a video, a PDF card, a bookmark…): the browser extends a selection
+ * line by line and has no line inside a block without text, so the selection stopped just before it.
+ * On the last (first) line of a block, the head goes past every such block in the way to the next text,
+ * or to the note's edge, and the pictures are in the selection like the lines around them.
+ */
+function shiftPastBlocks(view: EditorView, e: KeyboardEvent): boolean {
+  if (!e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return false;
+  const dir = e.key === 'ArrowDown' ? 1 : -1;
+  const { state } = view;
+  const sel = state.selection;
+  if (!(sel instanceof TextSelection) || !sel.$head.parent.isTextblock) return false;
+  if (!view.endOfTextblock(dir > 0 ? 'down' : 'up')) return false;
+  let $edge = state.doc.resolve(dir > 0 ? sel.$head.after() : sel.$head.before());
+  const next = (at: typeof $edge) => (dir > 0 ? at.nodeAfter : at.nodeBefore);
+  if (!next($edge)?.isAtom || !next($edge)!.isBlock) return false;
+  while (next($edge)?.isAtom && next($edge)!.isBlock) $edge = state.doc.resolve($edge.pos + dir * next($edge)!.nodeSize);
+  const beyond = Selection.findFrom($edge, dir, true);
+  view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, sel.anchor, beyond ? beyond.head : $edge.pos)).scrollIntoView());
+  return true;
 }
 
 /** (Re)install the user keymap in front of every other plugin, so rebinding wins. */
@@ -540,6 +562,10 @@ export function createEditor(opts: {
         ],
       }),
       LocalImage.configure({ inline: false, allowBase64: true }),
+      Extension.create({
+        name: 'shiftPastBlocks',
+        addProseMirrorPlugins: () => [new Plugin({ key: new PluginKey('shiftPastBlocks'), props: { handleKeyDown: shiftPastBlocks } })],
+      }),
       Bookmark,
       Kanban,
       Extension.create({
