@@ -1135,7 +1135,10 @@
 - [x] G221 v0.7.16 (Mac, Latest) is released
   EVIDENCE: run 36665496954 (workflow_dispatch, main at 2d543b1) succeeded; release v0.7.16 "Eve v0.7.16"
   published 2026-09-30T03:46Z, not a prerelease, the newest (Latest, which the cask follows).
-- [ ] G222 android-v0.7.20 is released (tauri.android.conf.json 0.7.20), made by Run workflow
+- [x] G222 android-v0.7.20 is released (tauri.android.conf.json 0.7.20), made by Run workflow
+  EVIDENCE: run 36667424204 (workflow_dispatch, main at 546101f) succeeded; release android-v0.7.20 "Eve for
+  Android 0.7.20" published 2026-09-30T04:14Z, not Latest, with Eve-android-0.7.20.apk and Eve-android.apk
+  (the same file, sha256:f7defa6c…).
 
 # GATES — toggles, every line one step for ⌥↑↓, Tab moves only its lines, a pasted link asks; v0.7.17 (Mac), 0.7.21 (Android) (2026-10-01)
 
