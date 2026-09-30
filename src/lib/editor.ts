@@ -7,7 +7,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
-import { Plugin, PluginKey, Selection, type Command } from '@tiptap/pm/state';
+import { Plugin, PluginKey, Selection, TextSelection, type Command } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
@@ -91,6 +91,7 @@ function moveBlock(dir: -1 | 1) {
     while (range) {
       const { parent, startIndex, endIndex, start, end } = range;
       const i = dir < 0 ? startIndex - 1 : endIndex;
+      if (isEdge(state.doc, parent, i, dir)) return true; // the note's title or its end: nothing to pass
       if (i >= 0 && i < parent.childCount) {
         if (dispatch) {
           const node = parent.child(i);
@@ -116,28 +117,57 @@ function moveBlock(dir: -1 | 1) {
   };
 }
 
+/**
+ * The empty line the editor keeps at the very end of a note (StarterKit's TrailingNode puts one back
+ * whenever the note ends in anything else). It is not a line to swap with: stepping past it only makes
+ * the editor add another, and ⌥↓ would go on trading places with new empty lines forever.
+ */
+function isTrailer(doc: PMNode, parent: PMNode, i: number): boolean {
+  const node = parent === doc && i === doc.childCount - 1 ? doc.child(i) : null;
+  return !!node && node.type.name === 'paragraph' && node.content.size === 0;
+}
+/** The neighbour a move would pass is the note's end, or its title (a heading as the first line): both stay put. */
+function isEdge(doc: PMNode, parent: PMNode, i: number, dir: -1 | 1): boolean {
+  if (dir > 0) return isTrailer(doc, parent, i);
+  return parent === doc && i === 0 && doc.child(0).type.name === 'heading';
+}
+
 /** Carry the item out of its list and past the block on the other side, still an item of its own list. */
 function hopOutOfList(
   { state, dispatch }: { state: any; dispatch?: (tr: any) => void },
   range: any,
   dir: -1 | 1,
 ): boolean {
-  const { parent, start, end, depth } = range;
+  const { parent, start, end, depth, startIndex, endIndex } = range;
   const $start = state.doc.resolve(start);
   const listStart = $start.before(depth), listEnd = $start.after(depth);
-  const beside = dir < 0 ? state.doc.resolve(listStart).nodeBefore : state.doc.resolve(listEnd).nodeAfter;
-  if (!beside) return false; // the list is already at the edge: there is nothing to step over
-  const alone = parent.childCount === 1; // the last item leaves no empty list behind
+  const $edge = state.doc.resolve(dir < 0 ? listStart : listEnd);
+  const beside = dir < 0 ? $edge.nodeBefore : $edge.nodeAfter;
+  // the list is already at the edge: nothing to step over, and the key stays ours (the webview's own ⌥↓
+  // would drop the selection)
+  if (!beside) return true;
+  const besideAt = dir < 0 ? $edge.index() - 1 : $edge.index();
+  if (isEdge(state.doc, $edge.parent, besideAt, dir)) return true;
+  // a sub-list's top item does not climb over its own item's first line: an item has to start with a line
+  if (besideAt === 0 && /Item$/.test($edge.parent.type.name)) return true;
+  // every item going (the last one, or all of them selected) leaves no empty list behind: the list goes
+  const alone = startIndex === 0 && endIndex === parent.childCount;
   const cut = alone ? { from: listStart, to: listEnd } : { from: start, to: end };
   // measured from the list's own edges: the item has to clear the whole neighbour, not just the list
   const target = dir < 0 ? listStart - beside.nodeSize : listEnd + beside.nodeSize;
   if (dispatch) {
     const moved = alone ? state.doc.slice(listStart, listEnd).content : parent.copy(state.doc.slice(start, end).content);
-    const caretIn = state.selection.from - (alone ? listStart : start - 1); // where the caret sat inside it
+    // the selection rides along as it was, a range over several items included, so the next ⌥↓ moves
+    // the same items again
+    const base = alone ? listStart : start - 1;
+    const { anchor, head } = state.selection;
     const tr = state.tr.delete(cut.from, cut.to);
     const at = tr.mapping.map(target);
     tr.insert(at, moved);
-    tr.setSelection(Selection.near(tr.doc.resolve(Math.min(at + caretIn, tr.doc.content.size))));
+    const clamp = (p: number) => Math.min(at + p - base, tr.doc.content.size);
+    tr.setSelection(state.selection instanceof TextSelection
+      ? TextSelection.create(tr.doc, clamp(anchor), clamp(head))
+      : Selection.near(tr.doc.resolve(clamp(state.selection.from))));
     dispatch(tr.scrollIntoView());
   }
   return true;
@@ -187,6 +217,28 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     codeBlock: () => c().toggleCodeBlock().run(),
     divider: () => c().setHorizontalRule().run(),
   };
+}
+
+/**
+ * ⇧↓ / ⇧↑ from a line into a picture (a video, a PDF card, a bookmark…): the browser extends a selection
+ * line by line and has no line inside a block without text, so the selection stopped just before it.
+ * On the last (first) line of a block, the head goes past every such block in the way to the next text,
+ * or to the note's edge, and the pictures are in the selection like the lines around them.
+ */
+function shiftPastBlocks(view: EditorView, e: KeyboardEvent): boolean {
+  if (!e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return false;
+  const dir = e.key === 'ArrowDown' ? 1 : -1;
+  const { state } = view;
+  const sel = state.selection;
+  if (!(sel instanceof TextSelection) || !sel.$head.parent.isTextblock) return false;
+  if (!view.endOfTextblock(dir > 0 ? 'down' : 'up')) return false;
+  let $edge = state.doc.resolve(dir > 0 ? sel.$head.after() : sel.$head.before());
+  const next = (at: typeof $edge) => (dir > 0 ? at.nodeAfter : at.nodeBefore);
+  if (!next($edge)?.isAtom || !next($edge)!.isBlock) return false;
+  while (next($edge)?.isAtom && next($edge)!.isBlock) $edge = state.doc.resolve($edge.pos + dir * next($edge)!.nodeSize);
+  const beyond = Selection.findFrom($edge, dir, true);
+  view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, sel.anchor, beyond ? beyond.head : $edge.pos)).scrollIntoView());
+  return true;
 }
 
 /** (Re)install the user keymap in front of every other plugin, so rebinding wins. */
@@ -540,6 +592,10 @@ export function createEditor(opts: {
         ],
       }),
       LocalImage.configure({ inline: false, allowBase64: true }),
+      Extension.create({
+        name: 'shiftPastBlocks',
+        addProseMirrorPlugins: () => [new Plugin({ key: new PluginKey('shiftPastBlocks'), props: { handleKeyDown: shiftPastBlocks } })],
+      }),
       Bookmark,
       Kanban,
       Extension.create({

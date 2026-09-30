@@ -147,7 +147,8 @@ export const LocalImage = Image.extend({
         editor.commands.focus();
       });
 
-      figure.append(img, sizeGrip(img, setWidth), cap);
+      const grip = sizeGrip(img, setWidth);
+      figure.append(img, grip, cap);
       return {
         dom: figure,
         update: (updated) => {
@@ -158,8 +159,12 @@ export const LocalImage = Image.extend({
           if (document.activeElement !== cap) cap.textContent = updated.attrs.alt ?? '';
           return true;
         },
-        ignoreMutation: (m) => owns(m.target),
-        stopEvent: (e) => owns(e.target),
+        // a drag writes the width straight onto the <img> style. Left to ProseMirror, that change is
+        // read back as an edit: the figure is re-parsed, the parse finds no width in the alt, and the
+        // picture snaps back to its natural size under the pointer. Only a caret move outside the
+        // caption is the editor's business; every other change in here is this view's own.
+        ignoreMutation: (m) => m.type !== 'selection' || owns(m.target),
+        stopEvent: (e) => owns(e.target) || e.target === grip,
         destroy: () => { clearTimeout(timer); document.removeEventListener('mousedown', release, true); },
       };
     };

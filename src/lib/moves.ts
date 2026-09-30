@@ -24,7 +24,9 @@ function noteSlots(me: Note): NoteSlot[] {
     for (const c of groups.children(g)) if (!groups.isCollapsed(c)) walk(c); // subgroups first, as the tree shows them
     pages(g, '');
   };
-  walk('');
+  // the root's notes sit above the groups, so the slots run the same way
+  pages('', '');
+  for (const c of groups.children('')) if (!groups.isCollapsed(c)) walk(c);
   return out;
 }
 

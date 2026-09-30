@@ -164,8 +164,8 @@
 {#if !isMobile}
         <label class="row">
           <span class="label">Close sidebar when you start writing <span class="sub">typing or arrowing in the editor folds the list away</span></span>
-          <input type="checkbox" class="switch" checked={appearance.s.hideSidebarOnEdit}
-            onchange={(e) => appearance.set({ hideSidebarOnEdit: e.currentTarget.checked })} />
+          <input type="checkbox" class="switch" checked={appearance.s.closeSidebarOnWrite}
+            onchange={(e) => appearance.set({ closeSidebarOnWrite: e.currentTarget.checked })} />
         </label>
 {/if}
         <label class="row">
