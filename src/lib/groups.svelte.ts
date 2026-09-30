@@ -67,17 +67,18 @@ class Groups {
   /** show a page's sub-pages (used when one is tucked under it) */
   unfold(id: string) { if (this.isFolded(id)) this.fold(id); }
 
-  /** notes in the order the sidebar shows them: depth-first groups (subgroups before notes), then root */
+  /** notes in the order the sidebar shows them: the root's notes first, then each group depth-first
+   *  (inside a group, its subgroups before its own notes) */
   ordered() {
     const walk = (p: string): typeof notes.visible => [...this.children(p).flatMap(walk), ...this.pagesIn(p)];
-    return walk('');
+    return [...this.pagesIn(''), ...this.children('').flatMap(walk)];
   }
 
   /** like ordered(), but only what the sidebar currently shows (collapsed groups skipped) */
   visibleOrdered() {
-    const walk = (p: string): typeof notes.visible =>
-      [...this.children(p).flatMap((c) => (this.isCollapsed(c) ? [] : walk(c))), ...this.pagesIn(p, true)];
-    return walk('');
+    const inner = (p: string): typeof notes.visible =>
+      [...this.children(p).flatMap((c) => (this.isCollapsed(c) ? [] : inner(c))), ...this.pagesIn(p, true)];
+    return [...this.pagesIn('', true), ...this.children('').flatMap((c) => (this.isCollapsed(c) ? [] : inner(c)))];
   }
 
   /** what icons + order last looked like, to tell a change to them from a fold */
