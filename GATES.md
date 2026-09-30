@@ -1114,3 +1114,22 @@
   EVIDENCE: run 36648459120 (workflow_dispatch, main at 52b7b64) succeeded; the release's zip carries a
   sha256 digest and its Info.plist says 0.7.15 with CFBundleURLTypes eve. happy-nut/homebrew-tap#1 adds
   `binary "#{appdir}/Eve.app/Contents/MacOS/eve"` and `uninstall quit: "dev.happynut.eve"` (ruby -c ok).
+
+# GATES — editor and list fixes from use; v0.7.16 (2026-09-30)
+
+- [x] G220 Seven fixes, each reproduced in the Vite dev server (Playwright, Chromium) before and checked after
+  CHECK: npm run check
+  EXPECT: 0 ERRORS 0 WARNINGS
+  EVIDENCE: (1) a picture dragged 600 -> 400 stays 400 and saves `![cap|400]` (before: snapped back to 600:
+  the node view let ProseMirror re-read its own style change). (2) ⇧↓ from "first line" runs past a picture
+  to the line after it, ⇧↑ back (before: stopped on the line above it). (3) the calendar's row, like any note,
+  ⌥↓ from the root into Work, Work/Sub, Play and ⌥↑ back (before: the slots ran groups first, the sidebar
+  shows the root first); ⌘1–9 and next/prev follow. (4) a day opened with Enter closes on Esc with the focus
+  left behind it (before: Esc fell through to Hide window); a popup in it still takes the first Esc.
+  (5) emoji search "cat": ↓ into the grid, arrows by cell and row (9 across), ↑ from the top row and ⌫ / a
+  letter back to the box with the key applied, ↩ picks. (6) a bullet or two selected items ⌥↓ past the list's
+  end and on down, the selection kept, stopping above the note's own empty last line and under its title;
+  the whole list selected moves as one; a sub-list's first item no longer breaks its item open.
+  (7) Close sidebar when you start writing is off unless switched on, on a device that saved the old
+  setting as on too. npm run check 0 errors; the node tests pass but ql.test (qlmanage is macOS-only).
+- [ ] G221 v0.7.16 (Mac, Latest) is released
