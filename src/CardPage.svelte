@@ -40,7 +40,10 @@
     if (req.markdown !== undefined) editor.commands.focus('end');
     else editor.commands.focus(editor.state.doc.firstChild!.nodeSize - 1);
     editor.view.focus();
-    return () => editor?.destroy();
+    // the page grows in from a day opened with Enter: if the webview left the focus on that day behind
+    // it, the keys (Esc included) would go to the calendar, not to the page
+    const again = requestAnimationFrame(() => { if (!el.contains(document.activeElement)) editor?.view.focus(); });
+    return () => { cancelAnimationFrame(again); editor?.destroy(); };
   });
 
   /** a sheet slides up on a phone; the Mac's floating page grows in place */

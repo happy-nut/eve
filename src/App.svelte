@@ -374,6 +374,15 @@
       else ui.closePdf();
       return;
     }
+    // …and a floating page (a board's card, a day from the calendar) is on top of everything. It closes
+    // on its own Esc; one that gets here had the focus outside it (on the day behind it, say), and must
+    // still close the page rather than hide the window. A popup inside it that took the Esc keeps it open.
+    if (e.key === 'Escape' && ui.card && (!e.defaultPrevented || (e as any).eveApp)) {
+      e.preventDefault();
+      ui.closeCard();
+      queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus());
+      return;
+    }
     if (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
       e.preventDefault();
       jumpTo(Number(e.code[5]));
