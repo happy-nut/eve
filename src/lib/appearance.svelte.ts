@@ -15,8 +15,10 @@ export type Theme = (typeof THEMES)[number][0];
 
 interface Appearance {
   theme: Theme; font: string; custom: string; size: number; lineHeight: number; width: number;
-  /** close the sidebar as soon as you start writing (typing or arrowing in the editor) */
-  hideSidebarOnEdit: boolean;
+  /** close the sidebar as soon as you start writing (typing or arrowing in the editor). Off unless asked
+   *  for: it replaces `hideSidebarOnEdit`, which was on by default and saved with every other setting,
+   *  so a new name is what lets every device start from off */
+  closeSidebarOnWrite: boolean;
   /** give a new or imported note an icon of its own, so the list reads at a glance */
   autoIcon: boolean;
   /** a note per day, opened from the calendar (lib/daily.ts); its template is a note (DAILY_TEMPLATE_ID) */
@@ -31,10 +33,13 @@ interface Appearance {
 // the window's own defaults match tauri.conf.json, so a fresh install never resizes on launch
 // A phone starts from bigger type. Appearance lives in this device's localStorage and never syncs, so a
 // phone and a Mac each keep their own.
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, hideSidebarOnEdit: true, autoIcon: true, dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, closeSidebarOnWrite: false, autoIcon: true, dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
 
 function load(): Appearance {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; } catch { return { ...DEFAULTS }; }
+  try {
+    const { hideSidebarOnEdit: _, ...saved } = JSON.parse(localStorage.getItem(LS) ?? '{}'); // the old name, dropped
+    return { ...DEFAULTS, ...saved };
+  } catch { return { ...DEFAULTS }; }
 }
 
 class AppearanceStore {

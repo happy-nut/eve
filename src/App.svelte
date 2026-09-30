@@ -361,7 +361,7 @@
     if (e.key === 'Meta' && !e.shiftKey && !e.altKey && !e.ctrlKey) cmdDown();
     else cmdUp();
     // writing takes the window: the list folds away the moment you type inside the editor
-    if (sidebarOpen && appearance.s.hideSidebarOnEdit && isWriting(e)) sidebarOpen = false;
+    if (sidebarOpen && appearance.s.closeSidebarOnWrite && isWriting(e)) sidebarOpen = false;
     // the right-click menu takes the keyboard while it is up, wherever the focus actually sits
     if (ui.menu) { if (e.key === 'Escape') { e.preventDefault(); ui.closeMenu(); } return; }
     if (ui.pending || ui.emoji) return;
