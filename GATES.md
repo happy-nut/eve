@@ -1110,3 +1110,7 @@
   Mac only", exit 1), search without a query (exit 1), --version, and `eve mcp` answering tools/list.
   `eve` alone and macOS's -psn_ arguments still start the app. 32 tests ok; no new warnings.
 
+- [x] G219 v0.7.15 (Mac, Latest) is released and the cask links `eve` and quits Eve before replacing it
+  EVIDENCE: run 36648459120 (workflow_dispatch, main at 52b7b64) succeeded; the release's zip carries a
+  sha256 digest and its Info.plist says 0.7.15 with CFBundleURLTypes eve. happy-nut/homebrew-tap#1 adds
+  `binary "#{appdir}/Eve.app/Contents/MacOS/eve"` and `uninstall quit: "dev.happynut.eve"` (ruby -c ok).
