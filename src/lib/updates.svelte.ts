@@ -21,6 +21,8 @@ class Updates {
   /** Settings' Check button: busy while asking, then what came of it */
   checking = $state(false);
   failed = $state(false);
+  /** why the last check failed, when GitHub said */
+  reason = $state('');
   private checked = 0;
 
   async check(force = false) {
@@ -31,9 +33,13 @@ class Updates {
     const shown = new Promise((r) => setTimeout(r, 600));
     try {
       if (!this.current) this.current = await (await import('@tauri-apps/api/app')).getVersion();
-      this.available = await findUpdate(this.current, undefined, target);
+      // the sync's token, when it is github.com's: a signed-in question is not held to 60 an hour
+      const { sync } = await import('./sync.svelte');
+      const token = sync.settings.host ? '' : sync.settings.token;
+      this.available = await findUpdate(this.current, undefined, target, token);
       this.failed = false;
-    } catch { this.failed = true; /* offline: next time */ }
+      this.reason = '';
+    } catch (err) { this.failed = true; this.reason = err instanceof Error ? err.message : ''; /* offline: next time */ }
     await shown;
     this.checking = false;
   }

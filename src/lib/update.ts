@@ -34,10 +34,19 @@ function assetFor(target: Target, tag: string, assets: Asset[]): Asset | undefin
 }
 
 /** The highest-versioned published release that carries `target`'s file, if it is newer than `current`.
- *  (The API lists the Latest release first, and that is the Mac's — so order says nothing about versions.) */
-export async function findUpdate(current: string, f: typeof fetch = (...a) => fetch(...a), target: Target = 'android'): Promise<Update | null> {
-  const res = await f(RELEASES, { headers: { accept: 'application/vnd.github+json' }, cache: 'no-store' });
-  if (!res.ok) return null;
+ *  (The API lists the Latest release first, and that is the Mac's — so order says nothing about versions.)
+ *
+ *  `token`: the github.com sync token, when there is one. Asked without it, GitHub answers an address only
+ *  60 times an hour — shared with everything else on that network — and past that says 403.
+ *  A question GitHub did not answer throws: "no newer Eve" is only ever said after reading the list. */
+export async function findUpdate(current: string, f: typeof fetch = (...a) => fetch(...a), target: Target = 'android', token = ''): Promise<Update | null> {
+  const ask = (auth: string) => f(RELEASES, {
+    headers: { accept: 'application/vnd.github+json', ...(auth ? { authorization: `Bearer ${auth}` } : {}) },
+    cache: 'no-store',
+  });
+  let res = await ask(token);
+  if (res.status === 401 && token) res = await ask(''); // a revoked token still leaves the open question
+  if (!res.ok) throw new Error(res.status === 403 || res.status === 429 ? 'GitHub is limiting checks — try again in a while' : `GitHub answered ${res.status}`);
   let best: Update | null = null;
   for (const r of (await res.json()) as { tag_name: string; draft: boolean; prerelease?: boolean; assets?: Asset[] }[]) {
     const file = r.draft || r.prerelease ? undefined : assetFor(target, r.tag_name, r.assets ?? []);
