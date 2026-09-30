@@ -1,6 +1,8 @@
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, WindowEvent};
 
+pub mod cli;
+pub mod core;
 mod files;
 mod mac;
 pub mod mcp;
@@ -18,6 +20,15 @@ fn take_pending_files(pending: tauri::State<Pending>) -> Vec<String> {
     std::mem::take(&mut *pending.0.lock().unwrap())
 }
 
+/// The last eve:// link macOS handed over before the frontend was listening (Eve started by it).
+#[derive(Default)]
+struct PendingLink(Mutex<Option<String>>);
+
+#[tauri::command]
+fn take_pending_link(pending: tauri::State<PendingLink>) -> Option<String> {
+    pending.0.lock().unwrap().take()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
@@ -32,6 +43,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Pending::default())
+        .manage(PendingLink::default())
         .invoke_handler(tauri::generate_handler![
             files::list_notes,
             files::write_note,
@@ -55,6 +67,7 @@ pub fn run() {
             mac::save_image,
             files::list_folder,
             take_pending_files,
+            take_pending_link,
             files::notes_path,
             window::toggle_window,
             window::is_front,
@@ -78,21 +91,25 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building eve")
         .run(|app, event| {
-            // Finder "Open With", double-click on a .md, `open -a Eve file.md`
+            // Finder "Open With", double-click on a .md, `open -a Eve file.md`; and eve://open?id=… from
+            // `eve open` or the MCP server's open_note (only ever shown, never acted on beyond that)
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = event {
                 let paths: Vec<String> = urls
                     .iter()
+                    .filter(|u| u.scheme() == "file")
                     .filter_map(|u| u.to_file_path().ok())
                     .map(|p| p.to_string_lossy().into_owned())
                     .collect();
-                app.state::<Pending>().0.lock().unwrap().extend(paths.clone());
-                let _ = app.emit("open-files", paths);
-                if let Some(win) = app.get_webview_window("main") {
-                    let _ = app.show();
-                    let _ = win.show();
-                    let _ = win.set_focus();
+                if !paths.is_empty() {
+                    app.state::<Pending>().0.lock().unwrap().extend(paths.clone());
+                    let _ = app.emit("open-files", paths);
                 }
+                if let Some(link) = urls.iter().rev().find(|u| u.scheme() == "eve") {
+                    *app.state::<PendingLink>().0.lock().unwrap() = Some(link.to_string());
+                    let _ = app.emit("open-link", link.to_string());
+                }
+                let _ = window::show_window(app.clone());
             }
         });
 }

@@ -276,13 +276,25 @@ export const files = {
   },
 };
 
+/** eve:// links macOS hands over (`eve open`, the MCP server's open_note): the raw URL, parsed by evelink.ts. */
+export const links = {
+  /** Subscribe to them; also takes the one that started Eve before the UI was listening. */
+  async onOpen(cb: (url: string) => void) {
+    if (!desktop) return;
+    const { listen } = await import('@tauri-apps/api/event');
+    await listen<string>('open-link', (e) => cb(e.payload));
+    const pending = await invoke<string | null>('take_pending_link');
+    if (pending) cb(pending);
+  },
+};
+
 /** Which app macOS opens a .md with. macOS only; a browser reports false and refuses to change it. */
 export const defaultApp = {
   get: () => (desktop ? invoke<boolean>('is_default_for_markdown') : Promise.resolve(false)),
   set: (on: boolean) => (isTauri ? invoke<void>('set_default_for_markdown', { on }) : Promise.reject(new Error('desktop only'))),
 };
 
-/** A Claude app that can start `eve mcp` (src-tauri/src/mcp.rs), the read-only notes server. */
+/** A Claude app that can start `eve mcp` (src-tauri/src/mcp.rs), the notes server (read-only, and open_note to show one). */
 export interface McpClient { id: string; name: string; installed: boolean; connected: boolean; stale: boolean }
 /** Settings → Claude: find the Claude apps on this Mac and register Eve with all of them in one go. Desktop only. */
 export const mcp = {

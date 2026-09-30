@@ -1006,7 +1006,8 @@
   macOS-only warnings). npm run check: 0 errors. Browser, a fake 0.7.13 set on the store: the banner sits
   over the Mac sidebar's footer at 12.5px (the title bar owns the top), with progress and an error that
   wraps; the phone keeps its banner up top and its Update button while Android's installer is up.
-- [ ] G210 On a Mac, 0.7.13 (installed with brew) updates itself to the next release from the sidebar
+- [x] G210 On a Mac, 0.7.13 (installed with brew) updates itself to the next release from the sidebar
+  EVIDENCE: reported by the user on their Mac (2026-09-30).
 
 # GATES — the calendar shows its keyboard day, and a day's note can be deleted (2026-09-29)
 
@@ -1081,3 +1082,31 @@
   android job ran from a dispatch for the first time and made its tag. The Mac zip's Info.plist says
   0.7.14 and it carries a sha256 digest (what 0.7.13's updater needs to offer it); the APK compiled the
   Kotlin changed in #101 (its dex holds the /api/v3 of PullJob.apiBase). Latest stays the Mac's.
+
+# GATES — Claude opens a note in Eve; the tools are commands in a terminal too (2026-09-30)
+
+- [x] G216 open_note shows a note in the running Eve, through an eve:// link that can do nothing else
+  CHECK: cd src-tauri && cargo test --lib && cd .. && node --experimental-strip-types --no-warnings src/lib/evelink.test.mjs
+  EXPECT: test result: ok / EVELINK_OK
+  EVIDENCE: open_note finds the note as read_note does (title, id, a whole [[Title#Section]], alias) and
+  names the heading as the editor shows it (plain(): "## **Goals** & [[Road|map]]" -> "Goals & map", what
+  goToSection compares with); link_to percent-encodes id and section, and evelink.ts reads back the same
+  strings (Korean, / ? = # &). A missing note or section is an error before macOS is asked; off the Mac it
+  says so. Info.plist registers the eve scheme; RunEvent::Opened now tells file:// (as before) from eve://,
+  keeps the last link for a frontend not yet listening (take_pending_link), shows the window. The page opens
+  only an id it has and never makes one; the note already open jumps to the section (hooks.section). The
+  tool is annotated readOnlyHint false, destructiveHint false; the other four stay read-only.
+  npm run check 0 errors.
+- [ ] G217 On the Mac: "open my … note" in Claude brings Eve up on it (running, hidden, and not running)
+- [x] G218 One table of commands serves MCP, the command line and help
+  CHECK: cd src-tauri && cargo test --lib cli mcp core
+  EXPECT: test result: ok
+  EVIDENCE: mcp.rs split into core.rs (notes, the five commands in COMMANDS, help) and a JSON-RPC-only
+  mcp.rs whose tools/list is built from COMMANDS (the schemas as before: required, limits, maxItems);
+  cli.rs reads `--name value`, `--name=value`, bare words for the main argument (joined for a text, one
+  each for ids), `--` and refuses unknown or doubled flags, a missing required one, a non-number. Help
+  names Claude's tools as commands ("`eve read`"). The real binary, a scratch EVE_NOTES_DIR: eve help,
+  help search, list, search 회의 --limit 5, read 주간 계획 --section 목표, read-many, open (Linux: "on the
+  Mac only", exit 1), search without a query (exit 1), --version, and `eve mcp` answering tools/list.
+  `eve` alone and macOS's -psn_ arguments still start the app. 32 tests ok; no new warnings.
+

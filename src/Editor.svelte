@@ -68,6 +68,7 @@
       }
       runEditorCommand(editor, id);
     };
+    hooks.section = (heading) => editor && goToSection(editor, heading);
     hooks.centerCaret = () => {
       if (!editor || !scrollEl) return;
       const caret = editor.view.coordsAtPos(editor.state.selection.head);
@@ -91,6 +92,7 @@
     return () => {
       hooks.attach = undefined;
       hooks.centerCaret = undefined;
+      hooks.section = undefined;
       hooks.command = undefined;
       if (editor) notes.cursor.set(id, editor.state.selection.from);
       editor?.destroy();

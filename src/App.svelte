@@ -10,7 +10,7 @@
   import { groups, MAX_DEPTH } from './lib/groups.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
-  import { setGlobalHotkey, win, files, autostart, dock, pin, isTauri, isMobile, onWindowFocus, onBack, widget } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, dock, pin, isTauri, isMobile, onWindowFocus, onBack, widget, links } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Confirm from './Confirm.svelte';
@@ -26,6 +26,7 @@
   import { importPaths, exportCurrent } from './lib/transfer';
   import { titleOf } from './lib/notes.svelte';
   import { parseTicket } from './lib/handoff';
+  import { parseEveLink } from './lib/evelink';
 
   let sidebarOpen = $state(true);
   let settingsOpen = $state(false);
@@ -75,6 +76,20 @@
       void files.onOpen(async (paths) => {
         const first = await importPaths(paths);
         if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; }
+      });
+      // eve://open?id=… (`eve open`, Claude's open_note): that note, at its heading when one is named.
+      // Showing is all a link may do: an unknown id is ignored, nothing is made
+      void links.onOpen((url) => {
+        const link = parseEveLink(url);
+        if (!link || !notes.all.some((n) => n.id === link.id && !n.deleted)) return;
+        settingsOpen = false;
+        ui.focusOwner = 'editor';
+        if (notes.currentId === link.id) {
+          if (link.section) hooks.section?.(link.section);
+          return;
+        }
+        notes.section = link.section;
+        notes.currentId = link.id;
       });
       widget.onOpen((ask) => {
         // the phone-setup page: take the sign-in the Mac's QR points at

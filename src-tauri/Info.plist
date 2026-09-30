@@ -49,5 +49,20 @@
       </array>
     </dict>
   </array>
+  <!--
+    eve://open?id=…[&section=…] shows that note: how `eve open` and the MCP server's open_note reach the
+    Eve that is running (lib.rs). It only ever shows a note; it changes nothing.
+  -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>dev.happynut.eve</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>eve</string>
+      </array>
+    </dict>
+  </array>
 </dict>
 </plist>
