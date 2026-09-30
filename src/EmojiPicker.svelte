@@ -43,7 +43,8 @@
       const st = document.createElement('style');
       st.id = 'eve-nav';
       st.textContent = `.nav-button[data-group-id="-1"] { order: 99 } .indicator-wrapper { display: none }
-        .nav-button[aria-selected="true"] { background: var(--button-active-background); border-radius: 6px }`;
+        .nav-button[aria-selected="true"] { background: var(--button-active-background); border-radius: 6px }
+        #search-results .emoji:focus { background: var(--button-active-background); outline: 2px solid var(--outline-color); outline-offset: -2px }`;
       root.append(st);
     }
   });
@@ -52,6 +53,39 @@
     const d = (e as CustomEvent).detail;
     ui.emojiDone(d.unicode ?? `:${d.emoji.shortcodes[0]}:`);
   }
+  /**
+   * The search results as a grid under the keyboard. The element's own ↑↓ walk the results one by one,
+   * a row at a time being nine presses; here ↓ from the search box goes into the results, the arrows
+   * then move by cell and by row, ↩ / space pick, and ↑ from the top row goes back to the box. Typing
+   * (a letter, ⌫) goes back to the box too, and the key lands there.
+   */
+  function onGridKey(e: KeyboardEvent) {
+    const root = el?.shadowRoot;
+    if (!root || e.metaKey || e.ctrlKey || e.altKey) return;
+    const input = root.querySelector<HTMLInputElement>('input.search');
+    const cells = [...root.querySelectorAll<HTMLButtonElement>('#search-results button.emoji')];
+    const at = e.composedPath()[0];
+    const i = cells.indexOf(at as HTMLButtonElement);
+    const go = (cell: HTMLElement) => { e.preventDefault(); e.stopPropagation(); cell.focus(); cell.scrollIntoView({ block: 'nearest' }); };
+    if (at === input) {
+      if (e.key === 'ArrowDown' && cells.length && !e.isComposing) go(cells[0]);
+      return;
+    }
+    if (i < 0 || !input) return;
+    const cols = Math.max(1, cells.filter((c) => c.offsetTop === cells[0].offsetTop).length);
+    const lastRow = Math.floor((cells.length - 1) / cols);
+    const row = Math.floor(i / cols);
+    if (e.key === 'ArrowRight') { if (i + 1 < cells.length) go(cells[i + 1]); else e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { if (i > 0) go(cells[i - 1]); else go(input); }
+    else if (e.key === 'ArrowDown') { if (row < lastRow) go(cells[Math.min(i + cols, cells.length - 1)]); else e.preventDefault(); }
+    else if (e.key === 'ArrowUp') go(row > 0 ? cells[i - cols] : input);
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); cells[i].click(); }
+    else if (e.key === 'Backspace' || e.key.length === 1 || e.key === 'Process' || e.isComposing) {
+      // not prevented: the key itself goes on to the box, caret at the end of what was typed
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+  }
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); ui.emojiDone(null); }
   }
@@ -59,7 +93,8 @@
 
 <svelte:window onkeydown={onKey} />
 <div class="backdrop" transition:fade={{ duration: 100 }} onmousedown={() => ui.emojiDone(null)} role="presentation"></div>
-<div class="panel" style="left: {x}px; top: {y}px; width: {W}px" transition:scale={{ start: 0.96, duration: 140 }} role="dialog" aria-label="이모지 선택">
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div class="panel" style="left: {x}px; top: {y}px; width: {W}px" transition:scale={{ start: 0.96, duration: 140 }} role="dialog" aria-label="이모지 선택" onkeydowncapture={onGridKey}>
   <header>
     <span class="tab">이모지</span>
     <span class="acts">
