@@ -1132,4 +1132,7 @@
   the whole list selected moves as one; a sub-list's first item no longer breaks its item open.
   (7) Close sidebar when you start writing is off unless switched on, on a device that saved the old
   setting as on too. npm run check 0 errors; the node tests pass but ql.test (qlmanage is macOS-only).
-- [ ] G221 v0.7.16 (Mac, Latest) is released
+- [x] G221 v0.7.16 (Mac, Latest) is released
+  EVIDENCE: run 36665496954 (workflow_dispatch, main at 2d543b1) succeeded; release v0.7.16 "Eve v0.7.16"
+  published 2026-09-30T03:46Z, not a prerelease, the newest (Latest, which the cask follows).
+- [ ] G222 android-v0.7.20 is released (tauri.android.conf.json 0.7.20), made by Run workflow
