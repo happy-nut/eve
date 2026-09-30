@@ -52,7 +52,8 @@ export const Video = Node.create({
         editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, width }));
       };
 
-      dom.append(video, sizeGrip(video, setWidth));
+      const grip = sizeGrip(video, setWidth);
+      dom.append(video, grip);
       return {
         dom,
         ignoreMutation: () => true,
@@ -65,7 +66,7 @@ export const Video = Node.create({
         // the player's own buttons belong to the player, not to the editor's selection handling.
         // globalThis.Node, because the Node imported up top is TipTap's — against that one the test
         // is false for every event there is, and the editor swallows the click meant for Play.
-        stopEvent: (e) => e.target instanceof globalThis.Node && video.contains(e.target),
+        stopEvent: (e) => e.target === grip || (e.target instanceof globalThis.Node && video.contains(e.target)),
       };
     };
   },
