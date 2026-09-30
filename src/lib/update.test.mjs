@@ -17,7 +17,16 @@ assert.equal(await findUpdate('0.7.2', releases([apk('v0.7.2')])), null);
 // drafts and assets hosted anywhere else are never offered
 assert.equal(await findUpdate('0.7.1', releases([{ ...apk('v0.7.2'), draft: true }])), null);
 assert.equal(await findUpdate('0.7.1', releases([{ tag_name: 'v0.7.2', draft: false, assets: [{ name: 'Eve-android.apk', browser_download_url: 'https://evil.example/Eve-android.apk' }] }])), null);
-assert.equal(await findUpdate('0.7.1', async () => ({ ok: false })), null);
+// GitHub not answering (offline, or its hourly limit) is not "up to date": the check fails
+await assert.rejects(findUpdate('0.7.1', async () => ({ ok: false, status: 403 })), /limiting/);
+await assert.rejects(findUpdate('0.7.1', async () => ({ ok: false, status: 500 })), /500/);
+// the sync token goes along when there is one; a revoked one falls back to asking without it
+{
+  const seen = [];
+  const f = async (_url, init) => { seen.push(init.headers.authorization ?? ''); return seen.length === 1 ? { ok: false, status: 401 } : { ok: true, json: async () => [apk('v0.7.2')] }; };
+  assert.equal((await findUpdate('0.7.1', f, 'android', 'tok'))?.version, '0.7.2');
+  assert.deepEqual(seen, ['Bearer tok', '']);
+}
 
 // the phone's own tags
 assert.equal(newer('android-v0.7.2', '0.7.1'), true);

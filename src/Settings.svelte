@@ -386,7 +386,7 @@
             <span class="sub">{updates.checking ? 'Checking…'
               : updates.doing ? updates.doing
               : updates.available ? `${updates.available.version} is available`
-              : updates.failed ? 'Could not check — offline?' : '✓ Up to date'}</span></span>
+              : updates.failed ? (updates.reason.startsWith('GitHub') ? `Could not check — ${updates.reason}` : 'Could not check — offline?') : '✓ Up to date'}</span></span>
           {#if updates.available}
             <button class="btn primary" disabled={updates.busy} onclick={() => updates.install()}>
               {#if updates.busy}<span class="spin light" aria-hidden="true"></span>{/if}Update
