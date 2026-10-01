@@ -1166,3 +1166,25 @@
   turn -> a test fails. npm run check 0 errors.
 - [ ] G225 v0.7.17 (Mac, Latest) is released and a Mac on 0.7.16 updates itself to it from the app
 - [ ] G226 android-v0.7.21 is released
+
+# GATES — an update check that fails says so; v0.7.18 (Mac), 0.7.22 (Android) (2026-10-01)
+
+- [x] G227 Check for updates tells a failed check from "Up to date", and asks with the sync token
+  CHECK: node --experimental-strip-types --no-warnings src/lib/update.test.mjs
+  EXPECT: UPDATE_OK
+  EVIDENCE: 0.7.15 said Up to date while v0.7.16 was out: GitHub answered 403 (60 unauthenticated asks an
+  hour per address, reproduced from this container: "API rate limit exceeded") and findUpdate took it as
+  nothing newer. A failed answer now throws (Settings: "Could not check — GitHub is limiting checks…");
+  the github.com sync token goes along (not a GitHub Enterprise one), a 401 falls back to asking without it.
+- [x] G228 main at 1c105cb (#107 and #108 together) checked before release
+  CHECK: npm run check && npm test (but ql.test, macOS-only) && cd src-tauri && cargo test --lib
+  EXPECT: 0 ERRORS / every *_OK / 22 passed / test result: ok. 32 passed
+  EVIDENCE: all as expected. In the Vite dev server (Playwright, Chromium), this session's fixes still hold
+  on #107's rewrite: picture 600 -> 400 kept and saved; ⇧↓ past a picture and back; the calendar row ⌥↓
+  through Work, Work/Sub, Play and back; a day's page closes on Esc with the focus behind it, a popup takes
+  the first Esc; emoji search arrows over the grid, ⌫ / a letter back to the box; Close sidebar when you
+  start writing off on a device that saved the old setting. List ⌥↑↓ (one item, two selected, the whole
+  list) stops under the title and above the last empty line, the selection kept; a sub-item steps out
+  beside its parent (#107's rule). #107 typed for real: "> Title" ↩ "inside" saves <details open> with
+  <summary>Title</summary>; <- <= -> become ← ⇐ →; "| " a quote; Tab / ⇧Tab move only "two". No page errors.
+- [ ] G229 v0.7.18 (Mac, Latest) and android-v0.7.22 are released
