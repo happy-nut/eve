@@ -34,7 +34,8 @@ import { hints } from './hints.svelte';
 import { fileMarkdown, isAsset } from './drop';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
-import { calendar, popup, ICONS, SLASH, type CalendarUI, type SuggestionUI, type SuggestItem } from './slash';
+import { calendar, emojiRow, popup, ICONS, SLASH, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
+import { loadEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
 import { moveBlock, indentLines, switchItem } from './blocks';
 
@@ -277,6 +278,7 @@ export function createEditor(opts: {
   targets: () => Note[];
   suggestionUI: SuggestionUI;
   calendarUI: CalendarUI;
+  emojiUI: EmojiUI;
   cursor?: number;
 }) {
   const iconOf = (link: string) => {
@@ -622,10 +624,31 @@ export function createEditor(opts: {
           ];
         },
       }),
+      // Slack's `:smile`: a colon (at a line's start or after a space) and a letter bring up the best
+      // few emoji in a row; the pick replaces what was typed. Not in code, where `:x` is just text.
+      Extension.create({
+        name: 'emojiSuggest',
+        addProseMirrorPlugins() {
+          return [
+            Suggestion({
+              editor: this.editor,
+              char: ':',
+              pluginKey: new PluginKey('emojiSuggest'),
+              allowSpaces: false,
+              allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
+              items: async ({ query }) => searchEmoji(await loadEmoji().catch(() => []), query),
+              command: ({ editor, range, props }) => {
+                editor.chain().focus().insertContentAt(range, (props as EmojiEntry).emoji).run();
+              },
+              render: () => emojiRow(opts.emojiUI),
+            }),
+          ];
+        },
+      }),
     ],
     onUpdate: ({ editor }) => opts.onUpdate(getMarkdown(editor)),
   });
-  suggestionVisible.set(editor, () => opts.suggestionUI.visible() || opts.calendarUI.visible());
+  suggestionVisible.set(editor, () => opts.suggestionUI.visible() || opts.calendarUI.visible() || opts.emojiUI.visible());
   applyKeymap(editor);
   if (isMobile) {
     // a tap on a line near the bottom puts the caret there, then the keyboard comes up and the page
