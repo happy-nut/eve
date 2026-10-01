@@ -46,7 +46,7 @@ pull → push 순서라 원격이 더 새로우면 로컬을 덮고, 로컬이 �
 | `src/lib/github.test.mjs` (신규) | 메모리 가짜 GitHub(ref/trees/blobs/commits/refs/contents, ~80줄)로 두 클라이언트 시나리오: push, pull, LWW, tombstone, 동시 push → 422 재시도, 빈 repo 초기화, `serialize(parse(x)) === x`. 성공 시 `SYNC_OK`. `npm test` |
 | `package.json` | `"test": "node --experimental-strip-types src/lib/github.test.mjs"` (Node 버전 확인 필요: 22.6+ 플래그, 24는 기본) |
 | `README.md` | Sync 섹션·Layout 교체 |
-| `server/`, `GATES.md` G3 | 삭제 / ABANDON 기록 |
+| `server/` | 삭제 |
 
 마이그레이션: 기존 `eve.sync`에 `url`이 있으면 무시하고 새 필드로 초기화. 사용자가 한 명이므로 충분.
 
