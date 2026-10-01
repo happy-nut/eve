@@ -197,13 +197,14 @@
     }
   }
 
-  /** A phone's note bar: export to the share sheet, a widget of this note on the home screen, delete. */
-  function exportMenu(from: HTMLElement) {
+  /** A phone's note bar: ⋯ (select all, export to the share sheet), a widget of this note on the home screen, delete. */
+  function moreMenu(from: HTMLElement) {
     const r = from.getBoundingClientRect();
     ui.openMenu({ clientX: r.right, clientY: r.bottom }, [
-      { label: 'Markdown (.md)', run: () => void exportCurrent('md') },
-      { label: 'PDF', run: () => void exportCurrent('pdf') },
-      { label: 'Image (.png)', run: () => void exportCurrent('png') },
+      { label: 'Select all', run: () => hooks.command?.('selectAll') },
+      { label: 'Export as Markdown (.md)', sep: true, run: () => void exportCurrent('md') },
+      { label: 'Export as PDF', run: () => void exportCurrent('pdf') },
+      { label: 'Export as image (.png)', run: () => void exportCurrent('png') },
     ]);
   }
   /** Opened from the Mac's QR: a newer Eve is asked about there and then, not left to a banner. */
@@ -425,7 +426,7 @@
 <!-- the webview's own menu is Reload / AutoFill / Speech — nothing a note can act on. The places worth
      right-clicking open one of ours instead (a sidebar row, the note). A plain text box keeps the
      system menu: cut/copy/paste there is exactly what it offers, and the app has nothing better. -->
-<svelte:window oncontextmenu={(e) => { if (!(e.target as HTMLElement).closest('input, textarea')) e.preventDefault(); }} ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={() => { cmdUp(); leaveWindow(); }} onfocus={restoreFocus}
+<svelte:window oncontextmenu={(e) => { if (!(e.target as HTMLElement).closest(isMobile ? 'input, textarea, .tiptap' : 'input, textarea')) e.preventDefault(); }} ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={() => { cmdUp(); leaveWindow(); }} onfocus={restoreFocus}
   onmousedowncapture={() => (document.documentElement.dataset.input = 'mouse')}
   onclickcapture={(e) => {
     // a button clicked with the mouse that a key also does: say which key
@@ -466,8 +467,8 @@
       </button>
       <span class="mgap"></span>
       {#if notes.current}
-      <button class="micon" aria-label="Export" onclick={(e) => exportMenu(e.currentTarget)}>
-        <svg viewBox="0 0 16 16"><path d="M8 10V2.5M5 5.5l3-3 3 3"/><path d="M4.5 8H4a1.5 1.5 0 00-1.5 1.5v3A1.5 1.5 0 004 14h8a1.5 1.5 0 001.5-1.5v-3A1.5 1.5 0 0012 8h-.5"/></svg>
+      <button class="micon" aria-label="More" onclick={(e) => moreMenu(e.currentTarget)}>
+        <svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".9"/><circle cx="8" cy="8" r=".9"/><circle cx="12.5" cy="8" r=".9"/></svg>
       </button>
       <button class="micon" class:on={!!notes.current && widgetTop.includes(notes.current.id)} aria-label="Pin to the top of the widget" onclick={pinToHome}>
         <svg viewBox="0 0 16 16"><path d="M6 1.8h4l-.6 3.4 2.2 2.2v1.2H4.4V7.4l2.2-2.2z"/><path d="M8 8.6V14"/></svg>

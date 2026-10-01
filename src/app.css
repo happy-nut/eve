@@ -592,3 +592,16 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
   .tiptap img, .tiptap .pdf-card, .tiptap .bookmark, .tiptap pre, .tiptap blockquote, .tiptap .callout { break-inside: avoid; }
   .tiptap h1, .tiptap h2, .tiptap h3 { break-after: avoid; }
 }
+
+/* toggle ("> "): a twisty, its title line, and the body indented under it */
+.tiptap [data-type='details'] { display: flex; gap: 4px; align-items: flex-start; margin: 0.15em 0; }
+.tiptap [data-type='details'] > button {
+  flex: none; width: 1.3em; height: 1.6em; padding: 0; border: 0; background: none; color: var(--fg-dim); cursor: pointer;
+}
+.tiptap [data-type='details'] > button::before { content: '▸'; display: inline-block; transition: transform 0.12s; }
+.tiptap [data-type='details'].is-open > button::before { transform: rotate(90deg); }
+.tiptap [data-type='details'] > div { flex: 1; min-width: 0; }
+.tiptap [data-type='details'] summary { display: block; list-style: none; }
+.tiptap [data-type='details'] summary::-webkit-details-marker { display: none; }
+.tiptap [data-type='detailsContent'] > * + * { margin-top: 0.4em; }
+.tiptap [data-type='details']:not(.is-open) > div > [data-type='detailsContent'] { display: none; }

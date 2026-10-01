@@ -86,6 +86,7 @@ export const ICONS = {
   page: '<path d="M4 1.5h5L12.5 5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5"/><path d="M6.2 10h3.6M8 8.2v3.6"/>',
   note: '<path d="M4 1.5h5L12.5 5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5"/><path d="M5.9 8.6h4.2M5.9 11h4.2"/>',
   callout: '<circle cx="8" cy="6.6" r="4"/><path d="M6.3 11.6h3.4M6.9 13.6h2.2"/>',
+  toggle: '<path d="M5.5 4.5 10 8l-4.5 3.5z"/>',
   kanban: '<rect x="2.5" y="3.5" width="3.2" height="9" rx="1"/><rect x="6.4" y="3.5" width="3.2" height="6" rx="1"/><rect x="10.3" y="3.5" width="3.2" height="7.6" rx="1"/>',
   image: '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><circle cx="6" cy="6.8" r="1"/><path d="M3.2 11.8 6.4 8.7l2.3 2.1 2.1-2 2.5 2.8"/>',
   video: '<rect x="1.5" y="3.5" width="9" height="9" rx="1.5"/><path d="M10.5 7.4l4-2.2v5.6l-4-2.2z"/>',
@@ -102,6 +103,7 @@ const tip = (id: string, run: NonNullable<SuggestItem['run']>): SuggestItem['run
 export const SLASH: SuggestItem[] = [
   { label: 'New page', hint: '📄 하위 페이지', icon: ICONS.page, run: newPage },
   { label: 'Callout', hint: '💡 highlighted box', icon: ICONS.callout, run: tip('callout', (e) => e.chain().focus().toggleWrap('callout').run()) },
+  { label: 'Toggle', hint: '> folds its content', icon: ICONS.toggle, run: (e) => e.chain().focus().setDetails().updateAttributes('details', { open: true }).run() },
   { label: 'Kanban', hint: '칸반 board', icon: ICONS.kanban, run: insertKanban },
   { label: 'Table', hint: '3×3, with a header row', icon: ICONS.table, run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   { label: 'Image', hint: 'Pick a file', icon: ICONS.image, run: tip('image', (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); }) },

@@ -15,6 +15,8 @@ import { WikiLink } from './wikilink';
 import { DateMention, dayChoices } from './date';
 import { Callout } from './callout';
 import { Highlight } from './highlight';
+import { Toggle } from './toggle';
+import Blockquote from '@tiptap/extension-blockquote';
 import { LocalImage } from './image';
 import { Bookmark, URL_RE } from './bookmark';
 import { Kanban } from './kanban';
@@ -33,7 +35,8 @@ import { fileMarkdown, isAsset } from './drop';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
 import { calendar, popup, ICONS, SLASH, type CalendarUI, type SuggestionUI, type SuggestItem } from './slash';
-import { noteMenu, linkMenu, linkLeft } from './noteMenu';
+import { noteMenu } from './noteMenu';
+import { moveBlock, indentLines } from './blocks';
 
 /** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
 const MD_SYNTAX = /(\*\*|__|~~|^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|`|\[[^\]]*\]\(|^\|.*\|\s*$)/m;
@@ -75,103 +78,6 @@ const APP_GUARD = new PluginKey('eve-app-guard');
 const suggestionVisible = new WeakMap<Editor, () => boolean>();
 
 export const getMarkdown = (editor: Editor): string => (editor.storage as any).markdown.getMarkdown();
-
-/**
- * Move whatever the selection covers one step up or down among its siblings — a line, a list item, a
- * picture, or a whole dragged-over range. Nothing to swap with at this level (the only paragraph in a
- * list item, say) means the block one level out moves instead, so ⌥↓ walks an item down the list.
- *
- * The neighbour is the one that actually moves: cutting it and putting it back on the other side
- * leaves the selection where the writer put it, carried along by the transaction's own mapping.
- */
-function moveBlock(dir: -1 | 1) {
-  return ({ state, dispatch }: { state: any; dispatch?: (tr: any) => void }): boolean => {
-    const { $from, $to } = state.selection;
-    let range = $from.blockRange($to);
-    while (range) {
-      const { parent, startIndex, endIndex, start, end } = range;
-      const i = dir < 0 ? startIndex - 1 : endIndex;
-      if (isEdge(state.doc, parent, i, dir)) return true; // the note's title or its end: nothing to pass
-      if (i >= 0 && i < parent.childCount) {
-        if (dispatch) {
-          const node = parent.child(i);
-          const tr = state.tr;
-          if (dir < 0) {
-            tr.delete(start - node.nodeSize, start);
-            tr.insert(tr.mapping.map(end), node);
-          } else {
-            tr.delete(end, end + node.nodeSize);
-            tr.insert(start, node);
-          }
-          dispatch(tr.scrollIntoView());
-        }
-        return true;
-      }
-      // first / last item of a list: the item itself steps over whatever sits beside the list, instead
-      // of dragging the whole list along
-      if (/List$/.test(parent.type.name)) return hopOutOfList({ state, dispatch }, range, dir);
-      if (range.depth < 1) return false;
-      range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1)); // one level out
-    }
-    return false;
-  };
-}
-
-/**
- * The empty line the editor keeps at the very end of a note (StarterKit's TrailingNode puts one back
- * whenever the note ends in anything else). It is not a line to swap with: stepping past it only makes
- * the editor add another, and ⌥↓ would go on trading places with new empty lines forever.
- */
-function isTrailer(doc: PMNode, parent: PMNode, i: number): boolean {
-  const node = parent === doc && i === doc.childCount - 1 ? doc.child(i) : null;
-  return !!node && node.type.name === 'paragraph' && node.content.size === 0;
-}
-/** The neighbour a move would pass is the note's end, or its title (a heading as the first line): both stay put. */
-function isEdge(doc: PMNode, parent: PMNode, i: number, dir: -1 | 1): boolean {
-  if (dir > 0) return isTrailer(doc, parent, i);
-  return parent === doc && i === 0 && doc.child(0).type.name === 'heading';
-}
-
-/** Carry the item out of its list and past the block on the other side, still an item of its own list. */
-function hopOutOfList(
-  { state, dispatch }: { state: any; dispatch?: (tr: any) => void },
-  range: any,
-  dir: -1 | 1,
-): boolean {
-  const { parent, start, end, depth, startIndex, endIndex } = range;
-  const $start = state.doc.resolve(start);
-  const listStart = $start.before(depth), listEnd = $start.after(depth);
-  const $edge = state.doc.resolve(dir < 0 ? listStart : listEnd);
-  const beside = dir < 0 ? $edge.nodeBefore : $edge.nodeAfter;
-  // the list is already at the edge: nothing to step over, and the key stays ours (the webview's own ⌥↓
-  // would drop the selection)
-  if (!beside) return true;
-  const besideAt = dir < 0 ? $edge.index() - 1 : $edge.index();
-  if (isEdge(state.doc, $edge.parent, besideAt, dir)) return true;
-  // a sub-list's top item does not climb over its own item's first line: an item has to start with a line
-  if (besideAt === 0 && /Item$/.test($edge.parent.type.name)) return true;
-  // every item going (the last one, or all of them selected) leaves no empty list behind: the list goes
-  const alone = startIndex === 0 && endIndex === parent.childCount;
-  const cut = alone ? { from: listStart, to: listEnd } : { from: start, to: end };
-  // measured from the list's own edges: the item has to clear the whole neighbour, not just the list
-  const target = dir < 0 ? listStart - beside.nodeSize : listEnd + beside.nodeSize;
-  if (dispatch) {
-    const moved = alone ? state.doc.slice(listStart, listEnd).content : parent.copy(state.doc.slice(start, end).content);
-    // the selection rides along as it was, a range over several items included, so the next ⌥↓ moves
-    // the same items again
-    const base = alone ? listStart : start - 1;
-    const { anchor, head } = state.selection;
-    const tr = state.tr.delete(cut.from, cut.to);
-    const at = tr.mapping.map(target);
-    tr.insert(at, moved);
-    const clamp = (p: number) => Math.min(at + p - base, tr.doc.content.size);
-    tr.setSelection(state.selection instanceof TextSelection
-      ? TextSelection.create(tr.doc, clamp(anchor), clamp(head))
-      : Selection.near(tr.doc.resolve(clamp(state.selection.from))));
-    dispatch(tr.scrollIntoView());
-  }
-  return true;
-}
 
 /** Run one editor action by id (the phone's formatting bar uses these; a keyboard uses applyKeymap). */
 export const runEditorCommand = (editor: Editor, id: string): boolean => editorCommands(editor)[id]?.() ?? false;
@@ -216,6 +122,9 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     blockquote: () => c().toggleBlockquote().run(),
     codeBlock: () => c().toggleCodeBlock().run(),
     divider: () => c().setHorizontalRule().run(),
+    selectAll: () => c().selectAll().run(),
+    indent: () => c().command(indentLines(1)).run(),
+    outdent: () => c().command(indentLines(-1)).run(),
   };
 }
 
@@ -382,16 +291,10 @@ export function createEditor(opts: {
           }
           return false;
         },
-        contextmenu: (_view, event) => { event.preventDefault(); noteMenu(editor, event as MouseEvent); return true; },
-        // the pointer resting on a link brings up what can be done with it; leaving it puts that away
-        mouseover: (_view, event) => {
-          const a = (event.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
-          if (a && !a.closest('.bookmark')) { ui.keepMenu(); linkMenu(editor, a); }
-          return false;
-        },
-        mouseout: (_view, event) => {
-          if ((event.target as HTMLElement | null)?.closest?.('a[href]')) { linkLeft(); ui.closeMenuSoon(); }
-          return false;
+        // a phone's long press is the system's: select a word, drag the handles (the note bar's ⋯ has the rest)
+        contextmenu: (_view, event) => {
+          if (isMobile) return false;
+          event.preventDefault(); noteMenu(editor, event as MouseEvent); return true;
         },
         click: (_view, event) => {
           const a = (event.target as HTMLElement | null)?.closest?.('a[href]');
@@ -422,7 +325,14 @@ export function createEditor(opts: {
         link: { openOnClick: false, autolink: true },
         codeBlock: false, // replaced below: syntax highlighting + a language chip
         horizontalRule: false, // replaced below: no divider inside a list, and the caret can reach it
+        blockquote: false, // replaced below: "> " makes a toggle, as in Notion, so a quote is "| "
       }),
+      Blockquote.extend({
+        addInputRules() {
+          return [wrappingInputRule({ find: /^\s*\|\s$/, type: this.type })];
+        },
+      }),
+      ...Toggle,
       // An image pasted onto an empty list item takes that line. Stock list items are `paragraph block*`, so
       // the image could only go *after* the item's paragraph and the empty line stayed above it.
       BlankLine,
@@ -443,6 +353,15 @@ export function createEditor(opts: {
       // Two lists that end up touching (a blank line between them deleted, a paragraph between them
       // turned into an item, an item moved out with ⌥↓, …) become one list — markdown has no way to
       // keep them apart anyway, and a numbered count carries on instead of restarting at 1.
+      // ahead of the list items' own Tab, which moves an item's sub-items along with it
+      Extension.create({
+        name: 'lineIndent',
+        priority: 101,
+        addKeyboardShortcuts() {
+          const run = (dir: 1 | -1) => () => !suggestionVisible.get(this.editor)?.() && this.editor.commands.command(indentLines(dir));
+          return { Tab: run(1), 'Shift-Tab': run(-1) };
+        },
+      }),
       Extension.create({
         name: 'joinLists',
         addProseMirrorPlugins() {
@@ -588,7 +507,9 @@ export function createEditor(opts: {
         name: 'arrows',
         addInputRules: () => [
           textInputRule({ find: /->$/, replace: '→' }),
+          textInputRule({ find: /<-$/, replace: '←' }),
           textInputRule({ find: /=>$/, replace: '⇒' }),
+          textInputRule({ find: /<=$/, replace: '⇐' }),
         ],
       }),
       LocalImage.configure({ inline: false, allowBase64: true }),

@@ -1,4 +1,4 @@
-// The menus a note opens by itself: right-click (or ⌥↩) inside it, and hovering a link.
+// The menu a note opens by itself: right-click (or ⌥↩) inside it; on a link, the link's own.
 import type { Editor } from '@tiptap/core';
 import { ui, type MenuItem } from './ui.svelte';
 import { openUrl, clipboardText, copyText } from './platform';
@@ -19,7 +19,7 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
   }
   const empty = editor.state.selection.empty;
   const linked = editor.isActive('link');
-  // the caret on a link (⌥↩ there, or a right-click on it): the link's own menu, the same one hovering shows
+  // the caret on a link (⌥↩ there, or a right-click on it): the link's own menu
   if (empty && linked) {
     const href = editor.getAttributes('link').href ?? '';
     const unlink = () => editor.chain().focus().extendMarkRange('link').unsetLink().run();
@@ -49,26 +49,6 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
   // from the keyboard (⌥↩) there is no pointer: the menu opens under the caret instead
   const caret = editor.view.coordsAtPos(editor.state.selection.head);
   ui.openMenu(event ?? { clientX: Math.round(caret.left), clientY: Math.round(caret.bottom) }, items);
-}
-
-/**
- * Hovering a link: what there is to do with it, under the link itself. An address gets a message and a
- * copy, a page gets opened or copied — the things you would otherwise select the text to do by hand.
- * It takes no focus, so the caret stays where it was writing.
- */
-let hovered = '';
-/** the pointer left the link: the next hover on it opens its menu again */
-export const linkLeft = () => { hovered = ''; };
-export function linkMenu(editor: Editor, a: HTMLAnchorElement) {
-  const href = a.getAttribute('href') ?? '';
-  if (!href || (ui.menu?.hover && hovered === href)) return;
-  hovered = href;
-  const unlink = () => {
-    const at = editor.view.posAtDOM(a, 0);
-    editor.chain().setTextSelection({ from: at, to: at + (a.textContent?.length ?? 0) }).unsetLink().setTextSelection(at).run();
-  };
-  const box = a.getBoundingClientRect();
-  ui.openMenu({ clientX: Math.round(box.left), clientY: Math.round(box.bottom + 4) }, linkItems(href, unlink), true);
 }
 
 /** What a link offers, wherever it is asked: open (or write to) it, take the link off, copy it. */

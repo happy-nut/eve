@@ -11,17 +11,19 @@
     "tauri": "tauri",
     "app": "tauri dev",
     "bundle": "tauri build",
-    "test": "node --experimental-strip-types --no-warnings src/lib/board.test.mjs && node --experimental-strip-types --no-warnings src/lib/github.test.mjs && node --experimental-strip-types --no-warnings src/lib/paths.test.mjs && node --experimental-strip-types --no-warnings src/lib/markdown.test.mjs && node --experimental-strip-types --no-warnings src/lib/ql.test.mjs && node --experimental-strip-types --no-warnings src/lib/suggest.test.mjs && node --experimental-strip-types --no-warnings src/lib/date.test.mjs && node --experimental-strip-types --no-warnings src/lib/handoff.test.mjs && node --experimental-strip-types --no-warnings src/lib/update.test.mjs && node --experimental-strip-types --no-warnings src/lib/daily.test.mjs && node --experimental-strip-types --no-warnings src/lib/evelink.test.mjs"
+    "test": "node --experimental-strip-types --no-warnings src/lib/board.test.mjs && node --experimental-strip-types --no-warnings src/lib/github.test.mjs && node --experimental-strip-types --no-warnings src/lib/paths.test.mjs && node --experimental-strip-types --no-warnings src/lib/markdown.test.mjs && node --experimental-strip-types --no-warnings src/lib/ql.test.mjs && node --experimental-strip-types --no-warnings src/lib/suggest.test.mjs && node --experimental-strip-types --no-warnings src/lib/blocks.test.mjs && node --experimental-strip-types --no-warnings src/lib/date.test.mjs && node --experimental-strip-types --no-warnings src/lib/handoff.test.mjs && node --experimental-strip-types --no-warnings src/lib/update.test.mjs && node --experimental-strip-types --no-warnings src/lib/daily.test.mjs && node --experimental-strip-types --no-warnings src/lib/evelink.test.mjs && vitest run"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@tauri-apps/cli": "^2.11.4",
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^24.13.3",
+    "jsdom": "^30.1.1",
     "svelte": "^5.56.10",
     "svelte-check": "^4.7.6",
     "typescript": "~6.0.2",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "vitest": "^5.0.3"
   },
   "dependencies": {
     "@rhwp/core": "^0.8.6",
@@ -31,7 +33,9 @@
     "@tauri-apps/plugin-global-shortcut": "^2.3.2",
     "@tauri-apps/plugin-notification": "~2.4.0",
     "@tiptap/core": "^3.31.3",
+    "@tiptap/extension-blockquote": "^3.31.3",
     "@tiptap/extension-code-block": "^3.31.3",
+    "@tiptap/extension-details": "^3.31.3",
     "@tiptap/extension-image": "^3.31.3",
     "@tiptap/extension-list": "^3.31.3",
     "@tiptap/extension-placeholder": "^3.31.3",

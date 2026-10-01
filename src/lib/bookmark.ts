@@ -129,19 +129,31 @@ export const Bookmark = Node.create({
   },
 
   addProseMirrorPlugins() {
-    // a URL pasted into an empty top-level line: card, plain link, or both — asked on the spot
+    // a URL pasted with nothing selected: card, plain link, or both — asked on the spot. An empty top-level
+    // line becomes what was picked; anywhere else the link goes in at the caret and the card under the line.
+    // (Over selected text the URL just links it: editor.ts handles that before this.)
     return [
       new Plugin({
         props: {
           handlePaste: (view, event) => {
             const text = event.clipboardData?.getData('text/plain').trim() ?? '';
             const { $from, empty } = view.state.selection;
-            if (!URL_RE.test(text) || !empty || $from.depth !== 1 || $from.parent.type.name !== 'paragraph' || $from.parent.content.size) return false;
+            if (!URL_RE.test(text) || !empty || $from.parent.type.spec.code) return false;
             const editor = this.editor;
-            const line = { from: $from.before(), to: $from.after() };
             const c = view.coordsAtPos($from.pos);
-            void ui.pickLink(new DOMRect(c.left, c.top, 0, c.bottom - c.top)).then((how) => {
-              editor.chain().insertContentAt(line, linkContent(text, how ?? 'link')).focus().run();
+            const blankLine = $from.depth === 1 && $from.parent.type.name === 'paragraph' && !$from.parent.content.size;
+            const at = $from.pos, below = $from.after();
+            void ui.pickLink(new DOMRect(c.left, c.top, 0, c.bottom - c.top)).then((choice) => {
+              const how = choice ?? 'link';
+              if (blankLine) {
+                editor.chain().insertContentAt({ from: $from.before(), to: below }, linkContent(text, how)).focus().run();
+                return;
+              }
+              const chain = editor.chain();
+              // the card first: it goes after the line, so the caret's position is still good for the link
+              if (how !== 'link') chain.insertContentAt(below, { type: 'bookmark', attrs: { href: text } });
+              if (how !== 'card') chain.insertContentAt(at, { type: 'text', marks: [{ type: 'link', attrs: { href: text } }], text });
+              chain.focus().run();
             });
             return true;
           },
