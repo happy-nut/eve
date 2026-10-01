@@ -177,20 +177,28 @@
     if (next) notes.currentId = next.id;
   }
 
-  /** A phone: a swipe to the right on a note brings the list back in. */
-  let swipe: { x: number; y: number } | null = null;
+  /**
+   * A phone: a swipe to the right on a note brings the list back in. Not when the finger is choosing
+   * text: a long press that starts a selection, a drag of its handles, or any gesture that leaves text
+   * selected is the system's, and the list stays away.
+   */
+  let swipe: { x: number; y: number; at: number } | null = null;
   function swipeStart(e: TouchEvent) {
     swipe = null;
     if (!isMobile || sidebarOpen || settingsOpen || ui.card || e.touches.length !== 1) return;
     // things that scroll sideways themselves keep the gesture
     if ((e.target as HTMLElement).closest('pre, table, .kanban, .mbar, .mhead, input, textarea, .menu, .suggest')) return;
-    swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY, at: Date.now() };
   }
   function swipeEnd(e: TouchEvent) {
     if (!swipe) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
+    const held = Date.now() - swipe.at;
     swipe = null;
+    // a swipe is quick: a finger held first is a long press choosing text, and text selected when it
+    // lifts means the drag was choosing it (or pulling a handle)
+    if (held > 600 || !getSelection()?.isCollapsed) return;
     if (dx > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) {
       (document.activeElement as HTMLElement | null)?.blur(); // the keyboard goes with the note
       sidebarOpen = true;
