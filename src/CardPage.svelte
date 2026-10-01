@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fade, fly, scale } from 'svelte/transition';
-  import { cubicOut } from 'svelte/easing';
+  import { fade, scale } from 'svelte/transition';
   import { isMobile } from './lib/platform';
+  import { sheet } from './lib/popup';
   import type { Editor as TipTap } from '@tiptap/core';
   import { createEditor } from './lib/editor';
   import { notes } from './lib/notes.svelte';
@@ -47,8 +47,7 @@
   });
 
   /** a sheet slides up on a phone; the Mac's floating page grows in place */
-  const appear = (node: HTMLElement) =>
-    isMobile ? fly(node, { y: window.innerHeight, duration: 280, easing: cubicOut }) : scale(node, { start: 0.96, duration: 180 });
+  const appear = (node: HTMLElement) => sheet(node, (n) => scale(n, { start: 0.96, duration: 180 }));
 
   function onKey(e: KeyboardEvent) {
     // a popup's Esc has already been taken by the editor (and closed the popup) by the time it gets here
@@ -60,7 +59,7 @@
 
 <div class="backdrop" transition:fade={{ duration: 120 }} onmousedown={close} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="card" transition:appear role="dialog" tabindex="-1" onkeydown={onKey}>
+<div class="card-page" transition:appear role="dialog" tabindex="-1" onkeydown={onKey}>
   {#if isMobile}<div class="grip" aria-hidden="true"></div>{/if}
   {#if req.note}<p class="tpl-note">{req.note}</p>{/if}
   <div class="card-scroll" bind:this={scrollEl}>
@@ -75,7 +74,7 @@
 
 <style>
   .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); z-index: 30; }
-  .card {
+  .card-page {
     position: fixed; z-index: 31; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: min(760px, 92vw); height: min(80vh, 760px); display: flex; flex-direction: column; overflow: hidden;
     border-radius: 14px; background: var(--bg-pop); border: 1px solid var(--line); box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
@@ -87,9 +86,9 @@
   :global(html.mobile) .card-scroll { padding: 8px 0 0; }
   .grip { flex: none; width: 36px; height: 4px; border-radius: 2px; margin: 8px auto 2px; background: var(--bg-active); }
   .card-body { flex: 1; }
-  .card .card-body :global(.tiptap) { padding: 0 0 120px; max-width: none; min-height: 100%; }
+  .card-page .card-body :global(.tiptap) { padding: 0 0 120px; max-width: none; min-height: 100%; }
   /* an untitled card still shows where the title goes (the editor's own placeholder is for paragraphs) */
-  .card .card-body :global(.tiptap > h1:first-child:has(> br:only-child))::before {
+  .card-page .card-body :global(.tiptap > h1:first-child:has(> br:only-child))::before {
     content: 'Untitled'; color: var(--fg-dim); float: left; height: 0; pointer-events: none;
   }
   /* a template, not a card: says so above it */

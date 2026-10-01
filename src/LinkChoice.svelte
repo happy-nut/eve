@@ -1,11 +1,14 @@
 <script lang="ts">
   import { scale } from 'svelte/transition';
   import { ui } from './lib/ui.svelte';
+  import { sheet } from './lib/popup';
 
   /** The three ways a pasted link can land, asked right where it was dropped. 1 / 2 / 3, ←→, ↩, Esc. */
   const req = ui.link!;
   const returnTo = document.activeElement as HTMLElement | null;
   let at = $state(0);
+  /** a sheet from the bottom on a phone; at the caret on the Mac, growing from it */
+  const appear = (node: Element) => sheet(node, (n) => scale(n, { start: 0.94, duration: 130 }));
 
   const CHOICES = [
     { id: 'card', label: 'Card', hint: 'preview', icon: '<rect x="1.5" y="3.5" width="13" height="9" rx="1.5"/><path d="M9.5 6h3M9.5 8.4h3M9.5 10.8h2"/><rect x="3.5" y="6" width="4" height="4.8" rx="0.8"/>' },
@@ -35,7 +38,7 @@
 <svelte:window onkeydown={onKey} />
 <div class="backdrop" onmousedown={() => pick(null)} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="choice" style:left="{req.x}px" style:top="{req.y}px" transition:scale={{ start: 0.94, duration: 130 }}
+<div class="choice" style:left="{req.x}px" style:top="{req.y}px" transition:appear
   role="menu" tabindex="-1" use:grab>
   {#each CHOICES as c, i}
     <button role="menuitem" class:on={at === i} onmouseenter={() => (at = i)} onclick={() => pick(c.id)}>

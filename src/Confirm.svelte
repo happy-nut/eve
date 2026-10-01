@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fade, scale } from 'svelte/transition';
   import { ui } from './lib/ui.svelte';
+  import { sheet } from './lib/popup';
 
   const p = $derived(ui.pending!);
   // give focus back to where it was (sidebar row, editor) the moment the dialog closes —
@@ -11,6 +12,8 @@
   $effect(() => { value = p.input ?? ''; });
 
   let box: HTMLDivElement;
+  /** up from the bottom on a phone (a sheet); the Mac's dialog grows in place */
+  const appear = (node: Element) => sheet(node, (n) => scale(n, { start: 0.96, duration: 160 }));
   // the keypress that opened the dialog (Enter on a / menu item, say) is still travelling to window:
   // it must not count as the answer to a dialog that did not exist when the key went down
   const openedAt = performance.now();
@@ -31,7 +34,7 @@
 <svelte:window onkeydown={onKey} />
 
 <div class="backdrop" transition:fade={{ duration: 120 }} onmousedown={() => done(null)} role="presentation"></div>
-<div class="box" bind:this={box} transition:scale={{ start: 0.96, duration: 160 }} role="dialog" aria-modal="true">
+<div class="box" bind:this={box} transition:appear role="dialog" aria-modal="true">
   <div class="head">
     <span class="mark" class:danger={p.danger && p.input === undefined}>
       {#if p.input !== undefined}
