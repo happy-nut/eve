@@ -547,6 +547,20 @@ export function createEditor(opts: {
   });
   suggestionVisible.set(editor, () => opts.suggestionUI.visible() || opts.calendarUI.visible());
   applyKeymap(editor);
+  if (isMobile) {
+    // a tap on a line near the bottom puts the caret there, then the keyboard comes up and the page
+    // shrinks under it (MainActivity): nothing scrolls on its own, and the caret ends up behind the
+    // keyboard or the formatting bar. When the page shrinks with the caret in this note, bring the caret
+    // back into view — scrollMargin keeps it clear of the bar.
+    let tall = window.innerHeight;
+    const onResize = () => {
+      const shrank = window.innerHeight < tall;
+      tall = window.innerHeight;
+      if (shrank && editor.view.hasFocus()) requestAnimationFrame(() => editor.isDestroyed || editor.commands.scrollIntoView());
+    };
+    window.addEventListener('resize', onResize);
+    editor.on('destroy', () => window.removeEventListener('resize', onResize));
+  }
   if (import.meta.env.DEV) (window as any).__eve = editor;
   return editor;
 }
