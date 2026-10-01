@@ -20,7 +20,7 @@
 
   let recording = $state<string | null>(null);
   let conflict = $state<{ id: string; keys: string; with: string } | null>(null);
-  let tab = $state<'shortcuts' | 'appearance' | 'sync'>(isMobile ? 'sync' : 'shortcuts'); // a phone has no shortcuts to set
+  let tab = $state<'general' | 'appearance' | 'sync' | 'shortcuts'>('general');
   let notesPath = $state('');
   let launchAtLogin = $state(false);
   let opensMarkdown = $state(false);
@@ -84,7 +84,8 @@
     copiedTimer = setTimeout(() => (copied = false), 1400);
   }
 
-  const tabs = ([['shortcuts', 'Shortcuts'], ['appearance', 'Appearance'], ['sync', 'Sync & app']] as const).filter(([id]) => !isMobile || id !== 'shortcuts');
+  // what is changed most comes first; a phone has no shortcuts to set
+  const tabs = ([['general', 'General'], ['appearance', 'Appearance'], ['sync', 'Sync'], ['shortcuts', 'Shortcuts']] as const).filter(([id]) => !isMobile || id !== 'shortcuts');
 
   const syncText = $derived(
     sync.status === 'syncing' ? 'Syncing…'
@@ -151,23 +152,9 @@
       </div>
       <div class="foot"><button class="link" onclick={() => shortcuts.reset()}>Reset all to defaults</button></div>
 
-    {:else if tab === 'appearance'}
-      <h3>Theme</h3>
+    {:else if tab === 'general'}
+      <h3>Notes</h3>
       <div class="card">
-        <div class="row">
-          <span class="label">Appearance <span class="sub">System follows {isMobile ? 'the phone' : 'macOS'}</span></span>
-          <Select label="Appearance" value={appearance.s.theme} options={THEMES} onchange={(v) => appearance.set({ theme: v as Theme })} />
-        </div>
-      </div>
-      <h3>{isMobile ? 'Notes' : 'Window'}</h3>
-      <div class="card">
-{#if !isMobile}
-        <label class="row">
-          <span class="label">Close sidebar when you start writing <span class="sub">typing or arrowing in the editor folds the list away</span></span>
-          <input type="checkbox" class="switch" checked={appearance.s.closeSidebarOnWrite}
-            onchange={(e) => appearance.set({ closeSidebarOnWrite: e.currentTarget.checked })} />
-        </label>
-{/if}
         <label class="row">
           <span class="label">Give new notes an icon <span class="sub">a random one on every new or imported note; you can always change it</span></span>
           <input type="checkbox" class="switch" checked={appearance.s.autoIcon}
@@ -178,42 +165,101 @@
           <input type="checkbox" class="switch" checked={appearance.s.dailyNotes}
             onchange={(e) => appearance.set({ dailyNotes: e.currentTarget.checked })} />
         </label>
+        <!-- what only applies while daily notes are on hangs under them, indented, inside the same group -->
         {#if appearance.s.dailyNotes}
           {#if isMobile}
-            <label class="row tmpl child">
+            <label class="row child">
               <span class="label">Show in widget <span class="sub">daily notes in the home-screen widget's list too</span></span>
               <input type="checkbox" class="switch" checked={appearance.s.dailyInWidget}
                 onchange={(e) => appearance.set({ dailyInWidget: e.currentTarget.checked })} />
             </label>
           {/if}
-          <label class="row tmpl child">
+          <div class="row child">
             <span class="label">Remind me <span class="sub">if today's note is still empty at this time</span></span>
-            <input type="checkbox" class="switch" checked={appearance.s.dailyReminder}
-              onchange={(e) => { appearance.set({ dailyReminder: e.currentTarget.checked }); if (e.currentTarget.checked) void askNotify(); }} />
-          </label>
-          {#if appearance.s.dailyReminder}
-            <div class="row tmpl child deeper">
-              <span class="label">Time</span>
-              <input type="time" class="time" value={appearance.s.reminderAt}
-                onchange={(e) => e.currentTarget.value && appearance.set({ reminderAt: e.currentTarget.value })} />
-            </div>
-          {/if}
+            <span class="controls">
+              {#if appearance.s.dailyReminder}
+                <input type="time" class="time" aria-label="Reminder time" value={appearance.s.reminderAt}
+                  onchange={(e) => e.currentTarget.value && appearance.set({ reminderAt: e.currentTarget.value })} />
+              {/if}
+              <input type="checkbox" class="switch" aria-label="Remind me" checked={appearance.s.dailyReminder}
+                onchange={(e) => { appearance.set({ dailyReminder: e.currentTarget.checked }); if (e.currentTarget.checked) void askNotify(); }} />
+            </span>
+          </div>
         {/if}
+      </div>
 {#if !isMobile}
+      <h3>Window</h3>
+      <div class="card">
+        <label class="row">
+          <span class="label">Close sidebar when you start writing <span class="sub">typing or arrowing in the editor folds the list away</span></span>
+          <input type="checkbox" class="switch" checked={appearance.s.closeSidebarOnWrite}
+            onchange={(e) => appearance.set({ closeSidebarOnWrite: e.currentTarget.checked })} />
+        </label>
         <label class="row">
           <span class="label">Hide from Dock and ⌘Tab <span class="sub">like Raycast: only the hotkey and Finder open it</span></span>
           <input type="checkbox" class="switch" checked={dock.hidden} disabled={!isTauri} onchange={(e) => dock.set(e.currentTarget.checked)} />
         </label>
-      {/if}
+        <label class="row"><span class="label">Opening width <span class="sub">{appearance.s.winW}px</span></span>
+          <Slider label="Opening width" min={640} max={1800} step={16} value={appearance.s.winW} oninput={(v) => appearance.set({ winW: v })} /></label>
+        <label class="row"><span class="label">Opening height <span class="sub">{appearance.s.winH}px</span></span>
+          <Slider label="Opening height" min={400} max={1400} step={16} value={appearance.s.winH} oninput={(v) => appearance.set({ winH: v })} /></label>
       </div>
-      <h3>Typeface</h3>
+{/if}
+{#if !isMobile}
+      <h3>App</h3>
       <div class="card">
+        <label class="row">
+          <span class="label">Launch at login <span class="sub">keeps <Keys keys={shortcuts.keysFor('toggleWindow')} /> available after a quit</span></span>
+          <input type="checkbox" class="switch" checked={launchAtLogin} disabled={!isTauri}
+            onchange={(e) => { launchAtLogin = e.currentTarget.checked; autostart.set(launchAtLogin); }} />
+        </label>
+        <label class="row">
+          <span class="label">Open .md files <span class="sub">double-clicking a markdown or text file in Finder opens it here</span></span>
+          <input type="checkbox" class="switch" checked={opensMarkdown} disabled={!isTauri}
+            onchange={(e) => claimMarkdown(e.currentTarget.checked)} />
+        </label>
+        {#if defaultAppError}<p class="alert">{defaultAppError}</p>{/if}
+      </div>
+      {/if}
+
+{#if isTauri}
+      <h3>Version</h3>
+      <div class="card">
+        <div class="row">
+          <span class="label">Eve {updates.current}
+            <span class="sub">{updates.checking ? 'Checking…'
+              : updates.doing ? updates.doing
+              : updates.available ? `${updates.available.version} is available`
+              : updates.failed ? (updates.reason.startsWith('GitHub') ? `Could not check — ${updates.reason}` : 'Could not check — offline?') : '✓ Up to date'}</span></span>
+          {#if updates.available}
+            <button class="btn primary" disabled={updates.busy} onclick={() => updates.install()}>
+              {#if updates.busy}<span class="spin light" aria-hidden="true"></span>{/if}Update
+            </button>
+          {:else}
+            <button class="btn" disabled={updates.checking} onclick={() => updates.check(true)}>
+              {#if updates.checking}<span class="spin" aria-hidden="true"></span>{/if}Check
+            </button>
+          {/if}
+        </div>
+      </div>
+{/if}
+
+      <h3>Storage</h3>
+      <div class="card"><div class="row"><span class="label mono path">{notesPath}</span></div></div>
+
+    {:else if tab === 'appearance'}
+      <h3>Theme and font</h3>
+      <div class="card">
+        <div class="row">
+          <span class="label">Theme <span class="sub">System follows {isMobile ? 'the phone' : 'macOS'}</span></span>
+          <Select label="Theme" value={appearance.s.theme} options={THEMES} onchange={(v) => appearance.set({ theme: v as Theme })} />
+        </div>
         <div class="row">
           <span class="label">Editor font</span>
           <Select label="Editor font" value={appearance.s.font} options={FONTS.map((f) => [f.id, isMobile ? f.label.replace(/ \(SF [^)]*\)$/, '') : f.label] as const)} onchange={(v) => appearance.set({ font: v })} />
         </div>
         {#if appearance.s.font === 'custom'}
-          <label class="row">
+          <label class="row child">
             <span class="label">Font family <span class="sub">any CSS font-family</span></span>
             <input value={appearance.s.custom} oninput={(e) => appearance.set({ custom: e.currentTarget.value })} placeholder="'Pretendard', 'Noto Sans KR', sans-serif" spellcheck="false" />
           </label>
@@ -230,21 +276,12 @@
           <Slider label="Width" min={520} max={1400} step={20} value={appearance.s.width} oninput={(v) => appearance.set({ width: v })} /></label>
 {/if}
       </div>
-{#if !isMobile}
-      <h3>Window</h3>
-      <div class="card">
-        <label class="row"><span class="label">Opening width <span class="sub">{appearance.s.winW}px</span></span>
-          <Slider label="Opening width" min={640} max={1800} step={16} value={appearance.s.winW} oninput={(v) => appearance.set({ winW: v })} /></label>
-        <label class="row"><span class="label">Opening height <span class="sub">{appearance.s.winH}px</span></span>
-          <Slider label="Opening height" min={400} max={1400} step={16} value={appearance.s.winH} oninput={(v) => appearance.set({ winH: v })} /></label>
-      </div>
-      {/if}
       <p class="sample" style="font-family: {appearance.stack}; font-size: {appearance.s.size}px; line-height: {appearance.s.lineHeight}">
         The quick brown fox jumps over the lazy dog. 다람쥐 헌 쳇바퀴에 타고파. 0123456789
       </p>
       <div class="foot"><button class="link" onclick={() => appearance.reset()}>Reset to defaults</button></div>
 
-    {:else}
+    {:else if tab === 'sync'}
       <h3>GitHub sync</h3>
       <div class="card">
         {#if sync.claiming}
@@ -341,23 +378,6 @@
 {/if}
 
 {#if !isMobile}
-      <h3>App</h3>
-      <div class="card">
-        <label class="row">
-          <span class="label">Launch at login <span class="sub">keeps <Keys keys={shortcuts.keysFor('toggleWindow')} /> available after a quit</span></span>
-          <input type="checkbox" class="switch" checked={launchAtLogin} disabled={!isTauri}
-            onchange={(e) => { launchAtLogin = e.currentTarget.checked; autostart.set(launchAtLogin); }} />
-        </label>
-        <label class="row">
-          <span class="label">Open .md files <span class="sub">double-clicking a markdown or text file in Finder opens it here</span></span>
-          <input type="checkbox" class="switch" checked={opensMarkdown} disabled={!isTauri}
-            onchange={(e) => claimMarkdown(e.currentTarget.checked)} />
-        </label>
-        {#if defaultAppError}<p class="alert">{defaultAppError}</p>{/if}
-      </div>
-      {/if}
-
-{#if !isMobile}
       <h3>Claude</h3>
       <div class="card">
         <div class="row">
@@ -378,30 +398,6 @@
       </div>
 {/if}
 
-{#if isTauri}
-      <h3>Version</h3>
-      <div class="card">
-        <div class="row">
-          <span class="label">Eve {updates.current}
-            <span class="sub">{updates.checking ? 'Checking…'
-              : updates.doing ? updates.doing
-              : updates.available ? `${updates.available.version} is available`
-              : updates.failed ? (updates.reason.startsWith('GitHub') ? `Could not check — ${updates.reason}` : 'Could not check — offline?') : '✓ Up to date'}</span></span>
-          {#if updates.available}
-            <button class="btn primary" disabled={updates.busy} onclick={() => updates.install()}>
-              {#if updates.busy}<span class="spin light" aria-hidden="true"></span>{/if}Update
-            </button>
-          {:else}
-            <button class="btn" disabled={updates.checking} onclick={() => updates.check(true)}>
-              {#if updates.checking}<span class="spin" aria-hidden="true"></span>{/if}Check
-            </button>
-          {/if}
-        </div>
-      </div>
-{/if}
-
-      <h3>Storage</h3>
-      <div class="card"><div class="row"><span class="label mono path">{notesPath}</span></div></div>
     {/if}
   </div>
 </div>
@@ -427,7 +423,8 @@
 
   .body { padding: 0 14px 16px; overflow-y: auto; font-size: 13px; }
   .lead { color: var(--fg-dim); font-size: 12.5px; margin: 6px 4px 2px; }
-  h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-dim); margin: 16px 8px 6px; }
+  /* group captions as macOS writes them: sentence case, a touch heavier than the rows, no shouting caps */
+  h3 { font-size: 12px; font-weight: 600; color: var(--fg-dim); margin: 18px 6px 6px; }
 
   /* grouped rows, macOS-settings style: hairlines between rows, label left, control right */
   .card { background: var(--bg-input); border-radius: 10px; padding: 0 12px; }
@@ -529,12 +526,10 @@
   }
   .codechip:hover { border-color: var(--accent); }
 
-  .row.tmpl { border-top: 1px solid var(--line); }
-  /* a setting that only shows while the one above is on sits under it: indented, on a guide line, so
-     what it belongs to reads at a glance (and the hairline above it starts where it does) */
-  .row.child { margin-left: 6px; padding-left: 14px; border-left: 2px solid var(--line); }
-  .row.child.deeper { margin-left: 26px; }
-  :global(html.mobile .panel) .row.child { padding-left: 14px; }
+  /* a setting that only applies while the one above is on: indented in the same group, macOS-style, and
+     the hairline above it starts at the indent, so it reads as part of its parent rather than a peer */
+  .row.child { margin-left: 22px; border-top: 1px solid var(--line); }
+  .controls { display: flex; align-items: center; gap: 10px; flex: none; }
   .time {
     font: inherit; font-size: 13px; padding: 4px 8px; border: 0; border-radius: 7px; outline: none;
     background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line); font-variant-numeric: tabular-nums;

@@ -524,8 +524,8 @@
 
 {#if open}
 {#snippet updateBanner()}
-  <!-- a newer Eve: one tap downloads it and opens Android's installer, or on the Mac installs it and restarts -->
-  <div class="update" class:mac={!isMobile}>
+  <!-- a newer Eve on the phone: one tap downloads it and opens Android's installer -->
+  <div class="update">
     <span class="utext"><b>Eve {updates.available?.version}</b>
       <span class="usub">{updates.doing || 'A new version is ready'}</span></span>
     <button class="ubtn" disabled={updates.busy} onclick={() => updates.install()}>
@@ -658,12 +658,18 @@
       <button class="fab" aria-label="New note" onclick={onNew}><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
     {/if}
     {#if !isMobile}
-    <!-- the Mac's top is the window's title bar: its update sits down here, over the footer -->
-    {#if updates.available}{@render updateBanner()}{/if}
     <footer>
       <span class="sync {sync.status}" title={sync.error || (sync.enabled ? 'Synced' : 'Sync off')}>
         {syncLabel}
       </span>
+      <!-- a newer Eve: one button by Settings installs it and restarts; what it is doing shows on hover -->
+      {#if updates.available}
+        <button class="icon tip-up gear upd" class:failed={updates.state === 'error'} aria-label="Update Eve"
+          data-tip={updates.doing || `Update to Eve ${updates.available.version}`} disabled={updates.busy} onclick={() => updates.install()}>
+          {#if updates.busy}<span class="uspin" aria-hidden="true"></span>
+          {:else}<svg class="gear-i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v8.5M8.5 12.5 12 16l3.5-3.5"/></svg>{/if}
+        </button>
+      {/if}
       <button class="icon tip-up gear" aria-label="Settings" data-tip="Settings" data-keys={shortcuts.keysFor('settings')} onclick={onSettings}>
         <svg class="gear-i" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
@@ -778,10 +784,10 @@
   .ubtn { flex: none; border: 0; border-radius: 10px; padding: 9px 16px; background: var(--accent); color: #fff; font: inherit; font-size: 15px; font-weight: 600; }
   .ubtn:disabled { opacity: 0.85; }
   /* the Mac's sidebar is 13px type: the same banner, smaller */
-  .update.mac { gap: 8px; margin: 6px 10px 8px; padding: 7px 7px 7px 10px; border-radius: 9px; }
-  .update.mac .utext { font-size: 12.5px; }
-  .update.mac .usub { font-size: 11.5px; }
-  .update.mac .ubtn { border-radius: 7px; padding: 5px 11px; font-size: 12.5px; }
+  /* the Mac's update: an icon in the footer, in the accent colour so it is noticed */
+  .upd { margin-left: auto; color: var(--accent); }
+  .upd.failed { color: #ff453a; }
+  .upd .uspin { margin: 0; border-color: var(--accent-soft); border-top-color: var(--accent); }
   :global(.gear-i) { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   footer {
     display: flex; align-items: center; justify-content: space-between;
