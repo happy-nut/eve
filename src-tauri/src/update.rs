@@ -129,9 +129,11 @@ fn install(app: &AppHandle, url: &str, sha256: &str, version: &str) -> Result<()
     let _ = std::fs::remove_dir_all(&work);
     result?;
     let _ = app.emit("eve-update", "restarting");
-    // start the new copy once this one has gone (a second Eve would find the hotkey taken)
+    // start the new copy once this one has gone (a second Eve would find the hotkey taken). Started bare it
+    // would wait for the hotkey with no window, as at login, and the update looked like Eve had quit: handing
+    // it an eve:// link brings the window up (RunEvent::Opened shows it; the page acts only on eve://open).
     std::process::Command::new("/bin/sh")
-        .args(["-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; /usr/bin/open \"$2\"", "sh"])
+        .args(["-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; /usr/bin/open -a \"$2\" eve://updated", "sh"])
         .arg(std::process::id().to_string())
         .arg(&bundle)
         .stdin(std::process::Stdio::null())

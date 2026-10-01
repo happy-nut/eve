@@ -1,4 +1,4 @@
-import { Editor, Extension, textInputRule, wrappingInputRule } from '@tiptap/core';
+import { Editor, Extension, InputRule, textInputRule, wrappingInputRule } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { ListItem, OrderedList } from '@tiptap/extension-list';
 import Paragraph from '@tiptap/extension-paragraph';
@@ -10,7 +10,7 @@ import { keydownHandler } from '@tiptap/pm/keymap';
 import { Plugin, PluginKey, Selection, TextSelection, type Command } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import type { EditorView } from '@tiptap/pm/view';
+import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
 import { DateMention, dayChoices } from './date';
 import { Callout } from './callout';
@@ -36,7 +36,7 @@ import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
 import { calendar, popup, ICONS, SLASH, type CalendarUI, type SuggestionUI, type SuggestItem } from './slash';
 import { noteMenu } from './noteMenu';
-import { moveBlock, indentLines } from './blocks';
+import { moveBlock, indentLines, switchItem } from './blocks';
 
 /** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
 const MD_SYNTAX = /(\*\*|__|~~|^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|`|\[[^\]]*\]\(|^\|.*\|\s*$)/m;
@@ -79,6 +79,39 @@ const suggestionVisible = new WeakMap<Editor, () => boolean>();
 
 export const getMarkdown = (editor: Editor): string => (editor.storage as any).markdown.getMarkdown();
 
+/**
+ * What ⌥↑ / ⌥↓ just moved is lit faintly for a moment, so the eye can tell which lines went where: every
+ * line in the selection, or for a caret in an item's first line the whole item with what hangs under it.
+ * The two classes are taken in turn so a second move right away starts the fade over.
+ */
+const FLASH = new PluginKey<DecorationSet>('moveFlash');
+let flashes = 0;
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
+function moveAndFlash(editor: Editor, dir: -1 | 1): boolean {
+  const before = editor.state.doc;
+  if (!editor.commands.command(moveBlock(dir))) return false;
+  const { state, view } = editor;
+  if (state.doc.eq(before)) return true;
+  let { from, to } = state.selection;
+  const { $from } = state.selection;
+  for (let d = $from.depth; d > 0; d--) {
+    if (!/Item$/.test($from.node(d).type.name)) continue;
+    if (state.selection.empty && $from.index(d) === 0) { from = $from.before(d); to = $from.after(d); }
+    break;
+  }
+  const cls = `moved-flash-${flashes++ % 2}`;
+  const decos: Decoration[] = [];
+  state.doc.nodesBetween(from, to, (n, pos) => {
+    if (!n.isTextblock && !(n.isBlock && n.isAtom)) return true;
+    decos.push(Decoration.node(pos, pos + n.nodeSize, { class: cls }));
+    return false;
+  });
+  view.dispatch(state.tr.setMeta(FLASH, DecorationSet.create(state.doc, decos)));
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { if (!view.isDestroyed) view.dispatch(view.state.tr.setMeta(FLASH, DecorationSet.empty)); }, 900);
+  return true;
+}
+
 /** Run one editor action by id (the phone's formatting bar uses these; a keyboard uses applyKeymap). */
 export const runEditorCommand = (editor: Editor, id: string): boolean => editorCommands(editor)[id]?.() ?? false;
 
@@ -92,8 +125,8 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
       pickImage().then((src) => src && c().setImage({ src }).run());
       return true;
     },
-    moveBlockUp: () => editor.commands.command(moveBlock(-1)),
-    moveBlockDown: () => editor.commands.command(moveBlock(1)),
+    moveBlockUp: () => moveAndFlash(editor, -1),
+    moveBlockDown: () => moveAndFlash(editor, 1),
     bold: () => c().toggleBold().run(),
     italic: () => c().toggleItalic().run(),
     underline: () => c().toggleUnderline().run(),
@@ -353,6 +386,33 @@ export function createEditor(opts: {
       // Two lists that end up touching (a blank line between them deleted, a paragraph between them
       // turned into an item, an item moved out with ⌥↓, …) become one list — markdown has no way to
       // keep them apart anyway, and a numbered count carries on instead of restarting at 1.
+      // "- ", "[] " or "1. " typed at the start of a list line of another kind turns that line into it (the stock
+      // rules only wrap a plain line, so on a to-do "- " stayed text)
+      Extension.create({
+        name: 'listSwitch',
+        priority: 102,
+        addInputRules() {
+          const n = this.editor.schema.nodes;
+          const rule = (find: RegExp, list: string, item: string, attrs?: (m: RegExpMatchArray) => Record<string, unknown>) =>
+            new InputRule({ find, handler: ({ state, range, match }) => (switchItem(state.tr, range.from, range.to, n[list], n[item], attrs?.(match)) ? undefined : null) });
+          return [
+            rule(/^\s*[-+*]\s$/, 'bulletList', 'listItem'),
+            rule(/^\s*\[( |x)?\]\s$/, 'taskList', 'taskItem'),
+            rule(/^(\d+)\.\s$/, 'orderedList', 'listItem', (m) => ({ start: +m[1] })),
+          ];
+        },
+      }),
+      Extension.create({
+        name: 'moveFlash',
+        addProseMirrorPlugins: () => [new Plugin({
+          key: FLASH,
+          state: {
+            init: () => DecorationSet.empty,
+            apply: (tr, set) => tr.getMeta(FLASH) ?? set.map(tr.mapping, tr.doc),
+          },
+          props: { decorations: (state) => FLASH.getState(state) },
+        })],
+      }),
       // ahead of the list items' own Tab, which moves an item's sub-items along with it
       Extension.create({
         name: 'lineIndent',
@@ -410,6 +470,26 @@ export function createEditor(opts: {
               // around the block image, leaving the item with an empty first line above the picture. Unwrap an
               // item that is nothing but an image (the checkbox moves up: the task-item hook reads it there).
               updateDOM(element: HTMLElement) {
+                // Markdown writes a to-do and a bullet with the same "-", so one written after the other is a single
+                // list, which tiptap-markdown makes a to-do list whole: the bullets in it did not fit and came back
+                // as an empty to-do above them. Each run of to-dos or of plain items becomes a list of its own.
+                for (const ul of [...element.querySelectorAll<HTMLElement>('ul.contains-task-list')].reverse()) {
+                  const items = [...ul.children];
+                  if (items.every((li) => li.classList.contains('task-list-item'))) continue;
+                  const runs: HTMLElement[] = [];
+                  let task: boolean | null = null;
+                  for (const li of items) {
+                    const isTask = li.classList.contains('task-list-item');
+                    if (isTask !== task) {
+                      const run = document.createElement('ul');
+                      if (isTask) { run.className = 'contains-task-list'; run.dataset.type = 'taskList'; }
+                      runs.push(run);
+                      task = isTask;
+                    }
+                    runs.at(-1)!.append(li);
+                  }
+                  ul.replaceWith(...runs);
+                }
                 for (const p of element.querySelectorAll('li > p')) {
                   const kids = [...p.children];
                   const img = kids.find((c) => c.tagName === 'IMG');

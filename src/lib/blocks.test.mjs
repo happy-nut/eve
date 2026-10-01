@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { Schema } from '@tiptap/pm/model';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
-import { moveBlock, indentLines } from './blocks.ts';
+import { moveBlock, indentLines, switchItem } from './blocks.ts';
 
 // the editor's node names and content rules (editor.ts), without the editor
 const schema = new Schema({
@@ -217,5 +217,71 @@ assert.deepEqual(last(run(doc('- a', '- b'), 'a', null, tab)), ['- a', '- b']);
 
 // outside a list Tab is not ours (the editor keeps it from leaving the page)
 assert.equal(run(doc('문단'), '문단', null, tab)[0].ok, false);
+
+// ---- lists of different kinds under one another (bullets under a to-do, a to-do under a bullet) ----
+
+// ⇧Tab takes a bullet out from under its to-do as a bullet (it used to become a plain line inside the to-do),
+// and Tab puts it back under the to-do it came from
+assert.deepEqual(run(doc('[] a', '  - b', '[] c'), 'b', null, untab, tab).map((x) => x.lines), [
+  ['[] a', '- b', '[] c'],
+  ['[] a', '  - b', '[] c'],
+]);
+// a to-do under a bullet, the same both ways
+assert.deepEqual(run(doc('- a', '  [] t', '- c'), 't', null, untab, tab).map((x) => x.lines), [
+  ['- a', '[] t', '- c'],
+  ['- a', '  [] t', '- c'],
+]);
+// two bullets selected come out and go back together; one bullet out, the one under it stays at its level
+assert.deepEqual(last(run(doc('[] a', '  - b', '  - b2', '[] c'), 'b', 'b2', untab)), ['[] a', '- b', '- b2', '[] c']);
+assert.deepEqual(last(run(doc('[] a', '  - b', '  - b2', '[] c'), 'b', null, untab)), ['[] a', '- b', '  - b2', '[] c']);
+// Tab under a to-do that has sub-to-dos already: the bullet joins them at their level
+assert.deepEqual(last(run(doc('[] a', '  [] a1', '- b'), 'b', null, tab)), ['[] a', '  [] a1', '  - b']);
+
+// typing another kind's marker at the start of a list line turns that one line into it
+{
+  const kind = (src, word, list, item, attrs) => {
+    let state = EditorState.create({ doc: src });
+    let p = -1;
+    state.doc.descendants((n, pos) => { if (p < 0 && n.isText && n.text.startsWith(word)) p = pos; });
+    const tr = state.tr;
+    const ok = switchItem(tr, p, p + word.length, schema.nodes[list], schema.nodes[item], attrs);
+    return ok ? lines(state.apply(tr).doc) : false;
+  };
+  assert.deepEqual(kind(doc('[] a', '  [] -b', '  [] c'), '-', 'bulletList', 'listItem'), ['[] a', '  - b', '  [] c']);
+  assert.deepEqual(kind(doc('[] a', '  - x', '  - []y'), '[]', 'taskList', 'taskItem'), ['[] a', '  - x', '  [] y']);
+  assert.deepEqual(kind(doc('- a', '- 1.b', '- c'), '1.', 'orderedList', 'listItem', { start: 1 }), ['- a', '1. b', '- c']);
+  assert.equal(kind(doc('- a', '- -b'), '-', 'bulletList', 'listItem'), false, 'already a bullet: nothing to do');
+  assert.equal(kind(doc('-x'), '-', 'bulletList', 'listItem'), false, 'not in a list: the stock rule\'s business');
+}
+
+// ---- ⌥↑ / ⌥↓ through lists of different kinds ----
+
+// a bullet under a to-do: up past the to-do's own line, it steps out above it (it used to break the to-do's
+// text apart); down from the bottom, out under it and on past the next to-dos (it used to stay put)
+assert.deepEqual(last(run(doc('[] t1', '  - a', '  - b', '[] t2'), 'a', null, up)), ['- a', '[] t1', '  - b', '[] t2']);
+assert.deepEqual(run(doc('[] t1', '  - a', '  - b', '[] t2', '[] t3'), 'b', null, down, down, down).map((x) => x.lines), [
+  ['[] t1', '  - a', '- b', '[] t2', '[] t3'],
+  ['[] t1', '  - a', '[] t2', '- b', '[] t3'],
+  ['[] t1', '  - a', '[] t2', '[] t3', '- b'],
+]);
+// a to-do under a bullet, the same
+assert.deepEqual(last(run(doc('- a', '  [] x', '  [] y', '- b'), 'y', null, down, down)), ['- a', '  [] x', '- b', '[] y']);
+// a bullet passing to-dos and a to-do passing bullets: one line at a time, both ways
+assert.deepEqual(last(run(doc('- a', '[] t1', '[] t2', '- b'), 'a', null, down, down)), ['[] t1', '[] t2', '- a', '- b']);
+assert.deepEqual(last(run(doc('[] t', '- a', '- b', '[] u'), 't', null, down, down, up, up)), ['[] t', '- a', '- b', '[] u']);
+// a to-do between two child lists of another kind: past the bullet above it first, then out
+assert.deepEqual(run(doc('[] t', '  - a', '  [] x', '  - b', '[] u'), 'x', null, up, up).map((x) => x.lines), [
+  ['[] t', '  [] x', '  - a', '  - b', '[] u'],
+  ['[] x', '[] t', '  - a', '  - b', '[] u'],
+]);
+// a selection from a bullet into the to-do under the list: only those two move, the to-do after them stays
+assert.deepEqual(run(doc('- a', '[] t1', '[] t2', '- b', 'p'), 'a', 't1', down, down, up, up).map((x) => [x.lines.join(' | '), x.selected]), [
+  ['[] t2 | - a | [] t1 | - b | p', 'a/t1'],
+  ['[] t2 | - b | - a | [] t1 | p', 'a/t1'],
+  ['[] t2 | - a | [] t1 | - b | p', 'a/t1'],
+  ['- a | [] t1 | [] t2 | - b | p', 'a/t1'],
+]);
+// several lines of several kinds, nested ones included, travel together and keep their levels
+assert.deepEqual(last(run(doc('p', '[] t', '  - a', '1. one', '1. two', '끝'), 't', 'one', up)), ['[] t', '  - a', '1. one', 'p', '1. two', '끝']);
 
 console.log('BLOCKS_OK');

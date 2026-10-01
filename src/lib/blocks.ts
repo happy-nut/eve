@@ -1,5 +1,5 @@
 // Moving and indenting lines: plain ProseMirror, no editor or DOM, so it runs in Node (blocks.test.mjs).
-import type { Node as PMNode } from '@tiptap/pm/model';
+import { Fragment, type Node as PMNode, type NodeType } from '@tiptap/pm/model';
 import { Selection, TextSelection } from '@tiptap/pm/state';
 import { liftListItem, sinkListItem } from '@tiptap/pm/schema-list';
 
@@ -19,18 +19,38 @@ export function moveBlock(dir: -1 | 1) {
     const tr = state.tr;
     // one transaction for the split and the move: applied apart, joinLists would glue the list back first
     const at = () => ({ doc: tr.doc, selection: tr.selection, tr });
-    let r = moveOnce(at(), dir);
+    splitAtSelection(tr);
+    let r = moveOnce(at(), dir, tr.steps.length);
     if (typeof r === 'number') {
-      const $r = tr.doc.resolve(r), list = $r.parent;
-      tr.split(r);
-      // the part split off a numbered list keeps counting where it was, not from 1
-      if (list.type.name === 'orderedList') tr.setNodeAttribute(r + 1, 'start', (list.attrs.start ?? 1) + $r.index());
+      splitList(tr, r);
       r = moveOnce(at(), dir, tr.steps.length);
     }
     if (!r || typeof r === 'number') return false;
     if (dispatch && tr.docChanged) dispatch(tr.scrollIntoView());
     return true;
   };
+}
+
+/** Split a list between two items at `pos`; the half split off a numbered list keeps counting, not from 1. */
+function splitList(tr: any, pos: number) {
+  const $p = tr.doc.resolve(pos), list = $p.parent;
+  tr.split(pos);
+  if (list.type.name === 'orderedList') tr.setNodeAttribute(pos + 1, 'start', (list.attrs.start ?? 1) + $p.index());
+}
+
+/**
+ * A selection over several blocks that starts or ends partway into a list (a bullet and the to-do under it,
+ * say) covers only some of that list's items: the list is split there, so only the selected items move.
+ */
+function splitAtSelection(tr: any) {
+  const { $from, $to } = tr.selection;
+  const range = $from.blockRange($to);
+  if (!range || /List$/.test(range.parent.type.name) || range.endIndex - range.startIndex < 2) return;
+  const d = range.depth + 1; // the level of the blocks in the range
+  const last = range.parent.child(range.endIndex - 1);
+  if (/List$/.test(last.type.name) && $to.depth > d && $to.index(d) < last.childCount - 1) splitList(tr, $to.after(d + 1));
+  const first = range.parent.child(range.startIndex);
+  if (/List$/.test(first.type.name) && $from.depth > d && $from.index(d) > 0) splitList(tr, $from.before(d + 1));
 }
 
 /**
@@ -102,9 +122,12 @@ function hopOutOfList(state: any, range: any, dir: -1 | 1, done: number): any {
   const $list = state.doc.resolve(listStart);
   const beside = dir < 0 ? $list.nodeBefore : state.doc.resolve(listEnd).nodeAfter;
   // a nested list's first item going up would land above its parent item's own text, and its last one
-  // has nothing to step over: either way it steps out to its parent's level, beside the parent item
+  // has nothing to step over: either way it steps out to its parent's level, beside the parent item. (A list
+  // further down in the item, after other blocks of it, steps over those instead.)
   const item = $list.parent, outer = depth > 1 ? $list.node(depth - 2) : null;
-  const lift = /Item$/.test(item.type.name) && outer?.type === parent.type && (dir < 0 || !beside);
+  const lift = /Item$/.test(item.type.name) && !!outer && /List$/.test(outer.type.name) && (dir < 0 ? $list.index() === 1 : !beside);
+  // under an item of another kind (bullets under a to-do) the items come out as a list of their own kind
+  const across = lift && outer!.type !== parent.type;
   // the list is already at the edge, or what is beside it is the title or the note's end: nothing to step
   // over, and the key stays ours (the webview's own ⌥↓ would drop the selection)
   if (!lift && (!beside || isEdge(state.doc, $list.parent, dir < 0 ? $list.index() - 1 : $list.index() + 1, dir))) return true;
@@ -114,12 +137,15 @@ function hopOutOfList(state: any, range: any, dir: -1 | 1, done: number): any {
   }
   const alone = range.startIndex === 0 && range.endIndex === parent.childCount; // every item goes: no empty list left behind
   const cut = alone ? { from: listStart, to: listEnd } : { from: start, to: end };
-  // measured from the list's own edges: the item has to clear the whole neighbour, not just the list
-  const target = lift ? (dir < 0 ? $list.before(depth - 1) : $list.after(depth - 1))
-    : dir < 0 ? listStart - beside!.nodeSize : listEnd + beside!.nodeSize;
+  // beside the parent item: inside the outer list, or (across) just outside it when the parent is its first
+  // or last item; in between, inserting there splits the outer list around the new one
+  const ownerAt = $list.index(depth - 2), ownerEdge = dir < 0 ? ownerAt === 0 : ownerAt === outer?.childCount - 1;
+  const target = !lift ? (dir < 0 ? listStart - beside!.nodeSize : listEnd + beside!.nodeSize)
+    : across && ownerEdge ? (dir < 0 ? $list.before(depth - 2) : $list.after(depth - 2))
+    : dir < 0 ? $list.before(depth - 1) : $list.after(depth - 1);
   const items = state.doc.slice(start, end).content;
-  const moved = lift ? items : alone ? state.doc.slice(listStart, listEnd).content : parent.copy(items);
-  const base = lift ? start : alone ? listStart : start - 1; // where the moved piece began
+  const moved = lift && !across ? items : alone && !lift ? state.doc.slice(listStart, listEnd).content : parent.copy(items);
+  const base = lift && !across ? start : alone && !lift ? listStart : start - 1; // where the moved piece began
   const tr = state.tr.delete(cut.from, cut.to);
   const at = tr.mapping.slice(done).map(target);
   tr.insert(at, moved);
@@ -160,6 +186,8 @@ export function indentLines(dir: 1 | -1) {
     const step = (sink: boolean, item: string) => {
       const type = tr.doc.type.schema.nodes[item];
       const state = { doc: tr.doc, selection: tr.selection, schema: tr.doc.type.schema, tr };
+      const across = sink ? sinkAcross(tr) : liftAcross(tr);
+      if (across !== null) return across;
       return (sink ? sinkListItem(type) : liftListItem(type))(state as any, () => {});
     };
     const before = lineDepths(tr.doc);
@@ -184,4 +212,89 @@ export function indentLines(dir: 1 | -1) {
     tr.setSelection(TextSelection.create(tr.doc, at(first, from), at(last, to)));
     return true;
   };
+}
+/** Where child `i` of `node` starts, counted from the start of its content. */
+const offsetOf = (node: PMNode, i: number) => { let o = 0; for (let k = 0; k < i; k++) o += node.child(k).nodeSize; return o; };
+
+/**
+ * ⇧Tab on items whose list hangs under an item of another kind (bullets under a to-do, a to-do under a
+ * number…). ProseMirror would turn them into plain lines inside that item; here they come out as a list of
+ * their own kind right after it, the outer list split around them. Items below the lifted ones stay at their
+ * level, under the last one lifted. null: not that case, the stock lift applies.
+ */
+function liftAcross(tr: any): boolean | null {
+  const { $from, $to } = tr.selection;
+  const range = $from.blockRange($to, (n: PMNode) => /List$/.test(n.type.name));
+  if (!range || range.depth < 2) return null;
+  const list: PMNode = range.parent, owner: PMNode = range.$from.node(range.depth - 1);
+  if (!/Item$/.test(owner.type.name) || owner.type === list.firstChild!.type) return null;
+  const { startIndex, endIndex } = range;
+  const moved: PMNode[] = [];
+  for (let k = startIndex; k < endIndex; k++) moved.push(list.child(k));
+  if (endIndex < list.childCount) { // the items below come along as the last one's children
+    const rest = list.content.cut(offsetOf(list, endIndex));
+    const last = moved.pop()!;
+    moved.push(last.copy(last.content.append(Fragment.from(list.copy(rest)))));
+  }
+  const listStart = range.$from.before(range.depth), contentEnd = range.$from.end(range.depth);
+  const ownerEnd = range.$from.after(range.depth - 1), outerEnd = range.$from.after(range.depth - 2);
+  const ownerIsLast = range.$from.index(range.depth - 2) === range.$from.node(range.depth - 2).childCount - 1;
+  if (startIndex === 0) tr.delete(listStart, contentEnd + 1);
+  else tr.delete(range.start, contentEnd);
+  const out = list.copy(Fragment.fromArray(moved));
+  if (ownerIsLast) tr.insert(tr.mapping.map(outerEnd), out);
+  else {
+    const at = tr.mapping.map(ownerEnd);
+    tr.split(at);
+    tr.insert(at + 1, out);
+  }
+  return true;
+}
+
+/**
+ * A list line whose marker is typed over by another kind's ("- " on a to-do, "[] " or "1. " on a bullet):
+ * that one line becomes the other kind, its list split around it (and joined with a neighbour of the same
+ * kind afterwards, by joinLists). `from`–`to` is the typed marker, removed. False when the line is not the
+ * first line of an item, or already that kind.
+ */
+export function switchItem(tr: any, from: number, to: number, listType: NodeType, itemType: NodeType, listAttrs: Record<string, unknown> = {}): boolean {
+  const $p = tr.doc.resolve(from);
+  const d = $p.depth;
+  if (d < 3 || $p.parentOffset !== 0 || !$p.parent.isTextblock) return false;
+  const item: PMNode = $p.node(d - 1);
+  if (!/Item$/.test(item.type.name) || $p.index(d - 1) !== 0 || !/List$/.test($p.node(d - 2).type.name)) return false;
+  if ($p.node(d - 2).type === listType) return false;
+  tr.delete(from, to);
+  const $q = tr.doc.resolve(from);
+  const own: PMNode = $q.node(d - 1), list: PMNode = $q.node(d - 2), i = $q.index(d - 2);
+  const attrs = itemType.name === 'taskItem' ? { checked: false } : null;
+  if (!itemType.validContent(own.content)) return false;
+  const parts: PMNode[] = [];
+  if (i > 0) parts.push(list.copy(list.content.cut(0, offsetOf(list, i))));
+  parts.push(listType.create(listAttrs, itemType.create(attrs, own.content)));
+  if (i < list.childCount - 1) parts.push(list.copy(list.content.cut(offsetOf(list, i + 1))));
+  const listPos = $q.before(d - 2);
+  tr.replaceWith(listPos, $q.after(d - 2), parts);
+  tr.setSelection(TextSelection.create(tr.doc, listPos + (i > 0 ? parts[0].nodeSize : 0) + 3));
+  return true;
+}
+
+/**
+ * Tab on the first items of a list that sits right under a list of another kind (bullets after to-dos): there
+ * is no item above them in their own list to go under, so they go under the last item of the list above,
+ * as a list of their own kind (the way ⇧Tab took them out). null: not that case.
+ */
+function sinkAcross(tr: any): boolean | null {
+  const { $from, $to } = tr.selection;
+  const range = $from.blockRange($to, (n: PMNode) => /List$/.test(n.type.name));
+  if (!range || range.startIndex !== 0) return null;
+  const list: PMNode = range.parent;
+  const listStart = range.$from.before(range.depth), listEnd = range.$from.after(range.depth);
+  const above = tr.doc.resolve(listStart).nodeBefore as PMNode | null;
+  if (!above || !/List$/.test(above.type.name) || !above.lastChild) return null;
+  const moved = list.copy(list.content.cut(0, offsetOf(list, range.endIndex)));
+  if (range.endIndex === list.childCount) tr.delete(listStart, listEnd);
+  else tr.delete(listStart + 1, listStart + 1 + offsetOf(list, range.endIndex));
+  tr.insert(listStart - 2, moved); // the end of the last item above, inside it
+  return true;
 }
