@@ -156,7 +156,7 @@
       <h3>Notes</h3>
       <div class="card">
         <label class="row">
-          <span class="label">Give new notes an icon <span class="sub">a random one on every new or imported note; you can always change it</span></span>
+          <span class="label">Give new notes and groups an icon <span class="sub">a random one on every new or imported note and new group; you can always change it</span></span>
           <input type="checkbox" class="switch" checked={appearance.s.autoIcon}
             onchange={(e) => appearance.set({ autoIcon: e.currentTarget.checked })} />
         </label>
