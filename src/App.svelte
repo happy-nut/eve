@@ -157,7 +157,7 @@
     if (ui.pending || ui.emoji || ui.menu || settingsOpen) return; // a dialog owns focus
     const a = document.activeElement as HTMLElement | null;
     if (a && a.isConnected && a !== document.body) return;
-    const el = back?.isConnected ? back : document.querySelector<HTMLElement>(ui.card ? '.card .tiptap' : '.tiptap');
+    const el = back?.isConnected ? back : document.querySelector<HTMLElement>(ui.card ? '.card-page .tiptap' : '.tiptap');
     // the view's own focus puts its selection back in the same step, not 20 ms later under a keystroke
     const view = (el as { editor?: { view: View } } | null)?.editor?.view;
     if (view && back) redrawCaretLine(view);

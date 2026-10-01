@@ -15,3 +15,14 @@ export function placeAt(rect: DOMRect, want = 300, width = 220): string {
   if (below >= Math.min(want, 160) || below >= above) return `left:${left}px; top:${rect.bottom + 4}px; max-height:${Math.max(96, below)}px`;
   return `left:${left}px; bottom:${window.innerHeight - rect.top + 4}px; max-height:${above}px`;
 }
+
+/**
+ * How a sheet comes up from the bottom of a phone, and goes back down. It moves by `translate`, not
+ * `transform`: the phone's sheet styles (app.css) pin `transform: none !important` to undo the Mac's
+ * centring, and an !important rule wins over an animation of the same property — a sheet animated by
+ * transform just appeared. Elsewhere `desktop` runs as before.
+ */
+export function sheet<T>(node: Element, desktop: (node: Element) => T): T | { duration: number; css: (t: number, u: number) => string } {
+  if (!isMobile) return desktop(node);
+  return { duration: 260, css: (t, u) => `translate: 0 ${(u * u * u * 100).toFixed(2)}%` }; // cubic ease-out, as the menus' sheets
+}
