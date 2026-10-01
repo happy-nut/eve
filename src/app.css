@@ -107,10 +107,12 @@ html.mobile aside .mtop .gear:active { background: var(--bg-active); }
 html.mobile aside .ico-slot { width: 24px; height: 24px; }
 html.mobile aside .tools { display: none; } /* hover-only; a long-press opens the row's menu instead */
 
-/* a row lifted by a long press, ready to move */
-html.mobile aside .row.dragging {
-  opacity: 1; background: var(--bg-pop); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-  transform: scale(1.02);
+/* a row lifted by a long press: its copy rides under the finger, the row stays faint where it was */
+html.mobile aside .row.dragging { opacity: 0.3; }
+html.mobile li.row.lifted {
+  position: fixed; z-index: 60; margin: 0; list-style: none; pointer-events: none; padding-left: 0;
+  background: var(--bg-pop); border-radius: 10px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+  transform: scale(1.03); transform-origin: center; opacity: 0.96;
 }
 html.mobile aside {
   position: fixed; inset: var(--top) 0 var(--bottom); width: auto; z-index: 5;

@@ -128,8 +128,12 @@
 
   // ---- drag & drop (native HTML5): notes and whole groups ----
   let drag = $state<{ note?: string; group?: string } | null>(null);
-  /** where it would land: into a group ('' = root), or before a note / a group */
-  let dropAt = $state<{ into?: string; beforeNote?: string; beforeGroup?: string } | null>(null);
+  /**
+   * where it would land: into a group ('' = root), or before a note / a group. A note dropped on a note
+   * row also says under which page (`parent`, '' = a page of its own), as the list shows it; `afterNote`
+   * is only for the line drawn under the row it follows, when nothing comes after it.
+   */
+  let dropAt = $state<{ into?: string; beforeNote?: string; beforeGroup?: string; parent?: string; afterNote?: string } | null>(null);
 
   function dragStartNote(e: DragEvent, n: Note) {
     drag = { note: n.id };
@@ -150,17 +154,33 @@
     allow(e);
     dropAt = { into: g };
   }
-  /** over a note row: before / after it (same group) */
+  /**
+   * Over a note row: the gap above it or below it, in the order the list shows. Above: before it, beside
+   * it. Below: its first sub-page's place when its sub-pages show, else right after it, beside it. So a
+   * page lands where the line was drawn, a sub-page included, never into its own sub-pages.
+   */
   function overNote(e: DragEvent, n: Note) {
     if (!drag || drag.note === n.id) return;
-    const list = groups.notesIn(n.group);
     if (drag.group !== undefined) { overSection(e, n.group); return; } // groups can't sit between notes
-    allow(e);
+    const inGroup = groups.notesIn(n.group);
+    const parentOfNote = (x: Note) => (x.parent && inGroup.some((m) => m.id === x.parent) ? x.parent : '');
+    const pagesUnder = (p: string) => inGroup.filter((x) => parentOfNote(x) === p && x.id !== drag?.note);
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const before = e.clientY < r.top + r.height / 2;
-    const i = list.findIndex((x) => x.id === n.id);
-    const target = before ? n : list[i + 1];
-    dropAt = target ? { beforeNote: target.id, into: n.group } : { into: n.group };
+    const below = e.clientY >= r.top + r.height / 2;
+    const kids = below && !groups.isFolded(n.id) ? pagesUnder(n.id) : [];
+    let at: { parent: string; before: string | null; after?: string };
+    if (!below) at = { parent: parentOfNote(n), before: n.id };
+    else if (kids.length) at = { parent: n.id, before: kids[0].id };
+    else {
+      const sibs = pagesUnder(parentOfNote(n));
+      const next = sibs[sibs.indexOf(n) + 1];
+      at = { parent: parentOfNote(n), before: next?.id ?? null, after: next ? undefined : n.id };
+    }
+    const mover = drag.note!;
+    // the calendar's row is never a sub-page, and a page never goes under its own sub-pages
+    if (at.parent && (mover === CALENDAR_NOTE_ID || at.parent === CALENDAR_NOTE_ID || at.parent === mover || notes.isAncestor(mover, at.parent))) return;
+    allow(e);
+    dropAt = { into: n.group, parent: at.parent, beforeNote: at.before ?? undefined, afterNote: at.after };
   }
   /** over a group header: top third = before it (sibling), else = into it */
   function overGroup(e: DragEvent, g: string) {
@@ -179,7 +199,11 @@
     if (!d || !at) return;
     const into = at.into ?? '';
     if (!isMobile) hints.show('sidebarMove', 'Move notes from the keyboard: open the list, then ⌥↑↓', shortcuts.keysFor('focusSidebar'));
-    if (d.note) { groups.remember(into); notes.move(d.note, into, at.beforeNote ?? null); }
+    if (d.note) {
+      groups.remember(into);
+      if (at.parent === undefined) notes.move(d.note, into, at.beforeNote ?? null); // into a group, at its end
+      else { if (at.parent) groups.unfold(at.parent); notes.place(d.note, into, at.parent, at.beforeNote ?? null); }
+    }
     else if (d.group !== undefined) groups.move(d.group, into, at.beforeGroup ?? null);
   }
   function dragEnd() { drag = null; dropAt = null; }
@@ -188,12 +212,30 @@
    * A phone has no mouse to drag with: a long press lifts the row; move the finger and it goes where
    * the mouse would have dropped it (the same overNote / overGroup / drop as above), or let go without
    * moving and the row's menu opens. Auto-scrolls near the top and bottom of the list.
+   *
+   * The lifted row rides under the finger (a copy, the row itself left faint in its place) and the line
+   * says where it will land, so the move is seen while it is made, not only after the finger lifts.
    */
   function touchReorder(tree: HTMLElement) {
     if (!isMobile) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let start: { x: number; y: number; row: HTMLElement } | null = null;
     let lifted = false, moved = false, x = 0, y = 0;
+    let ghost: HTMLElement | null = null, liftH = 0;
+    const lift = (row: HTMLElement) => {
+      const li = row.closest<HTMLElement>('li.row');
+      if (!li) return;
+      const r = li.getBoundingClientRect();
+      liftH = r.height;
+      ghost = li.cloneNode(true) as HTMLElement;
+      ghost.classList.add('lifted');
+      Object.assign(ghost.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px` });
+      document.body.append(ghost);
+      navigator.vibrate?.(12);
+    };
+    // it rides just above the fingertip: the finger hides neither the row nor the line it points at
+    const follow = () => { if (ghost) ghost.style.top = `${y - liftH - 14}px`; };
+    const land = () => { ghost?.remove(); ghost = null; };
     const as = (el: HTMLElement) => ({
       clientX: x, clientY: y, currentTarget: el, target: el,
       preventDefault() {}, stopPropagation() {}, dataTransfer: { dropEffect: '' },
@@ -207,6 +249,7 @@
       timer = setTimeout(() => {
         lifted = true;
         const n = row.dataset.note, g = row.dataset.group;
+        lift(row); // copied before the row turns faint
         drag = n ? { note: n } : g !== undefined ? { group: g } : null;
       }, 420);
     };
@@ -219,6 +262,7 @@
       }
       e.preventDefault(); // the list stays put under a lifted row
       if (Math.hypot(x - start.x, y - start.y) > 8) moved = true;
+      follow();
       const el = document.elementFromPoint(x, y) as HTMLElement | null;
       const noteRow = el?.closest<HTMLElement>('.note-row');
       const gname = el?.closest<HTMLElement>('.gname');
@@ -239,16 +283,18 @@
       start = null;
       if (!lifted) return; // a tap: the row's own click handles it
       e.preventDefault(); // and no click after a lift
+      land();
       if (moved && dropAt) { drop(as(tree)); (document.activeElement as HTMLElement | null)?.blur(); } // no focus ring left behind
       else { dragEnd(); rowMenu(as(row) as unknown as MouseEvent, row); }
     };
-    const cancel = () => { clearTimeout(timer); start = null; dragEnd(); };
+    const cancel = () => { clearTimeout(timer); start = null; land(); dragEnd(); };
     tree.addEventListener('touchstart', down, { passive: true });
     tree.addEventListener('touchmove', move, { passive: false });
     tree.addEventListener('touchend', up);
     tree.addEventListener('touchcancel', cancel);
     return {
       destroy() {
+        land();
         tree.removeEventListener('touchstart', down);
         tree.removeEventListener('touchmove', move);
         tree.removeEventListener('touchend', up);
@@ -533,6 +579,7 @@
           class="row {r.kind}" style="--d: {'depth' in r ? r.depth : 0}"
           class:over={r.kind !== 'note' && dropAt?.into === r.g && !dropAt.beforeNote && !dropAt.beforeGroup}
           class:drop-before={(r.kind === 'note' && dropAt?.beforeNote === r.n.id) || (r.kind === 'group' && dropAt?.beforeGroup === r.g)}
+          class:drop-after={r.kind === 'note' && dropAt?.afterNote === r.n.id}
           class:dragging={(r.kind === 'note' && drag?.note === r.n.id) || (r.kind === 'group' && drag?.group === r.g)}>
 
           {#if r.kind === 'note'}
@@ -696,10 +743,11 @@
   }
 
   .empty { padding: 5px 10px; font-size: 11.5px; color: var(--fg-dim); opacity: 0.7; }
-  .row.drop-before::before {
+  .row.drop-before::before, .row.drop-after::after {
     content: ''; position: absolute; left: calc(var(--d) * 18px); right: 8px; top: -1px; height: 2px; border-radius: 1px;
     background: var(--accent); box-shadow: var(--glow); pointer-events: none; z-index: 1;
   }
+  .row.drop-after::after { top: auto; bottom: -1px; }
   .note-row { display: flex; align-items: center; }
   .note-row > button:first-child {
     flex: 1; min-width: 0; text-align: left; border: 0; background: none; color: inherit; font: inherit;
