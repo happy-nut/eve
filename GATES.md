@@ -1191,3 +1191,22 @@
   EVIDENCE: runs 36864953156 and 36864956227 (workflow_dispatch, main at df4de06) succeeded. v0.7.18 is
   the Latest release with Eve-macos-arm64.zip (sha256:de0425c8…); android-v0.7.22 has Eve-android-0.7.22.apk
   and Eve-android.apk (the same file, sha256:ed960f43…). Both published 2026-10-01T13:01Z.
+
+# GATES — the phone: text, keyboard, sheets, Settings, moving notes in the list; v0.7.19 (Mac), 0.7.23 (Android) (2026-10-01)
+
+- [x] G230 Five fixes, each reproduced in the Vite dev server (Playwright, Chromium; an Android user agent
+  with touch for the phone ones) before and checked after
+  CHECK: npm run check && npx vitest run
+  EXPECT: 0 ERRORS / 22 passed
+  EVIDENCE: (1) a rightward drag held 800 ms, or one that leaves text selected, no longer brings the list
+  in (before: both did); a quick swipe still does. (2) a tap on the bottom line with the page then 320 px
+  shorter (the keyboard): the caret's bottom 390 px, above the formatting bar at 431 (before: 760, off
+  screen). (3) the day sheet's top every 40 ms: 800 661 435 208 118 64 32 28 (before: 28 throughout: the
+  phone's transform: none !important beat the animation); the confirm and link-choice sheets use the same
+  sheet() transition. (4) Settings on a phone: the groups' box-shadow none (before: the card sheet's
+  0 -8px 32px, as .card was both); Show in widget / Remind me indented on a guide under Daily notes, Time
+  under Remind me (Mac and phone, screenshots). (5) the list A | B (B1, B2) | C, by a long press and by
+  the Mac's drag: A below B -> B's first sub-page, A below C -> last with a line under C, C above B1 -> a
+  sub-page before B1, B onto its own B1 -> refused (before: B2's place / no line / nothing / a line drawn);
+  the lifted copy rides above the fingertip and is gone after.
+- [ ] G231 v0.7.19 (Mac, Latest) and android-v0.7.23 are released
