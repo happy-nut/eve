@@ -1187,4 +1187,7 @@
   list) stops under the title and above the last empty line, the selection kept; a sub-item steps out
   beside its parent (#107's rule). #107 typed for real: "> Title" ↩ "inside" saves <details open> with
   <summary>Title</summary>; <- <= -> become ← ⇐ →; "| " a quote; Tab / ⇧Tab move only "two". No page errors.
-- [ ] G229 v0.7.18 (Mac, Latest) and android-v0.7.22 are released
+- [x] G229 v0.7.18 (Mac, Latest) and android-v0.7.22 are released
+  EVIDENCE: runs 36864953156 and 36864956227 (workflow_dispatch, main at df4de06) succeeded. v0.7.18 is
+  the Latest release with Eve-macos-arm64.zip (sha256:de0425c8…); android-v0.7.22 has Eve-android-0.7.22.apk
+  and Eve-android.apk (the same file, sha256:ed960f43…). Both published 2026-10-01T13:01Z.
