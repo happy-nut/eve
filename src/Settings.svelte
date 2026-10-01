@@ -180,19 +180,19 @@
         </label>
         {#if appearance.s.dailyNotes}
           {#if isMobile}
-            <label class="row tmpl">
+            <label class="row tmpl child">
               <span class="label">Show in widget <span class="sub">daily notes in the home-screen widget's list too</span></span>
               <input type="checkbox" class="switch" checked={appearance.s.dailyInWidget}
                 onchange={(e) => appearance.set({ dailyInWidget: e.currentTarget.checked })} />
             </label>
           {/if}
-          <label class="row tmpl">
+          <label class="row tmpl child">
             <span class="label">Remind me <span class="sub">if today's note is still empty at this time</span></span>
             <input type="checkbox" class="switch" checked={appearance.s.dailyReminder}
               onchange={(e) => { appearance.set({ dailyReminder: e.currentTarget.checked }); if (e.currentTarget.checked) void askNotify(); }} />
           </label>
           {#if appearance.s.dailyReminder}
-            <div class="row">
+            <div class="row tmpl child deeper">
               <span class="label">Time</span>
               <input type="time" class="time" value={appearance.s.reminderAt}
                 onchange={(e) => e.currentTarget.value && appearance.set({ reminderAt: e.currentTarget.value })} />
@@ -530,6 +530,11 @@
   .codechip:hover { border-color: var(--accent); }
 
   .row.tmpl { border-top: 1px solid var(--line); }
+  /* a setting that only shows while the one above is on sits under it: indented, on a guide line, so
+     what it belongs to reads at a glance (and the hairline above it starts where it does) */
+  .row.child { margin-left: 6px; padding-left: 14px; border-left: 2px solid var(--line); }
+  .row.child.deeper { margin-left: 26px; }
+  :global(html.mobile .panel) .row.child { padding-left: 14px; }
   .time {
     font: inherit; font-size: 13px; padding: 4px 8px; border: 0; border-radius: 7px; outline: none;
     background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line); font-variant-numeric: tabular-nums;
