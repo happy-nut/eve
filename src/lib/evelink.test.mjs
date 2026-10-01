@@ -12,4 +12,6 @@ assert.equal(parseEveLink('eve://open'), null);
 assert.equal(parseEveLink('eve://open?id=%20'), null);
 assert.equal(parseEveLink('https://open?id=p1'), null);
 assert.equal(parseEveLink('not a url'), null);
+// the updater restarts Eve with this one only to bring the window up (update.rs): the page does nothing with it
+assert.equal(parseEveLink('eve://updated'), null);
 console.log('EVELINK_OK');

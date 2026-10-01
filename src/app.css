@@ -607,3 +607,10 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
 .tiptap [data-type='details'] summary::-webkit-details-marker { display: none; }
 .tiptap [data-type='detailsContent'] > * + * { margin-top: 0.4em; }
 .tiptap [data-type='details']:not(.is-open) > div > [data-type='detailsContent'] { display: none; }
+
+/* lines ⌥↑ / ⌥↓ just moved: a faint wash that fades (two names, so a second move restarts it) */
+.tiptap .moved-flash-0 { animation: moved-flash-0 0.9s ease-out; border-radius: 4px; }
+.tiptap .moved-flash-1 { animation: moved-flash-1 0.9s ease-out; border-radius: 4px; }
+@keyframes moved-flash-0 { from { background: color-mix(in srgb, var(--accent) 14%, transparent); } to { background: transparent; } }
+@keyframes moved-flash-1 { from { background: color-mix(in srgb, var(--accent) 14%, transparent); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .tiptap .moved-flash-0, .tiptap .moved-flash-1 { animation: none; } }

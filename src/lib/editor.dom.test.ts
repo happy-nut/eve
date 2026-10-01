@@ -1,6 +1,7 @@
 import { describe, test, expect, afterEach } from 'vitest';
 import { ui } from './ui.svelte';
 import { editorWith, md, posOf, type, press, paste } from './testEditor';
+import { runEditorCommand } from './editor';
 
 afterEach(() => {
   ui.linkDone(null);
@@ -153,6 +154,69 @@ describe('links', () => {
     expect(ui.menu).toBeNull();
     a.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
     expect(ui.menu?.items.map((i) => i.label)).toEqual(['Open link', 'Remove link', 'Copy link']);
+  });
+});
+
+describe('lists of different kinds', () => {
+  test('under a to-do, "- " makes a bullet, "[] " a to-do again, "1. " a number', () => {
+    const ed = editorWith('');
+    ed.commands.focus('end');
+    type(ed, '[] a');
+    press(ed, 'Enter');
+    press(ed, 'Tab');
+    type(ed, '- b');
+    press(ed, 'Enter');
+    type(ed, 'c');
+    press(ed, 'Enter');
+    type(ed, '[] d');
+    press(ed, 'Enter');
+    type(ed, '1. e');
+    expect(md(ed).trimEnd()).toBe('- [ ] a\n  - b\n  - c\n  - [ ] d\n  1. e');
+  });
+
+  test('a bullet and a to-do written one after the other read back as they were, no empty to-do', () => {
+    for (const note of ['- b\n- [ ] d', '- [ ] d\n- b', '- [ ] a\n  - b\n  - [ ] d']) {
+      const ed = editorWith(note);
+      const texts: string[] = [];
+      ed.state.doc.descendants((n) => { if (n.isTextblock) texts.push(n.textContent); });
+      expect(texts.filter(Boolean)).toEqual(note.match(/[a-z]$/gm));
+      expect(texts.slice(0, -1)).not.toContain('');
+      const again = editorWith(md(ed));
+      expect(md(again)).toBe(md(ed));
+    }
+  });
+
+  test('⇧Tab brings a bullet out from under its to-do as a bullet, Tab puts it back', () => {
+    const ed = editorWith('- [ ] a\n  - b\n- [ ] c');
+    ed.commands.setTextSelection(posOf(ed, 'b', true));
+    press(ed, 'Tab', { shiftKey: true });
+    expect(md(ed).trimEnd()).toBe('- [ ] a\n\n- b\n\n- [ ] c');
+    press(ed, 'Tab');
+    expect(md(ed).trimEnd()).toBe('- [ ] a\n  - b\n- [ ] c');
+  });
+});
+
+describe('⌥↑ / ⌥↓ light up what moved', () => {
+  const lit = (ed: ReturnType<typeof editorWith>) =>
+    [...ed.view.dom.querySelectorAll('.moved-flash-0, .moved-flash-1')].map((e) => `${e.className.match(/moved-flash-\d/)![0]}:${e.textContent}`);
+
+  test('the moved lines, a fresh class each time so the fade starts over, and nothing when nothing moved', () => {
+    const ed = editorWith('- a\n- [ ] t\n- b\n\n문단');
+    ed.commands.setTextSelection({ from: posOf(ed, 'a'), to: posOf(ed, 't', true) });
+    runEditorCommand(ed, 'moveBlockDown');
+    const first = lit(ed);
+    expect(first.map((l) => l.split(':')[1])).toEqual(['a', 't']);
+    runEditorCommand(ed, 'moveBlockDown');
+    const second = lit(ed);
+    expect(second.map((l) => l.split(':')[1])).toEqual(['a', 't']);
+    expect(second[0].split(':')[0]).not.toBe(first[0].split(':')[0]);
+  });
+
+  test('a caret in an item lights the item and what hangs under it', () => {
+    const ed = editorWith('- [ ] t1\n  - a\n- [ ] t2');
+    ed.commands.setTextSelection(posOf(ed, 't1', true));
+    runEditorCommand(ed, 'moveBlockDown');
+    expect(lit(ed).map((l) => l.split(':')[1])).toEqual(['t1', 'a']);
   });
 });
 
