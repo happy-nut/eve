@@ -60,12 +60,6 @@
     // not pinned to whichever edge the last scroll into view left it against
     hooks.command = (id) => {
       if (!editor) return;
-      // Tab and Shift-Tab, for a keyboard that has neither: a to-do first, then a plain list item
-      if (id === 'indent' || id === 'outdent') {
-        const lift = id === 'indent' ? 'sinkListItem' : 'liftListItem';
-        if (!editor.chain().focus()[lift]('taskItem').run()) editor.chain().focus()[lift]('listItem').run();
-        return;
-      }
       runEditorCommand(editor, id);
     };
     hooks.section = (heading) => editor && goToSection(editor, heading);

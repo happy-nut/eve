@@ -1136,3 +1136,30 @@
   EVIDENCE: run 36665496954 (workflow_dispatch, main at 2d543b1) succeeded; release v0.7.16 "Eve v0.7.16"
   published 2026-09-30T03:46Z, not a prerelease, the newest (Latest, which the cask follows).
 - [ ] G222 android-v0.7.20 is released (tauri.android.conf.json 0.7.20), made by Run workflow
+
+# GATES — toggles, every line one step for ⌥↑↓, Tab moves only its lines, a pasted link asks; v0.7.17 (Mac), 0.7.21 (Android) (2026-10-01)
+
+- [x] G223 Moving and indenting lines: ⌥↑↓ passes one line at a time, Tab / ⇧Tab change only the chosen lines
+  CHECK: node --experimental-strip-types --no-warnings src/lib/blocks.test.mjs
+  EXPECT: BLOCKS_OK
+  EVIDENCE: moveBlock / indentLines moved to blocks.ts (plain ProseMirror). A paragraph, a code block or a
+  bullet passes a list item by item (the list split, a numbered one counting on from where it was); empty
+  lines are lines; the note's last empty line and its title are not passed; several items selected move and
+  stay selected; a sub-item steps out beside its parent; an item takes its sub-items along. Tab / ⇧Tab move
+  only the caret's or the selected lines, the others put back at their level; ⇧Tab at the top does nothing.
+  Negative controls: list splitting, the put-back, the edge stop, the sub-item step-out and the top-level
+  ⇧Tab each removed in turn -> the test fails.
+- [x] G224 Toggles, arrows, the pasted link, hover and the phone's long press, in a real editor (jsdom)
+  CHECK: npx vitest run
+  EXPECT: 22 passed
+  EVIDENCE: "> " makes a toggle saved as GitHub's <details>/<summary> (open kept), read back byte for byte
+  (nested, in a list, &lt; &amp; in the title, a <details> with no <summary>); a quote is "| ", a markdown
+  "> " still reads as a quote; Enter in a new toggle's title goes in, Enter on an empty line leaves it; the
+  arrow opens and closes it (the stock view's timer shut a saved-open one). <- and <= become ← ⇐. A URL
+  pasted over selected text links it with nothing asked; anywhere else Card / Link / Both is asked (the card
+  under the line, the link at the caret; Esc a plain link; a code block plain text). Hovering a link opens
+  nothing, its right-click menu stays. A phone's long press is left to the system (select, drag handles);
+  ⋯ in the phone's note bar has Select all and the exports. Negative controls: each of these removed in
+  turn -> a test fails. npm run check 0 errors.
+- [ ] G225 v0.7.17 (Mac, Latest) is released and a Mac on 0.7.16 updates itself to it from the app
+- [ ] G226 android-v0.7.21 is released

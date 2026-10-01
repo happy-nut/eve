@@ -34,7 +34,7 @@ brew install --cask happy-nut/tap/eve
 Apple silicon only. The app is ad-hoc signed, not notarized; the cask strips the quarantine flag so it opens
 without a Gatekeeper detour. New versions arrive in the app, as on the phone: when one is out, the sidebar and
 Settings → Version offer **Update**, which downloads the release's zip, checks it against the SHA-256 GitHub lists
-for it, puts the new Eve.app in place of the old one and restarts (`brew reinstall --cask eve` does the same by hand;
+for it, puts the new Eve.app in place of the old one and restarts (`brew reinstall --cask happy-nut/tap/eve` does the same by hand;
 0.7.12 and older need it once).
 Releases are built by `.github/workflows/release.yml` from a `v*` tag; the cask lives in [happy-nut/homebrew-tap](https://github.com/happy-nut/homebrew-tap).
 
