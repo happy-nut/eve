@@ -6,6 +6,7 @@ import { notes, titleOf } from './notes.svelte';
 import { isCustom } from './icons';
 import { pickImage, pickVideo } from './platform';
 import { hints } from './hints.svelte';
+import type { EmojiEntry } from './emoji';
 
 export interface SuggestItem {
   label: string; value?: string; hint?: string; icon?: string; noteIcon?: string;
@@ -32,6 +33,33 @@ export interface CalendarUI {
   select(): boolean;
   hide(): void;
   visible(): boolean;
+}
+
+/** The `:smile` emoji row: one line of the best few, driven like the others. */
+export interface EmojiUI {
+  show(items: EmojiEntry[], rect: DOMRect | null, pick: (e: EmojiEntry) => void): void;
+  move(delta: number): void;
+  select(): boolean;
+  hide(): void;
+  visible(): boolean;
+}
+
+/** `:` wiring: the row runs sideways, so ←→ choose; ↑↓ are the editor's (the caret leaves, the row goes). */
+export function emojiRow(uiRef: EmojiUI) {
+  const open = (p: any) => uiRef.show(p.items, p.clientRect?.() ?? null, (e: EmojiEntry) => p.command(e));
+  return {
+    onStart: open,
+    onUpdate: open,
+    onKeyDown: ({ event }: { event: KeyboardEvent }) => {
+      if (!uiRef.visible()) return false;
+      if (event.key === 'ArrowLeft') return (uiRef.move(-1), true);
+      if (event.key === 'ArrowRight') return (uiRef.move(1), true);
+      if (event.key === 'Enter' || event.key === 'Tab') return uiRef.select();
+      if (event.key === 'Escape') return (uiRef.hide(), true);
+      return false;
+    },
+    onExit: () => uiRef.hide(),
+  };
 }
 
 /**

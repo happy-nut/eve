@@ -9,6 +9,7 @@
   import Icon from './Icon.svelte';
   import Suggest from './Suggest.svelte';
   import DateMenu from './DateMenu.svelte';
+  import EmojiRow from './EmojiRow.svelte';
   import Outline from './Outline.svelte';
   import TableTools from './TableTools.svelte';
   import Find from './Find.svelte';
@@ -23,6 +24,7 @@
 
   let suggest: ReturnType<typeof Suggest>; // [[ and / popup
   let dateMenu: ReturnType<typeof DateMenu>; // the @ calendar
+  let emojiRow: ReturnType<typeof EmojiRow>; // the :smile row
 
   onMount(() => {
     const id = note.id;
@@ -43,6 +45,7 @@
       targets: () => notes.pages,
       suggestionUI: suggest.ui,
       calendarUI: dateMenu.ui,
+      emojiUI: emojiRow.ui,
       // a [[Title#Section]] link says where to land, over wherever the caret was left last time
       cursor: notes.section ? undefined : notes.cursor.get(note.id),
     });
@@ -137,6 +140,7 @@
 
 <Suggest bind:this={suggest} />
 <DateMenu bind:this={dateMenu} />
+<EmojiRow bind:this={emojiRow} />
 
 <style>
   .scroll { height: 100%; overflow-y: auto; scrollbar-width: none; }
