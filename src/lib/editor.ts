@@ -7,7 +7,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
-import { Plugin, PluginKey, Selection, TextSelection, type Command } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
@@ -401,6 +401,27 @@ export function createEditor(opts: {
             rule(/^(\d+)\.\s$/, 'orderedList', 'listItem', (m) => ({ start: +m[1] })),
           ];
         },
+      }),
+      // A selection running over a picture, a link card, a PDF or a video: the browser paints its blue only on
+      // text, so those blocks stayed blank and the selection looked broken into pieces. Each one the selection
+      // covers whole is marked, the same whether it came from the mouse or from ⇧ and the arrows.
+      Extension.create({
+        name: 'blocksInSelection',
+        addProseMirrorPlugins: () => [new Plugin({
+          props: {
+            decorations: (state) => {
+              const sel = state.selection;
+              if (sel.empty || sel instanceof NodeSelection) return null;
+              const marks: Decoration[] = [];
+              state.doc.nodesBetween(sel.from, sel.to, (node, pos) => {
+                if (!(node.isBlock && node.isAtom)) return true;
+                if (pos >= sel.from && pos + node.nodeSize <= sel.to) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: 'in-sel' }));
+                return false;
+              });
+              return marks.length ? DecorationSet.create(state.doc, marks) : null;
+            },
+          },
+        })],
       }),
       Extension.create({
         name: 'moveFlash',
