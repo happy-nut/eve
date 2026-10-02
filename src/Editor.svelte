@@ -14,6 +14,7 @@
   import TableTools from './TableTools.svelte';
   import Find from './Find.svelte';
   import { randomIcon } from './lib/icons';
+  import { nudgeNote, openedFromList } from './lib/moves';
 
   let { note }: { note: Note } = $props();
 
@@ -32,6 +33,7 @@
       element: el,
       content: note.body,
       onUpdate: (md) => notes.update(note.id, md),
+      onNoteMove: (dir, onTitle) => (onTitle || openedFromList.id === note.id) && nudgeNote(note.id, dir),
       onOpenNote: (title) => {
         notes.flush(note.id);
         notes.openByTitle(title);
@@ -132,7 +134,12 @@
   <!-- Tab indents a list (the editor marks those handled); anywhere else it must not walk focus out of the editor -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="editor has-head" bind:this={el}
-    onkeydown={(e) => { if (e.key === 'Tab' && !e.defaultPrevented) e.preventDefault(); }}></div>
+    onkeydown={(e) => {
+      if (e.key === 'Tab' && !e.defaultPrevented) e.preventDefault();
+      // any other key (or a click, below) means the note is being written in: ⌥↑ / ⌥↓ move lines again
+      if (!(e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown'))) openedFromList.id = '';
+    }}
+    onmousedown={() => (openedFromList.id = '')}></div>
 </div>
 <Outline {scrollEl} {editor} />
 <TableTools {editor} />
