@@ -18,7 +18,7 @@ import { Highlight } from './highlight';
 import { Toggle } from './toggle';
 import Blockquote from '@tiptap/extension-blockquote';
 import { LocalImage } from './image';
-import { Bookmark, URL_RE } from './bookmark';
+import { Bookmark, URL_RE, openLinkHere } from './bookmark';
 import { Kanban } from './kanban';
 import { CodeBlock } from './code';
 import { Pdf } from './pdf';
@@ -180,7 +180,8 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     bulletList: () => c().toggleBulletList().run(),
     orderedList: () => c().toggleOrderedList().run(),
     taskList: () => c().toggleTaskList().run(),
-    toggleCheck: () => editor.commands.command(toggleCheck),
+    // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
+    toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck),
     blockquote: () => c().toggleBlockquote().run(),
     codeBlock: () => c().toggleCodeBlock().run(),
     divider: () => c().setHorizontalRule().run(),

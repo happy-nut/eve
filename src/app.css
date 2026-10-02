@@ -569,7 +569,7 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
   .menu, .find, .outline, .suggest, .tbl-tools, .panel,
   .mhead, .mbar, .sheet, .scrim,
   /* the shortcut tip toast (it showed up in the PDF or picture it was teaching the key for), the popups */
-  .hint, .cal, .choice, .box, .emoji-row { display: none !important; }
+  .hint, .cal, .box, .emoji-row { display: none !important; }
   html.mobile #app { padding: 0 !important; }
   main { position: static; }
   .page { position: static; }
@@ -623,4 +623,10 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
 .tiptap .in-sel::after {
   content: ''; position: absolute; inset: -3px; border-radius: 10px; pointer-events: none; z-index: 1;
   background: color-mix(in srgb, var(--sel) 55%, transparent);
+}
+
+/* a long bare address (the long-link decoration, bookmark.ts): one line, cut short with an ellipsis */
+.tiptap .long-link {
+  display: inline-block; max-width: min(42ch, 100%); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; vertical-align: bottom;
 }

@@ -40,12 +40,6 @@ class Ui {
   pdf = $state<{ src: string; name: string } | null>(null);
   openPdf(src: string, name: string) { this.pdf = { src, name }; }
   closePdf() { this.pdf = null; }
-  /** how a pasted link should land: a card, plain underlined text, or both */
-  link = $state<{ x: number; y: number; resolve: (v: 'card' | 'link' | 'both' | null) => void } | null>(null);
-  pickLink(at: DOMRect): Promise<'card' | 'link' | 'both' | null> {
-    return new Promise((res) => { this.link = { x: at.left, y: at.bottom + 6, resolve: res }; });
-  }
-  linkDone(v: 'card' | 'link' | 'both' | null) { this.link?.resolve(v); this.link = null; }
 
   /** a right-click menu at a point; the app draws its own everywhere, the webview's is suppressed */
   menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
