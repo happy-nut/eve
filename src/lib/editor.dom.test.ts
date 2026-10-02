@@ -220,6 +220,19 @@ describe('⌥↑ / ⌥↓ light up what moved', () => {
   });
 });
 
+describe('a selection over pictures and cards', () => {
+  test('every one it covers whole is marked, one it only touches is not, a caret marks nothing', () => {
+    const ed = editorWith('시작 문단\n\n![](a.png)\n\nhttps://github.com\n\n끝 문단');
+    const marked = () => [...ed.view.dom.querySelectorAll('.in-sel')].map((e) => e.className.split(' ')[0]);
+    ed.commands.setTextSelection({ from: posOf(ed, '문단'), to: posOf(ed, '끝', true) });
+    expect(marked()).toEqual(['img-fig', 'bookmark']);
+    ed.commands.setTextSelection({ from: posOf(ed, '문단'), to: posOf(ed, '문단', true) });
+    expect(marked()).toEqual([]);
+    ed.commands.setTextSelection(posOf(ed, '끝'));
+    expect(marked()).toEqual([]);
+  });
+});
+
 describe('Tab in the real keymap', () => {
   test('a to-do\'s sub-items keep their level', () => {
     const ed = editorWith('- [ ] a\n- [ ] b\n  - [ ] c\n- [ ] d');

@@ -511,7 +511,6 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
 .tiptap .img-cap { user-select: none; -webkit-user-select: none; }
 .tiptap .img-cap.editing { user-select: text; -webkit-user-select: text; }
 .tiptap .img-fig img::selection, .tiptap .img-fig::selection { background: transparent; }
-.tiptap .img-fig.in-sel { background: var(--sel); border-radius: 10px; box-shadow: 0 0 0 4px var(--sel); }
 .tiptap .img-fig.in-sel .img-cap { color: var(--fg); }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; } /* height, or a sideways bar keeps WebKit's chunky default */
@@ -568,7 +567,9 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
   /* only the note is printed: no window chrome, no floating anything */
   aside, .toolbar, .dragbar, .drop-hint, .pdf-panel, .tip, .plus-menu, .backdrop,
   .menu, .find, .outline, .suggest, .tbl-tools, .panel,
-  .mhead, .mbar, .sheet, .scrim { display: none !important; }
+  .mhead, .mbar, .sheet, .scrim,
+  /* the shortcut tip toast (it showed up in the PDF or picture it was teaching the key for), the popups */
+  .hint, .cal, .choice, .box, .emoji-row { display: none !important; }
   html.mobile #app { padding: 0 !important; }
   main { position: static; }
   .page { position: static; }
@@ -596,13 +597,14 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
 }
 
 /* toggle ("> "): a twisty, its title line, and the body indented under it */
-.tiptap [data-type='details'] { display: flex; gap: 4px; align-items: flex-start; margin: 0.15em 0; }
+/* the twisty sits in the left margin, not in a flex row: in a flex row with it, a selection running across the
+   toggle left the body's text unpainted (Chromium), as if the selection had a hole in it */
+.tiptap [data-type='details'] { position: relative; padding-left: calc(1.3em + 4px); margin: 0.15em 0; }
 .tiptap [data-type='details'] > button {
-  flex: none; width: 1.3em; height: 1.6em; padding: 0; border: 0; background: none; color: var(--fg-dim); cursor: pointer;
+  position: absolute; left: 0; top: 0; width: 1.3em; height: 1.6em; padding: 0; border: 0; background: none; color: var(--fg-dim); cursor: pointer;
 }
 .tiptap [data-type='details'] > button::before { content: '▸'; display: inline-block; transition: transform 0.12s; }
 .tiptap [data-type='details'].is-open > button::before { transform: rotate(90deg); }
-.tiptap [data-type='details'] > div { flex: 1; min-width: 0; }
 .tiptap [data-type='details'] summary { display: block; list-style: none; }
 .tiptap [data-type='details'] summary::-webkit-details-marker { display: none; }
 .tiptap [data-type='detailsContent'] > * + * { margin-top: 0.4em; }
@@ -614,3 +616,11 @@ html::selection, body::selection, .scroll::selection, .editor::selection,
 @keyframes moved-flash-0 { from { background: color-mix(in srgb, var(--accent) 14%, transparent); } to { background: transparent; } }
 @keyframes moved-flash-1 { from { background: color-mix(in srgb, var(--accent) 14%, transparent); } to { background: transparent; } }
 @media (prefers-reduced-motion: reduce) { .tiptap .moved-flash-0, .tiptap .moved-flash-1 { animation: none; } }
+
+/* a picture, link card, PDF or video the selection covers whole (the in-sel decoration, editor.ts): the
+   selection's colour laid over it, so an opaque picture shows it too and the selection reads unbroken */
+.tiptap .in-sel { position: relative; }
+.tiptap .in-sel::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 10px; pointer-events: none; z-index: 1;
+  background: color-mix(in srgb, var(--sel) 55%, transparent);
+}
