@@ -1,4 +1,6 @@
 import { notes, nested } from './notes.svelte';
+import { appearance } from './appearance.svelte';
+import { randomIcon } from './icons';
 
 /**
  * Sidebar folders, nested up to MAX_DEPTH. A group is a path like "Work/Projects/Alpha";
@@ -146,6 +148,7 @@ class Groups {
     while (siblings.includes(leaf)) leaf = `New group ${i++}`;
     const p = parent ? `${parent}/${leaf}` : leaf;
     this.saved.order = [...this.names, p];
+    if (appearance.s.autoIcon) this.saved.icons[p] = randomIcon(); // like a new note, unless the setting is off
     this.persist();
     if (parent) this.expand(parent);
     this.editing = p;

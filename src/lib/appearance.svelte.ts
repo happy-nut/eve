@@ -46,7 +46,11 @@ class AppearanceStore {
   s = $state<Appearance>(load());
   get stack() { return this.s.font === 'custom' ? this.s.custom || DEFAULTS.font : FONTS.find((f) => f.id === this.s.font)?.stack ?? FONTS[0].stack; }
   set(patch: Partial<Appearance>) { Object.assign(this.s, patch); localStorage.setItem(LS, JSON.stringify(this.s)); }
-  reset() { this.set({ ...DEFAULTS }); }
+  /** Appearance's own Reset: how notes look (theme, type, text), not what the app does (daily notes, window…) */
+  reset() {
+    const { theme, font, custom, size, lineHeight, width } = DEFAULTS;
+    this.set({ theme, font, custom, size, lineHeight, width });
+  }
   /** call once; keeps <html> in sync */
   apply() {
     $effect(() => {
