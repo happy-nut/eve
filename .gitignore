@@ -5,3 +5,4 @@ src-tauri/gen/schemas
 *.sqlite
 .DS_Store
 .claude/settings.local.json
+e2e/out
