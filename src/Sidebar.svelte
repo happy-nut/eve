@@ -516,6 +516,7 @@
     else if (from >= 0 && to === from - 1) hints.action('prevNote', 'The previous note is a key away');
     ui.focusOwner = 'editor';
     notes.currentId = n.id;
+    moves.openedFromList.id = n.id; // ⌥↑ / ⌥↓ right after still move it here
     if (isMobile) { open = false; return; } // a phone shows the list or the note, never both — and opens it to read
     await tick();
     document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus();

@@ -30,6 +30,12 @@ function noteSlots(me: Note): NoteSlot[] {
   return out;
 }
 
+/**
+ * The note just opened from the list, until its editor is clicked or typed in: ⌥↑ / ⌥↓ then still move it
+ * in the list, as they would have with the row focused (the click put the caret in the note to write).
+ */
+export const openedFromList = { id: '' };
+
 /** ⌥↑ / ⌥↓ on a note: one slot up/down — past a page, into it, or on into the next group. */
 export function nudgeNote(id: string, dir: 1 | -1): boolean {
   const me = notes.all.find((n) => n.id === id);

@@ -88,16 +88,24 @@ export const getMarkdown = (editor: Editor): string => (editor.storage as any).m
 const FLASH = new PluginKey<DecorationSet>('moveFlash');
 let flashes = 0;
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
+/** per editor: ⌥↑ / ⌥↓ that move the note itself rather than a line (the note's own editor says when) */
+const noteMove = new WeakMap<Editor, (dir: -1 | 1, onTitle: boolean) => boolean>();
+
 function moveAndFlash(editor: Editor, dir: -1 | 1): boolean {
+  // the title line never moves inside its note: there (or right after the note was opened from the list)
+  // the keys move the note itself, the way they move a row in the list
+  const { $from, empty } = editor.state.selection;
+  const onTitle = empty && $from.depth === 1 && $from.index(0) === 0 && $from.parent.type.name === 'heading';
+  if (noteMove.get(editor)?.(dir, onTitle)) return true;
   const before = editor.state.doc;
   if (!editor.commands.command(moveBlock(dir))) return false;
   const { state, view } = editor;
   if (state.doc.eq(before)) return true;
   let { from, to } = state.selection;
-  const { $from } = state.selection;
-  for (let d = $from.depth; d > 0; d--) {
-    if (!/Item$/.test($from.node(d).type.name)) continue;
-    if (state.selection.empty && $from.index(d) === 0) { from = $from.before(d); to = $from.after(d); }
+  const $sel = state.selection.$from;
+  for (let d = $sel.depth; d > 0; d--) {
+    if (!/Item$/.test($sel.node(d).type.name)) continue;
+    if (state.selection.empty && $sel.index(d) === 0) { from = $sel.before(d); to = $sel.after(d); }
     break;
   }
   const cls = `moved-flash-${flashes++ % 2}`;
@@ -280,6 +288,8 @@ export function createEditor(opts: {
   calendarUI: CalendarUI;
   emojiUI: EmojiUI;
   cursor?: number;
+  /** ⌥↑ / ⌥↓ that should move the note itself, not a line: true when it did (`onTitle`: the caret is on the title) */
+  onNoteMove?: (dir: -1 | 1, onTitle: boolean) => boolean;
 }) {
   const iconOf = (link: string) => {
     const title = splitLink(link)[0].toLowerCase(); // a section link keeps the page's icon
@@ -683,6 +693,7 @@ export function createEditor(opts: {
     onUpdate: ({ editor }) => opts.onUpdate(getMarkdown(editor)),
   });
   suggestionVisible.set(editor, () => opts.suggestionUI.visible() || opts.calendarUI.visible() || opts.emojiUI.visible());
+  if (opts.onNoteMove) noteMove.set(editor, opts.onNoteMove);
   applyKeymap(editor);
   if (isMobile) {
     // a tap on a line near the bottom puts the caret there, then the keyboard comes up and the page
