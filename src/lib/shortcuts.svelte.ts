@@ -51,6 +51,7 @@ export const DEFAULTS: Action[] = [
   { id: 'bulletList', label: 'Bulleted list', scope: 'editor', keys: 'Mod-Shift-8' },
   { id: 'orderedList', label: 'Numbered list', scope: 'editor', keys: 'Mod-Shift-7' },
   { id: 'taskList', label: 'To-do list', scope: 'editor', keys: 'Mod-Shift-9' },
+  { id: 'toggleCheck', label: 'Check / uncheck a to-do, or open the link under the caret', scope: 'editor', keys: 'Mod-Enter' },
   { id: 'blockquote', label: 'Quote', scope: 'editor', keys: 'Mod-Shift-.' },
   { id: 'codeBlock', label: 'Code block', scope: 'editor', keys: 'Mod-Alt-c' },
   { id: 'divider', label: 'Divider', scope: 'editor', keys: 'Mod-Shift-Minus' },

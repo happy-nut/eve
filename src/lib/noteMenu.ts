@@ -1,5 +1,7 @@
 // The menu a note opens by itself: right-click (or ⌥↩) inside it; on a link, the link's own.
 import type { Editor } from '@tiptap/core';
+import type { NodeSelection } from '@tiptap/pm/state';
+import { cardToLink, linkToCard } from './bookmark';
 import { ui, type MenuItem } from './ui.svelte';
 import { openUrl, clipboardText, copyText } from './platform';
 import { exportCurrent } from './transfer';
@@ -19,12 +21,20 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
   }
   const empty = editor.state.selection.empty;
   const linked = editor.isActive('link');
-  // the caret on a link (⌥↩ there, or a right-click on it): the link's own menu
+  const caret = editor.view.coordsAtPos(editor.state.selection.head);
+  const at = event ?? { clientX: Math.round(caret.left), clientY: Math.round(caret.bottom) };
+  // a link card selected (⌥↩ on it, or a right-click): back to a plain link, or open / copy it
+  const sel = editor.state.selection as NodeSelection;
+  if (sel.node?.type.name === 'bookmark') {
+    const href: string = sel.node.attrs.href;
+    ui.openMenu(at, [{ label: 'Show as link', run: () => void cardToLink(editor) }, ...linkItems(href, null).map((i, n) => (n ? i : { ...i, sep: true }))]);
+    return;
+  }
+  // the caret on a link (⌥↩ there, or a right-click on it): the link's own menu, its card first
   if (empty && linked) {
     const href = editor.getAttributes('link').href ?? '';
     const unlink = () => editor.chain().focus().extendMarkRange('link').unsetLink().run();
-    const caret = editor.view.coordsAtPos(editor.state.selection.head);
-    ui.openMenu(event ?? { clientX: Math.round(caret.left), clientY: Math.round(caret.bottom) }, linkItems(href, unlink));
+    ui.openMenu(at, [{ label: 'Show as card', run: () => void linkToCard(editor) }, ...linkItems(href, unlink).map((i, n) => (n ? i : { ...i, sep: true }))]);
     return;
   }
   /** execCommand is the one path that keeps ProseMirror's own clipboard serializer (markdown, nodes) */
@@ -47,16 +57,15 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
     { label: 'Export as image…', keys: keys('exportPng'), run: () => void exportCurrent('png') },
   ];
   // from the keyboard (⌥↩) there is no pointer: the menu opens under the caret instead
-  const caret = editor.view.coordsAtPos(editor.state.selection.head);
-  ui.openMenu(event ?? { clientX: Math.round(caret.left), clientY: Math.round(caret.bottom) }, items);
+  ui.openMenu(at, items);
 }
 
 /** What a link offers, wherever it is asked: open (or write to) it, take the link off, copy it. */
-function linkItems(href: string, unlink: () => void): MenuItem[] {
+function linkItems(href: string, unlink: (() => void) | null): MenuItem[] {
   const mail = href.startsWith('mailto:');
   return [
-    { label: mail ? 'Send mail' : 'Open link', run: () => void openUrl(href) },
-    { label: 'Remove link', run: unlink },
+    { label: mail ? 'Send mail' : 'Open link', keys: shortcuts.keysFor('toggleCheck'), run: () => void openUrl(href) },
+    { label: 'Remove link', hide: !unlink, run: () => unlink?.() },
     // an address is copied bare: mailto: is of no use in a To: field
     { label: 'Copy link', run: () => void copyText(mail ? href.slice('mailto:'.length) : href) },
   ];

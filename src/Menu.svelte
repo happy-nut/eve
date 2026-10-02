@@ -38,7 +38,11 @@
     e.preventDefault();
     e.stopPropagation();
   }
-  const autofocus = (node: HTMLElement) => node.focus();
+  // opened from the keyboard (⌥↩), the first item is ready for ↩; from the mouse, nothing is highlighted
+  const autofocus = (node: HTMLElement) => {
+    const first = document.documentElement.dataset.input === 'keyboard' && node.querySelector<HTMLElement>('button:not(:disabled)');
+    (first || node).focus();
+  };
   // WebKit does not focus a clicked button, it blurs the menu — which would close it mid-click
   const hold = (e: MouseEvent) => { e.preventDefault(); (e.currentTarget as HTMLElement).focus(); };
 </script>

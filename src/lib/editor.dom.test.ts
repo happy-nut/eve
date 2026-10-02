@@ -4,7 +4,6 @@ import { editorWith, md, posOf, type, press, paste } from './testEditor';
 import { runEditorCommand } from './editor';
 
 afterEach(() => {
-  ui.linkDone(null);
   ui.closeMenu();
   document.body.innerHTML = '';
 });
@@ -87,62 +86,74 @@ describe('arrows', () => {
 describe('pasting a link', () => {
   const URL = 'https://example.com/a';
 
-  test('over selected text: links it at once, nothing asked', () => {
+  test('over selected text: links it', () => {
     const ed = editorWith('여기 링크');
     ed.commands.setTextSelection({ from: posOf(ed, '링크'), to: posOf(ed, '링크', true) });
     paste(ed, URL);
-    expect(ui.link).toBeNull();
     expect(md(ed)).toBe(`여기 [링크](${URL})`);
   });
 
-  test.each([
-    ['link', `앞 <${URL}>뒤`],
-    ['card', `앞 뒤\n\n${URL}`],
-    ['both', `앞 <${URL}>뒤\n\n${URL}`],
-  ] as const)('mid-sentence: asked, and %s lands as picked', async (how, want) => {
+  test('anywhere else: in as a plain link, nothing asked', () => {
     const ed = editorWith('앞 뒤');
     ed.commands.setTextSelection(posOf(ed, '뒤'));
     paste(ed, URL);
-    expect(ui.link).not.toBeNull();
-    ui.linkDone(how);
-    await Promise.resolve();
-    expect(md(ed).trimEnd()).toBe(want);
-  });
-
-  test('an empty line becomes the card itself', async () => {
-    const ed = editorWith('');
-    ed.commands.focus('end');
-    paste(ed, URL);
-    ui.linkDone('card');
-    await Promise.resolve();
-    expect(ed.state.doc.firstChild!.type.name).toBe('bookmark');
-  });
-
-  test('inside a list the card goes under the item\'s line', async () => {
-    const ed = editorWith('- 항목');
-    ed.commands.setTextSelection(posOf(ed, '항목', true));
-    paste(ed, URL);
-    ui.linkDone('both');
-    await Promise.resolve();
-    const item = ed.state.doc.firstChild!.firstChild!;
-    expect(item.child(0).textContent).toBe(`항목${URL}`);
-    expect(item.child(1).type.name).toBe('bookmark');
-  });
-
-  test('Esc keeps the plain link', async () => {
-    const ed = editorWith('앞 뒤');
-    ed.commands.setTextSelection(posOf(ed, '뒤'));
-    paste(ed, URL);
-    ui.linkDone(null);
-    await Promise.resolve();
+    expect(ui.menu).toBeNull();
     expect(md(ed)).toBe(`앞 <${URL}>뒤`);
+    const blank = editorWith('');
+    blank.commands.focus('end');
+    paste(blank, URL);
+    expect(blank.state.doc.firstChild!.type.name).toBe('paragraph');
   });
 
   test('in a code block it is just text', () => {
     const ed = editorWith('```\ncode\n```');
     ed.commands.setTextSelection(posOf(ed, 'code', true));
     paste(ed, URL);
-    expect(ui.link).toBeNull();
+    expect(ed.state.doc.firstChild!.textContent).toBe(`code${URL}`);
+  });
+});
+
+describe('a link and its card, from the keyboard', () => {
+  const URL = 'https://example.com/a';
+  const menu = () => ui.menu?.items.map((i) => i.label) ?? [];
+  const pick = (label: string) => ui.menu!.items.find((i) => i.label === label)!.run!();
+
+  test('⌥↩ on a link alone on its line: "Show as card" makes the line the card, ⌥↩ on the card brings the link back', () => {
+    const ed = editorWith(`<${URL}>\n\n끝`);
+    ed.commands.setTextSelection(posOf(ed, 'example'));
+    press(ed, 'Enter', { altKey: true });
+    expect(menu()[0]).toBe('Show as card');
+    pick('Show as card');
+    expect(ed.state.doc.firstChild!.type.name).toBe('bookmark');
+    ui.closeMenu();
+    press(ed, 'Enter', { altKey: true });
+    expect(menu()).toEqual(['Show as link', 'Open link', 'Copy link']);
+    pick('Show as link');
+    expect(md(ed).trimEnd()).toBe(`<${URL}>\n\n끝`);
+  });
+
+  test('a link inside a sentence keeps its place; the card goes under the line', () => {
+    const ed = editorWith(`앞 <${URL}> 뒤`);
+    ed.commands.setTextSelection(posOf(ed, 'example'));
+    press(ed, 'Enter', { altKey: true });
+    pick('Show as card');
+    expect(ed.state.doc.child(0).textContent).toBe(`앞 ${URL} 뒤`);
+    expect(ed.state.doc.child(1).type.name).toBe('bookmark');
+  });
+
+  test('⌘↩ on a link or a card is the link\'s, not the to-do\'s', async () => {
+    const opened: string[] = [];
+    const platform = await import('./platform');
+    const spy = (await import('vitest')).vi.spyOn(platform, 'openUrl').mockImplementation(async (u: string) => { opened.push(u); });
+    const ed = editorWith(`- [ ] read <${URL}>\n\n${URL}`);
+    ed.commands.setTextSelection(posOf(ed, 'example'));
+    runEditorCommand(ed, 'toggleCheck');
+    expect(opened).toEqual([URL]);
+    expect(md(ed)).toContain('- [ ] read'); // the box is left as it was
+    ed.commands.setTextSelection(posOf(ed, 'read'));
+    runEditorCommand(ed, 'toggleCheck');
+    expect(md(ed)).toContain('- [x] read');
+    spy.mockRestore();
   });
 });
 
@@ -153,7 +164,7 @@ describe('links', () => {
     a.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
     expect(ui.menu).toBeNull();
     a.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    expect(ui.menu?.items.map((i) => i.label)).toEqual(['Open link', 'Remove link', 'Copy link']);
+    expect(ui.menu?.items.map((i) => i.label)).toEqual(['Show as card', 'Open link', 'Remove link', 'Copy link']);
   });
 });
 
@@ -265,6 +276,34 @@ describe('a selection over pictures and cards', () => {
     expect(marked()).toEqual([]);
     ed.commands.setTextSelection(posOf(ed, '끝'));
     expect(marked()).toEqual([]);
+  });
+});
+
+describe('⌘↩ checks a to-do', () => {
+  const boxes = (ed: ReturnType<typeof editorWith>) => md(ed).trimEnd().split('\n').map((l) => l.match(/\[( |x)\]/)?.[1] ?? '-').join('');
+
+  test('the to-do under the caret, back and forth; a nested one alone, not its parent', () => {
+    const ed = editorWith('- [ ] a\n  - [ ] a1\n- [ ] b');
+    ed.commands.setTextSelection(posOf(ed, 'a1', true));
+    runEditorCommand(ed, 'toggleCheck');
+    expect(boxes(ed)).toBe(' x ');
+    runEditorCommand(ed, 'toggleCheck');
+    expect(boxes(ed)).toBe('   ');
+  });
+
+  test('several lines: all ticked if any was open, all cleared once every one is done', () => {
+    const ed = editorWith('- [x] a\n- [ ] b\n- [x] c');
+    ed.commands.setTextSelection({ from: posOf(ed, 'a'), to: posOf(ed, 'c', true) });
+    runEditorCommand(ed, 'toggleCheck');
+    expect(boxes(ed)).toBe('xxx');
+    runEditorCommand(ed, 'toggleCheck');
+    expect(boxes(ed)).toBe('   ');
+  });
+
+  test('not a to-do: nothing happens, and the key is left to others', () => {
+    const ed = editorWith('- a\n\n문단');
+    ed.commands.setTextSelection(posOf(ed, '문단'));
+    expect(runEditorCommand(ed, 'toggleCheck')).toBe(false);
   });
 });
 

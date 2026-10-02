@@ -18,7 +18,6 @@
   import Hint from './Hint.svelte';
   import { hints } from './lib/hints.svelte';
   import { updates } from './lib/updates.svelte';
-  import LinkChoice from './LinkChoice.svelte';
   import Tooltip from './Tooltip.svelte';
   import Menu from './Menu.svelte';
   import { ui, hooks } from './lib/ui.svelte';
@@ -528,8 +527,5 @@
 {/if}
 {#if ui.menu}
   <Menu />
-{/if}
-{#if ui.link}
-  <LinkChoice />
 {/if}
 <Tooltip />

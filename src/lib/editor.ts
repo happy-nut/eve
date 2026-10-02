@@ -18,7 +18,7 @@ import { Highlight } from './highlight';
 import { Toggle } from './toggle';
 import Blockquote from '@tiptap/extension-blockquote';
 import { LocalImage } from './image';
-import { Bookmark, URL_RE } from './bookmark';
+import { Bookmark, URL_RE, openLinkHere } from './bookmark';
 import { Kanban } from './kanban';
 import { CodeBlock } from './code';
 import { Pdf } from './pdf';
@@ -121,6 +121,25 @@ function moveAndFlash(editor: Editor, dir: -1 | 1): boolean {
   return true;
 }
 
+/**
+ * ⌘↩ on a to-do, Notion's way: its box ticked or cleared. Over several lines, every to-do among them: all
+ * ticked if any was open, all cleared if every one was done. Elsewhere the key is not ours.
+ */
+function toggleCheck({ tr, state }: { tr: any; state: any }): boolean {
+  const { from, to } = state.selection;
+  const items: number[] = [];
+  state.doc.nodesBetween(from, to, (n: PMNode, pos: number) => {
+    if (!n.isTextblock) return true;
+    const $p = state.doc.resolve(pos);
+    if ($p.parent.type.name === 'taskItem' && $p.index() === 0) items.push($p.before());
+    return false;
+  });
+  if (!items.length) return false;
+  const check = items.some((pos) => !state.doc.nodeAt(pos).attrs.checked);
+  for (const pos of items) tr.setNodeAttribute(pos, 'checked', check);
+  return true;
+}
+
 /** Run one editor action by id (the phone's formatting bar uses these; a keyboard uses applyKeymap). */
 export const runEditorCommand = (editor: Editor, id: string): boolean => editorCommands(editor)[id]?.() ?? false;
 
@@ -161,6 +180,8 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     bulletList: () => c().toggleBulletList().run(),
     orderedList: () => c().toggleOrderedList().run(),
     taskList: () => c().toggleTaskList().run(),
+    // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
+    toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck),
     blockquote: () => c().toggleBlockquote().run(),
     codeBlock: () => c().toggleCodeBlock().run(),
     divider: () => c().setHorizontalRule().run(),

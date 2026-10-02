@@ -1,7 +1,10 @@
-import { Node } from '@tiptap/core';
-import { Plugin } from '@tiptap/pm/state';
+import { Node, getMarkRange, type Editor } from '@tiptap/core';
+import { Plugin, TextSelection, type NodeSelection } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
+
+/** a bare address longer than this is shown cut short */
+const LONG = 48;
 import { fetchUrl, openUrl } from './platform';
-import { ui } from './ui.svelte';
 
 /**
  * Bookmark card: a URL on a line of its own renders as a compact preview (favicon, title, description,
@@ -48,16 +51,6 @@ export async function linkMeta(url: string): Promise<Meta> {
   } catch {
     return { title: host(url), desc: '', image: '', icon: '' };
   }
-}
-
-/** What a pasted link becomes. Escape falls back to the plain link — nothing is lost that way. */
-function linkContent(href: string, how: 'card' | 'link' | 'both') {
-  const card = { type: 'bookmark', attrs: { href } };
-  const link = { type: 'paragraph', content: [{ type: 'text', marks: [{ type: 'link', attrs: { href } }], text: href }] };
-  const tail = { type: 'paragraph' };
-  if (how === 'card') return [card, tail];
-  if (how === 'link') return [link, tail];
-  return [link, card, tail];
 }
 
 const el = (tag: string, cls: string, text = '') => { const e = document.createElement(tag); e.className = cls; if (text) e.textContent = text; return e; };
@@ -129,9 +122,8 @@ export const Bookmark = Node.create({
   },
 
   addProseMirrorPlugins() {
-    // a URL pasted with nothing selected: card, plain link, or both — asked on the spot. An empty top-level
-    // line becomes what was picked; anywhere else the link goes in at the caret and the card under the line.
-    // (Over selected text the URL just links it: editor.ts handles that before this.)
+    // a URL pasted with nothing selected goes in as it is, a plain link; ⌥↩ on it then offers the card.
+    // (Over selected text the URL links that text: editor.ts handles that before this.)
     return [
       new Plugin({
         props: {
@@ -139,23 +131,26 @@ export const Bookmark = Node.create({
             const text = event.clipboardData?.getData('text/plain').trim() ?? '';
             const { $from, empty } = view.state.selection;
             if (!URL_RE.test(text) || !empty || $from.parent.type.spec.code) return false;
-            const editor = this.editor;
-            const c = view.coordsAtPos($from.pos);
-            const blankLine = $from.depth === 1 && $from.parent.type.name === 'paragraph' && !$from.parent.content.size;
-            const at = $from.pos, below = $from.after();
-            void ui.pickLink(new DOMRect(c.left, c.top, 0, c.bottom - c.top)).then((choice) => {
-              const how = choice ?? 'link';
-              if (blankLine) {
-                editor.chain().insertContentAt({ from: $from.before(), to: below }, linkContent(text, how)).focus().run();
-                return;
-              }
-              const chain = editor.chain();
-              // the card first: it goes after the line, so the caret's position is still good for the link
-              if (how !== 'link') chain.insertContentAt(below, { type: 'bookmark', attrs: { href: text } });
-              if (how !== 'card') chain.insertContentAt(at, { type: 'text', marks: [{ type: 'link', attrs: { href: text } }], text });
-              chain.focus().run();
-            });
+            const link = view.state.schema.text(text, [view.state.schema.marks.link.create({ href: text })]);
+            view.dispatch(view.state.tr.replaceSelectionWith(link, false).scrollIntoView());
             return true;
+          },
+        },
+      }),
+      // a bare address too long for its line is cut short with an ellipsis; with the caret in it, it shows whole
+      new Plugin({
+        props: {
+          decorations: (state) => {
+            const type = state.schema.marks.link, { from, to } = state.selection;
+            const cut: Decoration[] = [];
+            state.doc.descendants((node, pos) => {
+              if (!node.isText) return true;
+              const href = type.isInSet(node.marks)?.attrs.href;
+              const end = pos + node.nodeSize;
+              if (href && node.text === href && href.length > LONG && (to < pos || from > end)) cut.push(Decoration.inline(pos, end, { class: 'long-link' }));
+              return false;
+            });
+            return cut.length ? DecorationSet.create(state.doc, cut) : null;
           },
         },
       }),
@@ -200,3 +195,59 @@ export const Bookmark = Node.create({
     };
   },
 });
+
+/** The link under the caret (or just behind it): where it runs and where it points. */
+function linkAt(editor: Editor): { from: number; to: number; href: string } | null {
+  const { $from, empty } = editor.state.selection;
+  const type = editor.schema.marks.link;
+  const range = empty ? getMarkRange($from, type) : undefined;
+  const mark = range && type.isInSet(editor.state.doc.nodeAt(range.from)?.marks ?? []);
+  return mark ? { ...range, href: mark.attrs.href } : null;
+}
+
+/** The card the selection is on (an arrow key or a click selects it whole), with where it sits. */
+function cardAt(editor: Editor): { pos: number; href: string } | null {
+  const sel = editor.state.selection as NodeSelection;
+  return sel.node?.type.name === 'bookmark' ? { pos: sel.from, href: sel.node.attrs.href } : null;
+}
+
+/** ⌘↩ on a link or a card: open it. False when the caret is on neither (the key goes on to a to-do). */
+export function openLinkHere(editor: Editor): boolean {
+  const href = cardAt(editor)?.href ?? linkAt(editor)?.href;
+  if (!href) return false;
+  void openUrl(href);
+  return true;
+}
+
+/**
+ * ⌥↩ on a link: show it as a card. A link alone on its line becomes the card; one inside a sentence keeps
+ * its place and the card goes under the line. False where no card can sit (a toggle's title, a table cell…).
+ */
+export function linkToCard(editor: Editor): boolean {
+  const link = linkAt(editor);
+  if (!link) return false;
+  const { state } = editor, $from = state.selection.$from, card = state.schema.nodes.bookmark.create({ href: link.href });
+  const line = $from.parent, holder = $from.node(-1), at = $from.index(-1);
+  const alone = line.type.name === 'paragraph' && line.textContent.trim() === state.doc.textBetween(link.from, link.to).trim();
+  if (alone && holder.canReplaceWith(at, at + 1, card.type)) {
+    editor.chain().command(({ tr }) => { tr.replaceWith($from.before(), $from.after(), card); return true; }).setNodeSelection($from.before()).focus().run();
+    return true;
+  }
+  if (!holder.canReplaceWith(at + 1, at + 1, card.type)) return false;
+  editor.chain().insertContentAt($from.after(), card.toJSON()).focus().run();
+  return true;
+}
+
+/** ⌥↩ on a card: back to a plain link on a line of its own, the caret after it. */
+export function cardToLink(editor: Editor): boolean {
+  const card = cardAt(editor);
+  if (!card) return false;
+  const { schema } = editor.state;
+  const line = schema.nodes.paragraph.create(null, schema.text(card.href, [schema.marks.link.create({ href: card.href })]));
+  editor.chain().command(({ tr }) => {
+    tr.replaceWith(card.pos, card.pos + 1, line);
+    tr.setSelection(TextSelection.create(tr.doc, card.pos + 1 + card.href.length));
+    return true;
+  }).focus().run();
+  return true;
+}
