@@ -442,7 +442,20 @@ export function createEditor(opts: {
         priority: 101,
         addKeyboardShortcuts() {
           const run = (dir: 1 | -1) => () => !suggestionVisible.get(this.editor)?.() && this.editor.commands.command(indentLines(dir));
-          return { Tab: run(1), 'Shift-Tab': run(-1) };
+          return {
+            Tab: run(1),
+            'Shift-Tab': run(-1),
+            // Enter on an empty item under an item of another kind (a bullet under a to-do): it steps out as
+            // ⇧Tab does, still a bullet. The stock lift made it an unmarked line inside the to-do, where the
+            // caret could not be seen in WebKit
+            Enter: () => {
+              const { $from, empty } = this.editor.state.selection;
+              if (!empty || $from.parent.content.size || $from.depth < 4 || $from.index(-1) !== 0) return false;
+              const item = $from.node(-1), owner = $from.node(-3);
+              if (!/Item$/.test(item.type.name) || !/Item$/.test(owner.type.name) || owner.type === item.type) return false;
+              return !suggestionVisible.get(this.editor)?.() && this.editor.commands.command(indentLines(-1));
+            },
+          };
         },
       }),
       Extension.create({
