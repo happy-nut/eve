@@ -268,6 +268,34 @@ describe('a selection over pictures and cards', () => {
   });
 });
 
+describe('⌘↩ checks a to-do', () => {
+  const boxes = (ed: ReturnType<typeof editorWith>) => md(ed).trimEnd().split('\n').map((l) => l.match(/\[( |x)\]/)?.[1] ?? '-').join('');
+
+  test('the to-do under the caret, back and forth; a nested one alone, not its parent', () => {
+    const ed = editorWith('- [ ] a\n  - [ ] a1\n- [ ] b');
+    ed.commands.setTextSelection(posOf(ed, 'a1', true));
+    runEditorCommand(ed, 'toggleCheck');
+    expect(boxes(ed)).toBe(' x ');
+    runEditorCommand(ed, 'toggleCheck');
+    expect(boxes(ed)).toBe('   ');
+  });
+
+  test('several lines: all ticked if any was open, all cleared once every one is done', () => {
+    const ed = editorWith('- [x] a\n- [ ] b\n- [x] c');
+    ed.commands.setTextSelection({ from: posOf(ed, 'a'), to: posOf(ed, 'c', true) });
+    runEditorCommand(ed, 'toggleCheck');
+    expect(boxes(ed)).toBe('xxx');
+    runEditorCommand(ed, 'toggleCheck');
+    expect(boxes(ed)).toBe('   ');
+  });
+
+  test('not a to-do: nothing happens, and the key is left to others', () => {
+    const ed = editorWith('- a\n\n문단');
+    ed.commands.setTextSelection(posOf(ed, '문단'));
+    expect(runEditorCommand(ed, 'toggleCheck')).toBe(false);
+  });
+});
+
 describe('Tab in the real keymap', () => {
   test('a to-do\'s sub-items keep their level', () => {
     const ed = editorWith('- [ ] a\n- [ ] b\n  - [ ] c\n- [ ] d');
