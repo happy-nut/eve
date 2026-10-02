@@ -220,6 +220,41 @@ describe('⌥↑ / ⌥↓ light up what moved', () => {
   });
 });
 
+describe('Enter on an empty line under an item of another kind', () => {
+  // the stock lift made the line an unmarked one inside the item above, where WebKit lost the caret
+  const blankUnder = (src: string, word: string) => {
+    const ed = editorWith(src);
+    ed.commands.setTextSelection(posOf(ed, word, true));
+    press(ed, 'Enter');
+    return ed;
+  };
+  const kinds = (ed: ReturnType<typeof editorWith>) => {
+    const $ = ed.state.selection.$from;
+    return [...Array($.depth + 1).keys()].map((d) => $.node(d).type.name).reverse().join('<');
+  };
+
+  test('a bullet under a to-do: out as a bullet, then a plain line, never a line with no mark inside the to-do', () => {
+    const ed = blankUnder('- [ ] a\n  - b', 'b');
+    press(ed, 'Enter');
+    expect(kinds(ed)).toBe('paragraph<listItem<bulletList<doc');
+    press(ed, 'Enter');
+    expect(kinds(ed)).toBe('paragraph<doc');
+  });
+
+  test('a to-do under a bullet, the same', () => {
+    const ed = blankUnder('- a\n  - [ ] t', 't');
+    press(ed, 'Enter');
+    expect(kinds(ed)).toBe('paragraph<taskItem<taskList<doc');
+  });
+
+  test('the same kind keeps the stock behaviour (out one level, still in the list above)', () => {
+    const ed = blankUnder('- a\n  - b', 'b');
+    press(ed, 'Enter');
+    expect(kinds(ed)).toBe('paragraph<listItem<bulletList<doc');
+    expect(ed.state.doc.firstChild!.childCount).toBe(2);
+  });
+});
+
 describe('Tab in the real keymap', () => {
   test('a to-do\'s sub-items keep their level', () => {
     const ed = editorWith('- [ ] a\n- [ ] b\n  - [ ] c\n- [ ] d');
