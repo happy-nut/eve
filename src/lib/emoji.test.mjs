@@ -25,6 +25,10 @@ assert.equal(top('thu')[0], '👍'); // thumbsup
 assert.equal(top('fir')[0], '🔥'); // fire
 // under the row, the shortcode the search hit, not the emoji's first one
 assert.equal(searchEmoji(data, 'smi')[0].code, 'smile');
+// nothing is left out unless the system says it cannot draw it: Emoji 15's shaking face is there by default,
+// and gone only below the version it came with
+assert.ok(top('shaking').includes('🫨'));
+assert.ok(!searchEmoji(data, 'shaking', 5, 14).some((e) => e.emoji === '🫨'));
 // case does not matter
 assert.deepEqual(top('SMILE'), top('smile'));
 

@@ -35,7 +35,7 @@ import { fileMarkdown, isAsset } from './drop';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
 import { calendar, emojiRow, popup, ICONS, SLASH, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
-import { loadEmoji, searchEmoji, type EmojiEntry } from './emoji';
+import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
 import { moveBlock, indentLines, switchItem } from './blocks';
 
@@ -636,7 +636,7 @@ export function createEditor(opts: {
               pluginKey: new PluginKey('emojiSuggest'),
               allowSpaces: false,
               allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
-              items: async ({ query }) => searchEmoji(await loadEmoji().catch(() => []), query),
+              items: async ({ query }) => searchEmoji(await loadEmoji().catch(() => []), query, 5, newestEmoji()),
               command: ({ editor, range, props }) => {
                 editor.chain().focus().insertContentAt(range, (props as EmojiEntry).emoji).run();
               },
