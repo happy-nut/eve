@@ -9,7 +9,7 @@ import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
-import type { Node as PMNode } from '@tiptap/pm/model';
+import { Fragment, type Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
 import { DateMention, dayChoices } from './date';
@@ -326,6 +326,16 @@ export function createEditor(opts: {
       // clear of it, and scrolled to a little early, instead of typing (or deleting) out of sight
       ...(isMobile ? { scrollMargin: { top: 16, bottom: 90, left: 0, right: 0 }, scrollThreshold: { top: 16, bottom: 90, left: 0, right: 0 } } : {}),
       // images pasted or dropped in are stored as files (blob: URLs would die on restart)
+      // a copy is markdown (tiptap-markdown's serializer, transformCopiedText below); words inside one line come
+      // as just those words, their bold or links kept, not wrapped in the line's list item or heading
+      clipboardTextSerializer: (slice, view) => {
+        const { $from, $to } = view.state.selection;
+        const serializer = (editor.storage as any).markdown.serializer;
+        const inLine = $from.sameParent($to) && $from.parent.isTextblock;
+        if (inLine && $from.parent.type.spec.code) return slice.content.textBetween(0, slice.content.size, '\n');
+        const content = inLine ? Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))) : slice.content;
+        return (serializer.serialize(content) as string).replace(new RegExp(`^${BLANK}$`, 'gm'), ''); // an empty line is just empty
+      },
       handlePaste: (view, event): boolean => {
         if (insertFiles(editor, event.clipboardData?.files)) return true;
         // a URL pasted over selected text links that text instead of replacing it (a bare URL on its own
@@ -583,7 +593,7 @@ export function createEditor(opts: {
       TaskItem.extend({ content: LIST_ITEM_CONTENT }).configure({ nested: true }),
       // a phone's bar does the formatting; the markdown hint is for a keyboard
       Placeholder.configure({ placeholder: isMobile ? 'Start writing…' : 'Start typing… `#` heading, `-` list, `[[` link' }),
-      Markdown.configure({ html: true, transformPastedText: true, linkify: true, breaks: false }),
+      Markdown.configure({ html: true, transformPastedText: true, transformCopiedText: true, linkify: true, breaks: false }),
       WikiLink.configure({
         onOpen: opts.onOpenNote,
         iconOf,
