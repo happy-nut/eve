@@ -8,6 +8,8 @@ import { isMobile, isTauri, widget } from './platform';
  * the new app, then starts again (src-tauri/src/update.rs).
  */
 const EVERY = 3 * 60 * 60 * 1000;
+/** how old an answer may be when the window comes back, or Settings opens: a release made an hour ago shows */
+export const FRESH = 10 * 60 * 1000;
 const target = isMobile ? 'android' : 'mac';
 
 class Updates {
@@ -23,10 +25,11 @@ class Updates {
   failed = $state(false);
   /** why the last check failed, when GitHub said */
   reason = $state('');
-  private checked = 0;
+  /** when it last asked (0: not yet, so Settings does not claim "up to date" before it knows) */
+  checked = $state(0);
 
-  async check(force = false) {
-    if (!isTauri || this.checking || (!force && Date.now() - this.checked < EVERY)) return;
+  async check(force = false, maxAge = EVERY) {
+    if (!isTauri || this.checking || (!force && Date.now() - this.checked < maxAge)) return;
     this.checked = Date.now();
     this.checking = true;
     // long enough to be seen: an answer in 80 ms would look like the button did nothing
@@ -82,9 +85,13 @@ class Updates {
     if (!isTauri) return;
     if (isMobile) window.addEventListener('eve-update', (e) => this.report(String((e as CustomEvent<string>).detail)));
     else void import('@tauri-apps/api/event').then(({ listen }) => listen<string>('eve-update', (e) => this.report(e.payload)));
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) void this.check(); });
-    // the Mac stays open for days, hidden rather than quit
-    if (!isMobile) setInterval(() => void this.check(), EVERY);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) void this.check(false, FRESH); });
+    // the Mac stays open for days, hidden rather than quit: asked again each time it is summoned (the page's
+    // visibility does not change for a hidden app), and every few hours besides
+    if (!isMobile) {
+      void import('./platform').then(({ onWindowFocus }) => onWindowFocus(() => void this.check(false, FRESH)));
+      setInterval(() => void this.check(), EVERY);
+    }
     void this.check(true);
   }
 }

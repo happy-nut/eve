@@ -33,22 +33,21 @@
   const hits = $derived([...notes.visible, ...(appearance.s.dailyNotes ? notes.daily : [])].filter((n) => n.body.toLowerCase().includes(q)));
 
   /**
-   * One flat, keyed list of rows (groups, notes, labels, placeholders). A single {#each} lets
+   * One flat, keyed list of rows (groups, notes, placeholders). A single {#each} lets
    * animate:flip carry a row smoothly to its new place even when it changes group or nesting.
    */
   type Row =
     | { kind: 'group'; key: string; g: string; depth: number }
     | { kind: 'note'; key: string; n: Note; depth: number; kids?: boolean }
-    | { kind: 'label'; key: string; text: string; g: string }
     | { kind: 'empty'; key: string; text: string; g: string; depth: number };
   const rows = $derived.by((): Row[] => {
     if (q) return hits.length ? hits.map((n) => ({ kind: 'note', key: n.id, n, depth: 0 })) : [{ kind: 'empty', key: 'empty:search', text: 'No matches', g: '', depth: 0 }];
     const out: Row[] = [];
     // Notes first, above the groups (the daily notes' calendar is one of them: it moves like a note)
     const root = nested(groups.notesIn(''), (id) => groups.isFolded(id));
-    if (groups.names.length) out.push({ kind: 'label', key: 'label:root', text: 'Notes', g: '' });
+    // no heading over them: notes outside a group simply come first
     for (const { n, depth, kids } of root) out.push({ kind: 'note', key: n.id, n, depth, kids });
-    if (!root.length) out.push({ kind: 'empty', key: 'empty:root', text: 'No notes', g: '', depth: 0 });
+
     const walk = (parent: string, depth: number) => {
       for (const g of groups.children(parent)) {
         out.push({ kind: 'group', key: 'g:' + groups.id(g), g, depth });
@@ -56,6 +55,8 @@
         const own = nested(groups.notesIn(g), (id) => groups.isFolded(id));
         walk(g, depth + 1);
         for (const { n, depth: d, kids } of own) out.push({ kind: 'note', key: n.id, n, depth: depth + 1 + d, kids });
+        // an open group with nothing in it says so, rather than looking like it failed to open
+        if (!own.length && !groups.children(g).length) out.push({ kind: 'empty', key: 'empty:' + groups.id(g), text: 'No notes', g, depth: depth + 1 });
       }
     };
     walk('', 0);
@@ -306,7 +307,7 @@
   // ---- keyboard ----
   async function removeGroup(g: string) {
     const n = groups.notesIn(g, true).length, sub = groups.subtree(g).length - 1;
-    const extra = [sub ? `${sub} subgroup${sub > 1 ? 's' : ''}` : '', n ? `${n} note${n > 1 ? 's' : ''} (moved to Notes)` : ''].filter(Boolean).join(', ');
+    const extra = [sub ? `${sub} subgroup${sub > 1 ? 's' : ''}` : '', n ? `${n} note${n > 1 ? 's' : ''} (moved out of the group)` : ''].filter(Boolean).join(', ');
     if (await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`)) groups.remove(g);
   }
   async function removeNote(n: Note) {
@@ -645,9 +646,6 @@
               {/if}
             </div>
 
-          {:else if r.kind === 'label'}
-            <div class="ghead static" role="presentation" ondragover={(e) => r.g === '' && overSection(e, '')} ondrop={drop}><span class="gname static">{r.text}</span></div>
-
           {:else}
             <div class="empty" role="presentation" ondragover={(e) => overSection(e, r.g)} ondrop={drop}>{r.text}</div>
           {/if}
@@ -730,13 +728,11 @@
   .tools .icon.mini, .fold { width: 22px; height: 22px; font-size: 14px; flex: none; }
   .fold { margin-left: 2px; }
   .tail { display: flex; align-items: center; cursor: default; }
-  .ghead.static { padding-top: 8px; }
   .gname {
     flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px;
     border: 0; background: none; color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
     padding: 4px 6px; border-radius: 6px; text-align: left; white-space: nowrap; overflow: hidden;
   }
-  .gname.static { color: var(--fg-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; cursor: default; }
   .gname .t { overflow: hidden; text-overflow: ellipsis; }
   /* disclosure chevron lives on the right, so group icons sit flush left and notes indent just one column */
   /* an SVG, not a "›" glyph: text glyphs sit off-centre in their box, which shows once rotated */
@@ -750,6 +746,7 @@
   }
 
   .empty { padding: 5px 10px; font-size: 11.5px; color: var(--fg-dim); opacity: 0.7; }
+
   .row.drop-before::before, .row.drop-after::after {
     content: ''; position: absolute; left: calc(var(--d) * 18px); right: 8px; top: -1px; height: 2px; border-radius: 1px;
     background: var(--accent); box-shadow: var(--glow); pointer-events: none; z-index: 1;

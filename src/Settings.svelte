@@ -28,6 +28,7 @@
   /** the newest phone release, shown beside the QR (a phone on 0.7.2 or later offers it itself once opened) */
   let phoneApp = $state<{ version: string } | null>(null);
   onMount(() => {
+    void updates.check(false, 60_000); // the Version row says what is true now, not what was true hours ago
     if (!isMobile) findUpdate('0').then((r) => (phoneApp = r), () => {});
     storage.path().then((p) => (notesPath = p));
     autostart.get().then((v) => (launchAtLogin = v));
@@ -230,7 +231,8 @@
             <span class="sub">{updates.checking ? 'Checking…'
               : updates.doing ? updates.doing
               : updates.available ? `${updates.available.version} is available`
-              : updates.failed ? (updates.reason.startsWith('GitHub') ? `Could not check — ${updates.reason}` : 'Could not check — offline?') : '✓ Up to date'}</span></span>
+              : updates.failed ? (updates.reason.startsWith('GitHub') ? `Could not check — ${updates.reason}` : 'Could not check — offline?')
+              : updates.checked ? '✓ Up to date' : 'Not checked yet'}</span></span>
           {#if updates.available}
             <button class="btn primary" disabled={updates.busy} onclick={() => updates.install()}>
               {#if updates.busy}<span class="spin light" aria-hidden="true"></span>{/if}Update
