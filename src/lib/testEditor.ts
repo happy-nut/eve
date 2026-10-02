@@ -8,7 +8,7 @@ const popup = { visible: () => false, show: noop, hide: noop, update: noop, key:
 export function editorWith(content: string): Editor {
   const element = document.createElement('div');
   document.body.append(element);
-  return createEditor({ element, content, onUpdate: noop, onOpenNote: noop, targets: () => [], suggestionUI: popup, calendarUI: popup });
+  return createEditor({ element, content, onUpdate: noop, onOpenNote: noop, targets: () => [], suggestionUI: popup, calendarUI: popup, emojiUI: popup });
 }
 
 export const md = getMarkdown;

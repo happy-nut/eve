@@ -7,7 +7,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
-import { Plugin, PluginKey, Selection, TextSelection, type Command } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
@@ -34,7 +34,8 @@ import { hints } from './hints.svelte';
 import { fileMarkdown, isAsset } from './drop';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
-import { calendar, popup, ICONS, SLASH, type CalendarUI, type SuggestionUI, type SuggestItem } from './slash';
+import { calendar, emojiRow, popup, ICONS, SLASH, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
+import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
 import { moveBlock, indentLines, switchItem } from './blocks';
 
@@ -277,6 +278,7 @@ export function createEditor(opts: {
   targets: () => Note[];
   suggestionUI: SuggestionUI;
   calendarUI: CalendarUI;
+  emojiUI: EmojiUI;
   cursor?: number;
 }) {
   const iconOf = (link: string) => {
@@ -401,6 +403,27 @@ export function createEditor(opts: {
             rule(/^(\d+)\.\s$/, 'orderedList', 'listItem', (m) => ({ start: +m[1] })),
           ];
         },
+      }),
+      // A selection running over a picture, a link card, a PDF or a video: the browser paints its blue only on
+      // text, so those blocks stayed blank and the selection looked broken into pieces. Each one the selection
+      // covers whole is marked, the same whether it came from the mouse or from ⇧ and the arrows.
+      Extension.create({
+        name: 'blocksInSelection',
+        addProseMirrorPlugins: () => [new Plugin({
+          props: {
+            decorations: (state) => {
+              const sel = state.selection;
+              if (sel.empty || sel instanceof NodeSelection) return null;
+              const marks: Decoration[] = [];
+              state.doc.nodesBetween(sel.from, sel.to, (node, pos) => {
+                if (!(node.isBlock && node.isAtom)) return true;
+                if (pos >= sel.from && pos + node.nodeSize <= sel.to) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: 'in-sel' }));
+                return false;
+              });
+              return marks.length ? DecorationSet.create(state.doc, marks) : null;
+            },
+          },
+        })],
       }),
       Extension.create({
         name: 'moveFlash',
@@ -635,10 +658,31 @@ export function createEditor(opts: {
           ];
         },
       }),
+      // Slack's `:smile`: a colon (at a line's start or after a space) and a letter bring up the best
+      // few emoji in a row; the pick replaces what was typed. Not in code, where `:x` is just text.
+      Extension.create({
+        name: 'emojiSuggest',
+        addProseMirrorPlugins() {
+          return [
+            Suggestion({
+              editor: this.editor,
+              char: ':',
+              pluginKey: new PluginKey('emojiSuggest'),
+              allowSpaces: false,
+              allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
+              items: async ({ query }) => searchEmoji(await loadEmoji().catch(() => []), query, 5, newestEmoji()),
+              command: ({ editor, range, props }) => {
+                editor.chain().focus().insertContentAt(range, (props as EmojiEntry).emoji).run();
+              },
+              render: () => emojiRow(opts.emojiUI),
+            }),
+          ];
+        },
+      }),
     ],
     onUpdate: ({ editor }) => opts.onUpdate(getMarkdown(editor)),
   });
-  suggestionVisible.set(editor, () => opts.suggestionUI.visible() || opts.calendarUI.visible());
+  suggestionVisible.set(editor, () => opts.suggestionUI.visible() || opts.calendarUI.visible() || opts.emojiUI.visible());
   applyKeymap(editor);
   if (isMobile) {
     // a tap on a line near the bottom puts the caret there, then the keyboard comes up and the page

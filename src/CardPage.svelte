@@ -10,6 +10,7 @@
   import { ui } from './lib/ui.svelte';
   import Suggest from './Suggest.svelte';
   import DateMenu from './DateMenu.svelte';
+  import EmojiRow from './EmojiRow.svelte';
   import Outline from './Outline.svelte';
   import TableTools from './TableTools.svelte';
 
@@ -20,6 +21,7 @@
   let scrollEl = $state<HTMLDivElement | null>(null);
   let suggest: ReturnType<typeof Suggest>;
   let dateMenu: ReturnType<typeof DateMenu>;
+  let emojiRow: ReturnType<typeof EmojiRow>;
   let editor = $state<TipTap | undefined>();
   const returnTo = document.activeElement as HTMLElement | null;
 
@@ -34,6 +36,7 @@
       targets: () => notes.pages,
       suggestionUI: suggest.ui,
       calendarUI: dateMenu.ui,
+      emojiUI: emojiRow.ui,
     });
     // a card: caret at the end of its title line, so a long card opens at its top rather than scrolled to
     // the end. A day's note opens to be written in: under whatever is there.
@@ -71,6 +74,7 @@
 <TableTools {editor} />
 <Suggest bind:this={suggest} />
 <DateMenu bind:this={dateMenu} />
+<EmojiRow bind:this={emojiRow} />
 
 <style>
   .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); z-index: 30; }
