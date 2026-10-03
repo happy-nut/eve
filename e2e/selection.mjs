@@ -5,7 +5,7 @@
 //   ink      the text's dark pixels still there under the selection, in % of before: ≥ 80 (it stays readable)
 //   and the selection must still be the same after the screenshot (it used to collapse after some drags).
 // The table cases also check the selection itself: a cell selection inside the table, a text selection out of it.
-// Needs the dev server (npm run dev) and WebKit for Playwright: npx playwright-core install webkit
+// Needs WebKit for Playwright: npx playwright-core install webkit. It starts its own dev server, or uses EVE_URL.
 // Run: npm run e2e:selection   (screenshots go to e2e/out/)
 import { webkit } from 'playwright-core';
 import { PNG } from 'pngjs';
@@ -13,7 +13,8 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 
 const OUT = new URL('./out', import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
-const URL_ = process.env.EVE_URL ?? 'http://localhost:5173/';
+const server = process.env.EVE_URL ? null : await (await import('vite')).createServer({ server: { port: 0 }, logLevel: 'error' }).then((v) => v.listen());
+const URL_ = process.env.EVE_URL ?? server.resolvedUrls.local[0];
 let page, DARK = false;
 
 /** a test editor over the app: a note with every kind of block, the app's own editor and keymap */
@@ -211,6 +212,9 @@ const CASES = [
   ['35-shift-up-out-of-table', () => keys('qqqq', ['Shift+ArrowUp', 'Shift+ArrowUp']), outUp],
   ['36-shift-cells-then-out', () => keys('qqqq', ['Shift+ArrowDown', 'Shift+ArrowDown', 'Shift+ArrowDown']), outDown],
   ['37-table-to-line-start', () => drag('ssss', 'I0', { before: 30 }), outDown],
+  ['38-up-over-image-card', () => drag('I9z', 'before')],
+  ['39-up-out-of-callout', () => drag('C1z', 'jjjj')],
+  ['40-up-out-of-todo', () => drag('T1az', 'cccc')],
 ];
 // what the selection must be, for the table cases
 function cells({ kind, from, to, table: [a, b] }) { return kind === 'cell' && from > a && to < b; }
@@ -236,6 +240,7 @@ for (const dark of [false, true]) {
   await page.close();
 }
 await browser.close();
+await server?.close();
 
 let failed = 0;
 for (const r of results) {
