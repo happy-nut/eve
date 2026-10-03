@@ -143,13 +143,6 @@
           {/each}
         </div>
       {/each}
-      <h3>Tips</h3>
-      <div class="card">
-        <label class="row">
-          <span class="label">Shortcut tips <span class="sub">after doing something the long way, a moment's note of the key that does it</span></span>
-          <input type="checkbox" class="switch" checked={hints.on} onchange={(e) => hints.setOn(e.currentTarget.checked)} />
-        </label>
-      </div>
       <div class="foot"><button class="link" onclick={() => shortcuts.reset()}>Reset all to defaults</button></div>
 
     {:else if tab === 'general'}
@@ -219,6 +212,10 @@
             onchange={(e) => claimMarkdown(e.currentTarget.checked)} />
         </label>
         {#if defaultAppError}<p class="alert">{defaultAppError}</p>{/if}
+        <label class="row">
+          <span class="label">Show tips <span class="sub">after doing something the long way, a moment's note of the key that does it</span></span>
+          <input type="checkbox" class="switch" aria-label="Show tips" checked={hints.on} onchange={(e) => hints.setOn(e.currentTarget.checked)} />
+        </label>
       </div>
       {/if}
 
