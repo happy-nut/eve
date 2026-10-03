@@ -48,10 +48,23 @@ pub(crate) fn hide_app(app: AppHandle) -> Result<(), String> {
 /// the hotkey, Finder "Open With" or `open -a Eve`; key equivalents (⌘C/V/Z/Q…) still route through the hidden menu.
 #[tauri::command]
 pub(crate) fn set_dock_hidden(app: AppHandle, hidden: bool) -> Result<(), String> {
+    // becoming an accessory app deactivates it, and its window drops behind the app below. Eve started by a link
+    // (eve://updated after an update, `eve open`) has just shown its window, then the page applies this: Eve
+    // looked like it never came back. At login there is no link, and the window stays out of the way as before.
     #[cfg(target_os = "macos")]
-    return app
-        .set_activation_policy(if hidden { tauri::ActivationPolicy::Accessory } else { tauri::ActivationPolicy::Regular })
-        .map_err(|e| e.to_string());
+    {
+        let front = is_front(app.clone()) && app.state::<crate::PendingLink>().0.lock().unwrap().is_some();
+        app.set_activation_policy(if hidden { tauri::ActivationPolicy::Accessory } else { tauri::ActivationPolicy::Regular })
+            .map_err(|e| e.to_string())?;
+        // the deactivation lands a moment later: shown again at once, it was undone (a test app needed ≥50 ms)
+        if front {
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                let _ = show_window(app);
+            });
+        }
+        return Ok(());
+    }
     #[cfg(not(target_os = "macos"))]
     Ok(())
 }
