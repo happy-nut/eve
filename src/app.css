@@ -398,15 +398,14 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
    in the selection is coloured, whatever holds it (selectionLayer.ts). (Fields inside a note keep the browser's.) */
 .tiptap ::selection, .tiptap::selection, .editor ::selection, .editor::selection { background: transparent; }
 .tiptap input::selection, .tiptap textarea::selection { background: var(--sel); }
-/* the selection layer (selectionLayer.ts): rectangles over the selected text, blended so the text shows through
-   on any background (multiply darkens a light page toward the selection colour, screen lightens a dark one) */
-.sel-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: 2; }
-/* the blend on each rectangle, not on the (empty) layer: WebKit composited the layer alone and hid the text */
-.sel-layer > div { position: absolute; background: var(--sel); mix-blend-mode: multiply; }
+/* the selection layer (selectionLayer.ts): rectangles behind the selected text, so it reads as the browser's own
+   selection did. Not over it with a blend: WebKit composited the rectangles on their own and they covered the
+   text. z-index -1 inside the editor's own stacking context puts them above the page, under the note's text. */
+:has(> .sel-layer) { isolation: isolate; }
+.sel-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: -1; }
+.sel-layer > div { position: absolute; background: var(--sel); }
 /* the note not focused (the list, a dialog): the selection stays, fainter, as the browser's own did */
 .ProseMirror:not(.ProseMirror-focused) ~ .sel-layer > div { opacity: 0.45; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .sel-layer > div { mix-blend-mode: screen; } }
-:root[data-theme='dark'] .sel-layer > div { mix-blend-mode: screen; }
 @media print { .sel-layer { display: none; } }
 /* a [[link]] or a date inside the selection (they are not text, so the layer leaves them to this) */
 .tiptap .pm-sel { background: var(--sel); }
