@@ -4,7 +4,8 @@
 //   outside  pixels that changed anywhere else (a line end lit past the text, a gap between blocks): ≤ 12
 //   ink      the text's dark pixels still there under the selection, in % of before: ≥ 80 (it stays readable)
 //   and the selection must still be the same after the screenshot (it used to collapse after some drags).
-// Needs the dev server (npm run dev) and WebKit for Playwright: npx playwright-core install webkit
+// The table cases also check the selection itself: a cell selection inside the table, a text selection out of it.
+// Needs WebKit for Playwright: npx playwright-core install webkit. It starts its own dev server, or uses EVE_URL.
 // Run: npm run e2e:selection   (screenshots go to e2e/out/)
 import { webkit } from 'playwright-core';
 import { PNG } from 'pngjs';
@@ -12,7 +13,8 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 
 const OUT = new URL('./out', import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
-const URL_ = process.env.EVE_URL ?? 'http://localhost:5173/';
+const server = process.env.EVE_URL ? null : await (await import('vite')).createServer({ server: { port: 0 }, logLevel: 'error' }).then((v) => v.listen());
+const URL_ = process.env.EVE_URL ?? server.resolvedUrls.local[0];
 let page, DARK = false;
 
 /** a test editor over the app: a note with every kind of block, the app's own editor and keymap */
@@ -130,6 +132,12 @@ async function measure(name) {
   const buf = await page.screenshot();
   writeFileSync(`${OUT}/${name}.png`, buf);
   const after = await page.evaluate(() => window.__ed.state.selection.from + '-' + window.__ed.state.selection.to);
+  // the selection's kind and ends, and where the table is
+  const sel = await page.evaluate(() => {
+    const { state } = window.__ed; const s = state.selection; let table;
+    state.doc.descendants((n, pos) => { if (n.type.name === 'table') table = [pos, pos + n.nodeSize]; return !table; });
+    return { kind: '$anchorCell' in s ? 'cell' : s.constructor.name === 'TextSelection' ? 'text' : s.constructor.name, from: s.from, to: s.to, table };
+  });
   const png = PNG.sync.read(buf);
   const S = 2, PAD = 2;
   const inRects = (x, y) => exp.rects.some(([l, t, r, b]) => x >= (l - PAD) * S && x <= (r + PAD) * S && y >= (t - PAD) * S && y <= (b + PAD) * S);
@@ -144,12 +152,12 @@ async function measure(name) {
     if (!changed) continue;
     if (inside_) inside++; else { outside++; if (stray.length < 4) stray.push([Math.round(x / S), Math.round(y / S)]); }
   }
-  return { name, layer: exp.layer, pm: exp.pm === after ? exp.pm : exp.pm + '→' + after, text: exp.text.replace(/\s+/g, ' ').slice(0, 40), inside, outside, ink: inkBefore ? Math.round((100 * inkAfter) / inkBefore) : 100, stray };
+  return { name, sel, layer: exp.layer, pm: exp.pm === after ? exp.pm : exp.pm + '→' + after, text: exp.text.replace(/\s+/g, ' ').slice(0, 40), inside, outside, ink: inkBefore ? Math.round((100 * inkAfter) / inkBefore) : 100, stray };
 }
 
 async function drag(a, b, opts = {}) {
   const A = await at(a), B = await at(b);
-  const ax = opts.fromEnd ? A.r - 1 : A.l + 1, bx = opts.pastEnd ? B.r + (opts.pastEnd) : opts.toEnd ? B.r - 1 : B.l + 1;
+  const ax = opts.fromEnd ? A.r - 1 : A.l + 1, bx = opts.before ? B.l - opts.before : opts.pastEnd ? B.r + (opts.pastEnd) : opts.toEnd ? B.r - 1 : B.l + 1;
   await page.mouse.move(ax, A.y); await page.mouse.down();
   await page.mouse.move(bx, B.y, { steps: 16 }); await page.mouse.up();
   await page.waitForTimeout(500);
@@ -175,8 +183,8 @@ const CASES = [
   ['11-toggle-in-out', () => drag('mmmm', '인용')],
   ['12-quote-to-code', () => drag('nnnn', 'line')],
   ['13-code-inside', () => drag('oooo', 'pppp')],
-  ['14-table-cells', () => drag('qqqq', 'ssss')],
-  ['15-over-image-card', () => drag('tttt', '빈 줄 뒤')],
+  ['14-table-cells', () => drag('qqqq', 'ssss'), cells],
+  ['15-over-image-card', () => drag('tttt', '빈 줄 뒤'), outDown],
   ['16-drag-past-line-end', () => drag('cccc', 'B2z', { pastEnd: 300 })],
   ['17-into-line-end-todo', () => drag('ffff', 'T1az', { pastEnd: 260 })],
   ['18-reverse-long', () => drag('E1z', 'bbbb')],
@@ -189,7 +197,30 @@ const CASES = [
   ['25-heading-partial', () => drag('제목', '줄', { toEnd: true })],
   ['26-callout-inside', () => drag('kkkk', '콜아웃 안', { toEnd: true })],
   ['27-across-empty-line', () => drag('after', '빈 줄')],
+  ['28-table-down-out', () => drag('ssss', 'before'), outDown],
+  ['29-table-up-out', () => drag('rrrr', '인용'), outUp],
+  ['30-over-table', () => drag('인용', 'before'), over],
+  ['31-table-across-cells', () => drag('rrrr', 'tttt'), cells],
+  ['32-table-out-and-back', async () => {
+    const A = await at('ssss'), B = await at('before'), C = await at('tttt');
+    await page.mouse.move(A.l + 1, A.y); await page.mouse.down();
+    await page.mouse.move(B.l + 1, B.y, { steps: 12 }); await page.mouse.move(C.l + 1, C.y, { steps: 12 }); await page.mouse.up();
+    await page.waitForTimeout(500);
+  }, cells],
+  ['33-shift-down-out-of-table', () => keys('ssss', ['Shift+ArrowDown', 'Shift+ArrowDown']), outDown],
+  ['34-shift-down-over-table', () => keys('pppp', ['Shift+ArrowDown', 'Shift+ArrowDown', 'Shift+ArrowDown', 'Shift+ArrowDown', 'Shift+ArrowDown']), over],
+  ['35-shift-up-out-of-table', () => keys('qqqq', ['Shift+ArrowUp', 'Shift+ArrowUp']), outUp],
+  ['36-shift-cells-then-out', () => keys('qqqq', ['Shift+ArrowDown', 'Shift+ArrowDown', 'Shift+ArrowDown']), outDown],
+  ['37-table-to-line-start', () => drag('ssss', 'I0', { before: 30 }), outDown],
+  ['38-up-over-image-card', () => drag('I9z', 'before')],
+  ['39-up-out-of-callout', () => drag('C1z', 'jjjj')],
+  ['40-up-out-of-todo', () => drag('T1az', 'cccc')],
 ];
+// what the selection must be, for the table cases
+function cells({ kind, from, to, table: [a, b] }) { return kind === 'cell' && from > a && to < b; }
+function outDown({ kind, from, to, table: [a, b] }) { return kind === 'text' && from > a && from < b && to > b; }
+function outUp({ kind, from, to, table: [a, b] }) { return kind === 'text' && from < a && to > a && to < b; }
+function over({ kind, from, to, table: [a, b] }) { return kind === 'text' && from < a && to > b; }
 
 const browser = await webkit.launch();
 const results = [];
@@ -199,21 +230,24 @@ for (const dark of [false, true]) {
   await page.goto(URL_);
   await page.waitForTimeout(1500);
   await setup();
-  for (const [name, act] of CASES) {
+  for (const [name, act, check] of CASES) {
     await base();
     await act();
-    results.push(await measure((dark ? 'dark-' : '') + name));
+    const r = await measure((dark ? 'dark-' : '') + name);
+    r.wrong = check && !check(r.sel);
+    results.push(r);
   }
   await page.close();
 }
 await browser.close();
+await server?.close();
 
 let failed = 0;
 for (const r of results) {
   const collapsed = r.pm.includes('→');
-  const ok = r.inside > 300 && r.outside <= 12 && r.ink >= 80 && !collapsed;
+  const ok = r.inside > 300 && r.outside <= 12 && r.ink >= 80 && !collapsed && !r.wrong;
   if (!ok) failed++;
-  console.log(ok ? 'pass' : 'FAIL', r.name.padEnd(30), `inside ${r.inside}`.padEnd(15), `outside ${r.outside}`.padEnd(13), `ink ${r.ink}%`.padEnd(10), r.pm, collapsed ? '(collapsed after the drag)' : '');
+  console.log(ok ? 'pass' : 'FAIL', r.name.padEnd(30), `inside ${r.inside}`.padEnd(15), `outside ${r.outside}`.padEnd(13), `ink ${r.ink}%`.padEnd(10), r.pm, collapsed ? '(collapsed after the drag)' : '', r.wrong ? `(wrong selection: ${r.sel.kind} ${r.sel.from}-${r.sel.to}, table ${r.sel.table})` : '');
 }
 console.log(`${results.length - failed}/${results.length} pass — screenshots in ${OUT}`);
 process.exit(failed ? 1 : 0);
