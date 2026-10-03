@@ -25,6 +25,7 @@ import { Pdf } from './pdf';
 import { Video } from './video';
 import { TableNodes } from './table';
 import { Find } from './find';
+import { SelectionLayer } from './selectionLayer';
 import { Divider } from './divider';
 import { ui } from './ui.svelte';
 import { notes, titleOf, type Note } from './notes.svelte';
@@ -435,21 +436,32 @@ export function createEditor(opts: {
           ];
         },
       }),
-      // A selection running over a picture, a link card, a PDF or a video: the browser paints its blue only on
-      // text, so those blocks stayed blank and the selection looked broken into pieces. Each one the selection
-      // covers whole is marked, the same whether it came from the mouse or from ⇧ and the arrows.
+      // The selection is drawn by SelectionLayer (rectangles over the text, nothing inside it); what the layer
+      // cannot show is marked here with a class only: a picture, card, PDF or video the selection covers whole
+      // (the colour laid over it), a [[link]] or date in it, an empty line it runs through.
+      SelectionLayer,
       Extension.create({
-        name: 'blocksInSelection',
+        name: 'paintSelection',
         addProseMirrorPlugins: () => [new Plugin({
           props: {
             decorations: (state) => {
               const sel = state.selection;
               if (sel.empty || sel instanceof NodeSelection) return null;
+              const { from, to } = sel;
               const marks: Decoration[] = [];
-              state.doc.nodesBetween(sel.from, sel.to, (node, pos) => {
-                if (!(node.isBlock && node.isAtom)) return true;
-                if (pos >= sel.from && pos + node.nodeSize <= sel.to) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: 'in-sel' }));
-                return false;
+              state.doc.nodesBetween(from, to, (node, pos) => {
+                if (node.isText) return false;
+                const whole = pos >= from && pos + node.nodeSize <= to;
+                if (node.isAtom) {
+                  // a [[link]] or a date in the line takes the text's colour; a block (picture, card…) the overlay
+                  if (whole) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: node.isBlock ? 'in-sel' : 'pm-sel' }));
+                  return false;
+                }
+                // an empty line the selection runs through (not the one it merely starts or ends on)
+                if (node.isTextblock && !node.content.size && pos > from && pos + node.nodeSize < to) {
+                  marks.push(Decoration.node(pos, pos + node.nodeSize, { class: 'pm-sel-empty' }));
+                }
+                return true;
               });
               return marks.length ? DecorationSet.create(state.doc, marks) : null;
             },
@@ -580,7 +592,20 @@ export function createEditor(opts: {
           },
         }],
       }),
-      TaskItem.extend({ content: LIST_ITEM_CONTENT }).configure({ nested: true }),
+      TaskItem.extend({
+        content: LIST_ITEM_CONTENT,
+        // the box and its hidden label are the view's own: tiptap rewrites the label on every update and WebKit
+        // touches the box's style after a drag, and ProseMirror read either back as an edit of the item, so a
+        // drag selection starting in a to-do collapsed on mouseup. Only the item's own text counts.
+        addNodeView() {
+          const stock = this.parent?.();
+          if (!stock) return null;
+          return (props) => {
+            const view = stock(props) as any;
+            return { ...view, ignoreMutation: (m: { type: string; target: Node }) => m.type !== 'selection' && !view.contentDOM?.contains(m.target) };
+          };
+        },
+      }).configure({ nested: true }),
       // a phone's bar does the formatting; the markdown hint is for a keyboard
       Placeholder.configure({ placeholder: isMobile ? 'Start writing…' : 'Start typing… `#` heading, `-` list, `[[` link' }),
       Markdown.configure({ html: true, transformPastedText: true, linkify: true, breaks: false }),

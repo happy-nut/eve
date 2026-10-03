@@ -85,7 +85,9 @@ export const LocalImage = Image.extend({
       const cap = document.createElement('figcaption');
       const owns = (target: EventTarget | Node | null) => target === cap || (target instanceof Node && cap.contains(target));
       cap.className = 'img-cap';
-      cap.contentEditable = 'true';
+      // writable only while it is being written in: an editable island sitting in the note all the time caught
+      // a drag going up over the picture (WebKit ends the selection inside it), so it stopped at the picture
+      cap.contentEditable = 'false';
       cap.spellcheck = false;
       cap.dataset.placeholder = 'Add a caption';
       cap.textContent = node.attrs.alt ?? '';
@@ -105,10 +107,10 @@ export const LocalImage = Image.extend({
       // and the editor's own mousedown handling leaves the caret sitting in it otherwise
       const release = (e: MouseEvent) => { if (!owns(e.target)) cap.blur(); };
       cap.addEventListener('focus', () => { cap.classList.add('editing'); document.addEventListener('mousedown', release, true); });
-      cap.addEventListener('blur', () => { cap.classList.remove('editing'); document.removeEventListener('mousedown', release, true); });
+      cap.addEventListener('blur', () => { cap.classList.remove('editing'); cap.contentEditable = 'false'; document.removeEventListener('mousedown', release, true); });
       // a drag across the note passes over the caption instead of starting a selection inside it; a
       // press on the caption itself makes it writable before the caret lands
-      cap.addEventListener('mousedown', () => cap.classList.add('editing'));
+      cap.addEventListener('mousedown', () => { cap.contentEditable = 'true'; cap.classList.add('editing'); });
       cap.addEventListener('keydown', (e) => {
         // ⌘A belongs to the caption while the caret is in it, not to the whole note
         if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {

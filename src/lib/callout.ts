@@ -88,6 +88,9 @@ export const Callout = Node.create({
       return {
         dom,
         contentDOM,
+        // the icon is the view's own, not the note's: WebKit touches its style after a drag, and ProseMirror read
+        // that back as an edit of the callout and collapsed a selection running past it to where it started
+        ignoreMutation: (m) => m.type !== 'selection' && !contentDOM.contains(m.target),
         update: (n) => {
           if (n.type.name !== 'callout') return false;
           renderIcon(emoji, n.attrs.emoji);

@@ -392,22 +392,28 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 /* a day reads as part of the sentence, not as a control: tinted and rounded, nothing more */
 .tiptap .datechip { background: var(--accent-soft); border-radius: 4px; padding: 0 0.3em; white-space: nowrap; }
 .tiptap .datechip.ProseMirror-selectednode { background: var(--sel); }
-.tiptap ::selection { background: var(--sel); color: var(--fg); }
-/* A selection that runs past a line's end is painted out to the block's right edge by WebKit. Making each text
-   block its own selection root (overflow: clip) shrunk to its content keeps the highlight on the text; the 2px
-   keeps the caret at a line end from being clipped. Empty paragraphs stay full width (placeholder, click target). */
-.tiptap p:not(.is-empty):not(:has(> br:only-child)), .tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 {
-  overflow: clip; width: fit-content; max-width: 100%; padding-right: 2px;
-}
-/* WebKit paints "selection gaps" with the containing block's own ::selection colour — between two blocks, and
-   beside a block narrower than its container, which the clip above makes every text block. That is what turned a
-   drag across blocks into full-width bars (Chromium paints no gaps, so the browser preview never showed them).
-   A block that only holds other blocks paints nothing, so only the text reads as selected. */
-html::selection, body::selection, .scroll::selection, .editor::selection,
-.tiptap::selection, .tiptap ul::selection, .tiptap ol::selection, .tiptap li::selection, .tiptap li > div::selection,
-.tiptap label::selection, .tiptap label *::selection, .tiptap blockquote::selection, .tiptap .callout::selection,
-.tiptap .callout-body::selection, .tiptap .callout-emoji::selection, .tiptap .code-block::selection,
-.tiptap .img-fig::selection { background: transparent; }
+/* The selection is drawn by the editor itself, never by the browser. WebKit's own painting
+   filled line ends and the gaps between blocks in its own way for every kind of block (lists, to-dos, nested
+   items, callouts…), so a drag that stopped mid-line could still light the line to its end. Now only the text
+   in the selection is coloured, whatever holds it (selectionLayer.ts). (Fields inside a note keep the browser's.) */
+.tiptap ::selection, .tiptap::selection, .editor ::selection, .editor::selection { background: transparent; }
+.tiptap input::selection, .tiptap textarea::selection { background: var(--sel); }
+/* the selection layer (selectionLayer.ts): rectangles over the selected text, blended so the text shows through
+   on any background (multiply darkens a light page toward the selection colour, screen lightens a dark one) */
+.sel-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: 2; }
+/* the blend on each rectangle, not on the (empty) layer: WebKit composited the layer alone and hid the text */
+.sel-layer > div { position: absolute; background: var(--sel); mix-blend-mode: multiply; }
+/* the note not focused (the list, a dialog): the selection stays, fainter, as the browser's own did */
+.ProseMirror:not(.ProseMirror-focused) ~ .sel-layer > div { opacity: 0.45; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .sel-layer > div { mix-blend-mode: screen; } }
+:root[data-theme='dark'] .sel-layer > div { mix-blend-mode: screen; }
+@media print { .sel-layer { display: none; } }
+/* a [[link]] or a date inside the selection (they are not text, so the layer leaves them to this) */
+.tiptap .pm-sel { background: var(--sel); }
+/* an empty line inside the selection: a narrow mark where its text would be, as an editor shows a newline. Laid
+   over the line, not in it: an inline mark made the empty line taller and the note below it jumped. */
+.tiptap .pm-sel-empty { position: relative; }
+.tiptap .pm-sel-empty::after { content: ''; position: absolute; left: 0; top: 0.2em; bottom: 0.2em; width: 0.45em; background: var(--sel); }
 /* Only the callout icon opts out of selection. The checkbox must not: user-select: none on the label made
    WebKit put the insertion point *outside* the item whenever the last task item was empty, so typing there
    deleted the item and prepended the text to the block below. The ::selection rules above already keep the
