@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { fade, fly, scale } from 'svelte/transition';
-  import { cubicOut } from 'svelte/easing';
+  import { scale } from 'svelte/transition';
   import { isMobile } from './lib/platform';
+  import BottomSheet from './BottomSheet.svelte';
 
   /**
    * A choice among a few, drawn by the app instead of the platform: a popover under the button on the
@@ -60,22 +60,21 @@
 </button>
 
 {#if open}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="scrim" use:portal class:dim={isMobile} role="presentation" transition:fade={{ duration: 140 }}
-    onmousedown={(e) => { e.preventDefault(); open = false; }}></div>
   {#if isMobile}
-    <div class="sheet" use:portal role="listbox" transition:fly={{ y: 280, duration: 240, easing: cubicOut }}>
+    <BottomSheet onclose={() => (open = false)} role="listbox" label={label || undefined}>
       {#if label}<p class="title">{label}</p>{/if}
       {#each options as [id, text], i (id)}
-        <button role="option" aria-selected={id === value} class:on={id === value} onclick={() => pick(i)}>
+        <button class="opt" role="option" aria-selected={id === value} class:on={id === value} onclick={() => pick(i)}>
           <span>{text}</span>
           {#if id === value}<svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg>{/if}
         </button>
       {/each}
-    </div>
+    </BottomSheet>
   {:else}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="scrim" use:portal role="presentation" onmousedown={(e) => { e.preventDefault(); open = false; }}></div>
     <div class="pop" use:portal role="listbox" style="left: {pos.left}px; top: {pos.top}px; min-width: {Math.max(pos.width, 160)}px"
-      transition:scale={{ start: 0.95, duration: 120 }}>
+      transition:scale|global={{ start: 0.95, duration: 120 }}>
       {#each options as [id, text], i (id)}
         <button role="option" aria-selected={id === value} class:at={i === at} tabindex="-1"
           onmouseenter={() => (at = i)} onmousedown={(e) => e.preventDefault()} onclick={() => pick(i)}>
@@ -101,7 +100,6 @@
   .select.open svg { transform: rotate(180deg); }
 
   .scrim { position: fixed; inset: 0; z-index: 40; }
-  .scrim.dim { background: rgba(0, 0, 0, 0.28); }
 
   .pop {
     position: fixed; z-index: 41; transform: translateX(-100%); transform-origin: top right; padding: 4px;
@@ -112,19 +110,14 @@
     border-radius: 6px; padding: 7px 10px; background: none; color: var(--fg); font: inherit; font-size: 13px; text-align: left;
   }
   .pop button.at { background: var(--accent-soft); }
-  .pop svg, .sheet svg { color: var(--accent); }
+  .pop svg, .opt svg { color: var(--accent); }
 
-  .sheet {
-    position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; padding: 8px 12px calc(16px + var(--bottom, 0px));
-    background: var(--bg-pop); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
-  }
-  .sheet::before { content: ''; display: block; width: 36px; height: 4px; border-radius: 2px; margin: 4px auto 10px; background: var(--bg-active); }
   .title { margin: 0 8px 6px; font-size: 13px; font-weight: 600; color: var(--fg-dim); }
-  .sheet button {
+  .opt {
     display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 52px; border: 0;
     border-radius: 12px; padding: 0 14px; background: none; color: var(--fg); font: inherit; font-size: 17px; text-align: left;
   }
-  .sheet button:active { background: var(--bg-active); }
-  .sheet button.on { font-weight: 600; }
-  .sheet svg { width: 20px; height: 20px; }
+  .opt:active { background: var(--bg-active); }
+  .opt.on { font-weight: 600; }
+  .opt svg { width: 20px; height: 20px; }
 </style>

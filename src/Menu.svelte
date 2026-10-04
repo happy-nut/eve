@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { scale, fade, fly } from 'svelte/transition';
-  import { cubicOut } from 'svelte/easing';
+  import { scale } from 'svelte/transition';
+  import BottomSheet from './BottomSheet.svelte';
   import { isMobile } from './lib/platform';
   import { ui, type MenuItem } from './lib/ui.svelte';
   import { prettyKeys } from './lib/shortcuts.svelte';
@@ -8,7 +8,9 @@
 
   // the app's own right-click menu (the webview's is suppressed): App renders it, anyone opens it
   // through ui.openMenu. Keyboard-reachable like the "+" dropdown — the mouse moves the highlight.
-  const req = $derived(ui.menu!);
+  // the last menu opened: closing, it slides away showing what it showed (ui.menu is already null by then)
+  let last = ui.menu!;
+  const req = $derived.by(() => (last = ui.menu ?? last));
   let el = $state<HTMLUListElement | null>(null);
   let x = $state(0), y = $state(0);
 
@@ -49,22 +51,21 @@
 
 {#if isMobile}
   <!-- a phone: the same items as a sheet from the bottom, rows a thumb can hit -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="scrim" transition:fade={{ duration: 150 }} onclick={() => ui.closeMenu()} role="presentation"></div>
-  <ul class="sheet" role="menu" transition:fly={{ y: 320, duration: 240, easing: cubicOut }}>
-    {#each req.items as it, i (i)}
-      <li role="none" class:sep={it.sep}>
-        <button role="menuitem" class:danger={it.danger} disabled={it.disabled} onclick={() => pick(it)}>{it.label}</button>
-      </li>
-    {/each}
-    <li role="none" class="sep"><button role="menuitem" class="cancel" onclick={() => ui.closeMenu()}>Cancel</button></li>
-  </ul>
+  <BottomSheet onclose={() => ui.closeMenu()}>
+    <ul class="items" role="menu">
+      {#each req.items as it, i (i)}
+        <li role="none" class:sep={it.sep}>
+          <button role="menuitem" class:danger={it.danger} disabled={it.disabled} onclick={() => pick(it)}>{it.label}</button>
+        </li>
+      {/each}
+    </ul>
+  </BottomSheet>
 {:else}
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="backdrop" onmousedown={() => ui.closeMenu()} oncontextmenu={(e) => { e.preventDefault(); ui.closeMenu(); }}></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <ul bind:this={el} class="menu" role="menu" tabindex="-1" use:autofocus style="left: {x}px; top: {y}px"
-  transition:scale={{ start: 0.94, duration: 110 }} onkeydown={onKey}>
+  transition:scale|global={{ start: 0.94, duration: 110 }} onkeydown={onKey}>
   {#each req.items as it, i (i)}
     <li role="none" class:sep={it.sep}>
       <button role="menuitem" class:danger={it.danger} disabled={it.disabled}
@@ -77,22 +78,15 @@
 {/if}
 
 <style>
-  .scrim { position: fixed; inset: 0; z-index: 44; background: rgba(0, 0, 0, 0.3); }
-  .sheet {
-    position: fixed; z-index: 45; left: 0; right: 0; bottom: 0; margin: 0; list-style: none;
-    padding: 8px 10px calc(12px + var(--bottom, 0px)); background: var(--bg-pop); border-radius: 20px 20px 0 0;
-    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18); max-height: 80vh; overflow-y: auto;
-  }
-  .sheet::before { content: ''; display: block; width: 36px; height: 4px; border-radius: 2px; margin: 4px auto 8px; background: var(--bg-active); }
-  .sheet button {
+  .items { margin: 0; padding: 0; list-style: none; }
+  .items button {
     width: 100%; min-height: 52px; border: 0; border-radius: 12px; background: none; color: var(--fg);
     font: inherit; font-size: 17px; text-align: left; padding: 0 14px;
   }
-  .sheet button:active { background: var(--bg-active); }
-  .sheet button:disabled { color: var(--fg-dim); }
-  .sheet button.danger { color: #ff453a; }
-  .sheet button.cancel { text-align: center; font-weight: 600; color: var(--fg-dim); }
-  .sheet li.sep { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+  .items button:active { background: var(--bg-active); }
+  .items button:disabled { color: var(--fg-dim); }
+  .items button.danger { color: #ff453a; }
+  .items li.sep { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
   .backdrop { position: fixed; inset: 0; z-index: 44; }
   .menu {
     position: fixed; z-index: 45; min-width: 184px; max-width: 280px; list-style: none; margin: 0; padding: 4px;
