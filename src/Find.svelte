@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
+  import { caretIn } from './lib/motion';
   import type { Editor } from '@tiptap/core';
   import { findState, setQuery, step, replaceOne, replaceAll, clearFind } from './lib/find';
   import { ui } from './lib/ui.svelte';
@@ -66,7 +67,7 @@
 <!-- the keys come from the fields and buttons inside, which are focusable on their own; the bar only
      catches them once on the way up, so it needs no role of its own beyond the landmark -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="find" transition:fly={{ y: -8, duration: 140 }} onkeydown={onKey} role="search">
+<div class="find" transition:fly|global={{ ...caretIn, y: -6 }} onkeydown={onKey} role="search">
   <div class="line">
     <svg class="glass" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
     <input use:focus placeholder="Find" spellcheck="false" value={query} oninput={(e) => type(e.currentTarget.value)} />
@@ -102,8 +103,8 @@
 <style>
   .find {
     position: absolute; top: 10px; right: 16px; z-index: 7; width: min(360px, calc(100% - 32px));
-    display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 10px;
-    background: var(--bg-pop); border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+    display: flex; flex-direction: column; gap: 4px; padding: 6px;
+    background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }
   .line { display: flex; align-items: center; gap: 4px; }
   .glass { width: 14px; height: 14px; margin: 0 2px 0 4px; flex: none; fill: none; stroke: var(--fg-dim); stroke-width: 1.4; stroke-linecap: round; }

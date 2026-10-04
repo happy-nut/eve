@@ -25,6 +25,14 @@
   /* tooltips sit on the same grey as a callout or a code block (opaque, so they read over anything) */
   --tip-bg: light-dark(#f3f3f4, #1c1d21);
   --tip-fg: var(--fg);
+  /* every floating surface is one of two: a popup (menus, popovers, the caret's popups, Find) or a panel (Settings,
+     a confirm, a card, a PDF). Their motion is src/lib/motion.ts. */
+  --pop-radius: 10px;
+  --pop-border: 1px solid var(--line);
+  --pop-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  --panel-radius: 14px;
+  --panel-shadow: 0 0 0 0.5px var(--line), 0 24px 72px rgba(0, 0, 0, 0.28);
+  --scrim: light-dark(rgba(20, 22, 28, 0.18), rgba(0, 0, 0, 0.38)); /* under a dialog */
   color-scheme: light dark; /* follows the system; Settings -> Appearance -> Theme pins one */
 }
 :root[data-theme='light'] { color-scheme: light; }
@@ -342,19 +350,6 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 .tiptap .code-block:hover .code-lang, .tiptap .code-lang:hover, .tiptap .code-lang.open { opacity: 1; }
 .tiptap .code-lang:hover, .tiptap .code-lang.open { color: var(--fg); background: var(--bg-side); } /* opaque: a tint would let the edge it straddles show through */
 
-/* the chip's menu: same popup as the sidebar's + menu, in the top layer so Esc and click-outside are free */
-.lang-menu {
-  position: fixed; inset: auto; margin: 0; padding: 4px; z-index: 40;
-  min-width: 160px; max-height: min(320px, 60vh); overflow-y: auto;
-  list-style: none; color: var(--fg);
-  background: var(--bg-pop); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-}
-.lang-menu button {
-  width: 100%; border: 0; background: none; color: inherit; font: inherit; font-size: 13px;
-  padding: 5px 8px; border-radius: 5px; text-align: left; white-space: nowrap;
-}
-.lang-menu button:focus { background: var(--accent-soft); outline: none; }
-.lang-menu button.on { color: var(--accent); }
 
 /* ---- syntax highlighting (highlight.js class names, emitted by lowlight) ---- */
 .tiptap .hljs-comment, .tiptap .hljs-quote { color: var(--fg-dim); font-style: italic; }
@@ -570,7 +565,7 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
   .tiptap { caret-color: transparent; }
   .shell { display: block; animation: none; }
   /* only the note is printed: no window chrome, no floating anything */
-  aside, .toolbar, .dragbar, .drop-hint, .pdf-panel, .tip, .plus-menu, .backdrop,
+  aside, .toolbar, .dragbar, .drop-hint, .pdf-panel, .tip, .backdrop,
   .menu, .find, .outline, .suggest, .tbl-tools, .panel,
   .mhead, .mbar, .sheet, .scrim,
   /* the shortcut tip toast (it showed up in the PDF or picture it was teaching the key for), the popups */

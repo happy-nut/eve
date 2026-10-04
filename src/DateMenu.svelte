@@ -1,6 +1,7 @@
 <script lang="ts">
   import { placeAt } from './lib/popup';
   import { fly } from 'svelte/transition';
+  import { caretIn } from './lib/motion';
   import type { CalendarUI } from './lib/slash';
   import { dateLabel, isoDay, monthGrid, monthName, sameMonth, shiftDays, shiftMonths, weekdayNames } from './lib/date';
 
@@ -33,7 +34,7 @@
 </script>
 
 {#if day}
-  <div class="cal" style={place} transition:fly={{ y: 4, duration: 120 }}>
+  <div class="cal" style={place} transition:fly|global={caretIn}>
     <div class="cal-bar">
       <button class="cal-step" aria-label="Previous month" onmousedown={grab(() => ui.month(-1))}>
         <svg viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg>
@@ -68,9 +69,7 @@
     overflow-y: auto; /* cut to the room over or under the caret (lib/popup.ts) */
     padding: 6px;
     background: var(--bg-pop);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
     font-size: 12.5px;
     user-select: none;
   }

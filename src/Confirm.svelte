@@ -1,9 +1,12 @@
 <script lang="ts">
   import { fade, scale } from 'svelte/transition';
+  import { panelIn, scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
   import { sheet } from './lib/popup';
 
-  const p = $derived(ui.pending!);
+  // the last one asked: closing, it fades out showing what it showed (ui.pending is already null by then)
+  let last = ui.pending!;
+  const p = $derived.by(() => (last = ui.pending ?? last));
   // give focus back to where it was (sidebar row, editor) the moment the dialog closes —
   // synchronously, before any list re-render, so a later focusRow() can still override it
   const returnTo = document.activeElement as HTMLElement | null;
@@ -13,7 +16,7 @@
 
   let box: HTMLDivElement;
   /** up from the bottom on a phone (a sheet); the Mac's dialog grows in place */
-  const appear = (node: Element) => sheet(node, (n) => scale(n, { start: 0.96, duration: 160 }));
+  const appear = (node: Element) => sheet(node, (n) => scale(n, panelIn));
   // the keypress that opened the dialog (Enter on a / menu item, say) is still travelling to window:
   // it must not count as the answer to a dialog that did not exist when the key went down
   const openedAt = performance.now();
@@ -33,8 +36,8 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="backdrop" transition:fade={{ duration: 120 }} onmousedown={() => done(null)} role="presentation"></div>
-<div class="box" bind:this={box} transition:appear role="dialog" aria-modal="true">
+<div class="backdrop" transition:fade|global={scrimFade} onmousedown={() => done(null)} role="presentation"></div>
+<div class="box" bind:this={box} transition:appear|global role="dialog" aria-modal="true">
   <div class="head">
     <span class="mark" class:danger={p.danger && p.input === undefined}>
       {#if p.input !== undefined}
@@ -61,11 +64,11 @@
 </div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: light-dark(rgba(20, 22, 28, 0.18), rgba(0, 0, 0, 0.38)); z-index: 30; }
+  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: 30; }
   .box {
     position: fixed; z-index: 31; top: 38%; left: 50%; transform: translate(-50%, -50%);
-    width: min(380px, 90vw); padding: 18px 18px 14px; border-radius: 14px;
-    background: var(--bg-pop); box-shadow: 0 0 0 0.5px var(--line), 0 24px 70px rgba(0, 0, 0, 0.28);
+    width: min(380px, 90vw); padding: 18px 18px 14px; border-radius: var(--panel-radius);
+    background: var(--bg-pop); box-shadow: var(--panel-shadow);
     font-size: 13px;
   }
   .head { display: flex; gap: 11px; align-items: flex-start; }

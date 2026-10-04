@@ -2,10 +2,13 @@
   import 'emoji-picker-element';
   import dataSource from 'emoji-picker-element-data/en/emojibase/data.json?url';
   import { fade, scale } from 'svelte/transition';
+  import { popIn, scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
   import { CUSTOM_ICONS, customUrl, randomIcon } from './lib/icons';
 
-  const req = $derived(ui.emoji!);
+  // the last one asked: closing, it fades out showing what it showed (ui.emoji is already null by then)
+  let last = ui.emoji!;
+  const req = $derived.by(() => (last = ui.emoji ?? last));
   let el: HTMLElement & { i18n?: unknown };
   // keep the panel inside the window
   const W = 352, H = 400;
@@ -92,9 +95,9 @@
 </script>
 
 <svelte:window onkeydown={onKey} />
-<div class="backdrop" transition:fade={{ duration: 100 }} onmousedown={() => ui.emojiDone(null)} role="presentation"></div>
+<div class="backdrop" transition:fade|global={scrimFade} onmousedown={() => ui.emojiDone(null)} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="panel" style="left: {x}px; top: {y}px; width: {W}px" transition:scale={{ start: 0.96, duration: 140 }} role="dialog" aria-label="이모지 선택" onkeydowncapture={onGridKey}>
+<div class="panel" style="left: {x}px; top: {y}px; width: {W}px" transition:scale|global={popIn} role="dialog" aria-label="이모지 선택" onkeydowncapture={onGridKey}>
   <header>
     <span class="tab">이모지</span>
     <span class="acts">
@@ -116,7 +119,7 @@
   .backdrop { position: fixed; inset: 0; z-index: 40; }
   .panel {
     position: fixed; z-index: 41; overflow: hidden;
-    background: var(--bg-pop); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
+    background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
     transform-origin: top left;
   }
   header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 6px; border-bottom: 1px solid var(--line); font-size: 13px; }

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { scale } from 'svelte/transition';
+  import { panelIn } from './lib/motion';
   import { ui } from './lib/ui.svelte';
   import { pdfSrc } from './lib/pdf';
   import { openAsset, qlPreview } from './lib/platform';
@@ -117,7 +118,7 @@
 </script>
 
 <div class="pdf-panel" class:busy style:left="{x}px" style:top="{y}px" style:width="{w}px" style:height="{h}px"
-  transition:scale={{ start: 0.97, duration: 140 }}>
+  transition:scale|global={panelIn}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="pdf-bar" onpointerdown={drag}>
     <span class="pdf-title">{req.name}</span>
@@ -156,8 +157,7 @@
 <style>
   .pdf-panel {
     position: fixed; z-index: 32; display: flex; flex-direction: column; overflow: hidden; outline: none;
-    border-radius: 12px; background: var(--bg-pop); border: 1px solid var(--line);
-    box-shadow: 0 20px 64px rgba(0, 0, 0, 0.3);
+    background: var(--bg-pop); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
   }
   .pdf-bar {
     display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 12px; cursor: default;

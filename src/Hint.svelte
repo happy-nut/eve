@@ -7,7 +7,7 @@
 
 {#if hints.current}
   {@const h = hints.current}
-  <div class="hint" role="status" transition:fly={{ y: 16, duration: 220, easing: cubicOut }}>
+  <div class="hint" role="status" transition:fly|global={{ y: 16, duration: 220, easing: cubicOut }}>
     <span class="bulb">💡</span>
     <span class="text">{h.text}</span>
     <span class="keys">{#each h.keys as k, i}{#if i}<span class="or">/</span>{/if}<Keys keys={k} dark />{/each}</span>

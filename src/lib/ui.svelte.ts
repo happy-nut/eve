@@ -1,5 +1,5 @@
-/** One line of a right-click menu. `sep` starts a group above it; a `hide` item never makes the list. */
-export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean }
+/** One line of a menu. `sep` starts a group above it; a `hide` item never makes the list; `checked` is the current choice. */
+export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean; checked?: boolean }
 
 /** In-app confirm/prompt (WKWebView has no native JS dialogs). Rendered by Confirm.svelte. */
 interface Pending { message: string; input?: string; danger?: boolean; yes?: string; resolve: (v: string | null) => void }
@@ -41,10 +41,14 @@ class Ui {
   openPdf(src: string, name: string) { this.pdf = { src, name }; }
   closePdf() { this.pdf = null; }
 
-  /** a right-click menu at a point; the app draws its own everywhere, the webview's is suppressed */
+  /** every menu (a right click, the list's "+", a code block's language) at a point; the app draws its own
+   *  everywhere, the webview's is suppressed. Menu.svelte draws it: a popup on the Mac, a sheet on a phone. */
   menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   private menuFrom: HTMLElement | null = null;
-  openMenu(at: { clientX: number; clientY: number }, items: MenuItem[]) {
+  private menuClosed: (() => void) | undefined;
+  openMenu(at: { clientX: number; clientY: number }, items: MenuItem[], onclose?: () => void) {
+    this.menuClosed?.();
+    this.menuClosed = onclose;
     this.menuFrom = document.activeElement as HTMLElement | null;
     const shown = items.filter((i) => !i.hide);
     // a group whose items all went away must not leave its divider at the top of the menu
@@ -53,6 +57,8 @@ class Ui {
   /** Dismissed or picked: whatever had the keyboard gets it back (a picked item may take it again). */
   closeMenu() {
     this.menu = null;
+    this.menuClosed?.();
+    this.menuClosed = undefined;
     if (this.menuFrom?.isConnected) this.menuFrom.focus();
     this.menuFrom = null;
   }

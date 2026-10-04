@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade, scale } from 'svelte/transition';
+  import { panelIn, scrimFade } from './lib/motion';
   import { shortcuts, eventToKeys, type Scope } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { storage, autostart, dock, defaultApp, mcp, isTauri, isMobile, copyText, openUrl, type McpClient } from './lib/platform';
@@ -113,8 +114,8 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="backdrop" transition:fade={{ duration: 140 }} onmousedown={onClose} role="presentation"></div>
-<div class="panel" transition:scale={{ start: 0.96, duration: 180 }} role="dialog">
+<div class="backdrop" transition:fade|global={scrimFade} onmousedown={onClose} role="presentation"></div>
+<div class="panel" transition:scale|global={panelIn} role="dialog">
   <header>
     <div class="seg" role="tablist">
       {#each tabs as [id, label]}
@@ -402,14 +403,13 @@
 </div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.22); z-index: 20; }
+  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: 20; }
   /* a phone: settings is a page, and the strip above the status bar is part of it */
   :global(html.mobile) .backdrop { background: var(--bg); }
   .panel {
     position: fixed; z-index: 21; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: min(560px, 92vw); max-height: 82vh; display: flex; flex-direction: column; overflow: hidden;
-    background: var(--bg-pop); border-radius: 14px;
-    box-shadow: 0 0 0 0.5px var(--line), 0 24px 80px rgba(0, 0, 0, 0.28);
+    background: var(--bg-pop); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
   }
 
   header { display: flex; justify-content: space-between; align-items: center; padding: 12px 12px 10px 14px; }

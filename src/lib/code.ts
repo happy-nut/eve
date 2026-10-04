@@ -3,6 +3,7 @@ import type { Editor } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
+import { ui } from './ui.svelte';
 
 /**
  * Syntax highlighting, loaded with the first code block shown: lowlight, highlight.js and the grammars
@@ -120,12 +121,6 @@ export const CodeBlock = CodeBlockBase.extend({
       chip.textContent = labelOf(node.attrs.language);
       dom.append(chip, pre);
 
-      // a popover, so the browser handles the top layer, Esc, and click-outside for us
-      const menu = document.createElement('ul');
-      menu.className = 'lang-menu';
-      menu.popover = 'auto';
-      chip.popoverTargetElement = menu;
-
       const language = (): string => {
         const pos = typeof getPos === 'function' ? getPos() : null;
         return (pos == null ? null : editor.state.doc.nodeAt(pos)?.attrs.language) ?? '';
@@ -138,45 +133,18 @@ export const CodeBlock = CodeBlockBase.extend({
         editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, language: value || null }));
         editor.commands.focus();
       };
-
-      menu.addEventListener('beforetoggle', (e) => {
-        const open = (e as ToggleEvent).newState === 'open';
-        chip.classList.toggle('open', open); // the chip is hover-only, but must stay while its menu is up
-        if (!open) return;
+      // the app's one menu (Menu.svelte): a popup under the chip on the Mac, a sheet on a phone
+      chip.addEventListener('click', () => {
+        if (ui.menu) { ui.closeMenu(); return; }
         const current = language();
         // a language typed in markdown that the menu does not list (```vbnet) keeps its own entry
         const items = LANGUAGES.some(([v]) => v === current) ? LANGUAGES : [...LANGUAGES, [current, current] as [string, string]];
-        menu.replaceChildren(...items.map(([value, label]) => {
-          const item = document.createElement('button');
-          item.type = 'button';
-          item.textContent = label;
-          if (value === current) item.classList.add('on');
-          item.addEventListener('mouseenter', () => item.focus());
-          item.addEventListener('click', () => { menu.hidePopover(); setLanguage(value); });
-          const li = document.createElement('li');
-          li.append(item);
-          return li;
-        }));
-      });
-      menu.addEventListener('toggle', (e) => {
-        if ((e as ToggleEvent).newState !== 'open') return;
         const r = chip.getBoundingClientRect();
-        menu.style.left = `${Math.round(Math.min(r.left, innerWidth - menu.offsetWidth - 8))}px`;
-        const below = r.bottom + 4;
-        menu.style.top = `${Math.round(below + menu.offsetHeight + 8 > innerHeight ? Math.max(8, r.top - 4 - menu.offsetHeight) : below)}px`;
-        (menu.querySelector<HTMLButtonElement>('button.on') ?? menu.querySelector('button'))?.focus();
-        menu.querySelector('button.on')?.scrollIntoView({ block: 'nearest' });
+        chip.classList.add('open'); // the chip is hover-only, but must stay while its menu is up
+        ui.openMenu({ clientX: r.left, clientY: r.bottom + 4 },
+          items.map(([value, label]) => ({ label, checked: value === current, run: () => setLanguage(value) })),
+          () => chip.classList.remove('open'));
       });
-      menu.addEventListener('keydown', (e) => {
-        const items = [...menu.querySelectorAll('button')];
-        const i = items.indexOf(document.activeElement as HTMLButtonElement);
-        if (e.key === 'ArrowDown') items[(i + 1) % items.length]?.focus();
-        else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length]?.focus();
-        else return;
-        e.preventDefault();
-        e.stopPropagation();
-      });
-      document.body.append(menu);
 
       const owns = (target: EventTarget | Node | null) => target === chip || (target instanceof Node && chip.contains(target));
       return {
@@ -185,7 +153,6 @@ export const CodeBlock = CodeBlockBase.extend({
         update: (updated) => updated.type === node.type && ((chip.textContent = labelOf(updated.attrs.language)), true),
         ignoreMutation: (m) => owns(m.target),
         stopEvent: (e) => owns(e.target),
-        destroy: () => menu.remove(),
       };
     };
   },

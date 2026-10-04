@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
+  import { caretIn } from './lib/motion';
   import type { SuggestItem, SuggestionUI } from './lib/slash';
   import { rows, expand, collapse } from './lib/suggest';
   import Icon from './Icon.svelte';
@@ -44,7 +45,7 @@
 </script>
 
 {#if items.length}
-  <ul class="suggest" bind:this={list} style={place} transition:fly={{ y: 4, duration: 120 }}>
+  <ul class="suggest" bind:this={list} style={place} transition:fly|global={caretIn}>
     {#each shown as row, i (`${row.top}-${row.child}-${row.item.value ?? row.item.label}`)}
       {@const t = row.item}
       <li class:sel={i === sel} class:child={row.child}>
@@ -77,9 +78,7 @@
     max-height: 300px;
     overflow-y: auto;
     background: var(--bg-pop);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
     font-size: 13px;
   }
   .suggest button { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; border: 0; background: none; color: inherit; font: inherit; padding: 5px 8px; border-radius: 5px; white-space: nowrap; }

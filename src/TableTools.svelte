@@ -83,8 +83,8 @@
 <style>
   .tbl-tools {
     position: fixed; z-index: 12; display: flex; align-items: center; gap: 1px;
-    transform: translateY(-100%); padding: 3px; border-radius: 8px;
-    background: var(--bg-pop); border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+    transform: translateY(-100%); padding: 3px;
+    background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }
   .tbl-tools .icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
   .tbl-tools svg { width: 15px; height: 15px; display: block; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }

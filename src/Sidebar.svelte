@@ -3,7 +3,7 @@
   import { hints } from './lib/hints.svelte';
   import { updates } from './lib/updates.svelte';
   import { flip } from 'svelte/animate';
-  import { fade, slide, scale } from 'svelte/transition';
+  import { fade, slide } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { tick } from 'svelte';
   import { notes, nested, titleOf, CALENDAR, type Note } from './lib/notes.svelte';
@@ -63,26 +63,16 @@
     return out;
   });
 
-  // ---- "+" dropdown: new note / new group, relative to the focused row ----
-  let plusOpen = $state(false);
+  // ---- "+" menu: new note / new group, relative to the focused row (the app's one menu, Menu.svelte) ----
   let ctxGroup = $state('');
-  let plusFrom: HTMLElement | null = null; // row that had focus when the menu opened
-  let plusStyle = $state(''); // anchored under the focused row (⌘N) or under the toolbar + button
   hooks.openPlus = (anchor?: HTMLElement) => {
-    if (plusOpen) { plusOpen = false; return; }
+    if (ui.menu) { ui.closeMenu(); return; }
     const el = document.activeElement as HTMLElement | null;
     const row = el?.closest<HTMLElement>('[data-row]');
-    plusFrom = row ?? null;
     const r = (anchor ?? row ?? searchEl)?.getBoundingClientRect();
-    plusStyle = r ? `left: ${r.left + (row && !anchor ? 8 : 0)}px; top: ${r.bottom + 4}px;` : 'left: 12px; top: 40px;';
     ctxGroup = row?.dataset.group ?? notes.all.find((n) => n.id === row?.dataset.note)?.group ?? '';
-    plusOpen = true;
+    ui.openMenu(r ? { clientX: r.left + (row && !anchor ? 8 : 0), clientY: r.bottom + 4 } : { clientX: 12, clientY: 40 }, plusItems);
   };
-  function closePlus() {
-    plusOpen = false;
-    (plusFrom?.isConnected ? plusFrom : document.querySelector<HTMLElement>('aside [data-row]'))?.focus();
-    ui.focusOwner = 'sidebar';
-  }
   /** Import / export. A failed export says so instead of doing nothing at all. */
   async function transfer(run: () => Promise<unknown>) {
     try { await run(); } catch (err) { await ui.ask(String(err), false); }
@@ -110,23 +100,6 @@
     );
     return items;
   });
-  function plusPick(i: number) { plusOpen = false; plusItems[i].run(); }
-  function plusKey(e: KeyboardEvent) {
-    const items = [...document.querySelectorAll<HTMLElement>('.plus-menu button')];
-    const i = items.indexOf(document.activeElement as HTMLElement);
-    if (e.key === 'ArrowDown') items[(i + 1) % items.length]?.focus();
-    else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length]?.focus();
-    else if (e.key === 'Escape') closePlus();
-    else return;
-    e.preventDefault(); e.stopPropagation();
-  }
-  const autofocus = (el: HTMLElement) => el.focus();
-  /** keep the keyboard where it is: a press that moves focus out of the menu closes it mid-click */
-  function hold(e: MouseEvent) {
-    e.preventDefault();
-    (e.currentTarget as HTMLElement).focus();
-  }
-
   // ---- drag & drop (native HTML5): notes and whole groups ----
   let drag = $state<{ note?: string; group?: string } | null>(null);
   /**
@@ -477,7 +450,7 @@
   }
   function pullStart(e: TouchEvent) {
     if (!isMobile || !notes.current || e.touches.length !== 1) return;
-    if ((e.target as HTMLElement).closest('input, .fab, .menu, .plus-menu')) return;
+    if ((e.target as HTMLElement).closest('input, .fab, .menu')) return;
     touch = { x: e.touches[0].clientX, y: e.touches[0].clientY, axis: '' };
   }
   function pullMove(e: TouchEvent) {
@@ -554,26 +527,6 @@
       <input bind:this={searchEl} bind:value={query} onkeydown={onSearchKey}
         onmousedown={() => { if (document.activeElement !== searchEl) hints.action('search', 'Search from anywhere'); }}
         placeholder={isMobile ? 'Search' : `Search  ${prettyKeys(shortcuts.keysFor('search'))}`} spellcheck="false" />
-      <div class="plus-wrap">
-        {#if plusOpen}
-          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-          <ul class="plus-menu" role="menu" style={plusStyle} transition:scale={{ start: 0.92, duration: 140 }}
-            onkeydown={plusKey} onfocusout={(e) => { if (!(e.relatedTarget as HTMLElement | null)?.closest('.plus-wrap')) plusOpen = false; }}>
-            {#each plusItems as it, i}
-              <li role="none" class:sep={it.sep}>
-                <!-- one highlight only: the mouse moves focus instead of adding a hover state.
-                     mousedown is swallowed because WebKit does not focus a button that is clicked —
-                     it blurs the menu instead, which closed it before the click could ever land. -->
-                {#if i === 0}
-                  <button role="menuitem" use:autofocus onmousedown={hold} onmouseenter={(e) => e.currentTarget.focus()} onclick={() => plusPick(i)}>{it.label}</button>
-                {:else}
-                  <button role="menuitem" onmousedown={hold} onmouseenter={(e) => e.currentTarget.focus()} onclick={() => plusPick(i)}>{it.label}</button>
-                {/if}
-              </li>
-            {/each}
-          </ul>
-        {/if}
-      </div>
     </div>
 
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -692,18 +645,6 @@
     background: var(--bg-input); color: inherit; font: inherit; font-size: 13px; outline: none; transition: box-shadow 0.15s;
   }
   .top input:focus { box-shadow: 0 0 0 2px var(--accent-soft), var(--glow); }
-  .plus-menu {
-    position: fixed; z-index: 10; min-width: 190px; list-style: none; margin: 0; padding: 4px;
-    background: var(--bg-pop); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-    transform-origin: top left;
-  }
-  .plus-menu button {
-    width: 100%; display: flex; flex-direction: row; justify-content: space-between; align-items: center; gap: 12px;
-    border: 0; background: none; color: inherit; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 5px; text-align: left; white-space: nowrap;
-  }
-  .plus-menu button:focus { background: var(--accent-soft); outline: none; }
-  /* files in and out, kept apart from what the menu creates */
-  .plus-menu li.sep { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--line); }
 
   .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 10px 8px; margin: 0; list-style: none; }
   .row { position: relative; padding-left: calc(var(--d) * 18px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
