@@ -351,7 +351,11 @@
         if (group && !groups.isCollapsed(group)) groups.toggle(group);
         else { const p = group ? parentOf(group) : notes.all.find((n) => n.id === noteId)?.group; if (p) focusRow(groupSel(p)); else return; }
         break;
-      case 'ArrowRight': if (group && groups.isCollapsed(group)) groups.toggle(group); else return; break;
+      // → opens a folded group; anywhere else it steps over into the note, as Escape does
+      case 'ArrowRight':
+        if (group && groups.isCollapsed(group)) groups.toggle(group);
+        else document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus();
+        break;
       case 'Backspace': case 'Delete': {
         const nb = rows[i + 1] ?? rows[i - 1];
         const sel = nb?.dataset.note ? `[data-note="${nb.dataset.note}"]` : nb?.dataset.group ? groupSel(nb.dataset.group) : '[data-row]';
