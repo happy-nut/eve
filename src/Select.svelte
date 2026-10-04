@@ -1,5 +1,6 @@
 <script lang="ts">
   import { scale } from 'svelte/transition';
+  import { popIn } from './lib/motion';
   import { isMobile } from './lib/platform';
   import BottomSheet from './BottomSheet.svelte';
 
@@ -74,7 +75,7 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div class="scrim" use:portal role="presentation" onmousedown={(e) => { e.preventDefault(); open = false; }}></div>
     <div class="pop" use:portal role="listbox" style="left: {pos.left}px; top: {pos.top}px; min-width: {Math.max(pos.width, 160)}px"
-      transition:scale|global={{ start: 0.95, duration: 120 }}>
+      transition:scale|global={popIn}>
       {#each options as [id, text], i (id)}
         <button role="option" aria-selected={id === value} class:at={i === at} tabindex="-1"
           onmouseenter={() => (at = i)} onmousedown={(e) => e.preventDefault()} onclick={() => pick(i)}>
@@ -103,7 +104,7 @@
 
   .pop {
     position: fixed; z-index: 41; transform: translateX(-100%); transform-origin: top right; padding: 4px;
-    background: var(--bg-pop); border-radius: 10px; box-shadow: 0 0 0 0.5px var(--line), 0 12px 32px rgba(0, 0, 0, 0.2);
+    background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }
   .pop button {
     display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; border: 0;

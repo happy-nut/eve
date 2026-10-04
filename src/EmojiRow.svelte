@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
+  import { caretIn } from './lib/motion';
   import type { EmojiUI } from './lib/slash';
   import type { EmojiEntry } from './lib/emoji';
   import { placeAt } from './lib/popup';
@@ -23,7 +24,7 @@
 </script>
 
 {#if items.length}
-  <div class="emoji-row" style={place} transition:fly={{ y: 4, duration: 120 }} role="listbox" aria-label="Emoji">
+  <div class="emoji-row" style={place} transition:fly|global={caretIn} role="listbox" aria-label="Emoji">
     <div class="cells">
       {#each items as e, i (e.emoji)}
         <!-- mousedown, not click: the editor keeps the caret, so the pick lands where the colon was -->
@@ -38,8 +39,7 @@
 <style>
   .emoji-row {
     position: fixed; z-index: 40; padding: 4px; max-height: none !important;
-    background: var(--bg-pop); border: 1px solid var(--line); border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }
   .cells { display: flex; gap: 2px; }
   .cell {

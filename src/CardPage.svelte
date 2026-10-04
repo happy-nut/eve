@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade, scale } from 'svelte/transition';
+  import { panelIn, scrimFade } from './lib/motion';
   import { isMobile } from './lib/platform';
   import { sheet } from './lib/popup';
   import type { Editor as TipTap } from '@tiptap/core';
@@ -50,7 +51,7 @@
   });
 
   /** a sheet slides up on a phone; the Mac's floating page grows in place */
-  const appear = (node: HTMLElement) => sheet(node, (n) => scale(n, { start: 0.96, duration: 180 }));
+  const appear = (node: HTMLElement) => sheet(node, (n) => scale(n, panelIn));
 
   function onKey(e: KeyboardEvent) {
     // a popup's Esc has already been taken by the editor (and closed the popup) by the time it gets here
@@ -60,9 +61,9 @@
   }
 </script>
 
-<div class="backdrop" transition:fade={{ duration: 120 }} onmousedown={close} role="presentation"></div>
+<div class="backdrop" transition:fade|global={scrimFade} onmousedown={close} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="card-page" transition:appear role="dialog" tabindex="-1" onkeydown={onKey}>
+<div class="card-page" transition:appear|global role="dialog" tabindex="-1" onkeydown={onKey}>
   {#if isMobile}<div class="grip" aria-hidden="true"></div>{/if}
   {#if req.note}<p class="tpl-note">{req.note}</p>{/if}
   <div class="card-scroll" bind:this={scrollEl}>
@@ -77,11 +78,11 @@
 <EmojiRow bind:this={emojiRow} />
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); z-index: 30; }
+  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: 30; }
   .card-page {
     position: fixed; z-index: 31; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: min(760px, 92vw); height: min(80vh, 760px); display: flex; flex-direction: column; overflow: hidden;
-    border-radius: 14px; background: var(--bg-pop); border: 1px solid var(--line); box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
+    background: var(--bg-pop); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
   }
   /* the scroller sits inside the card so the outline rail can stay put while the page scrolls */
   .card-scroll { flex: 1; padding: 40px 56px 0; overflow-y: auto; scrollbar-width: none; }
