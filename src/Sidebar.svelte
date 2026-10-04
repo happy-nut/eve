@@ -502,15 +502,15 @@
 </script>
 
 {#if open}
-{#snippet updateBanner()}
-  <!-- a newer Eve on the phone: one tap downloads it and opens Android's installer -->
-  <div class="update">
-    <span class="utext"><b>Eve {updates.available?.version}</b>
-      <span class="usub">{updates.doing || 'A new version is ready'}</span></span>
-    <button class="ubtn" disabled={updates.busy} onclick={() => updates.install()}>
-      {#if updates.busy}<span class="uspin" aria-hidden="true"></span>{/if}Update
-    </button>
-  </div>
+{#snippet updateButton()}
+  <!-- a newer Eve: one button by Settings installs it (the Mac restarts; a phone opens Android's installer).
+       The same on both: an icon in the accent colour, what it is doing on hover and to a screen reader. -->
+  <button class="icon tip-up gear upd" class:failed={updates.state === 'error'}
+    aria-label={updates.doing || `Update to Eve ${updates.available?.version}`}
+    data-tip={updates.doing || `Update to Eve ${updates.available?.version}`} disabled={updates.busy} onclick={() => updates.install()}>
+    {#if updates.busy}<span class="uspin" aria-hidden="true"></span>
+    {:else}<svg class="gear-i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v8.5M8.5 12.5 12 16l3.5-3.5"/></svg>{/if}
+  </button>
 {/snippet}
   <aside transition:drawer style={drawerStyle}
     ontouchstart={pullStart} ontouchmove={pullMove} ontouchend={pullEnd} ontouchcancel={pullEnd}>
@@ -519,10 +519,10 @@
       <div class="mtop">
         <h1 class="mtitle">Eve</h1>
         <span class="sync {sync.status}">{syncLabel}</span>
+        {#if updates.available}{@render updateButton()}{/if}
         <button class="icon gear" aria-label="Settings" onclick={onSettings}>{@html GEAR}</button>
       </div>
     {/if}
-    {#if isMobile && updates.available}{@render updateBanner()}{/if}
     <div class="top" data-tauri-drag-region>
       <input bind:this={searchEl} bind:value={query} onkeydown={onSearchKey}
         onmousedown={() => { if (document.activeElement !== searchEl) hints.action('search', 'Search from anywhere'); }}
@@ -618,14 +618,7 @@
       <span class="sync {sync.status}" title={sync.error || (sync.enabled ? 'Synced' : 'Sync off')}>
         {syncLabel}
       </span>
-      <!-- a newer Eve: one button by Settings installs it and restarts; what it is doing shows on hover -->
-      {#if updates.available}
-        <button class="icon tip-up gear upd" class:failed={updates.state === 'error'} aria-label="Update Eve"
-          data-tip={updates.doing || `Update to Eve ${updates.available.version}`} disabled={updates.busy} onclick={() => updates.install()}>
-          {#if updates.busy}<span class="uspin" aria-hidden="true"></span>
-          {:else}<svg class="gear-i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v8.5M8.5 12.5 12 16l3.5-3.5"/></svg>{/if}
-        </button>
-      {/if}
+      {#if updates.available}{@render updateButton()}{/if}
       <button class="icon tip-up gear" aria-label="Settings" data-tip="Settings" data-keys={shortcuts.keysFor('settings')} onclick={onSettings}>
         <svg class="gear-i" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
@@ -718,19 +711,9 @@
 
   .gear { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
   .gear svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
-  .update {
-    display: flex; align-items: center; gap: 12px; margin: 4px 16px 10px; padding: 10px 10px 10px 14px; border-radius: 14px;
-    background: var(--accent-soft); color: var(--fg);
-  }
-  .utext { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 15px; }
-  .usub { font-size: 13px; color: var(--fg-dim); }
-  .ubtn { flex: none; border: 0; border-radius: 10px; padding: 9px 16px; background: var(--accent); color: #fff; font: inherit; font-size: 15px; font-weight: 600; }
-  .ubtn:disabled { opacity: 0.85; }
-  /* the Mac's sidebar is 13px type: the same banner, smaller */
-  /* the Mac's update: an icon in the footer, in the accent colour so it is noticed */
+  /* the update: an icon by Settings, in the accent colour so it is noticed (the Mac's footer, a phone's top bar) */
   .upd { margin-left: auto; color: var(--accent); }
   .upd.failed { color: #ff453a; }
-  .upd .uspin { margin: 0; border-color: var(--accent-soft); border-top-color: var(--accent); }
   :global(.gear-i) { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   footer {
     display: flex; align-items: center; justify-content: space-between;
@@ -746,8 +729,8 @@
   @keyframes pulse { 50% { opacity: 0.3; } }
   /* downloading: the button spins, so a slow download never looks like a tap that did nothing */
   .uspin {
-    display: inline-block; width: 13px; height: 13px; margin: 0 7px -2px 0; border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.45); border-top-color: #fff; animation: uspin 0.7s linear infinite;
+    display: inline-block; width: 13px; height: 13px; border-radius: 50%;
+    border: 2px solid var(--accent-soft); border-top-color: var(--accent); animation: uspin 0.7s linear infinite;
   }
   @keyframes uspin { to { transform: rotate(360deg); } }
 </style>

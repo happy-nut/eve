@@ -193,6 +193,8 @@ html.mobile aside .mtop .gear {
   justify-content: center; color: var(--fg-dim);
 }
 html.mobile aside .mtop .gear-i { width: 21px; height: 21px; stroke-width: 1.5; }
+html.mobile aside .mtop .upd { color: var(--accent); } /* the update keeps the Mac's accent next to the grey gear */
+html.mobile aside .mtop .upd.failed { color: #ff453a; }
 html.mobile aside .top { padding: 6px 16px 8px; }
 html.mobile aside .top input { font-size: 15.5px; padding: 9px 12px; border-radius: 8px; background: var(--bg-input); }
 
