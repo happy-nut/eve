@@ -1,4 +1,4 @@
-import { test, expect, vi } from 'vitest';
+import { test, expect, vi, afterEach } from 'vitest';
 
 // the emoji list from disk (jsdom has no server to fetch it from); the search itself is the real one
 vi.mock('./emoji', async (original) => {
@@ -10,6 +10,12 @@ vi.mock('./emoji', async (original) => {
 const { createEditor } = await import('./editor');
 const { type, press, posOf } = await import('./testEditor');
 import type { EmojiEntry } from './emoji';
+
+// every editor a test makes is destroyed after it: one left running took the emoji list's late answer after the
+// file's jsdom was gone ("document is not defined", an unhandled error that failed CI now and then)
+const settle = () => new Promise((r) => setTimeout(r, 0));
+const made: { destroy(): void }[] = [];
+afterEach(async () => { await settle(); for (const e of made.splice(0)) e.destroy(); });
 
 function editor() {
   let shown: EmojiEntry[] = [], pick: ((e: EmojiEntry) => void) | null = null, sel = 0;
@@ -26,9 +32,9 @@ function editor() {
   document.body.append(element);
   const ed = createEditor({ element, content: '', onUpdate: noop, onOpenNote: noop, targets: () => [], suggestionUI: popup, calendarUI: popup, emojiUI });
   ed.commands.focus('end');
+  made.push(ed);
   return { ed, row: () => shown.map((e) => e.emoji.replace(/️/g, '')) };
 }
-const settle = () => new Promise((r) => setTimeout(r, 0));
 
 test(':fir shows up to five in a row, → chooses, ↩ puts it in place of what was typed', async () => {
   const { ed, row } = editor();
