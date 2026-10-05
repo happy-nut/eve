@@ -39,6 +39,7 @@ import { calendar, emojiRow, popup, ICONS, SLASH, type CalendarUI, type EmojiUI,
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
 import { moveBlock, indentLines, switchItem } from './blocks';
+import { holdEdit, dropEdit } from './pending';
 
 /** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
 const MD_SYNTAX = /(\*\*|__|~~|^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|`|\[[^\]]*\]\(|^\|.*\|\s*$)/m;
@@ -80,6 +81,8 @@ const APP_GUARD = new PluginKey('eve-app-guard');
 const suggestionVisible = new WeakMap<Editor, () => boolean>();
 
 export const getMarkdown = (editor: Editor): string => (editor.storage as any).markdown.getMarkdown();
+/** a note this long (in ProseMirror positions, about characters) waits for a pause before it becomes markdown */
+const LONG = 10_000;
 
 /**
  * What ⌥↑ / ⌥↓ just moved is lit faintly for a moment, so the eye can tell which lines went where: every
@@ -317,6 +320,17 @@ export function createEditor(opts: {
     const title = splitLink(link)[0].toLowerCase(); // a section link keeps the page's icon
     return notes.visible.find((n) => titleOf(n).toLowerCase() === title)?.icon ?? '';
   };
+  // A long note's markdown is a few milliseconds per key (54 KB: 6.6 ms of a 7.9 ms keystroke), so it is made
+  // once the typing pauses; a short one, at once. Anything that reads the note first runs flushEdits() (pending.ts).
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cancel = () => { clearTimeout(timer); timer = undefined; dropEdit(flush); };
+  const flush = () => { if (timer === undefined) return; cancel(); opts.onUpdate(getMarkdown(editor)); };
+  function handOver(ed: Editor) {
+    if (ed.state.doc.content.size < LONG) { cancel(); opts.onUpdate(getMarkdown(ed)); return; }
+    clearTimeout(timer);
+    timer = setTimeout(flush, 150);
+    holdEdit(flush);
+  }
   const editor: Editor = new Editor({
     element: opts.element,
     autofocus: false, // Editor.svelte decides (the sidebar may own focus, e.g. after deleting from the list)
@@ -746,8 +760,10 @@ export function createEditor(opts: {
         },
       }),
     ],
-    onUpdate: ({ editor }) => opts.onUpdate(getMarkdown(editor)),
+    onUpdate: ({ editor }) => handOver(editor),
   });
+  editor.on('blur', flush); // leaving the note: the list, a dialog, another app
+  editor.on('destroy', flush); // the note closed or switched (the document is still there to read)
   suggestionVisible.set(editor, () => opts.suggestionUI.visible() || opts.calendarUI.visible() || opts.emojiUI.visible());
   if (opts.onNoteMove) noteMove.set(editor, opts.onNoteMove);
   applyKeymap(editor);

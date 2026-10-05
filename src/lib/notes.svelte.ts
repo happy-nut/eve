@@ -1,4 +1,5 @@
 import { storage } from './platform';
+import { flushEdits } from './pending';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
 import { plain, splitLink } from './markdown';
@@ -250,9 +251,10 @@ class NotesStore {
   }
 
   /** write every edit still waiting on its debounce (the app is going to the background) */
-  flushAll() { for (const id of [...this.timers.keys()]) this.flush(id); }
+  flushAll() { flushEdits(); for (const id of [...this.timers.keys()]) this.flush(id); }
 
   flush(id: string) {
+    flushEdits(); // a long note's last keys may still be on their way from the editor
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
     clearTimeout(this.timers.get(id));

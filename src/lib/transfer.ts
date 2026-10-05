@@ -4,6 +4,7 @@ import { files, importAsset, pickFiles, pickFolders, listFolder, pickSavePath, s
 import { TEXT_FILE, DOC_FILE, VIDEO_FILE } from './drop';
 import { commonDir, dirOf, groupFor, nameOf, stem } from './paths';
 import { ui } from './ui.svelte';
+import { flushEdits } from './pending';
 
 /** Files this app takes in, by extension. */
 const IMPORTABLE = /\.(md|markdown|mdx|txt|pdf|xlsx?|hwpx?|png|jpe?g|gif|webp|svg|heic|mp4|mov|m4v|webm)$/i;
@@ -70,6 +71,7 @@ export type ExportAs = 'md' | 'pdf' | 'png';
  * the picture being that page rasterised.
  */
 export async function exportNote(note: Note, as: ExportAs): Promise<string | null> {
+  flushEdits(); // the export is of the note as it is on screen, the last keys included
   // a phone has no save panel: the note goes to the share sheet (Files, Drive, a chat…)
   if (isMobile) {
     if (!(await widget.export(as, titleOf(note), note.body))) throw new Error(`Could not export this note as ${as.toUpperCase()}.`);
