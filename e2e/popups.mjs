@@ -35,11 +35,13 @@ const present = (page, sel) => page.locator(sel).count().then((n) => n > 0);
 async function check(page, name, sel, open, close) {
   let from = await mark(page);
   await open();
-  await page.waitForTimeout(500);
+  // until it is there (a popup loaded on first use, as the emoji picker is, takes a while on a slow machine)
+  await page.locator(sel).last().waitFor({ state: 'attached', timeout: 10_000 }).catch(() => {});
+  await page.waitForTimeout(300);
   const r = { name, opened: await present(page, sel), in: await animated(page, sel, from) };
   from = await mark(page);
   await close();
-  await page.waitForTimeout(500);
+  await page.waitForFunction((sel) => !document.querySelector(sel), sel, { timeout: 10_000 }).catch(() => {});
   Object.assign(r, { out: await animated(page, sel, from), closed: !(await present(page, sel)) });
   results.push(r);
   console.log(`${r.opened && r.in && r.out && r.closed ? 'pass' : 'FAIL'} ${name.padEnd(28)} opened ${r.opened ? 'yes' : 'no '}  in ${r.in ? 'yes' : 'no '}  out ${r.out ? 'yes' : 'no '}  closed ${r.closed ? 'yes' : 'no'}`);
