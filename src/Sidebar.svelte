@@ -661,8 +661,8 @@
   /* + and × unfold between the count and the chevron on hover; the chevron never moves */
   .tools { display: flex; gap: 2px; width: 0; opacity: 0; overflow: hidden; transform: translateX(6px);
     transition: width 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.16s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
-  .ghead:hover .tools, .tools:focus-within { width: 46px; opacity: 1; transform: none; }
-  .note-row:hover .tools, .note-row .tools:focus-within { width: 22px; opacity: 1; transform: none; }
+  :global(html[data-hover]) .ghead:hover .tools, .tools:focus-within { width: 46px; opacity: 1; transform: none; }
+  :global(html[data-hover]) .note-row:hover .tools, .note-row .tools:focus-within { width: 22px; opacity: 1; transform: none; }
   .tools .icon.mini, .fold { width: 22px; height: 22px; font-size: 14px; flex: none; }
   .fold { margin-left: 2px; }
   .tail { display: flex; align-items: center; cursor: default; }
@@ -696,7 +696,7 @@
     padding: 5px 6px; border-radius: 6px; display: flex; flex-direction: column;
     cursor: default; transition: background 0.12s, transform 0.12s;
   }
-  .note-row > button:first-child:hover { background: var(--bg-hover); }
+  :global(html[data-hover]) .note-row > button:first-child:hover { background: var(--bg-hover); }
   .note-row > button:first-child:active { transform: scale(0.985); }
   .note-row > button.active { background: var(--bg-active); }
   /* Keyboard cursor: the row's own background, and it appears at once. The rows fade their background

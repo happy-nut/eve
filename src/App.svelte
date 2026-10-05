@@ -429,7 +429,10 @@
 <!-- the webview's own menu is Reload / AutoFill / Speech — nothing a note can act on. The places worth
      right-clicking open one of ours instead (a sidebar row, the note). A plain text box keeps the
      system menu: cut/copy/paste there is exactly what it offers, and the app has nothing better. -->
-<svelte:window oncontextmenu={(e) => { if (!(e.target as HTMLElement).closest(isMobile ? 'input, textarea, .tiptap' : 'input, textarea')) e.preventDefault(); }} ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={() => { cmdUp(); leaveWindow(); }} onfocus={restoreFocus}
+<!-- data-hover: the mouse has moved since the last key or since the window came back. WebKit keeps :hover on
+     whatever was under a still pointer (the window hidden and summoned again, the list walked with the arrows),
+     so a row's hover-only buttons showed with no mouse near them; those wait for this instead. -->
+<svelte:window oncontextmenu={(e) => { if (!(e.target as HTMLElement).closest(isMobile ? 'input, textarea, .tiptap' : 'input, textarea')) e.preventDefault(); }} ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={() => { cmdUp(); leaveWindow(); delete document.documentElement.dataset.hover; }} onfocus={restoreFocus}
   onmousedowncapture={() => (document.documentElement.dataset.input = 'mouse')}
   onclickcapture={(e) => {
     // a button clicked with the mouse that a key also does: say which key
@@ -437,7 +440,8 @@
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-keys]');
     if (b?.dataset.keys) hints.show('btn:' + (b.dataset.tip ?? b.dataset.keys), `${b.dataset.tip ?? 'This'} has a shortcut`, b.dataset.keys);
   }}
-  onkeydowncapture={() => (document.documentElement.dataset.input = 'keyboard')}
+  onkeydowncapture={() => { document.documentElement.dataset.input = 'keyboard'; delete document.documentElement.dataset.hover; }}
+  onmousemove={() => { document.documentElement.dataset.hover ??= '1'; }}
   onfocusin={flashPane} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
