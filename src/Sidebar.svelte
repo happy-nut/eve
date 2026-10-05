@@ -17,6 +17,7 @@
   import { appearance } from './lib/appearance.svelte';
   import * as moves from './lib/moves';
   import { focusNote } from './lib/popup';
+  import { touchReorder, type Reorder } from './lib/touchReorder';
 
   let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings, onNew }:
     { open: boolean; searchEl: HTMLInputElement | null; cmdHeld?: boolean; onSettings: () => void; onNew?: () => void } = $props();
@@ -184,100 +185,37 @@
   }
   function dragEnd() { drag = null; dropAt = null; }
 
-  /**
-   * A phone has no mouse to drag with: a long press lifts the row; move the finger and it goes where
-   * the mouse would have dropped it (the same overNote / overGroup / drop as above), or let go without
-   * moving and the row's menu opens. Auto-scrolls near the top and bottom of the list.
-   *
-   * The lifted row rides under the finger (a copy, the row itself left faint in its place) and the line
-   * says where it will land, so the move is seen while it is made, not only after the finger lifts.
-   */
-  function touchReorder(tree: HTMLElement) {
-    if (!isMobile) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let start: { x: number; y: number; row: HTMLElement } | null = null;
-    let lifted = false, moved = false, x = 0, y = 0;
-    let ghost: HTMLElement | null = null, liftH = 0;
-    const lift = (row: HTMLElement) => {
-      const li = row.closest<HTMLElement>('li.row');
-      if (!li) return;
-      const r = li.getBoundingClientRect();
-      liftH = r.height;
-      ghost = li.cloneNode(true) as HTMLElement;
-      ghost.classList.add('lifted');
-      Object.assign(ghost.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px` });
-      document.body.append(ghost);
-      navigator.vibrate?.(12);
-    };
-    // it rides just above the fingertip: the finger hides neither the row nor the line it points at
-    const follow = () => { if (ghost) ghost.style.top = `${y - liftH - 14}px`; };
-    const land = () => { ghost?.remove(); ghost = null; };
-    const as = (el: HTMLElement) => ({
-      clientX: x, clientY: y, currentTarget: el, target: el,
-      preventDefault() {}, stopPropagation() {}, dataTransfer: { dropEffect: '' },
-    }) as unknown as DragEvent;
-    const down = (e: TouchEvent) => {
-      const t = e.target as HTMLElement;
-      const row = t.closest<HTMLElement>('[data-row]');
-      if (!row || e.touches.length !== 1 || t.closest('.fold, input')) return;
-      x = e.touches[0].clientX; y = e.touches[0].clientY;
-      start = { x, y, row }; lifted = moved = false;
-      timer = setTimeout(() => {
-        lifted = true;
-        const n = row.dataset.note, g = row.dataset.group;
-        lift(row); // copied before the row turns faint
-        drag = n ? { note: n } : g !== undefined ? { group: g } : null;
-      }, 420);
-    };
-    const move = (e: TouchEvent) => {
-      if (!start) return;
-      x = e.touches[0].clientX; y = e.touches[0].clientY;
-      if (!lifted) {
-        if (Math.hypot(x - start.x, y - start.y) > 8) { clearTimeout(timer); start = null; } // a scroll
-        return;
-      }
-      e.preventDefault(); // the list stays put under a lifted row
-      if (Math.hypot(x - start.x, y - start.y) > 8) moved = true;
-      follow();
+  /** a phone's long press (touchReorder.ts) moves rows through the same drop as a mouse drag */
+  const reorder: Reorder = {
+    lift(row) {
+      const n = row.dataset.note, g = row.dataset.group;
+      drag = n ? { note: n } : g !== undefined ? { group: g } : null;
+    },
+    over(x, y) {
+      // the drag handlers take the element under the finger as a drag event would carry it
+      const as = (el: HTMLElement) => ({
+        clientX: x, clientY: y, currentTarget: el, target: el,
+        preventDefault() {}, stopPropagation() {}, dataTransfer: { dropEffect: '' },
+      }) as unknown as DragEvent;
       const el = document.elementFromPoint(x, y) as HTMLElement | null;
       const noteRow = el?.closest<HTMLElement>('.note-row');
       const gname = el?.closest<HTMLElement>('.gname');
+      const tree = el?.closest<HTMLElement>('.tree');
       if (noteRow) {
         const id = noteRow.querySelector<HTMLElement>('[data-note]')?.dataset.note;
         const n = notes.all.find((m) => m.id === id);
         if (n) overNote(as(noteRow), n);
       } else if (gname?.dataset.group !== undefined) overGroup(as(gname), gname.dataset.group);
-      else if (el && tree.contains(el)) overSection(as(tree), '');
-      const r = tree.getBoundingClientRect();
-      if (y < r.top + 56) tree.scrollTop -= 14;
-      else if (y > r.bottom - 56) tree.scrollTop += 14;
-    };
-    const up = (e: TouchEvent) => {
-      clearTimeout(timer);
-      if (!start) return;
-      const row = start.row;
-      start = null;
-      if (!lifted) return; // a tap: the row's own click handles it
-      e.preventDefault(); // and no click after a lift
-      land();
-      if (moved && dropAt) { drop(as(tree)); (document.activeElement as HTMLElement | null)?.blur(); } // no focus ring left behind
-      else { dragEnd(); rowMenu(as(row) as unknown as MouseEvent, row); }
-    };
-    const cancel = () => { clearTimeout(timer); start = null; land(); dragEnd(); };
-    tree.addEventListener('touchstart', down, { passive: true });
-    tree.addEventListener('touchmove', move, { passive: false });
-    tree.addEventListener('touchend', up);
-    tree.addEventListener('touchcancel', cancel);
-    return {
-      destroy() {
-        land();
-        tree.removeEventListener('touchstart', down);
-        tree.removeEventListener('touchmove', move);
-        tree.removeEventListener('touchend', up);
-        tree.removeEventListener('touchcancel', cancel);
-      },
-    };
-  }
+      else if (tree) overSection(as(tree), '');
+    },
+    drop() {
+      if (!dropAt) return false;
+      drop({ preventDefault() {}, stopPropagation() {} } as unknown as DragEvent);
+      return true;
+    },
+    menu(row) { dragEnd(); rowMenu({ preventDefault() {}, stopPropagation() {}, currentTarget: row, target: row } as unknown as MouseEvent, row); },
+    cancel: dragEnd,
+  };
 
   // ---- keyboard ----
   async function removeGroup(g: string) {
@@ -534,7 +472,7 @@
     </div>
 
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <ul class="tree" role="tree" tabindex="-1" onkeydown={treeKey} use:touchReorder
+    <ul class="tree" role="tree" tabindex="-1" onkeydown={treeKey} use:touchReorder={reorder}
       oncontextmenu={(e) => { if (isMobile) e.preventDefault(); else rowMenu(e); }}
       ondragover={(e) => overSection(e, '')} ondrop={drop}>
       {#each rows as r (r.key)}
@@ -624,7 +562,7 @@
       </span>
       {#if updates.available}{@render updateButton()}{/if}
       <button class="icon tip-up gear" aria-label="Settings" data-tip="Settings" data-keys={shortcuts.keysFor('settings')} onclick={onSettings}>
-        <svg class="gear-i" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        {@html GEAR}
       </button>
     </footer>
     {/if}
