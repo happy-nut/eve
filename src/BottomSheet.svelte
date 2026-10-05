@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { fade } from 'svelte/transition';
+  import { pullDown } from './lib/popup';
 
   /**
    * A phone's sheet from the bottom (the menus, a Select's choices): it slides up, and goes away by a tap on the
@@ -21,35 +22,7 @@
   const slide = (_: Element) => ({ duration: 240, css: (t: number, u: number) => `translate: 0 calc(${(dy * t).toFixed(1)}px + ${(u * u * u * 100).toFixed(2)}%)` });
 
   /** pulled down from the top of its scroll, the sheet follows the finger; far or fast enough, it closes */
-  function pull(node: HTMLElement) {
-    let y0 = 0, t0 = 0, armed = false;
-    const start = (e: TouchEvent) => { y0 = e.touches[0].clientY; t0 = e.timeStamp; armed = node.scrollTop <= 0; dragging = false; };
-    const move = (e: TouchEvent) => {
-      if (!armed) return;
-      const d = e.touches[0].clientY - y0;
-      if (!dragging && d < 6) { if (d < 0) armed = false; return; } // an upward move scrolls the sheet instead
-      dragging = true;
-      dy = Math.max(0, d);
-      e.preventDefault();
-    };
-    const end = (e: TouchEvent) => {
-      if (!dragging) return;
-      dragging = false;
-      const fast = dy / Math.max(1, e.timeStamp - t0) > 0.5;
-      if (dy > Math.min(120, node.offsetHeight / 3) || (fast && dy > 24)) onclose();
-      else dy = 0;
-    };
-    node.addEventListener('touchstart', start, { passive: true });
-    node.addEventListener('touchmove', move, { passive: false });
-    node.addEventListener('touchend', end);
-    node.addEventListener('touchcancel', end);
-    return { destroy() {
-      node.removeEventListener('touchstart', start);
-      node.removeEventListener('touchmove', move);
-      node.removeEventListener('touchend', end);
-      node.removeEventListener('touchcancel', end);
-    } };
-  }
+  const pull = (node: HTMLElement) => pullDown(node, { onpull: (d, on) => { dy = d; dragging = on; }, onclose });
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->

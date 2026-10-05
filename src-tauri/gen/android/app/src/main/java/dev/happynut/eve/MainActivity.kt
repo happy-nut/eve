@@ -24,7 +24,11 @@ class MainActivity : TauriActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
-    remember(intent)
+    // A task begun by the reminder (or the widget) keeps that tap as the intent it starts from: reopened from
+    // Recents, or brought back after Android let the app go, it would be asked again — today's note on every
+    // launch. Only a fresh tap asks.
+    val replayed = savedInstanceState != null || (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+    if (!replayed) remember(intent)
     super.onCreate(savedInstanceState)
     // Edge to edge, the keyboard no longer shrinks the window: the page would be scrolled up under the
     // status bar to show the caret instead. Shrink the content by the keyboard's height ourselves; the

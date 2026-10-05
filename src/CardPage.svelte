@@ -3,7 +3,7 @@
   import { fade, scale } from 'svelte/transition';
   import { panelIn, scrimFade } from './lib/motion';
   import { isMobile } from './lib/platform';
-  import { sheet } from './lib/popup';
+  import { pullDown, sheet } from './lib/popup';
   import type { Editor as TipTap } from '@tiptap/core';
   import { createEditor } from './lib/editor';
   import { notes } from './lib/notes.svelte';
@@ -52,7 +52,13 @@
   });
 
   /** a sheet slides up on a phone; the Mac's floating page grows in place */
-  const appear = (node: HTMLElement) => sheet(node, (n) => scale(n, panelIn));
+  const appear = (node: HTMLElement) => sheet(node, (n) => scale(n, panelIn), dy);
+
+  // a phone: pulled down by its handle, or from the top of the note, the sheet follows the finger and closes.
+  // From inside the note only a drag that sets off at once: a finger held first is selecting text.
+  let dy = $state(0);
+  let dragging = $state(false);
+  const pull = (node: HTMLElement) => isMobile ? pullDown(node, { onpull: (d, on) => { dy = d; dragging = on; }, onclose: close, scroller: () => scrollEl, quick: true }) : undefined;
 
   function onKey(e: KeyboardEvent) {
     // a popup's Esc has already been taken by the editor (and closed the popup) by the time it gets here
@@ -63,9 +69,10 @@
 </script>
 
 <!-- preventDefault: the press would otherwise move the focus to the page under it after close() put it back -->
-<div class="backdrop" transition:fade|global={scrimFade} onmousedown={(e) => { e.preventDefault(); close(); }} role="presentation"></div>
+<div class="backdrop" transition:fade|global={scrimFade} style:opacity={dy ? Math.max(0.2, 1 - dy / 400) : null} onmousedown={(e) => { e.preventDefault(); close(); }} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="card-page" transition:appear|global role="dialog" tabindex="-1" onkeydown={onKey}>
+<div class="card-page" transition:appear|global use:pull class:dragging style:translate={dy ? `0 ${dy}px` : null}
+  role="dialog" tabindex="-1" onkeydown={onKey}>
   {#if isMobile}<div class="grip" aria-hidden="true"></div>{/if}
   {#if req.note}<p class="tpl-note">{req.note}</p>{/if}
   <div class="card-scroll" bind:this={scrollEl}>
@@ -91,6 +98,9 @@
   .card-scroll::-webkit-scrollbar { display: none; }
   /* a phone: the note's own 20px margins, no card margin on top of them; a handle says it is a sheet */
   :global(html.mobile) .card-scroll { padding: 8px 0 0; }
+  /* let go short of closing: it settles back */
+  :global(html.mobile) .card-page { transition: translate 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  :global(html.mobile) .card-page.dragging { transition: none; }
   .grip { flex: none; width: 36px; height: 4px; border-radius: 2px; margin: 8px auto 2px; background: var(--bg-active); }
   .card-body { flex: 1; }
   .card-page .card-body :global(.tiptap) { padding: 0 0 120px; max-width: none; min-height: 100%; }
