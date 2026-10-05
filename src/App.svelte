@@ -51,9 +51,10 @@
     setGlobalHotkey(keys).then((err) => (hotkeyError = err));
   });
 
-  // Android back: a dialog closes, a note goes back to the list, and only the list leaves the app
+  // Android back: a popup or a dialog closes, a note goes back to the list, and only the list leaves the app
+  const popupOpen = $derived(!!(ui.emoji || ui.menu || ui.pending || ui.find || ui.pdf || ui.card));
   $effect(() => {
-    if (!isMobile || !isTauri || (sidebarOpen && !settingsOpen && !ui.card)) return;
+    if (!isMobile || !isTauri || (sidebarOpen && !settingsOpen && !popupOpen)) return;
     let off: (() => void) | undefined, gone = false;
     onBack(phoneBack)
       .then((u) => (gone ? u() : (off = u)));
@@ -282,7 +283,13 @@
 
   /** A phone's back (the bar's chevron, or Android's): a day goes back to its calendar, anything else to the list. */
   function phoneBack() {
-    if (ui.card) ui.closeCard(); // a sheet (a card, a day) closes first
+    // what is on top closes first: a popup over everything, then a dialog, then a sheet (a card, a day)
+    if (ui.emoji) ui.emojiDone(null);
+    else if (ui.menu) ui.closeMenu();
+    else if (ui.pending) ui.done(null);
+    else if (ui.find) { ui.find = false; focusNote(); }
+    else if (ui.pdf) ui.closePdf();
+    else if (ui.card) ui.closeCard();
     else if (settingsOpen) settingsOpen = false;
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
     else sidebarOpen = true;
