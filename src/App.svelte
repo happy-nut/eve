@@ -201,10 +201,11 @@
     }
   }
 
-  /** A phone's note bar: ⋯ (select all, export to the share sheet), a widget of this note on the home screen, delete. */
+  /** A phone's note bar: ⋯ (find & replace, select all, export to the share sheet), a widget of this note on the home screen, delete. */
   function moreMenu(from: HTMLElement) {
     const r = from.getBoundingClientRect();
     ui.openMenu({ clientX: r.right, clientY: r.bottom }, [
+      { label: 'Find & replace', run: () => (ui.find = true) },
       { label: 'Select all', run: () => hooks.command?.('selectAll') },
       { label: 'Export as Markdown (.md)', sep: true, run: () => void exportCurrent('md') },
       { label: 'Export as PDF', run: () => void exportCurrent('pdf') },
