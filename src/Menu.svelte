@@ -6,12 +6,12 @@
   import { prettyKeys } from './lib/shortcuts.svelte';
   import { hints } from './lib/hints.svelte';
   import { popIn } from './lib/motion';
+  import { held } from './lib/popup';
 
   // every menu in the app (a right click, the list's "+", a code block's language): App renders it, anyone opens
   // it through ui.openMenu. Keyboard-reachable — the mouse moves the highlight.
   // the last menu opened: closing, it slides away showing what it showed (ui.menu is already null by then)
-  let last = ui.menu!;
-  const req = $derived.by(() => (last = ui.menu ?? last));
+  const req = $derived.by(held(() => ui.menu));
   let el = $state<HTMLUListElement | null>(null);
   let x = $state(0), y = $state(0);
 

@@ -16,6 +16,7 @@
   import Icon from './Icon.svelte';
   import { appearance } from './lib/appearance.svelte';
   import * as moves from './lib/moves';
+  import { focusNote } from './lib/popup';
 
   let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings, onNew }:
     { open: boolean; searchEl: HTMLInputElement | null; cmdHeld?: boolean; onSettings: () => void; onNew?: () => void } = $props();
@@ -82,9 +83,10 @@
   const importFolder = () => transfer(async () => opened(await importFromFolder()));
   const exportAs = (as: ExportAs) => () => exportCurrent(as);
 
+  /** a new note in group `g`, straight into the editor (deleting keeps focus in the list) */
+  const newNote = (g: string) => async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); focusNote(); };
+
   const plusItems = $derived.by(() => {
-    // a new note goes straight into the editor (deleting keeps focus in the list)
-    const newNote = (g: string) => async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus(); };
     const items: { label: string; run: () => void; sep?: boolean }[] = [
       { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', run: newNote(ctxGroup) },
       { label: ctxGroup && depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : 'New group', run: () => groups.create(ctxGroup) },
@@ -327,7 +329,7 @@
       // → opens a folded group; anywhere else it steps over into the note, as Escape does
       case 'ArrowRight':
         if (group && groups.isCollapsed(group)) groups.toggle(group);
-        else document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus();
+        else focusNote();
         break;
       case 'Backspace': case 'Delete': {
         const nb = rows[i + 1] ?? rows[i - 1];
@@ -341,7 +343,7 @@
         if (group) { groups.editing = group; break; }
         return;
       case 'i': if (group) pickIcon({ group }); else pickIcon({ note: notes.all.find((n) => n.id === noteId) }); break;
-      case 'Escape': document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus(); break;
+      case 'Escape': focusNote(); break;
       default: return;
     }
     e.preventDefault();
@@ -499,7 +501,7 @@
     moves.openedFromList.id = n.id; // ⌥↑ / ⌥↓ right after still move it here
     if (isMobile) { open = false; return; } // a phone shows the list or the note, never both — and opens it to read
     await tick();
-    document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus();
+    focusNote();
   }
 </script>
 
@@ -597,7 +599,7 @@
                 </span>
                 <!-- on hover the tools unfold between the count and the chevron; the chevron stays at the edge -->
                 <span class="tools">
-                  <button class="icon mini tip-right" data-tip="New note here" onclick={async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus(); }}>+</button>
+                  <button class="icon mini tip-right" data-tip="New note here" onclick={newNote(g)}>+</button>
                   <button class="icon mini tip-right" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
                 </span>
                 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->

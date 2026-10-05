@@ -26,3 +26,16 @@ export function sheet<T>(node: Element, desktop: (node: Element) => T): T | { du
   if (!isMobile) return desktop(node);
   return { duration: 260, css: (t, u) => `translate: 0 ${(u * u * u * 100).toFixed(2)}%` }; // cubic ease-out, as the menus' sheets
 }
+
+/** The keyboard back to the note: its editor, or the calendar's day when the calendar is open. The one in <main>,
+ *  not a floating page's (a card closing is still in the page while it fades). */
+export function focusNote() {
+  document.querySelector<HTMLElement>('main .tiptap, main .calendar .day.cursor')?.focus();
+}
+
+/** What `get` gave last while it gave something: a popup closing keeps showing what it showed, though its state is
+ *  already null while it fades out. `const req = $derived.by(held(() => ui.menu));` */
+export function held<T>(get: () => T | null | undefined): () => T {
+  let last = get() as T;
+  return () => (last = get() ?? last);
+}

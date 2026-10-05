@@ -5,10 +5,10 @@
   import { popIn, scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
   import { CUSTOM_ICONS, customUrl, randomIcon } from './lib/icons';
+  import { held } from './lib/popup';
 
   // the last one asked: closing, it fades out showing what it showed (ui.emoji is already null by then)
-  let last = ui.emoji!;
-  const req = $derived.by(() => (last = ui.emoji ?? last));
+  const req = $derived.by(held(() => ui.emoji));
   let el: HTMLElement & { i18n?: unknown };
   // keep the panel inside the window
   const W = 352, H = 400;

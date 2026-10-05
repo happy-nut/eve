@@ -2,11 +2,10 @@
   import { fade, scale } from 'svelte/transition';
   import { panelIn, scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
-  import { sheet } from './lib/popup';
+  import { sheet, held } from './lib/popup';
 
   // the last one asked: closing, it fades out showing what it showed (ui.pending is already null by then)
-  let last = ui.pending!;
-  const p = $derived.by(() => (last = ui.pending ?? last));
+  const p = $derived.by(held(() => ui.pending));
   // give focus back to where it was (sidebar row, editor) the moment the dialog closes —
   // synchronously, before any list re-render, so a later focusRow() can still override it
   const returnTo = document.activeElement as HTMLElement | null;
