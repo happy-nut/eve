@@ -106,6 +106,11 @@
     if (v !== null) notes.setIcon(note.id, v);
   }
 
+  // asked to write at the end of this very note (the reminder's today, already open): no remount brings it there
+  $effect(() => {
+    if (editor && notes.caretEnd && notes.currentId === note.id) { notes.caretEnd = false; editor.commands.focus('end'); }
+  });
+
   // rebind editor shortcuts live when the user changes them
   $effect(() => { shortcuts.actions; if (editor) applyKeymap(editor); });
 

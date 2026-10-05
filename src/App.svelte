@@ -94,7 +94,7 @@
         const ticket = parseTicket(ask);
         if (ticket) { settingsOpen = true; void sync.claim(ticket).then(offerUpdate); return; }
         // the reminder's notification: today's note
-        if (ask === 'daily') { settingsOpen = false; writeToday(); return; }
+        if (ask === 'daily') { writeToday(); return; }
         // the home-screen widget: straight into that note (or a new one), keyboard up
         const id = ask.startsWith('note:') ? ask.slice(5) : null;
         if (ask !== 'new' && !id) return;
@@ -244,8 +244,16 @@
       { label: "Today's daily note", run: writeToday },
     ]);
   }
-  /** Today's note, to write in: caret under the template, keyboard up on a phone. */
+  /** Today's note, to write in: caret under the template, keyboard up on a phone. Whatever was left open over
+   *  the app (a card, a picker, a menu, a dialog, Find) is put away first, or it would sit over the note. */
   function writeToday() {
+    if (ui.emoji) ui.emojiDone(null);
+    if (ui.menu) ui.closeMenu();
+    if (ui.pending) ui.done(null);
+    if (ui.card) ui.closeCard();
+    if (ui.pdf) ui.closePdf();
+    ui.find = false;
+    settingsOpen = false;
     ui.focusOwner = 'editor';
     notes.caretEnd = true;
     notes.openDaily();
