@@ -1,3 +1,4 @@
+import { focusNote } from './popup';
 /** One line of a menu. `sep` starts a group above it; a `hide` item never makes the list; `checked` is the current choice. */
 export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean; checked?: boolean }
 
@@ -47,7 +48,7 @@ class Ui {
     const from = this.cardFrom;
     this.cardFrom = null;
     if (from?.isConnected && from !== document.body && !from.closest('.card-page')) from.focus();
-    else document.querySelector<HTMLElement>('main .tiptap, main .calendar .day.cursor')?.focus();
+    else focusNote();
   }
   /** a PDF opened from a note, shown by PdfViewer.svelte as a floating panel (nothing modal about it) */
   pdf = $state<{ src: string; name: string } | null>(null);

@@ -26,6 +26,7 @@
   import { titleOf } from './lib/notes.svelte';
   import { parseTicket } from './lib/handoff';
   import { parseEveLink } from './lib/evelink';
+  import { focusNote } from './lib/popup';
 
   let sidebarOpen = $state(true);
   let settingsOpen = $state(false);
@@ -41,7 +42,7 @@
     if (!note) return;
     ui.focusOwner = 'editor';
     notes.currentId = note.id;
-    queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus());
+    queueMicrotask(focusNote);
   }
 
   // global hotkey follows the shortcut store live
@@ -299,7 +300,7 @@
   function focusSidebar() {
     if (sidebarOpen && document.activeElement?.closest('aside')) {
       sidebarOpen = false;
-      queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus());
+      queueMicrotask(focusNote);
       return;
     }
     sidebarOpen = true;
@@ -376,7 +377,7 @@
     // closing the thing on top is what Escape means everywhere in the app.
     if (e.key === 'Escape' && (ui.find || ui.pdf)) {
       e.preventDefault();
-      if (ui.find) { ui.find = false; queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus()); }
+      if (ui.find) { ui.find = false; queueMicrotask(focusNote); }
       else ui.closePdf();
       return;
     }
@@ -409,7 +410,7 @@
       case 'search': sidebarOpen = true; queueMicrotask(() => searchEl?.focus()); break;
       case 'find': // pressing it again puts the bar away and hands the note back the caret
         ui.find = !ui.find;
-        if (!ui.find) queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus());
+        if (!ui.find) queueMicrotask(focusNote);
         break;
       case 'focusSidebar': focusSidebar(); break;
       case 'back': notes.back(); break;
