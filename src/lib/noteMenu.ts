@@ -52,6 +52,7 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
       ? { label: 'Remove link', run: () => editor.chain().focus().unsetLink().run() }
       : { label: 'Link…', keys: keys('link'), hide: empty, run: () => void linkSelection(editor) },
     { label: 'Select all', sep: true, keys: 'Mod-a', run: () => editor.chain().focus().selectAll().run() },
+    { label: 'Find & replace…', keys: keys('find'), run: () => (ui.find = true) },
     { label: 'Export as Markdown…', sep: true, keys: keys('exportMd'), run: () => void exportCurrent('md') },
     { label: 'Export as PDF…', keys: keys('exportPdf'), run: () => void exportCurrent('pdf') },
     { label: 'Export as image…', keys: keys('exportPng'), run: () => void exportCurrent('png') },

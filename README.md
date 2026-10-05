@@ -15,6 +15,7 @@ type Notion-style markdown, link notes with `[[wiki links]]`, and sync through a
 - **Every shortcut is rebindable** live in Settings (`⌘,`): system hotkey, app actions, editor formatting.
 - **Notes link to notes** — type `[[` for a picker; click a link to jump (creates the note if missing). `[[Note|shown as]]` links under another name, as in Obsidian. `⌘[` / `⌘]` go back and forward through the notes you visited, restoring the cursor.
 - **Link cards** — paste a URL on an empty line (or type one and press Enter) and it becomes a compact preview card: favicon, title, description, thumbnail; click opens the browser. The file keeps just the bare URL.
+- **Find & replace in a note** — `⌘F` (or the note's right-click menu; on a phone, the note's ⋯) opens a bar over the note: ↩ / ⇧↩ walk the matches, the replace field replaces one at a time (↩) or all at once.
 - **Section outline** instead of a scrollbar — when a note is taller than the window, one tick per heading sits at the left edge, dark for the sections on screen; hover to see the titles, click to jump.
 - **Obsidian's syntax** — `[[Note|alias]]` links, `==highlights==` (`⌘⇧H`), and callouts by type: `> [!warning] Title` shows the type's icon and colour, the text on its line as the title; the fold mark (`-`/`+`) is kept. A vault's notes read and save back unchanged.
 - **`/` block menu** — callouts (`> [!💡]` in markdown), code blocks, dividers, images (copied into `notes/assets/`), note links, kanban boards. Headings and lists come from markdown shortcuts (`# `, `- `, `1. `, `[ ] `, `> `).

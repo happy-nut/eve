@@ -117,4 +117,10 @@
   .count { font-size: 11.5px; color: var(--fg-dim); font-variant-numeric: tabular-nums; padding: 0 2px; }
   .find .icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
   .find svg { width: 14px; height: 14px; display: block; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+  /* a phone: across the note under its bar, with buttons and text a thumb can use */
+  :global(html.mobile) .find { left: 12px; right: 12px; top: 8px; width: auto; padding: 8px; gap: 6px; }
+  :global(html.mobile) .find input { font-size: 16px; padding: 8px 10px; border-radius: 8px; }
+  :global(html.mobile) .find .icon { width: 36px; height: 36px; }
+  :global(html.mobile) .find svg { width: 18px; height: 18px; }
+  :global(html.mobile) .count { font-size: 13px; }
 </style>
