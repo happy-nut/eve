@@ -319,7 +319,7 @@
     switch (e.key) {
       case ' ': if (group) groups.toggle(group); else if (noteId) groups.fold(noteId); else return; break;
       case 'ArrowDown': rows[i + 1]?.focus(); break;
-      case 'ArrowUp': rows[i - 1]?.focus(); break;
+      case 'ArrowUp': if (i === 0 && q) searchEl?.focus(); else rows[i - 1]?.focus(); break;
       case 'ArrowLeft':
         if (group && !groups.isCollapsed(group)) groups.toggle(group);
         else { const p = group ? parentOf(group) : notes.all.find((n) => n.id === noteId)?.group; if (p) focusRow(groupSel(p)); else return; }
@@ -432,6 +432,8 @@
   function onSearchKey(e: KeyboardEvent) {
     if (e.key === 'Escape') { query = ''; searchEl?.blur(); e.preventDefault(); }
     if (e.key === 'Enter' && hits[0]) { notes.currentId = hits[0].id; searchEl?.blur(); e.preventDefault(); }
+    // ↓ walks on into the matches below; ↑ from the first one comes back here (treeKey)
+    if (e.key === 'ArrowDown' && !e.isComposing) { document.querySelector<HTMLElement>('aside [data-row]')?.focus(); e.preventDefault(); }
   }
   /**
    * On a phone the list is a drawer: it slides in from the left and out again, and a swipe to the left
