@@ -387,8 +387,7 @@
     // still close the page rather than hide the window. A popup inside it that took the Esc keeps it open.
     if (e.key === 'Escape' && ui.card && (!e.defaultPrevented || (e as any).eveApp)) {
       e.preventDefault();
-      ui.closeCard();
-      queueMicrotask(() => document.querySelector<HTMLElement>('.tiptap, .calendar .day.cursor')?.focus());
+      ui.closeCard(); // it puts the keyboard back
       return;
     }
     if (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
