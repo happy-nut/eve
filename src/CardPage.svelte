@@ -24,9 +24,7 @@
   let dateMenu: ReturnType<typeof DateMenu>;
   let emojiRow: ReturnType<typeof EmojiRow>;
   let editor = $state<TipTap | undefined>();
-  const returnTo = document.activeElement as HTMLElement | null;
-
-  function close() { returnTo?.isConnected && returnTo.focus(); ui.closeCard(); }
+  const close = () => ui.closeCard(); // it puts the keyboard back
 
   onMount(() => {
     editor = createEditor({
@@ -41,9 +39,12 @@
     });
     // a card: caret at the end of its title line, so a long card opens at its top rather than scrolled to
     // the end. A day's note opens to be written in: under whatever is there.
+    // focused first: in WebKit the focus command's own view.focus() fires the focus event at once, a plugin
+    // dispatches on it, and the command's transaction no longer matched the state ("mismatched transaction").
+    // The page then never finished opening, and Esc no longer closed it.
+    editor.view.focus();
     if (req.markdown !== undefined) editor.commands.focus('end');
     else editor.commands.focus(editor.state.doc.firstChild!.nodeSize - 1);
-    editor.view.focus();
     // the page grows in from a day opened with Enter: if the webview left the focus on that day behind
     // it, the keys (Esc included) would go to the calendar, not to the page
     const again = requestAnimationFrame(() => { if (!el.contains(document.activeElement)) editor?.view.focus(); });
@@ -61,7 +62,8 @@
   }
 </script>
 
-<div class="backdrop" transition:fade|global={scrimFade} onmousedown={close} role="presentation"></div>
+<!-- preventDefault: the press would otherwise move the focus to the page under it after close() put it back -->
+<div class="backdrop" transition:fade|global={scrimFade} onmousedown={(e) => { e.preventDefault(); close(); }} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="card-page" transition:appear|global role="dialog" tabindex="-1" onkeydown={onKey}>
   {#if isMobile}<div class="grip" aria-hidden="true"></div>{/if}

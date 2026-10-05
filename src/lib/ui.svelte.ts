@@ -29,13 +29,26 @@ class Ui {
   card = $state<CardReq | null>(null);
   /** Open a card as a floating page; resolves when it closes. */
   openCard(c: { title: string; body: string; note?: string }, onChange: CardReq['onChange']): Promise<void> {
+    this.cardFrom = document.activeElement as HTMLElement | null;
     return new Promise((res) => { this.card = { ...c, onChange, resolve: res }; });
   }
   /** A note's markdown as a floating page (a day from the calendar, the daily template); resolves when it closes. */
   openPage(markdown: string, onMarkdown: (md: string) => void, note?: string): Promise<void> {
+    this.cardFrom = document.activeElement as HTMLElement | null;
     return new Promise((res) => { this.card = { title: '', body: '', markdown, onMarkdown, note, onChange: () => {}, resolve: res }; });
   }
-  closeCard() { this.card?.resolve(); this.card = null; }
+  private cardFrom: HTMLElement | null = null;
+  /** Closed however (Esc, a click outside, a phone's back): the keyboard goes back where it was. Opened by a
+   *  click (the template buttons take no focus) it was nowhere, so it goes to the note, or the calendar's day. */
+  closeCard() {
+    if (!this.card) return;
+    this.card.resolve();
+    this.card = null;
+    const from = this.cardFrom;
+    this.cardFrom = null;
+    if (from?.isConnected && from !== document.body && !from.closest('.card-page')) from.focus();
+    else document.querySelector<HTMLElement>('main .tiptap, main .calendar .day.cursor')?.focus();
+  }
   /** a PDF opened from a note, shown by PdfViewer.svelte as a floating panel (nothing modal about it) */
   pdf = $state<{ src: string; name: string } | null>(null);
   openPdf(src: string, name: string) { this.pdf = { src, name }; }
