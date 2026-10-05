@@ -4,6 +4,7 @@
   import { fade, scale } from 'svelte/transition';
   import { popIn, scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
+  import { isMobile } from './lib/platform';
   import { CUSTOM_ICONS, customUrl, randomIcon } from './lib/icons';
   import { held } from './lib/popup';
 
@@ -167,6 +168,12 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="panel" style="left: {x}px; top: {y}px; width: {W}px" transition:scale|global={popIn} role="dialog" aria-label="이모지 선택" onkeydowncapture={onGridKey}>
   <header>
+    {#if isMobile}
+      <!-- a phone's picker fills the screen: the way back is where the note's own back button is -->
+      <button class="act back" aria-label="닫기" onclick={() => ui.emojiDone(null)}>
+        <svg viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg>
+      </button>
+    {/if}
     <span class="tab">이모지</span>
     <span class="acts">
       <!-- the same pool the "아이콘 추가" button rolls from, so a page can be given a face without choosing one -->
@@ -212,6 +219,13 @@
   /* a thumb, not a pointer */
   :global(html.mobile) .act { width: 44px; height: 44px; border-radius: 12px; }
   :global(html.mobile) .act svg { width: 22px; height: 22px; }
+  :global(html.mobile) .act.back { margin: 0 2px 0 -10px; }
+  :global(html.mobile) .tab { flex: 1; }
+  /* a phone's picker fills the screen (app.css): the grid takes all the height under the header, so with the
+     keyboard down the recent row sits at the bottom, not halfway down with nothing under it */
+  :global(html.mobile) .panel { display: flex; flex-direction: column; }
+  :global(html.mobile) emoji-picker { flex: 1; min-height: 0; height: auto; }
+  :global(html.mobile) .preview { display: none; } /* no pointer to hover with: a tap picks */
   emoji-picker {
     width: 100%; height: 312px; /* + the preview line: the same 400 the panel is placed by */
     --background: var(--bg-pop); --border-color: var(--line); --border-size: 0;
