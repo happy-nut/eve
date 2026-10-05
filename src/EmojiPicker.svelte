@@ -42,12 +42,23 @@
       if (inp) inp.focus(); else if (tries++ < 40) setTimeout(focusSearch, 25);
     };
     focusSearch();
+    // the element opens on the custom icons, whose tab is moved to the far right: open on the first tab
+    // shown instead, so ↓ walks the categories from the start
+    let waits = 0;
+    const firstTab = () => {
+      // once the emoji are drawn: before that no tab is selected yet, and the custom one gets picked after
+      const tab = root?.querySelector<HTMLButtonElement>('.nav-button:not([data-group-id="-1"])');
+      if (!tab || !root?.querySelector('.tabpanel button.emoji')) { if (waits++ < 80) setTimeout(firstTab, 25); return; }
+      if (root?.querySelector('.nav-button[data-group-id="-1"][aria-selected="true"]')) tab.click();
+      focusSearch();
+    };
+    firstTab();
     if (root && !root.querySelector('#eve-nav')) {
       const st = document.createElement('style');
       st.id = 'eve-nav';
       st.textContent = `.nav-button[data-group-id="-1"] { order: 99 } .indicator-wrapper { display: none }
         .nav-button[aria-selected="true"] { background: var(--button-active-background); border-radius: 6px }
-        #search-results .emoji:focus { background: var(--button-active-background); outline: 2px solid var(--outline-color); outline-offset: -2px }`;
+        .tabpanel .emoji:focus { background: var(--button-active-background); outline: 2px solid var(--outline-color); outline-offset: -2px }`;
       root.append(st);
     }
   });
@@ -57,37 +68,94 @@
     ui.emojiDone(d.unicode ?? `:${d.emoji.shortcodes[0]}:`);
   }
   /**
-   * The search results as a grid under the keyboard. The element's own ↑↓ walk the results one by one,
-   * a row at a time being nine presses; here ↓ from the search box goes into the results, the arrows
-   * then move by cell and by row, ↩ / space pick, and ↑ from the top row goes back to the box. Typing
+   * The emoji as a grid under the keyboard: the search results, or the open category when nothing is typed.
+   * The element's own ↑↓ walk the results one by one (a row is nine presses) and do nothing in a category;
+   * here ↓ from the search box goes into the grid, ←→ move by cell, ↑↓ to the nearest cell on the line above
+   * or below. Past a category's last line ↓ opens the next category (↑ past its first, the one before), so
+   * every section is a few presses away; ↑ from the very top goes back to the box. ↩ / space pick. Typing
    * (a letter, ⌫) goes back to the box too, and the key lands there.
    */
   function onGridKey(e: KeyboardEvent) {
     const root = el?.shadowRoot;
     if (!root || e.metaKey || e.ctrlKey || e.altKey) return;
     const input = root.querySelector<HTMLInputElement>('input.search');
-    const cells = [...root.querySelectorAll<HTMLButtonElement>('#search-results button.emoji')];
+    const cells = [...root.querySelectorAll<HTMLButtonElement>('.tabpanel button.emoji')].filter((c) => c.offsetParent);
     const at = e.composedPath()[0];
     const i = cells.indexOf(at as HTMLButtonElement);
-    const go = (cell: HTMLElement) => { e.preventDefault(); e.stopPropagation(); cell.focus(); cell.scrollIntoView({ block: 'nearest' }); };
+    const go = (cell: HTMLElement) => { e.preventDefault(); e.stopPropagation(); cell.focus(); cell.scrollIntoView({ block: 'nearest' }); void showCell(cell); };
     if (at === input) {
       if (e.key === 'ArrowDown' && cells.length && !e.isComposing) go(cells[0]);
       return;
     }
     if (i < 0 || !input) return;
-    const cols = Math.max(1, cells.filter((c) => c.offsetTop === cells[0].offsetTop).length);
-    const lastRow = Math.floor((cells.length - 1) / cols);
-    const row = Math.floor(i / cols);
+    /** the cell on the next line up or down, nearest to this one sideways */
+    const line = (dir: 1 | -1) => {
+      const r = cells[i].getBoundingClientRect();
+      let best: HTMLButtonElement | null = null, bestTop = 0, bestDx = Infinity;
+      for (const c of cells) {
+        const b = c.getBoundingClientRect();
+        if (dir * (b.top - r.top) < r.height / 2) continue; // this line, or the wrong way
+        const dx = Math.abs(b.left - r.left);
+        if (!best || dir * (b.top - bestTop) < -1 || (Math.abs(b.top - bestTop) <= 1 && dx < bestDx)) { best = c; bestTop = b.top; bestDx = dx; }
+      }
+      return best;
+    };
     if (e.key === 'ArrowRight') { if (i + 1 < cells.length) go(cells[i + 1]); else e.preventDefault(); }
     else if (e.key === 'ArrowLeft') { if (i > 0) go(cells[i - 1]); else go(input); }
-    else if (e.key === 'ArrowDown') { if (row < lastRow) go(cells[Math.min(i + cols, cells.length - 1)]); else e.preventDefault(); }
-    else if (e.key === 'ArrowUp') go(row > 0 ? cells[i - cols] : input);
+    else if (e.key === 'ArrowDown') { const c = line(1); if (c) go(c); else { e.preventDefault(); e.stopPropagation(); void category(root, 1, cells[i]); } }
+    else if (e.key === 'ArrowUp') {
+      const c = line(-1);
+      if (c) go(c);
+      else { e.preventDefault(); e.stopPropagation(); void category(root, -1, cells[i]).then((moved) => moved || input.focus()); }
+    }
     else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); cells[i].click(); }
     else if (e.key === 'Backspace' || e.key.length === 1 || e.key === 'Process' || e.isComposing) {
       // not prevented: the key itself goes on to the box, caret at the end of what was typed
       input.focus();
       input.setSelectionRange(input.value.length, input.value.length);
     }
+  }
+
+  /** Opens the next (or previous) category tab, in the order they are shown (the custom icons last), and puts the
+   *  keyboard on its first line (or its last), nearest to where it was. Not searching only: results have no tabs. */
+  async function category(root: ShadowRoot, dir: 1 | -1, from: HTMLElement): Promise<boolean> {
+    if (root.querySelector('#search-results')) return false;
+    const tabs = [...root.querySelectorAll<HTMLButtonElement>('.nav-button')]
+      .sort((a, b) => Number(a.dataset.groupId === '-1') - Number(b.dataset.groupId === '-1'));
+    const next = tabs[tabs.findIndex((t) => t.getAttribute('aria-selected') === 'true') + dir];
+    if (!next) return false;
+    const x = from.getBoundingClientRect().left;
+    next.click();
+    for (let n = 0; n < 20; n++) { // the element draws the new category a frame or two later
+      await new Promise((r) => setTimeout(r, 16));
+      const cells = [...root.querySelectorAll<HTMLButtonElement>('.tabpanel button.emoji')];
+      if (!cells.length || cells.includes(from as HTMLButtonElement)) continue;
+      const tops = cells.map((c) => c.getBoundingClientRect().top);
+      const edge = dir > 0 ? Math.min(...tops) : Math.max(...tops);
+      const row = cells.filter((_, k) => Math.abs(tops[k] - edge) <= 1);
+      const cell = row.reduce((a, c) => (Math.abs(c.getBoundingClientRect().left - x) < Math.abs(a.getBoundingClientRect().left - x) ? c : a));
+      cell.focus();
+      cell.scrollIntoView({ block: 'nearest' });
+      void showCell(cell);
+      return true;
+    }
+    return false;
+  }
+
+  /** the emoji under the mouse or the keyboard, with the :code: that types it in a note (the same data) */
+  let preview = $state<{ face: string; url?: string; code: string } | null>(null);
+  function show(e: Event) {
+    const b = e.composedPath().find((n): n is HTMLButtonElement => n instanceof HTMLElement && n.matches('.tabpanel button.emoji'));
+    if (b) void showCell(b);
+  }
+  async function showCell(b: HTMLElement) {
+    if (!b.matches('button.emoji')) { preview = null; return; } // the search box
+    const id = b.id.slice(b.id.indexOf('-') + 1); // emo-😀, fav-😀, or a custom icon's name
+    const own = CUSTOM_ICONS.find((c) => c.label === id); // the app's own icons are not in the element's data
+    if (own) { preview = { face: '', url: customUrl(own), code: own.name }; return; }
+    const found = await (el as any)?.database?.getEmojiByUnicodeOrName(id);
+    const code = found?.shortcodes?.[0];
+    if (code) preview = { face: found.unicode ?? '', code };
   }
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); ui.emojiDone(null); }
@@ -112,7 +180,16 @@
       {/if}
     </span>
   </header>
-  <emoji-picker bind:this={el} data-source={dataSource} skin-tone-emoji="✌️" onemoji-click={onPick}></emoji-picker>
+  <!-- the preview follows the mouse and the keyboard (focusin) alike; the picker itself is the interactive part -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <emoji-picker bind:this={el} data-source={dataSource} skin-tone-emoji="✌️" onemoji-click={onPick}
+    onmouseover={show} onfocusin={show}></emoji-picker>
+  <footer class="preview" aria-live="polite">
+    {#if preview}
+      {#if preview.url}<img src={preview.url} alt="" />{:else}<span class="face">{preview.face}</span>{/if}
+      <span class="code">:{preview.code}:</span>
+    {/if}
+  </footer>
 </div>
 
 <style>
@@ -136,7 +213,7 @@
   :global(html.mobile) .act { width: 44px; height: 44px; border-radius: 12px; }
   :global(html.mobile) .act svg { width: 22px; height: 22px; }
   emoji-picker {
-    width: 100%; height: 340px;
+    width: 100%; height: 312px; /* + the preview line: the same 400 the panel is placed by */
     --background: var(--bg-pop); --border-color: var(--line); --border-size: 0;
     --indicator-color: var(--accent); --input-border-color: transparent; --input-font-color: var(--fg);
     --input-placeholder-color: var(--fg-dim); --input-border-radius: 8px; --input-padding: 7px 10px; --input-font-size: 13px;
@@ -144,4 +221,12 @@
     --button-hover-background: var(--bg-hover); --button-active-background: var(--bg-active);
     --emoji-size: 1.35rem; --emoji-padding: 0.4rem; --num-columns: 9; --skintone-border-radius: 8px; --custom-emoji-size: 1.35rem;
   }
+  /* what is under the mouse or the keyboard, as it is typed in a note */
+  .preview {
+    display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--fg-dim);
+  }
+  .preview .face { font-size: 16px; line-height: 1; }
+  .preview img { width: 16px; height: 16px; }
+  .preview .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 </style>
