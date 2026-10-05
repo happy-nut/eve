@@ -323,15 +323,6 @@ export const dock = {
   },
 };
 
-/** Keep the window above every other app (⌘⇧P). Remembered across restarts, like the Dock setting. */
-export const pin = {
-  get on() { return localStorage.getItem('eve.pin') === '1'; },
-  async set(on: boolean) {
-    localStorage.setItem('eve.pin', on ? '1' : '0');
-    if (desktop) await invoke('set_always_on_top', { on });
-  },
-};
-
 /**
  * Summon / dismiss. No fade: the page keeps its pixels while hidden, so the window comes back whole —
  * the traffic lights and the note appearing together instead of the chrome arriving a few frames early.

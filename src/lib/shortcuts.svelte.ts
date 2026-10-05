@@ -27,7 +27,6 @@ export const DEFAULTS: Action[] = [
   { id: 'exportPng', label: 'Export note as an image…', scope: 'app', keys: 'Mod-Alt-p' },
   { id: 'settings', label: 'Settings', scope: 'app', keys: 'Mod-,' },
   { id: 'hide', label: 'Hide window', scope: 'app', keys: 'Escape' },
-  { id: 'pin', label: 'Keep window on top', scope: 'app', keys: 'Mod-Shift-p' },
 
   { id: 'bold', label: 'Bold', scope: 'editor', keys: 'Mod-b' },
   { id: 'italic', label: 'Italic', scope: 'editor', keys: 'Mod-i' },

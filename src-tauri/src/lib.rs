@@ -76,7 +76,6 @@ pub fn run() {
             window::set_dock_hidden,
             mac::is_default_for_markdown,
             mac::set_default_for_markdown,
-            window::set_always_on_top,
             mcp_setup::mcp_clients,
             mcp_setup::mcp_connect,
             update::install_update

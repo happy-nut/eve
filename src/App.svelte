@@ -10,7 +10,7 @@
   import { groups, MAX_DEPTH } from './lib/groups.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
-  import { setGlobalHotkey, win, files, autostart, dock, pin, isTauri, isMobile, onWindowFocus, onBack, widget, links } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, widget, links } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Confirm from './Confirm.svelte';
@@ -29,8 +29,6 @@
 
   let sidebarOpen = $state(true);
   let settingsOpen = $state(false);
-  let pinned = $state(pin.on);
-  function togglePin() { pinned = !pinned; void pin.set(pinned); }
   let searchEl = $state<HTMLInputElement | null>(null);
   let hotkeyError = $state<string | null>(null);
   // hold ⌘: sidebar notes show 1…9, ⌘<digit> opens that note
@@ -68,7 +66,6 @@
       autostart.set(true).finally(() => localStorage.setItem('eve.autostart.init', '1'));
     }
     if (dock.hidden) dock.set(true);
-    if (pinned) void pin.set(true); // the window forgets it across restarts; the setting does not
     // a file opened from Finder joins the notes like any import — it is a note from then on, movable
     // in the sidebar and synced (the file on disk is left as it was)
     notes.load().then(() => {
@@ -425,7 +422,6 @@
       case 'exportPng': void exportCurrent('png'); break;
       case 'settings': settingsOpen = !settingsOpen; break;
       case 'hide': win.hide(); break;
-      case 'pin': togglePin(); break;
     }
   }
 </script>
@@ -457,10 +453,6 @@
     </button>
     <button class="icon" aria-label="Forward" data-tip="Forward" data-keys={shortcuts.keysFor('forward')} disabled={!notes.canForward} onclick={() => notes.forward()}>
       <svg viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
-    </button>
-    <button class="icon pin" class:on={pinned} aria-label="Keep on top" data-tip={pinned ? 'On top' : 'Keep on top'} data-keys={shortcuts.keysFor('pin')} onclick={togglePin}>
-      <!-- a pushpin: head, shaft, point -->
-      <svg viewBox="0 0 16 16"><path d="M6 1.8h4l-.6 3.4 2.2 2.2v1.2H4.4V7.4l2.2-2.2z"/><path d="M8 8.6V14"/></svg>
     </button>
     <button class="icon" aria-label="New" data-tip="New" data-keys={shortcuts.keysFor('newNote')} onclick={(e) => { if (sidebarOpen && hooks.openPlus) hooks.openPlus(e.currentTarget); else { ui.focusOwner = 'editor'; notes.create(); } }}>
       <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>

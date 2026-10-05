@@ -68,16 +68,3 @@ pub(crate) fn set_dock_hidden(app: AppHandle, hidden: bool) -> Result<(), String
     #[cfg(not(target_os = "macos"))]
     Ok(())
 }
-
-/// Keep the window above other apps (⌘⇧P). Notes stay readable while you work in another window.
-#[tauri::command]
-pub(crate) fn set_always_on_top(app: AppHandle, on: bool) -> Result<(), String> {
-    let win = app.get_webview_window("main").ok_or("no window")?;
-    #[cfg(desktop)]
-    return win.set_always_on_top(on).map_err(|e| e.to_string());
-    #[cfg(mobile)]
-    {
-        let _ = (win, on);
-        Ok(())
-    }
-}
