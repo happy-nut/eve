@@ -96,7 +96,7 @@ class NotesStore {
   /** set just before creating a page whose title is a placeholder: the editor selects it on open */
   selectTitle = false;
   /** set just before opening a note to write in it (today's daily note): the editor puts the caret at its end */
-  caretEnd = false;
+  caretEnd = $state(false); // reactive: an editor already showing the note acts on it too (Editor.svelte)
   /** the heading a `[[Title#Section]]` link just aimed at; the editor scrolls there as the page opens */
   section = '';
 
