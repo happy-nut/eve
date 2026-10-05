@@ -3,8 +3,9 @@
 // a setting's choices, Settings, the confirm dialog, the emoji picker, the / menu, the :emoji row, the @ calendar,
 // Find, and the phone's sheets. A transition that silently stopped playing (a local transition inside an {#if}
 // made with its parent, say) shows up here as "no".
-// For each: the popup's look (transform, translate, opacity) over the first 200 ms after it opens is compared with
-// its look once it has settled, and again after it is told to close (it must still be there, and moving).
+// For each: it must open, be given an animation (Element.animate with a duration, which is how Svelte runs a
+// transition) as it opens and again as it closes, and be gone after. Counted from the calls, not from how it looks
+// at some moment, so a slow machine (CI) that is late to look still sees them.
 // Needs WebKit for Playwright: npx playwright-core install webkit. It starts its own dev server, or uses EVE_URL.
 // Run: npm run e2e:popups
 import { webkit } from 'playwright-core';
@@ -15,31 +16,33 @@ const browser = await webkit.launch();
 const results = [];
 const errors = [];
 
-const look = (page, sel) => page.evaluate((sel) => {
-  const el = [...document.querySelectorAll(sel)].at(-1);
-  if (!el) return null;
-  const s = getComputedStyle(el);
-  return `${s.transform}|${s.translate}|${s.opacity}`;
-}, sel);
+/** every Element.animate with a duration, as it is called: Svelte's transitions run through it */
+const RECORD = () => {
+  const seen = (window.__animated = []);
+  const animate = Element.prototype.animate;
+  Element.prototype.animate = function (keyframes, options) {
+    const ms = typeof options === 'number' ? options : options?.duration;
+    if (ms > 0) seen.push(this);
+    return animate.call(this, keyframes, options);
+  };
+};
+const mark = (page) => page.evaluate(() => window.__animated.length);
+/** was an element matching `sel` animated since `from`? */
+const animated = (page, sel, from) => page.evaluate(([sel, from]) => window.__animated.slice(from).some((el) => el.matches(sel)), [sel, from]);
+const present = (page, sel) => page.locator(sel).count().then((n) => n > 0);
 
-/** its looks over the first 200 ms after `act` (a heavy popup like Settings starts moving a few frames late) */
-async function samples(page, sel, act) {
-  await act();
-  const seen = [];
-  for (let i = 0; i < 8; i++) { await page.waitForTimeout(25); seen.push(await look(page, sel)); }
-  return seen;
-}
-
-/** opens it, measures, closes it, measures; `open` and `close` drive the page */
+/** opens it, checks it animated in, closes it, checks it animated out and went; `open` and `close` drive the page */
 async function check(page, name, sel, open, close) {
-  const opening = await samples(page, sel, open);
-  await page.waitForTimeout(400);
-  const settled = await look(page, sel);
-  const closing = await samples(page, sel, close);
-  await page.waitForTimeout(400);
-  const gone = await look(page, sel);
-  const moving = (seen) => seen.some((v) => v !== null && v !== settled);
-  const r = { name, opened: settled !== null, in: moving(opening), out: moving(closing), closed: gone === null };
+  let from = await mark(page);
+  await open();
+  // until it is there (a popup loaded on first use, as the emoji picker is, takes a while on a slow machine)
+  await page.locator(sel).last().waitFor({ state: 'attached', timeout: 10_000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  const r = { name, opened: await present(page, sel), in: await animated(page, sel, from) };
+  from = await mark(page);
+  await close();
+  await page.waitForFunction((sel) => !document.querySelector(sel), sel, { timeout: 10_000 }).catch(() => {});
+  Object.assign(r, { out: await animated(page, sel, from), closed: !(await present(page, sel)) });
   results.push(r);
   console.log(`${r.opened && r.in && r.out && r.closed ? 'pass' : 'FAIL'} ${name.padEnd(28)} opened ${r.opened ? 'yes' : 'no '}  in ${r.in ? 'yes' : 'no '}  out ${r.out ? 'yes' : 'no '}  closed ${r.closed ? 'yes' : 'no'}`);
 }
@@ -57,6 +60,7 @@ async function newNote(page, mobile) {
 // ---- the Mac ----
 {
   const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+  await page.addInitScript(RECORD);
   page.on('pageerror', (e) => errors.push(`mac: ${e.message}`));
   await page.goto(URL_);
   await page.waitForSelector('.tiptap');
@@ -99,6 +103,7 @@ async function newNote(page, mobile) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true,
     userAgent: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Mobile' });
   const page = await ctx.newPage();
+  await page.addInitScript(RECORD);
   page.on('pageerror', (e) => errors.push(`phone: ${e.message}`));
   await page.goto(URL_);
   await page.waitForTimeout(1500);
