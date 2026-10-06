@@ -370,7 +370,7 @@
 
   // ---- misc ----
   function onSearchKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') { query = ''; searchEl?.blur(); e.preventDefault(); }
+    if (e.key === 'Escape') { query = ''; e.preventDefault(); focusNote(); } // back to the note, not to nowhere
     if (e.key === 'Enter' && hits[0]) { notes.currentId = hits[0].id; searchEl?.blur(); e.preventDefault(); }
     // ↓ walks on into the matches below; ↑ from the first one comes back here (treeKey)
     if (e.key === 'ArrowDown' && !e.isComposing) { document.querySelector<HTMLElement>('aside [data-row]')?.focus(); e.preventDefault(); }
