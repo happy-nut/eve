@@ -8,7 +8,7 @@
   import { hooks } from './lib/ui.svelte';
 
   /**
-   * A phone has no shortcuts: while the note holds the caret and the keyboard is up, a row of
+   * A phone has no shortcuts: while the note (or a sheet over it) holds the caret and the keyboard is up, a row of
    * formatting buttons sits on top of the keyboard. MainActivity shrinks the page by the keyboard's
    * height, so "on top of the keyboard" is simply the bottom of the page; the keyboard being up shows
    * as the page being noticeably shorter than it has ever been.
@@ -18,7 +18,7 @@
 
   onMount(() => {
     const measure = () => { tallest = Math.max(tallest, window.innerHeight); keyboard = window.innerHeight < tallest - 120; };
-    const check = () => { editing = !!document.activeElement?.closest('.page .tiptap'); measure(); };
+    const check = () => { editing = !!document.activeElement?.closest('.page .tiptap, .card-page .tiptap'); measure(); };
     const out = () => setTimeout(check, 0); // focus lands on the next element a tick later
     document.addEventListener('focusin', check);
     document.addEventListener('focusout', out);
@@ -31,7 +31,8 @@
     };
   });
 
-  const run = (id: string) => hooks.command?.(id);
+  // the sheet's editor when the caret is in it (a card, a day, a template), else the note's
+  const run = (id: string) => (document.activeElement?.closest('.card-page') ? hooks.cardCommand : hooks.command)?.(id);
   const done = () => (document.activeElement as HTMLElement | null)?.blur(); // puts the keyboard away
 
   const buttons: { id: string; label: string; icon: string }[] = [
@@ -75,7 +76,7 @@
 
 <style>
   .mbar {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; align-items: center; gap: 2px;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 33; /* over a sheet (31) too */ display: flex; align-items: center; gap: 2px;
     padding: 4px 6px; background: var(--bg-pop); border-top: 1px solid var(--line);
   }
   button {

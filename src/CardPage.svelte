@@ -5,10 +5,10 @@
   import { isMobile } from './lib/platform';
   import { pullDown, sheet } from './lib/popup';
   import type { Editor as TipTap } from '@tiptap/core';
-  import { createEditor } from './lib/editor';
+  import { createEditor, runEditorCommand } from './lib/editor';
   import { notes } from './lib/notes.svelte';
   import { cardDoc, splitCard } from './lib/markdown';
-  import { ui } from './lib/ui.svelte';
+  import { hooks, ui } from './lib/ui.svelte';
   import Suggest from './Suggest.svelte';
   import DateMenu from './DateMenu.svelte';
   import EmojiRow from './EmojiRow.svelte';
@@ -48,7 +48,8 @@
     // the page grows in from a day opened with Enter: if the webview left the focus on that day behind
     // it, the keys (Esc included) would go to the calendar, not to the page
     const again = requestAnimationFrame(() => { if (!el.contains(document.activeElement)) editor?.view.focus(); });
-    return () => { cancelAnimationFrame(again); editor?.destroy(); };
+    hooks.cardCommand = (id) => { if (editor) runEditorCommand(editor, id); }; // the phone's formatting bar
+    return () => { cancelAnimationFrame(again); hooks.cardCommand = undefined; editor?.destroy(); };
   });
 
   /** a sheet slides up on a phone; the Mac's floating page grows in place */
