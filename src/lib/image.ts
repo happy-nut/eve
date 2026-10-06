@@ -1,4 +1,6 @@
 import Image from '@tiptap/extension-image';
+import { Extension } from '@tiptap/core';
+import { ui } from './ui.svelte';
 import { Plugin, PluginKey, NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { assetUrl } from './platform';
 import { nameOf, sizeGrip, widthOf, withWidth } from './resize';
@@ -130,6 +132,9 @@ export const LocalImage = Image.extend({
         editor.commands.focus();
       });
 
+      // a double-click (a double tap on a phone) shows the picture full size
+      img.addEventListener('dblclick', (e) => { e.preventDefault(); ui.viewImage(img.src, img.alt); });
+
       const grip = sizeGrip(img, setWidth);
       figure.append(img, grip, cap);
       return {
@@ -150,6 +155,27 @@ export const LocalImage = Image.extend({
         stopEvent: (e) => owns(e.target) || e.target === grip,
         destroy: () => { clearTimeout(timer); document.removeEventListener('mousedown', release, true); },
       };
+    };
+  },
+});
+
+/**
+ * ↩ on a selected picture shows it full size, as a double-click does. Its own extension, ahead of the
+ * others: left to them, Enter would replace the selected picture with a new line.
+ */
+export const ImageView = Extension.create({
+  name: 'imageView',
+  priority: 1000,
+  addKeyboardShortcuts() {
+    return {
+      Enter: () => {
+        const sel = this.editor.state.selection;
+        if (!(sel instanceof NodeSelection) || sel.node.type.name !== 'image') return false;
+        const img = this.editor.view.nodeDOM(sel.from) as HTMLElement | null;
+        const shown = img?.querySelector('img');
+        ui.viewImage(shown?.src || assetUrl(sel.node.attrs.src) || sel.node.attrs.src, sel.node.attrs.alt ?? '');
+        return true;
+      },
     };
   },
 });

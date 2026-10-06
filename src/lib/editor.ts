@@ -17,7 +17,7 @@ import { Callout } from './callout';
 import { Highlight } from './highlight';
 import { Toggle } from './toggle';
 import Blockquote from '@tiptap/extension-blockquote';
-import { LocalImage } from './image';
+import { ImageView, LocalImage } from './image';
 import { Bookmark, URL_RE, openLinkHere } from './bookmark';
 import { Kanban } from './kanban';
 import { CodeBlock } from './code';
@@ -714,6 +714,7 @@ export function createEditor(opts: {
         ],
       }),
       LocalImage.configure({ inline: false, allowBase64: true }),
+      ImageView,
       Extension.create({
         name: 'shiftPastBlocks',
         addProseMirrorPlugins: () => [new Plugin({ key: new PluginKey('shiftPastBlocks'), props: { handleKeyDown: shiftPastBlocks } })],

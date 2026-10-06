@@ -50,6 +50,18 @@ class Ui {
     if (from?.isConnected && from !== document.body && !from.closest('.card-page')) from.focus();
     else focusNote();
   }
+  /** a picture shown full size over everything (ImageViewer.svelte): a double-click on it, or ↩ with it selected */
+  photo = $state<{ src: string; alt: string } | null>(null);
+  private photoFrom: HTMLElement | null = null;
+  viewImage(src: string, alt = '') { this.photoFrom = document.activeElement as HTMLElement | null; this.photo = { src, alt }; }
+  /** the keyboard goes back to where it was: the note (or the card) with the picture still selected */
+  closeImage() {
+    if (!this.photo) return;
+    this.photo = null;
+    const from = this.photoFrom;
+    this.photoFrom = null;
+    if (from?.isConnected && from !== document.body) from.focus(); else focusNote();
+  }
   /** a PDF opened from a note, shown by PdfViewer.svelte as a floating panel (nothing modal about it) */
   pdf = $state<{ src: string; name: string } | null>(null);
   openPdf(src: string, name: string) { this.pdf = { src, name }; }
