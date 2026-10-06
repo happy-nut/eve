@@ -15,8 +15,25 @@
    */
   let { onpick, ontemplate }: { onpick: (key: string) => void; ontemplate: () => void } = $props();
 
-  const today = dayKey(new Date());
+  // Eve stays open for days, hidden and summoned: today is read again when the day turns and whenever the
+  // window comes back, or a calendar left open overnight kept showing (and its Today going to) yesterday
+  let today = $state(dayKey(new Date()));
   let cursor = $state(today); // the day under the keyboard
+  $effect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const check = () => {
+      clearTimeout(timer);
+      const now = new Date();
+      const key = dayKey(now);
+      if (key !== today) { if (cursor === today) cursor = key; today = key; } // a cursor left on today moves on with it
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      timer = setTimeout(check, midnight.getTime() - now.getTime() + 500);
+    };
+    check();
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', check);
+    return () => { clearTimeout(timer); window.removeEventListener('focus', check); document.removeEventListener('visibilitychange', check); };
+  });
   const parse = (k: string) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
   const year = $derived(parse(cursor).getFullYear());
   const month = $derived(parse(cursor).getMonth());
