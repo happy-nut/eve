@@ -3,6 +3,7 @@ import { groups, MAX_DEPTH } from './groups.svelte';
 import { files, importAsset, pickFiles, pickFolders, listFolder, pickSavePath, savePdf, savePng, isMobile, widget } from './platform';
 import { TEXT_FILE, DOC_FILE, VIDEO_FILE } from './drop';
 import { commonDir, dirOf, groupFor, nameOf, stem } from './paths';
+import { attachmentCandidates, isKeepNote, keepOrder, keepToNote, type FromKeep } from './keep';
 import { ui } from './ui.svelte';
 import { flushEdits } from './pending';
 
@@ -28,16 +29,57 @@ async function bodyOf(path: string): Promise<string | null> {
  */
 export async function importPaths(paths: string[], from?: string): Promise<Note | null> {
   const root = from ?? commonDir(paths);
-  let first: Note | null = null;
+  const groupOf = (path: string) => (paths.length > 1 || from ? groupFor(path, root, MAX_DEPTH) : (notes.current?.group ?? ''));
+  const keep = await importKeep(paths, groupOf);
+  let first: Note | null = keep.first;
   for (const path of paths) {
+    if (keep.taken.has(path)) continue;
     const body = await bodyOf(path);
     if (body === null) continue;
-    const group = paths.length > 1 || from ? groupFor(path, root, MAX_DEPTH) : (notes.current?.group ?? '');
+    const group = groupOf(path);
     if (group) groups.remember(group);
     const note = notes.addImported(body, group);
     first ??= note;
   }
   return first;
+}
+
+/**
+ * The Google Keep notes among the files (a Takeout export: a .json per note), each made into a note in
+ * Keep's own order: pinned first, then the most recently edited, keeping when it was edited. Its label
+ * becomes a group under the one the export sits in ("Keep/Work"), an archived note goes to "Keep/Archive".
+ * `taken`: the files that were part of a Keep note (its .html, its pictures, Labels.txt), not notes of their own.
+ */
+async function importKeep(paths: string[], groupOf: (path: string) => string): Promise<{ first: Note | null; taken: Set<string> }> {
+  const taken = new Set<string>();
+  const made: (FromKeep & { group: string })[] = [];
+  for (const path of paths.filter((p) => /\.json$/i.test(p))) {
+    let json: unknown;
+    try { json = JSON.parse(await files.read(path)); } catch { continue; }
+    if (!isKeepNote(json)) continue;
+    const dir = dirOf(path);
+    taken.add(path).add(`${dir}/${stem(nameOf(path))}.html`).add(`${dir}/Labels.txt`);
+    // trashed in Keep: left behind, its pictures too
+    if (json.isTrashed) { for (const a of json.attachments ?? []) for (const c of attachmentCandidates(a.filePath ?? '')) taken.add(`${dir}/${c}`); continue; }
+    const copied: Record<string, string> = {};
+    for (const a of json.attachments ?? []) {
+      if (!a.filePath) continue;
+      for (const c of attachmentCandidates(a.filePath)) {
+        taken.add(`${dir}/${c}`);
+        if (copied[a.filePath]) continue;
+        try { copied[a.filePath] = await importAsset(`${dir}/${c}`); } catch { /* not there, or a kind Eve cannot hold */ }
+      }
+    }
+    const note = keepToNote(json, copied);
+    if (note) made.push({ ...note, group: [groupOf(path), note.sub].filter(Boolean).join('/').split('/').slice(0, MAX_DEPTH).join('/') });
+  }
+  let first: Note | null = null;
+  for (const k of made.sort(keepOrder)) {
+    if (k.group) groups.remember(k.group);
+    const note = notes.addImported(k.body, k.group, k.updatedAt || Date.now());
+    first ??= note;
+  }
+  return { first, taken };
 }
 
 /** Ask for files, then import them. Returns the first note made, or null (nothing picked / nothing usable). */

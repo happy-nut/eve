@@ -227,7 +227,7 @@ export async function pickFiles(): Promise<string[] | null> {
   const { open } = await import('@tauri-apps/plugin-dialog');
   const picked = await open({
     multiple: true,
-    filters: [{ name: 'Notes and attachments', extensions: ['md', 'markdown', 'mdx', 'txt', 'pdf', 'xlsx', 'xls', 'hwp', 'hwpx', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic'] }],
+    filters: [{ name: 'Notes, attachments and Google Keep notes', extensions: ['md', 'markdown', 'mdx', 'txt', 'json', 'pdf', 'xlsx', 'xls', 'hwp', 'hwpx', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic'] }],
   });
   return picked === null ? null : (Array.isArray(picked) ? picked : [picked]);
 }

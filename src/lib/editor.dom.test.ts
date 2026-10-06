@@ -75,7 +75,7 @@ describe('toggle', () => {
 });
 
 describe('arrows', () => {
-  test.each([['->', '→'], ['<-', '←'], ['=>', '⇒'], ['<=', '⇐']])('%s becomes %s', (typed, arrow) => {
+  test.each([['->', '→'], ['<-', '←'], ['=>', '⇒'], ['<=', '⇐'], ['<->', '↔'], ['<=>', '⇔']])('%s becomes %s', (typed, arrow) => {
     const ed = editorWith('');
     ed.commands.focus('end');
     type(ed, `a${typed}b`);

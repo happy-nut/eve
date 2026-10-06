@@ -1,7 +1,7 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
 import { groups } from './groups.svelte';
 import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText } from './platform';
-import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, type LocalFile, type RemoteFile } from './github';
+import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, signInError, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
 
 /**
@@ -47,8 +47,9 @@ class Sync {
 
   get enabled() { return /^[\w.-]+\/[\w.-]+$/.test(this.settings.repo) && !!this.settings.token; }
 
-  /** device-flow code the user has to enter on GitHub, while a sign-in is in progress */
-  pending = $state<{ code: string; url: string } | null>(null);
+  /** device-flow code the user has to enter on GitHub, while a sign-in is in progress; `renewed`: the one
+   *  before it ran out (an account still being made), and this one is not on the clipboard yet */
+  pending = $state<{ code: string; url: string; renewed?: boolean } | null>(null);
   private abort: AbortController | undefined;
 
   /**
@@ -67,22 +68,30 @@ class Sync {
       if (!token && host && !clientId) throw new Error('For this server, paste a token, or the Client ID of an OAuth App its admin set up for Eve.');
       // the code goes on the clipboard first; a phone waits for the button, so the code is seen before
       // the browser covers it
-      token ||= await deviceLogin(github.post, (code, url) => { this.pending = { code, url }; void copyText(code); if (!isMobile) void openUrl(url); }, this.abort.signal, undefined, { host, clientId });
+      // a renewed code is only shown: the clipboard may hold what they are pasting on GitHub's sign-up
+      // pages meanwhile, and a new browser tab every 15 minutes would be in the way
+      token ||= await deviceLogin(github.post, (code, url, renewed) => {
+        this.pending = { code, url, renewed };
+        if (renewed) return;
+        void copyText(code);
+        if (!isMobile) void openUrl(url);
+      }, this.abort.signal, undefined, { host, clientId });
       const { user, repo } = await ensureRepo(token, undefined, { host, owner: a.owner });
       this.save({ token, user, repo, host });
       this.pending = null;
       await this.now();
     } catch (e) {
       this.pending = null;
-      this.status = 'error';
-      this.error = e instanceof Error ? e.message : String(e);
+      const said = signInError(e instanceof Error ? e.message : String(e));
+      this.status = said === null ? 'idle' : 'error';
+      this.error = said ?? '';
     } finally {
       this.abort = undefined;
     }
   }
   cancelLogin() { this.abort?.abort(); }
   /** copy the code and open the device page (again: the browser tab may have been closed) */
-  openLogin() { if (this.pending) { void copyText(this.pending.code); void openUrl(this.pending.url); } }
+  openLogin() { if (this.pending) { void copyText(this.pending.code); void openUrl(this.pending.url); this.pending.renewed = false; } }
   /**
    * Mac: set up a phone. This Mac's sign-in, sealed with a one-time key, is served once on the local
    * network; the QR carries the address and the key (handoff.ts). No GitHub step: the phone simply

@@ -15,6 +15,7 @@
   import Editor from './Editor.svelte';
   import Confirm from './Confirm.svelte';
   import MobileBar from './MobileBar.svelte';
+  import ImageViewer from './ImageViewer.svelte';
   import Hint from './Hint.svelte';
   import { hints } from './lib/hints.svelte';
   import { updates } from './lib/updates.svelte';
@@ -52,7 +53,7 @@
   });
 
   // Android back: a popup or a dialog closes, a note goes back to the list, and only the list leaves the app
-  const popupOpen = $derived(!!(ui.emoji || ui.menu || ui.pending || ui.find || ui.pdf || ui.card));
+  const popupOpen = $derived(!!(ui.photo || ui.emoji || ui.menu || ui.pending || ui.find || ui.pdf || ui.card));
   $effect(() => {
     if (!isMobile || !isTauri || (sidebarOpen && !settingsOpen && !popupOpen)) return;
     let off: (() => void) | undefined, gone = false;
@@ -152,7 +153,7 @@
   function restoreFocus() {
     const back = away;
     away = null;
-    if (ui.pending || ui.emoji || ui.menu || settingsOpen) return; // a dialog owns focus
+    if (ui.photo || ui.pending || ui.emoji || ui.menu || settingsOpen) return; // a dialog owns focus
     const a = document.activeElement as HTMLElement | null;
     if (a && a.isConnected && a !== document.body) return;
     const el = back?.isConnected ? back : document.querySelector<HTMLElement>(ui.card ? '.card-page .tiptap' : '.tiptap');
@@ -247,6 +248,7 @@
   /** Today's note, to write in: caret under the template, keyboard up on a phone. Whatever was left open over
    *  the app (a card, a picker, a menu, a dialog, Find) is put away first, or it would sit over the note. */
   function writeToday() {
+    if (ui.photo) ui.closeImage();
     if (ui.emoji) ui.emojiDone(null);
     if (ui.menu) ui.closeMenu();
     if (ui.pending) ui.done(null);
@@ -291,8 +293,9 @@
 
   /** A phone's back (the bar's chevron, or Android's): a day goes back to its calendar, anything else to the list. */
   function phoneBack() {
-    // what is on top closes first: a popup over everything, then a dialog, then a sheet (a card, a day)
-    if (ui.emoji) ui.emojiDone(null);
+    // what is on top closes first: a picture shown full size, a popup, then a dialog, then a sheet (a card, a day)
+    if (ui.photo) ui.closeImage();
+    else if (ui.emoji) ui.emojiDone(null);
     else if (ui.menu) ui.closeMenu();
     else if (ui.pending) ui.done(null);
     else if (ui.find) { ui.find = false; focusNote(); }
@@ -523,6 +526,7 @@
 {#if ui.card}
   {#await import('./CardPage.svelte') then { default: CardPage }}<CardPage />{/await}
 {/if}
+{#if ui.photo}<ImageViewer />{/if}
 {#if ui.pdf}
   {#await import('./PdfViewer.svelte') then { default: PdfViewer }}<PdfViewer />{/await}
 {/if}

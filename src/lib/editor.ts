@@ -17,7 +17,7 @@ import { Callout } from './callout';
 import { Highlight } from './highlight';
 import { Toggle } from './toggle';
 import Blockquote from '@tiptap/extension-blockquote';
-import { LocalImage } from './image';
+import { ImageView, LocalImage } from './image';
 import { Bookmark, URL_RE, openLinkHere } from './bookmark';
 import { Kanban } from './kanban';
 import { CodeBlock } from './code';
@@ -190,6 +190,8 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     codeBlock: () => c().toggleCodeBlock().run(),
     divider: () => c().setHorizontalRule().run(),
     selectAll: () => c().selectAll().run(),
+    undo: () => c().undo().run(),
+    redo: () => c().redo().run(),
     indent: () => c().command(indentLines(1)).run(),
     outdent: () => c().command(indentLines(-1)).run(),
   };
@@ -706,9 +708,13 @@ export function createEditor(opts: {
           textInputRule({ find: /<-$/, replace: '←' }),
           textInputRule({ find: /=>$/, replace: '⇒' }),
           textInputRule({ find: /<=$/, replace: '⇐' }),
+          // "<-" is already ← by the time ">" comes: the two ways round are ← finished with >
+          textInputRule({ find: /(?:←|<-)>$/, replace: '↔' }),
+          textInputRule({ find: /(?:⇐|<=)>$/, replace: '⇔' }),
         ],
       }),
       LocalImage.configure({ inline: false, allowBase64: true }),
+      ImageView,
       Extension.create({
         name: 'shiftPastBlocks',
         addProseMirrorPlugins: () => [new Plugin({ key: new PluginKey('shiftPastBlocks'), props: { handleKeyDown: shiftPastBlocks } })],

@@ -1,7 +1,7 @@
 // Sync engine self-check. Default: in-memory fake GitHub. Real API: EVE_TEST_REPO=owner/name EVE_TEST_TOKEN=... npm test
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
-import { Repo, FileHashes, syncRound, blobSha, deviceLogin, pollToken, normHost, apiBase, webBase, ensureRepo } from './github.ts';
+import { Repo, FileHashes, syncRound, blobSha, deviceLogin, pollToken, normHost, apiBase, webBase, ensureRepo, signInError } from './github.ts';
 
 const gitSha = (buf) => createHash('sha1').update(`blob ${buf.length}\0`).update(buf).digest('hex');
 const rnd = () => randomBytes(20).toString('hex');
@@ -128,6 +128,37 @@ assert.deepEqual(shown, ['AB12-CD34', 'https://github.com/login/device']);
 assert.equal(posts.length, 4);
 const ac = new AbortController(); ac.abort();
 await assert.rejects(deviceLogin(post, () => {}, ac.signal, async () => {}), /cancelled/);
+
+// a code that runs out (an account still being made) is replaced by a new one, shown as renewed; not forever
+{
+  let codes = 0, tokenAsks = 0;
+  const shownCodes = [];
+  const slow = async (url) => {
+    if (url.endsWith('device/code')) return JSON.stringify({ device_code: `d${++codes}`, user_code: `C${codes}`, verification_uri: 'https://github.com/login/device', interval: 1 });
+    tokenAsks++;
+    return codes < 3 ? '{"error":"expired_token"}' : '{"access_token":"gho_new"}';
+  };
+  assert.equal(await deviceLogin(slow, (code, _url, renewed) => shownCodes.push(`${code}:${renewed}`), undefined, async () => {}), 'gho_new');
+  assert.deepEqual(shownCodes, ['C1:false', 'C2:true', 'C3:true']);
+  assert.equal(tokenAsks, 3);
+  const never = async (url) => (url.endsWith('device/code') ? '{"device_code":"d","user_code":"C","verification_uri":"u","interval":1}' : '{"error":"expired_token"}');
+  await assert.rejects(deviceLogin(never, () => {}, undefined, async () => {}, {}, 2), /expired/);
+  // a "no" on GitHub is the end, not a new code
+  const denied = async (url) => (url.endsWith('device/code') ? '{"device_code":"d","user_code":"C","verification_uri":"u","interval":1}' : '{"error":"access_denied","error_description":"The authorization request was denied by the user."}');
+  let asked = 0;
+  await assert.rejects(deviceLogin(denied, () => asked++, undefined, async () => {}), /denied/);
+  assert.equal(asked, 1);
+}
+
+// a failed sign-in in words someone new to GitHub can act on; cancelling is no failure
+assert.equal(signInError('sign-in cancelled'), null);
+assert.match(signInError('The authorization request was denied by the user.'), /not authorized/);
+assert.match(signInError('the sign-in code expired; start again'), /new one/);
+assert.match(signInError('Could not reach https://github.com. On a company network or VPN?'), /internet connection/);
+assert.match(signInError('io: failed to lookup address information'), /internet connection/);
+assert.match(signInError('403 You need to verify your email address first'), /email address confirmed/);
+assert.match(signInError('401 bad token'), /did not accept/);
+assert.equal(signInError('owner/eve-notes exists but is public — make it private or rename it'), 'owner/eve-notes exists but is public — make it private or rename it');
 
 // a phone polling with the Mac's code: expiry is an error, not a hang
 const expired = async () => '{"error":"expired_token","error_description":"This \'device_code\' has expired."}';
