@@ -190,6 +190,8 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     codeBlock: () => c().toggleCodeBlock().run(),
     divider: () => c().setHorizontalRule().run(),
     selectAll: () => c().selectAll().run(),
+    undo: () => c().undo().run(),
+    redo: () => c().redo().run(),
     indent: () => c().command(indentLines(1)).run(),
     outdent: () => c().command(indentLines(-1)).run(),
   };
