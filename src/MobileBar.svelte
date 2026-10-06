@@ -36,8 +36,6 @@
 
   const buttons: { id: string; label: string; icon: string }[] = [
     { id: 'taskList', label: 'To-do', icon: '<rect x="3" y="3.5" width="9" height="9" rx="2"/><path d="M5.3 8l1.7 1.7L10 6.5"/>' },
-    { id: 'bulletList', label: 'Bullets', icon: '<circle cx="3.5" cy="4.5" r=".9" fill="currentColor"/><circle cx="3.5" cy="11.5" r=".9" fill="currentColor"/><path d="M7 4.5h6.5M7 11.5h6.5"/>' },
-    { id: 'h2', label: 'Heading', icon: '<path d="M3 3.5v9M10 3.5v9M3 8h7"/><path d="M12.2 12.5h2.3" />' },
     { id: 'bold', label: 'Bold', icon: '<path d="M4.5 3h4a2.5 2.5 0 010 5h-4zM4.5 8h4.8a2.5 2.5 0 010 5H4.5z"/>' },
     { id: 'outdent', label: 'Outdent', icon: '<path d="M13.5 4h-6M13.5 8h-6M13.5 12h-6M5 6L2.5 8 5 10"/>' },
     { id: 'indent', label: 'Indent', icon: '<path d="M13.5 4h-6M13.5 8h-6M13.5 12h-6M2.5 6L5 8l-2.5 2"/>' },
@@ -60,7 +58,8 @@
       </button>
     {/each}
     <span class="sep"></span>
-    <!-- the formatting buttons scroll sideways when the phone is too narrow for them all -->
+    <!-- the formatting buttons scroll sideways when the phone is too narrow for them all. No bullets or
+         headings: "- " and "## " already make them while typing -->
     <div class="tools">
       {#each buttons as b (b.id)}
         <button tabindex="-1" aria-label={b.label} onclick={() => run(b.id)}>
