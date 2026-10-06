@@ -111,11 +111,19 @@
     }
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); }
   }
+  /** Esc with the keyboard still behind Settings (the list's row, the note) closes Settings first: left to them,
+   *  the list's own Esc took the keyboard to the note. Inside Settings, its popups keep their own Esc. */
+  function escBehind(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || recording || ui.pending || ui.menu) return;
+    if ((e.target as HTMLElement | null)?.closest?.('.panel')) return;
+    e.preventDefault(); e.stopPropagation(); onClose();
+  }
 </script>
 
-<svelte:window onkeydown={onKey} />
+<svelte:window onkeydown={onKey} onkeydowncapture={escBehind} />
 
-<div class="backdrop" transition:fade|global={scrimFade} onmousedown={onClose} role="presentation"></div>
+<!-- preventDefault: the press would otherwise take the keyboard away again after closing gave it back -->
+<div class="backdrop" transition:fade|global={scrimFade} onmousedown={(e) => { e.preventDefault(); onClose(); }} role="presentation"></div>
 <div class="panel" transition:scale|global={panelIn} role="dialog">
   <header>
     <div class="seg" role="tablist">

@@ -281,7 +281,7 @@
         if (group) { groups.editing = group; break; }
         return;
       case 'i': if (group) pickIcon({ group }); else pickIcon({ note: notes.all.find((n) => n.id === noteId) }); break;
-      case 'Escape': focusNote(); break;
+      case 'Escape': if (ui.pdf || ui.find) return; focusNote(); break; // what floats on top closes first (App)
       default: return;
     }
     e.preventDefault();

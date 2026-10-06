@@ -31,6 +31,18 @@
 
   let sidebarOpen = $state(true);
   let settingsOpen = $state(false);
+  // Settings takes nothing from the keyboard's place: closed however (Esc, ✕, a click beside it), the keyboard
+  // is back where it was — the list's row, the note — unless something has taken it meanwhile
+  let settingsFrom: HTMLElement | null = null;
+  $effect(() => {
+    if (settingsOpen) { settingsFrom = document.activeElement as HTMLElement | null; return; }
+    const from = settingsFrom;
+    settingsFrom = null;
+    if (!from || isMobile) return;
+    const a = document.activeElement;
+    if (a && a !== document.body && a.isConnected) return;
+    if (from.isConnected && from !== document.body) from.focus(); else focusNote();
+  });
   let searchEl = $state<HTMLInputElement | null>(null);
   let hotkeyError = $state<string | null>(null);
   // hold ⌘: sidebar notes show 1…9, ⌘<digit> opens that note
