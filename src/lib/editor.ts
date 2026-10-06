@@ -708,6 +708,9 @@ export function createEditor(opts: {
           textInputRule({ find: /<-$/, replace: '←' }),
           textInputRule({ find: /=>$/, replace: '⇒' }),
           textInputRule({ find: /<=$/, replace: '⇐' }),
+          // "<-" is already ← by the time ">" comes: the two ways round are ← finished with >
+          textInputRule({ find: /(?:←|<-)>$/, replace: '↔' }),
+          textInputRule({ find: /(?:⇐|<=)>$/, replace: '⇔' }),
         ],
       }),
       LocalImage.configure({ inline: false, allowBase64: true }),
