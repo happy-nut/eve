@@ -571,6 +571,7 @@
 
 <style>
   aside {
+    position: relative; /* the focus flash's layer (app.css) covers it */
     width: 260px; flex: none; display: flex; flex-direction: column;
     background: var(--bg-side); border-right: 1px solid var(--line); overflow: hidden;
   }
