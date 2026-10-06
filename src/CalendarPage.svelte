@@ -18,7 +18,7 @@
   // Eve stays open for days, hidden and summoned: today is read again when the day turns and whenever the
   // window comes back, or a calendar left open overnight kept showing (and its Today going to) yesterday
   let today = $state(dayKey(new Date()));
-  let cursor = $state(today); // the day under the keyboard
+  let cursor = $state(dayKey(new Date())); // the day under the keyboard
   $effect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const check = () => {
