@@ -230,9 +230,9 @@ class NotesStore {
    * A note made by importing a file. It joins the end of its group (an import reads top to bottom)
    * and leaves the open note alone — the file usually links itself into the page being written.
    */
-  addImported(body: string, group = this.current?.group ?? ''): Note {
+  addImported(body: string, group = this.current?.group ?? '', updatedAt = Date.now()): Note {
     const last = this.visible.filter((x) => x.group === group).at(-1);
-    const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group, order: last ? last.order + 1 : 0, icon: autoIcon() };
+    const n: Note = { id: newId(), body, updatedAt, deleted: false, group, order: last ? last.order + 1 : 0, icon: autoIcon() };
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
     void storage.write(n.id, serialize(n));
