@@ -206,13 +206,32 @@ export async function requestCode(post: Post, l: Login = {}): Promise<DeviceCode
   return { device_code: a.device_code, user_code: a.user_code, verification_uri: a.verification_uri, interval: Number(a.interval) || 5, expires_in: Number(a.expires_in) || 900 };
 }
 
+/**
+ * A failed sign-in, said so that someone new to GitHub knows what to do next. Null: nothing to say
+ * (they cancelled it themselves). Anything not recognised is shown as GitHub gave it.
+ */
+export function signInError(msg: string): string | null {
+  if (/cancelled/i.test(msg)) return null;
+  if (/denied/i.test(msg)) return 'Eve was not authorized on GitHub. Press Sign in with GitHub to try again.';
+  if (/expired/i.test(msg)) return 'The sign-in code ran out. Press Sign in with GitHub for a new one.';
+  if (/verif\w*.*email|email.*verif/i.test(msg)) return 'GitHub wants the account\'s email address confirmed first: open the link in the email GitHub sent, then sign in again.';
+  if (/could not reach|lookup address|network|dns|timed? ?out|connection|offline|error sending request/i.test(msg)) return 'Could not reach GitHub. Check the internet connection (or a VPN) and try again.';
+  if (/^401\b/.test(msg)) return 'GitHub did not accept this sign-in. Sign in again; a pasted token needs the repo scope.';
+  return msg;
+}
+
+/** The sign-in code ran out before it was entered (GitHub's own `expired_token`, or its time up). */
+export class CodeExpired extends Error {
+  constructor(msg = 'the sign-in code expired; start again') { super(msg); }
+}
+
 /** Device flow, second half: poll until the code is authorized; resolves to the token. A failed request
  *  is not the end: the user is in the browser meanwhile, and a phone may cut a background app off the
  *  network for a while (DNS then fails). Only GitHub's own answer — denied, expired — or `expiresIn`
  *  running out ends it. */
 export async function pollToken(post: Post, deviceCode: string, interval = 5, signal?: AbortSignal, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)), expiresIn = 900, l: Login = {}): Promise<string> {
   for (let waited = 0; ; waited += interval) {
-    if (waited > expiresIn) throw new Error('the sign-in code expired; start again');
+    if (waited > expiresIn) throw new CodeExpired();
     await sleep(interval * 1000);
     if (signal?.aborted) throw new Error('sign-in cancelled');
     let reply: string;
@@ -224,6 +243,7 @@ export async function pollToken(post: Post, deviceCode: string, interval = 5, si
     const t = JSON.parse(reply);
     if (t.access_token) return t.access_token;
     if (t.error === 'slow_down') interval += 5;
+    else if (t.error === 'expired_token') throw new CodeExpired(t.error_description);
     else if (t.error !== 'authorization_pending') throw new Error(t.error_description ?? t.error ?? 'sign-in failed');
   }
 }
@@ -231,11 +251,19 @@ export async function pollToken(post: Post, deviceCode: string, interval = 5, si
 /**
  * Device flow: ask for a code, hand it to the user (onCode), poll until they authorize in the browser.
  * `post` does the two github.com POSTs (no CORS there, so the desktop side runs them). Resolves to the token.
+ * A code lasts 15 minutes; someone making their GitHub account first (an email to confirm, a puzzle) can
+ * take longer, so a code that runs out is replaced by a new one (`renewed`), for about an hour.
  */
-export async function deviceLogin(post: Post, onCode: (code: string, url: string) => void, signal?: AbortSignal, sleep?: (ms: number) => Promise<unknown>, l: Login = {}): Promise<string> {
-  const a = await requestCode(post, l);
-  onCode(a.user_code, a.verification_uri);
-  return pollToken(post, a.device_code, a.interval, signal, sleep, a.expires_in, l);
+export async function deviceLogin(post: Post, onCode: (code: string, url: string, renewed: boolean) => void, signal?: AbortSignal, sleep?: (ms: number) => Promise<unknown>, l: Login = {}, renewals = 4): Promise<string> {
+  for (let n = 0; ; n++) {
+    const a = await requestCode(post, l);
+    onCode(a.user_code, a.verification_uri, n > 0);
+    try {
+      return await pollToken(post, a.device_code, a.interval, signal, sleep, a.expires_in, l);
+    } catch (e) {
+      if (!(e instanceof CodeExpired) || n >= renewals || signal?.aborted) throw e;
+    }
+  }
 }
 
 /**

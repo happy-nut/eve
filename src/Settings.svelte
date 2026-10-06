@@ -72,6 +72,7 @@
   /** the device code a click away from the clipboard, with a moment of "Copied" to say it worked */
   /** sign-in elsewhere: a GitHub Enterprise server, an organization as the notes' owner, a token instead of the browser */
   let elsewhere = $state(false);
+  let signingUp = $state(false); // the GitHub sign-up page was opened from here
   let signIn = $state({ host: sync.settings.host, owner: '', token: '', clientId: '' });
   /** the server as typed, if it reads as one ('' = github.com, or not yet a host) */
   const signHost = $derived.by(() => { try { return normHost(signIn.host); } catch { return ''; } });
@@ -300,10 +301,22 @@
           {#if sync.status === 'error'}<p class="alert">{sync.error}</p>{/if}
         {:else if sync.pending}
           <div class="device">
-            <p class="sub">{isMobile
-              ? 'The code is copied. On GitHub, long-press the first box and choose Paste, then authorize Eve.'
-              : 'Enter this code on the GitHub page that just opened (it is on the clipboard), then authorize Eve.'}</p>
+            {#if sync.pending.renewed}
+              <p class="sub">The last code ran out, so here is a new one: {isMobile ? 'tap' : 'click'} it to copy it.</p>
+            {:else}
+              <p class="sub">{isMobile
+                ? 'The code is copied. On GitHub, long-press the first box and choose Paste.'
+                : 'Enter this code on the GitHub page that just opened (it is on the clipboard).'}</p>
+            {/if}
             <button class="devicecode" data-tip="Copy" onclick={() => copyCode(sync.pending!.code)}>{copied ? 'Copied' : sync.pending.code}</button>
+            <ol class="steps">
+              <li>Paste the code on GitHub and press <b>Continue</b>.</li>
+              <li>Press <b>Authorize Eve</b>. GitHub calls it “full control of private repositories”: that is what lets
+                Eve make its own private <span class="mono nowrap">eve-notes</span> repository and keep your notes in it.</li>
+              <li>Come back here: Eve sets up the rest.</li>
+            </ol>
+            <p class="sub later">No GitHub account yet? Make one on that page first (it is free) — take your time: a code
+              that runs out is replaced here.</p>
             <div class="actions">
               <button class="btn" onclick={() => sync.cancelLogin()}>Cancel</button>
               <button class="btn" class:primary={isMobile} onclick={() => sync.openLogin()}>{isMobile ? 'Copy code & open GitHub' : 'Open GitHub again'}</button>
@@ -312,9 +325,19 @@
         {:else}
           <div class="row">
             <span class="label">Not signed in
-              <span class="sub">Notes sync to a private <span class="mono">eve-notes</span> repository in your account.</span></span>
+              <span class="sub">Notes sync to a private <span class="mono">eve-notes</span> repository in your GitHub account.</span></span>
             <button class="btn primary" onclick={() => sync.login(elsewhere ? signIn : {})} disabled={!isTauri}>{elsewhere && signIn.token.trim() ? 'Sign in with token' : 'Sign in with GitHub'}</button>
           </div>
+          {#if !elsewhere && isTauri}
+            <!-- someone with no GitHub yet: the account first, with no sign-in code ticking meanwhile -->
+            <div class="row">
+              <span class="label">{signingUp ? 'Made your account?' : 'New to GitHub?'}
+                <span class="sub">{signingUp
+                  ? 'Confirm its email address (GitHub sends a link), then press Sign in with GitHub.'
+                  : 'A free account is all Eve needs. Only you can see the notes in it.'}</span></span>
+              <button class="btn" onclick={() => { signingUp = true; void openUrl('https://github.com/signup'); }}>{signingUp ? 'Open again' : 'Create account'}</button>
+            </div>
+          {/if}
           {#if elsewhere}
             <!-- GitHub Enterprise (NAME.ghe.com, or a company's own server), an organization, or a token -->
             <label class="row">
@@ -500,6 +523,11 @@
 
   .device { text-align: center; padding: 14px 0 12px; }
   .device .sub { display: block; margin: 0; }
+  .steps { margin: 0 auto 12px; padding-left: 20px; max-width: 420px; text-align: left; font-size: 12.5px; line-height: 1.5; color: var(--fg-dim); }
+  .steps li + li { margin-top: 4px; }
+  .steps .nowrap { white-space: nowrap; }
+  .device .sub.later { margin-bottom: 14px; }
+  .steps b { color: var(--fg); font-weight: 600; }
   .devicecode { display: block; border: 0; background: none; color: inherit; cursor: copy; font: 600 30px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.14em; margin: 14px auto 16px; user-select: all; -webkit-user-select: all; }
   .actions { display: flex; justify-content: center; gap: 8px; }
   .actions.pad { padding: 0 0 14px; }
