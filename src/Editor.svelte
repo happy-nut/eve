@@ -104,6 +104,7 @@
   async function changeIcon(anchor: HTMLElement) {
     const v = await ui.pickEmoji(anchor, note.icon ?? '');
     if (v !== null) notes.setIcon(note.id, v);
+    if (!isMobile) editor?.view.focus(); // back into the note, the caret where it was (a phone's keyboard stays down)
   }
 
   // asked to write at the end of this very note (the reminder's today, already open): no remount brings it there

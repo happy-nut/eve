@@ -293,8 +293,9 @@
     const current = target.note ? target.note.icon ?? '' : groups.icon(target.group!);
     const el = anchor ?? document.querySelector<HTMLElement>(target.note ? `aside [data-note="${target.note.id}"]` : `aside [data-group="${CSS.escape(target.group!)}"]`);
     const v = await ui.pickEmoji(el ?? new DOMRect(60, 60, 0, 0), current);
-    if (v === null) return;
-    if (target.note) notes.setIcon(target.note.id, v); else groups.setIcon(target.group!, v);
+    if (v !== null) { if (target.note) notes.setIcon(target.note.id, v); else groups.setIcon(target.group!, v); }
+    // the keyboard goes back to the row whose icon it was, picked or not
+    if (!isMobile) void focusRow(target.note ? `[data-note="${target.note.id}"]` : groupSel(target.group!));
   }
 
   /**

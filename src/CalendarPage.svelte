@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import { focusNote } from './lib/popup';
   import { notes } from './lib/notes.svelte';
   import { plain } from './lib/markdown';
   import { ui } from './lib/ui.svelte';
@@ -85,6 +86,8 @@
   async function changeIcon(anchor: HTMLElement) {
     const v = await ui.pickEmoji(anchor, notes.calendar.icon);
     if (v !== null) notes.setCalendar({ icon: v || '🗓️' });
+    await tick();
+    focusNote(); // back to the calendar's day
   }
 </script>
 

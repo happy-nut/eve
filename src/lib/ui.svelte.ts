@@ -1,4 +1,5 @@
 import { focusNote } from './popup';
+import { isMobile } from './platform';
 /** One line of a menu. `sep` starts a group above it; a `hide` item never makes the list; `checked` is the current choice. */
 export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean; checked?: boolean }
 
@@ -24,9 +25,25 @@ class Ui {
   /** Pick an emoji near `anchor`. Resolves the emoji, '' to remove, or null when dismissed. */
   pickEmoji(anchor: HTMLElement | DOMRect, current = ''): Promise<string | null> {
     const r = anchor instanceof DOMRect ? anchor : anchor.getBoundingClientRect();
+    this.emojiFrom = document.activeElement as HTMLElement | null;
     return new Promise((res) => { this.emoji = { x: r.left, y: r.bottom + 6, current, resolve: res }; });
   }
-  emojiDone(v: string | null) { this.emoji?.resolve(v); this.emoji = null; }
+  private emojiFrom: HTMLElement | null = null;
+  /** Closed however (picked, removed, dismissed). Each caller puts the keyboard back where the picker was
+   *  opened from (the list's row, the note); should the focus still be nowhere after that, it goes back to
+   *  where it was when the picker opened, so it is never simply lost. */
+  emojiDone(v: string | null) {
+    this.emoji?.resolve(v);
+    this.emoji = null;
+    const from = this.emojiFrom;
+    this.emojiFrom = null;
+    if (isMobile) return; // a phone has no keyboard focus to lose, and focusing a note would raise its keyboard
+    setTimeout(() => {
+      const a = document.activeElement;
+      if (a && a !== document.body && a.isConnected) return;
+      if (from?.isConnected && from !== document.body) from.focus(); else focusNote();
+    }, 60);
+  }
   card = $state<CardReq | null>(null);
   /** Open a card as a floating page; resolves when it closes. */
   openCard(c: { title: string; body: string; note?: string }, onChange: CardReq['onChange']): Promise<void> {
