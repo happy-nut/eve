@@ -12,10 +12,11 @@
 
   function place() {
     const e = editor;
+    if (!e || e.isDestroyed) { at = null; return; } // gone already (the note was switched)
     // the caret's own element, not view.hasFocus(): a window that is not the frontmost one still has
     // a caret sitting in the table, and the bar should be there when it comes back
-    const caretIn = document.activeElement && e?.view.dom.contains(document.activeElement);
-    if (!e || e.isDestroyed || !caretIn || !e.isActive('table')) { at = null; return; }
+    const caretIn = document.activeElement && e.view.dom.contains(document.activeElement);
+    if (!caretIn || !e.isActive('table')) { at = null; return; }
     const dom = e.view.domAtPos(e.state.selection.from).node;
     const el = (dom instanceof HTMLElement ? dom : dom.parentElement)?.closest('table');
     if (!el) { at = null; return; }
@@ -26,7 +27,9 @@
   $effect(() => {
     const e = editor;
     if (!e) return;
-    const update = () => place();
+    // a moment later, not inside the event: switching notes destroys this editor in the middle of the page's own
+    // update, and its blur arriving then may not touch state (Svelte's state_unsafe_mutation)
+    const update = () => queueMicrotask(place);
     e.on('selectionUpdate', update);
     e.on('transaction', update);
     e.on('focus', update);
