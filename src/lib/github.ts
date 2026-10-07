@@ -54,7 +54,13 @@ const unb64 = (s: string) => Uint8Array.from(atob(s.replace(/\s/g, '')), (c) => 
 
 async function explain(res: Response): Promise<string> {
   let msg = '';
-  try { msg = (await res.json()).message ?? ''; } catch { /* not json */ }
+  try {
+    const j = await res.json();
+    msg = j.message ?? '';
+    // GitHub says what was wrong in `errors` ("name already exists on this account"); "Validation Failed" alone tells nothing
+    const why = (j.errors ?? []).map((e: { message?: string; code?: string }) => e?.message || e?.code).filter(Boolean);
+    if (why.length) msg += ` (${why.join('; ')})`;
+  } catch { /* not json */ }
   if (res.status === 401) msg = 'bad token';
   if (res.status === 404) msg = 'repository not found (check owner/name and the token\'s access)';
   return `${res.status} ${msg}`.trim();
@@ -221,10 +227,15 @@ export async function requestCode(post: Post, l: Login = {}): Promise<DeviceCode
  */
 export function signInError(msg: string): string | null {
   if (/cancelled/i.test(msg)) return null;
+  // Eve's own messages name an account, a repository or a server the user chose ("dnsmith/eve-notes exists
+  // but is public"): said as they are, never mistaken for a network failure by a word in a name
+  if (/ exists but is | is not a server address| is not a user or organization name|already exists, but this sign-in/.test(msg)) return msg;
   if (/denied/i.test(msg)) return 'Eve was not authorized on GitHub. Press Sign in with GitHub to try again.';
   if (/expired/i.test(msg)) return 'The sign-in code ran out. Press Sign in with GitHub for a new one.';
   if (/verif\w*.*email|email.*verif/i.test(msg)) return 'GitHub wants the account\'s email address confirmed first: open the link in the email GitHub sent, then sign in again.';
-  if (/could not reach|lookup address|network|dns|timed? ?out|connection|offline|error sending request/i.test(msg)) return 'Could not reach GitHub. Check the internet connection (or a VPN) and try again.';
+  // GitHub answered (a status code first: "403 …the acme-network organization…"), so the network is fine
+  const answered = /^\d{3}\b/.test(msg);
+  if (!answered && /could not reach|lookup address|network|\bdns\b|timed? ?out|connection|offline|error sending request/i.test(msg)) return 'Could not reach GitHub. Check the internet connection (or a VPN) and try again.';
   if (/^401\b/.test(msg)) return 'GitHub did not accept this sign-in. Sign in again; a pasted token needs the repo scope.';
   return msg;
 }
@@ -239,9 +250,12 @@ export class CodeExpired extends Error {
  *  network for a while (DNS then fails). Only GitHub's own answer — denied, expired — or `expiresIn`
  *  running out ends it. */
 export async function pollToken(post: Post, deviceCode: string, interval = 5, signal?: AbortSignal, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)), expiresIn = 900, l: Login = {}): Promise<string> {
+  // Cancel ends the wait between asks at once, not after it (5 seconds, 10 and more after a slow_down)
+  const cancelled = new Promise<void>((r) => signal?.addEventListener('abort', () => r(), { once: true }));
   for (let waited = 0; ; waited += interval) {
     if (waited > expiresIn) throw new CodeExpired();
-    await sleep(interval * 1000);
+    if (signal?.aborted) throw new Error('sign-in cancelled');
+    await Promise.race([sleep(interval * 1000), cancelled]);
     if (signal?.aborted) throw new Error('sign-in cancelled');
     let reply: string;
     try {
@@ -270,7 +284,8 @@ export async function deviceLogin(post: Post, onCode: (code: string, url: string
     try {
       return await pollToken(post, a.device_code, a.interval, signal, sleep, a.expires_in, l);
     } catch (e) {
-      if (!(e instanceof CodeExpired) || n >= renewals || signal?.aborted) throw e;
+      if (signal?.aborted) throw new Error('sign-in cancelled'); // cancelled while the last ask was out: not "the code ran out"
+      if (!(e instanceof CodeExpired) || n >= renewals) throw e;
     }
   }
 }
@@ -303,7 +318,13 @@ export async function ensureRepo(token: string, f: typeof fetch = (...a) => fetc
   } else if (r.status === 404) {
     const into = owner.toLowerCase() === user.toLowerCase() ? `${api}/user/repos` : `${api}/orgs/${owner}/repos`;
     const c = await f(into, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ name: REPO_NAME, private: true, description: 'Eve notes (synced by the app)' }) });
-    if (!c.ok) throw new Error(await explain(c));
+    if (!c.ok) {
+      const why = await explain(c);
+      // looked for and not found, yet there: this sign-in may not see it (a token for other repositories only,
+      // an organization that has not let Eve in, single sign-on not authorized)
+      if (c.status === 422 && /already exists/i.test(why)) throw new Error(`${repo} already exists, but this sign-in cannot see it: give Eve (or the token) access to it on GitHub, or rename it`);
+      throw new Error(why);
+    }
   } else throw new Error(await explain(r));
   return { user, repo };
 }
