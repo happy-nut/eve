@@ -107,6 +107,19 @@ assert.equal(dec.decode(bytes(bFiles, N('n1'))), dec.decode(v2));
 assert.deepEqual([...bytes(bFiles, ASSET)], [...png]);
 assert.equal(B.s.known[N('n2')], await blobSha(n2));
 
+// a merge that stops halfway (a file this device could not write) takes nothing in: the next round brings
+// every file again, and nothing stale is pushed over the remote meanwhile
+{
+  const D = fresh(), dFiles = {};
+  const saw = { head: D.s.head, known: D.s.known };
+  await assert.rejects(syncRound(D, () => entries(dFiles), () => { throw new Error('invalid asset name'); }), /invalid asset name/);
+  assert.equal(D.s.head, saw.head);
+  assert.deepEqual(D.s.known, saw.known);
+  await syncRound(D, () => entries(dFiles), (p) => merge(dFiles, p));
+  assert.equal(dec.decode(bytes(dFiles, N('n1'))), dec.decode(v2));
+  assert.deepEqual([...bytes(dFiles, ASSET)], [...png]);
+}
+
 // a third client sees everything
 const C = fresh(), cFiles = {};
 await syncRound(C, () => [], (p) => merge(cFiles, p));

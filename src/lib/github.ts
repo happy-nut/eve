@@ -180,8 +180,17 @@ export async function syncRound(
   onPull: (files: RemoteFile[]) => void | Promise<void>,
 ): Promise<void> {
   for (let i = 0; i < 3; i++) {
+    // what was pulled counts as taken in only once it is: a merge that stops halfway (a file it could not
+    // write) leaves head and known where they were, or the files after it would never come again and the
+    // older copies here would be pushed over them
+    const before = { head: repo.s.head, tree: repo.s.tree, known: repo.s.known };
     const pulled = await repo.pull();
-    if (pulled.length) await onPull(pulled);
+    try {
+      if (pulled.length) await onPull(pulled);
+    } catch (e) {
+      Object.assign(repo.s, before);
+      throw e;
+    }
     if (await repo.push(await local())) return;
   }
   throw new Error('branch keeps moving; try again');

@@ -174,7 +174,12 @@ class Sync {
       }, async (files: RemoteFile[]) => {
         const lww: Note[] = [], force: Note[] = [];
         for (const f of files) {
-          if (f.path.startsWith(ASSETS)) { await assets.write(f.path.slice(ASSETS.length), f.data); continue; }
+          if (f.path.startsWith(ASSETS)) {
+            // one this device cannot keep (a name with a space or a leading dot, put there on github.com) is
+            // left on GitHub and asked for again next time; the notes after it still come in
+            try { await assets.write(f.path.slice(ASSETS.length), f.data); } catch { delete repo.s.known[f.path]; }
+            continue;
+          }
           if (f.path === GROUPS) { try { groups.takeRemote(JSON.parse(dec.decode(f.data))); } catch { /* a hand-edited file that no longer parses */ } continue; }
           if (!f.path.endsWith('.md')) continue;
           const r = parse(dec.decode(f.data));
