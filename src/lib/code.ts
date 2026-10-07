@@ -104,6 +104,24 @@ const labelOf = (language: string | null) => LANGUAGES.find(([v]) => v === (lang
 /** Syntax highlighting, plus a language chip (and its menu) that appears on hover. */
 export const CodeBlock = CodeBlockBase.extend({
   addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter]; },
+  addStorage() {
+    return {
+      ...this.parent?.(),
+      markdown: {
+        // the fence one backtick longer than any run of backticks in the code: always ``` before, so a ``` line
+        // in the code closed the block there, and the note came back split into code, text and an open fence
+        serialize(state: any, node: any) {
+          const longest = Math.max(0, ...(node.textContent.match(/`+/g) ?? []).map((r: string) => r.length));
+          const fence = '`'.repeat(Math.max(3, longest + 1));
+          state.write(fence + (node.attrs.language || '') + '\n');
+          state.text(node.textContent, false);
+          state.ensureNewLine();
+          state.write(fence);
+          state.closeBlock(node);
+        },
+      },
+    };
+  },
   addNodeView() {
     return ({ node, editor, getPos }) => {
       withGrammars(editor);
