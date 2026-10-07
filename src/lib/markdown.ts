@@ -3,6 +3,10 @@
 /** Strip markdown syntax from one line for display. */
 export function plain(line: string): string {
   return line
+    // HTML a note keeps (html.ts) is not part of what it says: <span …>Plan</span> reads "Plan" (an escaped \<b\>,
+    // Keep's text, is text and stays)
+    .replace(/<!--[\s\S]*?(-->|$)/g, '')
+    .replace(/(?<!\\)<\/?[a-z][a-z0-9-]*(\s[^>]*?)?(?<!\\)>/gi, '')
     .replace(/^[#>\-*+\s]+|^\d+\.\s+|^\[[ x]\]\s*/g, '')
     .replace(/\\(.)/g, '$1')
     .replace(/==(?=\S)(.+?)==/g, '$1')
@@ -11,6 +15,9 @@ export function plain(line: string): string {
     .replace(/\[\[(.+?)\]\]/g, (_, inner: string) => { const [title, alias] = splitAlias(inner); return alias || title; })
     .trim();
 }
+
+/** A line that is only HTML tags or a comment (a README's <div align="center">, a <!-- note -->): no title. */
+export const onlyHtml = (line: string) => /^\s*(<!--.*?(-->|$)\s*|<\/?[a-z][a-z0-9-]*(\s[^>]*?)?>\s*)+$/i.test(line);
 
 /** `Title|alias` inside a `[[…]]` (the bar maybe escaped, as in a table cell) -> [title, alias] ('' = none) */
 export function splitAlias(inner: string): [string, string] {

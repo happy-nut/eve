@@ -30,3 +30,24 @@ test('HTML pasted from a page is taken for its text, as before', () => {
   ed.view.pasteHTML('<div class="post"><p>a <span style="color:red">red</span> word</p></div>');
   expect(md(ed).trim()).toBe('a red word');
 });
+
+test.each([
+  ['a [[link]]', 'see [[Other note]] here, [[Other note#Part|shown]]'],
+  ['an @date', 'due @2026-10-07 ok'],
+  ['a link inside kept HTML', 'a <span style="color: red">see [[Other note]]</span> b'],
+])('%s is still itself, not taken for HTML', (_what, note) => {
+  expect(md(editorWith(note))).toBe(note);
+});
+
+test('a copy and paste inside the app keeps the HTML as the note had it', () => {
+  const ed = editorWith('<div align="center">\n\nx <span style="color: red">y</span>\n\n</div>');
+  const html = ed.view.dom.innerHTML;
+  const into = editorWith('');
+  into.commands.focus('end');
+  into.view.pasteHTML(html.replace('<div', '<div data-pm-slice="0 0 []"'));
+  expect(md(into).trim()).toBe('<div align="center">\n\nx <span style="color: red">y</span>\n\n</div>');
+});
+
+test('a style keeps what text may wear, not where it sits; no class or id', () => {
+  expect(md(editorWith('<span style="position:fixed;inset:0;color:red" class="mhead" id="x">s</span>'))).toBe('<span style="color:red">s</span>');
+});

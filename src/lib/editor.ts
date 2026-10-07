@@ -597,7 +597,8 @@ export function createEditor(opts: {
                 // is tight again; the runs are split apart later (updateDOM).
                 md.core.ruler.after('block', 'eve-tight-runs', (state: any) => {
                   const t = state.tokens, lines: string[] = state.src.split('\n');
-                  const blank = (n: number) => n >= 0 && n < lines.length && !lines[n].trim();
+                  // blank inside a quote or a callout too, where the line is a bare ">"
+                  const blank = (n: number) => n >= 0 && n < lines.length && !lines[n].replace(/^\s*(>\s?)*/, '').trim();
                   for (let i = 0; i < t.length; i++) {
                     if (t[i].type !== 'bullet_list_open') continue;
                     const level = t[i].level;
@@ -618,8 +619,15 @@ export function createEditor(opts: {
                         const [from, to] = t[items[k].open].map ?? [0, 0];
                         for (let n = from; n < (k < b ? t[items[k + 1].open].map[0] : to) - (k < b ? 0 : 1); n++) if (blank(n)) { tight = false; break; }
                       }
+                      const stop = b + 1 < items.length ? items[b + 1].open : end;
+                      // never an item of two paragraphs: made tight, they ran together into one line
+                      for (let k = a; k <= b && tight; k++) {
+                        const to = k < b ? items[k + 1].open : stop;
+                        let paras = 0;
+                        for (let m = items[k].open; m < to; m++) if (t[m].type === 'paragraph_open' && t[m].level === level + 2) paras++;
+                        if (paras > 1) tight = false;
+                      }
                       if (tight) {
-                        const stop = b + 1 < items.length ? items[b + 1].open : end;
                         for (let k = items[a].open; k < stop; k++) {
                           if ((t[k].type === 'paragraph_open' || t[k].type === 'paragraph_close') && t[k].level === level + 2) t[k].hidden = true;
                         }

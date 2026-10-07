@@ -56,3 +56,15 @@ test('a table keeps its columns\' alignment', () => {
   expect(md(editorWith(once))).toBe(once);
   expect(md(editorWith('| A | B |\n| --- | --- |\n| 1 | 2 |')).trim()).toBe('| A | B |\n| --- | --- |\n| 1 | 2 |');
 });
+
+test.each([
+  ['in a quote', '> - [ ] t\n> - b\n>\n>   para'],
+  ['in a callout', '> [!note]\n> - [ ] t\n> - b\n>\n>   second paragraph'],
+  ['a loose run in a quote', '> - [ ] t\n>\n> - [ ] u\n>\n> - b'],
+])('to-dos and bullets %s keep their paragraphs apart', (_what, note) => {
+  const once = md(editorWith(note));
+  expect(md(editorWith(once))).toBe(once);
+  for (const word of ['para', 'second paragraph']) if (note.includes(word)) expect(once).not.toMatch(new RegExp(`\\S${word}`));
+  const words = (t: string) => t.replace(/^>\s*$/gm, '').replace(/\s/g, ''); // the runs' own blank ">" line aside
+  expect(words(once)).toBe(words(note));
+});

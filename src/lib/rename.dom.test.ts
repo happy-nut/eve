@@ -33,3 +33,19 @@ test('a link to a note whose title holds "#" opens that note, not a new one', ()
   expect(notes.section).toBe('Setup');
   expect(notes.all.length).toBe(before);
 });
+
+test('renaming "C" leaves a link to the note "C# notes" alone, and takes its own sections along', () => {
+  make('# C# notes\n');
+  const c = make('# C\n');
+  const index = make('# Index 3\n\n[[C# notes]] and [[C]] and [[C#Sec]]\n');
+  retitle(c.id, '# Go\n');
+  expect(bodyOf(index.id)).toBe('# Index 3\n\n[[C# notes]] and [[Go]] and [[Go#Sec]]\n');
+});
+
+test('a title is read past HTML: a tag around it, a line of HTML or a comment above it', async () => {
+  const { titleOf } = await import('./notes.svelte');
+  expect(titleOf({ body: '# <span style="color:red">Plan</span>\n' })).toBe('Plan');
+  expect(titleOf({ body: '<div align="center">\n\n# Project\n' })).toBe('Project');
+  expect(titleOf({ body: '<!-- generated -->\n\n# Real title\n' })).toBe('Real title');
+  expect(titleOf({ body: '# a \\<b\\> tag\n' })).toBe('a <b> tag'); // Keep's escaped text stays text
+});
