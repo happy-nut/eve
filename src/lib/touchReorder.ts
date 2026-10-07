@@ -2,22 +2,26 @@ import { isMobile } from './platform';
 
 /** What the list does with a row a finger lifts: the gesture is here, where the row lands is the list's. */
 export interface Reorder {
-  /** held long enough: the row is picked up */
+  /** its handle touched, reordering: the row is picked up */
   lift(row: HTMLElement): void;
   /** the finger moved to (x, y): point the drop at what is under it */
   over(x: number, y: number): void;
   /** let go after moving: lands it, false when there was nowhere to land */
   drop(): boolean;
-  /** let go without moving (or with nowhere to land): the row's menu instead */
+  /** held, outside reordering: the row's menu */
   menu(row: HTMLElement): void;
+  /** the list is being reordered: a row's handle (.handle) lifts it at a touch, and a long press does nothing */
+  reordering(): boolean;
   /** the gesture was taken away (a call, the system) */
   cancel(): void;
 }
 
 /**
- * A phone has no mouse to drag with: a long press lifts the row; move the finger and it goes where the mouse
- * would have dropped it, or let go without moving and the row's menu opens. Auto-scrolls near the top and
- * bottom of the list.
+ * A phone has no mouse to drag with. A long press on a row opens its menu, at once (the finger still down); one
+ * of its items puts the list into reordering, where each row has a handle: touched, it lifts the row, and the
+ * finger takes it where the mouse would have dropped it. Auto-scrolls near the top and bottom of the list.
+ * One gesture, one meaning: a long press used to lift the row and, let go without moving, open the menu, and
+ * neither was found.
  *
  * The lifted row rides under the finger (a copy, the row itself left faint in its place) and the list's own
  * drop line says where it will land, so the move is seen while it is made, not only after the finger lifts.
@@ -35,6 +39,7 @@ export function touchReorder(tree: HTMLElement, list: Reorder) {
     liftH = r.height;
     ghost = li.cloneNode(true) as HTMLElement;
     ghost.classList.add('lifted');
+    ghost.querySelectorAll('.swipe-act').forEach((el) => el.remove()); // what a sideways pull would do: not this
     Object.assign(ghost.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px` });
     document.body.append(ghost);
     navigator.vibrate?.(12);
@@ -42,17 +47,25 @@ export function touchReorder(tree: HTMLElement, list: Reorder) {
   // it rides just above the fingertip: the finger hides neither the row nor the line it points at
   const follow = () => { if (ghost) ghost.style.top = `${y - liftH - 14}px`; };
   const land = () => { ghost?.remove(); ghost = null; };
+  let held = false; // the menu opened under a finger still down
   const down = (e: TouchEvent) => {
     const t = e.target as HTMLElement;
-    const row = t.closest<HTMLElement>('[data-row]');
-    if (!row || e.touches.length !== 1 || t.closest('.fold, input')) return;
+    if (e.touches.length !== 1 || t.closest('.fold, input')) return;
     x = e.touches[0].clientX; y = e.touches[0].clientY;
-    start = { x, y, row }; lifted = moved = false;
-    timer = setTimeout(() => {
-      lifted = true;
+    held = lifted = moved = false;
+    if (list.reordering()) {
+      const row = t.closest('.handle')?.closest('li.row')?.querySelector<HTMLElement>('[data-row]');
+      if (!row) return;
+      e.preventDefault(); // the handle's touch is the reorder's, not a scroll
+      start = { x, y, row }; lifted = true;
       lift(row); // copied before the row turns faint
       list.lift(row);
-    }, 420);
+      return;
+    }
+    const row = t.closest<HTMLElement>('[data-row]');
+    if (!row) return;
+    start = { x, y, row };
+    timer = setTimeout(() => { held = true; navigator.vibrate?.(12); list.menu(row); }, 420);
   };
   const move = (e: TouchEvent) => {
     if (!start) return;
@@ -72,16 +85,16 @@ export function touchReorder(tree: HTMLElement, list: Reorder) {
   const up = (e: TouchEvent) => {
     clearTimeout(timer);
     if (!start) return;
-    const row = start.row;
     start = null;
+    if (held) { e.preventDefault(); return; } // the menu is up: letting go is no tap on the row
     if (!lifted) return; // a tap: the row's own click handles it
     e.preventDefault(); // and no click after a lift
     land();
     if (moved && list.drop()) (document.activeElement as HTMLElement | null)?.blur(); // no focus ring left behind
-    else list.menu(row);
+    else list.cancel();
   };
   const cancel = () => { clearTimeout(timer); start = null; land(); list.cancel(); };
-  tree.addEventListener('touchstart', down, { passive: true });
+  tree.addEventListener('touchstart', down, { passive: false });
   tree.addEventListener('touchmove', move, { passive: false });
   tree.addEventListener('touchend', up);
   tree.addEventListener('touchcancel', cancel);

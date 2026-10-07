@@ -199,3 +199,17 @@ export const DateMention = Node.create<DateMentionOptions>({
     };
   },
 });
+
+/**
+ * When a note was last written, as a list shows it: "now", "5 min. ago", "3 hr. ago" today; "yesterday"; a
+ * month and day this year; the full date before. '' when it never was (0).
+ */
+export function editedLabel(ms: number, now: Date = new Date(), locale?: string): string {
+  if (!ms) return '';
+  const at = new Date(ms), mins = Math.floor((now.getTime() - ms) / 60000);
+  const rel = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'short' });
+  if (mins < 1) return rel.format(0, 'second');
+  if (isoDay(at) === isoDay(now)) return mins < 60 ? rel.format(-mins, 'minute') : rel.format(-Math.floor(mins / 60), 'hour');
+  if (daysFrom(isoDay(at), now) === -1) return rel.format(-1, 'day');
+  return at.toLocaleDateString(locale, at.getFullYear() === now.getFullYear() ? { month: 'short', day: 'numeric' } : { year: 'numeric', month: 'short', day: 'numeric' });
+}

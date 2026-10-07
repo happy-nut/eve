@@ -247,14 +247,51 @@ html.mobile .panel .select {
 }
 html.mobile aside .tree { padding: 2px 8px 96px; scrollbar-width: none; }
 html.mobile aside .tree::-webkit-scrollbar { display: none; }
-/* the list, tighter: Notion's rows are a line of text and a little air, not a thumb-sized slab */
-html.mobile aside [data-row] { font-size: 15.5px; border-radius: 6px; min-height: 32px; }
-html.mobile aside .gname {
-  font-size: 15.5px; font-weight: 600; min-height: 32px; padding-top: 2px; padding-bottom: 2px;
+/* the list (and a row lifted out of it to be moved): rows a thumb hits (48px, Android's touch size), each note with what it says and when it was written,
+   so the list alone finds it — a phone shows the list or the note, never both */
+html.mobile :is(aside, .lifted) [data-row] { font-size: 15.5px; border-radius: 8px; min-height: 48px; }
+html.mobile :is(aside, .lifted) .gname {
+  font-size: 15.5px; font-weight: 600; min-height: 48px; padding-top: 4px; padding-bottom: 4px;
 }
-html.mobile aside .fold { width: 32px; height: 32px; }
-html.mobile aside .note-row > button:first-child { padding-top: 2px; padding-bottom: 2px; }
-html.mobile aside .ghead { padding: 0; }
+html.mobile :is(aside, .lifted) .fold { width: 40px; height: 48px; }
+html.mobile :is(aside, .lifted) .note-row > button:first-child { padding: 9px 10px; justify-content: center; gap: 3px; }
+html.mobile :is(aside, .lifted) .ghead { padding: 0; }
+html.mobile :is(aside, .lifted) .title { font-size: 15.5px; }
+html.mobile :is(aside, .lifted) .title .t { flex: 1; min-width: 0; }
+html.mobile :is(aside, .lifted) .when { flex: none; margin-left: 8px; font-size: 12.5px; font-weight: 400; color: var(--fg-dim); }
+html.mobile :is(aside, .lifted) .preview {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+  padding-left: 30px; /* under the title, past the icon */
+  font-size: 13.5px; line-height: 1.4; color: var(--fg-dim); text-align: left; overflow-wrap: anywhere;
+}
+
+/* a row pulled sideways (swipeRow.ts): it follows the finger, the action shows behind it, full colour past the mark */
+html.mobile :is(aside, .lifted) .note-row { position: relative; touch-action: pan-y; --sx: 0px; }
+html.mobile :is(aside, .lifted) .note-row > :not(.swipe-act) {
+  position: relative; z-index: 1; transform: translateX(var(--sx)); transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+html.mobile :is(aside, .lifted) .note-row.swiping > :not(.swipe-act) { transition: none; }
+html.mobile :is(aside, .lifted) .note-row:is(.to-left, .to-right) > button:first-child { background: var(--bg); }
+html.mobile :is(aside, .lifted) .swipe-act {
+  position: absolute; z-index: 0; inset: 1px 0; display: none; align-items: center; padding: 0 22px; border-radius: 8px;
+  font-size: 14.5px; font-weight: 600; color: #fff; opacity: 0.55; transition: opacity 0.12s;
+}
+html.mobile :is(aside, .lifted) .swipe-act.del { justify-content: flex-end; background: #ff453a; }
+html.mobile :is(aside, .lifted) .swipe-act.move { justify-content: flex-start; background: var(--accent); }
+html.mobile :is(aside, .lifted) .note-row.to-left .swipe-act.del, html.mobile :is(aside, .lifted) .note-row.to-right .swipe-act.move { display: flex; }
+html.mobile :is(aside, .lifted) .note-row.armed .swipe-act { opacity: 1; }
+
+/* reordering: a handle on every row to drag it by; nothing else on the row answers a touch */
+html.mobile aside .mtop .done {
+  border: 0; background: none; color: var(--accent); font: inherit; font-size: 16px; font-weight: 600;
+  min-height: 44px; padding: 0 14px;
+}
+html.mobile aside .handle {
+  flex: none; width: 44px; height: 48px; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--fg-dim); touch-action: none;
+}
+html.mobile aside .handle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+html.mobile aside.reordering .note-row > button:first-child:active { transform: none; }
 /* the note: a flat bar of grey icons, and a page head sized for a phone */
 html.mobile .mhead {
   position: absolute; top: 0; left: 0; right: 0; height: 52px; z-index: 6; display: flex; align-items: center;
