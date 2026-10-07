@@ -218,14 +218,29 @@
   };
 
   // ---- keyboard ----
+  /** The row after this one (the one before, at the end): where the keyboard goes once this one is deleted. */
+  function neighbourOf(sel: string): string {
+    const rows = rowsNow(), i = rows.findIndex((r) => r.matches(sel));
+    const nb = i < 0 ? undefined : rows[i + 1] ?? rows[i - 1];
+    return nb?.dataset.note ? `[data-note="${nb.dataset.note}"]` : nb?.dataset.group ? groupSel(nb.dataset.group) : '[data-row]';
+  }
+  // However asked (⌫ on the row, its menu, its ×): deleted, the keyboard goes to the row next to it; not
+  // deleted, it stays where it was (the dialog gives it back). It used to go on to the next row even when
+  // cancelled — a second ⌫ then asked about another note — and from the menu or × it went nowhere.
   async function removeGroup(g: string) {
     const n = groups.notesIn(g, true).length, sub = groups.subtree(g).length - 1;
     const extra = [sub ? `${sub} subgroup${sub > 1 ? 's' : ''}` : '', n ? `${n} note${n > 1 ? 's' : ''} (moved out of the group)` : ''].filter(Boolean).join(', ');
-    if (await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`)) groups.remove(g);
+    const next = neighbourOf(groupSel(g));
+    if (!(await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`))) return;
+    groups.remove(g);
+    if (!isMobile) void focusRow(next);
   }
   async function removeNote(n: Note) {
     if (n.id === notes.currentId) hints.action('deleteNote', 'Delete the open note');
-    if (await ui.ask(`Delete “${titleOf(n)}”?`)) notes.remove(n.id);
+    const next = neighbourOf(`[data-note="${n.id}"]`);
+    if (!(await ui.ask(`Delete “${titleOf(n)}”?`))) return;
+    notes.remove(n.id);
+    if (!isMobile) void focusRow(next);
   }
   const rowsNow = () => [...document.querySelectorAll<HTMLElement>('aside [data-row]')];
   async function focusRow(sel: string) {
@@ -269,13 +284,10 @@
         if (group && groups.isCollapsed(group)) groups.toggle(group);
         else focusNote();
         break;
-      case 'Backspace': case 'Delete': {
-        const nb = rows[i + 1] ?? rows[i - 1];
-        const sel = nb?.dataset.note ? `[data-note="${nb.dataset.note}"]` : nb?.dataset.group ? groupSel(nb.dataset.group) : '[data-row]';
-        const done = noteId ? removeNote(notes.all.find((n) => n.id === noteId)!) : group ? removeGroup(group) : Promise.resolve();
-        done.then(() => focusRow(sel));
+      case 'Backspace': case 'Delete':
+        if (noteId) void removeNote(notes.all.find((n) => n.id === noteId)!);
+        else if (group) void removeGroup(group);
         break;
-      }
       case 'Enter':
         if (e.altKey) { rowMenu(e, el); return; } // ⌥↩ is the right button, for people who are not holding one
         if (group) { groups.editing = group; break; }
@@ -365,14 +377,21 @@
   }
   function finishRename(g: string, value: string) {
     if (groups.editing !== g) return; // Esc already handled
-    focusRow(groupSel(groups.rename(g, value)));
+    const renamed = groups.rename(g, value);
+    // ↩ ends it with the keyboard nowhere: back to the group's row. A click elsewhere (into the note) took the
+    // keyboard there, and pulling it back to the list lost what was typed next and sent the keys to the row.
+    setTimeout(() => {
+      const a = document.activeElement;
+      if (!a || a === document.body || a.closest('aside')) void focusRow(groupSel(renamed));
+    }, 0);
   }
   const focusInput = (el: HTMLInputElement) => { el.focus(); el.select(); };
 
   // ---- misc ----
   function onSearchKey(e: KeyboardEvent) {
     if (e.key === 'Escape') { query = ''; e.preventDefault(); focusNote(); } // back to the note, not to nowhere
-    if (e.key === 'Enter' && hits[0]) { notes.currentId = hits[0].id; searchEl?.blur(); e.preventDefault(); }
+    // the first match, opened as a click on it would: the keyboard goes into the note (a bare blur left it nowhere)
+    if (e.key === 'Enter' && hits[0]) { e.preventDefault(); void openNote(hits[0]); }
     // ↓ walks on into the matches below; ↑ from the first one comes back here (treeKey)
     if (e.key === 'ArrowDown' && !e.isComposing) { document.querySelector<HTMLElement>('aside [data-row]')?.focus(); e.preventDefault(); }
   }

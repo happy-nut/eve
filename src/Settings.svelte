@@ -114,6 +114,10 @@
   /** Esc with the keyboard still behind Settings (the list's row, the note) closes Settings first: left to them,
    *  the list's own Esc took the keyboard to the note. Inside Settings, its popups keep their own Esc. */
   function escBehind(e: KeyboardEvent) {
+    // a shortcut being recorded is taken here, first: the app's own keys listen on the window too, ahead of
+    // Settings' bubbling handler, and ran what the keys were already bound to (⌘N made a note, ⌘⇧⌫ asked to
+    // delete the open one, ⌘, closed Settings) while they were being recorded
+    if (recording && !ui.pending) { onKey(e); e.stopPropagation(); return; }
     if (e.key !== 'Escape' || recording || ui.pending || ui.menu) return;
     if ((e.target as HTMLElement | null)?.closest?.('.panel')) return;
     e.preventDefault(); e.stopPropagation(); onClose();
