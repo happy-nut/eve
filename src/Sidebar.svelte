@@ -224,23 +224,31 @@
     const nb = i < 0 ? undefined : rows[i + 1] ?? rows[i - 1];
     return nb?.dataset.note ? `[data-note="${nb.dataset.note}"]` : nb?.dataset.group ? groupSel(nb.dataset.group) : '[data-row]';
   }
-  // However asked (⌫ on the row, its menu, its ×): deleted, the keyboard goes to the row next to it; not
-  // deleted, it stays where it was (the dialog gives it back). It used to go on to the next row even when
-  // cancelled — a second ⌫ then asked about another note — and from the menu or × it went nowhere.
+  // However asked (⌫ on the row, its menu, its ×): deleted, the keyboard goes to the row next to it when it was
+  // in the list, or would be nowhere (the open note was the one deleted); writing in a note, a click on another
+  // note's × leaves it there. Not deleted, it stays where it was (the dialog gives it back). It used to go on to
+  // the next row even when cancelled — a second ⌫ then asked about another note — and from the menu or × nowhere.
+  async function afterRemove(next: string, fromList: boolean) {
+    if (isMobile) return;
+    await tick();
+    const a = document.activeElement;
+    if (fromList || !a || a === document.body) void focusRow(next);
+  }
+  const inList = () => !!document.activeElement?.closest('aside');
   async function removeGroup(g: string) {
     const n = groups.notesIn(g, true).length, sub = groups.subtree(g).length - 1;
     const extra = [sub ? `${sub} subgroup${sub > 1 ? 's' : ''}` : '', n ? `${n} note${n > 1 ? 's' : ''} (moved out of the group)` : ''].filter(Boolean).join(', ');
-    const next = neighbourOf(groupSel(g));
+    const next = neighbourOf(groupSel(g)), fromList = inList();
     if (!(await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`))) return;
     groups.remove(g);
-    if (!isMobile) void focusRow(next);
+    void afterRemove(next, fromList);
   }
   async function removeNote(n: Note) {
     if (n.id === notes.currentId) hints.action('deleteNote', 'Delete the open note');
-    const next = neighbourOf(`[data-note="${n.id}"]`);
+    const next = neighbourOf(`[data-note="${n.id}"]`), fromList = inList();
     if (!(await ui.ask(`Delete “${titleOf(n)}”?`))) return;
     notes.remove(n.id);
-    if (!isMobile) void focusRow(next);
+    void afterRemove(next, fromList);
   }
   const rowsNow = () => [...document.querySelectorAll<HTMLElement>('aside [data-row]')];
   async function focusRow(sel: string) {
