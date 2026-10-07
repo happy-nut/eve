@@ -17,6 +17,8 @@
             android:layout_height="0dp"
             android:layout_weight="1">
 
+            <!-- no list selector: it is drawn square over the whole cell, margins and all, so a press showed past the
+                 card's round corners whatever the card's own ripple did; each row draws its own press -->
             <ListView
                 android:id="@+id/widget_list"
                 android:layout_width="match_parent"
@@ -24,6 +26,7 @@
                 android:clipToPadding="false"
                 android:divider="@null"
                 android:dividerHeight="0dp"
+                android:listSelector="@android:color/transparent"
                 android:paddingTop="8dp"
                 android:paddingBottom="64dp" />
 
