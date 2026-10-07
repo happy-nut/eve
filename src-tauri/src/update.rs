@@ -148,21 +148,36 @@ fn install(app: &AppHandle, url: &str, sha256: &str, version: &str) -> Result<()
     Ok(())
 }
 
-/// Homebrew's turn, in the user's own shell: a login, interactive one, so it has what their Terminal has —
-/// a company network's proxy or mirror is set there (.zprofile, .zshrc), and a Mac app started from the Dock
-/// has none of it. The cask quits Eve as it reinstalls (`uninstall quit:`), so this runs on in a process group
-/// of its own, and starts the new Eve when brew is done (one brew could not quit goes first). brew is not
-/// left to update itself or its taps first: the cask always fetches the latest release.
-/// $1 the shell, $2 the log, $3 this Eve's pid. Exits as brew did (127: no Homebrew).
+/// Homebrew's turn, with the user's own environment: a company network's proxy or mirror is set in their shell's
+/// files (.zprofile, .zshrc, fish's config), and a Mac app started from the Dock has none of it. Their login shell
+/// is only asked for that environment (any shell runs `env`; the steps below are sh, which fish could not run), and
+/// for no longer than 20 seconds (a startup file may wait on a terminal). The cask quits Eve as it reinstalls
+/// (`uninstall quit:`), so this runs on in a process group of its own and starts the new Eve when brew is done (one
+/// brew could not quit goes first). brew is not left to update itself or its taps first: the cask always fetches
+/// the latest release. $1 the shell, $2 the log, $3 this Eve's pid. Exits as brew did (127: no Homebrew).
 const BREW: &str = r#"shell="$1"; log="$2"; pid="$3"
 mkdir -p "$(dirname "$log")"
-"$shell" -l -i -c '
-  export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1
-  command -v brew >/dev/null 2>&1 || export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+envf="$log.env"
+"$shell" -l -i -c env >"$envf" 2>/dev/null </dev/null &
+sp=$!
+( sleep 20; kill "$sp" 2>/dev/null ) >/dev/null 2>&1 &
+wp=$!
+wait "$sp" 2>/dev/null
+kill "$wp" 2>/dev/null
+while IFS= read -r line; do
+  name="${line%%=*}"
+  [ "$name" = "$line" ] && continue
+  case "$name" in ''|*[!A-Za-z0-9_]*|[0-9]*|PWD|OLDPWD|SHLVL|_|PS1|PS2|TERM) continue ;; esac
+  export "$line" 2>/dev/null
+done <"$envf"
+rm -f "$envf"
+export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1
+command -v brew >/dev/null 2>&1 || PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+(
   command -v brew >/dev/null 2>&1 || { echo "Homebrew is not installed."; exit 127; }
   if brew list --cask eve >/dev/null 2>&1; then brew reinstall --cask happy-nut/tap/eve
   else brew install --cask --force happy-nut/tap/eve; fi
-' >"$log" 2>&1 </dev/null
+) >"$log" 2>&1 </dev/null
 code=$?
 echo "exit $code" >>"$log"
 if [ "$code" -eq 0 ]; then
@@ -198,7 +213,21 @@ fn brew(app: &AppHandle) -> Result<(), String> {
         .stderr(std::process::Stdio::null());
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0); // lives on when brew quits this Eve
-    let status = cmd.spawn().and_then(|mut c| c.wait()).map_err(|e| format!("Could not start Homebrew: {e}"))?;
+    let mut child = cmd.spawn().map_err(|e| format!("Could not start Homebrew: {e}"))?;
+    // brew downloads and installs in a minute or two; one still at it after twenty is stuck (a lock, a prompt
+    // nobody can answer): stopped, so the Update button works again
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20 * 60);
+    let status = loop {
+        match child.try_wait().map_err(|e| e.to_string())? {
+            Some(status) => break status,
+            None if std::time::Instant::now() > deadline => {
+                let _ = std::process::Command::new("/bin/kill").args(["-TERM", &format!("-{}", child.id())]).status();
+                let _ = child.wait();
+                return Err(format!("Homebrew took too long and was stopped.\n(what it did: {})", log.display()));
+            }
+            None => std::thread::sleep(std::time::Duration::from_millis(500)),
+        }
+    };
     match status.code() {
         Some(0) => {
             let _ = app.emit("eve-update", "restarting");
