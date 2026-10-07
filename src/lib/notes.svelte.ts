@@ -64,6 +64,9 @@ export function parse(text: string): Note | null {
 
 
 
+/** the first written line of a body, as it is (an empty title reads "Untitled" through titleOf) */
+const plainTitleLine = (body: string) => plain(body.split('\n').find((l) => l.trim()) ?? '');
+
 export function titleOf(n: Pick<Note, 'body'>): string {
   const first = n.body.split('\n').find((l) => l.trim()) ?? '';
   return plain(first) || 'Untitled';
@@ -280,15 +283,21 @@ class NotesStore {
   private followRename(n: Note) {
     const now = titleOf(n);
     const was = this.titles.get(n.id);
+    if (was === undefined || was === now) { this.titles.set(n.id, now); return; }
+    // A title on its way to another (each pause in typing flushes) is no rename yet while it is empty or is
+    // another note's: "Ideas 2" → "Ideas" (on the way to "Ideas 3") made [[Ideas 2]] into [[Ideas]], and the
+    // next step then took the other note's [[Ideas]] along. The links wait for a title of this note's own.
+    const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+    if (!/\S/.test(plainTitleLine(n.body))) return; // emptied, on the way to a new title
+    if (this.all.some((o) => !o.deleted && o.id !== n.id && same(titleOf(o), now))) return;
     this.titles.set(n.id, now);
-    if (was === undefined || was === now) return;
     // ponytail: scans every body on a rename; fine for local notes, index the links if it ever bites
+    // every shape of the link: the page itself, one of its sections, and either under an alias
+    // (`[[Title|shown as]]`, its bar escaped inside a table); in any case, as links are followed
+    const link = new RegExp(`\\[\\[${was.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\]\\]|#|\\||\\\\\\|)`, 'gi');
     for (const other of this.all) {
       if (other.deleted || other.id === n.id) continue;
-      // every shape of the link: the page itself, one of its sections, and either under an alias
-      // (`[[Title|shown as]]`, its bar escaped inside a table)
-      let body = other.body;
-      for (const end of [']]', '#', '|', '\\|']) body = body.split(`[[${was}${end}`).join(`[[${now}${end}`);
+      const body = other.body.replace(link, () => `[[${now}`); // a "$" in a title is just a "$"
       if (body === other.body) continue;
       other.body = body;
       other.updatedAt = Date.now();
