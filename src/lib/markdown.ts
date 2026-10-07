@@ -36,7 +36,15 @@ export function headingsOf(body: string): string[] {
 }
 
 /** `Title#Section` -> its two halves ('' when the link points at the page itself). */
-export function splitLink(link: string): [title: string, section: string] {
+export function splitLink(link: string, isTitle?: (title: string) => boolean): [title: string, section: string] {
+  // a title may hold a "#" itself ("C# notes", "Issue #12"): the longest title that is a note's wins, the
+  // whole link first; failing any, the first "#" splits, as written by hand
+  if (isTitle) {
+    if (isTitle(link.trim())) return [link.trim(), ''];
+    for (let i = link.lastIndexOf('#'); i > 0; i = link.lastIndexOf('#', i - 1)) {
+      if (isTitle(link.slice(0, i).trim())) return [link.slice(0, i).trim(), link.slice(i + 1).trim()];
+    }
+  }
   const i = link.indexOf('#');
   return i < 0 ? [link.trim(), ''] : [link.slice(0, i).trim(), link.slice(i + 1).trim()];
 }

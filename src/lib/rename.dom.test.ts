@@ -21,3 +21,15 @@ test('a title emptied on the way to a new one takes its links along once it has 
   retitle(a.id, '# Final $1\n');
   expect(bodyOf(index.id)).toBe('# Index 2\n\n[[Final $1]] and [[Untitled]]\n');
 });
+
+test('a link to a note whose title holds "#" opens that note, not a new one', () => {
+  const cs = make('# C# notes\n\nx\n');
+  make('# Elsewhere\n');
+  const before = notes.all.length;
+  notes.openByTitle('C# notes');
+  expect(notes.currentId).toBe(cs.id);
+  notes.openByTitle('c# notes#Setup');
+  expect(notes.currentId).toBe(cs.id);
+  expect(notes.section).toBe('Setup');
+  expect(notes.all.length).toBe(before);
+});

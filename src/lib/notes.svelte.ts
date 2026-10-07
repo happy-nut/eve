@@ -442,8 +442,9 @@ class NotesStore {
   /** Open note by title, creating it if missing (used by [[wiki links]]). */
   /** Follow a `[[link]]`. `Title#Section` opens the page at that heading (Editor reads `section`). */
   openByTitle(link: string) {
-    const [title, section] = splitLink(link);
-    const hit = this.visible.find((n) => titleOf(n).toLowerCase() === title.toLowerCase());
+    const find = (t: string) => this.visible.find((n) => titleOf(n).toLowerCase() === t.toLowerCase());
+    const [title, section] = splitLink(link, (t) => !!find(t));
+    const hit = find(title);
     this.section = hit ? section : '';
     this.currentId = hit ? hit.id : this.create(`# ${title}\n\n`).id;
   }

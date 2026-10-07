@@ -333,8 +333,8 @@ export function createEditor(opts: {
   onNoteMove?: (dir: -1 | 1, onTitle: boolean) => boolean;
 }) {
   const iconOf = (link: string) => {
-    const title = splitLink(link)[0].toLowerCase(); // a section link keeps the page's icon
-    return notes.visible.find((n) => titleOf(n).toLowerCase() === title)?.icon ?? '';
+    const find = (t: string) => notes.visible.find((n) => titleOf(n).toLowerCase() === t.toLowerCase());
+    return find(splitLink(link, (t) => !!find(t))[0])?.icon ?? ''; // a section link keeps the page's icon
   };
   // A long note's markdown is a few milliseconds per key (54 KB: 6.6 ms of a 7.9 ms keystroke), so it is made
   // once the typing pauses; a short one, at once. Anything that reads the note first runs flushEdits() (pending.ts).
