@@ -83,11 +83,14 @@
             
             <!-- tauri-file-associations. AUTO-GENERATED. DO NOT REMOVE. -->
         </activity>
-        <!-- the daily note reminder's alarm, and setting it again after a reboot or an update -->
+        <!-- the daily note reminder's alarm, and setting it again after a reboot, an update, or the clock or
+             time zone changing -->
         <receiver android:name=".ReminderReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
             </intent-filter>
         </receiver>
 
