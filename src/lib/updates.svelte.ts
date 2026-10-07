@@ -14,7 +14,7 @@ const target = isMobile ? 'android' : 'mac';
 
 class Updates {
   available = $state<Update | null>(null);
-  state = $state<'' | 'permission' | 'downloading' | 'installing' | 'restarting' | 'error'>('');
+  state = $state<'' | 'permission' | 'downloading' | 'installing' | 'brew' | 'restarting' | 'error'>('');
   /** how much of the download is done while downloading (-1 until the first report) */
   progress = $state(-1);
   /** what went wrong, when the Mac says (the phone only reports that it failed) */
@@ -67,6 +67,8 @@ class Updates {
     switch (this.state) {
       case 'downloading': return `Downloading${this.available ? ` ${this.available.version}` : ''}…${this.progress >= 0 ? ` ${this.progress}%` : ''}`;
       case 'installing': return isMobile ? 'Tap Update on the next screen' : 'Installing…';
+      // the download was refused (a company network): Homebrew, which the network lets out, takes over
+      case 'brew': return 'Installing with Homebrew…';
       case 'restarting': return 'Restarting…';
       case 'permission': return 'Allow Eve to install apps, then tap Update again';
       case 'error': return this.message || 'Download failed — try again';
@@ -75,7 +77,7 @@ class Updates {
   }
   /** the Update button waits while the update is under way (on the phone only while downloading: a
    *  cancelled installer screen needs the button again) */
-  get busy() { return this.state === 'downloading' || (!isMobile && (this.state === 'installing' || this.state === 'restarting')); }
+  get busy() { return this.state === 'downloading' || (!isMobile && (this.state === 'installing' || this.state === 'brew' || this.state === 'restarting')); }
   private report(detail: string) {
     const [state, pct] = detail.split(':');
     this.state = state as Updates['state'];
