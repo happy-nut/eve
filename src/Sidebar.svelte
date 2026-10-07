@@ -417,6 +417,9 @@
   }
   function pullMove(e: TouchEvent) {
     if (!touch) return;
+    // a row lifted to be reordered has the move (touchReorder marks it): a sideways drag of the row is not a
+    // pull of the list, which slid off with it and closed when the row was let go
+    if (e.defaultPrevented) { touch = null; pull = 0; return; }
     const dx = e.touches[0].clientX - touch.x, dy = e.touches[0].clientY - touch.y;
     if (!touch.axis && Math.hypot(dx, dy) > 10) touch.axis = Math.abs(dx) > Math.abs(dy) * 1.4 && dx < 0 ? 'x' : 'y';
     if (touch.axis === 'x') pull = Math.min(0, dx);
