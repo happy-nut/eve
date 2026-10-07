@@ -584,6 +584,43 @@ export function createEditor(opts: {
                     if (t[i].type === 'inline' && t[i - 2].type === 'list_item_open' && /^\[[ xX]\]$/.test(t[i].content)) t[i].content += ' ';
                   }
                 });
+                // A run of to-dos and a run of bullets one after the other are one list to markdown, and the blank
+                // line the two lists are written with makes that one list loose: each run came back loose (spaced
+                // out) and was written so, the note changing on the first read. A run with no blank line inside it
+                // is tight again; the runs are split apart later (updateDOM).
+                md.core.ruler.after('block', 'eve-tight-runs', (state: any) => {
+                  const t = state.tokens, lines: string[] = state.src.split('\n');
+                  const blank = (n: number) => n >= 0 && n < lines.length && !lines[n].trim();
+                  for (let i = 0; i < t.length; i++) {
+                    if (t[i].type !== 'bullet_list_open') continue;
+                    const level = t[i].level;
+                    const items: { open: number; task: boolean }[] = [];
+                    let end = i + 1;
+                    for (; end < t.length && !(t[end].type === 'bullet_list_close' && t[end].level === level); end++) {
+                      if (t[end].type !== 'list_item_open' || t[end].level !== level + 1) continue;
+                      const first = t[end + 2];
+                      items.push({ open: end, task: first?.type === 'inline' && /^\[[ xX]\](\s|$)/.test(first.content) });
+                    }
+                    if (!items.some((x) => x.task) || items.every((x) => x.task)) continue; // one kind: markdown's own say
+                    for (let a = 0; a < items.length; ) {
+                      let b = a;
+                      while (b + 1 < items.length && items[b + 1].task === items[a].task) b++;
+                      // tight: no blank line between its items nor inside them (their trailing blank line aside)
+                      let tight = true;
+                      for (let k = a; k <= b && tight; k++) {
+                        const [from, to] = t[items[k].open].map ?? [0, 0];
+                        for (let n = from; n < (k < b ? t[items[k + 1].open].map[0] : to) - (k < b ? 0 : 1); n++) if (blank(n)) { tight = false; break; }
+                      }
+                      if (tight) {
+                        const stop = b + 1 < items.length ? items[b + 1].open : end;
+                        for (let k = items[a].open; k < stop; k++) {
+                          if ((t[k].type === 'paragraph_open' || t[k].type === 'paragraph_close') && t[k].level === level + 2) t[k].hidden = true;
+                        }
+                      }
+                      a = b + 1;
+                    }
+                  }
+                });
               },
               // markdown-it wraps a loose list item's content in a <p>; ProseMirror then splits that paragraph
               // around the block image, leaving the item with an empty first line above the picture. Unwrap an

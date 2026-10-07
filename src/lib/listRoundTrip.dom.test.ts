@@ -33,3 +33,18 @@ test.each([
 test('plain code keeps its usual ``` fence', () => {
   expect(md(editorWith('```js\nlet a = 1\n```'))).toBe('```js\nlet a = 1\n```');
 });
+
+test.each([
+  ['to-dos then a bullet', '- [ ] a\n  - [ ] b\n\n- c'],
+  ['a bullet then to-dos', '- c\n\n- [ ] a\n- [x] b'],
+])('%s, written tight, read back tight', (_what, note) => {
+  const once = md(editorWith(note));
+  expect(md(editorWith(once))).toBe(once);
+  expect(once).toBe(note);
+});
+
+test('a run written loose stays loose', () => {
+  const note = '- [ ] a\n\n- [ ] b\n\n- c';
+  const once = md(editorWith(note));
+  expect(md(editorWith(once))).toBe(once);
+});
