@@ -49,7 +49,7 @@ class PickNoteActivity : Activity() {
     findViewById<Button>(R.id.pick_ok).setOnClickListener {
       val pos = list.checkedItemPosition
       NotesWidget.pin(this, widgetId, if (pos <= 0) null else notes[pos - 1].id)
-      NotesWidget.refresh(this)
+      NotesWidget.refreshSoon(this)
       setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
       finish()
     }
