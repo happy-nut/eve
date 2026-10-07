@@ -30,15 +30,15 @@ assert.equal(n.body, '# 2023-12-24\n\n- [ ] a\n- [x] b\n');
 
 // Keep is plain text: a "#", a ">" or a tag stays as typed
 n = keepToNote({ title: 't', textContent: '# not a heading\n> not a quote\na <b> tag', isTrashed: false });
-assert.equal(n.body, '# t\n\n\\# not a heading\n\n\\> not a quote\n\na &lt;b> tag\n');
+assert.equal(n.body, '# t\n\n\\# not a heading\n\n\\> not a quote\n\na \\<b\\> tag\n');
 
 // labels: the first is the group, the rest stay as tags; archived goes to Archive, every label a tag
 n = keepToNote({ title: 't', textContent: 'x', labels: [{ name: 'Work' }, { name: 'Big ideas' }], isTrashed: false });
 assert.equal(n.sub, 'Work');
-assert.ok(n.body.endsWith('\n\n#Big_ideas\n'));
+assert.ok(n.body.endsWith('\n\n\\#Big\\_ideas\n'));
 n = keepToNote({ title: 't', textContent: 'x', labels: [{ name: 'a/b' }], isArchived: true, isTrashed: false });
 assert.equal(n.sub, 'Archive');
-assert.ok(n.body.endsWith('\n\n#a-b\n'));
+assert.ok(n.body.endsWith('\n\n\\#a-b\n'));
 
 // pictures as copied; one that could not be says so; links at the end
 n = keepToNote({
@@ -46,7 +46,7 @@ n = keepToNote({
   attachments: [{ filePath: 'p.jpeg', mimetype: 'image/jpeg' }, { filePath: 'memo.3gp', mimetype: 'audio/3gpp' }],
   annotations: [{ url: 'https://example.com', title: 'Example [site]' }],
 }, { 'p.jpeg': 'assets/1.jpg' });
-assert.equal(n.body, '# t\n\nx\n\n![](assets/1.jpg)\n\n*(not brought over from Keep: memo.3gp)*\n\n- [Example site](https://example.com)\n');
+assert.equal(n.body, '# t\n\nx\n\n![](assets/1.jpg)\n\n*(not brought over from Keep: memo.3gp)*\n\n- [Example \\[site\\]](https://example.com)\n');
 
 // trashed: left behind
 assert.equal(keepToNote({ title: 't', textContent: 'x', isTrashed: true }), null);

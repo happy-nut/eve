@@ -34,8 +34,20 @@ export function attachmentCandidates(filePath: string): string[] {
   return out;
 }
 
-/** Keep is plain text: what markdown would read as something else stays text */
-const plain = (line: string) => line.replace(/</g, '&lt;').replace(/^(\s*)(#{1,6}\s|>)/, '$1\\$2');
+/**
+ * Keep is plain text: whatever markdown would read as something else stays text. The characters markdown
+ * gives a meaning (emphasis, code, links, HTML, entities, headings, tables) are escaped wherever they are;
+ * what only means something at the start of a line (a list's "- " or "1. ", a divider) is escaped there; and
+ * an indent, which markdown takes for code or drops, is kept as no-break spaces.
+ */
+export const plain = (line: string) =>
+  line
+    .replace(/[\\`*_~[\]<>&#|]/g, '\\$&')
+    .replace(/^(\s*)([-+=])/, '$1\\$2')
+    .replace(/^(\s*\d+)([.)])/, '$1\\$2')
+    .replace(/^[ \t]+/, (ws) => ws.replace(/\t/g, '    ').replace(/ /g, '\u00a0'));
+/** a link's address as markdown takes it whatever it holds (a space, brackets) */
+const dest = (url: string) => (/[\s()<>]/.test(url) ? `<${url.replace(/[<>]/g, encodeURIComponent)}>` : url);
 const BLANK = ' '; // an empty line kept as one (editor.ts BlankLine)
 const day = (usec: number | undefined) => (usec ? new Date(usec / 1000).toISOString().slice(0, 10) : '');
 const groupName = (s: string) => s.trim().replace(/\//g, '-');
@@ -64,8 +76,9 @@ export function keepToNote(k: KeepNote, files: Record<string, string> = {}): Fro
   let title = (k.title ?? '').trim();
   if (!title && lines.length && !k.listContent?.length) {
     const first = lines[0].trim();
-    if (first.length <= 60) { title = first; lines.shift(); while (lines.length && !lines[0].trim()) lines.shift(); }
-    else title = first.slice(0, 40).trimEnd() + '…';
+    const chars = Array.from(first); // by character: a cut through an emoji left half of it in the title
+    if (chars.length <= 60) { title = first; lines.shift(); while (lines.length && !lines[0].trim()) lines.shift(); }
+    else title = chars.slice(0, 40).join('').trimEnd() + '…';
   }
   title ||= day(k.createdTimestampUsec ?? k.userEditedTimestampUsec) || 'Untitled';
 
@@ -77,20 +90,20 @@ export function keepToNote(k: KeepNote, files: Record<string, string> = {}): Fro
   for (const a of k.attachments ?? []) {
     if (!a.filePath) continue;
     const src = files[a.filePath];
-    if (!src) blocks.push(`*(not brought over from Keep: ${a.filePath})*`);
-    else blocks.push(/^image\//.test(a.mimetype ?? '') || /\.(png|jpe?g|gif|webp|heic)$/i.test(src) ? `![](${src})` : `[${a.filePath}](${src})`);
+    if (!src) blocks.push(`*(not brought over from Keep: ${plain(a.filePath)})*`);
+    else blocks.push(/^image\//.test(a.mimetype ?? '') || /\.(png|jpe?g|gif|webp|heic)$/i.test(src) ? `![](${dest(src)})` : `[${plain(a.filePath)}](${dest(src)})`);
   }
   const links = (k.annotations ?? []).filter((a) => a.url);
-  if (links.length) blocks.push(links.map((a) => `- [${(a.title || a.url)!.replace(/[[\]]/g, '')}](${a.url})`).join('\n'));
+  if (links.length) blocks.push(links.map((a) => `- [${plain((a.title || a.url)!.trim())}](${dest(a.url!)})`).join('\n'));
 
   const labels = (k.labels ?? []).map((l) => groupName(l.name ?? '')).filter(Boolean);
   const sub = k.isArchived ? 'Archive' : (labels[0] ?? '');
   // the labels that did not become the group stay with the note, as tags
   const rest = k.isArchived ? labels : labels.slice(1);
-  if (rest.length) blocks.push(rest.map((l) => `#${l.replace(/\s+/g, '_')}`).join(' '));
+  if (rest.length) blocks.push(rest.map((l) => `\\#${plain(l.replace(/\s+/g, '_'))}`).join(' '));
 
   return {
-    body: `# ${title.replace(/\s*\n\s*/g, ' ')}\n\n${blocks.join('\n\n')}\n`,
+    body: `# ${plain(title.replace(/\s*\n\s*/g, ' ').trim())}\n\n${blocks.join('\n\n')}\n`,
     sub,
     updatedAt: Math.round((k.userEditedTimestampUsec ?? k.createdTimestampUsec ?? 0) / 1000),
     pinned: !!k.isPinned,

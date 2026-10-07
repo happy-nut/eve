@@ -1,4 +1,4 @@
-import { Editor, Extension, InputRule, textInputRule, wrappingInputRule } from '@tiptap/core';
+import { Editor, Extension, InputRule, wrappingInputRule } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { ListItem, OrderedList } from '@tiptap/extension-list';
 import Paragraph from '@tiptap/extension-paragraph';
@@ -143,6 +143,20 @@ function toggleCheck({ tr, state }: { tr: any; state: any }): boolean {
   for (const pos of items) tr.setNodeAttribute(pos, 'checked', check);
   return true;
 }
+
+/**
+ * An arrow typed as text ("->" becomes →). Not inside `code` still being typed: its mark only comes with the
+ * closing backtick, by when "=>" in it had already turned. (Code that is already code is left alone anyway.)
+ */
+const arrow = (find: RegExp, replace: string) => new InputRule({
+  find,
+  handler: ({ state, range }) => {
+    const $from = state.doc.resolve(range.from);
+    const before = $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc');
+    if ((before.match(/`/g)?.length ?? 0) % 2) return null;
+    state.tr.insertText(replace, range.from, range.to);
+  },
+});
 
 /** Run one editor action by id (the phone's formatting bar uses these; a keyboard uses applyKeymap). */
 export const runEditorCommand = (editor: Editor, id: string): boolean => editorCommands(editor)[id]?.() ?? false;
@@ -704,13 +718,14 @@ export function createEditor(opts: {
       Extension.create({
         name: 'arrows',
         addInputRules: () => [
-          textInputRule({ find: /->$/, replace: '→' }),
-          textInputRule({ find: /<-$/, replace: '←' }),
-          textInputRule({ find: /=>$/, replace: '⇒' }),
-          textInputRule({ find: /<=$/, replace: '⇐' }),
-          // "<-" is already ← by the time ">" comes: the two ways round are ← finished with >
-          textInputRule({ find: /(?:←|<-)>$/, replace: '↔' }),
-          textInputRule({ find: /(?:⇐|<=)>$/, replace: '⇔' }),
+          // both ways first: "<-" is already ← by the time ">" comes, so they are ← finished with > — and with
+          // the ← taken back (⌫), "<-" then ">" must not be read as "<" and "->"
+          arrow(/(?:←|<-)>$/, '↔'),
+          arrow(/(?:⇐|<=)>$/, '⇔'),
+          arrow(/->$/, '→'),
+          arrow(/<-$/, '←'),
+          arrow(/=>$/, '⇒'),
+          arrow(/<=$/, '⇐'),
         ],
       }),
       LocalImage.configure({ inline: false, allowBase64: true }),

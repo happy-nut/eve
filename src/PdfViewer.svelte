@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { scale } from 'svelte/transition';
   import { panelIn } from './lib/motion';
   import { ui } from './lib/ui.svelte';
@@ -115,9 +116,22 @@
     });
   }
 
+  // The document (WebKit's PDF view, an iframe) can take the keyboard by itself as it loads; the panel sits
+  // beside the note to be written next to, and Esc has to reach the app to close it. For its first moments,
+  // until the panel is clicked, the keyboard is given back.
+  let panel: HTMLDivElement;
+  let touched = false;
+  onMount(() => {
+    const until = Date.now() + 2500;
+    const watch = setInterval(() => {
+      if (touched || Date.now() > until) { clearInterval(watch); return; }
+      if (document.activeElement?.tagName === 'IFRAME' && panel.contains(document.activeElement)) ui.pdfGiveBack();
+    }, 100);
+    return () => clearInterval(watch);
+  });
 </script>
 
-<div class="pdf-panel" class:busy style:left="{x}px" style:top="{y}px" style:width="{w}px" style:height="{h}px"
+<div class="pdf-panel" bind:this={panel} onpointerdowncapture={() => (touched = true)} class:busy style:left="{x}px" style:top="{y}px" style:width="{w}px" style:height="{h}px"
   transition:scale|global={panelIn}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="pdf-bar" onpointerdown={drag}>

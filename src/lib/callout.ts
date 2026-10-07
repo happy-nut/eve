@@ -1,5 +1,6 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ui } from './ui.svelte';
+import { isMobile } from './platform';
 import { customIcon } from './icons';
 import { calloutKind } from './calloutKind';
 
@@ -81,6 +82,7 @@ export const Callout = Node.create({
           tr.setNodeMarkup(getPos()!, undefined, { ...tr.doc.nodeAt(getPos()!)?.attrs, emoji: v.trim() });
           return true;
         }).run();
+        else if (!isMobile) editor.commands.focus(); // dismissed: back into the note all the same
       });
       const contentDOM = document.createElement('div');
       contentDOM.className = 'callout-body';

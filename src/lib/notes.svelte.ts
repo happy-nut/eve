@@ -29,7 +29,18 @@ export function serialize(n: Note): string {
   return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\norder: ${n.order}${n.group ? `\ngroup: ${n.group}` : ''}${n.parent ? `\nparent: ${n.parent}` : ''}${n.icon ? `\nicon: ${n.icon}` : ''}\n---\n${n.body}`;
 }
 
+/**
+ * When a note with a fixed id (a day, the daily template, the calendar's row) was only just made here and not
+ * written in yet. Another device may have made and written the same note already; this blank copy must not be
+ * newer than that one, or the first sync kept the blank and pushed it over what was written there. Typing in
+ * it dates it as any edit does.
+ */
+const UNWRITTEN = 0;
+
 export function parse(text: string): Note | null {
+  // a note saved on Windows (CRLF), or with a byte-order mark, is the same note: unread, it was skipped by the
+  // pull and the older copy here pushed back over it
+  text = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   const m = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text);
   if (!m) return null;
   const meta: Record<string, string> = {};
@@ -155,7 +166,7 @@ class NotesStore {
     let n = this.all.find((x) => x.id === CALENDAR_NOTE_ID);
     if (n) return n;
     const top = this.visible.filter((x) => x.group === '').reduce((m, x) => Math.min(m, x.order), 1);
-    n = { id: CALENDAR_NOTE_ID, body: `# ${CALENDAR_NAME}\n`, updatedAt: Date.now(), deleted: false, group: '', order: top - 1, icon: '🗓️' };
+    n = { id: CALENDAR_NOTE_ID, body: `# ${CALENDAR_NAME}\n`, updatedAt: UNWRITTEN, deleted: false, group: '', order: top - 1, icon: '🗓️' };
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
     void storage.write(n.id, serialize(n));
@@ -172,7 +183,7 @@ class NotesStore {
   templateNote(): Note {
     let n = this.all.find((x) => x.id === DAILY_TEMPLATE_ID);
     if (!n) {
-      this.all.push({ id: DAILY_TEMPLATE_ID, body: DEFAULT_TEMPLATE, updatedAt: Date.now(), deleted: false, group: '', order: 0, icon: '🗓️' });
+      this.all.push({ id: DAILY_TEMPLATE_ID, body: DEFAULT_TEMPLATE, updatedAt: UNWRITTEN, deleted: false, group: '', order: 0, icon: '🗓️' });
       n = this.all.at(-1)!;
       void storage.write(n.id, serialize(n));
       this.dirty++;
@@ -188,7 +199,7 @@ class NotesStore {
     if (n && !n.deleted) return n;
     const body = dailyBody(this.dailyTemplate, key);
     if (n) Object.assign(n, { deleted: false, body, updatedAt: Date.now() }); // a deleted day, begun again
-    else { this.all.push({ id, body, updatedAt: Date.now(), deleted: false, group: '', order: 0, icon: '🗓️' }); n = this.all.at(-1)!; }
+    else { this.all.push({ id, body, updatedAt: UNWRITTEN, deleted: false, group: '', order: 0, icon: '🗓️' }); n = this.all.at(-1)!; }
     this.titles.set(id, titleOf(n));
     void storage.write(id, serialize(n));
     this.dirty++;

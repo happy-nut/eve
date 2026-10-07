@@ -281,7 +281,7 @@
         if (group) { groups.editing = group; break; }
         return;
       case 'i': if (group) pickIcon({ group }); else pickIcon({ note: notes.all.find((n) => n.id === noteId) }); break;
-      case 'Escape': focusNote(); break;
+      case 'Escape': if (ui.pdf || ui.find) return; focusNote(); break; // what floats on top closes first (App)
       default: return;
     }
     e.preventDefault();
@@ -293,8 +293,9 @@
     const current = target.note ? target.note.icon ?? '' : groups.icon(target.group!);
     const el = anchor ?? document.querySelector<HTMLElement>(target.note ? `aside [data-note="${target.note.id}"]` : `aside [data-group="${CSS.escape(target.group!)}"]`);
     const v = await ui.pickEmoji(el ?? new DOMRect(60, 60, 0, 0), current);
-    if (v === null) return;
-    if (target.note) notes.setIcon(target.note.id, v); else groups.setIcon(target.group!, v);
+    if (v !== null) { if (target.note) notes.setIcon(target.note.id, v); else groups.setIcon(target.group!, v); }
+    // the keyboard goes back to the row whose icon it was, picked or not
+    if (!isMobile) void focusRow(target.note ? `[data-note="${target.note.id}"]` : groupSel(target.group!));
   }
 
   /**
@@ -370,7 +371,7 @@
 
   // ---- misc ----
   function onSearchKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') { query = ''; searchEl?.blur(); e.preventDefault(); }
+    if (e.key === 'Escape') { query = ''; e.preventDefault(); focusNote(); } // back to the note, not to nowhere
     if (e.key === 'Enter' && hits[0]) { notes.currentId = hits[0].id; searchEl?.blur(); e.preventDefault(); }
     // ↓ walks on into the matches below; ↑ from the first one comes back here (treeKey)
     if (e.key === 'ArrowDown' && !e.isComposing) { document.querySelector<HTMLElement>('aside [data-row]')?.focus(); e.preventDefault(); }
@@ -571,6 +572,7 @@
 
 <style>
   aside {
+    position: relative; /* the focus flash's layer (app.css) covers it */
     width: 260px; flex: none; display: flex; flex-direction: column;
     background: var(--bg-side); border-right: 1px solid var(--line); overflow: hidden;
   }

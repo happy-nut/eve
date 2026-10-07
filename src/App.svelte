@@ -31,6 +31,18 @@
 
   let sidebarOpen = $state(true);
   let settingsOpen = $state(false);
+  // Settings takes nothing from the keyboard's place: closed however (Esc, ✕, a click beside it), the keyboard
+  // is back where it was — the list's row, the note — unless something has taken it meanwhile
+  let settingsFrom: HTMLElement | null = null;
+  $effect(() => {
+    if (settingsOpen) { settingsFrom = document.activeElement as HTMLElement | null; return; }
+    const from = settingsFrom;
+    settingsFrom = null;
+    if (!from || isMobile) return;
+    const a = document.activeElement;
+    if (a && a !== document.body && a.isConnected) return;
+    if (from.isConnected && from !== document.body) from.focus(); else focusNote();
+  });
   let searchEl = $state<HTMLInputElement | null>(null);
   let hotkeyError = $state<string | null>(null);
   // hold ⌘: sidebar notes show 1…9, ⌘<digit> opens that note
@@ -277,6 +289,7 @@
    * Where is the keyboard? The pane it just moved to (the list ↔ the note) flashes blue once. Only on a
    * move between panes made from the keyboard: typing in a note, or its caret coming back to the same
    * pane, tells the user nothing they don't know. Never on a phone (its on-screen keys count as keys).
+   * Nor into a text box (⌘K's search, a group being renamed): its own focus ring already says where the keys go.
    */
   let lastPane: Element | null = null;
   function flashPane(e: FocusEvent) {
@@ -285,10 +298,11 @@
     const moved = lastPane !== null;
     lastPane = pane;
     if (!moved || isMobile || document.documentElement.dataset.input !== 'keyboard') return;
+    if ((e.target as HTMLElement).matches('input, textarea')) return;
     pane.classList.remove('focus-flash');
     void (pane as HTMLElement).offsetWidth; // restart the animation
     pane.classList.add('focus-flash');
-    setTimeout(() => pane.classList.remove('focus-flash'), 700);
+    setTimeout(() => pane.classList.remove('focus-flash'), 300);
   }
 
   /** A phone's back (the bar's chevron, or Android's): a day goes back to its calendar, anything else to the list. */

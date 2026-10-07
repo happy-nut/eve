@@ -81,6 +81,22 @@ describe('arrows', () => {
     type(ed, `a${typed}b`);
     expect(ed.state.doc.textContent).toBe(`a${arrow}b`);
   });
+
+  test('not inside `code` being typed: its mark only comes with the closing backtick', () => {
+    const ed = editorWith('');
+    ed.commands.focus('end');
+    type(ed, '`x => y` and a <- b');
+    expect(md(ed)).toBe('`x => y` and a ← b');
+  });
+
+  test('"<-" whose ← was taken back, then ">", is both ways, not "<" and →', () => {
+    const ed = editorWith('');
+    ed.commands.focus('end');
+    type(ed, 'a<-');
+    press(ed, 'Backspace');
+    type(ed, '>');
+    expect(ed.state.doc.textContent).toBe('a↔');
+  });
 });
 
 describe('pasting a link', () => {
