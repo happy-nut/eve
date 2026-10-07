@@ -1,0 +1,12 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- values-night/themes.xml, and: Android 12+ draws its own splash before the page: on the colour of the page's splash (index.html),
+         so the two read as one — Eve's face on dark navy, then her smile — in a light theme as in a dark one -->
+    <style name="Theme.eve" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#FF3FC1FF</item>
+        <item name="colorSecondary">#FF3FC1FF</item>
+        <item name="colorAccent">#FF3FC1FF</item>
+        <item name="colorControlActivated">#FF3FC1FF</item>
+        <item name="android:textColorHighlight">#551E9BFF</item>
+        <item name="android:windowSplashScreenBackground">#11141a</item>
+    </style>
+</resources>
