@@ -247,23 +247,34 @@ html.mobile .panel .select {
 }
 html.mobile aside .tree { padding: 2px 8px 96px; scrollbar-width: none; }
 html.mobile aside .tree::-webkit-scrollbar { display: none; }
-/* the list (and a row lifted out of it to be moved): rows a thumb hits (48px, Android's touch size), each note with what it says and when it was written,
-   so the list alone finds it — a phone shows the list or the note, never both */
-html.mobile :is(aside, .lifted) [data-row] { font-size: 15.5px; border-radius: 8px; min-height: 48px; }
-html.mobile :is(aside, .lifted) .gname {
-  font-size: 15.5px; font-weight: 600; min-height: 48px; padding-top: 4px; padding-bottom: 4px;
-}
-html.mobile :is(aside, .lifted) .fold { width: 40px; height: 48px; }
-html.mobile :is(aside, .lifted) .note-row > button:first-child { padding: 9px 10px; justify-content: center; gap: 3px; }
-html.mobile :is(aside, .lifted) .ghead { padding: 0; }
-html.mobile :is(aside, .lifted) .title { font-size: 15.5px; }
+/* the list (and a row lifted out of it to be moved). A phone shows the list or the note, never both, so each note
+   says what it is about and when it was written — set as type, not boxes: the title, a quiet time beside it, two
+   grey lines of what it says. Rows a thumb hits (48px and more, Android's touch size); the desktop's file and
+   folder glyphs stay on the desktop, a note's own emoji comes along. */
+html.mobile :is(aside, .lifted) [data-row] { border-radius: 12px; min-height: 48px; }
+html.mobile :is(aside, .lifted) .ico-slot:has(> svg.ico) { display: none; }
+html.mobile :is(aside, .lifted) .note-row > button:first-child { padding: 11px 12px; justify-content: center; gap: 3px; }
+html.mobile :is(aside, .lifted) .title { gap: 8px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; }
 html.mobile :is(aside, .lifted) .title .t { flex: 1; min-width: 0; }
-html.mobile :is(aside, .lifted) .when { flex: none; margin-left: 8px; font-size: 12.5px; font-weight: 400; color: var(--fg-dim); }
+html.mobile :is(aside, .lifted) .when {
+  flex: none; font-size: 12.5px; font-weight: 400; letter-spacing: 0; color: var(--fg-dim); font-variant-numeric: tabular-nums;
+}
 html.mobile :is(aside, .lifted) .preview {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
-  padding-left: 30px; /* under the title, past the icon */
-  font-size: 13.5px; line-height: 1.4; color: var(--fg-dim); text-align: left; overflow-wrap: anywhere;
+  font-size: 14px; line-height: 1.45; color: var(--fg-dim); text-align: left; overflow-wrap: anywhere;
 }
+/* under the title's words when an emoji leads it */
+html.mobile :is(aside, .lifted) .note-row > button:has(.ico-slot > :is(.emoji, .cico, .painted, .num)) .preview { padding-left: 32px; }
+/* the note last open: a soft wash, not a slab; no keyboard on a phone, so no keyboard cursor colour either */
+html.mobile aside .note-row > button.active, html.mobile aside .note-row > [data-row].active:focus { background: var(--bg-hover); }
+html.mobile aside .note-row > [data-row]:not(.active):focus, html.mobile aside .gname:focus, html.mobile aside .ghead:focus-within { background: none; }
+html.mobile aside .note-row > button:first-child:active { background: var(--bg-active); transform: none; }
+/* a group: a quiet caption over its notes, with room above it, so the notes stay what the eye lands on */
+html.mobile :is(aside, .lifted) .ghead { padding: 0; margin-top: 12px; }
+html.mobile :is(aside, .lifted) .gname {
+  font-size: 13.5px; font-weight: 600; color: var(--fg-dim); min-height: 44px; padding: 4px 12px; gap: 8px;
+}
+html.mobile :is(aside, .lifted) .fold { width: 44px; height: 44px; }
 
 /* a row pulled sideways (swipeRow.ts): it follows the finger, the action shows behind it, full colour past the mark */
 html.mobile :is(aside, .lifted) .note-row { position: relative; touch-action: pan-y; --sx: 0px; }
