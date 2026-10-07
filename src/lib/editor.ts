@@ -15,6 +15,7 @@ import { WikiLink } from './wikilink';
 import { DateMention, dayChoices } from './date';
 import { Callout } from './callout';
 import { Highlight } from './highlight';
+import { Html } from './html';
 import { Toggle } from './toggle';
 import Blockquote from '@tiptap/extension-blockquote';
 import { ImageView, LocalImage } from './image';
@@ -765,6 +766,7 @@ export function createEditor(opts: {
       }),
       Callout,
       Highlight,
+      ...Html,
       Extension.create({
         name: 'arrows',
         addInputRules: () => [
