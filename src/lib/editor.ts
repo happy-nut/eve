@@ -165,7 +165,13 @@ export const runEditorCommand = (editor: Editor, id: string): boolean => editorC
 function editorCommands(editor: Editor): Record<string, () => boolean> {
   const c = () => editor.chain().focus();
   return {
-    slash: () => c().insertContent('/').run(),
+    // the / menu opens where a word can start: right after a word (the phone's Insert block, the caret at the
+    // end of a line) a bare "/" opened nothing and stayed in the text, so a space goes first
+    slash: () => {
+      const { $from } = editor.state.selection;
+      const before = $from.parent.textBetween(Math.max(0, $from.parentOffset - 1), $from.parentOffset, undefined, '\ufffc');
+      return c().insertContent(before && !/\s/.test(before) ? ' /' : '/').run();
+    },
     callout: () => c().toggleWrap('callout').run(),
     image: () => {
       pickImage().then((src) => src && c().setImage({ src }).run());
