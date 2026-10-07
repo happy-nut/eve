@@ -105,8 +105,9 @@ function show(editor: Editor, index: number) {
 }
 
 /**
- * Replace the match in view, then sit on the one that follows it — the replaced match leaves the list,
- * so the same index is already the next one, and Enter walks the note in order.
+ * Replace the match in view, then sit on the one that follows it, so Enter walks the note in order. The one
+ * after is the first that starts past what was just put in: the replacement may itself match ("eve" → "Eve",
+ * the search ignoring case; "eve" → "steve"), and the same index then stayed on it, replacing it over and over.
  */
 export function replaceOne(editor: Editor, text: string) {
   const { hits, index } = findState(editor);
@@ -114,7 +115,9 @@ export function replaceOne(editor: Editor, text: string) {
   if (!hit) return;
   editor.view.dispatch(editor.state.tr.insertText(text, hit.from, hit.to));
   const left = findState(editor).hits; // the plugin re-searched the changed doc
-  if (left.length) show(editor, index < left.length ? index : 0);
+  if (!left.length) return;
+  const next = left.findIndex((h) => h.from >= hit.from + text.length);
+  show(editor, next >= 0 ? next : 0); // past the last one: round to the first again
 }
 
 /** Replace every match, back to front so the earlier positions stay valid. */

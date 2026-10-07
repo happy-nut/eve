@@ -12,6 +12,16 @@ assert.deepEqual(headingsOf('# N\n\nno headings at all\n'), []);
 
 assert.deepEqual(splitLink('DB'), ['DB', '']);
 assert.deepEqual(splitLink('DB#인덱스'), ['DB', '인덱스']);
+// a title holding "#" is a title, whole, when a note has it; its own sections still split off after it
+{
+  const titles = new Set(['c# notes', 'issue #12', 'db']);
+  const is = (t) => titles.has(t.toLowerCase());
+  assert.deepEqual(splitLink('C# notes', is), ['C# notes', '']);
+  assert.deepEqual(splitLink('C# notes#Setup', is), ['C# notes', 'Setup']);
+  assert.deepEqual(splitLink('Issue #12', is), ['Issue #12', '']);
+  assert.deepEqual(splitLink('DB#인덱스', is), ['DB', '인덱스']);
+  assert.deepEqual(splitLink('Nowhere#x', is), ['Nowhere', 'x']); // no such note: split as written
+}
 assert.deepEqual(splitLink(' DB # 인덱스 '), ['DB', '인덱스']);
 // a section with a `#` of its own: only the first one splits
 assert.deepEqual(splitLink('DB#C# 이야기'), ['DB', 'C# 이야기']);

@@ -58,6 +58,11 @@ export const LocalImage = Image.extend({
         state.doc.nodesBetween(sel.from, sel.to, (node, pos) => {
           if (node.type.name === name) { if (at === null) at = pos; else other = true; return false; }
           if (node.isText && node.text?.trim()) other = true;
+          // anything else the range takes in counts too: a divider, a video or a card, an empty line lying
+          // wholly inside it (the lines it starts and ends on are only touched). Left out, the drag became the
+          // picture alone and ⌫ left them behind.
+          else if (node.isAtom && !node.isText) other = true;
+          else if (node.isTextblock && !node.content.size && pos > sel.from && pos + node.nodeSize < sel.to) other = true;
           return true;
         });
         return at === null || other ? null : state.tr.setSelection(NodeSelection.create(state.doc, at));

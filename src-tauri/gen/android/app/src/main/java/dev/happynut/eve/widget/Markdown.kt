@@ -30,12 +30,15 @@ class Markdown(
     var i = 0
     while (i < lines.size) {
       val raw = lines[i]
-      val fence = Regex("^\\s*```(\\w*)").find(raw)
+      // the fence as long as the code needs (the editor writes ```` around code holding ```): closed by one as long
+      val fence = Regex("^\\s*(`{3,})(\\w*)").find(raw)
       if (fence != null) {
-        val lang = fence.groupValues[1]
+        val ticks = fence.groupValues[1].length
+        val lang = fence.groupValues[2]
+        val close = Regex("^\\s*`{$ticks,}\\s*$")
         val code = mutableListOf<String>()
         i++
-        while (i < lines.size && !lines[i].trimStart().startsWith("```")) code += lines[i++]
+        while (i < lines.size && !close.matches(lines[i])) code += lines[i++]
         i++ // the closing fence
         out += if (lang == "kanban") board(code.joinToString("\n")) else codeBlock(code)
         continue
@@ -49,7 +52,11 @@ class Markdown(
   /** A one-line version for the list widget: the title, plain. */
   fun title(body: String): String = blocks(body).firstOrNull()?.toString()?.trim() ?: ""
 
-  private fun block(raw: String): CharSequence? {
+  private fun block(raw0: String): CharSequence? {
+    // HTML a note keeps (a <span> around a word, a README's <div align="center">, a comment) is not what it says:
+    // the tags go, a line of only tags is no line (an escaped \<b\> is text and stays)
+    val raw = raw0.replace(COMMENT, "").replace(TAG, "")
+    if (raw0.isNotBlank() && raw.isBlank()) return null
     // the editor keeps an empty line as a no-break space (or &nbsp;); it is still an empty line
     if (raw.replace("&nbsp;", "").all { it.isWhitespace() || it == '\u00a0' || it == '\\' }) return null
     val indent = raw.length - raw.trimStart().length
@@ -206,6 +213,9 @@ class Markdown(
 
   private companion object {
     const val EX = Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+    /** HTML in a note's markdown, as src/lib/markdown.ts plain() drops it */
+    val COMMENT = Regex("<!--.*?(-->|$)")
+    val TAG = Regex("(?<!\\\\)</?[a-zA-Z][a-zA-Z0-9-]*(\\s[^>]*?)?(?<!\\\\)>")
     /** the marker pen behind ==highlighted== text, as in the editor */
     const val MARK = 0x73FFD60A
     /** Obsidian's callout types, as the editor draws them (src/lib/calloutKind.ts) */

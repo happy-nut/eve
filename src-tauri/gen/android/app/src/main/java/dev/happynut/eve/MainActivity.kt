@@ -59,7 +59,7 @@ class MainActivity : TauriActivity() {
   override fun onStop() {
     super.onStop()
     inFront = false
-    NotesWidget.refresh(applicationContext)
+    NotesWidget.refreshSoon(applicationContext)
   }
 
   private fun remember(intent: Intent?): Boolean {
@@ -142,6 +142,6 @@ class MainActivity : TauriActivity() {
 
     /** a note was written: the widget reads the folder again */
     @JavascriptInterface
-    fun notesChanged() = NotesWidget.refresh(applicationContext)
+    fun notesChanged() = NotesWidget.refreshSoon(applicationContext)
   }
 }

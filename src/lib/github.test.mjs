@@ -165,6 +165,11 @@ await assert.rejects(deviceLogin(post, () => {}, ac.signal, async () => {}), /ca
 
 // a failed sign-in in words someone new to GitHub can act on; cancelling is no failure
 assert.equal(signInError('sign-in cancelled'), null);
+// a word in a name the user chose is not a network failure: GitHub answered, or the message is Eve's own
+assert.match(signInError('403 Although you appear to have the correct authorization credentials, the `acme-network` organization has enabled OAuth App access restrictions'), /^403 /);
+assert.match(signInError('dnsmith/eve-notes exists but is public — make it private or rename it'), /^dnsmith\/eve-notes exists/);
+assert.match(signInError('"git.mynetwork.corp/x y" is not a server address'), /is not a server address/);
+assert.match(signInError('error sending request for url (https://github.com/login/device/code)'), /internet connection/);
 assert.match(signInError('The authorization request was denied by the user.'), /not authorized/);
 assert.match(signInError('the sign-in code expired; start again'), /new one/);
 assert.match(signInError('Could not reach https://github.com. On a company network or VPN?'), /internet connection/);
@@ -249,6 +254,33 @@ if (fake) {
   await assert.rejects(ensureRepo('t', api({ 'me/eve-notes': { private: false } }), { host: 'github.acme.com' }), /is public/);
   await assert.rejects(ensureRepo('t', async () => { throw new TypeError('Load failed'); }, { host: 'github.acme.com' }), /Could not reach https:\/\/github\.acme\.com/);
   await assert.rejects(ensureRepo('t', api({}), { host: 'github.acme.com', owner: 'a/b' }), /not a user or organization/);
+}
+
+// eve-notes there but out of this sign-in's sight: GET says 404, creating it says 422 "name already exists"
+{
+  const hidden = async (url, init = {}) => {
+    const p = new URL(url).pathname;
+    if (p === '/user') return new Response(JSON.stringify({ login: 'me' }), { status: 200 });
+    if ((init.method ?? 'GET') === 'GET') return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 });
+    return new Response(JSON.stringify({ message: 'Repository creation failed.', errors: [{ resource: 'Repository', code: 'custom', field: 'name', message: 'name already exists on this account' }] }), { status: 422 });
+  };
+  const err = await ensureRepo('t', hidden).catch((e) => e.message);
+  assert.match(err, /me\/eve-notes already exists, but this sign-in cannot see it/);
+  assert.equal(signInError(err), err); // said as it is, not turned into something else
+}
+
+// Cancel ends the wait between asks at once, and a code that ran out as Cancel was pressed is no failure
+{
+  const ac = new AbortController();
+  const t0 = Date.now();
+  setTimeout(() => ac.abort(), 50);
+  await assert.rejects(pollToken(async () => '{"error":"authorization_pending"}', 'd', 5, ac.signal), /cancelled/);
+  assert.ok(Date.now() - t0 < 1000, `took ${Date.now() - t0}ms`);
+  const ac2 = new AbortController();
+  const lastAsk = async (url) => { if (url.endsWith('device/code')) return '{"device_code":"d","user_code":"C","verification_uri":"u","interval":1}'; ac2.abort(); return '{"error":"expired_token"}'; };
+  const why = await deviceLogin(lastAsk, () => {}, ac2.signal, async () => {}).catch((e) => e.message);
+  assert.match(why, /cancelled/);
+  assert.equal(signInError(why), null);
 }
 
 console.log('SYNC_OK');

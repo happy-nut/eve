@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { fade } from 'svelte/transition';
+  import { onMount } from 'svelte';
   import { pullDown } from './lib/popup';
+  import { ui } from './lib/ui.svelte';
 
   /**
    * A phone's sheet from the bottom (the menus, a Select's choices): it slides up, and goes away by a tap on the
@@ -11,6 +13,9 @@
    * around it, and a local transition only plays when its own block is made — which is why the sheets just appeared.
    */
   let { onclose, children, role = 'dialog', label }: { onclose: () => void; children: Snippet; role?: string; label?: string } = $props();
+
+  // Android's back closes it, the newest sheet first (App's phoneBack)
+  onMount(() => ui.openedSheet(() => onclose()));
 
   // on <body>: a transformed ancestor (the settings panel) would otherwise become what position:fixed is measured from
   const portal = (node: HTMLElement) => { document.body.appendChild(node); return { destroy: () => node.remove() }; };

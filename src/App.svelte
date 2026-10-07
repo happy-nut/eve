@@ -65,7 +65,7 @@
   });
 
   // Android back: a popup or a dialog closes, a note goes back to the list, and only the list leaves the app
-  const popupOpen = $derived(!!(ui.photo || ui.emoji || ui.menu || ui.pending || ui.find || ui.pdf || ui.card));
+  const popupOpen = $derived(!!(ui.photo || ui.sheetsOpen || ui.emoji || ui.menu || ui.pending || ui.find || ui.pdf || ui.card));
   $effect(() => {
     if (!isMobile || !isTauri || (sidebarOpen && !settingsOpen && !popupOpen)) return;
     let off: (() => void) | undefined, gone = false;
@@ -111,9 +111,12 @@
         // the home-screen widget: straight into that note (or a new one), keyboard up
         const id = ask.startsWith('note:') ? ask.slice(5) : null;
         if (ask !== 'new' && !id) return;
-        settingsOpen = false;
+        putAway();
+        // a widget may still show a note deleted since (on the Mac, then synced): opened, it took what was
+        // typed into a note no list shows. The list instead.
+        if (id && !notes.all.some((n) => n.id === id && !n.deleted)) { sidebarOpen = true; return; }
         ui.focusOwner = 'editor';
-        if (id && notes.all.some((n) => n.id === id)) notes.currentId = id; else notes.create();
+        if (id) notes.currentId = id; else notes.create();
         sidebarOpen = false;
         widget.keyboard();
       });
@@ -257,9 +260,9 @@
       { label: "Today's daily note", run: writeToday },
     ]);
   }
-  /** Today's note, to write in: caret under the template, keyboard up on a phone. Whatever was left open over
-   *  the app (a card, a picker, a menu, a dialog, Find) is put away first, or it would sit over the note. */
-  function writeToday() {
+  /** Whatever was left open over the app (a picture, a picker, a menu, a dialog, a card, a PDF, Find, Settings),
+   *  put away before a note is brought to the front from outside (the reminder, the widget), or it sat over it. */
+  function putAway() {
     if (ui.photo) ui.closeImage();
     if (ui.emoji) ui.emojiDone(null);
     if (ui.menu) ui.closeMenu();
@@ -268,6 +271,10 @@
     if (ui.pdf) ui.closePdf();
     ui.find = false;
     settingsOpen = false;
+  }
+  /** Today's note, to write in: caret under the template, keyboard up on a phone. */
+  function writeToday() {
+    putAway();
     ui.focusOwner = 'editor';
     notes.caretEnd = true;
     notes.openDaily();
@@ -309,6 +316,7 @@
   function phoneBack() {
     // what is on top closes first: a picture shown full size, a popup, then a dialog, then a sheet (a card, a day)
     if (ui.photo) ui.closeImage();
+    else if (ui.closeSheet()) return; // a sheet (a menu, a setting's choices) over whatever opened it
     else if (ui.emoji) ui.emojiDone(null);
     else if (ui.menu) ui.closeMenu();
     else if (ui.pending) ui.done(null);

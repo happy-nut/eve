@@ -74,6 +74,15 @@ describe('toggle', () => {
   });
 });
 
+describe('insert block (the phone bar\'s /)', () => {
+  test.each([['main text', 'main text /'], ['main text ', 'main text /'], ['', '/']])('after "%s" gives "%s"', (text, out) => {
+    const ed = editorWith(text);
+    ed.commands.focus('end');
+    runEditorCommand(ed, 'slash');
+    expect(ed.state.doc.textContent).toBe(out);
+  });
+});
+
 describe('arrows', () => {
   test.each([['->', '→'], ['<-', '←'], ['=>', '⇒'], ['<=', '⇐'], ['<->', '↔'], ['<=>', '⇔']])('%s becomes %s', (typed, arrow) => {
     const ed = editorWith('');

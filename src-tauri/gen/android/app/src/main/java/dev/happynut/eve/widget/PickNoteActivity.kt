@@ -15,8 +15,19 @@ import dev.happynut.eve.R
  * away as the newest notes): the newest notes, or one note pinned for good.
  */
 class PickNoteActivity : Activity() {
+  private companion object {
+    val FILE_ACTIONS = setOf(Intent.ACTION_VIEW, Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE)
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    // The build puts the app's "open / share Markdown" filters on every activity (tauri-build inserts them
+    // before each </activity>), so this one is offered too, as a second "Eve": such a file is for Eve itself.
+    // It used to end here with nothing done.
+    if (intent?.action in FILE_ACTIONS) {
+      startActivity(Intent(intent).setClass(this, dev.happynut.eve.MainActivity::class.java).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+      return finish()
+    }
     val widgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
     // backing out adds no widget
     setResult(RESULT_CANCELED, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
@@ -38,7 +49,7 @@ class PickNoteActivity : Activity() {
     findViewById<Button>(R.id.pick_ok).setOnClickListener {
       val pos = list.checkedItemPosition
       NotesWidget.pin(this, widgetId, if (pos <= 0) null else notes[pos - 1].id)
-      NotesWidget.refresh(this)
+      NotesWidget.refreshSoon(this)
       setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
       finish()
     }

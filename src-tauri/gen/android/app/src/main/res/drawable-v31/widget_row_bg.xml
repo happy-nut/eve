@@ -2,4 +2,6 @@
 <!-- each note its own soft card: a light fill, round corners a step inside the widget's, a darker tint while pressed -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/widget_line">
     <item><shape><solid android:color="@color/widget_row" /><corners android:radius="@android:dimen/system_app_widget_inner_radius" /></shape></item>
+    <!-- the ripple kept inside the round corners: with an opaque fill and no mask, Android clips it to the square bounds only -->
+    <item android:id="@android:id/mask"><shape><solid android:color="#fff" /><corners android:radius="@android:dimen/system_app_widget_inner_radius" /></shape></item>
 </ripple>

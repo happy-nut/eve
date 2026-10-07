@@ -127,6 +127,22 @@ class Ui {
     this.menuFrom = null;
   }
 
+  /** A phone's sheets open now (BottomSheet: a menu, a setting's choices), newest last: Android's back closes the
+   *  top one first. A setting's choices keep their open state to themselves, so back closed all of Settings. */
+  private sheets: (() => void)[] = [];
+  sheetsOpen = $state(0);
+  openedSheet(close: () => void) {
+    this.sheets.push(close);
+    this.sheetsOpen = this.sheets.length;
+    return () => { this.sheets = this.sheets.filter((c) => c !== close); this.sheetsOpen = this.sheets.length; };
+  }
+  /** close the newest sheet; false when none is open */
+  closeSheet(): boolean {
+    const close = this.sheets.at(-1);
+    close?.();
+    return !!close;
+  }
+
   /** the find bar over the open note (⌘F) */
   find = $state(false);
   pending = $state<Pending | null>(null);

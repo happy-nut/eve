@@ -1,6 +1,9 @@
 <script lang="ts" module>
-  // the page's full height, taken when the app starts (keyboard down); the bar can mount with it up
-  let tallest = typeof window === 'undefined' ? 0 : window.innerHeight;
+  // the page's full height for each width it has had (upright, turned on its side), taken when the app starts
+  // (keyboard down; the bar can mount with it up). The keyboard only ever shortens the page, never narrows it:
+  // one height for both, a phone turned on its side read as a keyboard up, and the bar stayed over the note.
+  const tallest = new Map<number, number>();
+  if (typeof window !== 'undefined') tallest.set(window.innerWidth, window.innerHeight);
 </script>
 
 <script lang="ts">
@@ -17,7 +20,11 @@
   let keyboard = $state(false);
 
   onMount(() => {
-    const measure = () => { tallest = Math.max(tallest, window.innerHeight); keyboard = window.innerHeight < tallest - 120; };
+    const measure = () => {
+      const w = window.innerWidth, full = Math.max(tallest.get(w) ?? 0, window.innerHeight);
+      tallest.set(w, full);
+      keyboard = window.innerHeight < full - 120;
+    };
     const check = () => { editing = !!document.activeElement?.closest('.page .tiptap, .card-page .tiptap'); measure(); };
     const out = () => setTimeout(check, 0); // focus lands on the next element a tick later
     document.addEventListener('focusin', check);

@@ -23,7 +23,13 @@
     e.stopPropagation();
     if (e.timeStamp < openedAt) return;
     if (e.key === 'Escape') { e.preventDefault(); done(null); }
-    if (e.key === 'Enter') { e.preventDefault(); done(p.input !== undefined ? value : 'yes'); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      // Enter presses the button that has the keyboard: Tab to Cancel, then Enter, deleted all the same
+      const on = document.activeElement;
+      if (on instanceof HTMLButtonElement && box.contains(on)) on.click();
+      else done(p.input !== undefined ? value : 'yes');
+    }
     if (e.key === 'Tab') { // focus stays inside the dialog
       e.preventDefault();
       const els = [...box.querySelectorAll<HTMLElement>('input, button')];

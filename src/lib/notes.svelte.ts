@@ -2,7 +2,7 @@ import { storage } from './platform';
 import { flushEdits } from './pending';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
-import { plain, splitLink } from './markdown';
+import { onlyHtml, plain, splitLink } from './markdown';
 import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isDailyId } from './daily';
 
 export { plain };
@@ -64,9 +64,13 @@ export function parse(text: string): Note | null {
 
 
 
+/** the line a note's title is read from: its first written line that is more than HTML tags or a comment */
+const titleLine = (body: string) => body.split('\n').find((l) => l.trim() && !onlyHtml(l)) ?? '';
+/** the first written line of a body, as it is (an empty title reads "Untitled" through titleOf) */
+const plainTitleLine = (body: string) => plain(titleLine(body));
+
 export function titleOf(n: Pick<Note, 'body'>): string {
-  const first = n.body.split('\n').find((l) => l.trim()) ?? '';
-  return plain(first) || 'Untitled';
+  return plain(titleLine(n.body)) || 'Untitled';
 }
 
 /** `list` depth-first: every page is followed by its sub-pages (`folded` hides a page's sub-pages,
@@ -280,15 +284,25 @@ class NotesStore {
   private followRename(n: Note) {
     const now = titleOf(n);
     const was = this.titles.get(n.id);
+    if (was === undefined || was === now) { this.titles.set(n.id, now); return; }
+    // A title on its way to another (each pause in typing flushes) is no rename yet while it is empty or is
+    // another note's: "Ideas 2" → "Ideas" (on the way to "Ideas 3") made [[Ideas 2]] into [[Ideas]], and the
+    // next step then took the other note's [[Ideas]] along. The links wait for a title of this note's own.
+    const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+    if (!/\S/.test(plainTitleLine(n.body))) return; // emptied, on the way to a new title
+    if (this.all.some((o) => !o.deleted && o.id !== n.id && same(titleOf(o), now))) return;
     this.titles.set(n.id, now);
-    if (was === undefined || was === now) return;
     // ponytail: scans every body on a rename; fine for local notes, index the links if it ever bites
+    // every shape of the link: the page itself, one of its sections, and either under an alias
+    // (`[[Title|shown as]]`, its bar escaped inside a table); in any case, as links are followed
+    const link = new RegExp(`\\[\\[${was.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(#[^\\]|\\\\]*)?(?=\\]\\]|\\||\\\\\\|)`, 'gi');
+    // "[[C# notes]]" is the note "C# notes", not "C" with a section, when there is such a note (splitLink)
+    const isTitle = (t: string) => same(t, was) || this.all.some((o) => !o.deleted && o.id !== n.id && same(titleOf(o), t));
+    const ours = (section: string | undefined) => !section || same(splitLink(was + section, isTitle)[0], was);
     for (const other of this.all) {
       if (other.deleted || other.id === n.id) continue;
-      // every shape of the link: the page itself, one of its sections, and either under an alias
-      // (`[[Title|shown as]]`, its bar escaped inside a table)
-      let body = other.body;
-      for (const end of [']]', '#', '|', '\\|']) body = body.split(`[[${was}${end}`).join(`[[${now}${end}`);
+      // a "$" in a title is just a "$"
+      const body = other.body.replace(link, (m: string, section?: string) => (ours(section) ? `[[${now}${section ?? ''}` : m));
       if (body === other.body) continue;
       other.body = body;
       other.updatedAt = Date.now();
@@ -433,8 +447,9 @@ class NotesStore {
   /** Open note by title, creating it if missing (used by [[wiki links]]). */
   /** Follow a `[[link]]`. `Title#Section` opens the page at that heading (Editor reads `section`). */
   openByTitle(link: string) {
-    const [title, section] = splitLink(link);
-    const hit = this.visible.find((n) => titleOf(n).toLowerCase() === title.toLowerCase());
+    const find = (t: string) => this.visible.find((n) => titleOf(n).toLowerCase() === t.toLowerCase());
+    const [title, section] = splitLink(link, (t) => !!find(t));
+    const hit = find(title);
     this.section = hit ? section : '';
     this.currentId = hit ? hit.id : this.create(`# ${title}\n\n`).id;
   }

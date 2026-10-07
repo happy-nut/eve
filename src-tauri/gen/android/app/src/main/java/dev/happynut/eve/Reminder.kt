@@ -30,27 +30,43 @@ object Reminder {
     schedule(context)
   }
 
-  private fun alarm(context: Context) = PendingIntent.getBroadcast(context, 7,
-    Intent(context, ReminderReceiver::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+  private const val DAY = "day"
+  private fun keyOf(day: Calendar) = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(day.time)
+
+  /** the alarm, carrying the day it is for (yyyy-MM-dd) */
+  private fun alarm(context: Context, day: String? = null) = PendingIntent.getBroadcast(context, 7,
+    Intent(context, ReminderReceiver::class.java).putExtra(DAY, day), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
   /** The next occurrence of the time: later today, or tomorrow. Inexact (a window of ten minutes): no
    *  exact-alarm permission to ask for, and a reminder a few minutes late is still a reminder. */
-  fun schedule(context: Context) {
+  /** `clockMoved`: set again because the clock or the time zone changed. The phone corrects its clock by itself
+   *  too, and inside the ten minutes today's alarm may still be on its way that moved it to tomorrow, today's
+   *  reminder lost: within them, today's is still due (now). */
+  fun schedule(context: Context, clockMoved: Boolean = false) {
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     val am = context.getSystemService(AlarmManager::class.java)
     am.cancel(alarm(context))
     if (!prefs.getBoolean("on", false)) return
     val (h, m) = (prefs.getString("at", "21:00") ?: "21:00").split(":").map { it.toIntOrNull() ?: 0 }
+    val now = System.currentTimeMillis()
+    val window = 10 * 60 * 1000L
     val next = Calendar.getInstance().apply {
       set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, m); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-      if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
     }
-    am.setWindow(AlarmManager.RTC_WAKEUP, next.timeInMillis, 10 * 60 * 1000L, alarm(context))
+    val day = keyOf(next)
+    if (next.timeInMillis <= now) {
+      if (clockMoved && now - next.timeInMillis < window) {
+        am.setWindow(AlarmManager.RTC_WAKEUP, now + 1000L, window, alarm(context, day))
+        return
+      }
+      next.add(Calendar.DAY_OF_YEAR, 1)
+    }
+    am.setWindow(AlarmManager.RTC_WAKEUP, next.timeInMillis, window, alarm(context, keyOf(next)))
   }
 
   /** The same test as daily.ts isWritten: a line the template did not put there. */
   fun written(context: Context, day: Calendar): Boolean {
-    val key = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(day.time)
+    val key = keyOf(day)
     val file = File(NotesWidget.notesDir(context), "daily-$key.md")
     if (!file.isFile) return false
     val text = file.readText()
@@ -63,8 +79,12 @@ object Reminder {
     return m.groupValues[2].split("\n").map(::norm).any { it.isNotEmpty() && it !in given }
   }
 
-  fun fire(context: Context) {
-    if (context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("on", false) && !written(context, Calendar.getInstance())) {
+  /** `day`: the day the alarm was set for. The alarm may come up to ten minutes late: one for 23:55 could
+   *  arrive past midnight and say "nothing written yet today" of a day just begun; it only sets the next. */
+  fun fire(context: Context, day: String?) {
+    val today = Calendar.getInstance()
+    val due = day == null || day == keyOf(today)
+    if (due && context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("on", false) && !written(context, today)) {
       val nm = context.getSystemService(NotificationManager::class.java)
       nm.createNotificationChannel(NotificationChannel(CHANNEL, "Daily note reminder", NotificationManager.IMPORTANCE_DEFAULT))
       val open = PendingIntent.getActivity(context, 8,
@@ -83,12 +103,15 @@ object Reminder {
   }
 }
 
-/** The alarm going off, and the moments an alarm is lost: a reboot, an update of the app. */
+/** The alarm going off, and the moments an alarm is lost or goes wrong: a reboot, an update of the app, and
+ *  the clock or the time zone changing (the alarm is set at a moment, so 21:00 set in Seoul rang at 13:00 in
+ *  London, put right only after it had). */
 class ReminderReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     when (intent.action) {
       Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> Reminder.schedule(context)
-      else -> Reminder.fire(context)
+      Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED -> Reminder.schedule(context, clockMoved = true)
+      else -> Reminder.fire(context, intent.getStringExtra("day"))
     }
   }
 }

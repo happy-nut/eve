@@ -58,6 +58,7 @@ class NotesWidget : AppWidgetProvider() {
 
     /** the list widget shows this many of the newest notes */
     private const val MAX = 40
+    private const val MAX_LINES = 150
     private const val PREFS = "widgets"
 
     /** The note a widget is pinned to; null = the newest notes. */
@@ -75,11 +76,28 @@ class NotesWidget : AppWidgetProvider() {
     fun showDaily(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("daily", false)
     fun setShowDaily(context: Context, on: Boolean) {
       context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("daily", on).apply()
-      refresh(context)
+      refreshSoon(context)
     }
 
     /** Redraw every Eve widget from the note files. The system keeps what it is handed and shows it
      *  when the home screen comes back, so a change made while Eve is in front is not lost. */
+    private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val queued = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * refresh, on a thread of its own: it reads every note and lays out their markdown, which on the main thread
+     * (leaving the app, the page's bridge, OK in the picker) made the phone stutter, an ANR with a big folder.
+     * Several asked for while one waits are that one.
+     */
+    fun refreshSoon(context: Context) {
+      val app = context.applicationContext
+      if (!queued.compareAndSet(false, true)) return
+      worker.execute {
+        queued.set(false)
+        try { refresh(app) } catch (e: Exception) { android.util.Log.w("eve", "widget refresh failed", e) }
+      }
+    }
+
     fun refresh(context: Context) {
       val mgr = AppWidgetManager.getInstance(context)
       val ids = mgr.getAppWidgetIds(ComponentName(context, NotesWidget::class.java))
@@ -109,7 +127,9 @@ class NotesWidget : AppWidgetProvider() {
         views.setTextViewText(R.id.widget_empty, context.getString(if (note == null) R.string.widget_gone else R.string.widget_blank))
         views.setOnClickPendingIntent(R.id.widget_empty, open(context, "note:$pinnedId", 100 + widgetId))
         // no header: the note's icon and title are its first line, the body right under it
-        note?.let { md.blocks(it.body) }?.forEachIndexed { i, block ->
+        // as much as a widget can show: a very long note sent in whole could pass the size Android lets a
+        // widget's update carry (the update then failed with an exception, on leaving the app)
+        note?.let { md.blocks(it.body).take(MAX_LINES) }?.forEachIndexed { i, block ->
           val text = if (i == 0) android.text.SpannableStringBuilder("${note.icon.ifEmpty { "📝" }}  ").append(block) else block
           items.addItem(i.toLong(), line(context, text, pinnedId))
         }
@@ -157,7 +177,15 @@ class NotesWidget : AppWidgetProvider() {
     }
   }
 
-  override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) = refresh(context)
+  // the system's own update arrives on the main thread too: the reading is done on the worker, the broadcast
+  // kept alive (goAsync) until it is
+  override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
+    val pending = goAsync()
+    val app = context.applicationContext
+    Thread {
+      try { refresh(app) } catch (e: Exception) { android.util.Log.w("eve", "widget update failed", e) } finally { pending.finish() }
+    }.start()
+  }
 
   override fun onReceive(context: Context, intent: Intent) {
     super.onReceive(context, intent)

@@ -3,6 +3,10 @@
 /** Strip markdown syntax from one line for display. */
 export function plain(line: string): string {
   return line
+    // HTML a note keeps (html.ts) is not part of what it says: <span …>Plan</span> reads "Plan" (an escaped \<b\>,
+    // Keep's text, is text and stays)
+    .replace(/<!--[\s\S]*?(-->|$)/g, '')
+    .replace(/(?<!\\)<\/?[a-z][a-z0-9-]*(\s[^>]*?)?(?<!\\)>/gi, '')
     .replace(/^[#>\-*+\s]+|^\d+\.\s+|^\[[ x]\]\s*/g, '')
     .replace(/\\(.)/g, '$1')
     .replace(/==(?=\S)(.+?)==/g, '$1')
@@ -11,6 +15,9 @@ export function plain(line: string): string {
     .replace(/\[\[(.+?)\]\]/g, (_, inner: string) => { const [title, alias] = splitAlias(inner); return alias || title; })
     .trim();
 }
+
+/** A line that is only HTML tags or a comment (a README's <div align="center">, a <!-- note -->): no title. */
+export const onlyHtml = (line: string) => /^\s*(<!--.*?(-->|$)\s*|<\/?[a-z][a-z0-9-]*(\s[^>]*?)?>\s*)+$/i.test(line);
 
 /** `Title|alias` inside a `[[…]]` (the bar maybe escaped, as in a table cell) -> [title, alias] ('' = none) */
 export function splitAlias(inner: string): [string, string] {
@@ -36,7 +43,15 @@ export function headingsOf(body: string): string[] {
 }
 
 /** `Title#Section` -> its two halves ('' when the link points at the page itself). */
-export function splitLink(link: string): [title: string, section: string] {
+export function splitLink(link: string, isTitle?: (title: string) => boolean): [title: string, section: string] {
+  // a title may hold a "#" itself ("C# notes", "Issue #12"): the longest title that is a note's wins, the
+  // whole link first; failing any, the first "#" splits, as written by hand
+  if (isTitle) {
+    if (isTitle(link.trim())) return [link.trim(), ''];
+    for (let i = link.lastIndexOf('#'); i > 0; i = link.lastIndexOf('#', i - 1)) {
+      if (isTitle(link.slice(0, i).trim())) return [link.slice(0, i).trim(), link.slice(i + 1).trim()];
+    }
+  }
   const i = link.indexOf('#');
   return i < 0 ? [link.trim(), ''] : [link.slice(0, i).trim(), link.slice(i + 1).trim()];
 }

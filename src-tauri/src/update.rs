@@ -45,6 +45,9 @@ fn run(cmd: &str, args: &[&std::ffi::OsStr]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
+/// How a failed download starts its message: the one failure Homebrew is asked to take over (brew_update).
+const DOWNLOAD_FAILED: &str = "Download failed";
+
 /// Download `url` to `to`, reporting "downloading:<percent>" every 5%.
 fn download(app: &AppHandle, url: &str, to: &Path) -> Result<(), String> {
     use std::io::{Read, Write};
@@ -54,13 +57,13 @@ fn download(app: &AppHandle, url: &str, to: &Path) -> Result<(), String> {
         .timeout_global(Some(std::time::Duration::from_secs(600)))
         .build()
         .new_agent();
-    let mut res = agent.get(url).call().map_err(|e| format!("Download failed: {e}"))?;
+    let mut res = agent.get(url).call().map_err(|e| format!("{DOWNLOAD_FAILED}: {e}"))?;
     let total: u64 = res.headers().get("content-length").and_then(|v| v.to_str().ok()).and_then(|v| v.parse().ok()).unwrap_or(0);
     let mut body = res.body_mut().with_config().limit(200 << 20).reader();
     let mut file = std::fs::File::create(to).map_err(|e| e.to_string())?;
     let (mut buf, mut done, mut shown) = (vec![0u8; 64 * 1024], 0u64, -1i64);
     loop {
-        let n = body.read(&mut buf).map_err(|e| format!("Download failed: {e}"))?;
+        let n = body.read(&mut buf).map_err(|e| format!("{DOWNLOAD_FAILED}: {e}"))?;
         if n == 0 {
             break;
         }
@@ -145,16 +148,112 @@ fn install(app: &AppHandle, url: &str, sha256: &str, version: &str) -> Result<()
     Ok(())
 }
 
+/// Homebrew's turn, with the user's own environment: a company network's proxy or mirror is set in their shell's
+/// files (.zprofile, .zshrc, fish's config), and a Mac app started from the Dock has none of it. Their login shell
+/// is only asked for that environment (any shell runs `env`; the steps below are sh, which fish could not run), and
+/// for no longer than 20 seconds (a startup file may wait on a terminal). The cask quits Eve as it reinstalls
+/// (`uninstall quit:`), so this runs on in a process group of its own and starts the new Eve when brew is done (one
+/// brew could not quit goes first). brew is not left to update itself or its taps first: the cask always fetches
+/// the latest release. $1 the shell, $2 the log, $3 this Eve's pid. Exits as brew did (127: no Homebrew).
+const BREW: &str = r#"shell="$1"; log="$2"; pid="$3"
+mkdir -p "$(dirname "$log")"
+envf="$log.env"
+"$shell" -l -i -c env >"$envf" 2>/dev/null </dev/null &
+sp=$!
+( sleep 20; kill "$sp" 2>/dev/null ) >/dev/null 2>&1 &
+wp=$!
+wait "$sp" 2>/dev/null
+kill "$wp" 2>/dev/null
+while IFS= read -r line; do
+  name="${line%%=*}"
+  [ "$name" = "$line" ] && continue
+  case "$name" in ''|*[!A-Za-z0-9_]*|[0-9]*|PWD|OLDPWD|SHLVL|_|PS1|PS2|TERM) continue ;; esac
+  export "$line" 2>/dev/null
+done <"$envf"
+rm -f "$envf"
+export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1
+command -v brew >/dev/null 2>&1 || PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+(
+  command -v brew >/dev/null 2>&1 || { echo "Homebrew is not installed."; exit 127; }
+  if brew list --cask eve >/dev/null 2>&1; then brew reinstall --cask happy-nut/tap/eve
+  else brew install --cask --force happy-nut/tap/eve; fi
+) >"$log" 2>&1 </dev/null
+code=$?
+echo "exit $code" >>"$log"
+if [ "$code" -eq 0 ]; then
+  kill "$pid" 2>/dev/null
+  while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
+  /usr/bin/open -b dev.happynut.eve eve://updated
+elif ! kill -0 "$pid" 2>/dev/null; then
+  /usr/bin/open -b dev.happynut.eve
+fi
+exit "$code"
+"#;
+
+/// The last lines brew wrote, for the message (all of it stays in the log).
+fn tail(log: &Path, lines: usize) -> String {
+    let text = std::fs::read_to_string(log).unwrap_or_default();
+    let kept: Vec<&str> = text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("exit ")).collect();
+    kept[kept.len().saturating_sub(lines)..].join("\n")
+}
+
+/// The download was refused (a company network that lets only Homebrew out): brew reinstalls Eve instead.
+/// Returns once brew has; on success this Eve is quit and the new one started by the script.
+fn brew(app: &AppHandle) -> Result<(), String> {
+    let _ = app.emit("eve-update", "brew");
+    let shell = std::env::var("SHELL").ok().filter(|s| s.starts_with('/') && Path::new(s).exists()).unwrap_or_else(|| "/bin/zsh".into());
+    let home = std::env::var("HOME").map_err(|e| e.to_string())?;
+    let log = Path::new(&home).join("Library/Logs/Eve/brew-update.log");
+    let mut cmd = std::process::Command::new("/bin/sh");
+    cmd.args(["-c", BREW, "sh", &shell])
+        .arg(&log)
+        .arg(std::process::id().to_string())
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(&mut cmd, 0); // lives on when brew quits this Eve
+    let mut child = cmd.spawn().map_err(|e| format!("Could not start Homebrew: {e}"))?;
+    // brew downloads and installs in a minute or two; one still at it after twenty is stuck (a lock, a prompt
+    // nobody can answer): stopped, so the Update button works again
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20 * 60);
+    let status = loop {
+        match child.try_wait().map_err(|e| e.to_string())? {
+            Some(status) => break status,
+            None if std::time::Instant::now() > deadline => {
+                let _ = std::process::Command::new("/bin/kill").args(["-TERM", &format!("-{}", child.id())]).status();
+                let _ = child.wait();
+                return Err(format!("Homebrew took too long and was stopped.\n(what it did: {})", log.display()));
+            }
+            None => std::thread::sleep(std::time::Duration::from_millis(500)),
+        }
+    };
+    match status.code() {
+        Some(0) => {
+            let _ = app.emit("eve-update", "restarting");
+            Ok(())
+        }
+        Some(127) => Err("Homebrew is not installed on this Mac, so it could not take over.".into()),
+        _ => Err(format!("Homebrew could not update Eve either:\n{}\n(all of it: {})", tail(&log, 4), log.display())),
+    }
+}
+
 /// Update this Mac's Eve to `version` from `url` (a release's Eve-macos-arm64.zip, with its `sha256`).
-/// Progress arrives as "eve-update" events: downloading[:percent], installing, restarting.
+/// Progress arrives as "eve-update" events: downloading[:percent], installing, brew, restarting.
+/// A download the network refuses is handed to Homebrew; any other failure is not (a zip that does not match
+/// its SHA-256 must not be installed unchecked, which the cask would do; a Mac that will not let Eve replace
+/// itself will not let a brew Eve started either).
 #[tauri::command]
 pub(crate) async fn install_update(app: AppHandle, url: String, sha256: String, version: String) -> Result<(), String> {
     if !cfg!(target_os = "macos") {
         return Err("Updating in place is for the Mac.".into());
     }
-    tauri::async_runtime::spawn_blocking(move || install(&app, &url, &sha256, &version))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || match install(&app, &url, &sha256, &version) {
+        Err(e) if e.starts_with(DOWNLOAD_FAILED) => brew(&app).map_err(|b| format!("{e}\n{b}")),
+        done => done,
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
