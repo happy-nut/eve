@@ -65,7 +65,7 @@
   });
 
   // Android back: a popup or a dialog closes, a note goes back to the list, and only the list leaves the app
-  const popupOpen = $derived(!!(ui.photo || ui.emoji || ui.menu || ui.pending || ui.find || ui.pdf || ui.card));
+  const popupOpen = $derived(!!(ui.photo || ui.sheetsOpen || ui.emoji || ui.menu || ui.pending || ui.find || ui.pdf || ui.card));
   $effect(() => {
     if (!isMobile || !isTauri || (sidebarOpen && !settingsOpen && !popupOpen)) return;
     let off: (() => void) | undefined, gone = false;
@@ -316,6 +316,7 @@
   function phoneBack() {
     // what is on top closes first: a picture shown full size, a popup, then a dialog, then a sheet (a card, a day)
     if (ui.photo) ui.closeImage();
+    else if (ui.closeSheet()) return; // a sheet (a menu, a setting's choices) over whatever opened it
     else if (ui.emoji) ui.emojiDone(null);
     else if (ui.menu) ui.closeMenu();
     else if (ui.pending) ui.done(null);
