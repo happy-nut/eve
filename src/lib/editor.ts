@@ -634,6 +634,13 @@ export function createEditor(opts: {
       }),
       TaskItem.extend({
         content: LIST_ITEM_CONTENT,
+        // the item's own content wrapper only where the editor drew one (its label, then a div: copied HTML), else
+        // the item itself (read from markdown) — not the first div anywhere in it: a toggle's or a board's div in
+        // a to-do was taken for the whole item, and its text and the rest were gone the next time it was read
+        parseHTML() {
+          const content = (el: HTMLElement) => (el.querySelector(':scope > label') && el.querySelector<HTMLElement>(':scope > div')) || el;
+          return [{ tag: `li[data-type="${this.name}"]`, priority: 51, contentElement: content }];
+        },
         // the box and its hidden label are the view's own: tiptap rewrites the label on every update and WebKit
         // touches the box's style after a drag, and ProseMirror read either back as an edit of the item, so a
         // drag selection starting in a to-do collapsed on mouseup. Only the item's own text counts.
