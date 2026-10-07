@@ -46,10 +46,15 @@ const tableMarkdown = {
       });
       if (!rows.length) return;
       const width = rows.reduce((max, r) => Math.max(max, r.length), 0);
+      // a column's alignment, as the first cell of it that has one says (":---", ":---:", "---:"); it was always
+      // written "---", and an aligned column came back plain
+      const aligns: (string | null)[] = Array(width).fill(null);
+      node.forEach((row) => row.forEach((cell, _o, i) => { aligns[i] ??= cell.attrs.align ?? null; }));
+      const rule = (a: string | null) => (a === 'left' ? ':---' : a === 'center' ? ':---:' : a === 'right' ? '---:' : '---');
       // GFM has no headerless table: the first row is the header, whatever it holds
       state.write(line(rows[0], width));
       state.ensureNewLine();
-      state.write(line(Array(width).fill('---'), width));
+      state.write(line(aligns.map(rule), width));
       state.ensureNewLine();
       for (const row of rows.slice(1)) {
         state.write(line(row, width));
@@ -58,6 +63,13 @@ const tableMarkdown = {
       state.closeBlock(node);
     },
   },
+};
+
+/** a cell's alignment, as markdown's ":---:" gives it (markdown-it writes it as the cell's text-align) */
+const align = {
+  default: null as string | null,
+  parseHTML: (el: HTMLElement) => (['left', 'center', 'right'].includes(el.style.textAlign) ? el.style.textAlign : null),
+  renderHTML: (a: { align?: string | null }) => (a.align ? { style: `text-align: ${a.align}` } : {}),
 };
 
 /** the rows and cells are written by the table itself; these keep the serializer from visiting them */
@@ -160,6 +172,6 @@ export const TableNodes = [
     },
   }).configure({ resizable: true }),
   TableRow.extend({ addStorage: () => inner }),
-  TableHeader.extend({ addStorage: () => inner }),
-  TableCell.extend({ addStorage: () => inner }),
+  TableHeader.extend({ addStorage: () => inner, addAttributes() { return { ...this.parent?.(), align }; } }),
+  TableCell.extend({ addStorage: () => inner, addAttributes() { return { ...this.parent?.(), align }; } }),
 ];
