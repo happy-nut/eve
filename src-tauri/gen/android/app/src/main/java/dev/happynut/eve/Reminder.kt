@@ -39,17 +39,29 @@ object Reminder {
 
   /** The next occurrence of the time: later today, or tomorrow. Inexact (a window of ten minutes): no
    *  exact-alarm permission to ask for, and a reminder a few minutes late is still a reminder. */
-  fun schedule(context: Context) {
+  /** `clockMoved`: set again because the clock or the time zone changed. The phone corrects its clock by itself
+   *  too, and inside the ten minutes today's alarm may still be on its way that moved it to tomorrow, today's
+   *  reminder lost: within them, today's is still due (now). */
+  fun schedule(context: Context, clockMoved: Boolean = false) {
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     val am = context.getSystemService(AlarmManager::class.java)
     am.cancel(alarm(context))
     if (!prefs.getBoolean("on", false)) return
     val (h, m) = (prefs.getString("at", "21:00") ?: "21:00").split(":").map { it.toIntOrNull() ?: 0 }
+    val now = System.currentTimeMillis()
+    val window = 10 * 60 * 1000L
     val next = Calendar.getInstance().apply {
       set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, m); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-      if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
     }
-    am.setWindow(AlarmManager.RTC_WAKEUP, next.timeInMillis, 10 * 60 * 1000L, alarm(context, keyOf(next)))
+    val day = keyOf(next)
+    if (next.timeInMillis <= now) {
+      if (clockMoved && now - next.timeInMillis < window) {
+        am.setWindow(AlarmManager.RTC_WAKEUP, now + 1000L, window, alarm(context, day))
+        return
+      }
+      next.add(Calendar.DAY_OF_YEAR, 1)
+    }
+    am.setWindow(AlarmManager.RTC_WAKEUP, next.timeInMillis, window, alarm(context, keyOf(next)))
   }
 
   /** The same test as daily.ts isWritten: a line the template did not put there. */
@@ -97,8 +109,8 @@ object Reminder {
 class ReminderReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     when (intent.action) {
-      Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED,
-      Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED -> Reminder.schedule(context)
+      Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> Reminder.schedule(context)
+      Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED -> Reminder.schedule(context, clockMoved = true)
       else -> Reminder.fire(context, intent.getStringExtra("day"))
     }
   }
