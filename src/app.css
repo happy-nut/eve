@@ -247,14 +247,62 @@ html.mobile .panel .select {
 }
 html.mobile aside .tree { padding: 2px 8px 96px; scrollbar-width: none; }
 html.mobile aside .tree::-webkit-scrollbar { display: none; }
-/* the list, tighter: Notion's rows are a line of text and a little air, not a thumb-sized slab */
-html.mobile aside [data-row] { font-size: 15.5px; border-radius: 6px; min-height: 32px; }
-html.mobile aside .gname {
-  font-size: 15.5px; font-weight: 600; min-height: 32px; padding-top: 2px; padding-bottom: 2px;
+/* the list (and a row lifted out of it to be moved). A phone shows the list or the note, never both, so each note
+   says what it is about and when it was written — set as type, not boxes: the title, a quiet time beside it, two
+   grey lines of what it says. Rows a thumb hits (48px and more, Android's touch size); the desktop's file and
+   folder glyphs stay on the desktop, a note's own emoji comes along. */
+html.mobile :is(aside, .lifted) [data-row] { border-radius: 12px; min-height: 48px; }
+html.mobile :is(aside, .lifted) .ico-slot:has(> svg.ico) { display: none; }
+html.mobile :is(aside, .lifted) .note-row > button:first-child { padding: 11px 12px; justify-content: center; gap: 3px; }
+html.mobile :is(aside, .lifted) .title { gap: 8px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; }
+html.mobile :is(aside, .lifted) .title .t { flex: 1; min-width: 0; }
+html.mobile :is(aside, .lifted) .when {
+  flex: none; font-size: 12.5px; font-weight: 400; letter-spacing: 0; color: var(--fg-dim); font-variant-numeric: tabular-nums;
 }
-html.mobile aside .fold { width: 32px; height: 32px; }
-html.mobile aside .note-row > button:first-child { padding-top: 2px; padding-bottom: 2px; }
-html.mobile aside .ghead { padding: 0; }
+html.mobile :is(aside, .lifted) .preview {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+  font-size: 14px; line-height: 1.45; color: var(--fg-dim); text-align: left; overflow-wrap: anywhere;
+}
+/* under the title's words when an emoji leads it */
+html.mobile :is(aside, .lifted) .note-row > button:has(.ico-slot > :is(.emoji, .cico, .painted, .num)) .preview { padding-left: 32px; }
+/* the note last open: a soft wash, not a slab; no keyboard on a phone, so no keyboard cursor colour either */
+html.mobile aside .note-row > button.active, html.mobile aside .note-row > [data-row].active:focus { background: var(--bg-hover); }
+html.mobile aside .note-row > [data-row]:not(.active):focus, html.mobile aside .gname:focus, html.mobile aside .ghead:focus-within { background: none; }
+html.mobile aside .note-row > button:first-child:active { background: var(--bg-active); transform: none; }
+/* a group: a quiet caption over its notes, with room above it, so the notes stay what the eye lands on */
+html.mobile :is(aside, .lifted) .ghead { padding: 0; margin-top: 12px; }
+html.mobile :is(aside, .lifted) .gname {
+  font-size: 13.5px; font-weight: 600; color: var(--fg-dim); min-height: 44px; padding: 4px 12px; gap: 8px;
+}
+html.mobile :is(aside, .lifted) .fold { width: 44px; height: 44px; }
+
+/* a row pulled sideways (swipeRow.ts): it follows the finger, the action shows behind it, full colour past the mark */
+html.mobile :is(aside, .lifted) .note-row { position: relative; touch-action: pan-y; --sx: 0px; }
+html.mobile :is(aside, .lifted) .note-row > :not(.swipe-act) {
+  position: relative; z-index: 1; transform: translateX(var(--sx)); transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+html.mobile :is(aside, .lifted) .note-row.swiping > :not(.swipe-act) { transition: none; }
+html.mobile :is(aside, .lifted) .note-row:is(.to-left, .to-right) > button:first-child { background: var(--bg); }
+html.mobile :is(aside, .lifted) .swipe-act {
+  position: absolute; z-index: 0; inset: 1px 0; display: none; align-items: center; padding: 0 22px; border-radius: 8px;
+  font-size: 14.5px; font-weight: 600; color: #fff; opacity: 0.55; transition: opacity 0.12s;
+}
+html.mobile :is(aside, .lifted) .swipe-act.del { justify-content: flex-end; background: #ff453a; }
+html.mobile :is(aside, .lifted) .swipe-act.move { justify-content: flex-start; background: var(--accent); }
+html.mobile :is(aside, .lifted) .note-row.to-left .swipe-act.del, html.mobile :is(aside, .lifted) .note-row.to-right .swipe-act.move { display: flex; }
+html.mobile :is(aside, .lifted) .note-row.armed .swipe-act { opacity: 1; }
+
+/* reordering: a handle on every row to drag it by; nothing else on the row answers a touch */
+html.mobile aside .mtop .done {
+  border: 0; background: none; color: var(--accent); font: inherit; font-size: 16px; font-weight: 600;
+  min-height: 44px; padding: 0 14px;
+}
+html.mobile aside .handle {
+  flex: none; width: 44px; height: 48px; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--fg-dim); touch-action: none;
+}
+html.mobile aside .handle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+html.mobile aside.reordering .note-row > button:first-child:active { transform: none; }
 /* the note: a flat bar of grey icons, and a page head sized for a phone */
 html.mobile .mhead {
   position: absolute; top: 0; left: 0; right: 0; height: 52px; z-index: 6; display: flex; align-items: center;
@@ -325,6 +373,11 @@ aside.focus-flash::after, main.focus-flash::after {
    so WebKit fills the space between it and the text when a selection continues onto the line (the "2." lit up) */
 .tiptap li::before { position: absolute; right: calc(100% + 0.4em); top: 0; color: inherit; font-variant-numeric: tabular-nums; }
 .tiptap ol > li::before { content: counter(list-item) '.'; }
+/* a numbered list inside a numbered list counts in letters, the next in roman numerals, then numbers again (1. a. i. 1.);
+   only how it is shown: the note keeps 1. 2. as markdown writes them */
+.tiptap ol ol > li::before { content: counter(list-item, lower-alpha) '.'; }
+.tiptap ol ol ol > li::before { content: counter(list-item, lower-roman) '.'; }
+.tiptap ol ol ol ol > li::before { content: counter(list-item) '.'; }
 .tiptap ul > li::before { content: '•'; }
 .tiptap ul[data-type='taskList'] { padding-left: 0.2em; }
 .tiptap ul[data-type='taskList'] > li::before { content: none; }
@@ -334,7 +387,9 @@ aside.focus-flash::after, main.focus-flash::after {
 .tiptap ul[data-type='taskList'] li > div { flex: 1; }
 /* only the item's own text, not the > div's nested list: Notion strikes the checked line alone and leaves children be */
 .tiptap ul[data-type='taskList'] li[data-checked='true'] > div > p { color: var(--fg-dim); text-decoration: line-through; }
-.tiptap input[type='checkbox'] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+/* grows with the text (15px at the default 15px), so a larger note's to-dos are not left with small boxes; the
+   font-size is the text's, as an input's own would not be */
+.tiptap input[type='checkbox'] { accent-color: var(--accent); font-size: inherit; width: calc(0.6em + 6px); height: calc(0.6em + 6px); margin: 0; }
 /* a phone's caret in the app's blue (its WebView would draw the Android theme's teal); the Mac keeps its own */
 html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(--accent); }
 .tiptap blockquote { border-left: 3px solid var(--line); margin: 0.5em 0; padding-left: 1em; color: var(--fg-dim); }
@@ -353,7 +408,9 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
   font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px; line-height: 1.5;
   padding: 1px 6px; cursor: pointer; opacity: 0; transition: opacity 0.12s;
 }
-.tiptap .code-block:hover .code-lang, .tiptap .code-lang:hover, .tiptap .code-lang.open { opacity: 1; }
+/* hidden, it is not there to be clicked either: a click on the code's top edge is a click in the code */
+.tiptap .code-lang { pointer-events: none; }
+.tiptap .code-block:hover .code-lang, .tiptap .code-lang:hover, .tiptap .code-lang.open { opacity: 1; pointer-events: auto; }
 .tiptap .code-lang:hover, .tiptap .code-lang.open { color: var(--fg); background: var(--bg-side); } /* opaque: a tint would let the edge it straddles show through */
 
 
@@ -539,6 +596,14 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
   background: var(--tip-bg); color: var(--tip-fg); font-size: 12.5px; font-weight: 500;
   padding: 7px 14px; border-radius: 999px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
 }
+/* ⌘+ / ⌘-: the text size, for a moment, at the bottom of the window */
+.size-pill {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 46; pointer-events: none;
+  background: var(--tip-bg); color: var(--tip-fg); font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums;
+  padding: 7px 14px; border-radius: 999px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+/* over the list: the group (or the note's row) they would go into */
+aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
 
 /* ---- PDF card: a dropped PDF inside a note (the page arrives when it scrolls into view) ---- */
 .tiptap .pdf-card {

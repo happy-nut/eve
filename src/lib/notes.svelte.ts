@@ -97,6 +97,11 @@ export function nested(list: Note[], folded?: (id: string) => boolean): { n: Not
 /** Not a note: the daily notes' calendar, opened in the editor's place and kept in back/forward history. */
 export const CALENDAR = 'calendar';
 
+/** the note last looked at, kept on this device for the next start */
+const LAST = 'eve.lastNote';
+function remember(id: string | null) { try { if (id) localStorage.setItem(LAST, id); } catch { /* private mode: no memory, no harm */ } }
+function lastSeen(): string | null { try { return localStorage.getItem(LAST); } catch { return null; } }
+
 // ---- reactive store --------------------------------------------------------
 class NotesStore {
   all = $state<Note[]>([]);
@@ -124,6 +129,7 @@ class NotesStore {
       this.hIndex = this.history.length - 1;
     }
     this._cur = id;
+    remember(id);
   }
   back() { this.step(-1); }
   forward() { this.step(1); }
@@ -132,11 +138,13 @@ class NotesStore {
     while (i >= 0 && i < this.history.length) {
       const id = this.history[i];
       const n = this.all.find((x) => x.id === id);
-      if ((n && !n.deleted) || (id === CALENDAR && appearance.s.dailyNotes)) { this.hIndex = i; this._cur = id; return; }
+      if ((n && !n.deleted) || (id === CALENDAR && appearance.s.dailyNotes)) { this.hIndex = i; this._cur = id; remember(id); return; }
       i += d;
     }
   }
   loaded = $state(false);
+  /** the app opened on the note last looked at */
+  resumed = false;
   /** bumps whenever a note changes locally; sync listens to it */
   dirty = $state(0);
 
@@ -225,7 +233,10 @@ class NotesStore {
     const texts = await storage.list();
     this.all = texts.map(parse).filter((n): n is Note => !!n);
     for (const n of this.all) this.titles.set(n.id, titleOf(n));
-    this.currentId = this.pages[0]?.id ?? null;
+    // the note last looked at, as it was left (a phone opens on it, not on the list); else the list's first
+    const last = lastSeen();
+    this.resumed = !!last && (last === CALENDAR ? appearance.s.dailyNotes : this.all.some((n) => n.id === last && !n.deleted));
+    this.currentId = this.resumed ? last : this.pages[0]?.id ?? null;
     if (!this.currentId) this.create();
     this.loaded = true;
   }
@@ -245,9 +256,9 @@ class NotesStore {
    * A note made by importing a file. It joins the end of its group (an import reads top to bottom)
    * and leaves the open note alone — the file usually links itself into the page being written.
    */
-  addImported(body: string, group = this.current?.group ?? '', updatedAt = Date.now()): Note {
+  addImported(body: string, group = this.current?.group ?? '', updatedAt = Date.now(), parent?: string): Note {
     const last = this.visible.filter((x) => x.group === group).at(-1);
-    const n: Note = { id: newId(), body, updatedAt, deleted: false, group, order: last ? last.order + 1 : 0, icon: autoIcon() };
+    const n: Note = { id: newId(), body, updatedAt, deleted: false, group, ...(parent ? { parent } : {}), order: last ? last.order + 1 : 0, icon: autoIcon() };
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
     void storage.write(n.id, serialize(n));
@@ -258,7 +269,8 @@ class NotesStore {
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   update(id: string, body: string) {
     const n = this.all.find((x) => x.id === id);
-    if (!n || n.body === body) return;
+    // the editor writes no final newline where the file has one: the same note, not an edit
+    if (!n || n.body === body || n.body.replace(/\n+$/, '') === body.replace(/\n+$/, '')) return;
     n.body = body;
     n.updatedAt = Date.now();
     clearTimeout(this.timers.get(id));

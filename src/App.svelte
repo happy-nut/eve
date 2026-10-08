@@ -7,10 +7,10 @@
   import CalendarPage from './CalendarPage.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
-  import { groups, MAX_DEPTH } from './lib/groups.svelte';
+  import { groups, leafOf } from './lib/groups.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
-  import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, widget, links } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, widget, links, saveAsset } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Confirm from './Confirm.svelte';
@@ -22,7 +22,8 @@
   import Tooltip from './Tooltip.svelte';
   import Menu from './Menu.svelte';
   import { ui, hooks } from './lib/ui.svelte';
-  import { fileMarkdown, droppedFiles, stem, TEXT_FILE } from './lib/drop';
+  import { droppedFiles } from './lib/drop';
+  import { importTree } from './lib/importTree';
   import { importPaths, exportCurrent } from './lib/transfer';
   import { titleOf } from './lib/notes.svelte';
   import { parseTicket } from './lib/handoff';
@@ -84,6 +85,8 @@
     // a file opened from Finder joins the notes like any import — it is a note from then on, movable
     // in the sidebar and synced (the file on disk is left as it was)
     notes.load().then(() => {
+      // a phone opens where it was left: the note, not the list over it (the list is a swipe or Back away)
+      if (isMobile && notes.resumed) sidebarOpen = false;
       void files.onOpen(async (paths) => {
         const first = await importPaths(paths);
         if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; }
@@ -364,41 +367,77 @@
   /**
    * A file dragged in from Finder. Every file becomes a note of its own, at the end of the group, and
    * leaves a mark in the note that was open: a text file links to the note it made, an attachment
-   * (picture, PDF) shows up as itself. A whole folder can be dropped too — its shape becomes groups,
-   * and it keeps to itself instead of writing into the open note. Either way the webview never gets
-   * the drop: its own pastes DOM into the editor, which then takes no keystroke at all.
+   * (picture, PDF) shows up as itself. A whole folder can be dropped too — it comes in with its shape
+   * (importTree.ts: folders as groups, a page's folder as its sub-pages, its pictures in its notes, a Keep
+   * export as Keep notes) and keeps to itself instead of writing into the open note. Dropped on the list,
+   * it goes where it was let go: on a group, into it; on a note, beside it; elsewhere on the list, at the top.
+   * Either way the webview never gets the drop: its own pastes DOM into the editor, which then takes no
+   * keystroke at all.
    */
-  let dropHint = $state<'attach' | 'new' | null>(null);
+  /** the note's text size, said for a moment after ⌘+ / ⌘- / ⌘0 */
+  let sizeShown = $state<number | null>(null);
+  let sizeTimer: ReturnType<typeof setTimeout> | undefined;
+  function showSize(px: number) {
+    sizeShown = px;
+    clearTimeout(sizeTimer);
+    sizeTimer = setTimeout(() => (sizeShown = null), 900);
+  }
+  let dropHint = $state<string | null>(null);
   let hintTimer: ReturnType<typeof setTimeout> | undefined;
+  let dropRow: HTMLElement | null = null; // the list's row a drop would go into, marked while it is over it
+  function markRow(el: HTMLElement | null) {
+    if (el === dropRow) return;
+    dropRow?.classList.remove('file-over');
+    el?.classList.add('file-over');
+    dropRow = el;
+  }
+  /** where on the list a drop is: a group ('' = the top), or null when it is not over the list */
+  function listTarget(target: EventTarget | null): { group: string; row: HTMLElement | null } | null {
+    const el = target as HTMLElement | null;
+    if (!el?.closest?.('aside')) return null;
+    const g = el.closest<HTMLElement>('[data-group]');
+    if (g) return { group: g.dataset.group!, row: g.closest('.ghead') };
+    const n = el.closest<HTMLElement>('[data-note]');
+    const note = n && notes.all.find((x) => x.id === n.dataset.note);
+    if (note) return { group: note.group, row: n };
+    return { group: '', row: null };
+  }
   function onDragOver(e: DragEvent) {
     if (!e.dataTransfer?.types.includes('Files')) return;
     e.preventDefault(); // otherwise no drop event follows
     // an attachment joins the note, a text file becomes one — and only the type is knowable in flight
+    // (a folder shows as a file of no type)
     const items = [...e.dataTransfer.items];
     const asset = items.length > 0 && items.every((i) => i.kind === 'file' && (i.type.startsWith('image/') || i.type === 'application/pdf'));
-    dropHint = asset ? 'attach' : 'new';
+    const folder = items.some((i) => i.kind === 'file' && !i.type);
+    const on = listTarget(e.target);
+    markRow(on?.row ?? null);
+    dropHint = on ? (on.group ? `Import into “${leafOf(on.group)}”` : 'Import into the list')
+      : folder ? 'Import the folder' : asset ? 'Attach to this note' : 'Open as a new note';
     // a drag leaving the window fires nothing dependable, so the hint simply stops being refreshed
     clearTimeout(hintTimer);
-    hintTimer = setTimeout(() => (dropHint = null), 160);
+    hintTimer = setTimeout(() => { dropHint = null; markRow(null); }, 160);
   }
   async function onDrop(e: DragEvent) {
     clearTimeout(hintTimer);
     dropHint = null;
+    markRow(null);
     if (!e.dataTransfer?.types.includes('Files')) return;
     const taken = e.defaultPrevented; // dropped into a note: the editor has that attachment already
     e.preventDefault();
-    for (const { file, dir } of await droppedFiles(e.dataTransfer)) {
-      const md = await fileMarkdown(file);
-      if (md === null) continue;
-      const text = TEXT_FILE.test(file.name);
-      const title = stem(file.name);
-      const group = dir ? dir.split('/').slice(0, MAX_DEPTH).join('/') : undefined;
-      if (group) groups.remember(group);
-      const note = notes.addImported(text && /^\s*#\s/.test(md) ? md : `# ${title}\n\n${md}\n`, group);
-      ui.focusOwner = 'editor';
-      if (dir) continue; // a folder brings its own tree; it does not write into the open note
-      if (text) hooks.attach?.(`[[${titleOf(note)}]]`);
-      else if (!taken) hooks.attach?.(md);
+    const on = listTarget(e.target);
+    const dropped = await droppedFiles(e.dataTransfer);
+    const made = await importTree(dropped.map(({ file, dir }) => ({
+      path: dir ? `${dir}/${file.name}` : file.name,
+      text: () => file.text(),
+      asset: () => saveAsset(file),
+    })), on?.group ?? '', on?.group ?? notes.current?.group ?? '');
+    if (made.length) ui.focusOwner = 'editor';
+    if (on) return; // put on the list: nothing written into the open note
+    for (const { note, source, embed } of made) {
+      if (source.path.includes('/')) continue; // a folder brings its own tree; it does not write into the open note
+      if (!embed) hooks.attach?.(`[[${titleOf(note)}]]`);
+      else if (!taken) hooks.attach?.(embed);
     }
   }
 
@@ -435,7 +474,8 @@
       return;
     }
     if (e.defaultPrevented && !(e as any).eveApp) return;
-    const a = shortcuts.match(e, ['app']);
+    // ⌘+ is ⌘⇧= on most keyboards (and the keypad's +): the same as ⌘= unless it is bound to something itself
+    const a = shortcuts.match(e, ['app']) ?? (e.key === '+' && (e.metaKey || e.ctrlKey) && !e.altKey ? shortcuts.actions.find((x) => x.id === 'textBigger') : undefined);
     if (!a) return;
     // Escape belongs to whatever is open on top of the note (the PDF panel closes on it, and lets the
     // window hide once it is gone)
@@ -462,6 +502,9 @@
       case 'exportPdf': void exportCurrent('pdf'); break;
       case 'exportPng': void exportCurrent('png'); break;
       case 'settings': settingsOpen = !settingsOpen; break;
+      case 'textBigger': showSize(appearance.textSize(1)); break;
+      case 'textSmaller': showSize(appearance.textSize(-1)); break;
+      case 'textReset': showSize(appearance.textSize(0)); break;
       case 'hide': win.hide(); break;
     }
   }
@@ -552,9 +595,12 @@
 {#if ui.pdf}
   {#await import('./PdfViewer.svelte') then { default: PdfViewer }}<PdfViewer />{/await}
 {/if}
+{#if sizeShown !== null}
+  <div class="size-pill" transition:fade={{ duration: 120 }} role="status">Text {sizeShown}px</div>
+{/if}
 {#if dropHint}
   <div class="drop-hint" transition:fade={{ duration: 90 }}>
-    <span class="drop-pill">{dropHint === 'attach' ? 'Attach to this note' : 'Open as a new note'}</span>
+    <span class="drop-pill">{dropHint}</span>
   </div>
 {/if}
 {#if ui.pending}

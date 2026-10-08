@@ -69,3 +69,26 @@ export function splitCard(md: string): { title: string; body: string } {
   if (!/^#\s/.test(first)) return { title: '', body: md }; // heading deleted: all of it is body
   return { title: plain(first), body: nl < 0 ? '' : md.slice(nl + 1).replace(/^\n+/, '') };
 }
+
+/**
+ * What a note says under its title, as one line of plain text: a phone's list shows it under the title, the way
+ * the widget's cards do. Blank lines, HTML, code (a board is a fenced block too), dividers and a table's rule are
+ * passed over; a picture is nothing, a link its text.
+ */
+export function previewOf(body: string, max = 160): string {
+  const lines = body.split('\n');
+  const first = lines.findIndex((l) => l.trim() && !onlyHtml(l));
+  const out: string[] = [];
+  let fence = '';
+  for (const line of lines.slice(first + 1)) {
+    const f = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence) { if (f && f[0] === fence[0] && f.length >= fence.length && !line.trim().slice(f.length).trim()) fence = ''; continue; }
+    if (f) { fence = f; continue; }
+    if (!line.trim() || onlyHtml(line) || /^\s*([-*_]\s*){3,}$/.test(line) || /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(line)) continue;
+    const text = plain(line.replace(/^\s*([-*+]|\d+[.)])\s+\[[ xX]\]\s*/, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\|/g, ' ')).replace(/\s+/g, ' ');
+    if (text) out.push(text);
+    if (out.join(' ').length >= max) break;
+  }
+  const all = out.join(' ');
+  return all.length > max ? all.slice(0, max).trimEnd() + '…' : all;
+}

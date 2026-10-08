@@ -21,3 +21,20 @@ export function groupFor(path: string, root: string, maxDepth: number): string {
   if (!rel) return '';
   return rel.split('/').filter(Boolean).slice(0, maxDepth).join('/');
 }
+
+/**
+ * Where a link written in a file points, as a path among the files imported with it: `rel` read from the folder
+ * `dir` (`../img/a.png` from `Notes/Trip` is `Notes/img/a.png`). Null for what is no file of the import: an
+ * address (https:, mailto:, data:), an absolute path, a link inside the page (#…), or one climbing out of it.
+ */
+export function resolveLink(dir: string, rel: string): string | null {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(rel) || rel.startsWith('/') || rel.startsWith('#')) return null;
+  let target = rel.replace(/[?#].*$/, '');
+  try { target = decodeURIComponent(target); } catch { /* a bare % : taken as written */ }
+  const out = dir ? dir.split('/') : [];
+  for (const part of target.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') { if (!out.length) return null; out.pop(); } else out.push(part);
+  }
+  return out.length ? out.join('/') : null;
+}

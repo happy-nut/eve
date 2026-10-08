@@ -49,3 +49,16 @@ assert.equal(calloutKind('💡'), null);
 assert.equal(calloutKind('nonsense'), null);
 
 console.log('MARKDOWN_OK');
+
+// a phone's list: what a note says under its title, in one line
+{
+  const { previewOf } = await import('./markdown.ts');
+  assert.equal(previewOf('# Plan\n\nFirst **thing**\n\n- [ ] second\n'), 'First thing second');
+  assert.equal(previewOf('<div align="center">\n\n# Title\n\nbody\n'), 'body', 'HTML before the title is no title');
+  assert.equal(previewOf('# T\n\n```kanban\n{"columns":[]}\n```\nafter\n'), 'after', 'code and boards are passed over');
+  assert.equal(previewOf('# T\n\n````\n```\nx\n````\nafter\n'), 'after', 'a longer fence is closed only by one as long');
+  assert.equal(previewOf('# T\n\n![](assets/a.png)\n[site](https://x.y) and ---\n\n---\n'), 'site and ---');
+  assert.equal(previewOf('# T\n\n| a | b |\n|---|:-:|\n| 1 | 2 |\n'), 'a b 1 2');
+  assert.equal(previewOf('# T\n'), '');
+  assert.equal(previewOf('# T\n\n' + 'word '.repeat(60), 20), 'word word word word…');
+}

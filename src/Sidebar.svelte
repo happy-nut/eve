@@ -18,6 +18,9 @@
   import * as moves from './lib/moves';
   import { focusNote } from './lib/popup';
   import { touchReorder, type Reorder } from './lib/touchReorder';
+  import { swipeRow } from './lib/swipeRow';
+  import { previewOf } from './lib/markdown';
+  import { editedLabel } from './lib/date';
 
   let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings, onNew }:
     { open: boolean; searchEl: HTMLInputElement | null; cmdHeld?: boolean; onSettings: () => void; onNew?: () => void } = $props();
@@ -214,8 +217,32 @@
       return true;
     },
     menu(row) { dragEnd(); rowMenu({ preventDefault() {}, stopPropagation() {}, currentTarget: row, target: row } as unknown as MouseEvent, row); },
+    reordering: () => reordering,
     cancel: dragEnd,
   };
+
+  /**
+   * A phone's list being reordered (the row menu's "Reorder"): each row shows a handle to drag it by, a tap opens
+   * nothing, and Done (or Android's back, as for a sheet) ends it. Leaving the list ends it too.
+   */
+  let reordering = $state(false);
+  $effect(() => {
+    if (!reordering) return;
+    return ui.openedSheet(() => (reordering = false));
+  });
+  $effect(() => { if (!open) reordering = false; });
+
+  /** "Move to…": every group, indented as the list shows them, and the top level */
+  function moveTo(n: Note) {
+    const walk = (p: string): string[] => groups.children(p).flatMap((g) => [g, ...walk(g)]);
+    const items: MenuItem[] = ['', ...walk('')].map((g) => ({
+      label: g ? `${'\u2003'.repeat(depthOf(g) - 1)}${leafOf(g)}` : 'Top level',
+      checked: n.group === g,
+      run: () => { if (n.group !== g) { groups.remember(g); notes.move(n.id, g, null); } },
+    }));
+    // after the menu this came from has slid away
+    setTimeout(() => ui.openMenu({ clientX: 0, clientY: 0 }, items), 200);
+  }
 
   // ---- keyboard ----
   /** The row after this one (the one before, at the end): where the keyboard goes once this one is deleted. */
@@ -283,13 +310,26 @@
       case ' ': if (group) groups.toggle(group); else if (noteId) groups.fold(noteId); else return; break;
       case 'ArrowDown': rows[i + 1]?.focus(); break;
       case 'ArrowUp': if (i === 0 && q) searchEl?.focus(); else rows[i - 1]?.focus(); break;
-      case 'ArrowLeft':
+      // as in Finder: ← folds what is open (a group, a page showing its sub-pages); on what is folded already, or has
+      // nothing under it, it goes up to what holds it — the page it is a sub-page of, else its group
+      case 'ArrowLeft': {
+        const hasKids = !!el.closest('.note-row')?.querySelector('.fold');
         if (group && !groups.isCollapsed(group)) groups.toggle(group);
-        else { const p = group ? parentOf(group) : notes.all.find((n) => n.id === noteId)?.group; if (p) focusRow(groupSel(p)); else return; }
+        else if (noteId && hasKids && !groups.isFolded(noteId)) groups.fold(noteId);
+        else {
+          const n = noteId ? notes.all.find((x) => x.id === noteId) : undefined;
+          const page = n?.parent && rows.some((r) => r.dataset.note === n.parent) ? n.parent : '';
+          const p = group ? parentOf(group) : n?.group;
+          if (page) focusRow(`[data-note="${page}"]`);
+          else if (p) focusRow(groupSel(p));
+          else return;
+        }
         break;
-      // → opens a folded group; anywhere else it steps over into the note, as Escape does
+      }
+      // → opens what is folded (a group, a page's sub-pages); anywhere else it steps over into the note, as Escape does
       case 'ArrowRight':
         if (group && groups.isCollapsed(group)) groups.toggle(group);
+        else if (noteId && groups.isFolded(noteId) && el.closest('.note-row')?.querySelector('.fold')) groups.fold(noteId);
         else focusNote();
         break;
       case 'Backspace': case 'Delete':
@@ -344,30 +384,47 @@
     ui.focusOwner = 'sidebar';
     const g = row.dataset.group;
     const n = row.dataset.note ? notes.all.find((x) => x.id === row.dataset.note) : undefined;
-    if (n?.id === CALENDAR_NOTE_ID) return; // the calendar's row has nothing to offer but moving (drag, ⌥↑↓)
+    // the calendar's row has nothing to offer but moving (drag, ⌥↑↓; a phone's Reorder)
+    if (n?.id === CALENDAR_NOTE_ID) { if (isMobile) ui.openMenu({ clientX: 0, clientY: 0 }, [{ label: 'Reorder', run: () => (reordering = true) }]); return; }
     const items: MenuItem[] = g
       ? [
           { label: `New note in “${leafOf(g)}”`, run: () => { ui.focusOwner = 'editor'; notes.create('', g); } },
           { label: 'New group inside', run: () => groups.create(g), hide: depthOf(g) >= MAX_DEPTH },
           { label: 'Rename', sep: true, run: () => (groups.editing = g) },
           { label: 'Change icon…', run: () => pickIcon({ group: g }) },
-          { label: 'Move up', sep: true, run: () => nudgeGroup(g, 'ArrowUp') },
-          { label: 'Move down', run: () => nudgeGroup(g, 'ArrowDown') },
-          { label: 'Move out', run: () => nudgeGroup(g, 'ArrowLeft'), hide: !parentOf(g) },
-          { label: 'Nest under previous', run: () => nudgeGroup(g, 'ArrowRight'), hide: !groups.prevSibling(g) },
+          ...(isMobile
+            ? [{ label: 'Reorder', sep: true, run: () => (reordering = true) }]
+            : [
+                { label: 'Move up', sep: true, run: () => nudgeGroup(g, 'ArrowUp') },
+                { label: 'Move down', run: () => nudgeGroup(g, 'ArrowDown') },
+                { label: 'Move out', run: () => nudgeGroup(g, 'ArrowLeft'), hide: !parentOf(g) },
+                { label: 'Nest under previous', run: () => nudgeGroup(g, 'ArrowRight'), hide: !groups.prevSibling(g) },
+              ]),
           { label: 'Delete group', sep: true, danger: true, run: () => removeGroup(g) },
         ]
       : n
         ? [
             { label: 'Open', run: () => openNote(n) },
             { label: 'Change icon…', run: () => pickIcon({ note: n }) },
+            // a phone: a sheet of groups to move it to, and the list's handles to put it in its place — first, as
+            // the moves a long press is most often for
+            ...(isMobile
+              ? [
+                  { label: 'Move to…', run: () => moveTo(n) },
+                  { label: 'Reorder', run: () => (reordering = true) },
+                ]
+              : []),
             { label: 'Export as Markdown…', sep: true, keys: shortcuts.keysFor('exportMd'), run: () => exportRow(n, 'md') },
             { label: 'Export as PDF…', keys: shortcuts.keysFor('exportPdf'), run: () => exportRow(n, 'pdf') },
             { label: 'Export as image…', keys: shortcuts.keysFor('exportPng'), run: () => exportRow(n, 'png') },
-            { label: 'Move up', sep: true, run: () => nudgeNote(n.id, -1) },
-            { label: 'Move down', run: () => nudgeNote(n.id, 1) },
-            { label: 'Nest under previous', run: () => nestNote(n.id, 'in') },
-            { label: 'Move out', run: () => nestNote(n.id, 'out'), hide: !n.parent },
+            ...(isMobile
+              ? []
+              : [
+                  { label: 'Move up', sep: true, run: () => nudgeNote(n.id, -1) },
+                  { label: 'Move down', run: () => nudgeNote(n.id, 1) },
+                  { label: 'Nest under previous', run: () => nestNote(n.id, 'in') },
+                  { label: 'Move out', run: () => nestNote(n.id, 'out'), hide: !n.parent },
+                ]),
             { label: 'Delete note', sep: true, danger: true, run: () => removeNote(n) },
           ]
         : [];
@@ -474,6 +531,9 @@
   }
 </script>
 
+{#snippet handle()}
+  <span class="handle" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3 5.5h10M3 8h10M3 10.5h10"/></svg></span>
+{/snippet}
 {#if open}
 {#snippet updateButton()}
   <!-- a newer Eve: one button by Settings installs it (the Mac restarts; a phone opens Android's installer).
@@ -485,15 +545,20 @@
     {:else}<svg class="gear-i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v8.5M8.5 12.5 12 16l3.5-3.5"/></svg>{/if}
   </button>
 {/snippet}
-  <aside transition:drawer style={drawerStyle}
+  <aside transition:drawer style={drawerStyle} class:reordering
     ontouchstart={pullStart} ontouchmove={pullMove} ontouchend={pullEnd} ontouchcancel={pullEnd}>
     {#if isMobile}
       <!-- a phone: the title, then sync and settings up here, so nothing sits over the bottom of the list -->
       <div class="mtop">
-        <h1 class="mtitle">Eve</h1>
-        <span class="sync {sync.status}">{syncLabel}</span>
-        {#if updates.available}{@render updateButton()}{/if}
-        <button class="icon gear" aria-label="Settings" onclick={onSettings}>{@html GEAR}</button>
+        {#if reordering}
+          <h1 class="mtitle">Reorder</h1>
+          <button class="done" onclick={() => (reordering = false)}>Done</button>
+        {:else}
+          <h1 class="mtitle">Eve</h1>
+          <span class="sync {sync.status}">{syncLabel}</span>
+          {#if updates.available}{@render updateButton()}{/if}
+          <button class="icon gear" aria-label="Settings" onclick={onSettings}>{@html GEAR}</button>
+        {/if}
       </div>
     {/if}
     <div class="top" data-tauri-drag-region>
@@ -516,9 +581,10 @@
 
           {#if r.kind === 'note'}
             {@const n = r.n}
+            {@const swipe = n.id === CALENDAR_NOTE_ID ? {} : { left: () => removeNote(n), right: () => moveTo(n), enabled: () => !reordering }}
             <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!isMobile} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
-              ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation">
-              <button data-row data-note={n.id} class:active={n.id === CALENDAR_NOTE_ID ? onCalendar : n.id === notes.currentId} onclick={() => openNote(n)}>
+              ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation" use:swipeRow={swipe}>
+              <button data-row data-note={n.id} class:active={n.id === CALENDAR_NOTE_ID ? onCalendar : n.id === notes.currentId} onclick={() => { if (!reordering) openNote(n); }}>
                 <span class="title">
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ note: n }, e.currentTarget); }}>
@@ -527,7 +593,13 @@
                     <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>{/if}
                   </span>
                   <span class="t">{titleOf(n)}</span>
+                  {#if isMobile && n.id !== CALENDAR_NOTE_ID}<span class="when">{editedLabel(n.updatedAt)}</span>{/if}
                 </span>
+                <!-- a phone shows the list alone: what each note says, so it need not be opened to be found -->
+                {#if isMobile && n.id !== CALENDAR_NOTE_ID}
+                  {@const p = previewOf(n.body)}
+                  {#if p}<span class="preview">{p}</span>{/if}
+                {/if}
               </button>
               <!-- unfolds on hover, like a group's tools; the fold chevron keeps its place at the edge -->
               {#if n.id !== CALENDAR_NOTE_ID}
@@ -540,6 +612,12 @@
                   data-tip={groups.isFolded(n.id) ? 'Expand' : 'Collapse'} onclick={() => groups.fold(n.id)}>
                   <svg class="chev" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4"/></svg>
                 </button>
+              {/if}
+              {#if reordering}{@render handle()}{/if}
+              {#if isMobile && n.id !== CALENDAR_NOTE_ID}
+                <!-- under the row (last, so the row's first child is still its button), what a pull will do: move it (from the left), delete it (from the right) -->
+                <span class="swipe-act move" aria-hidden="true">Move to…</span>
+                <span class="swipe-act del" aria-hidden="true">Delete</span>
               {/if}
             </div>
 
@@ -573,6 +651,7 @@
                 </span>
                 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
                 <button class="icon mini fold tip-right" aria-label={groups.isCollapsed(g) ? 'Expand' : 'Collapse'} data-tip={groups.isCollapsed(g) ? 'Expand' : 'Collapse'} onclick={() => groups.toggle(g)}><svg class="chev" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4"/></svg></button>
+                {#if reordering}{@render handle()}{/if}
               {/if}
             </div>
 
@@ -583,7 +662,7 @@
       {/each}
     </ul>
 
-    {#if isMobile && onNew}
+    {#if isMobile && onNew && !reordering}
       <button class="fab" aria-label="New note" onclick={onNew}><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
     {/if}
     {#if !isMobile}

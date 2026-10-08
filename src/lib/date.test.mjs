@@ -100,3 +100,16 @@ assert.doesNotMatch(html('@2026-09-240'), /data-date/, 'a longer run of digits i
 assert.doesNotMatch(html('@today'), /data-date/, 'only the stored form is a date; the word is not');
 
 console.log('DATE_OK');
+
+// when a note was last written, as the phone's list shows it
+{
+  const { editedLabel } = await import('./date.ts');
+  const at = (d) => d.getTime();
+  assert.equal(editedLabel(0, now, 'en'), '');
+  assert.equal(editedLabel(at(new Date(2026, 8, 24, 23, 29, 40)), now, 'en'), 'now');
+  assert.equal(editedLabel(at(new Date(2026, 8, 24, 23, 5)), now, 'en'), '25 min. ago');
+  assert.equal(editedLabel(at(new Date(2026, 8, 24, 9, 0)), now, 'en'), '14 hr. ago');
+  assert.equal(editedLabel(at(new Date(2026, 8, 23, 23, 50)), now, 'en'), 'yesterday');
+  assert.equal(editedLabel(at(new Date(2026, 2, 3)), now, 'en'), 'Mar 3');
+  assert.equal(editedLabel(at(new Date(2025, 2, 3)), now, 'en'), 'Mar 3, 2025');
+}

@@ -3,6 +3,7 @@
     android:id="@+id/line"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@drawable/widget_line_bg"
     android:paddingHorizontal="14dp"
     android:paddingVertical="2dp"
     android:lineSpacingMultiplier="1.2"

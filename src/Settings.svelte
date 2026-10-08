@@ -7,7 +7,7 @@
   import { storage, autostart, dock, defaultApp, mcp, isTauri, isMobile, copyText, openUrl, type McpClient } from './lib/platform';
   import { normHost, webBase } from './lib/github';
   import { ui } from './lib/ui.svelte';
-  import { appearance, FONTS, THEMES, type Theme } from './lib/appearance.svelte';
+  import { appearance, SIZE_MIN, SIZE_MAX, FONTS, THEMES, type Theme } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
   import Select from './Select.svelte';
   import Slider from './Slider.svelte';
@@ -281,7 +281,7 @@
       <h3>Text</h3>
       <div class="card">
         <label class="row"><span class="label">Size <span class="sub">{appearance.s.size}px</span></span>
-          <Slider label="Size" min={12} max={24} value={appearance.s.size} oninput={(v) => appearance.set({ size: v })} /></label>
+          <Slider label="Size" min={SIZE_MIN} max={SIZE_MAX} value={appearance.s.size} oninput={(v) => appearance.set({ size: v })} /></label>
         <label class="row"><span class="label">Line height <span class="sub">{appearance.s.lineHeight}</span></span>
           <Slider label="Line height" min={1.2} max={2.2} step={0.05} value={appearance.s.lineHeight} oninput={(v) => appearance.set({ lineHeight: v })} /></label>
 {#if !isMobile}
