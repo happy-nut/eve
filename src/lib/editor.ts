@@ -351,13 +351,17 @@ const slashTyped = new Plugin<number | null>({
         at = r.deleted ? null : r.pos;
       }
       const { empty, $head } = state.selection;
-      if (tr.docChanged && empty && !tr.getMeta('paste') && tr.getMeta('uiEvent') !== 'paste' && tr.getMeta('uiEvent') !== 'drop'
+      // undo and redo put back a / that was already there: not one just typed
+      if (tr.docChanged && empty && !tr.getMeta('paste') && tr.getMeta('uiEvent') !== 'paste' && tr.getMeta('uiEvent') !== 'drop' && !tr.getMeta('history$')
         && $head.parent.isTextblock && $head.parentOffset > 0
         && $head.parent.textBetween($head.parentOffset - 1, $head.parentOffset) === '/'
         && tr.steps.some((st) => { const c = (st as { slice?: { content: Fragment; size: number } }).slice; return !!c?.size && c.content.textBetween(0, c.content.size).endsWith('/'); })) {
         return $head.pos - 1;
       }
       if (at !== null && (state.selection.head <= at || state.doc.resolve(at).parent !== $head.parent)) return null;
+      // done with once the menu has closed: a space typed after it, or the caret moved away (by a click, an arrow),
+      // so coming back to it later (a click, a ⌫) does not open it again
+      if (at !== null && (/\s/.test(state.doc.textBetween(at + 1, Math.max(at + 1, $head.pos))) || (!tr.docChanged && tr.selectionSet))) return null;
       return at;
     },
   },
@@ -409,7 +413,19 @@ export function createEditor(opts: {
         const serializer = (editor.storage as any).markdown.serializer;
         const inLine = $from.sameParent($to) && $from.parent.isTextblock;
         if (inLine && $from.parent.type.spec.code) return slice.content.textBetween(0, slice.content.size, '\n');
-        const content = inLine ? Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))) : slice.content;
+        let content = inLine ? Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))) : slice.content;
+        // a callout copied from below its title line: its first copied line is not its title
+        if (!inLine) for (let d = $from.depth; d > 0; d--) {
+          if ($from.node(d).type.name !== 'callout' || !$from.node(d).attrs.titled || $from.index(d) === 0) continue;
+          const untitle = (frag: Fragment): Fragment => {
+            const first = frag.firstChild;
+            if (!first) return frag;
+            const node = first.type.name === 'callout' ? first.type.create({ ...first.attrs, titled: false }, first.content, first.marks) : first.copy(untitle(first.content));
+            return frag.replaceChild(0, node);
+          };
+          content = untitle(content);
+          break;
+        }
         return (serializer.serialize(content) as string).replace(new RegExp(`^${BLANK}$`, 'gm'), ''); // an empty line is just empty
       },
       handlePaste: (view, event): boolean => {
@@ -641,9 +657,13 @@ export function createEditor(opts: {
                 if (node.type.name === 'orderedList' && (node.attrs.start ?? 1) !== 1 && parent && /Item$/.test(parent.type.name)) restart.push(pos);
                 // a list with an item of two paragraphs is loose, as markdown reads it back: written tight, the note
                 // came back with blank lines between all its items, changed by being opened and saved
+                // and a list around a loose one is loose too, as markdown reads it: the note kept "inner loose, outer
+                // tight" only until it was opened again
                 if (/List$/.test(node.type.name) && node.attrs.tight) {
                   let two = false;
-                  node.forEach((item) => { let n = 0; item.forEach((c) => { if (c.type.name === 'paragraph') n++; }); if (n > 1) two = true; });
+                  const twoIn = (item: PMNode) => { let n = 0; item.forEach((c) => { if (c.type.name === 'paragraph') n++; }); return n > 1; };
+                  node.forEach((item) => { if (twoIn(item)) two = true; });
+                  node.descendants((d) => { if (two) return false; if (/List$/.test(d.type.name) && !d.attrs.tight) two = true; if (/Item$/.test(d.type.name) && twoIn(d)) two = true; });
                   if (two) loose.push(pos);
                 }
               });
@@ -897,6 +917,7 @@ export function createEditor(opts: {
               allow: ({ state, range }) => {
                 if (SLASH_AT.getState(state) !== range.from) return false;
                 const $at = state.doc.resolve(range.from);
+                if ($at.parent.type.spec.code) return false; // in code a / is code (Enter made a new page)
                 const before = $at.parent.textBetween(Math.max(0, $at.parentOffset - 1), $at.parentOffset, undefined, '\ufffc');
                 return !before || /\s/.test(before);
               },

@@ -140,7 +140,9 @@
    * page lands where the line was drawn, a sub-page included, never into its own sub-pages.
    */
   function overNote(e: DragEvent, n: Note) {
-    if (!drag || drag.note === n.id) return;
+    if (!drag) return;
+    // over itself: nowhere to go (and not on to the list under it, which would take it to the top level)
+    if (drag.note === n.id) { e.stopPropagation(); dropAt = null; return; }
     if (drag.group !== undefined) { overSection(e, n.group); return; } // groups can't sit between notes
     const inGroup = groups.notesIn(n.group);
     const parentOfNote = (x: Note) => (x.parent && inGroup.some((m) => m.id === x.parent) ? x.parent : '');
@@ -164,7 +166,8 @@
   }
   /** over a group header: top third = before it (sibling), else = into it */
   function overGroup(e: DragEvent, g: string) {
-    if (!drag || drag.group === g) return;
+    if (!drag) return;
+    if (drag.group === g) { e.stopPropagation(); dropAt = null; return; }
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const before = drag.group !== undefined && e.clientY < r.top + r.height * 0.4;
     if (drag.group !== undefined && !groups.canPlace(drag.group, before ? parentOf(g) : g)) { e.stopPropagation(); return; }
@@ -200,6 +203,7 @@
         clientX: x, clientY: y, currentTarget: el, target: el,
         preventDefault() {}, stopPropagation() {}, dataTransfer: { dropEffect: '' },
       }) as unknown as DragEvent;
+      dropAt = null; // where the finger is now, never where it last was: back on its own place, it stays there
       const el = document.elementFromPoint(x, y) as HTMLElement | null;
       const noteRow = el?.closest<HTMLElement>('.note-row');
       const gname = el?.closest<HTMLElement>('.gname');
@@ -532,7 +536,7 @@
 
           {#if r.kind === 'note'}
             {@const n = r.n}
-            {@const swipe = n.id === CALENDAR_NOTE_ID ? {} : { left: () => removeNote(n) }}
+            {@const swipe = n.id === CALENDAR_NOTE_ID ? {} : { left: () => removeNote(n), enabled: () => !drag }}
             <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!isMobile} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation" use:swipeRow={swipe}>
               <button data-row data-note={n.id} class:active={n.id === CALENDAR_NOTE_ID ? onCalendar : n.id === notes.currentId} onclick={() => openNote(n)}>
@@ -572,7 +576,7 @@
 
           {:else if r.kind === 'group'}
             {@const g = r.g}
-            <div class="ghead" class:collapsed={groups.isCollapsed(g)} use:swipeRow={{ left: () => removeGroup(g) }}>
+            <div class="ghead" class:collapsed={groups.isCollapsed(g)} use:swipeRow={{ left: () => removeGroup(g), enabled: () => !drag }}>
               {#if groups.editing === g}
                 <input class="rename" value={leafOf(g)} use:focusInput onkeydown={(e) => renameKey(e, g)}
                   onblur={(e) => finishRename(g, e.currentTarget.value)} spellcheck="false" />

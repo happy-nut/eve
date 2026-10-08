@@ -207,7 +207,11 @@ class Groups {
     this.saved.collapsed = this.saved.collapsed.filter((g) => !sub.includes(g));
     for (const g of sub) { delete this.saved.icons[g]; this.ids.delete(g); }
     this.persist();
-    for (const n of notes.all) if (!n.deleted && within(n.group, p)) notes.setGroup(n.id, '');
+    // its notes go to the top level as the list showed them, each group's in turn, and a page's sub-pages stay under
+    // it (they follow their page); one at a time from storage order, they came out reversed and flattened
+    const moving = sub.flatMap((g) => this.pagesIn(g));
+    const ids = new Set(moving.map((n) => n.id));
+    for (const n of moving) if (!n.parent || !ids.has(n.parent)) notes.place(n.id, '', '', null);
   }
 
   /** ensure a group (and its ancestors) are remembered in order so they survive their notes moving out */

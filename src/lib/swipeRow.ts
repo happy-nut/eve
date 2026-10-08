@@ -40,6 +40,8 @@ export function swipeRow(node: HTMLElement, actions: SwipeActions) {
   };
   const move = (e: TouchEvent) => {
     if (!start) return;
+    // the row was lifted to be moved (a long press): the finger drags it, it is not a swipe
+    if (actions.enabled?.() === false) { cancel(); return; }
     const x = e.touches[0].clientX - start.x, y = e.touches[0].clientY - start.y;
     if (!start.axis && Math.hypot(x, y) > 10) start.axis = Math.abs(x) > Math.abs(y) * 1.4 ? 'x' : 'y';
     if (start.axis === 'y') { start = null; return; }

@@ -69,12 +69,23 @@ export function touchReorder(tree: HTMLElement, list: Reorder) {
     if (Math.hypot(x - start.x, y - start.y) > 8) moved = true;
     follow();
     list.over(x, y);
+    edge();
+  };
+  // held near the list's top or bottom, it keeps scrolling while the finger rests there (not only as it moves)
+  let frame = 0;
+  const edge = () => {
+    cancelAnimationFrame(frame);
+    if (!lifted || !start) return;
     const r = tree.getBoundingClientRect();
-    if (y < r.top + 56) tree.scrollTop -= 14;
-    else if (y > r.bottom - 56) tree.scrollTop += 14;
+    const step = y < r.top + 56 ? -8 : y > r.bottom - 56 ? 8 : 0;
+    if (!step) return;
+    tree.scrollTop += step;
+    list.over(x, y);
+    frame = requestAnimationFrame(edge);
   };
   const up = (e: TouchEvent) => {
     clearTimeout(timer);
+    cancelAnimationFrame(frame);
     if (!start) return;
     start = null;
     if (!lifted) return; // a tap: the row's own click handles it
@@ -83,7 +94,7 @@ export function touchReorder(tree: HTMLElement, list: Reorder) {
     if (moved && list.drop()) (document.activeElement as HTMLElement | null)?.blur(); // no focus ring left behind
     else list.cancel();
   };
-  const cancel = () => { clearTimeout(timer); start = null; land(); list.cancel(); };
+  const cancel = () => { clearTimeout(timer); cancelAnimationFrame(frame); start = null; land(); list.cancel(); };
   tree.addEventListener('touchstart', down, { passive: false });
   tree.addEventListener('touchmove', move, { passive: false });
   tree.addEventListener('touchend', up);

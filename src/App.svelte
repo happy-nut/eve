@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { notes, CALENDAR } from './lib/notes.svelte';
@@ -96,7 +97,7 @@
       void links.onOpen((url) => {
         const link = parseEveLink(url);
         if (!link || !notes.all.some((n) => n.id === link.id && !n.deleted)) return;
-        settingsOpen = false;
+        putAway(); // whatever was open over the app (a full-screen diagram, a card) would sit over the note
         ui.focusOwner = 'editor';
         if (notes.currentId === link.id) {
           if (link.section) hooks.section?.(link.section);
@@ -333,6 +334,8 @@
     else sidebarOpen = true;
   }
   // daily notes on: the calendar's row exists; and opening that row (⌘1–9, back, next note) shows the calendar
+  // another note brought up (a link, the widget, a reminder): a diagram shown full screen was the last one's
+  $effect(() => { void notes.currentId; untrack(() => ui.closeDiagramView()); });
   $effect(() => { if (appearance.s.dailyNotes && notes.loaded) notes.ensureCalendar(); });
   $effect(() => { if (notes.currentId === CALENDAR_NOTE_ID) notes.currentId = CALENDAR; });
   // the phone's reminder alarm follows the settings

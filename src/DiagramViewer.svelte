@@ -9,7 +9,7 @@
    * phone's back closes it.
    */
   const html = ui.diagramView ?? '';
-  let stage: HTMLDivElement, content: HTMLDivElement;
+  let stage: HTMLDivElement, content: HTMLDivElement, viewer: HTMLDivElement;
   let scale = $state(1), x = $state(0), y = $state(0);
   let w = 0, h = 0;
 
@@ -40,6 +40,9 @@
     } else content.style.width = '720px';
     w = content.offsetWidth; h = content.offsetHeight;
     fit();
+    // the keyboard is the viewer's while it is up: keys typed went into the note under it (where a click leaves the
+    // focus, as in WebKit), and a card under it took the Esc and closed itself instead
+    viewer.focus({ preventScroll: true });
   });
 
   const onWheel = (e: WheelEvent) => {
@@ -81,7 +84,7 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="viewer" transition:fade|global={{ duration: 140 }} role="dialog" aria-modal="true" aria-label="Diagram">
+<div class="viewer" bind:this={viewer} tabindex="-1" transition:fade|global={{ duration: 140 }} role="dialog" aria-modal="true" aria-label="Diagram">
   <div class="stage" bind:this={stage} onwheel={onWheel} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} role="presentation">
     <div class="diagram-canvas content" bind:this={content} style:transform={`translate(${x}px, ${y}px) scale(${scale})`}>{@html html}</div>
   </div>
@@ -96,7 +99,7 @@
 </div>
 
 <style>
-  .viewer { position: fixed; inset: 0; z-index: 40; background: light-dark(#f9fafb, #17181d); }
+  .viewer { position: fixed; inset: 0; z-index: 40; background: light-dark(#f9fafb, #17181d); outline: none; }
   .stage { position: absolute; inset: 0; overflow: hidden; cursor: grab; touch-action: none; }
   .stage:active { cursor: grabbing; }
   .content { position: absolute; left: 0; top: 0; transform-origin: 0 0; padding: 0; border-radius: 0; background: none; overflow: visible; display: block; }

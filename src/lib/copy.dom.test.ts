@@ -105,3 +105,18 @@ test('a picture or a board selected on its own copies as its markdown', () => {
     expect(text.trim().startsWith(want)).toBe(true);
   }
 });
+
+test('part of a toggle body copies as that body, not as a toggle titled with its first line', () => {
+  const text = copied('<details open>\n<summary>T</summary>\n\nbody one\n\nbody two\n\n</details>', 'one', 'two');
+  expect(text).not.toContain('<summary>');
+  expect(text).toContain('one\n\nbody two');
+  expect(text.match(/one/g)?.length).toBe(1);
+});
+
+test('a callout copied from below its title has no title', () => {
+  const text = copied('> [!warning] Title here\n> body one\n>\n> body two', 'one', 'two');
+  expect(text).not.toMatch(/\[!warning\] one/);
+  expect(text).toContain('one');
+  // from its title on, it keeps it
+  expect(copied('> [!warning] Title here\n> body one', 'Title', 'one')).toMatch(/\[!warning\] Title here/);
+});

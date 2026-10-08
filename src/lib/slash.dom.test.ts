@@ -42,3 +42,28 @@ test('not KRW/USD', () => {
   type(ed, '/USD');
   expect(open(ed)).toBe(false);
 });
+
+// ---- found in the bug hunt ----
+test('in a code block a / is code', () => {
+  const ed = editorWith('# T\n\n```sh\ncd\n```');
+  ed.commands.setTextSelection(posOf(ed, 'cd', true));
+  type(ed, ' /');
+  expect(open(ed)).toBe(false);
+});
+
+test('a / typed earlier, the menu since closed, stays shut when the caret comes back to it', () => {
+  const ed = editorWith('# T\n\nstart');
+  ed.commands.setTextSelection(posOf(ed, 'start', true));
+  type(ed, ' x / y');
+  expect(open(ed)).toBe(false);
+  ed.commands.setTextSelection(posOf(ed, '/', true));
+  expect(open(ed)).toBe(false);
+});
+
+test('undo putting back a / that was there does not open it', () => {
+  const ed = editorWith('# T\n\nsee /etc today');
+  ed.commands.setTextSelection(posOf(ed, '/', true));
+  ed.commands.deleteRange({ from: posOf(ed, '/'), to: posOf(ed, '/', true) });
+  ed.commands.undo();
+  expect(open(ed)).toBe(false);
+});
