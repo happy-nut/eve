@@ -373,11 +373,17 @@ aside.focus-flash::after, main.focus-flash::after {
    so WebKit fills the space between it and the text when a selection continues onto the line (the "2." lit up) */
 .tiptap li::before { position: absolute; right: calc(100% + 0.4em); top: 0; color: inherit; font-variant-numeric: tabular-nums; }
 .tiptap ol > li::before { content: counter(list-item) '.'; }
-/* a numbered list inside a numbered list counts in letters, the next in roman numerals, then numbers again (1. a. i. 1.);
-   only how it is shown: the note keeps 1. 2. as markdown writes them */
+/* a numbered list inside a numbered list counts in letters, the next in roman numerals, and round again
+   (1. a. i. 1. a. i. …, as word processors and Notion do), nine levels deep; only how it is shown: the note keeps
+   1. 2. as markdown writes them */
 .tiptap ol ol > li::before { content: counter(list-item, lower-alpha) '.'; }
 .tiptap ol ol ol > li::before { content: counter(list-item, lower-roman) '.'; }
 .tiptap ol ol ol ol > li::before { content: counter(list-item) '.'; }
+.tiptap ol ol ol ol ol > li::before { content: counter(list-item, lower-alpha) '.'; }
+.tiptap ol ol ol ol ol ol > li::before { content: counter(list-item, lower-roman) '.'; }
+.tiptap ol ol ol ol ol ol ol > li::before { content: counter(list-item) '.'; }
+.tiptap ol ol ol ol ol ol ol ol > li::before { content: counter(list-item, lower-alpha) '.'; }
+.tiptap ol ol ol ol ol ol ol ol ol > li::before { content: counter(list-item, lower-roman) '.'; }
 .tiptap ul > li::before { content: '•'; }
 .tiptap ul[data-type='taskList'] { padding-left: 0.2em; }
 .tiptap ul[data-type='taskList'] > li::before { content: none; }
