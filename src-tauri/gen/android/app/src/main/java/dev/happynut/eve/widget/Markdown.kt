@@ -26,6 +26,7 @@ class Markdown(
 
   fun blocks(body: String): List<CharSequence> {
     val out = mutableListOf<CharSequence>()
+    lists.clear()
     val lines = body.lines()
     var i = 0
     while (i < lines.size) {
@@ -43,10 +44,51 @@ class Markdown(
         out += if (lang == "kanban") board(code.joinToString("\n")) else codeBlock(code)
         continue
       }
+      olLevel = listLevel(raw)
       block(raw)?.let { out += it }
       i++
     }
     return out
+  }
+
+  /** the lists the line sits in, outermost first: each one's indent and whether it is numbered */
+  private val lists = mutableListOf<Pair<Int, Boolean>>()
+  /** the numbered lists the current line is in, itself included (1 = numbers, 2 = letters, 3 = roman numerals…) */
+  private var olLevel = 1
+
+  /**
+   * A numbered list inside a numbered list counts a. b. c., the next i. ii. iii., and round again, as the app shows
+   * it: here only the lines are seen, so the lists around a line are kept by their indent.
+   */
+  private fun listLevel(raw: String): Int {
+    val indent = raw.length - raw.trimStart().length
+    val line = raw.trim()
+    val numbered = Regex("^\\d+[.)]\\s").containsMatchIn(line)
+    val item = numbered || Regex("^[-*+]\\s").containsMatchIn(line)
+    if (!item) {
+      if (line.isNotEmpty() && indent == 0) lists.clear() // a line of the note's own: the lists are over
+      return 1
+    }
+    while (lists.isNotEmpty() && lists.last().first >= indent) lists.removeAt(lists.size - 1)
+    lists += indent to numbered
+    return lists.count { it.second }
+  }
+
+  private fun marker(n: Int, level: Int): String = when ((level - 1) % 3) {
+    1 -> letters(n)
+    2 -> roman(n)
+    else -> n.toString()
+  }
+  private fun letters(n0: Int): String {
+    var n = n0; val sb = StringBuilder()
+    while (n > 0) { n--; sb.insert(0, ('a' + n % 26)); n /= 26 }
+    return sb.toString().ifEmpty { "a" }
+  }
+  private fun roman(n0: Int): String {
+    if (n0 <= 0 || n0 >= 4000) return n0.toString()
+    var n = n0; val sb = StringBuilder()
+    for ((v, s) in listOf(1000 to "m", 900 to "cm", 500 to "d", 400 to "cd", 100 to "c", 90 to "xc", 50 to "l", 40 to "xl", 10 to "x", 9 to "ix", 5 to "v", 4 to "iv", 1 to "i")) while (n >= v) { sb.append(s); n -= v }
+    return sb.toString()
   }
 
   /** A one-line version for the list widget: the title, plain. */
@@ -112,7 +154,8 @@ class Markdown(
       return sb
     }
     Regex("^(\\d+)[.)]\\s+(.*)").find(line)?.let { m ->
-      sb.append(pad).append("${m.groupValues[1]}. ", ForegroundColorSpan(dim), EX)
+      val n = m.groupValues[1].toIntOrNull() ?: 1
+      sb.append(pad).append("${marker(n, olLevel)}. ", ForegroundColorSpan(dim), EX)
       inline(sb, m.groupValues[2])
       return sb
     }

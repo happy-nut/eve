@@ -243,7 +243,7 @@ export function indentLines(dir: 1 | -1) {
 const offsetOf = (node: PMNode, i: number) => { let o = 0; for (let k = 0; k < i; k++) o += node.child(k).nodeSize; return o; };
 
 /**
- * ⇧Tab on items whose list hangs under an item of another kind (bullets under a to-do, a to-do under a
+ * ⇧Tab on items whose list hangs under an item of another kind (bullets under a to-do or a number, a to-do under a
  * number…). ProseMirror would turn them into plain lines inside that item; here they come out as a list of
  * their own kind right after it, the outer list split around them. Items below the lifted ones stay at their
  * level, under the last one lifted. null: not that case, the stock lift applies.
@@ -253,7 +253,9 @@ function liftAcross(tr: any): boolean | null {
   const range = $from.blockRange($to, (n: PMNode) => /List$/.test(n.type.name));
   if (!range || range.depth < 2) return null;
   const list: PMNode = range.parent, owner: PMNode = range.$from.node(range.depth - 1);
-  if (!/Item$/.test(owner.type.name) || owner.type === list.firstChild!.type) return null;
+  // of another kind: another kind of item (a to-do), or the same item in another kind of list (a bullet under a number)
+  const outerList: PMNode = range.$from.node(range.depth - 2);
+  if (!/Item$/.test(owner.type.name) || (owner.type === list.firstChild!.type && outerList.type === list.type)) return null;
   const { startIndex, endIndex } = range;
   const moved: PMNode[] = [];
   for (let k = startIndex; k < endIndex; k++) moved.push(list.child(k));
@@ -265,12 +267,16 @@ function liftAcross(tr: any): boolean | null {
   const listStart = range.$from.before(range.depth), contentEnd = range.$from.end(range.depth);
   const ownerEnd = range.$from.after(range.depth - 1), outerEnd = range.$from.after(range.depth - 2);
   const ownerIsLast = range.$from.index(range.depth - 2) === range.$from.node(range.depth - 2).childCount - 1;
+  // positions here are in the document as it is now: mapped through this lift's own steps only, not through the
+  // ones already in the transaction (Tab sinks a line first, then puts the lines under it back with this)
+  const steps = tr.steps.length;
+  const map = (p: number) => tr.mapping.slice(steps).map(p);
   if (startIndex === 0) tr.delete(listStart, contentEnd + 1);
   else tr.delete(range.start, contentEnd);
   const out = list.copy(Fragment.fromArray(moved));
-  if (ownerIsLast) tr.insert(tr.mapping.map(outerEnd), out);
+  if (ownerIsLast) tr.insert(map(outerEnd), out);
   else {
-    const at = tr.mapping.map(ownerEnd);
+    const at = map(ownerEnd);
     tr.split(at);
     tr.insert(at + 1, out);
     // the numbered list split around them goes on counting after them (3. stays 3., not 1.)

@@ -59,3 +59,12 @@ test('an item of two paragraphs makes its list loose, so it reads back the same'
 test('empty lines at the very end of a note are not written', () => {
   expect(after('1. a\n2. b', (ed) => { at(ed, 'b'); key(ed, 'Enter'); key(ed, 'Enter'); type(ed, 'para'); })).toBe('1. a\n2. b\n\npara');
 });
+
+test('⌫ at the start of a nested item steps it out a level, still its own kind', () => {
+  expect(after('1. a\n   - b\n2. c', (ed) => { at(ed, 'b', false); key(ed, 'Backspace'); })).toBe('1. a\n\n- b\n\n2. c');
+  // the items below it stay at their level, under it (as ⇧Tab leaves them)
+  expect(after('- a\n  1. b\n  2. c\n- d', (ed) => { at(ed, 'b', false); key(ed, 'Backspace'); })).toBe('- a\n\n1. b\n   1. c\n\n- d');
+  expect(after('1. a\n   1. b\n2. c', (ed) => { at(ed, 'b', false); key(ed, 'Backspace'); })).toBe('1. a\n2. b\n3. c');
+  // at the top level the line becomes plain text, as before
+  expect(after('1. a\n2. b', (ed) => { at(ed, 'b', false); key(ed, 'Backspace'); })).toBe('1. a\n\nb');
+});

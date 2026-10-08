@@ -566,6 +566,15 @@ export function createEditor(opts: {
           return {
             Tab: run(1),
             'Shift-Tab': run(-1),
+            // ⌫ at the very start of a nested item: it steps out a level as ⇧Tab does, still its own kind (a bullet
+            // under a number stays a bullet). The stock join made it an item of its parent's list, of that list's kind.
+            // A top-level item is left to the stock ⌫ (the line becomes plain text).
+            Backspace: () => {
+              const { $from, empty } = this.editor.state.selection;
+              if (!empty || $from.parentOffset !== 0 || !$from.parent.isTextblock || $from.depth < 4 || $from.index(-1) !== 0) return false;
+              if (!/Item$/.test($from.node(-1).type.name) || !/Item$/.test($from.node(-3).type.name)) return false;
+              return !suggestionVisible.get(this.editor)?.() && this.editor.commands.command(indentLines(-1));
+            },
             // Enter on an empty item under an item of another kind (a bullet under a to-do): it steps out as
             // ⇧Tab does, still a bullet. The stock lift made it an unmarked line inside the to-do, where the
             // caret could not be seen in WebKit
