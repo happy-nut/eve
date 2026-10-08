@@ -66,7 +66,7 @@
   });
 
   // Android back: a popup or a dialog closes, a note goes back to the list, and only the list leaves the app
-  const popupOpen = $derived(!!(ui.photo || ui.sheetsOpen || ui.emoji || ui.menu || ui.pending || ui.find || ui.pdf || ui.card || ui.diagram || ui.diagramView !== null));
+  const popupOpen = $derived(!!(ui.photo || ui.sheetsOpen || ui.emoji || ui.menu || ui.pending || ui.find || ui.pdf || ui.card || ui.diagramView !== null));
   $effect(() => {
     if (!isMobile || !isTauri || (sidebarOpen && !settingsOpen && !popupOpen)) return;
     let off: (() => void) | undefined, gone = false;
@@ -171,7 +171,7 @@
   function restoreFocus() {
     const back = away;
     away = null;
-    if (ui.photo || ui.pending || ui.emoji || ui.menu || ui.diagram || ui.diagramView !== null || settingsOpen) return; // a dialog owns focus
+    if (ui.photo || ui.pending || ui.emoji || ui.menu || ui.diagramView !== null || settingsOpen) return; // a dialog owns focus
     const a = document.activeElement as HTMLElement | null;
     if (a && a.isConnected && a !== document.body) return;
     const el = back?.isConnected ? back : document.querySelector<HTMLElement>(ui.card ? '.card-page .tiptap' : '.tiptap');
@@ -272,7 +272,6 @@
     if (ui.pending) ui.done(null);
     if (ui.card) ui.closeCard();
     if (ui.pdf) ui.closePdf();
-    if (ui.diagram) ui.closeDiagram();
     ui.closeDiagramView();
     ui.find = false;
     settingsOpen = false;
@@ -326,7 +325,6 @@
     else if (ui.menu) ui.closeMenu();
     else if (ui.pending) ui.done(null);
     else if (ui.diagramView !== null) ui.closeDiagramView();
-    else if (ui.diagram) ui.closeDiagram();
     else if (ui.find) { ui.find = false; focusNote(); }
     else if (ui.pdf) ui.closePdf();
     else if (ui.card) ui.closeCard();
@@ -454,7 +452,7 @@
     if (sidebarOpen && appearance.s.closeSidebarOnWrite && isWriting(e)) sidebarOpen = false;
     // the right-click menu takes the keyboard while it is up, wherever the focus actually sits
     if (ui.menu) { if (e.key === 'Escape') { e.preventDefault(); ui.closeMenu(); } return; }
-    if (ui.pending || ui.emoji || ui.diagram || ui.diagramView !== null) return; // the builder and the viewer take their own keys
+    if (ui.pending || ui.emoji || ui.diagramView !== null) return; // the diagram viewer takes its own keys
     // Escape puts away whatever is open over the note — the find bar, then the PDF panel — and only a
     // bare note lets it through to hide the window. Tied to the key, not to the rebindable action:
     // closing the thing on top is what Escape means everywhere in the app.
@@ -598,9 +596,6 @@
 {#if ui.photo}<ImageViewer />{/if}
 {#if ui.diagramView !== null}
   {#await import('./DiagramViewer.svelte') then { default: DiagramViewer }}<DiagramViewer />{/await}
-{/if}
-{#if ui.diagram}
-  {#await import('./DiagramBuilder.svelte') then { default: DiagramBuilder }}<DiagramBuilder />{/await}
 {/if}
 {#if ui.pdf}
   {#await import('./PdfViewer.svelte') then { default: PdfViewer }}<PdfViewer />{/await}

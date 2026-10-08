@@ -5,7 +5,8 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
 import { isMobile } from './platform';
-import { renderMermaid, themeKey } from './mermaid';
+import { starter, toCode, type Kind } from './diagram';
+import { mountDiagram } from './diagramBlock.svelte';
 
 /**
  * Syntax highlighting, loaded with the first code block shown: lowlight, highlight.js and the grammars
@@ -117,7 +118,7 @@ const editingDiagram = new Plugin({
       for (let d = $head.depth; d > 0; d--) {
         const n = $head.node(d);
         if (n.type.name === 'codeBlock') {
-          return n.attrs.language === 'mermaid' ? DecorationSet.create(state.doc, [Decoration.node($head.before(d), $head.after(d), { class: 'editing' })]) : null;
+          return n.attrs.language === 'mermaid' ? DecorationSet.create(state.doc, [Decoration.node($head.before(d), $head.after(d), { class: 'editing' }, { editing: true })]) : null;
         }
       }
       return null;
@@ -161,61 +162,41 @@ export const CodeBlock = CodeBlockBase.extend({
       chip.contentEditable = 'false';
       chip.tabIndex = -1; // a mouse affordance, not a tab stop
       chip.textContent = labelOf(node.attrs.language);
-      // a mermaid block's picture: drawn from its code, a click on it puts the caret in the code
-      const view = document.createElement('div');
-      view.className = 'mermaid-view diagram-canvas';
-      view.contentEditable = 'false';
-      // full screen, to zoom into one too big for the note (DiagramViewer.svelte)
-      const expand = document.createElement('button');
-      expand.type = 'button';
-      expand.className = 'mermaid-expand';
-      expand.contentEditable = 'false';
-      expand.tabIndex = -1;
-      expand.setAttribute('aria-label', 'View full screen');
-      expand.dataset.tip = 'View full screen';
-      expand.innerHTML = '<svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/></svg>';
-      expand.addEventListener('mousedown', (e) => e.preventDefault());
-      expand.addEventListener('click', (e) => { e.stopPropagation(); if (view.firstElementChild) ui.viewDiagram(view.innerHTML); });
-      dom.append(chip, pre, view, expand);
-      let drawn = '', timer: ReturnType<typeof setTimeout> | undefined, gone = false;
-      const draw = (n: PMNode) => {
+      // a mermaid block: its drawing, edited right there (DiagramBlock.svelte); the code shows only with the caret in it
+      const host = document.createElement('div');
+      host.className = 'mermaid-host';
+      host.contentEditable = 'false';
+      dom.append(chip, pre, host);
+      const posNow = () => (typeof getPos === 'function' ? getPos() : null);
+      let block: ReturnType<typeof mountDiagram> | null = null;
+      let shown = false; // the caret in the code
+      const setDiagram = (n: PMNode) => {
         const on = n.attrs.language === 'mermaid';
         dom.classList.toggle('mermaid', on);
-        if (!on) { drawn = ''; view.replaceChildren(); return; }
-        const want = themeKey() + '\u0000' + n.textContent;
-        if (want === drawn) return;
-        drawn = want;
-        clearTimeout(timer);
-        // as it is typed, a moment after the keys stop; the first drawing at once
-        timer = setTimeout(async () => {
-          const out = await renderMermaid(n.textContent);
-          if (gone || drawn !== want) return;
-          dom.classList.toggle('mermaid-error', 'error' in out);
-          if ('svg' in out) view.innerHTML = out.svg;
-          else view.textContent = out.error;
-        }, view.childNodes.length ? 300 : 0);
-      };
-      draw(node);
-      const redraw = () => { const p = typeof getPos === 'function' ? getPos() : null; const n = p == null ? null : editor.state.doc.nodeAt(p); if (n) draw(n); };
-      const scheme = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
-      scheme?.addEventListener('change', redraw);
-      const themeWatch = new MutationObserver(redraw);
-      themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-      // a click on the picture opens it in the builder (DiagramBuilder.svelte), which also has its code
-      view.addEventListener('mousedown', (e) => e.preventDefault());
-      view.addEventListener('click', () => {
-        const p = typeof getPos === 'function' ? getPos() : null;
-        const n = p == null ? null : editor.state.doc.nodeAt(p);
-        if (p == null || !n || ui.diagram) return;
-        void ui.openDiagram(n.textContent, view.offsetWidth).then((code) => {
-          const at = typeof getPos === 'function' ? getPos() : null;
-          const now = at == null ? null : editor.state.doc.nodeAt(at);
-          if (at == null || !now || code === null || code === now.textContent) return;
-          const tr = editor.state.tr.replaceWith(at + 1, at + now.nodeSize - 1, editor.schema.text(code));
-          // the caret under the diagram, so it shows as drawn rather than as its code
-          editor.view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(at + tr.doc.nodeAt(at)!.nodeSize))).scrollIntoView());
+        if (!on) { block?.destroy(); block = null; dom.classList.remove('mermaid-error'); return; }
+        if (block) { block.set({ code: n.textContent, codeShown: shown }); return; }
+        const start = startNext !== null && startNext === n.textContent;
+        if (start) startNext = null;
+        block = mountDiagram(host, {
+          code: n.textContent, start, codeShown: shown,
+          // what was drawn, written into the block: one step to undo, the caret left where it was
+          onCode: (code) => {
+            const p = posNow();
+            const cur = p == null ? null : editor.state.doc.nodeAt(p);
+            if (p == null || !cur || cur.textContent === code) return;
+            editor.view.dispatch(editor.state.tr.replaceWith(p + 1, p + cur.nodeSize - 1, code ? editor.schema.text(code) : []));
+          },
+          onCodeEdit: () => {
+            const p = posNow();
+            const cur = p == null ? null : editor.state.doc.nodeAt(p);
+            if (p == null || !cur) return;
+            editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, p + cur.nodeSize - 1)).scrollIntoView());
+            editor.view.focus();
+          },
+          onError: (failed) => dom.classList.toggle('mermaid-error', failed),
         });
-      });
+      };
+      setDiagram(node);
 
       const language = (): string => {
         const pos = typeof getPos === 'function' ? getPos() : null;
@@ -245,50 +226,43 @@ export const CodeBlock = CodeBlockBase.extend({
           () => chip.classList.remove('open'));
       });
 
-      const owns = (target: EventTarget | Node | null) => target instanceof Node && (chip.contains(target) || view.contains(target) || expand.contains(target));
+      const owns = (target: EventTarget | Node | null) => target instanceof Node && (chip.contains(target) || host.contains(target));
       return {
         dom,
         contentDOM: code,
-        update: (updated) => {
+        update: (updated, decorations) => {
           if (updated.type !== node.type) return false;
           chip.textContent = labelOf(updated.attrs.language);
-          draw(updated);
+          shown = decorations.some((d) => (d as unknown as { spec?: { editing?: boolean } }).spec?.editing);
+          setDiagram(updated);
           return true;
         },
         // the block's own classes (mermaid, mermaid-error) are set here: read as an edit, ProseMirror made the block
         // anew, which drew again, failed again and set them again, without end
         ignoreMutation: (m) => owns(m.target) || (m.type === 'attributes' && m.target === dom),
         stopEvent: (e) => owns(e.target),
-        destroy: () => { gone = true; clearTimeout(timer); scheme?.removeEventListener('change', redraw); themeWatch.disconnect(); },
+        destroy: () => { block?.destroy(); },
       };
     };
   },
 }).configure({ languageClassPrefix: 'language-' });
 
-/** the width a diagram drawn at the caret will have: its block's container, inside its padding (the note's column,
- *  a list item, a callout), so the builder previews it at that size */
-export function canvasWidth(editor: Editor): number {
-  const { $from } = editor.state.selection;
-  const block = $from.depth ? editor.view.nodeDOM($from.before($from.depth)) : null;
-  const box = (block instanceof HTMLElement ? block.parentElement : null) ?? editor.view.dom;
-  const cs = getComputedStyle(box);
-  return Math.round(box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)) || 640;
-}
+/** the code of a diagram just made from the / menu: its block opens for editing as it is first drawn */
+let startNext: string | null = null;
 
-/** the / menu's Diagram: the builder, and what it made put in at the caret */
-export function insertDiagram(editor: Editor) {
-  void ui.openDiagram(null, canvasWidth(editor)).then((code) => {
-    if (!code || editor.isDestroyed) return;
-    const { from } = editor.state.selection;
-    const c = isMobile ? editor.chain() : editor.chain().focus();
-    c.insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: code }] }).run();
-    // out of the block it went into, onto the line under it
-    const $at = editor.state.doc.resolve(Math.min(editor.state.selection.from, editor.state.doc.content.size));
-    for (let d = $at.depth; d > 0; d--) {
-      if ($at.node(d).type.name !== 'codeBlock' || $at.before(d) < from - 2) continue;
-      const tr = editor.state.tr;
-      editor.view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve($at.after(d)))).scrollIntoView());
-      break;
-    }
-  });
+/** the / menu's diagrams: a small example of the kind, put in at the caret and opened for editing there */
+export function insertDiagram(editor: Editor, kind: Kind) {
+  const code = toCode(starter(kind));
+  startNext = code;
+  const { from } = editor.state.selection;
+  const c = isMobile ? editor.chain() : editor.chain().focus();
+  c.insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: code }] }).run();
+  // out of the block it went into, onto the line under it: drawn, not shown as code
+  const $at = editor.state.doc.resolve(Math.min(editor.state.selection.from, editor.state.doc.content.size));
+  for (let d = $at.depth; d > 0; d--) {
+    if ($at.node(d).type.name !== 'codeBlock' || $at.before(d) < from - 2) continue;
+    const tr = editor.state.tr;
+    editor.view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve($at.after(d)))).scrollIntoView());
+    break;
+  }
 }

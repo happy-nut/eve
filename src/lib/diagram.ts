@@ -1,6 +1,6 @@
 /**
- * The diagram builder's charts (DiagramBuilder.svelte) as data, and as the mermaid code a note keeps. The note stores
- * only the code: what the builder makes it writes out (toCode), and a diagram opened again is read back from its code
+ * The charts a note's diagrams are edited as (DiagramBlock.svelte) as data, and as the mermaid code a note keeps. The
+ * note stores only the code: what is drawn is written out (toCode), and a diagram opened again is read back from its code
  * (fromCode). Read back is strict: a line the builder would not have written (a style, a subgraph, a comment) makes it
  * null, and the diagram is edited as code, so nothing written by hand is lost to a form that cannot show it.
  */
