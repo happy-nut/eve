@@ -5,57 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>Eve</title>
-    <!-- a phone's splash (lib/splash.ts plays it out): here, in the page itself, so the very first frame the webview
-         paints is Eve's face on the colour of Android's own splash, never a blank page between the two -->
-    <style>
-      #splash {
-        position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
-        background: radial-gradient(120% 80% at 50% 38%, #18202c 0%, #11141a 55%, #0b0d12 100%);
-        transition: opacity 0.32s ease-out;
-      }
-      #splash svg { width: 168px; height: 172px; overflow: visible; transition: transform 0.36s cubic-bezier(0.3, 0, 0.2, 1); }
-      #splash.out { opacity: 0; pointer-events: none; }
-      #splash.out svg { transform: scale(1.12); }
-      #splash .head { transform-box: fill-box; transform-origin: 50% 60%; animation: eve-bob 0.5s 0.58s cubic-bezier(0.3, 0, 0.2, 1) both; }
-      /* the eyes light up, then close into a smile: the open eyes squeeze shut as the arcs draw in over them */
-      #splash .open { transform-box: fill-box; transform-origin: center; animation: eve-wake 0.3s ease-out both, eve-shut 0.16s 0.56s ease-in both; }
-      #splash .smile { stroke-dasharray: 150; stroke-dashoffset: 150; animation: eve-smile 0.26s 0.62s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-      @keyframes eve-wake { from { opacity: 0.35; } }
-      @keyframes eve-shut { to { transform: scaleY(0.12) translateY(10px); opacity: 0; } }
-      @keyframes eve-smile { to { stroke-dashoffset: 0; } }
-      @keyframes eve-bob { 40% { transform: scale(1.045) translateY(-4px); } }
-      @media (prefers-reduced-motion: reduce) { #splash * { animation: none !important; } #splash .open { opacity: 0; } #splash .smile { stroke-dashoffset: 0; } }
-    </style>
   </head>
   <body>
-    <div id="splash" aria-hidden="true">
-      <!-- the app icon's face (docs/icon.svg) -->
-      <svg viewBox="170 150 684 700">
-        <defs>
-          <radialGradient id="sp-body" cx="38%" cy="28%" r="80%"><stop offset="0" stop-color="#fff"/><stop offset="0.6" stop-color="#eef0f3"/><stop offset="1" stop-color="#c9ced6"/></radialGradient>
-          <radialGradient id="sp-visor" cx="50%" cy="45%" r="65%"><stop offset="0" stop-color="#1c2a3a"/><stop offset="0.7" stop-color="#0b1019"/><stop offset="1" stop-color="#04060a"/></radialGradient>
-          <filter id="sp-glow" filterUnits="userSpaceOnUse" x="300" y="380" width="424" height="260"><feGaussianBlur stdDeviation="14" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          <filter id="sp-shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="28" stdDeviation="30" flood-color="#000" flood-opacity=".55"/></filter>
-        </defs>
-        <g class="head">
-          <path filter="url(#sp-shadow)" fill="url(#sp-body)" d="M512 168c188 0 318 138 318 326 0 176-124 342-318 342S194 670 194 494c0-188 130-326 318-326z"/>
-          <path fill="url(#sp-visor)" d="M512 306C664 306 734 414 734 526C734 632 640 678 512 678C384 678 290 632 290 526C290 414 360 306 512 306Z"/>
-          <g filter="url(#sp-glow)">
-            <g fill="#3fc1ff">
-              <!-- the tilt on the ellipse, the animation on its group: a CSS transform would replace the tilt -->
-              <g class="open"><ellipse cx="424" cy="506" rx="60" ry="38" transform="rotate(14 424 506)"/></g>
-              <g class="open"><ellipse cx="600" cy="506" rx="60" ry="38" transform="rotate(-14 600 506)"/></g>
-            </g>
-            <g class="smiles" fill="none" stroke="#3fc1ff" stroke-width="30" stroke-linecap="round">
-              <path class="smile" d="M370 530Q424 462 478 530"/>
-              <path class="smile" d="M546 530Q600 462 654 530"/>
-            </g>
-          </g>
-        </g>
-      </svg>
-    </div>
-    <!-- the Mac has no splash: gone before its first paint -->
-    <script>if (!/Android|iPhone|iPad/.test(navigator.userAgent)) document.getElementById('splash').remove();</script>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

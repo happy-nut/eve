@@ -28,7 +28,6 @@
   import { parseTicket } from './lib/handoff';
   import { parseEveLink } from './lib/evelink';
   import { focusNote } from './lib/popup';
-  import { hideSplash } from './lib/splash';
 
   let sidebarOpen = $state(true);
   let settingsOpen = $state(false);
@@ -87,7 +86,6 @@
     notes.load().then(() => {
       // a phone opens where it was left: the note, not the list over it (the list is a swipe or Back away)
       if (isMobile && notes.resumed) sidebarOpen = false;
-      hideSplash();
       void files.onOpen(async (paths) => {
         const first = await importPaths(paths);
         if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; }
