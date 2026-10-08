@@ -64,15 +64,25 @@ function config(mode: 'light' | 'dark') {
     handDrawnSeed: 1,
     fontFamily: FONT,
     themeCSS: `
-      /* a flowchart's pill (its start or end: only it is drawn as an outer path with a plain label) in solid blue */
+      /* a flowchart in the database table's calm: white cards on hairlines, the start and end (its pills, the only
+         shapes drawn as an outer path with a plain label) a soft grey, a decision a plain white diamond, the lines
+         quiet, their labels small chips */
       .node rect.basic, .node rect.label-container, rect.actor, .cluster rect { rx: 12px; ry: 12px; }
-      .node .label-container, rect.actor { filter: drop-shadow(0 1px 3px ${c.shadow}); }
-      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) path { fill: ${c.accent} !important; stroke: ${c.accent} !important; }
-      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) .nodeLabel p { color: #fff; }
-      g.node:has(> polygon) polygon, g.node:has(> circle) circle { fill: ${c.tint}; stroke: ${c.tint}; }
-      g.node:has(> polygon) .nodeLabel, g.node:has(> circle) .nodeLabel { color: ${c.tintText}; }
-      .flowchart-link { stroke-width: 1.6px; } .marker { fill: ${c.line}; stroke: ${c.line}; }
-      .edgeLabel, .edgeLabel p { font-size: 12.5px; color: ${c.dim}; } .labelBkg { background: transparent; }
+      .node .label-container, rect.actor { stroke: ${c.border} !important; stroke-width: 1px !important; filter: drop-shadow(0 1px 1.5px ${c.shadow}); }
+      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) path { stroke: ${c.border} !important; stroke-width: 1px !important; }
+      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) path:first-child { fill: ${c.head} !important; }
+      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) .nodeLabel p { color: ${c.strong}; }
+      g.node:has(> polygon) polygon { fill: ${c.node}; stroke: ${c.border}; stroke-width: 1px; }
+      g.node:has(> circle) circle { fill: ${c.head}; stroke: ${c.border}; stroke-width: 1px; }
+      .nodeLabel, .nodeLabel p { color: ${c.fg}; }
+      .cluster rect { fill: ${c.canvas} !important; stroke: ${c.border} !important; stroke-dasharray: 0; }
+      .cluster-label .nodeLabel, .cluster-label .nodeLabel p { color: ${c.dim}; font-size: 12px; }
+      .flowchart-link { stroke-width: 1.4px; } .marker { fill: ${c.line}; stroke: ${c.line}; }
+      .edgeLabel foreignObject { overflow: visible; }
+      .edgeLabel, .edgeLabel p { font-size: 12px; color: ${c.dim}; }
+      .edgeLabel .labelBkg { background: ${c.node}; border-radius: 6px; box-shadow: 0 0 0 4px ${c.node}, 0 0 0 5px ${c.border}; }
+      .edgeLabel .labelBkg:has(.edgeLabel:empty) { box-shadow: none; background: none; }
+      .edgeLabel .labelBkg span, .edgeLabel .labelBkg p { background: transparent !important; } /* mermaid's own label fill: only the chip shows */
       .lineWrapper line { stroke: ${c.line}; stroke-width: 2px; } [id$='arrowhead'] path { fill: ${c.line}; }
       .actor-line { stroke-dasharray: 3 4; }
       .mindmap-node .node-bkg { filter: none; } .mindmap-edges path { stroke-width: 2px !important; } ${branches}
