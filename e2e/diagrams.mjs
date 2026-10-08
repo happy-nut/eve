@@ -30,7 +30,9 @@ const differ = (a, b) => page.evaluate(async ([a, b]) => {
 }, [a.toString('base64'), b.toString('base64')]);
 const drawing = (sel) => page.evaluate((sel) => {
   const c = document.querySelector(sel), s = c.querySelector('svg'), r = s.getBoundingClientRect();
-  return { w: Math.round(r.width * 100) / 100, h: Math.round(r.height * 100) / 100, svg: s.outerHTML.replace(/eve-mermaid-\d+/g, 'ID') };
+  const copy = s.cloneNode(true);
+  copy.querySelectorAll('path.hit').forEach((p) => p.remove()); // the builder's clear twins of its lines, to click them by
+  return { w: Math.round(r.width * 100) / 100, h: Math.round(r.height * 100) / 100, svg: copy.outerHTML.replace(/eve-mermaid-\d+/g, 'ID') };
 }, sel);
 
 try {
@@ -99,6 +101,49 @@ try {
   assert.equal(await page.locator('.tiptap .mermaid-view').nth(1).innerHTML(), pieHtml.replace(/<!---->/g, ''), 'the same markup');
   assert.equal(await page.locator('.tiptap .chart-pie .lbl').first().textContent(), 'Writing <b>&', 'a label is text, not markup');
   console.log('ok   pie: drawn by Eve, the same in the note');
+
+  // a flowchart drawn by hand on its picture: a box's +, a drag from it onto another box, its bar, a line's bar
+  await page.locator('.tiptap p').last().click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('/diagram');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Enter');
+  await page.locator('.card', { hasText: 'Flowchart' }).click();
+  await page.waitForSelector('.builder .preview svg');
+  await page.waitForTimeout(400);
+  const boxAt = async (label) => { const b = await page.locator('.builder .preview g.node', { hasText: label }).first().boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+  let at = await boxAt('Start');
+  await page.mouse.click(at.x, at.y);
+  await page.locator('.layer .plus').first().click();
+  await page.waitForSelector('input.rename');
+  await page.keyboard.type('Write');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(800);
+  at = await boxAt('Write');
+  await page.mouse.move(at.x, at.y);
+  const plus = await page.locator('.layer .plus').last().boundingBox();
+  const target = await boxAt('Done');
+  await page.mouse.move(plus.x + plus.width / 2, plus.y + plus.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x, target.y, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForSelector('.layer .bar .edge-label');
+  await page.locator('.layer .bar button[aria-label="Dotted"]').click();
+  await page.locator('.layer .bar .edge-label').fill('later');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(800);
+  at = await boxAt('Write');
+  await page.mouse.click(at.x, at.y);
+  await page.locator('.layer .bar button[aria-label="Database"]').click();
+  await page.waitForTimeout(800);
+  await page.keyboard.press('Control+Enter');
+  await page.waitForFunction(() => !document.querySelector('.builder'));
+  const drawn = await md();
+  assert.match(drawn, /n4\[\("Write"\)\]/, 'the new step, as a database');
+  assert.match(drawn, /n1 --> n4\n/, 'joined after the box whose + made it');
+  assert.match(drawn, /n4 -\.->\|"later"\| n3/, 'the line dragged onto Done, dotted, labelled');
+  console.log('ok   drawn by hand: +, drag to connect, the bars');
 
   // a fresh page: the one above saves its note on the way out, over anything seeded under it
   const hand = await browser.newPage({ viewport: { width: 1200, height: 860 } });

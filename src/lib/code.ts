@@ -165,7 +165,18 @@ export const CodeBlock = CodeBlockBase.extend({
       const view = document.createElement('div');
       view.className = 'mermaid-view diagram-canvas';
       view.contentEditable = 'false';
-      dom.append(chip, pre, view);
+      // full screen, to zoom into one too big for the note (DiagramViewer.svelte)
+      const expand = document.createElement('button');
+      expand.type = 'button';
+      expand.className = 'mermaid-expand';
+      expand.contentEditable = 'false';
+      expand.tabIndex = -1;
+      expand.setAttribute('aria-label', 'View full screen');
+      expand.dataset.tip = 'View full screen';
+      expand.innerHTML = '<svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/></svg>';
+      expand.addEventListener('mousedown', (e) => e.preventDefault());
+      expand.addEventListener('click', (e) => { e.stopPropagation(); if (view.firstElementChild) ui.viewDiagram(view.innerHTML); });
+      dom.append(chip, pre, view, expand);
       let drawn = '', timer: ReturnType<typeof setTimeout> | undefined, gone = false;
       const draw = (n: PMNode) => {
         const on = n.attrs.language === 'mermaid';
@@ -234,7 +245,7 @@ export const CodeBlock = CodeBlockBase.extend({
           () => chip.classList.remove('open'));
       });
 
-      const owns = (target: EventTarget | Node | null) => target instanceof Node && (chip.contains(target) || view.contains(target));
+      const owns = (target: EventTarget | Node | null) => target instanceof Node && (chip.contains(target) || view.contains(target) || expand.contains(target));
       return {
         dom,
         contentDOM: code,

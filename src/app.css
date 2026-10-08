@@ -433,12 +433,15 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
   --c0: light-dark(#3182f6, #4593fc); --c1: light-dark(#15c39a, #2bd4a9); --c2: light-dark(#ff9f2e, #ffae4d); --c3: light-dark(#8b5cf6, #a07bff);
   --c4: light-dark(#f04452, #ff6673); --c5: light-dark(#f5b800, #ffcd3c); --c6: light-dark(#4cc3ff, #6cd1ff); --c7: light-dark(#5fbf4a, #7ed36a);
   --c8: light-dark(#ec5fa8, #f47dbb); --c9: light-dark(#6366f1, #8187ff); --c10: light-dark(#c08457, #d39a6c); --c11: light-dark(#14b8a6, #3cc9b8);
-  display: flex; justify-content: center; align-items: center; padding: 24px 20px; overflow-x: auto;
+  display: flex; justify-content: flex-start; align-items: center; padding: 24px 20px; overflow-x: auto;
   border-radius: 16px; background: var(--d-canvas); color: var(--d-fg); user-select: none; -webkit-user-select: none;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif; font-size: 14px; line-height: 1.4;
   letter-spacing: -0.01em; text-align: left;
 }
-.diagram-canvas svg { max-width: 100%; height: auto; }
+.diagram-canvas svg { max-width: 100%; height: auto; flex: none; }
+/* centred by its margins, not by the flex box: one wider than the card scrolls from its left edge instead of being
+   cut off on both sides */
+.diagram-canvas > * { margin-left: auto; margin-right: auto; }
 .diagram-canvas svg[aria-roledescription='pie'] { max-width: min(100%, 380px) !important; } /* over mermaid's own inline size */
 .diagram-canvas:empty { min-height: 72px; } /* drawing: the space it will take, not a jump */
 .diagram-canvas .c0 { --c: var(--c0); } .diagram-canvas .c1 { --c: var(--c1); } .diagram-canvas .c2 { --c: var(--c2); }
@@ -489,6 +492,16 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 .g-bar { position: absolute; top: 10px; bottom: 10px; min-width: 6px; border-radius: 8px; background: var(--c); }
 .tiptap .mermaid-view { margin: 0.6em 0; cursor: pointer; transition: box-shadow 0.15s; }
 @media (hover: hover) { .tiptap .mermaid-view:hover { box-shadow: inset 0 0 0 1.5px var(--accent-soft); } }
+.tiptap .mermaid-expand { display: none; }
+.tiptap .code-block.mermaid:not(.mermaid-error) .mermaid-expand {
+  display: inline-flex; align-items: center; justify-content: center; position: absolute; right: 10px; bottom: calc(0.6em + 10px);
+  width: 30px; height: 30px; border: 0; border-radius: 9px; padding: 0; color: var(--fg-dim);
+  background: light-dark(rgba(255, 255, 255, 0.92), rgba(35, 37, 43, 0.92)); box-shadow: 0 1px 4px light-dark(rgba(0, 23, 51, 0.12), rgba(0, 0, 0, 0.4));
+  opacity: 0; transition: opacity 0.15s;
+}
+.tiptap .mermaid-expand svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+@media (hover: hover) { .tiptap .code-block.mermaid:hover .mermaid-expand { opacity: 1; } .tiptap .mermaid-expand:hover { color: var(--fg); } }
+html.mobile .tiptap .code-block.mermaid .mermaid-expand { opacity: 0.9; } /* no hover on a phone: always there */
 .tiptap .code-block.mermaid.editing .mermaid-view { margin-top: -0.2em; cursor: default; }
 .tiptap .code-block.mermaid-error .mermaid-view, .diagram-canvas.error {
   justify-content: flex-start; align-items: flex-start; color: #ff453a; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;

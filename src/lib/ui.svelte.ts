@@ -67,6 +67,17 @@ class Ui {
     if (from?.isConnected && from !== document.body && !from.closest('.card-page')) from.focus();
     else focusNote();
   }
+  /** a diagram shown full screen, to zoom into (DiagramViewer.svelte): its drawing as the note has it */
+  diagramView = $state<string | null>(null);
+  private diagramViewFrom: HTMLElement | null = null;
+  viewDiagram(html: string) { this.diagramViewFrom = document.activeElement as HTMLElement | null; this.diagramView = html; }
+  closeDiagramView() {
+    if (this.diagramView === null) return;
+    this.diagramView = null;
+    const from = this.diagramViewFrom;
+    this.diagramViewFrom = null;
+    if (!isMobile && from?.isConnected && from !== document.body) from.focus();
+  }
   /** the diagram builder (DiagramBuilder.svelte): a chart made or changed by hand, written as mermaid code. `width`
    *  is the note's diagram canvas, so the preview is drawn at the size the note will draw it. */
   diagram = $state<{ code: string | null; width: number; resolve: (code: string | null) => void } | null>(null);

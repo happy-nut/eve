@@ -11,6 +11,7 @@
     type Diagram, type Kind, type Shape, type Line, type Flowchart, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt,
   } from './lib/diagram';
   import Select from './Select.svelte';
+  import FlowEditor from './FlowEditor.svelte';
 
   /**
    * A mermaid diagram made without writing mermaid: pick a kind of chart, fill in its parts, and watch it drawn.
@@ -48,6 +49,7 @@
   // the note's canvas width; a narrower panel shows it scaled, as a picture of it
   const width = ui.diagram?.width ?? 640;
   let stageW = $state(0), canvasH = $state(0);
+  let previewEl = $state<HTMLDivElement | null>(null);
   const k = $derived(stageW ? Math.min(1, stageW / width) : 1);
   /** an element's layout size, read a frame after it changes: set straight from the observer, the preview's new
    *  height resized what it observed in the same frame, and the browser reported a ResizeObserver loop */
@@ -265,11 +267,15 @@
       <!-- the note's canvas, at the note's width: scaled as a whole when the panel is narrower -->
       <div class="stage" use:size={(w) => (stageW = w)}>
         <div class="fit" style:width={`${width * k}px`} style:height={canvasH ? `${canvasH * k}px` : null}>
-          <div class="diagram-canvas preview" class:error={!!error} use:size={(_, h) => (canvasH = h)}
+          <div class="diagram-canvas preview" class:error={!!error} use:size={(_, h) => (canvasH = h)} bind:this={previewEl}
             style:width={`${width}px`} style:transform={k < 1 ? `scale(${k})` : null}>
             {#if error}{error}{:else}{@html svg}{/if}
           </div>
+          {#if flow && mode === 'visual' && previewEl && svg && !error}<FlowEditor {flow} host={previewEl} version={svg} {k} />{/if}
         </div>
+        {#if flow && mode === 'visual'}
+          <p class="draw-tip">{isMobile ? 'Tap a box to edit it · tap its + to add the next step, or drag the + onto another box to connect' : 'Click a box to edit it · its + adds the next step, or drag it onto another box to connect · double-click empty space to add a box'}</p>
+        {/if}
       </div>
 
       {#if mode === 'code'}
@@ -498,7 +504,8 @@
 
   .body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 12px 20px 4px; }
   .stage { position: sticky; top: -12px; z-index: 1; background: var(--bg-pop); padding: 0 0 10px; margin-top: -2px; }
-  .fit { margin: 0 auto; overflow: hidden; max-height: 46vh; overflow-y: auto; border-radius: 12px; }
+  .fit { position: relative; margin: 0 auto; overflow: hidden; max-height: 46vh; overflow-y: auto; border-radius: 12px; }
+  .draw-tip { margin: 8px 2px 0; font-size: 12px; color: var(--fg-dim); text-align: center; }
   .preview { transform-origin: top left; box-sizing: border-box; }
 
   .section { padding: 10px 0 6px; }
