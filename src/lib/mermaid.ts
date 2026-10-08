@@ -22,12 +22,12 @@ const dark = () => {
 const PALETTE = {
   light: {
     fg: '#333d4b', strong: '#191f28', dim: '#8b95a1', canvas: '#f9fafb', node: '#ffffff', border: '#e5e8eb', line: '#c4cad1',
-    accent: '#3182f6', tint: '#e8f3ff', tintText: '#1b64da', note: '#fff8e6', noteLine: '#ffe2a6', shadow: 'rgba(0,23,51,0.06)',
+    accent: '#3182f6', head: '#f2f4f6', tint: '#e8f3ff', tintText: '#1b64da', note: '#fff8e6', noteLine: '#ffe2a6', shadow: 'rgba(0,23,51,0.06)',
     hues: ['#3182f6', '#15c39a', '#ff9f2e', '#8b5cf6', '#f04452', '#f5b800', '#4cc3ff', '#5fbf4a', '#ec5fa8', '#6366f1', '#c08457', '#14b8a6'],
   },
   dark: {
     fg: '#e5e8eb', strong: '#f9fafb', dim: '#8b95a1', canvas: '#17181d', node: '#23252b', border: '#2e3138', line: '#4e5560',
-    accent: '#4593fc', tint: '#1c2c45', tintText: '#9cc6ff', note: '#2e2a1d', noteLine: '#5c4f2a', shadow: 'rgba(0,0,0,0.3)',
+    accent: '#4593fc', head: '#2b2e35', tint: '#1c2c45', tintText: '#9cc6ff', note: '#2e2a1d', noteLine: '#5c4f2a', shadow: 'rgba(0,0,0,0.3)',
     hues: ['#4593fc', '#2bd4a9', '#ffae4d', '#a07bff', '#ff6673', '#ffcd3c', '#6cd1ff', '#7ed36a', '#f47dbb', '#8187ff', '#d39a6c', '#3cc9b8'],
   },
 };
@@ -51,6 +51,8 @@ function config(mode: 'light' | 'dark') {
     scale[`cScalePeer${i + 1}`] = h;
   });
   c.hues.forEach((h, i) => (scale[`pie${i + 1}`] = h));
+  // a git graph's branches and an XY chart's series in the same colours, their labels white on them
+  c.hues.slice(0, 8).forEach((h, i) => { scale[`git${i}`] = h; scale[`gitBranchLabel${i}`] = '#ffffff'; scale[`gitInv${i}`] = h; });
   const branches = c.hues.slice(1).concat(c.hues[0]).map((h, i) => `.section-edge-${i} { stroke: ${mix(h, c.canvas, 0.55)}; }`).join(' ');
   return {
     startOnLoad: false,
@@ -74,15 +76,15 @@ function config(mode: 'light' | 'dark') {
       .lineWrapper line { stroke: ${c.line}; stroke-width: 2px; } [id$='arrowhead'] path { fill: ${c.line}; }
       .actor-line { stroke-dasharray: 3 4; }
       .mindmap-node .node-bkg { filter: none; } .mindmap-edges path { stroke-width: 2px !important; } ${branches}
-      /* a database table (erDiagram): its name bold blue on a light-blue header, set apart from the columns under it; white rows split by hairlines, the type quiet,
+      /* a database table (erDiagram): a soft grey header with its name; white rows split by hairlines, the type quiet,
          the keys (PK, FK, UK) small and blue */
       g.node:has(> g.label.name) { clip-path: inset(0 round 12px); }
-      g.node:has(> g.label.name) > .outer-path path:first-child { fill: ${c.tint}; }
+      g.node:has(> g.label.name) > .outer-path path:first-child { fill: ${c.head}; }
       g.node:has(> g.label.name) > .outer-path path + path { stroke: ${c.border}; stroke-width: 2px; }
       .row-rect-odd path:first-child, .row-rect-even path:first-child { fill: ${c.node}; }
       .row-rect-odd path + path, .row-rect-even path + path { stroke: ${c.border}; stroke-width: 0.8px; }
       g.node:has(> g.label.name) > g.divider { display: none; } /* no column lines: a list, not a spreadsheet */
-      g.label.name .nodeLabel p { color: ${c.tintText}; font-weight: 700; letter-spacing: 0.02em; }
+      g.label.name .nodeLabel p { color: ${c.strong}; font-weight: 600; }
       marker circle { fill: ${c.canvas} !important; stroke: ${c.line} !important; } marker path { stroke: ${c.line}; }
       g.label.attribute-name .nodeLabel p { color: ${c.fg}; }
       g.label.attribute-type .nodeLabel p, g.label.attribute-comment .nodeLabel p { color: ${c.dim}; font-size: 12.5px; }
@@ -108,6 +110,9 @@ function config(mode: 'light' | 'dark') {
       doneTaskBkgColor: c.line, doneTaskBorderColor: c.line, critBkgColor: c.hues[4], critBorderColor: c.hues[4],
       todayLineColor: c.hues[4], excludeBkgColor: c.canvas,
       ...scale,
+      commitLabelColor: c.fg, commitLabelBackground: c.canvas, tagLabelBackground: c.tint, tagLabelColor: c.tintText, tagLabelBorder: c.tint,
+      xyChart: { plotColorPalette: c.hues.join(', '), backgroundColor: c.canvas, titleColor: c.strong, xAxisLineColor: c.border, yAxisLineColor: c.border,
+        xAxisTickColor: c.border, yAxisTickColor: c.border, xAxisLabelColor: c.dim, yAxisLabelColor: c.dim, xAxisTitleColor: c.dim, yAxisTitleColor: c.dim },
     },
     flowchart: { curve: 'basis' as const, padding: 16, nodeSpacing: 40, rankSpacing: 56 },
     sequence: { mirrorActors: false, actorMargin: 64, messageMargin: 44, boxMargin: 8, noteMargin: 12, boxTextMargin: 6 },

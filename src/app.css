@@ -116,7 +116,7 @@ html.mobile aside .mtop .sync { font-size: 13px; color: var(--fg-dim); display: 
 html.mobile aside .mtop .gear:active { background: var(--bg-active); }
 
 html.mobile aside .ico-slot { width: 24px; height: 24px; }
-html.mobile aside .tools { display: none; } /* hover-only; a long-press opens the row's menu instead */
+html.mobile aside .tools { display: none; } /* hover-only; a phone deletes with a pull to the left */
 
 /* a row lifted by a long press: its copy rides under the finger, the row stays faint where it was */
 html.mobile aside .row.dragging { opacity: 0.3; }
@@ -279,33 +279,20 @@ html.mobile :is(aside, .lifted) .gname {
 }
 html.mobile :is(aside, .lifted) .fold { width: 44px; height: 44px; }
 
-/* a row pulled sideways (swipeRow.ts): it follows the finger, the action shows behind it, full colour past the mark */
-html.mobile :is(aside, .lifted) .note-row { position: relative; touch-action: pan-y; --sx: 0px; }
-html.mobile :is(aside, .lifted) .note-row > :not(.swipe-act) {
+/* a row pulled sideways (swipeRow.ts): it follows the finger, the delete shows behind it, full colour past the mark.
+   A note's row and a group's alike. */
+html.mobile :is(aside, .lifted) :is(.note-row, .ghead) { position: relative; touch-action: pan-y; --sx: 0px; }
+html.mobile :is(aside, .lifted) :is(.note-row, .ghead) > :not(.swipe-act) {
   position: relative; z-index: 1; transform: translateX(var(--sx)); transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-html.mobile :is(aside, .lifted) .note-row.swiping > :not(.swipe-act) { transition: none; }
-html.mobile :is(aside, .lifted) .note-row:is(.to-left, .to-right) > button:first-child { background: var(--bg); }
+html.mobile :is(aside, .lifted) :is(.note-row, .ghead).swiping > :not(.swipe-act) { transition: none; }
+html.mobile :is(aside, .lifted) :is(.note-row, .ghead).to-left > :not(.swipe-act) { background: var(--bg); }
 html.mobile :is(aside, .lifted) .swipe-act {
-  position: absolute; z-index: 0; inset: 1px 0; display: none; align-items: center; padding: 0 22px; border-radius: 8px;
-  font-size: 14.5px; font-weight: 600; color: #fff; opacity: 0.55; transition: opacity 0.12s;
+  position: absolute; z-index: 0; inset: 1px 0; display: none; align-items: center; justify-content: flex-end; padding: 0 22px;
+  border-radius: 8px; background: #ff453a; font-size: 14.5px; font-weight: 600; color: #fff; opacity: 0.55; transition: opacity 0.12s;
 }
-html.mobile :is(aside, .lifted) .swipe-act.del { justify-content: flex-end; background: #ff453a; }
-html.mobile :is(aside, .lifted) .swipe-act.move { justify-content: flex-start; background: var(--accent); }
-html.mobile :is(aside, .lifted) .note-row.to-left .swipe-act.del, html.mobile :is(aside, .lifted) .note-row.to-right .swipe-act.move { display: flex; }
-html.mobile :is(aside, .lifted) .note-row.armed .swipe-act { opacity: 1; }
-
-/* reordering: a handle on every row to drag it by; nothing else on the row answers a touch */
-html.mobile aside .mtop .done {
-  border: 0; background: none; color: var(--accent); font: inherit; font-size: 16px; font-weight: 600;
-  min-height: 44px; padding: 0 14px;
-}
-html.mobile aside .handle {
-  flex: none; width: 44px; height: 48px; display: inline-flex; align-items: center; justify-content: center;
-  color: var(--fg-dim); touch-action: none;
-}
-html.mobile aside .handle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
-html.mobile aside.reordering .note-row > button:first-child:active { transform: none; }
+html.mobile :is(aside, .lifted) :is(.note-row, .ghead).to-left .swipe-act { display: flex; }
+html.mobile :is(aside, .lifted) :is(.note-row, .ghead).armed .swipe-act { opacity: 1; }
 /* the note: a flat bar of grey icons, and a page head sized for a phone */
 html.mobile .mhead {
   position: absolute; top: 0; left: 0; right: 0; height: 52px; z-index: 6; display: flex; align-items: center;
