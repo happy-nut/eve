@@ -60,7 +60,14 @@ const BlankLine = Paragraph.extend({
   addStorage() {
     return {
       markdown: {
-        serialize(state: any, node: PMNode) {
+        serialize(state: any, node: PMNode, parent?: PMNode, index?: number) {
+          // the empty line StarterKit's TrailingNode keeps after a note ending in a block (a code block, a table):
+          // the editor's, not the note's. Written down, merely opening such a note changed it ("edited just now",
+          // synced) — and the next opening added it again
+          // (a copy renders a bare Fragment: no parent node there, and nothing to leave out)
+          const trailer = parent?.type?.name === 'doc' && index === parent.childCount - 1 && index > 0 && !node.content.size
+            && parent.child(index - 1).type.name !== 'paragraph';
+          if (trailer) return;
           if (node.content.size) state.renderInline(node);
           else state.write(BLANK);
           state.closeBlock(node);

@@ -74,6 +74,10 @@
       const box = scrollEl.getBoundingClientRect();
       scrollEl.scrollBy({ top: caret.top - (box.top + box.height / 2) });
     };
+    // the empty line StarterKit keeps at the end of a note is only put there by the first transaction: before it, the
+    // note's end is the end of its last block, and a caret sent there (opening a note) landed at the end of a closing
+    // code block's last line, scrolling the code sideways to it. Put it there first, so the end is the empty line.
+    editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false));
     const section = notes.section; // a [[Title#Section]] link brought us here
     notes.section = '';
     if (section) {

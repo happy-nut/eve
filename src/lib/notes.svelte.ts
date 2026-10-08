@@ -269,7 +269,8 @@ class NotesStore {
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   update(id: string, body: string) {
     const n = this.all.find((x) => x.id === id);
-    if (!n || n.body === body) return;
+    // the editor writes no final newline where the file has one: the same note, not an edit
+    if (!n || n.body === body || n.body.replace(/\n+$/, '') === body.replace(/\n+$/, '')) return;
     n.body = body;
     n.updatedAt = Date.now();
     clearTimeout(this.timers.get(id));
