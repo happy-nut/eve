@@ -26,6 +26,10 @@ export const DEFAULTS: Action[] = [
   { id: 'exportPdf', label: 'Export note as PDF…', scope: 'app', keys: 'Mod-p' },
   { id: 'exportPng', label: 'Export note as an image…', scope: 'app', keys: 'Mod-Alt-p' },
   { id: 'settings', label: 'Settings', scope: 'app', keys: 'Mod-,' },
+  // the note's text only: the list, menus and bars keep their size, so nothing around the note moves
+  { id: 'textBigger', label: 'Larger text', scope: 'app', keys: 'Mod-=' },
+  { id: 'textSmaller', label: 'Smaller text', scope: 'app', keys: 'Mod-Minus' },
+  { id: 'textReset', label: 'Default text size', scope: 'app', keys: 'Mod-0' },
   { id: 'hide', label: 'Hide window', scope: 'app', keys: 'Escape' },
 
   { id: 'bold', label: 'Bold', scope: 'editor', keys: 'Mod-b' },

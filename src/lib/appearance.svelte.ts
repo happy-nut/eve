@@ -33,6 +33,8 @@ interface Appearance {
 // the window's own defaults match tauri.conf.json, so a fresh install never resizes on launch
 // A phone starts from bigger type. Appearance lives in this device's localStorage and never syncs, so a
 // phone and a Mac each keep their own.
+/** the note's text size, px: the Size slider's range, and where ⌘+ / ⌘- stop */
+export const SIZE_MIN = 12, SIZE_MAX = 28;
 const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, closeSidebarOnWrite: false, autoIcon: true, dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
 
 function load(): Appearance {
@@ -46,6 +48,12 @@ class AppearanceStore {
   s = $state<Appearance>(load());
   get stack() { return this.s.font === 'custom' ? this.s.custom || DEFAULTS.font : FONTS.find((f) => f.id === this.s.font)?.stack ?? FONTS[0].stack; }
   set(patch: Partial<Appearance>) { Object.assign(this.s, patch); localStorage.setItem(LS, JSON.stringify(this.s)); }
+  /** ⌘+ / ⌘- / ⌘0: the note's text a step larger or smaller (1px, within the Size slider's range), or back to the default */
+  textSize(step: 1 | -1 | 0): number {
+    const size = step ? Math.min(SIZE_MAX, Math.max(SIZE_MIN, this.s.size + step)) : DEFAULTS.size;
+    this.set({ size });
+    return size;
+  }
   /** Appearance's own Reset: how notes look (theme, type, text), not what the app does (daily notes, window…) */
   reset() {
     const { theme, font, custom, size, lineHeight, width } = DEFAULTS;

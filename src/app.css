@@ -382,7 +382,9 @@ aside.focus-flash::after, main.focus-flash::after {
 .tiptap ul[data-type='taskList'] li > div { flex: 1; }
 /* only the item's own text, not the > div's nested list: Notion strikes the checked line alone and leaves children be */
 .tiptap ul[data-type='taskList'] li[data-checked='true'] > div > p { color: var(--fg-dim); text-decoration: line-through; }
-.tiptap input[type='checkbox'] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+/* grows with the text (15px at the default 15px), so a larger note's to-dos are not left with small boxes; the
+   font-size is the text's, as an input's own would not be */
+.tiptap input[type='checkbox'] { accent-color: var(--accent); font-size: inherit; width: calc(0.6em + 6px); height: calc(0.6em + 6px); margin: 0; }
 /* a phone's caret in the app's blue (its WebView would draw the Android theme's teal); the Mac keeps its own */
 html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(--accent); }
 .tiptap blockquote { border-left: 3px solid var(--line); margin: 0.5em 0; padding-left: 1em; color: var(--fg-dim); }
@@ -585,6 +587,12 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 }
 .drop-pill {
   background: var(--tip-bg); color: var(--tip-fg); font-size: 12.5px; font-weight: 500;
+  padding: 7px 14px; border-radius: 999px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+/* ⌘+ / ⌘-: the text size, for a moment, at the bottom of the window */
+.size-pill {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 46; pointer-events: none;
+  background: var(--tip-bg); color: var(--tip-fg); font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums;
   padding: 7px 14px; border-radius: 999px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
 }
 /* over the list: the group (or the note's row) they would go into */

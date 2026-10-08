@@ -374,6 +374,14 @@
    * Either way the webview never gets the drop: its own pastes DOM into the editor, which then takes no
    * keystroke at all.
    */
+  /** the note's text size, said for a moment after ⌘+ / ⌘- / ⌘0 */
+  let sizeShown = $state<number | null>(null);
+  let sizeTimer: ReturnType<typeof setTimeout> | undefined;
+  function showSize(px: number) {
+    sizeShown = px;
+    clearTimeout(sizeTimer);
+    sizeTimer = setTimeout(() => (sizeShown = null), 900);
+  }
   let dropHint = $state<string | null>(null);
   let hintTimer: ReturnType<typeof setTimeout> | undefined;
   let dropRow: HTMLElement | null = null; // the list's row a drop would go into, marked while it is over it
@@ -466,7 +474,8 @@
       return;
     }
     if (e.defaultPrevented && !(e as any).eveApp) return;
-    const a = shortcuts.match(e, ['app']);
+    // ⌘+ is ⌘⇧= on most keyboards (and the keypad's +): the same as ⌘= unless it is bound to something itself
+    const a = shortcuts.match(e, ['app']) ?? (e.key === '+' && (e.metaKey || e.ctrlKey) && !e.altKey ? shortcuts.actions.find((x) => x.id === 'textBigger') : undefined);
     if (!a) return;
     // Escape belongs to whatever is open on top of the note (the PDF panel closes on it, and lets the
     // window hide once it is gone)
@@ -493,6 +502,9 @@
       case 'exportPdf': void exportCurrent('pdf'); break;
       case 'exportPng': void exportCurrent('png'); break;
       case 'settings': settingsOpen = !settingsOpen; break;
+      case 'textBigger': showSize(appearance.textSize(1)); break;
+      case 'textSmaller': showSize(appearance.textSize(-1)); break;
+      case 'textReset': showSize(appearance.textSize(0)); break;
       case 'hide': win.hide(); break;
     }
   }
@@ -582,6 +594,9 @@
 {#if ui.photo}<ImageViewer />{/if}
 {#if ui.pdf}
   {#await import('./PdfViewer.svelte') then { default: PdfViewer }}<PdfViewer />{/await}
+{/if}
+{#if sizeShown !== null}
+  <div class="size-pill" transition:fade={{ duration: 120 }} role="status">Text {sizeShown}px</div>
 {/if}
 {#if dropHint}
   <div class="drop-hint" transition:fade={{ duration: 90 }}>
