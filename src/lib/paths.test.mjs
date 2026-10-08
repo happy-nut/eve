@@ -21,3 +21,13 @@ assert.equal(stem('Report v2.final.pdf'), 'Report v2.final');
 assert.equal(stem('Makefile'), 'Makefile');
 
 console.log('PATHS_OK');
+
+// a link in an imported file, read from its folder
+{
+  const { resolveLink } = await import('./paths.ts');
+  assert.equal(resolveLink('Notes/Trip', 'img/a.png'), 'Notes/Trip/img/a.png');
+  assert.equal(resolveLink('Notes/Trip', '../img/a%20b.png'), 'Notes/img/a b.png');
+  assert.equal(resolveLink('', './x.md#part'), 'x.md');
+  assert.equal(resolveLink('A', '../../x.png'), null, 'out of the import');
+  for (const away of ['https://x.y/a.png', 'mailto:a@b', 'data:image/png;base64,AA', '/abs/a.png', '#heading']) assert.equal(resolveLink('A', away), null, away);
+}
