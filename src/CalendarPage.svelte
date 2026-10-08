@@ -214,7 +214,8 @@
   :global(html.mobile) .day { min-height: 0; padding: 5px 3px; gap: 2px; border-radius: 10px; align-items: center; }
   :global(html.mobile) .wd { padding: 0; font-size: 11px; text-align: center; }
   :global(html.mobile) .num { margin: 0; width: 26px; height: 26px; line-height: 26px; font-size: 13.5px; }
-  /* under the number on a phone: the cell is narrow */
-  :global(html.mobile) .day.has .num::after { top: auto; bottom: -5px; right: 50%; margin: 0 -2.5px 0 0; width: 4px; height: 4px; }
+  /* beside the number on a phone too, a little closer: under it, it sat on the day's first line of text. Absolutely
+     placed, so the number itself stays in the middle of the day */
+  :global(html.mobile) .day.has .num::after { right: -6px; width: 4px; height: 4px; margin-top: -2px; }
   :global(html.mobile) .line { font-size: 10px; -webkit-line-clamp: 2; line-clamp: 2; text-align: center; }
 </style>
