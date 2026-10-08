@@ -69,7 +69,14 @@ export function starter(kind: Kind, today = iso(new Date())): Diagram {
 // ---- text inside the code ----
 // mermaid reads entity codes (#quot; #58;) in labels: what would end a label is written as one
 const ent = (s: string, chars: string) => [...s].map((c) => (chars.includes(c) ? `#${c.charCodeAt(0)};` : c)).join('');
-const unent = (s: string) => s.replace(/#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/#quot;/g, '"');
+// mermaid reads #name; as the HTML entity &name;: the common ones are read back as their characters (a name not in this
+// list makes the code one the forms leave alone, fromCode, so its meaning is never changed by being written anew)
+const NAMED: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0' };
+const unent = (s: string) => s.replace(/#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/#([a-zA-Z]+);/g, (m, n) => NAMED[n] ?? m);
+/** a line beginning with one of these is a setting, not a task or a period (mermaid reads them so, in any case):
+ *  a name that begins with one has its first letter written as an entity code */
+const KEYWORD = /^(title|section|excludes|includes|dateformat|axisformat|tickinterval|todaymarker|weekday|weekend|acctitle|accdescr)\b/i;
+const unkeyword = (s: string) => (KEYWORD.test(s) ? `#${s.charCodeAt(0)};${s.slice(1)}` : s);
 const one = (s: string) => s.replace(/\s*\n\s*/g, ' ').trim(); // a label is one line
 const quoted = (s: string) => `"${ent(one(s), '"#|')}"`;
 const unquote = (s: string) => unent(s.trim().replace(/^"(.*)"$/, '$1'));
@@ -107,7 +114,10 @@ function readNode(s: string): { id: string; label?: string; shape?: Shape; rest:
     if (q < 0) return null;
     const end = rest.indexOf(close, q + 1);
     if (end < 0) return null;
-    const label = unquote(rest.slice(open.length, end));
+    const inner = rest.slice(open.length, end);
+    // [/…/], [\…\] and their mixes are parallelograms and trapezoids, shapes the chart cannot keep
+    if (open === '[' && !inner.startsWith('"') && /^[/\\]/.test(inner)) return null;
+    const label = unquote(inner);
     return { id, label, shape, rest: rest.slice(end + close.length) };
   }
   return { id, rest };
@@ -175,22 +185,23 @@ function seqRead(lines: string[]): Sequence | null {
 }
 
 // ---- pie ----
-const num = (v: number) => (Number.isFinite(v) && v > 0 ? +v.toFixed(4) : 0);
+// a value as mermaid reads it: no exponent (1e+29 is not a number to it), so kept under a quadrillion
+const num = (v: number) => (Number.isFinite(v) && v > 0 ? +Math.min(v, 1e15).toFixed(4) : 0);
 function pieCode(d: Pie) {
   const lines = [`pie${d.showData ? ' showData' : ''}`];
-  if (one(d.title)) lines.push(`  title ${one(d.title)}`);
+  if (one(d.title)) lines.push(`  title ${ent(one(d.title), '#;')}`);
   for (const s of d.slices) lines.push(`  ${quoted(s.label)} : ${num(s.value)}`);
   return lines.join('\n');
 }
 function pieRead(lines: string[], head: string): Pie | null {
   const h = /^pie(\s+showData)?(?:\s+title\s+(.*))?$/.exec(head);
   if (!h) return null;
-  const d: Pie = { kind: 'pie', title: h[2]?.trim() ?? '', slices: [], showData: !!h[1] };
+  const d: Pie = { kind: 'pie', title: unent(h[2]?.trim() ?? ''), slices: [], showData: !!h[1] };
   for (const raw of lines) {
     const line = raw.trim();
     const t = /^title\s+(.*)$/.exec(line);
-    if (t) { d.title = t[1].trim(); continue; }
-    const s = /^"((?:[^"]|\\")*)"\s*:\s*([0-9.]+)$/.exec(line);
+    if (t) { d.title = unent(t[1].trim()); continue; }
+    const s = /^"((?:[^"]|\\")*)"\s*:\s*(\d+(?:\.\d+)?|\.\d+)$/.exec(line);
     if (!s) return null;
     d.slices.push({ label: unent(s[1]), value: +s[2] });
   }
@@ -221,7 +232,7 @@ function mindRead(lines: string[]): Mindmap | null {
   for (const raw of rest) {
     const ind = raw.length - raw.trimStart().length;
     const text = raw.trim();
-    if (ind <= base || /[()[\]{}]/.test(text)) return null; // a shape or a second root
+    if (ind <= base || /[()[\]{}]/.test(text) || text.startsWith('::')) return null; // a shape, a second root, a class or an icon
     while (indents.length > 1 && ind <= indents[indents.length - 1]) indents.pop();
     indents.push(ind);
     d.items.push({ text: unent(text), depth: indents.length - 1 });
@@ -235,7 +246,7 @@ function timeCode(d: Timeline) {
   if (one(d.title)) lines.push(`  title ${ent(one(d.title), ':#')}`);
   for (const p of d.periods) {
     const events = p.events.map(one).filter(Boolean).map((e) => ent(e, ':#'));
-    lines.push(`  ${ent(one(p.label) || '…', ':#')}${events.map((e) => ` : ${e}`).join('')}`);
+    lines.push(`  ${unkeyword(ent(one(p.label) || '…', ':#'))}${events.map((e) => ` : ${e}`).join('')}`);
   }
   return lines.join('\n');
 }
@@ -243,10 +254,11 @@ function timeRead(lines: string[]): Timeline | null {
   const d: Timeline = { kind: 'timeline', title: '', periods: [] };
   for (const raw of lines) {
     const line = raw.trim();
-    const t = /^title\s+(.*)$/.exec(line);
+    const t = /^title\s+(.*)$/i.exec(line);
     if (t) { d.title = unent(t[1].trim()); continue; }
-    if (line.startsWith('section ')) return null;
-    const [label, ...events] = line.split(':').map((s) => unent(s.trim()));
+    if (/^section\s/i.test(line)) return null;
+    // events part at a colon with a space after it (or the line's end): "10:30" and a URL's "https:" stay whole
+    const [label, ...events] = line.split(/\s*:(?:\s+|$)/).map((s) => unent(s.trim()));
     if (!label) { const last = d.periods[d.periods.length - 1]; if (!last) return null; last.events.push(...events); continue; }
     d.periods.push({ label, events });
   }
@@ -267,21 +279,23 @@ function ganttCode(d: Gantt) {
   if (one(d.title)) lines.push(`  title ${ent(one(d.title), '#;')}`);
   for (const s of d.sections) {
     lines.push(`  section ${ent(one(s.name) || 'Tasks', '#;')}`);
-    for (const t of s.tasks) lines.push(`    ${ent(one(t.name) || 'Task', ':#;')} : ${t.start}, ${Math.max(1, Math.round(t.days) || 1)}d`);
+    for (const t of s.tasks) lines.push(`    ${unkeyword(ent(one(t.name) || 'Task', ':#;'))} : ${t.start}, ${Math.max(1, Math.round(t.days) || 1)}d`);
   }
   return lines.join('\n');
 }
+const realDay = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); const t = new Date(Date.UTC(y, m - 1, d)); return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d; };
 function ganttRead(lines: string[]): Gantt | null {
   const d: Gantt = { kind: 'gantt', title: '', sections: [] };
   for (const raw of lines) {
     const line = raw.trim();
     if (line === 'dateFormat YYYY-MM-DD' || /^tickInterval 1(day|week|month)$/.test(line) || line === 'axisFormat %Y-%m') continue; // written anew
-    const t = /^title\s+(.*)$/.exec(line);
+    const t = /^title\s+(.*)$/i.exec(line);
     if (t) { d.title = unent(t[1].trim()); continue; }
-    const s = /^section\s+(.*)$/.exec(line);
+    const s = /^section\s+(.*)$/i.exec(line);
     if (s) { d.sections.push({ name: unent(s[1].trim()), tasks: [] }); continue; }
     const k = /^(.+?)\s*:\s*(\d{4}-\d{2}-\d{2}),\s*(\d+)d$/.exec(line);
-    if (!k) return null;
+    // a real day (2024-13-01 and 2024-02-30 are not), and a length under a century
+    if (!k || !realDay(k[2]) || +k[3] > 36500) return null;
     if (!d.sections.length) d.sections.push({ name: 'Tasks', tasks: [] });
     d.sections[d.sections.length - 1].tasks.push({ name: unent(k[1]), start: k[2], days: +k[3] });
   }
@@ -301,6 +315,8 @@ export function toCode(d: Diagram): string {
 
 /** a diagram's code as the builder's chart, or null: not a kind it makes, or written beyond what it can show */
 export function fromCode(code: string): Diagram | null {
+  // an entity the forms would not read back (#copy;): written anew it would change, so the code is left as it is
+  for (const m of code.matchAll(/#([a-zA-Z]+);/g)) if (!(m[1] in NAMED)) return null;
   const lines = code.split('\n').filter((l) => l.trim() && !/^\s*%%/.test(l) === true);
   if (lines.length !== code.split('\n').filter((l) => l.trim()).length) return null; // a %% comment would be lost
   const head = lines.shift()?.trim() ?? '';

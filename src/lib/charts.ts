@@ -70,8 +70,17 @@ function gantt(d: Gantt) {
   const ticks: number[] = [];
   if (span <= 16) for (let n = from; n <= to; n++) ticks.push(n);
   else if (span <= 120) for (let n = from; n <= to; n += 7) ticks.push(n);
-  else for (let n = from; n <= to; n++) if (new Date(n * DAY).getUTCDate() === 1) ticks.push(n);
-  const axis = ticks.map((n) => `<span style="left:${pct(n)}">${md(n)}</span>`).join('');
+  else {
+    // each month's first (each year's past a decade), stepped a month at a time, not a day: a span of centuries drew for seconds
+    const d0 = new Date(from * DAY), years = span > 3660;
+    for (let y = d0.getUTCFullYear(), m = years ? 0 : d0.getUTCMonth() + 1; ; years ? y++ : m++) {
+      const n = Math.round(Date.UTC(y, m, 1) / DAY);
+      if (n > to) break;
+      if (n >= from) ticks.push(n);
+    }
+  }
+  const label = span > 3660 ? (n: number) => String(new Date(n * DAY).getUTCFullYear()) : md;
+  const axis = ticks.map((n) => `<span style="left:${pct(n)}">${label(n)}</span>`).join('');
   const grid = ticks.map((n) => `<i style="left:${pct(n)}"></i>`).join('');
   const rows = d.sections.map((s, si) => {
     const head = `<div class="g-sec">${esc(s.name)}</div><div class="g-track g-sec-track">${grid}</div>`;

@@ -50,3 +50,36 @@ for (const code of [
 ]) assert.equal(fromCode(code), null, code);
 
 console.log('diagram ok');
+
+// ---- found in the bug hunt ----
+// a task or a period named like a setting ("title …", "Section …") is not taken for one
+{
+  const g = { kind: 'gantt', title: '', sections: [{ name: 'S', tasks: [{ name: 'title search', start: '2024-01-01', days: 3 }, { name: 'Section review', start: '2024-01-04', days: 2 }] }] };
+  assert.deepEqual(fromCode(toCode(g)), g);
+  const t = { kind: 'timeline', title: '', periods: [{ label: 'title deed', events: ['signed'] }, { label: 'section x', events: [] }] };
+  assert.deepEqual(fromCode(toCode(t)), t);
+}
+// a colon inside an event (a time, a URL) is not where it ends
+assert.deepEqual(fromCode('timeline\n  2020 : meeting at 10:30 : see https://x.com').periods[0].events, ['meeting at 10:30', 'see https://x.com']);
+// named entities read as mermaid reads them; one the forms do not know leaves the code alone
+assert.equal(fromCode('flowchart LR\n  A["Tom #amp; Jerry"] --> B').nodes[0].label, 'Tom & Jerry');
+assert.equal(fromCode('pie\n  "R#amp;D" : 1').slices[0].label, 'R&D');
+assert.equal(fromCode('flowchart LR\n  A["#copy; 2026"] --> B'), null);
+// parallelograms and trapezoids are shapes the chart cannot keep
+assert.equal(fromCode('flowchart LR\n  A[/Input/] --> B[\\Out\\]'), null);
+assert.equal(fromCode('flowchart LR\n  A["/path/"] --> B').nodes[0].label, '/path/');
+// a mind map's class or icon line is not a branch
+assert.equal(fromCode('mindmap\n  root((x))\n    A\n    :::urgent large'), null);
+// days that are not days, and spans past a century
+assert.equal(fromCode('gantt\n  section A\n    T : 2024-13-01, 2d'), null);
+assert.equal(fromCode('gantt\n  section A\n    T : 2024-02-30, 2d'), null);
+assert.equal(fromCode('gantt\n  section A\n    T : 2024-01-01, 100000000d'), null);
+// a pie value that is not a number
+assert.equal(fromCode('pie\n  "x" : 1.2.3'), null);
+assert.equal(fromCode('pie\n  "x" : .'), null);
+assert.match(toCode({ kind: 'pie', title: '', showData: false, slices: [{ label: 'x', value: 1e29 }] }), /: 1000000000000000$/);
+// a pie's title is read like every other
+assert.equal(fromCode('pie title A #35; B\n  "x" : 1').title, 'A # B');
+assert.deepEqual(fromCode(toCode({ kind: 'pie', title: 'A # B; C', showData: false, slices: [{ label: 'x', value: 1 }] })).title, 'A # B; C');
+
+console.log('diagram hunt ok');
