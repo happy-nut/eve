@@ -151,6 +151,9 @@ export const CodeBlock = CodeBlockBase.extend({
         editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, language: value || null }));
         editor.commands.focus();
       };
+      // pressing it leaves the caret where it was: WebKit put it in the block above the code (the chip straddles
+      // the block's top edge), and the click looked as if it had landed somewhere else
+      chip.addEventListener('mousedown', (e) => e.preventDefault());
       // the app's one menu (Menu.svelte): a popup under the chip on the Mac, a sheet on a phone
       chip.addEventListener('click', () => {
         if (ui.menu) { ui.closeMenu(); return; }

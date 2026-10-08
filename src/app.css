@@ -403,7 +403,9 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
   font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px; line-height: 1.5;
   padding: 1px 6px; cursor: pointer; opacity: 0; transition: opacity 0.12s;
 }
-.tiptap .code-block:hover .code-lang, .tiptap .code-lang:hover, .tiptap .code-lang.open { opacity: 1; }
+/* hidden, it is not there to be clicked either: a click on the code's top edge is a click in the code */
+.tiptap .code-lang { pointer-events: none; }
+.tiptap .code-block:hover .code-lang, .tiptap .code-lang:hover, .tiptap .code-lang.open { opacity: 1; pointer-events: auto; }
 .tiptap .code-lang:hover, .tiptap .code-lang.open { color: var(--fg); background: var(--bg-side); } /* opaque: a tint would let the edge it straddles show through */
 
 
