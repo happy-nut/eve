@@ -22,12 +22,12 @@ const dark = () => {
 const PALETTE = {
   light: {
     fg: '#333d4b', strong: '#191f28', dim: '#8b95a1', canvas: '#f9fafb', node: '#ffffff', border: '#e5e8eb', line: '#c4cad1',
-    accent: '#3182f6', tint: '#e8f3ff', tintText: '#1b64da', note: '#fff8e6', noteLine: '#ffe2a6', shadow: 'rgba(0,23,51,0.06)',
+    accent: '#3182f6', head: '#f2f4f6', tint: '#e8f3ff', tintText: '#1b64da', note: '#fff8e6', noteLine: '#ffe2a6', shadow: 'rgba(0,23,51,0.06)',
     hues: ['#3182f6', '#15c39a', '#ff9f2e', '#8b5cf6', '#f04452', '#f5b800', '#4cc3ff', '#5fbf4a', '#ec5fa8', '#6366f1', '#c08457', '#14b8a6'],
   },
   dark: {
     fg: '#e5e8eb', strong: '#f9fafb', dim: '#8b95a1', canvas: '#17181d', node: '#23252b', border: '#2e3138', line: '#4e5560',
-    accent: '#4593fc', tint: '#1c2c45', tintText: '#9cc6ff', note: '#2e2a1d', noteLine: '#5c4f2a', shadow: 'rgba(0,0,0,0.3)',
+    accent: '#4593fc', head: '#2b2e35', tint: '#1c2c45', tintText: '#9cc6ff', note: '#2e2a1d', noteLine: '#5c4f2a', shadow: 'rgba(0,0,0,0.3)',
     hues: ['#4593fc', '#2bd4a9', '#ffae4d', '#a07bff', '#ff6673', '#ffcd3c', '#6cd1ff', '#7ed36a', '#f47dbb', '#8187ff', '#d39a6c', '#3cc9b8'],
   },
 };
@@ -65,8 +65,8 @@ function config(mode: 'light' | 'dark') {
       /* a flowchart's pill (its start or end: only it is drawn as an outer path with a plain label) in solid blue */
       .node rect.basic, .node rect.label-container, rect.actor, .cluster rect { rx: 12px; ry: 12px; }
       .node .label-container, rect.actor { filter: drop-shadow(0 1px 3px ${c.shadow}); }
-      g.node:has(> g.outer-path):has(> g.label) path { fill: ${c.accent} !important; stroke: ${c.accent} !important; }
-      g.node:has(> g.outer-path):has(> g.label) .nodeLabel, g.node:has(> g.outer-path):has(> g.label) .nodeLabel p { color: #fff; }
+      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) path { fill: ${c.accent} !important; stroke: ${c.accent} !important; }
+      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) .nodeLabel p { color: #fff; }
       g.node:has(> polygon) polygon, g.node:has(> circle) circle { fill: ${c.tint}; stroke: ${c.tint}; }
       g.node:has(> polygon) .nodeLabel, g.node:has(> circle) .nodeLabel { color: ${c.tintText}; }
       .flowchart-link { stroke-width: 1.6px; } .marker { fill: ${c.line}; stroke: ${c.line}; }
@@ -74,6 +74,19 @@ function config(mode: 'light' | 'dark') {
       .lineWrapper line { stroke: ${c.line}; stroke-width: 2px; } [id$='arrowhead'] path { fill: ${c.line}; }
       .actor-line { stroke-dasharray: 3 4; }
       .mindmap-node .node-bkg { filter: none; } .mindmap-edges path { stroke-width: 2px !important; } ${branches}
+      /* a database table (erDiagram): a tinted header with its name, white rows split by hairlines, the type quiet,
+         the keys (PK, FK, UK) small and blue */
+      g.node:has(> g.label.name) { clip-path: inset(0 round 12px); }
+      g.node:has(> g.label.name) > .outer-path path:first-child { fill: ${c.head}; }
+      g.node:has(> g.label.name) > .outer-path path + path { stroke: ${c.border}; stroke-width: 2px; }
+      .row-rect-odd path:first-child, .row-rect-even path:first-child { fill: ${c.node}; }
+      .row-rect-odd path + path, .row-rect-even path + path { stroke: ${c.border}; stroke-width: 0.8px; }
+      g.node:has(> g.label.name) > g.divider { display: none; } /* no column lines: a list, not a spreadsheet */
+      g.label.name .nodeLabel p { color: ${c.strong}; font-weight: 600; }
+      marker circle { fill: ${c.canvas} !important; stroke: ${c.line} !important; } marker path { stroke: ${c.line}; }
+      g.label.attribute-name .nodeLabel p { color: ${c.fg}; }
+      g.label.attribute-type .nodeLabel p, g.label.attribute-comment .nodeLabel p { color: ${c.dim}; font-size: 12.5px; }
+      g.label.attribute-keys .nodeLabel p { color: ${c.tintText}; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; }
       .grid .tick line { stroke: ${c.border}; } .grid path { stroke-width: 0; } .grid .tick text { fill: ${c.dim}; }`,
     themeVariables: {
       darkMode: mode === 'dark', fontFamily: FONT, fontSize: '14px', background: c.canvas,
@@ -101,6 +114,7 @@ function config(mode: 'light' | 'dark') {
     gantt: { useWidth: 680, barHeight: 24, barGap: 8, topPadding: 44, leftPadding: 90, fontSize: 13, sectionFontSize: 13, axisFormat: '%m/%d' },
     pie: { textPosition: 0.72 },
     mindmap: { padding: 16 },
+    er: { entityPadding: 16, fontSize: 13, minEntityWidth: 120, diagramPadding: 16 },
   };
 }
 

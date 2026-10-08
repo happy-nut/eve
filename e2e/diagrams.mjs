@@ -100,13 +100,16 @@ try {
   assert.equal(await page.locator('.tiptap .chart-pie .lbl').first().textContent(), 'Writing <b>&', 'a label is text, not markup');
   console.log('ok   pie: drawn by Eve, the same in the note');
 
-  await page.evaluate(() => { localStorage.setItem('eve.notes.a', `---\nid: a\nupdated: 2\ndeleted: false\norder: 0\n---\n# Plan\n\n\`\`\`mermaid\nflowchart LR\n  subgraph one\n  A --> B\n  end\n\`\`\`\n`); });
-  await page.reload();
-  await page.waitForSelector('.tiptap .mermaid-view svg');
-  await page.locator('.tiptap .mermaid-view').click();
-  await page.waitForSelector('.builder textarea');
-  assert.match(await page.locator('.builder textarea').inputValue(), /subgraph one/);
-  await page.keyboard.press('Escape');
+  // a fresh page: the one above saves its note on the way out, over anything seeded under it
+  const hand = await browser.newPage({ viewport: { width: 1200, height: 860 } });
+  hand.on('pageerror', (e) => errors.push(e.message));
+  await hand.addInitScript(() => { localStorage.clear(); localStorage.setItem('eve.notes.a', `---\nid: a\nupdated: 2\ndeleted: false\norder: 0\n---\n# Plan\n\n\`\`\`mermaid\nflowchart LR\n  subgraph one\n  A --> B\n  end\n\`\`\`\n`); });
+  await hand.goto(URL_);
+  await hand.waitForSelector('.tiptap .mermaid-view svg');
+  await hand.locator('.tiptap .mermaid-view').click();
+  await hand.waitForSelector('.builder textarea');
+  assert.match(await hand.locator('.builder textarea').inputValue(), /subgraph one/);
+  await hand.keyboard.press('Escape');
   console.log('ok   hand-written: opens as code');
 
   assert.deepEqual(errors, []);
