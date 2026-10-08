@@ -2,6 +2,8 @@
  * Mermaid diagrams (a ```mermaid code block drawn as its picture). The library is the biggest thing the app could
  * load, so it comes only with the first diagram shown, as the code grammars do (code.ts).
  */
+import { chartHtml } from './charts';
+
 type Mermaid = typeof import('mermaid').default;
 let lib: Promise<Mermaid> | null = null;
 let theme = '';
@@ -12,24 +14,44 @@ const dark = () => {
   return t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
 };
 
-/** The note's own colours (app.css :root), as mermaid needs them: plain hex, light or dark. */
+/**
+ * The diagrams' look, in the manner of Toss: white cards on a soft grey canvas, one strong blue, quiet grey lines,
+ * no frames around what needs none. Plain hex for mermaid; app.css .diagram-canvas holds the same colours as CSS
+ * for what Eve draws itself (charts.ts).
+ */
 const PALETTE = {
   light: {
-    fg: '#33363d', dim: '#7c8089', bg: '#ffffff', node: '#eef6ff', border: '#9fd0ff', line: '#a3a8b0', soft: '#f5f6f8',
-    second: '#f3efff', third: '#ecf8f4', note: '#fff8e0', noteLine: '#f0d68a', accent: '#1e9bff',
-    scale: ['#1e9bff', '#2fb8a4', '#8b6ee8', '#f29b45', '#ef6b73', '#e3b92e', '#4cc2e8', '#7cbf5a', '#d86fb5', '#6a83f0', '#c88a5c', '#59a9a0'],
+    fg: '#333d4b', strong: '#191f28', dim: '#8b95a1', canvas: '#f9fafb', node: '#ffffff', border: '#e5e8eb', line: '#c4cad1',
+    accent: '#3182f6', tint: '#e8f3ff', tintText: '#1b64da', note: '#fff8e6', noteLine: '#ffe2a6', shadow: 'rgba(0,23,51,0.06)',
+    hues: ['#3182f6', '#15c39a', '#ff9f2e', '#8b5cf6', '#f04452', '#f5b800', '#4cc3ff', '#5fbf4a', '#ec5fa8', '#6366f1', '#c08457', '#14b8a6'],
   },
   dark: {
-    fg: '#d3d6dc', dim: '#8b909a', bg: '#0b0c10', node: '#12263a', border: '#2f6f9f', line: '#5d636d', soft: '#15171c',
-    second: '#211c38', third: '#11291f', note: '#2a2512', noteLine: '#6b5a24', accent: '#3fc1ff',
-    scale: ['#3fc1ff', '#3fd1b8', '#a08bff', '#ffab5e', '#ff7a82', '#f0cd4a', '#6cd6f5', '#8fd16b', '#ec86c8', '#8399ff', '#dba070', '#6cc4ba'],
+    fg: '#e5e8eb', strong: '#f9fafb', dim: '#8b95a1', canvas: '#17181d', node: '#23252b', border: '#2e3138', line: '#4e5560',
+    accent: '#4593fc', tint: '#1c2c45', tintText: '#9cc6ff', note: '#2e2a1d', noteLine: '#5c4f2a', shadow: 'rgba(0,0,0,0.3)',
+    hues: ['#4593fc', '#2bd4a9', '#ffae4d', '#a07bff', '#ff6673', '#ffcd3c', '#6cd1ff', '#7ed36a', '#f47dbb', '#8187ff', '#d39a6c', '#3cc9b8'],
   },
 };
 export const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif";
 
+/** `hex` laid over `over` at `t` (0..1): the soft tints of a hue */
+function mix(hex: string, over: string, t: number) {
+  const p = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [a, b] = [p(hex), p(over)];
+  return '#' + a.map((v, i) => Math.round(v * t + b[i] * (1 - t)).toString(16).padStart(2, '0')).join('');
+}
+
 function config(mode: 'light' | 'dark') {
   const c = PALETTE[mode];
-  const scale = Object.fromEntries(c.scale.flatMap((v, i) => [[`cScale${i}`, v], [`cScaleLabel${i}`, '#ffffff'], [`cScaleInv${i}`, c.line], [`cScalePeer${i}`, v], [`pie${i + 1}`, v]]));
+  // a mind map: its centre in solid blue, each branch a soft chip of its own hue with a line of it
+  const scale: Record<string, string> = { cScale0: c.accent, cScaleLabel0: '#ffffff', cScaleInv0: c.line, cScalePeer0: c.accent };
+  c.hues.slice(1).concat(c.hues[0]).forEach((h, i) => {
+    scale[`cScale${i + 1}`] = mix(h, c.node, mode === 'dark' ? 0.24 : 0.14);
+    scale[`cScaleLabel${i + 1}`] = mode === 'dark' ? mix(h, '#ffffff', 0.75) : mix(h, '#000000', 0.72);
+    scale[`cScaleInv${i + 1}`] = c.line;
+    scale[`cScalePeer${i + 1}`] = h;
+  });
+  c.hues.forEach((h, i) => (scale[`pie${i + 1}`] = h));
+  const branches = c.hues.slice(1).concat(c.hues[0]).map((h, i) => `.section-edge-${i} { stroke: ${mix(h, c.canvas, 0.55)}; }`).join(' ');
   return {
     startOnLoad: false,
     securityLevel: 'strict' as const,
@@ -39,36 +61,46 @@ function config(mode: 'light' | 'dark') {
     // a diagram is drawn the same every time (the builder's preview and the note, to the byte)
     handDrawnSeed: 1,
     fontFamily: FONT,
-    // softer corners than mermaid draws: a box of the note's, not a form's
-    themeCSS: `.node rect.basic, .node rect.label-container, rect.actor { rx: 8px; ry: 8px; } .edgeLabel, .edgeLabel p { font-size: 13px; }
-      .labelBkg { background: transparent; } .lineWrapper line { stroke: ${c.line}; stroke-width: 2px; } [id$='arrowhead'] path { fill: ${c.line}; }
-      .grid .tick line { stroke: ${c.line}; opacity: 0.3; } .grid path { stroke-width: 0; } .grid .tick text { fill: ${c.dim}; }`,
+    themeCSS: `
+      /* a flowchart's pill (its start or end: only it is drawn as an outer path with a plain label) in solid blue */
+      .node rect.basic, .node rect.label-container, rect.actor, .cluster rect { rx: 12px; ry: 12px; }
+      .node .label-container, rect.actor { filter: drop-shadow(0 1px 3px ${c.shadow}); }
+      g.node:has(> g.outer-path):has(> g.label) path { fill: ${c.accent} !important; stroke: ${c.accent} !important; }
+      g.node:has(> g.outer-path):has(> g.label) .nodeLabel, g.node:has(> g.outer-path):has(> g.label) .nodeLabel p { color: #fff; }
+      g.node:has(> polygon) polygon, g.node:has(> circle) circle { fill: ${c.tint}; stroke: ${c.tint}; }
+      g.node:has(> polygon) .nodeLabel, g.node:has(> circle) .nodeLabel { color: ${c.tintText}; }
+      .flowchart-link { stroke-width: 1.6px; } .marker { fill: ${c.line}; stroke: ${c.line}; }
+      .edgeLabel, .edgeLabel p { font-size: 12.5px; color: ${c.dim}; } .labelBkg { background: transparent; }
+      .lineWrapper line { stroke: ${c.line}; stroke-width: 2px; } [id$='arrowhead'] path { fill: ${c.line}; }
+      .actor-line { stroke-dasharray: 3 4; }
+      .mindmap-node .node-bkg { filter: none; } .mindmap-edges path { stroke-width: 2px !important; } ${branches}
+      .grid .tick line { stroke: ${c.border}; } .grid path { stroke-width: 0; } .grid .tick text { fill: ${c.dim}; }`,
     themeVariables: {
-      darkMode: mode === 'dark', fontFamily: FONT, fontSize: '14px', background: c.bg,
+      darkMode: mode === 'dark', fontFamily: FONT, fontSize: '14px', background: c.canvas,
       primaryColor: c.node, primaryTextColor: c.fg, primaryBorderColor: c.border,
-      secondaryColor: c.second, secondaryTextColor: c.fg, secondaryBorderColor: c.border,
-      tertiaryColor: c.third, tertiaryTextColor: c.fg, tertiaryBorderColor: c.border,
-      mainBkg: c.node, nodeBorder: c.border, nodeTextColor: c.fg, textColor: c.fg, titleColor: c.fg,
-      lineColor: c.line, edgeLabelBackground: c.bg, clusterBkg: c.soft, clusterBorder: c.border,
+      secondaryColor: c.tint, secondaryTextColor: c.fg, secondaryBorderColor: c.border,
+      tertiaryColor: c.canvas, tertiaryTextColor: c.fg, tertiaryBorderColor: c.border,
+      mainBkg: c.node, nodeBorder: c.border, nodeTextColor: c.fg, textColor: c.fg, titleColor: c.strong,
+      lineColor: c.line, edgeLabelBackground: c.canvas, clusterBkg: mix(c.border, c.canvas, 0.35), clusterBorder: c.border,
       noteBkgColor: c.note, noteBorderColor: c.noteLine, noteTextColor: c.fg,
-      actorBkg: c.node, actorBorder: c.border, actorTextColor: c.fg, actorLineColor: c.line,
-      signalColor: c.dim, signalTextColor: c.fg, labelBoxBkgColor: c.node, labelBoxBorderColor: c.border,
-      labelTextColor: c.fg, loopTextColor: c.fg, activationBkgColor: c.second, activationBorderColor: c.border,
+      actorBkg: c.node, actorBorder: c.border, actorTextColor: c.strong, actorLineColor: c.line,
+      signalColor: c.line, signalTextColor: c.fg, labelBoxBkgColor: c.node, labelBoxBorderColor: c.border,
+      labelTextColor: c.fg, loopTextColor: c.dim, activationBkgColor: c.tint, activationBorderColor: c.accent,
       sequenceNumberColor: '#ffffff',
-      pieStrokeColor: c.bg, pieStrokeWidth: '2px', pieOuterStrokeWidth: '0px', pieOpacity: '1',
-      pieTitleTextColor: c.fg, pieSectionTextColor: '#ffffff', pieLegendTextColor: c.fg, pieTitleTextSize: '16px',
-      sectionBkgColor: c.soft, altSectionBkgColor: c.bg, sectionBkgColor2: c.soft, gridColor: c.soft,
+      pieStrokeColor: c.canvas, pieStrokeWidth: '2px', pieOuterStrokeWidth: '0px', pieOpacity: '1',
+      pieTitleTextColor: c.strong, pieSectionTextColor: '#ffffff', pieLegendTextColor: c.fg, pieTitleTextSize: '16px',
+      sectionBkgColor: c.canvas, altSectionBkgColor: c.canvas, sectionBkgColor2: c.canvas, gridColor: c.border,
       taskBkgColor: c.accent, taskBorderColor: c.accent, taskTextColor: '#ffffff', taskTextOutsideColor: c.fg,
-      taskTextLightColor: '#ffffff', taskTextDarkColor: c.fg, activeTaskBkgColor: c.scale[1], activeTaskBorderColor: c.scale[1],
-      doneTaskBkgColor: c.line, doneTaskBorderColor: c.line, critBkgColor: c.scale[4], critBorderColor: c.scale[4],
-      todayLineColor: c.scale[4], excludeBkgColor: c.soft,
+      taskTextLightColor: '#ffffff', taskTextDarkColor: c.fg, activeTaskBkgColor: c.hues[1], activeTaskBorderColor: c.hues[1],
+      doneTaskBkgColor: c.line, doneTaskBorderColor: c.line, critBkgColor: c.hues[4], critBorderColor: c.hues[4],
+      todayLineColor: c.hues[4], excludeBkgColor: c.canvas,
       ...scale,
     },
-    flowchart: { curve: 'basis' as const, padding: 14, nodeSpacing: 44, rankSpacing: 52 },
-    sequence: { mirrorActors: false, actorMargin: 60, messageMargin: 40, boxMargin: 8, noteMargin: 12 },
-    gantt: { useWidth: 680, barHeight: 24, barGap: 6, topPadding: 44, leftPadding: 90, fontSize: 13, sectionFontSize: 13, axisFormat: '%m/%d' },
+    flowchart: { curve: 'basis' as const, padding: 16, nodeSpacing: 40, rankSpacing: 56 },
+    sequence: { mirrorActors: false, actorMargin: 64, messageMargin: 44, boxMargin: 8, noteMargin: 12, boxTextMargin: 6 },
+    gantt: { useWidth: 680, barHeight: 24, barGap: 8, topPadding: 44, leftPadding: 90, fontSize: 13, sectionFontSize: 13, axisFormat: '%m/%d' },
     pie: { textPosition: 0.72 },
-    mindmap: { padding: 14 },
+    mindmap: { padding: 16 },
   };
 }
 
@@ -97,6 +129,8 @@ export function renderMermaid(code: string): Promise<{ svg: string } | { error: 
 /** The diagram's SVG, or the reason it could not be drawn. */
 async function draw(code: string): Promise<{ svg: string } | { error: string }> {
   if (!code.trim()) return { error: 'An empty diagram' };
+  const chart = chartHtml(code); // a pie, a timeline, a Gantt chart: drawn by Eve, without loading mermaid
+  if (chart) return { svg: chart };
   try {
     const m = await load();
     const { svg } = await m.render(`eve-mermaid-${++seq}`, code);
@@ -113,4 +147,6 @@ async function draw(code: string): Promise<{ svg: string } | { error: string }> 
 export const themeKey = () => (dark() ? 'dark' : 'light');
 
 /** the colour mermaid gives a pie's `i`th slice (the builder's swatches) */
-export const sliceColor = (i: number) => PALETTE[themeKey()].scale[i % 12];
+export const sliceColor = (i: number) => PALETTE[themeKey()].hues[i % 12];
+/** the colour a mind map's `i`th first-level branch is drawn in (the builder's bullets) */
+export const branchColor = (i: number) => PALETTE[themeKey()].hues[(i + 1) % 12];

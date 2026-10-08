@@ -335,6 +335,34 @@ export function goToSection(editor: Editor, section: string) {
 
 let lastCut = { text: '', at: 0 };
 
+/**
+ * Where the "/" that may open the / menu was just written (typed, or put in by the phone's Insert block), followed
+ * through later edits; null once the caret goes back before it or it is deleted. A "/" pasted, or already in the
+ * text, is never it.
+ */
+const SLASH_AT = new PluginKey<number | null>('slashAt');
+const slashTyped = new Plugin<number | null>({
+  key: SLASH_AT,
+  state: {
+    init: () => null,
+    apply(tr, at, _old, state) {
+      if (at !== null) {
+        const r = tr.mapping.mapResult(at, 1);
+        at = r.deleted ? null : r.pos;
+      }
+      const { empty, $head } = state.selection;
+      if (tr.docChanged && empty && !tr.getMeta('paste') && tr.getMeta('uiEvent') !== 'paste' && tr.getMeta('uiEvent') !== 'drop'
+        && $head.parent.isTextblock && $head.parentOffset > 0
+        && $head.parent.textBetween($head.parentOffset - 1, $head.parentOffset) === '/'
+        && tr.steps.some((st) => { const c = (st as { slice?: { content: Fragment; size: number } }).slice; return !!c?.size && c.content.textBetween(0, c.content.size).endsWith('/'); })) {
+        return $head.pos - 1;
+      }
+      if (at !== null && (state.selection.head <= at || state.doc.resolve(at).parent !== $head.parent)) return null;
+      return at;
+    },
+  },
+});
+
 export function createEditor(opts: {
   element: HTMLElement;
   content: string;
@@ -856,12 +884,22 @@ export function createEditor(opts: {
         name: 'slashMenu',
         addProseMirrorPlugins() {
           return [
+            slashTyped,
             Suggestion({
               editor: this.editor,
               char: '/',
               pluginKey: new PluginKey('slashMenu'),
               allowSpaces: false,
               // default prefixes (line start / after a space): a '/' already inside text like KRW/USD must not open the menu
+              // only the "/" just typed opens it: the caret coming back after one already in the sentence ("x / y",
+              // by an arrow, a click, a ⌫) opened it, and so did a "/" right after bold text or a link, where it
+              // starts its own text node and looked to the plugin like the start of the line
+              allow: ({ state, range }) => {
+                if (SLASH_AT.getState(state) !== range.from) return false;
+                const $at = state.doc.resolve(range.from);
+                const before = $at.parent.textBetween(Math.max(0, $at.parentOffset - 1), $at.parentOffset, undefined, '\ufffc');
+                return !before || /\s/.test(before);
+              },
               items: ({ query }) => {
                 const q = query.toLowerCase();
                 return SLASH.filter((i) => i.label.toLowerCase().includes(q) || i.hint?.toLowerCase().includes(q));

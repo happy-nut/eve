@@ -424,20 +424,71 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 /* a mermaid block: its diagram; the code above it only while the caret is in it (or the diagram failed, to fix it) */
 .tiptap .code-block:not(.mermaid) .mermaid-view { display: none; }
 .tiptap .code-block.mermaid:not(.editing):not(.mermaid-error) pre { display: none; }
+.tiptap .code-block.mermaid:not(.editing):not(.mermaid-error) .code-lang { display: none; } /* drawn: the builder changes it */
 /* the diagram's canvas: one look for the note and the builder's preview (DiagramBuilder.svelte), which must draw it
-   the same. A faint dot grid, as a whiteboard, rather than a framed box. */
+   the same. Toss's manner: a soft grey card, no frame, white cards on it (lib/mermaid.ts holds the same colours). */
 .diagram-canvas {
-  --dot: light-dark(rgba(17, 19, 24, 0.07), rgba(255, 255, 255, 0.06));
-  display: flex; justify-content: center; align-items: center; padding: 22px 18px; overflow-x: auto;
-  border-radius: 12px; background: radial-gradient(circle, var(--dot) 1px, transparent 1.2px) 0 0 / 16px 16px, var(--bg);
-  box-shadow: inset 0 0 0 1px var(--line); user-select: none; -webkit-user-select: none;
+  --d-fg: light-dark(#333d4b, #e5e8eb); --d-strong: light-dark(#191f28, #f9fafb); --d-dim: light-dark(#8b95a1, #8b95a1);
+  --d-canvas: light-dark(#f9fafb, #17181d); --d-card: light-dark(#ffffff, #23252b); --d-line: light-dark(#e5e8eb, #2e3138);
+  --c0: light-dark(#3182f6, #4593fc); --c1: light-dark(#15c39a, #2bd4a9); --c2: light-dark(#ff9f2e, #ffae4d); --c3: light-dark(#8b5cf6, #a07bff);
+  --c4: light-dark(#f04452, #ff6673); --c5: light-dark(#f5b800, #ffcd3c); --c6: light-dark(#4cc3ff, #6cd1ff); --c7: light-dark(#5fbf4a, #7ed36a);
+  --c8: light-dark(#ec5fa8, #f47dbb); --c9: light-dark(#6366f1, #8187ff); --c10: light-dark(#c08457, #d39a6c); --c11: light-dark(#14b8a6, #3cc9b8);
+  display: flex; justify-content: center; align-items: center; padding: 24px 20px; overflow-x: auto;
+  border-radius: 16px; background: var(--d-canvas); color: var(--d-fg); user-select: none; -webkit-user-select: none;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif; font-size: 14px; line-height: 1.4;
+  letter-spacing: -0.01em; text-align: left;
 }
 .diagram-canvas svg { max-width: 100%; height: auto; }
 .diagram-canvas svg[aria-roledescription='pie'] { max-width: min(100%, 380px) !important; } /* over mermaid's own inline size */
 .diagram-canvas:empty { min-height: 72px; } /* drawing: the space it will take, not a jump */
+.diagram-canvas .c0 { --c: var(--c0); } .diagram-canvas .c1 { --c: var(--c1); } .diagram-canvas .c2 { --c: var(--c2); }
+.diagram-canvas .c3 { --c: var(--c3); } .diagram-canvas .c4 { --c: var(--c4); } .diagram-canvas .c5 { --c: var(--c5); }
+.diagram-canvas .c6 { --c: var(--c6); } .diagram-canvas .c7 { --c: var(--c7); } .diagram-canvas .c8 { --c: var(--c8); }
+.diagram-canvas .c9 { --c: var(--c9); } .diagram-canvas .c10 { --c: var(--c10); } .diagram-canvas .c11 { --c: var(--c11); }
+
+/* ---- the charts Eve draws (lib/charts.ts) ---- */
+.chart { width: 100%; }
+.chart-title { font-size: 16px; font-weight: 700; color: var(--d-strong); margin: 0 0 16px; letter-spacing: -0.02em; }
+.chart-empty p { margin: 0; color: var(--d-dim); }
+/* a donut, its biggest part named in the middle, every part listed beside it */
+.pie-body { display: flex; align-items: center; justify-content: center; gap: 28px 36px; flex-wrap: wrap; }
+.donut { position: relative; width: 168px; height: 168px; flex: none; }
+.donut svg { width: 100%; height: 100%; display: block; }
+.donut circle { fill: none; stroke: var(--c); stroke-width: 26; }
+.donut-mid { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 40px; }
+.donut-mid b { font-size: 22px; font-weight: 700; color: var(--d-strong); letter-spacing: -0.03em; }
+.donut-mid span { font-size: 12px; color: var(--d-dim); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pie-legend { min-width: 180px; flex: 0 1 260px; display: flex; flex-direction: column; gap: 10px; }
+.pie-legend .row { display: flex; align-items: center; gap: 10px; }
+.pie-legend .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+.pie-legend .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pie-legend .val { color: var(--d-dim); font-variant-numeric: tabular-nums; }
+.pie-legend .pct { font-weight: 700; color: var(--d-strong); font-variant-numeric: tabular-nums; min-width: 3.4em; text-align: right; }
+/* a timeline: a column of dates down a thin line, what happened beside each */
+.tl { position: relative; }
+.tl-row { display: grid; grid-template-columns: minmax(64px, max-content) 22px 1fr; column-gap: 12px; }
+.tl-when { font-size: 13px; font-weight: 600; color: var(--c); text-align: right; padding-top: 9px; white-space: nowrap; }
+.tl-dot { position: relative; }
+.tl-dot::before { content: ''; position: absolute; left: 5px; top: 12px; width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 4px var(--d-canvas); z-index: 1; }
+.tl-row:not(:last-child) .tl-dot::after { content: ''; position: absolute; left: 10px; top: 18px; bottom: -18px; width: 2px; border-radius: 1px; background: var(--d-line); }
+.tl-row:not(:last-child) .tl-what { padding-bottom: 18px; }
+.tl-what { display: flex; flex-direction: column; gap: 6px; }
+.tl-what > div { background: var(--d-card); border-radius: 12px; padding: 9px 14px; font-weight: 500; color: var(--d-fg); box-shadow: 0 1px 3px light-dark(rgba(0, 23, 51, 0.06), rgba(0, 0, 0, 0.3)); }
+.tl-what > .tl-none { background: none; box-shadow: none; color: var(--d-dim); padding-left: 2px; }
+/* a Gantt chart: task names on the left, rounded bars along a quiet date axis */
+.g-grid { display: grid; grid-template-columns: minmax(80px, 28%) 1fr; column-gap: 14px; align-items: center; }
+.g-axis { position: relative; height: 22px; font-size: 11px; color: var(--d-dim); }
+.g-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.g-sec { font-size: 12px; font-weight: 700; color: var(--d-dim); padding-top: 6px; }
+.g-name { display: flex; flex-direction: column; min-width: 0; }
+.g-name span { font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-name small { font-size: 11.5px; color: var(--d-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.g-track { position: relative; height: 44px; }
+.g-sec-track { height: 30px; }
+.g-track > i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--d-line); opacity: 0.7; }
+.g-bar { position: absolute; top: 10px; bottom: 10px; min-width: 6px; border-radius: 8px; background: var(--c); }
 .tiptap .mermaid-view { margin: 0.6em 0; cursor: pointer; transition: box-shadow 0.15s; }
-@media (hover: hover) { .tiptap .mermaid-view:hover { box-shadow: inset 0 0 0 1px var(--accent-soft), 0 1px 8px light-dark(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.3)); } }
+@media (hover: hover) { .tiptap .mermaid-view:hover { box-shadow: inset 0 0 0 1.5px var(--accent-soft); } }
 .tiptap .code-block.mermaid.editing .mermaid-view { margin-top: -0.2em; cursor: default; }
 .tiptap .code-block.mermaid-error .mermaid-view, .diagram-canvas.error {
   justify-content: flex-start; align-items: flex-start; color: #ff453a; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;

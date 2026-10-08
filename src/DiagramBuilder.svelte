@@ -5,7 +5,7 @@
   import { isMobile } from './lib/platform';
   import { sheet } from './lib/popup';
   import { ui } from './lib/ui.svelte';
-  import { renderMermaid, sliceColor, themeKey } from './lib/mermaid';
+  import { renderMermaid, sliceColor, branchColor, themeKey } from './lib/mermaid';
   import {
     KINDS, starter, toCode, fromCode, freshId, addDays,
     type Diagram, type Kind, type Shape, type Line, type Flowchart, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt,
@@ -367,7 +367,7 @@
           {#each mind.items as b, i (i)}
             <!-- each first-level branch in its colour in the drawing (the centre takes the first) -->
             <div class="row m-item" style:padding-left={`${(b.depth - 1) * 22}px`}>
-              <span class="bullet" style:background={b.depth === 1 ? sliceColor(mind.items.slice(0, i + 1).filter((x) => x.depth === 1).length) : 'var(--fg-dim)'}></span>
+              <span class="bullet" style:background={b.depth === 1 ? branchColor(mind.items.slice(0, i + 1).filter((x) => x.depth === 1).length - 1) : 'var(--fg-dim)'}></span>
               <input class="grow" bind:value={b.text} placeholder="Idea" aria-label="Branch" onkeydown={(e) => branchKey(e, mind, i)} />
               <button class="x" type="button" aria-label="Back a level" title="Back a level" disabled={b.depth <= 1} onclick={() => indent(mind, i, -1)}>
                 <svg viewBox="0 0 16 16"><path d="M9.5 4.5 6 8l3.5 3.5" /></svg>
