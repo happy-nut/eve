@@ -310,13 +310,26 @@
       case ' ': if (group) groups.toggle(group); else if (noteId) groups.fold(noteId); else return; break;
       case 'ArrowDown': rows[i + 1]?.focus(); break;
       case 'ArrowUp': if (i === 0 && q) searchEl?.focus(); else rows[i - 1]?.focus(); break;
-      case 'ArrowLeft':
+      // as in Finder: ← folds what is open (a group, a page showing its sub-pages); on what is folded already, or has
+      // nothing under it, it goes up to what holds it — the page it is a sub-page of, else its group
+      case 'ArrowLeft': {
+        const hasKids = !!el.closest('.note-row')?.querySelector('.fold');
         if (group && !groups.isCollapsed(group)) groups.toggle(group);
-        else { const p = group ? parentOf(group) : notes.all.find((n) => n.id === noteId)?.group; if (p) focusRow(groupSel(p)); else return; }
+        else if (noteId && hasKids && !groups.isFolded(noteId)) groups.fold(noteId);
+        else {
+          const n = noteId ? notes.all.find((x) => x.id === noteId) : undefined;
+          const page = n?.parent && rows.some((r) => r.dataset.note === n.parent) ? n.parent : '';
+          const p = group ? parentOf(group) : n?.group;
+          if (page) focusRow(`[data-note="${page}"]`);
+          else if (p) focusRow(groupSel(p));
+          else return;
+        }
         break;
-      // → opens a folded group; anywhere else it steps over into the note, as Escape does
+      }
+      // → opens what is folded (a group, a page's sub-pages); anywhere else it steps over into the note, as Escape does
       case 'ArrowRight':
         if (group && groups.isCollapsed(group)) groups.toggle(group);
+        else if (noteId && groups.isFolded(noteId) && el.closest('.note-row')?.querySelector('.fold')) groups.fold(noteId);
         else focusNote();
         break;
       case 'Backspace': case 'Delete':

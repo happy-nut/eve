@@ -15,7 +15,7 @@ export const DEFAULTS: Action[] = [
   { id: 'newNote', label: 'New note', scope: 'app', keys: 'Mod-n' },
   { id: 'search', label: 'Search notes', scope: 'app', keys: 'Mod-k' },
   { id: 'find', label: 'Find & replace in this note', scope: 'app', keys: 'Mod-f' },
-  { id: 'focusSidebar', label: 'Sidebar: focus / close (↑↓ move, ⌥↑↓ reorder, Space fold, ⌫ delete, Esc back)', scope: 'app', keys: 'Mod-\\' },
+  { id: 'focusSidebar', label: 'Sidebar: focus / close (↑↓ move, ←→ or Space fold / unfold, ⌥↑↓ reorder, ⌫ delete, Esc back)', scope: 'app', keys: 'Mod-\\' },
   { id: 'back', label: 'Back (previous note)', scope: 'app', keys: 'Mod-[' },
   { id: 'forward', label: 'Forward', scope: 'app', keys: 'Mod-]' },
   { id: 'nextNote', label: 'Next note', scope: 'app', keys: 'Mod-Shift-ArrowDown' },
