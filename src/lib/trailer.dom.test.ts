@@ -13,7 +13,7 @@ test.each([
   expect(md(ed).trim()).toBe(text);
 });
 
-test('an empty line written after text is still kept', () => {
-  const ed = editorWith('# T\n\nline\n\n ');
-  expect(md(ed)).toContain(' ');
+test('an empty line between lines is kept; empty lines at the very end are not written', () => {
+  expect(md(editorWith('# T\n\nline\n\n\u00a0\n\nmore'))).toContain('\u00a0');
+  expect(md(editorWith('# T\n\nline\n\n\u00a0\n\n\u00a0')).trim()).toBe('# T\n\nline');
 });

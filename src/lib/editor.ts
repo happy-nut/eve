@@ -40,7 +40,7 @@ import { shortcuts } from './shortcuts.svelte';
 import { calendar, emojiRow, popup, ICONS, SLASH, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
-import { moveBlock, indentLines, switchItem } from './blocks';
+import { moveBlock, indentLines, switchItem, switchLines } from './blocks';
 import { holdEdit, dropEdit } from './pending';
 
 /** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
@@ -62,13 +62,13 @@ const BlankLine = Paragraph.extend({
     return {
       markdown: {
         serialize(state: any, node: PMNode, parent?: PMNode, index?: number) {
-          // the empty line StarterKit's TrailingNode keeps after a note ending in a block (a code block, a table):
-          // the editor's, not the note's. Written down, merely opening such a note changed it ("edited just now",
-          // synced) — and the next opening added it again
+          // empty lines at the very end of the note are not written: the one StarterKit's TrailingNode keeps after a
+          // note ending in a block (a code block, a table) is the editor's, not the note's — written down, merely
+          // opening such a note changed it ("edited just now", synced), and the next opening added it again — and
+          // any other left at the end shows nothing, but came back as a blank line under the note's last line
           // (a copy renders a bare Fragment: no parent node there, and nothing to leave out)
-          const trailer = parent?.type?.name === 'doc' && index === parent.childCount - 1 && index > 0 && !node.content.size
-            && parent.child(index - 1).type.name !== 'paragraph';
-          if (trailer) return;
+          const atEnd = (p: PMNode, i: number) => { for (let k = i; k < p.childCount; k++) if (p.child(k).type.name !== 'paragraph' || p.child(k).content.size) return false; return true; };
+          if (parent?.type?.name === 'doc' && index !== undefined && index > 0 && !node.content.size && atEnd(parent, index)) return;
           if (node.content.size) state.renderInline(node);
           else state.write(BLANK);
           state.closeBlock(node);
@@ -210,9 +210,11 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     h3: () => c().toggleHeading({ level: 3 }).run(),
     h4: () => c().toggleHeading({ level: 4 }).run(),
     h5: () => c().toggleHeading({ level: 5 }).run(),
-    bulletList: () => c().toggleBulletList().run(),
-    orderedList: () => c().toggleOrderedList().run(),
-    taskList: () => c().toggleTaskList().run(),
+    // on list lines of another kind, only those lines change kind, where they are (a bullet under a number stays
+    // under it); otherwise the stock toggle (a line becomes a list, a list's lines plain again)
+    bulletList: () => editor.commands.command(switchLines('bulletList', 'listItem')) || c().toggleBulletList().run(),
+    orderedList: () => editor.commands.command(switchLines('orderedList', 'listItem')) || c().toggleOrderedList().run(),
+    taskList: () => editor.commands.command(switchLines('taskList', 'taskItem')) || c().toggleTaskList().run(),
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
     toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck),
     blockquote: () => c().toggleBlockquote().run(),
@@ -468,6 +470,26 @@ export function createEditor(opts: {
       // Notion-style numbering: typing "1. " (any number) directly after a numbered list joins it and
       // continues the count. Stock TipTap only joins when the typed number is the next one.
       OrderedList.extend({
+        // written as tiptap-markdown does (")" for every other of two numbered lists in a row, so they stay two), but a
+        // list inside an item from 1: markdown reads one numbered from 5 right under the item's line as more of that
+        // line (a note from elsewhere may hold one, separated by a blank line, which a tight list does not keep)
+        addStorage: () => ({
+          markdown: {
+            serialize(state: any, node: PMNode, parent: PMNode, index: number) {
+              const nested = /Item$/.test((parent as any)?.type?.name ?? '');
+              const start = nested ? 1 : node.attrs.start || 1;
+              const width = String(start + node.childCount - 1).length;
+              let run = 0;
+              while (index - run > 0 && parent.child(index - run - 1).type.name === node.type.name) run++;
+              const sep = run % 2 ? ') ' : '. ';
+              state.renderList(node, state.repeat(' ', width + 2), (i: number) => {
+                const n = String(start + i);
+                return state.repeat(' ', width - n.length) + n + sep;
+              });
+            },
+            parse: {},
+          },
+        }),
         addInputRules() {
           return [wrappingInputRule({ find: /^(\d+)\.\s$/, type: this.type, getAttributes: (m) => ({ start: +m[1] }), joinPredicate: (_m, node) => !node.attrs.type || node.attrs.type === '1' })];
         },
@@ -574,8 +596,24 @@ export function createEditor(opts: {
                 });
               };
               scan(state.doc, 0);
-              if (!at.length) return null;
+              // A numbered list inside an item counts from 1. Markdown lets only a list starting at 1 begin right under a
+              // line of text, so one numbered from 5 under its item's line ("5. " typed there, a list split in two) was
+              // read back as more of that line: the list gone, "a 5. x" in its place.
+              const restart: number[] = [], loose: number[] = [];
+              state.doc.descendants((node, pos, parent) => {
+                if (node.type.name === 'orderedList' && (node.attrs.start ?? 1) !== 1 && parent && /Item$/.test(parent.type.name)) restart.push(pos);
+                // a list with an item of two paragraphs is loose, as markdown reads it back: written tight, the note
+                // came back with blank lines between all its items, changed by being opened and saved
+                if (/List$/.test(node.type.name) && node.attrs.tight) {
+                  let two = false;
+                  node.forEach((item) => { let n = 0; item.forEach((c) => { if (c.type.name === 'paragraph') n++; }); if (n > 1) two = true; });
+                  if (two) loose.push(pos);
+                }
+              });
+              if (!at.length && !restart.length && !loose.length) return null;
               const tr = state.tr;
+              for (const p of restart) tr.setNodeAttribute(p, 'start', 1); // attributes only: no position moves
+              for (const p of loose) tr.setNodeAttribute(p, 'tight', false);
               for (const p of at.reverse()) if (canJoin(tr.doc, p)) tr.join(p); // back to front: earlier positions stay valid
               return tr;
             },
