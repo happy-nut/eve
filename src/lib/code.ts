@@ -1,9 +1,10 @@
 import CodeBlockBase from '@tiptap/extension-code-block';
 import type { Editor } from '@tiptap/core';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
+import { renderMermaid, themeKey } from './mermaid';
 
 /**
  * Syntax highlighting, loaded with the first code block shown: lowlight, highlight.js and the grammars
@@ -87,6 +88,7 @@ const LANGUAGES: [value: string, label: string][] = [
   ['kotlin', 'Kotlin'],
   ['lua', 'Lua'],
   ['markdown', 'Markdown'],
+  ['mermaid', 'Mermaid diagram'],
   ['php', 'PHP'],
   ['python', 'Python'],
   ['ruby', 'Ruby'],
@@ -101,9 +103,30 @@ const LANGUAGES: [value: string, label: string][] = [
 
 const labelOf = (language: string | null) => LANGUAGES.find(([v]) => v === (language ?? ''))?.[1] ?? language ?? 'Plain text';
 
+/**
+ * A ```mermaid block is drawn as its diagram; its code shows (above the diagram, which follows it as it is typed)
+ * while the caret is in it. The node decoration marks that block "editing".
+ */
+const EDITING = new PluginKey('mermaid-editing');
+const editingDiagram = new Plugin({
+  key: EDITING,
+  props: {
+    decorations(state) {
+      const { $head } = state.selection;
+      for (let d = $head.depth; d > 0; d--) {
+        const n = $head.node(d);
+        if (n.type.name === 'codeBlock') {
+          return n.attrs.language === 'mermaid' ? DecorationSet.create(state.doc, [Decoration.node($head.before(d), $head.after(d), { class: 'editing' })]) : null;
+        }
+      }
+      return null;
+    },
+  },
+});
+
 /** Syntax highlighting, plus a language chip (and its menu) that appears on hover. */
 export const CodeBlock = CodeBlockBase.extend({
-  addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter]; },
+  addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, editingDiagram]; },
   addStorage() {
     return {
       ...this.parent?.(),
@@ -137,7 +160,43 @@ export const CodeBlock = CodeBlockBase.extend({
       chip.contentEditable = 'false';
       chip.tabIndex = -1; // a mouse affordance, not a tab stop
       chip.textContent = labelOf(node.attrs.language);
-      dom.append(chip, pre);
+      // a mermaid block's picture: drawn from its code, a click on it puts the caret in the code
+      const view = document.createElement('div');
+      view.className = 'mermaid-view';
+      view.contentEditable = 'false';
+      dom.append(chip, pre, view);
+      let drawn = '', timer: ReturnType<typeof setTimeout> | undefined, gone = false;
+      const draw = (n: PMNode) => {
+        const on = n.attrs.language === 'mermaid';
+        dom.classList.toggle('mermaid', on);
+        if (!on) { drawn = ''; view.replaceChildren(); return; }
+        const want = themeKey() + '\u0000' + n.textContent;
+        if (want === drawn) return;
+        drawn = want;
+        clearTimeout(timer);
+        // as it is typed, a moment after the keys stop; the first drawing at once
+        timer = setTimeout(async () => {
+          const out = await renderMermaid(n.textContent);
+          if (gone || drawn !== want) return;
+          dom.classList.toggle('mermaid-error', 'error' in out);
+          if ('svg' in out) view.innerHTML = out.svg;
+          else view.textContent = out.error;
+        }, view.childNodes.length ? 300 : 0);
+      };
+      draw(node);
+      const redraw = () => { const p = typeof getPos === 'function' ? getPos() : null; const n = p == null ? null : editor.state.doc.nodeAt(p); if (n) draw(n); };
+      const scheme = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+      scheme?.addEventListener('change', redraw);
+      const themeWatch = new MutationObserver(redraw);
+      themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+      view.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const p = typeof getPos === 'function' ? getPos() : null;
+        const n = p == null ? null : editor.state.doc.nodeAt(p);
+        if (p == null || !n) return;
+        editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, p + n.nodeSize - 1)));
+        editor.view.focus();
+      });
 
       const language = (): string => {
         const pos = typeof getPos === 'function' ? getPos() : null;
@@ -167,13 +226,21 @@ export const CodeBlock = CodeBlockBase.extend({
           () => chip.classList.remove('open'));
       });
 
-      const owns = (target: EventTarget | Node | null) => target === chip || (target instanceof Node && chip.contains(target));
+      const owns = (target: EventTarget | Node | null) => target instanceof Node && (chip.contains(target) || view.contains(target));
       return {
         dom,
         contentDOM: code,
-        update: (updated) => updated.type === node.type && ((chip.textContent = labelOf(updated.attrs.language)), true),
-        ignoreMutation: (m) => owns(m.target),
+        update: (updated) => {
+          if (updated.type !== node.type) return false;
+          chip.textContent = labelOf(updated.attrs.language);
+          draw(updated);
+          return true;
+        },
+        // the block's own classes (mermaid, mermaid-error) are set here: read as an edit, ProseMirror made the block
+        // anew, which drew again, failed again and set them again, without end
+        ignoreMutation: (m) => owns(m.target) || (m.type === 'attributes' && m.target === dom),
         stopEvent: (e) => owns(e.target),
+        destroy: () => { gone = true; clearTimeout(timer); scheme?.removeEventListener('change', redraw); themeWatch.disconnect(); },
       };
     };
   },

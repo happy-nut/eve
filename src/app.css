@@ -421,6 +421,19 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 .tiptap .code-lang { pointer-events: none; }
 .tiptap .code-block:hover .code-lang, .tiptap .code-lang:hover, .tiptap .code-lang.open { opacity: 1; pointer-events: auto; }
 .tiptap .code-lang:hover, .tiptap .code-lang.open { color: var(--fg); background: var(--bg-side); } /* opaque: a tint would let the edge it straddles show through */
+/* a mermaid block: its diagram; the code above it only while the caret is in it (or the diagram failed, to fix it) */
+.tiptap .code-block:not(.mermaid) .mermaid-view { display: none; }
+.tiptap .code-block.mermaid:not(.editing):not(.mermaid-error) pre { display: none; }
+.tiptap .mermaid-view {
+  display: flex; justify-content: center; margin: 0.6em 0; padding: 14px; overflow-x: auto; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 8px; user-select: none; -webkit-user-select: none;
+}
+.tiptap .code-block.mermaid.editing .mermaid-view { margin-top: -0.2em; cursor: default; }
+.tiptap .mermaid-view:empty { min-height: 60px; } /* drawing: the space it will take, not a jump */
+.tiptap .mermaid-view svg { max-width: 100%; height: auto; }
+.tiptap .code-block.mermaid-error .mermaid-view {
+  justify-content: flex-start; color: #ff453a; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; cursor: default;
+}
 
 
 /* ---- syntax highlighting (highlight.js class names, emitted by lowlight) ---- */

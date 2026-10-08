@@ -41,7 +41,11 @@ class Markdown(
         i++
         while (i < lines.size && !close.matches(lines[i])) code += lines[i++]
         i++ // the closing fence
-        out += if (lang == "kanban") board(code.joinToString("\n")) else codeBlock(code)
+        out += when (lang) {
+          "kanban" -> board(code.joinToString("\n"))
+          "mermaid" -> dimmed("📊 Diagram") // the app draws it; a widget line has no room for the picture
+          else -> codeBlock(code)
+        }
         continue
       }
       olLevel = listLevel(raw)
