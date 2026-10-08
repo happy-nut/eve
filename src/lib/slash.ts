@@ -1,6 +1,7 @@
 // The three popups typed into a note — `/` blocks, `[[` links, `@` dates — and the `/` menu's items.
 import type { Editor } from '@tiptap/core';
 import { insertKanban } from './kanban';
+import { insertDiagram } from './code';
 import { ui } from './ui.svelte';
 import { notes, titleOf } from './notes.svelte';
 import { isCustom } from './icons';
@@ -134,10 +135,7 @@ export const SLASH: SuggestItem[] = [
   { label: 'Callout', hint: '💡 highlighted box', icon: ICONS.callout, run: tip('callout', (e) => e.chain().focus().toggleWrap('callout').run()) },
   { label: 'Toggle', hint: '> folds its content', icon: ICONS.toggle, run: (e) => e.chain().focus().setDetails().updateAttributes('details', { open: true }).run() },
   { label: 'Kanban', hint: '칸반 board', icon: ICONS.kanban, run: insertKanban },
-  {
-    label: 'Diagram', hint: 'Mermaid: flowchart, sequence…', icon: ICONS.diagram,
-    run: (e) => e.chain().focus().insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: 'flowchart LR\n  A[Start] --> B{Choice}\n  B -->|yes| C[Done]\n  B -->|no| A' }] }).run(),
-  },
+  { label: 'Diagram', hint: 'Flowchart, pie, timeline…', icon: ICONS.diagram, run: insertDiagram },
   { label: 'Table', hint: '3×3, with a header row', icon: ICONS.table, run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   { label: 'Image', hint: 'Pick a file', icon: ICONS.image, run: tip('image', (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); }) },
   { label: 'Video', hint: 'Pick a file', icon: ICONS.video, run: (e) => { pickVideo().then((src) => src && e.chain().focus().insertContent({ type: 'video', attrs: { src, name: src.split('/').pop() } }).run()); } },

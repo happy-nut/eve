@@ -67,6 +67,24 @@ class Ui {
     if (from?.isConnected && from !== document.body && !from.closest('.card-page')) from.focus();
     else focusNote();
   }
+  /** the diagram builder (DiagramBuilder.svelte): a chart made or changed by hand, written as mermaid code. `width`
+   *  is the note's diagram canvas, so the preview is drawn at the size the note will draw it. */
+  diagram = $state<{ code: string | null; width: number; resolve: (code: string | null) => void } | null>(null);
+  private diagramFrom: HTMLElement | null = null;
+  /** resolves the new code, or null when it was closed without it */
+  openDiagram(code: string | null, width: number): Promise<string | null> {
+    this.diagramFrom = document.activeElement as HTMLElement | null;
+    return new Promise((res) => { this.diagram = { code, width, resolve: res }; });
+  }
+  closeDiagram(code: string | null = null) {
+    if (!this.diagram) return;
+    this.diagram.resolve(code);
+    this.diagram = null;
+    const from = this.diagramFrom;
+    this.diagramFrom = null;
+    if (isMobile) return; // the caller puts the caret; a phone's keyboard is not raised for it
+    if (from?.isConnected && from !== document.body) from.focus(); else focusNote();
+  }
   /** a picture shown full size over everything (ImageViewer.svelte): a double-click on it, or ↩ with it selected */
   photo = $state<{ src: string; alt: string } | null>(null);
   private photoFrom: HTMLElement | null = null;

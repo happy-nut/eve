@@ -12,15 +12,19 @@ type Notion-style markdown, link notes with `[[wiki links]]`, and sync through a
 - **Instant** — Tauri 2 shell (native WKWebView, ~10 MB), Svelte 5 UI, TipTap editor. No Electron.
 - **Global hotkey** — `⌘⇧Space` (default) shows/hides Eve over any app; focus returns to where you were. Like Raycast, Eve stays out of the Dock and ⌘Tab (toggle in Settings → Sync & app). Eve launches at login (toggle in Settings); closing the window only hides it, so the hotkey keeps working. `⌘Q` quits.
 - **Live markdown** — `# `, `- `, `1. `, `[ ] `, `> `, ` ``` `, `**bold**`, `` `code` ``… render as you type.
+- **Lists that nest like a document** — an indented numbered list counts `1.` → `a.` → `i.` and on (nine levels, then round again), in the editor and on the phone's widget. Bullets, numbers and to-dos mix freely: Tab under a numbered item makes a bullet stay a bullet, `⌘⇧7/8/9` switch only the lines you picked, and ⌫ / ⇧Tab at the start of an indented item bring it out a level as what it was. Numbering carries on across a list split around it.
 - **Every shortcut is rebindable** live in Settings (`⌘,`): system hotkey, app actions, editor formatting.
 - **Notes link to notes** — type `[[` for a picker; click a link to jump (creates the note if missing). `[[Note|shown as]]` links under another name, as in Obsidian. `⌘[` / `⌘]` go back and forward through the notes you visited, restoring the cursor.
 - **Link cards** — paste a URL on an empty line (or type one and press Enter) and it becomes a compact preview card: favicon, title, description, thumbnail; click opens the browser. The file keeps just the bare URL.
 - **Find & replace in a note** — `⌘F` (or the note's right-click menu; on a phone, the note's ⋯) opens a bar over the note: ↩ / ⇧↩ walk the matches, the replace field replaces one at a time (↩) or all at once.
 - **Section outline** instead of a scrollbar — when a note is taller than the window, one tick per heading sits at the left edge, dark for the sections on screen; hover to see the titles, click to jump.
 - **Obsidian's syntax** — `[[Note|alias]]` links, `==highlights==` (`⌘⇧H`), and callouts by type: `> [!warning] Title` shows the type's icon and colour, the text on its line as the title; the fold mark (`-`/`+`) is kept. A vault's notes read and save back unchanged.
-- **`/` block menu** — callouts (`> [!💡]` in markdown), code blocks, dividers, images (copied into `notes/assets/`), note links, kanban boards. Headings and lists come from markdown shortcuts (`# `, `- `, `1. `, `[ ] `, `> `).
+- **`/` block menu** — callouts (`> [!💡]` in markdown), code blocks, dividers, images (copied into `notes/assets/`), note links, kanban boards, diagrams. Headings and lists come from markdown shortcuts (`# `, `- `, `1. `, `[ ] `, `> `).
 - **Kanban** — `/kanban` drops a Notion-style board into the note. Drag cards between columns, or drive it from the keyboard: ↑↓←→ move between cards, ⌥↑↓←→ move a card (⌥←→ a column), Enter opens the card as a floating page with its own markdown body, ⌫ deletes. ↓ from the line above (↑ from the line below) steps into the board; Esc steps back out. The + past the last column adds one; hovering the board shows a × under it that deletes the board (or press ⌫ at the start of the line after it). The file keeps a ```` ```kanban ```` fence holding JSON (`{ "columns": [{ "title", "cards": [{ "title", "body" }] }] }`); a fence that fails to parse is shown as a plain code block, so a bad edit never loses cards.
-- **Sidebar** with search (`⌘K`; ↓ walks into the matches, ↑ from the first comes back), emoji icons for notes and groups (picker above the title, like Notion), hold `⌘` to number the visible notes and `⌘1`…`⌘9` to jump, collapsible **groups** (folders, nested up to 3 levels). Drag notes or whole groups to reorder or move them; `⌘\` opens and focuses the list (press again from the list to close it and return to the editor) (↑↓ move, `i` sets an emoji icon, ⌥↑↓ move notes or groups one row at a time (groups walk out of and into other groups), ⌥← ⌥→ un-nest / nest a group, Space or ← → fold, → on a note or an open group (or Esc) back to the editor, ⌫ deletes with confirmation). The list stays open while you write; Settings → Appearance → *Close sidebar when you start writing* folds it away at the first keystroke instead.
+- **Diagrams** — a ```` ```mermaid ```` block ([Mermaid](https://mermaid.js.org)) is drawn as its picture, on a dotted canvas in the app's own colours, light or dark. `/diagram` opens a builder: pick a **flowchart, sequence, pie chart, mind map, timeline or Gantt chart**, then fill in its parts (steps and connections, participants and messages, slices, branches, periods, tasks with dates) while the drawing updates above the form. Click a diagram in a note to change it the same way. The preview is the note's own drawing: same code, same renderer, at the note's width, so what you insert looks exactly as it did there. The note keeps plain mermaid code, readable anywhere; a diagram written by hand with more than the builder shows (styles, subgraphs, notes) opens in its code instead, so nothing is lost. "Edit as code" switches at any time; a diagram that does not parse shows the error under its code. Mermaid loads only with the first diagram, and draws with `securityLevel: strict` (labels stay text). The phone widget shows such a block as "📊 Diagram".
+- **Text size** — `⌘+` / `⌘-` step the note's text between 12 and 28 px, `⌘0` goes back to 15; a pill shows the size. Settings → Appearance has the same as a slider.
+- **Import a folder** — drop Markdown files or whole folders (an Obsidian vault, a Notion export, a Google Keep Takeout) onto the sidebar, or onto a group to import into it. Folders become groups (three levels deep), a page's folder of the same name becomes its sub-pages, and pictures a note reaches by a relative path or an Obsidian `![[embed]]` come along; links between the files become `[[links]]`.
+- **Sidebar** with search (`⌘K`; ↓ walks into the matches, ↑ from the first comes back), emoji icons for notes and groups (picker above the title, like Notion), hold `⌘` to number the visible notes and `⌘1`…`⌘9` to jump, collapsible **groups** (folders, nested up to 3 levels). Drag notes or whole groups to reorder or move them; `⌘\` opens and focuses the list (press again from the list to close it and return to the editor) (↑↓ move, `i` sets an emoji icon, ⌥↑↓ move notes or groups one row at a time (groups walk out of and into other groups), ⌥← ⌥→ un-nest / nest a group, Space or ← → fold — ← on a note with sub-pages folds it and ← again goes to its parent, as in Finder; → on a note or an open group (or Esc) back to the editor, ⌫ deletes with confirmation). The list stays open while you write; Settings → Appearance → *Close sidebar when you start writing* folds it away at the first keystroke instead.
 - **Opens .md files** — Eve registers as a Markdown editor, so it shows up in Finder's *Open With*. Such files are edited in place and listed under *Open files* (not synced; ⌫ closes them).
 - **Plain files** — each note is a `.md` with a tiny frontmatter (id, updated, group) in `~/Library/Application Support/dev.happynut.eve/notes/`.
 - **Sync without a server** — a private GitHub repository is the backend: one commit per change, last-writer-wins, images included. Edit a note on github.com and it comes back to the app.
@@ -60,6 +64,10 @@ Sign in from Settings → Sync on the phone too.
   long-press → the pencil changes what it shows.
 - **Background sync** — every 15 minutes (Android's floor) while Eve is closed, notes changed elsewhere come
   down and the widget redraws. The app pushes when it leaves the screen.
+- **Opens where you left off** — the note you had open, not the list.
+- **A list made for a thumb** — each row shows the note's title, when it was edited and two lines of it. Swipe a
+  row left to delete it, right to move it to another group; long-press for its menu (icon, move to a group, reorder, export, delete).
+  *Reorder* gives every row a handle to drag it by.
 - Back goes from a note to the list, and from the list out of the app.
 
 ```bash
@@ -82,6 +90,7 @@ Not on the phone: the global hotkey, Dock/login-item settings, PDF/image export,
 | app    | Next / previous note / Back / Forward | `⌘⇧↓` `⌘⇧↑` `⌘[` `⌘]` |
 | app    | Sidebar: open + focus / close   | `⌘\`              |
 | app    | Delete note / Settings / Hide   | `⌘⇧⌫` `⌘,` `Esc`  |
+| app    | Larger / smaller / default text | `⌘+` `⌘-` `⌘0`    |
 | editor | Bold / Italic / Underline       | `⌘B` `⌘I` `⌘U`    |
 | editor | Strike / Code / Link / `[[`     | `⌘⇧X` `⌘E` `⌘⇧K` `⌘⇧L` |
 | editor | Highlight (`==`)                | `⌘⇧H`             |
@@ -176,6 +185,10 @@ src/                Svelte UI
   lib/shortcuts.svelte.ts all key bindings + rebinding logic
   lib/editor.ts           TipTap setup, live keymap
   lib/wikilink.ts         [[link]] node + markdown rule + suggestion popup
+  lib/code.ts             code blocks: highlighting, the language chip, a mermaid block's drawing
+  lib/mermaid.ts          mermaid, loaded on first use, in the app's colours
+  lib/diagram.ts          the diagram builder's charts <-> mermaid code (DiagramBuilder.svelte is its UI)
+  lib/importTree.ts       files and folders dropped on the list, as notes and groups
   lib/sync.svelte.ts      sync client (notes + images <-> GitHub)
   lib/github.ts           GitHub REST sync engine (pure, tested in Node)
 src-tauri/          Rust: file/asset storage commands, window toggle, global-shortcut plugin

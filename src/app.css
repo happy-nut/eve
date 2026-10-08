@@ -424,17 +424,25 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 /* a mermaid block: its diagram; the code above it only while the caret is in it (or the diagram failed, to fix it) */
 .tiptap .code-block:not(.mermaid) .mermaid-view { display: none; }
 .tiptap .code-block.mermaid:not(.editing):not(.mermaid-error) pre { display: none; }
-.tiptap .mermaid-view {
-  display: flex; justify-content: center; margin: 0.6em 0; padding: 14px; overflow-x: auto; cursor: pointer;
-  border: 1px solid var(--line); border-radius: 8px; user-select: none; -webkit-user-select: none;
+/* the diagram's canvas: one look for the note and the builder's preview (DiagramBuilder.svelte), which must draw it
+   the same. A faint dot grid, as a whiteboard, rather than a framed box. */
+.diagram-canvas {
+  --dot: light-dark(rgba(17, 19, 24, 0.07), rgba(255, 255, 255, 0.06));
+  display: flex; justify-content: center; align-items: center; padding: 22px 18px; overflow-x: auto;
+  border-radius: 12px; background: radial-gradient(circle, var(--dot) 1px, transparent 1.2px) 0 0 / 16px 16px, var(--bg);
+  box-shadow: inset 0 0 0 1px var(--line); user-select: none; -webkit-user-select: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif; font-size: 14px; line-height: 1.4;
 }
+.diagram-canvas svg { max-width: 100%; height: auto; }
+.diagram-canvas svg[aria-roledescription='pie'] { max-width: min(100%, 380px) !important; } /* over mermaid's own inline size */
+.diagram-canvas:empty { min-height: 72px; } /* drawing: the space it will take, not a jump */
+.tiptap .mermaid-view { margin: 0.6em 0; cursor: pointer; transition: box-shadow 0.15s; }
+@media (hover: hover) { .tiptap .mermaid-view:hover { box-shadow: inset 0 0 0 1px var(--accent-soft), 0 1px 8px light-dark(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.3)); } }
 .tiptap .code-block.mermaid.editing .mermaid-view { margin-top: -0.2em; cursor: default; }
-.tiptap .mermaid-view:empty { min-height: 60px; } /* drawing: the space it will take, not a jump */
-.tiptap .mermaid-view svg { max-width: 100%; height: auto; }
-.tiptap .code-block.mermaid-error .mermaid-view {
-  justify-content: flex-start; color: #ff453a; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; cursor: default;
+.tiptap .code-block.mermaid-error .mermaid-view, .diagram-canvas.error {
+  justify-content: flex-start; align-items: flex-start; color: #ff453a; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap; cursor: default; background: light-dark(rgba(255, 69, 58, 0.05), rgba(255, 69, 58, 0.08));
 }
-
 
 /* ---- syntax highlighting (highlight.js class names, emitted by lowlight) ---- */
 .tiptap .hljs-comment, .tiptap .hljs-quote { color: var(--fg-dim); font-style: italic; }

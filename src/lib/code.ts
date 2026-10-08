@@ -4,6 +4,7 @@ import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
+import { isMobile } from './platform';
 import { renderMermaid, themeKey } from './mermaid';
 
 /**
@@ -162,7 +163,7 @@ export const CodeBlock = CodeBlockBase.extend({
       chip.textContent = labelOf(node.attrs.language);
       // a mermaid block's picture: drawn from its code, a click on it puts the caret in the code
       const view = document.createElement('div');
-      view.className = 'mermaid-view';
+      view.className = 'mermaid-view diagram-canvas';
       view.contentEditable = 'false';
       dom.append(chip, pre, view);
       let drawn = '', timer: ReturnType<typeof setTimeout> | undefined, gone = false;
@@ -189,13 +190,20 @@ export const CodeBlock = CodeBlockBase.extend({
       scheme?.addEventListener('change', redraw);
       const themeWatch = new MutationObserver(redraw);
       themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-      view.addEventListener('mousedown', (e) => {
-        e.preventDefault();
+      // a click on the picture opens it in the builder (DiagramBuilder.svelte), which also has its code
+      view.addEventListener('mousedown', (e) => e.preventDefault());
+      view.addEventListener('click', () => {
         const p = typeof getPos === 'function' ? getPos() : null;
         const n = p == null ? null : editor.state.doc.nodeAt(p);
-        if (p == null || !n) return;
-        editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, p + n.nodeSize - 1)));
-        editor.view.focus();
+        if (p == null || !n || ui.diagram) return;
+        void ui.openDiagram(n.textContent, view.offsetWidth).then((code) => {
+          const at = typeof getPos === 'function' ? getPos() : null;
+          const now = at == null ? null : editor.state.doc.nodeAt(at);
+          if (at == null || !now || code === null || code === now.textContent) return;
+          const tr = editor.state.tr.replaceWith(at + 1, at + now.nodeSize - 1, editor.schema.text(code));
+          // the caret under the diagram, so it shows as drawn rather than as its code
+          editor.view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(at + tr.doc.nodeAt(at)!.nodeSize))).scrollIntoView());
+        });
       });
 
       const language = (): string => {
@@ -245,3 +253,31 @@ export const CodeBlock = CodeBlockBase.extend({
     };
   },
 }).configure({ languageClassPrefix: 'language-' });
+
+/** the width a diagram drawn at the caret will have: its block's container, inside its padding (the note's column,
+ *  a list item, a callout), so the builder previews it at that size */
+export function canvasWidth(editor: Editor): number {
+  const { $from } = editor.state.selection;
+  const block = $from.depth ? editor.view.nodeDOM($from.before($from.depth)) : null;
+  const box = (block instanceof HTMLElement ? block.parentElement : null) ?? editor.view.dom;
+  const cs = getComputedStyle(box);
+  return Math.round(box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)) || 640;
+}
+
+/** the / menu's Diagram: the builder, and what it made put in at the caret */
+export function insertDiagram(editor: Editor) {
+  void ui.openDiagram(null, canvasWidth(editor)).then((code) => {
+    if (!code || editor.isDestroyed) return;
+    const { from } = editor.state.selection;
+    const c = isMobile ? editor.chain() : editor.chain().focus();
+    c.insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: code }] }).run();
+    // out of the block it went into, onto the line under it
+    const $at = editor.state.doc.resolve(Math.min(editor.state.selection.from, editor.state.doc.content.size));
+    for (let d = $at.depth; d > 0; d--) {
+      if ($at.node(d).type.name !== 'codeBlock' || $at.before(d) < from - 2) continue;
+      const tr = editor.state.tr;
+      editor.view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve($at.after(d)))).scrollIntoView());
+      break;
+    }
+  });
+}
