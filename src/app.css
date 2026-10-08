@@ -57,7 +57,10 @@ button.icon {
   width: 26px; height: 26px; border-radius: 6px; padding: 0;
   transition: background 0.12s, color 0.12s, transform 0.12s;
 }
-button.icon:hover { background: var(--bg-hover); color: var(--fg); }
+/* only where there is a pointer to hover with: a tap leaves a phone's :hover on what was tapped, and the button
+   looked held down after its press (the list's group arrow) */
+@media (hover: hover) { button.icon:hover { background: var(--bg-hover); color: var(--fg); } }
+html.mobile button.icon:active { background: var(--bg-active); }
 button.icon.on { color: var(--accent); background: var(--accent-soft); } /* a toggle that is on */
 /* icon buttons show keyboard focus as a tinted pill, like hover, not a ring that gets clipped by their containers */
 button.icon:focus-visible { outline: none; background: var(--accent-soft); color: var(--fg); }
@@ -682,7 +685,7 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
   background: none; color: var(--fg-dim); cursor: pointer; font-size: inherit; /* a button's own 13px made the twisty a speck */
   display: flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s;
 }
-.tiptap [data-type='details'] > button:hover { background: var(--bg-hover); color: var(--fg); }
+@media (hover: hover) { .tiptap [data-type='details'] > button:hover { background: var(--bg-hover); color: var(--fg); } }
 /* a filled triangle with soft corners, the size of the text's lower case, turning down when open */
 .tiptap [data-type='details'] > button::before {
   content: ''; width: 0.72em; height: 0.72em; background: currentColor; transition: transform 0.15s ease;

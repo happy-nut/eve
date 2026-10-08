@@ -211,11 +211,11 @@
   :global(html.mobile) .today-btn { height: 36px; font-size: 14px; border-radius: 10px; }
   :global(html.mobile) .grid { gap: 4px; }
   :global(html.mobile) .day:hover { background: none; } /* a tap leaves no hover behind */
-  :global(html.mobile) .day { min-height: 0; padding: 5px 3px; gap: 2px; border-radius: 10px; align-items: center; }
+  :global(html.mobile) .day { min-height: 0; padding: 6px 3px 14px; gap: 2px; border-radius: 10px; align-items: center; }
   :global(html.mobile) .wd { padding: 0; font-size: 11px; text-align: center; }
   :global(html.mobile) .num { margin: 0; width: 26px; height: 26px; line-height: 26px; font-size: 13.5px; }
-  /* beside the number on a phone too, a little closer: under it, it sat on the day's first line of text. Absolutely
-     placed, so the number itself stays in the middle of the day */
-  :global(html.mobile) .day.has .num::after { right: -6px; width: 4px; height: 4px; margin-top: -2px; }
-  :global(html.mobile) .line { font-size: 10px; -webkit-line-clamp: 2; line-clamp: 2; text-align: center; }
+  /* a phone's day is too narrow for its note's words (a word or two, broken mid-word): a dot under the number says
+     there is one, and the day opens it */
+  :global(html.mobile) .day.has .num::after { top: auto; bottom: -8px; right: 50%; width: 5px; height: 5px; margin: 0 -2.5px 0 0; }
+  :global(html.mobile) .line { display: none; }
 </style>
