@@ -672,9 +672,17 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
    toggle left the body's text unpainted (Chromium), as if the selection had a hole in it */
 .tiptap [data-type='details'] { position: relative; padding-left: calc(1.3em + 4px); margin: 0.15em 0; }
 .tiptap [data-type='details'] > button {
-  position: absolute; left: 0; top: 0; width: 1.3em; height: 1.6em; padding: 0; border: 0; background: none; color: var(--fg-dim); cursor: pointer;
+  position: absolute; left: 0; top: 0.1em; width: 1.3em; height: 1.4em; padding: 0; border: 0; border-radius: 5px;
+  background: none; color: var(--fg-dim); cursor: pointer; font-size: inherit; /* a button's own 13px made the twisty a speck */
+  display: flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s;
 }
-.tiptap [data-type='details'] > button::before { content: '▸'; display: inline-block; transition: transform 0.12s; }
+.tiptap [data-type='details'] > button:hover { background: var(--bg-hover); color: var(--fg); }
+/* a filled triangle with soft corners, the size of the text's lower case, turning down when open */
+.tiptap [data-type='details'] > button::before {
+  content: ''; width: 0.72em; height: 0.72em; background: currentColor; transition: transform 0.15s ease;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3 1.6c0-.6.7-1 1.2-.6l4.2 3.4c.4.3.4.9 0 1.2L4.2 9c-.5.4-1.2 0-1.2-.6z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3 1.6c0-.6.7-1 1.2-.6l4.2 3.4c.4.3.4.9 0 1.2L4.2 9c-.5.4-1.2 0-1.2-.6z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
 .tiptap [data-type='details'].is-open > button::before { transform: rotate(90deg); }
 .tiptap [data-type='details'] summary { display: block; list-style: none; }
 .tiptap [data-type='details'] summary::-webkit-details-marker { display: none; }
