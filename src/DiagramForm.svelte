@@ -74,7 +74,7 @@
 
   // ---- gantt ----
   const endOf = (g: Gantt) => {
-    const all = g.sections.flatMap((s) => s.tasks);
+    const all = g.sections.flatMap((s) => s.tasks).filter((t) => /^\d{4}-\d{2}-\d{2}$/.test(t.start)); // a real date to follow
     const last = all[all.length - 1];
     return last ? addDays(last.start, last.days) : (starter('gantt') as Gantt).sections[0].tasks[0].start;
   };
@@ -212,7 +212,7 @@
         {#each s.tasks as t, j (j)}
           <div class="row g-task">
             <input class="grow label" bind:value={t.name} placeholder="Task" aria-label="Task" />
-            <input class="date" type="date" bind:value={t.start} aria-label="Starts" />
+            <input class="date" type="date" value={t.start} aria-label="Starts" oninput={(e) => { const v = e.currentTarget.value; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) t.start = v; }} onblur={(e) => (e.currentTarget.value = t.start)} />
             <span class="days"><input class="num" type="number" min="1" step="1" inputmode="numeric" bind:value={t.days} aria-label="Days" />d</span>
             {@render remove(() => s.tasks.splice(j, 1), 'Remove task')}
           </div>

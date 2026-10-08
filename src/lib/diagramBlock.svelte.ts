@@ -3,7 +3,7 @@ import DiagramBlock from '../DiagramBlock.svelte';
 
 type Props = {
   code: string; start: boolean; codeShown: boolean;
-  onCode: (code: string) => void; onCodeEdit: () => void; onError: (failed: boolean) => void;
+  onCode: (code: string) => void; onCodeEdit: () => void; onError: (failed: boolean) => void; onHistory: (redo: boolean) => void;
 };
 
 /** A mermaid block's drawing and its editing (DiagramBlock.svelte), mounted in its node view; `set` passes it what

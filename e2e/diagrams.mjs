@@ -97,6 +97,52 @@ try {
   console.log('ok   full screen');
   await page.close();
 
+  // ---- keys and clicks meant for something else (found in the bug hunt) ----
+  page = await open('# Keys\n\nAbove.\n\n```mermaid\nflowchart LR\n  n1("One")\n  n2("Two")\n  n1 --> n2\n```\n\n- [ ] a task below\n');
+  await page.waitForSelector('.tiptap .mermaid-view svg');
+  const one = '```mermaid\nflowchart LR\n  n1("One")\n  n2("Two")\n  n1 --> n2\n```';
+  // Esc right after opening it (the keyboard still in the note's text) lets go of it
+  await page.locator('.tiptap .mermaid-view').click();
+  await page.waitForSelector('.tiptap .dblock.active');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.tiptap .dblock.active').count(), 0, 'Esc lets go of the diagram');
+  // a box selected, then keys typed in the list's search: the box is not deleted
+  await page.locator('.tiptap .mermaid-view').click();
+  at = await boxAt(page, 'One');
+  await page.mouse.click(at.x, at.y);
+  await page.keyboard.press('Enter');
+  await page.locator('aside input').first().focus();
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Tab');
+  await settle(page);
+  assert.ok((await md(page)).includes(one), 'keys typed elsewhere leave the diagram alone');
+  // ⌘Z with the keyboard on nothing (after a box is deleted) undoes into the diagram
+  at = await boxAt(page, 'One');
+  await page.mouse.click(at.x, at.y);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Backspace');
+  await settle(page);
+  assert.ok(!(await md(page)).includes('One'), 'the box deleted');
+  await page.keyboard.press('Control+z');
+  await settle(page);
+  assert.ok((await md(page)).includes('"One"'), 'undo brings it back');
+  // with it open, a click on the task under it toggles the task (the tools folding away moved it from under the press)
+  await page.locator('.tiptap .mermaid-view').click();
+  await page.waitForSelector('.tiptap .dblock.active');
+  await page.locator('.tiptap ul[data-type="taskList"] input[type="checkbox"]').click();
+  await settle(page);
+  assert.match(await md(page), /- \[x\] a task below/, 'the click lands on the task');
+  // a change waiting to be written is dropped when the note changes it first (a sync)
+  await page.locator('.tiptap .mermaid-view').click();
+  at = await boxAt(page, 'Two');
+  await page.mouse.click(at.x, at.y);
+  await page.keyboard.type('Z');
+  await page.evaluate(() => { const e = window.__editor; e.commands.setContent(e.storage.markdown.getMarkdown().replace('"One"', '"Remote"')); });
+  await settle(page);
+  assert.ok((await md(page)).includes('"Remote"'), 'what came from elsewhere is not written over');
+  console.log('ok   keys and clicks elsewhere, Esc, ⌘Z, a sync meanwhile');
+  await page.close();
+
   // ---- a pie: its parts as rows under it, in the note ----
   page = await open('# Week\n\nx\n');
   await slash(page, 'pie');
@@ -107,6 +153,17 @@ try {
   assert.equal(await page.locator('.tiptap .chart-pie .lbl').first().textContent(), 'Writing <b>&', 'a label is text, not markup');
   assert.match(await md(page), /pie\n {2}"Writing <b>&" : 70\n/);
   console.log('ok   pie: its rows in the note');
+  await page.close();
+
+  // ---- a Gantt chart's date emptied: the last one stays ----
+  page = await open('# G\n\nx\n');
+  await slash(page, 'gantt');
+  await page.waitForSelector('.tiptap .dblock.active .g-task');
+  await page.locator('.tiptap .g-task input.date').first().fill('');
+  await page.locator('.tiptap .g-phase .add').first().click();
+  await settle(page);
+  assert.doesNotMatch(await md(page), /: , |NaN/, 'no task without a date');
+  console.log('ok   gantt: an emptied date keeps the last one');
   await page.close();
 
   // ---- written by hand, readable: left exactly as written until it is changed ----

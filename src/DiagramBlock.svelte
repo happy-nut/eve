@@ -14,7 +14,7 @@
    * an undo, a sync or the code typed by hand comes back as `code` and is read again. A diagram written with more
    * than these can show (styles, subgraphs, notes) is drawn, and edited as its code.
    */
-  let { code, start, codeShown, onCode, onCodeEdit, onError }: {
+  let { code, start, codeShown, onCode, onCodeEdit, onError, onHistory }: {
     code: string;
     /** made just now from the / menu: open for editing at once */
     start: boolean;
@@ -23,6 +23,8 @@
     onCode: (code: string) => void;
     onCodeEdit: () => void;
     onError: (failed: boolean) => void;
+    /** the note's undo (false) or redo (true): ⌘Z with the keyboard on the diagram */
+    onHistory: (redo: boolean) => void;
   } = $props();
 
   let root: HTMLDivElement, canvas = $state<HTMLDivElement | null>(null);
@@ -45,13 +47,25 @@
     sent = c;
     edited = true;
     clearTimeout(writeTimer);
-    writeTimer = setTimeout(() => onCode(c), 250); // written into the note a moment after the last change
+    // written into the note a moment after the last change, unless the note changed it meanwhile (an undo, a sync)
+    const at = untrack(() => code);
+    writeTimer = setTimeout(() => { writeTimer = undefined; if (code === at) onCode(c); }, 250);
   });
+  /** a change still waiting, written now (before an undo, so the undo undoes it) */
+  function flush() {
+    if (writeTimer === undefined) return;
+    clearTimeout(writeTimer);
+    writeTimer = undefined;
+    if (mine !== null && mine !== code) onCode(mine);
+  }
   // the code changed elsewhere (undo, sync, typed by hand): read again
   $effect(() => {
     const c = code;
     untrack(() => {
       if (c === sent) return;
+      // changed elsewhere (a sync, an undo): what this was about to write is older, and would write over it
+      clearTimeout(writeTimer);
+      writeTimer = undefined;
       sent = null;
       edited = false;
       d = fromCode(c);
@@ -84,17 +98,34 @@
     scheme?.addEventListener('change', again);
     const watch = new MutationObserver(again);
     watch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    // a press anywhere else in the app is done with it (not one on a choice's popup or sheet, or its backdrop)
-    const away = (e: PointerEvent) => {
+    // a click anywhere else in the app is done with it (not one on a choice's popup or sheet, or its backdrop). On the
+    // click, not the press: closed on the press, its tools folded away under the pointer and the click (a checkbox
+    // below, another diagram) landed on whatever moved up into their place
+    const away = (e: MouseEvent) => {
       const t = e.target as Element | null;
       if (active && t && !root.contains(t) && !t.closest('[role="listbox"], .scrim, .sheet, [role="dialog"]')) active = false;
     };
-    document.addEventListener('pointerdown', away, true);
+    document.addEventListener('click', away, true);
+    // keys meant for it while it is open: the keyboard on it, on nothing, or still in the note's text (a click on the
+    // drawing leaves it there). Esc lets go of it (it fell through and hid the window); ⌘Z undoes into it
+    const keys = (e: KeyboardEvent) => {
+      if (!active || e.defaultPrevented || ui.diagramView !== null) return;
+      const t = e.target as Element;
+      const typing = t instanceof HTMLElement && t.matches('input, textarea, select');
+      const ours = t === document.body || (root.contains(t) && !typing) || (!typing && t.closest?.('.tiptap') === root.closest('.tiptap'));
+      if (!ours) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); active = false; }
+      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && t === document.body) {
+        e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey);
+      }
+    };
+    window.addEventListener('keydown', keys, true);
     return () => {
-      clearTimeout(writeTimer); clearTimeout(drawTimer);
-      if (edited && mine !== null && mine !== code) onCode(mine); // a change still waiting is not lost
+      clearTimeout(drawTimer);
+      flush(); // a change still waiting is not lost (code.ts writes it only into this same block, if it is still there)
       scheme?.removeEventListener('change', again); watch.disconnect();
-      document.removeEventListener('pointerdown', away, true);
+      document.removeEventListener('click', away, true);
+      window.removeEventListener('keydown', keys, true);
     };
   });
   $effect(() => { if (codeShown) active = false; });

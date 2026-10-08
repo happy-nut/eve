@@ -170,6 +170,7 @@ export const CodeBlock = CodeBlockBase.extend({
       const posNow = () => (typeof getPos === 'function' ? getPos() : null);
       let block: ReturnType<typeof mountDiagram> | null = null;
       let shown = false; // the caret in the code
+      let shownNode: PMNode = node; // the block as this view last drew it
       const setDiagram = (n: PMNode) => {
         const on = n.attrs.language === 'mermaid';
         dom.classList.toggle('mermaid', on);
@@ -180,12 +181,16 @@ export const CodeBlock = CodeBlockBase.extend({
         block = mountDiagram(host, {
           code: n.textContent, start, codeShown: shown,
           // what was drawn, written into the block: one step to undo, the caret left where it was
+          // only into this very block, where it still is: the node there must be the one this view last showed (a last
+          // change written as the block was deleted found the paragraph after it at its old place, and wrote over it)
           onCode: (code) => {
+            if (editor.isDestroyed) return;
             const p = posNow();
             const cur = p == null ? null : editor.state.doc.nodeAt(p);
-            if (p == null || !cur || cur.textContent === code) return;
+            if (p == null || !cur || cur !== shownNode || cur.textContent === code) return;
             editor.view.dispatch(editor.state.tr.replaceWith(p + 1, p + cur.nodeSize - 1, code ? editor.schema.text(code) : []));
           },
+          onHistory: (redo) => queueMicrotask(() => { if (redo) editor.commands.redo(); else editor.commands.undo(); }),
           onCodeEdit: () => {
             const p = posNow();
             const cur = p == null ? null : editor.state.doc.nodeAt(p);
@@ -234,6 +239,7 @@ export const CodeBlock = CodeBlockBase.extend({
           if (updated.type !== node.type) return false;
           chip.textContent = labelOf(updated.attrs.language);
           shown = decorations.some((d) => (d as unknown as { spec?: { editing?: boolean } }).spec?.editing);
+          shownNode = updated;
           setDiagram(updated);
           return true;
         },

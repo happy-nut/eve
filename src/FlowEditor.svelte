@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { freshId, type Flowchart, type Line, type Shape } from './lib/diagram';
+  import { ui } from './lib/ui.svelte';
 
   /**
    * A flowchart drawn by hand on its own picture (the builder's preview): boxes are made, joined, renamed and removed
@@ -174,6 +175,11 @@
 
   function onKey(e: KeyboardEvent) {
     if (editing || !sel) return;
+    // only keys meant for this diagram: the keyboard on it, or on nothing (after a box's typing is done) — not keys
+    // typed in the list, another note's page or the full-screen view, which deleted the box behind them
+    if (ui.diagramView !== null) return;
+    const t = e.target as Element;
+    if (t !== document.body && !layer.closest('.dblock')?.contains(t)) return;
     const typing = (e.target as HTMLElement).matches?.('input, textarea, [contenteditable="true"]');
     // in a line's label: Esc or Enter is done with it (Esc closed the whole builder), the rest is typing
     if (typing && layer.contains(e.target as Node)) {
