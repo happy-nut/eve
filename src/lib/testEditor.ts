@@ -3,6 +3,8 @@ import { createEditor, getMarkdown } from './editor';
 import type { Editor } from '@tiptap/core';
 
 const noop = () => {};
+// jsdom has none: a PDF card waits for one to load its first page (a real webview always has it)
+(globalThis as any).IntersectionObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 const popup = { visible: () => false, show: noop, hide: noop, update: noop, key: () => false } as any;
 
 export function editorWith(content: string): Editor {

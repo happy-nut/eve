@@ -11,7 +11,7 @@ let seq = 0;
 
 const dark = () => {
   const t = document.documentElement.dataset.theme;
-  return t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+  return t === 'dark' || (t !== 'light' && typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches);
 };
 
 /**
