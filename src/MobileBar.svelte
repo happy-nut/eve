@@ -25,7 +25,13 @@
       tallest.set(w, full);
       keyboard = window.innerHeight < full - 120;
     };
-    const check = () => { editing = !!document.activeElement?.closest('.page .tiptap, .card-page .tiptap'); measure(); };
+    // the note's own text only: a box's name, a form's row or a formula being typed in a diagram or an equation inside
+    // the note is not it, and the bar's buttons wrote into the note (bold, a to-do) from there
+    const check = () => {
+      const a = document.activeElement;
+      editing = !!a?.closest('.page .tiptap, .card-page .tiptap') && !a.closest('.dblock, .math-edit, .mermaid-host, .math-inline, .math-block');
+      measure();
+    };
     const out = () => setTimeout(check, 0); // focus lands on the next element a tick later
     document.addEventListener('focusin', check);
     document.addEventListener('focusout', out);

@@ -7,9 +7,11 @@
 
 export type Shape = 'round' | 'box' | 'pill' | 'diamond' | 'circle' | 'db';
 export type Line = 'solid' | 'dotted' | 'thick';
-export interface FlowNode { id: string; label: string; shape: Shape }
+export interface FlowNode { id: string; label: string; shape: Shape; /** the swimlane it is in (a lane's id), if the chart has lanes */ lane?: string }
+/** a swimlane: who or what does the steps in it (mermaid's subgraph) */
+export interface Lane { id: string; label: string }
 export interface FlowEdge { from: string; to: string; label: string; line: Line }
-export interface Flowchart { kind: 'flowchart'; dir: 'LR' | 'TD'; nodes: FlowNode[]; edges: FlowEdge[] }
+export interface Flowchart { kind: 'flowchart'; dir: 'LR' | 'TD'; nodes: FlowNode[]; edges: FlowEdge[]; lanes?: Lane[] }
 
 export interface Person { id: string; name: string; actor: boolean }
 export interface Message { from: string; to: string; text: string; reply: boolean }
@@ -44,6 +46,31 @@ const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 export const addDays = (day: string, n: number) => { const d = new Date(`${day}T00:00:00`); d.setDate(d.getDate() + n); return iso(d); };
 
 /** what a new chart of each kind starts as: a small example to change, not an empty form */
+/** the / menu's swimlanes: a flowchart whose steps sit in the lane of who does them */
+export function swimlaneStarter(): Flowchart {
+  return {
+    kind: 'flowchart', dir: 'TD', // lanes side by side down the page: a note is narrower than it is long
+    lanes: [{ id: 'L1', label: 'Customer' }, { id: 'L2', label: 'Store' }, { id: 'L3', label: 'Delivery' }],
+    nodes: [
+      // in the order the code lists them (by lane), so the chart reads back exactly as it is
+      { id: 'n1', label: 'Order', shape: 'pill', lane: 'L1' },
+      { id: 'n6', label: 'Receive', shape: 'pill', lane: 'L1' },
+      { id: 'n2', label: 'Check payment', shape: 'round', lane: 'L2' },
+      { id: 'n3', label: 'In stock?', shape: 'diamond', lane: 'L2' },
+      { id: 'n4', label: 'Pack', shape: 'round', lane: 'L2' },
+      { id: 'n5', label: 'Ship', shape: 'round', lane: 'L3' },
+    ],
+    edges: [
+      { from: 'n1', to: 'n2', label: '', line: 'solid' },
+      { from: 'n2', to: 'n3', label: '', line: 'solid' },
+      { from: 'n3', to: 'n4', label: 'yes', line: 'solid' },
+      { from: 'n3', to: 'n1', label: 'no', line: 'dotted' },
+      { from: 'n4', to: 'n5', label: '', line: 'solid' },
+      { from: 'n5', to: 'n6', label: '', line: 'solid' },
+    ],
+  };
+}
+
 export function starter(kind: Kind, today = iso(new Date())): Diagram {
   switch (kind) {
     case 'flowchart': return {
@@ -89,7 +116,15 @@ const ARROWS: Record<Line, string> = { solid: '-->', dotted: '-.->', thick: '==>
 
 function flowCode(d: Flowchart) {
   const lines = [`flowchart ${d.dir}`];
-  for (const n of d.nodes) { const [a, b] = SHAPES[n.shape]; lines.push(`  ${n.id}${a}${quoted(n.label)}${b}`); }
+  const nodeLine = (n: FlowNode, pad: string) => { const [a, b] = SHAPES[n.shape]; return `${pad}${n.id}${a}${quoted(n.label)}${b}`; };
+  // swimlanes are subgraphs: each lane's boxes inside its own (any other app draws them as groups); boxes in no lane after
+  const lanes = d.lanes ?? [];
+  for (const l of lanes) {
+    lines.push(`  subgraph ${l.id}[${quoted(l.label)}]`, `    direction ${d.dir}`);
+    for (const n of d.nodes) if (n.lane === l.id) lines.push(nodeLine(n, '    '));
+    lines.push('  end');
+  }
+  for (const n of d.nodes) if (!lanes.some((l) => l.id === n.lane)) lines.push(nodeLine(n, '  '));
   const ids = new Set(d.nodes.map((n) => n.id));
   for (const e of d.edges) {
     if (!ids.has(e.from) || !ids.has(e.to)) continue;
@@ -128,14 +163,28 @@ function flowRead(lines: string[], head: string): Flowchart | null {
   if (!dir) return null;
   const d: Flowchart = { kind: 'flowchart', dir: dir[1] === 'LR' ? 'LR' : 'TD', nodes: [], edges: [] };
   const seen = new Map<string, FlowNode>();
+  let lane: Lane | null = null; // the subgraph being read
   const node = (n: { id: string; label?: string; shape?: Shape }) => {
     let have = seen.get(n.id);
     if (!have) { have = { id: n.id, label: n.label ?? n.id, shape: n.shape ?? 'box' }; seen.set(n.id, have); d.nodes.push(have); }
     else if (n.label !== undefined) { have.label = n.label; have.shape = n.shape!; }
+    // in a lane: the lane it is first named in (mermaid's own rule: a box mentioned in a subgraph is in it)
+    if (lane && !have.lane) have.lane = lane.id;
     return have;
   };
   for (const raw of lines) {
     const line = raw.trim().replace(/;$/, '');
+    // a swimlane: `subgraph id["Label"]` (or id[Label], or a bare id) … `end`; one inside another is more than lanes
+    const sub = /^subgraph\s+([A-Za-z0-9_]+)\s*(?:\[(.*)\])?$/.exec(line);
+    if (sub) {
+      if (lane || (d.lanes ?? []).some((l) => l.id === sub[1]) || seen.has(sub[1])) return null;
+      lane = { id: sub[1], label: sub[2] === undefined ? sub[1] : unquote(sub[2]) };
+      (d.lanes ??= []).push(lane);
+      continue;
+    }
+    if (line === 'end') { if (!lane) return null; lane = null; continue; }
+    if (/^direction\s+(LR|RL|TB|TD|BT)$/.test(line)) { if (!lane) return null; continue; } // written anew with the chart's
+    if (/^subgraph\b/.test(line)) return null; // a title with spaces, no id: kept as code
     const a = readNode(line);
     if (!a) return null;
     node(a);
@@ -148,6 +197,7 @@ function flowRead(lines: string[], head: string): Flowchart | null {
     node(b);
     d.edges.push({ from: a.id, to: b.id, label: arrow[2] === undefined ? '' : unquote(arrow[2]), line: arrow[1] === '-->' ? 'solid' : arrow[1] === '==>' ? 'thick' : 'dotted' });
   }
+  if (lane) return null; // a lane never closed
   return d;
 }
 
@@ -328,6 +378,22 @@ export function fromCode(code: string): Diagram | null {
   if (head === 'timeline') return timeRead(lines);
   if (head === 'gantt') return ganttRead(lines);
   return null;
+}
+
+/** Why a diagram opens as its code, not its drawing: the kind the editor has no form for, or the first line it cannot
+ *  show (a `Note`, a `style`, a `loop`), found as the line without which the rest reads. null when it reads. */
+export function whyCode(code: string): { kind: string } | { line: string } | { other: true } | null {
+  if (fromCode(code)) return null;
+  const all = code.split('\n');
+  const head = all.find((l) => l.trim())?.trim() ?? '';
+  const word = head.split(/\s+/)[0];
+  if (!['flowchart', 'graph', 'sequenceDiagram', 'pie', 'mindmap', 'timeline', 'gantt'].includes(word)) return { kind: word || 'empty' };
+  const first = all.findIndex((l) => l.trim());
+  for (let i = first + 1; i < all.length; i++) {
+    if (!all[i].trim()) continue;
+    if (fromCode(all.filter((_, j) => j !== i).join('\n'))) return { line: all[i].trim() };
+  }
+  return { other: true };
 }
 
 /** a fresh id for a node or a person, not one the chart has */

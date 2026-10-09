@@ -5,6 +5,8 @@ export type MathDone = 'after' | 'before' | 'remove' | 'away';
 type Props = {
   latex: string;
   display: boolean;
+  /** the click that opened it: the caret goes there */
+  at?: { x: number; y: number } | null;
   onInput: (latex: string) => void;
   /** finished: the caret after or before the formula, the formula removed (emptied and ⌫), or a click elsewhere */
   onDone: (how: MathDone) => void;

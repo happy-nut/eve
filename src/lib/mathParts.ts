@@ -2,14 +2,14 @@
  * The parts a formula is built from, put in by a click in its box (MathEdit.svelte): each is MathLive's template, `#@`
  * where what was selected goes, `#?` an empty slot the caret moves through with Tab. `show` is how its button reads.
  */
-export interface MathPart { tex: string; show?: string; name: string }
-export interface MathShelf { id: string; label: string; parts: MathPart[] }
+export interface MathPart { tex: string; show?: string; name: string; /** a MathLive command run in place of putting TeX in */ cmd?: string }
+export interface MathShelf { id: string; label: string; /** its tab on a phone, where five words ran past the screen */ short: string; parts: MathPart[] }
 
 const sym = (tex: string, name: string): MathPart => ({ tex, name });
 
 export const SHELVES: MathShelf[] = [
   {
-    id: 'basic', label: 'Basic', parts: [
+    id: 'basic', label: 'Basic', short: 'x²', parts: [
       { tex: '\\frac{#@}{#?}', show: '\\frac{a}{b}', name: 'Fraction' },
       { tex: '#@^{#?}', show: 'x^{2}', name: 'Power' },
       { tex: '#@_{#?}', show: 'x_{i}', name: 'Subscript' },
@@ -24,7 +24,7 @@ export const SHELVES: MathShelf[] = [
     ],
   },
   {
-    id: 'symbols', label: 'Symbols', parts: [
+    id: 'symbols', label: 'Symbols', short: '±≤', parts: [
       sym('\\pm', 'Plus or minus'), sym('\\times', 'Times'), sym('\\div', 'Divided by'), sym('\\cdot', 'Dot'),
       sym('\\le', 'Less or equal'), sym('\\ge', 'Greater or equal'), sym('\\ne', 'Not equal'), sym('\\approx', 'Approximately'),
       sym('\\equiv', 'Equivalent'), sym('\\propto', 'Proportional'), sym('\\infty', 'Infinity'), sym('^{\\circ}', 'Degrees'),
@@ -36,7 +36,7 @@ export const SHELVES: MathShelf[] = [
     ],
   },
   {
-    id: 'calculus', label: 'Calculus', parts: [
+    id: 'calculus', label: 'Calculus', short: '∑∫', parts: [
       { tex: '\\sum_{#?}^{#?}', show: '\\sum_{i=1}^{n}', name: 'Sum' },
       { tex: '\\prod_{#?}^{#?}', show: '\\prod_{i=1}^{n}', name: 'Product' },
       { tex: '\\int_{#?}^{#?}', show: '\\int_{a}^{b}', name: 'Integral' },
@@ -52,19 +52,22 @@ export const SHELVES: MathShelf[] = [
     ],
   },
   {
-    id: 'greek', label: 'Greek', parts: [
+    id: 'greek', label: 'Greek', short: 'αβ', parts: [
       'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'lambda', 'mu', 'nu', 'xi', 'pi', 'rho', 'sigma', 'tau', 'phi', 'chi', 'psi', 'omega',
       'Gamma', 'Delta', 'Theta', 'Lambda', 'Pi', 'Sigma', 'Phi', 'Psi', 'Omega',
     ].map((g) => sym(`\\${g}`, g)),
   },
   {
-    id: 'matrix', label: 'Matrix', parts: [
+    id: 'matrix', label: 'Matrix', short: '[ ]', parts: [
       { tex: '\\begin{pmatrix}#?&#?\\\\#?&#?\\end{pmatrix}', show: '\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}', name: '2×2 matrix' },
       { tex: '\\begin{pmatrix}#?&#?&#?\\\\#?&#?&#?\\\\#?&#?&#?\\end{pmatrix}', show: '\\begin{pmatrix}1&0&0\\\\0&1&0\\\\0&0&1\\end{pmatrix}', name: '3×3 matrix' },
       { tex: '\\begin{bmatrix}#?&#?\\\\#?&#?\\end{bmatrix}', show: '\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}', name: 'Matrix in brackets' },
       { tex: '\\begin{vmatrix}#?&#?\\\\#?&#?\\end{vmatrix}', show: '\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}', name: 'Determinant' },
       { tex: '\\begin{pmatrix}#?\\\\#?\\end{pmatrix}', show: '\\begin{pmatrix}x\\\\y\\end{pmatrix}', name: 'Column vector' },
       { tex: '\\begin{cases}#?&#?\\\\#?&#?\\end{cases}', show: '\\begin{cases}a&x>0\\\\b&x\\le0\\end{cases}', name: 'Cases' },
+      // in a matrix or cases already: a row or a column more (⌘↵ and ⌘; did it, unseen; a phone had no way)
+      { tex: 'row', cmd: 'addRowAfter', show: '\\begin{smallmatrix}\\square\\\\ +\\end{smallmatrix}', name: 'Add a row (in a matrix)' },
+      { tex: 'column', cmd: 'addColumnAfter', show: '\\begin{smallmatrix}\\square & +\\end{smallmatrix}', name: 'Add a column (in a matrix)' },
     ],
   },
 ];

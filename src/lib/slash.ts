@@ -2,6 +2,7 @@
 import type { Editor } from '@tiptap/core';
 import { insertKanban } from './kanban';
 import { insertDiagram } from './code';
+import { swimlaneStarter } from './diagram';
 import { insertMath } from './math';
 import { ui } from './ui.svelte';
 import { notes, titleOf } from './notes.svelte';
@@ -122,6 +123,7 @@ export const ICONS = {
   video: '<rect x="1.5" y="3.5" width="9" height="9" rx="1.5"/><path d="M10.5 7.4l4-2.2v5.6l-4-2.2z"/>',
   wikiLink: '<path d="M6.4 3.5H4.3v9h2.1M11.7 3.5H9.6v9h2.1"/>',
   diagram: '<rect x="1.5" y="2.5" width="5" height="4" rx="1"/><rect x="9.5" y="9.5" width="5" height="4" rx="1"/><path d="M4 6.5v5h5.5"/>',
+  lanes: '<rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M1.5 6.2h13M1.5 9.8h13M4.5 2.5v11"/><rect x="6.5" y="3.6" width="3" height="1.6" rx=".6"/><rect x="9.5" y="10.9" width="3" height="1.6" rx=".6"/>',
   sequence: '<rect x="1.5" y="2" width="4.5" height="3" rx="1"/><rect x="10" y="2" width="4.5" height="3" rx="1"/><path d="M3.75 5v9M12.25 5v9M3.75 8.5h7.5M9.5 7l1.75 1.5L9.5 10"/>',
   pie: '<circle cx="8" cy="8" r="5.8"/><path d="M8 8V2.2A5.8 5.8 0 0 1 13.6 9.4z"/>',
   mindmap: '<circle cx="8" cy="8" r="2"/><path d="M6.3 7 3.6 4.6M9.7 7l2.7-2.4M6.3 9l-2.7 2.4M9.7 9l2.7 2.4"/><circle cx="2.8" cy="3.9" r="1.2"/><circle cx="13.2" cy="3.9" r="1.2"/><circle cx="2.8" cy="12.1" r="1.2"/><circle cx="13.2" cy="12.1" r="1.2"/>',
@@ -144,6 +146,7 @@ export const SLASH: SuggestItem[] = [
   { label: 'Toggle', hint: '> folds its content', icon: ICONS.toggle, run: (e) => e.chain().focus().setDetails().updateAttributes('details', { open: true }).run() },
   { label: 'Kanban', hint: '칸반 board', icon: ICONS.kanban, run: insertKanban },
   { label: 'Flowchart', hint: 'Diagram: boxes and arrows', icon: ICONS.diagram, run: (e) => insertDiagram(e, 'flowchart') },
+  { label: 'Swimlanes', hint: 'Diagram: who does each step, in lanes', icon: ICONS.lanes, run: (e) => insertDiagram(e, swimlaneStarter()) },
   { label: 'Sequence diagram', hint: 'Diagram: who says what, in order', icon: ICONS.sequence, run: (e) => insertDiagram(e, 'sequence') },
   { label: 'Pie chart', hint: 'Diagram: parts of a whole', icon: ICONS.pie, run: (e) => insertDiagram(e, 'pie') },
   { label: 'Mind map', hint: 'Diagram: ideas branching out', icon: ICONS.mindmap, run: (e) => insertDiagram(e, 'mindmap') },

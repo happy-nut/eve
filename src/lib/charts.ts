@@ -1,4 +1,5 @@
 import { fromCode, type Gantt, type Pie, type Timeline } from './diagram';
+import { laneSvg } from './lanes';
 
 /**
  * The charts Eve draws itself, from the same mermaid code: a pie as a donut with its parts listed beside it, a
@@ -8,9 +9,12 @@ import { fromCode, type Gantt, type Pie, type Timeline } from './diagram';
  * sections) is left to mermaid. HTML for the diagram canvas, styled by app.css (.chart-*), colours by CSS
  * variables, so the light and dark themes need no drawing again.
  */
-export function chartHtml(code: string): string | null {
+export function chartHtml(code: string, laneMin = 0.64): string | null {
   const d = fromCode(code);
   if (!d) return null;
+  if (d.kind === 'flowchart' && d.lanes?.length) return laneSvg(d, laneMin); // swimlanes (lanes.ts)
+  // a sequence with no one in it: mermaid drew an empty card, with nothing to say what it was
+  if (d.kind === 'sequence' && !d.people.length) return `<div class="chart chart-empty"><p>Nothing to show yet</p></div>`;
   if (d.kind === 'pie') return pie(d);
   if (d.kind === 'timeline') return timeline(d);
   if (d.kind === 'gantt') return gantt(d);
@@ -30,19 +34,19 @@ function pie(d: Pie) {
   let at = 0;
   const arcs = parts.map((s) => {
     const len = (s.value / total) * C;
-    const arc = `<circle class="c${d.slices.indexOf(s) % 12}" r="${R}" cx="90" cy="90" stroke-dasharray="${Math.max(0.01, len - gap).toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-at).toFixed(2)}"/>`;
+    const arc = `<circle class="c${d.slices.indexOf(s) % 12}${d.slices.indexOf(s) >= 12 ? ' deep' : ''}" r="${R}" cx="90" cy="90" stroke-dasharray="${Math.max(0.01, len - gap).toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-at).toFixed(2)}"/>`;
     at += len;
     return arc;
   }).join('');
   const top = parts.reduce((a, s) => (s.value > a.value ? s : a), parts[0]);
   const rows = d.slices.map((s, i) => {
     const pct = total && s.value > 0 ? Math.round((s.value / total) * 1000) / 10 : 0;
-    return `<div class="row"><span class="dot c${i % 12}"></span><span class="lbl">${esc(s.label)}</span>`
+    return `<div class="row"><span class="dot c${i % 12}${i >= 12 ? ' deep' : ''}"></span><span class="lbl">${esc(s.label)}</span>`
       + `${d.showData ? `<span class="val">${fmt(s.value)}</span>` : ''}<span class="pct">${pct}%</span></div>`;
   }).join('');
   return `<div class="chart chart-pie">${title(d.title)}<div class="pie-body">`
     + `<div class="donut"><svg viewBox="0 0 180 180" aria-hidden="true"><g transform="rotate(-90 90 90)">${arcs}</g></svg>`
-    + `<div class="donut-mid"><b>${Math.round((top.value / total) * 100)}%</b><span>${esc(top.label)}</span></div></div>`
+    + `<div class="donut-mid"><b>${Math.round((top.value / total) * 1000) / 10}%</b><span>${esc(top.label)}</span></div></div>`
     + `<div class="pie-legend">${rows}</div></div></div>`;
 }
 
@@ -80,7 +84,12 @@ function gantt(d: Gantt) {
     }
   }
   const label = span > 3660 ? (n: number) => String(new Date(n * DAY).getUTCFullYear()) : md;
-  const axis = ticks.map((n) => `<span style="left:${pct(n)}">${label(n)}</span>`).join('');
+  // the dates named at most six times along the axis (every line still drawn): a fortnight's daily dates ran into one
+  // another on a phone, "10/910/1010/11"
+  const every = Math.ceil(ticks.length / 6);
+  const named = ticks.filter((_, i) => i % every === 0);
+  const end = (n: number) => ((n - from) / span < 0.04 ? ' class="first"' : (n - from) / span > 0.96 ? ' class="last"' : '');
+  const axis = named.map((n) => `<span${end(n)} style="left:${pct(n)}">${label(n)}</span>`).join('');
   const grid = ticks.map((n) => `<i style="left:${pct(n)}"></i>`).join('');
   const rows = d.sections.map((s, si) => {
     const head = `<div class="g-sec">${esc(s.name)}</div><div class="g-track g-sec-track">${grid}</div>`;

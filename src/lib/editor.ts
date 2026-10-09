@@ -45,7 +45,7 @@ import { moveBlock, indentLines, switchItem, switchLines } from './blocks';
 import { holdEdit, dropEdit } from './pending';
 
 /** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
-const MD_SYNTAX = /(\*\*|__|~~|^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|`|\[[^\]]*\]\(|^\|.*\|\s*$)/m;
+const MD_SYNTAX = /(\$[^\s$]|\*\*|__|~~|^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|`|\[[^\]]*\]\(|^\|.*\|\s*$)/m;
 /** clipboard HTML that carries formatting of its own, so it is more than a plain-text flavour */
 const RICH_HTML = /<(strong|b|em|i|u|s|a|h[1-6]|ul|ol|li|code|pre|blockquote|img|table|hr)\b/i;
 
@@ -442,7 +442,13 @@ export function createEditor(opts: {
         const html = event.clipboardData?.getData('text/html') ?? '';
         if (text && MD_SYNTAX.test(text) && !RICH_HTML.test(html) && !editor.isActive('codeBlock')) {
           const parsed = (editor.storage as any).markdown.parser.parse(raw);
-          return editor.chain().focus().insertContent(parsed).run();
+          // a line pasted into a line keeps the spaces at its ends (read as markdown, " $x$ ok" lost its first)
+          const lead = raw.includes('\n') ? '' : /^[ \t]+/.exec(raw)?.[0] ?? '', trail = raw.includes('\n') ? '' : /[ \t]+$/.exec(raw)?.[0] ?? '';
+          const c = editor.chain().focus();
+          if (lead) c.insertContent({ type: 'text', text: lead });
+          c.insertContent(parsed);
+          if (trail) c.insertContent({ type: 'text', text: trail });
+          return c.run();
         }
         return false;
       },
@@ -978,7 +984,12 @@ export function createEditor(opts: {
     const onResize = () => {
       const shrank = window.innerHeight < tall;
       tall = window.innerHeight;
-      if (shrank && editor.view.hasFocus()) requestAnimationFrame(() => editor.isDestroyed || editor.commands.scrollIntoView());
+      if (!shrank) return;
+      if (editor.view.hasFocus()) { requestAnimationFrame(() => editor.isDestroyed || editor.commands.scrollIntoView()); return; }
+      // a text box inside the note (a diagram's box name or row, a formula) with the keyboard: brought into view the
+      // same way, or it was typed into blind behind the keyboard
+      const a = document.activeElement as HTMLElement | null;
+      if (a && a !== editor.view.dom && editor.view.dom.contains(a)) requestAnimationFrame(() => a.scrollIntoView({ block: 'center', inline: 'nearest' }));
     };
     window.addEventListener('resize', onResize);
     editor.on('destroy', () => window.removeEventListener('resize', onResize));

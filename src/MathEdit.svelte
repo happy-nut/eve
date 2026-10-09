@@ -11,9 +11,12 @@
    * the parts a formula is made of, put in by a click, no TeX to know. Its TeX is a click away for whoever knows it.
    * Every change is written into the note as it is made (onInput); an undo or a sync comes back as `latex`.
    */
-  let { latex, display, onInput, onDone, onHistory }: {
+  let { latex, display, at = null, onInput, onDone, onHistory }: {
     latex: string;
     display: boolean;
+    /** where the formula was clicked: the caret goes there (it always went to the end, and a typo in the middle took
+     *  another click) */
+    at?: { x: number; y: number } | null;
     onInput: (latex: string) => void;
     onDone: (how: MathDone) => void;
     onHistory: (redo: boolean) => void;
@@ -26,7 +29,9 @@
   let texValue = $state(untrack(() => latex));
   let faces = $state<Record<string, string>>({}); // each part's button, drawn
   let finished = false;
-  let shift = $state(0); // an inline formula's row, moved left to stay on the screen
+  /** an inline formula's row, where it floats: fixed to the window, under the formula and on the screen (inside a table
+   *  its row was cut off by the table's own scroll box, and could not be used) */
+  let popAt = $state<{ left: number; top: number } | null>(null);
 
   const done = (how: MathDone) => { if (finished) return; finished = true; onDone(how); };
   const clean = tidyTex;
@@ -51,9 +56,13 @@
       slot.append(f);
       // these only once it is on the page (MathLive throws before it has drawn itself there)
       try {
-        el.smartFence = true;
+        // `(` is a plain bracket (smart fences wrote \left( \right), drawn with a gap: "f (x)"); a digit in an exponent
+        // does not end it (with it, the → after x^2 left the root or fraction it was in)
+        el.smartFence = false;
+        el.smartSuperscript = false;
         el.popoverPolicy = 'off';
         el.menuItems = [];
+        el.placeholder = '\\text{Formula}';
         f.value = latex;
       } catch { return; }
       mf = f;
@@ -63,7 +72,16 @@
       f.addEventListener('move-out', (e: Event) => {
         e.preventDefault();
         const dir = (e as CustomEvent<{ direction: string }>).detail.direction;
-        done(dir === 'backward' || dir === 'upward' ? 'before' : 'after');
+        // after the key has been dealt with: done at once, the note took the same ↓ and moved the caret a line further,
+        // and MathLive, its box gone under it, threw
+        setTimeout(() => done(dir === 'backward' || dir === 'upward' ? 'before' : 'after'));
+      });
+      // ⌫ on an empty formula from MathLive's own keyboard (a phone's) removes it, as the key does
+      let prev = f.value;
+      f.addEventListener('input', (e: Event) => {
+        const kind = (e as InputEvent).inputType;
+        if (!prev && !f.value && kind === 'deleteContentBackward') setTimeout(() => done('remove'));
+        prev = f.value;
       });
       f.addEventListener('keydown', (e: KeyboardEvent) => {
         if (f.mode === 'latex') return; // typing a \command: Esc and Enter are MathLive's
@@ -81,7 +99,14 @@
           e.preventDefault(); e.stopPropagation(); done('remove');
         }
       }, { capture: true });
-      requestAnimationFrame(() => { if (!gone) f.focus(); });
+      requestAnimationFrame(() => {
+        if (gone) return;
+        f.focus();
+        if (at) { try { const o = el.getOffsetFromPoint(at.x, at.y); if (o >= 0) el.position = o; } catch { /* the end, as before */ } }
+        place();
+        // a phone: MathLive's keyboard comes up over the lower part of the screen; the formula and its row above it
+        if (isMobile) setTimeout(clearKeyboard, 350);
+      });
       const out: Record<string, string> = {};
       for (const s of SHELVES) for (const p of s.parts) out[p.tex] = mathMarkup(m, p.show ?? p.tex, false);
       faces = out;
@@ -99,7 +124,11 @@
       e.preventDefault(); onHistory(e.shiftKey);
     };
     window.addEventListener('keydown', keys, true);
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
     return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
       gone = true;
       document.removeEventListener('mousedown', away, true);
       window.removeEventListener('keydown', keys, true);
@@ -108,18 +137,29 @@
     };
   });
 
-  // an inline formula's row hangs under it: kept on the screen
-  $effect(() => {
-    if (display || !tools) return;
-    const r = tools.getBoundingClientRect();
-    const over = r.right - (window.innerWidth - 12);
-    if (over > 0) shift = -Math.min(over, Math.max(0, r.left - 12));
-  });
+  /** the inline row under its formula, on the screen */
+  function place() {
+    if (display || !root || !tools) return;
+    const r = root.getBoundingClientRect();
+    const w = tools.offsetWidth || 440;
+    popAt = { left: Math.max(12, Math.min(window.innerWidth - w - 12, r.left - 8)), top: r.bottom + 8 };
+  }
+  /** what MathLive's keyboard covers brought up above it */
+  function clearKeyboard() {
+    const kb = (window as any).mathVirtualKeyboard?.boundingRect as DOMRect | undefined;
+    if (!kb || !kb.height || !root) return;
+    const r = (display ? root : tools ?? root).getBoundingClientRect();
+    const over = r.bottom - (kb.top - 12);
+    if (over > 0) (root.closest('.scroll') as HTMLElement | null)?.scrollBy({ top: over, behavior: 'smooth' });
+  }
 
   function put(p: MathPart) {
     if (!mf) return;
     if (tex) tex = false;
-    mf.insert(p.tex, { selectionMode: 'placeholder', format: 'latex' });
+    if (p.cmd) { mf.executeCommand(p.cmd); mf.focus(); return; }
+    // with nothing selected, an empty part: #@ took the term before the caret into it (x^2+y^2, Fraction: y^2 / ?)
+    const collapsed = (mf as unknown as { selectionIsCollapsed: boolean }).selectionIsCollapsed;
+    mf.insert(collapsed ? p.tex.replaceAll('#@', '#?') : p.tex, { selectionMode: 'placeholder', format: 'latex' });
     mf.focus();
     texValue = clean(mf.value);
     onInput(clean(mf.value));
@@ -130,23 +170,27 @@
     onInput(v);
   }
   const keep = (e: Event) => e.preventDefault(); // a press on the row leaves the keyboard in the box
+  /** out of the TeX line, the keyboard back in the box (it went nowhere: keys typed were lost, Esc did nothing) */
+  function backToBox() {
+    tex = false;
+    requestAnimationFrame(() => mf?.focus());
+  }
 </script>
 
 <svelte:element this={display ? 'div' : 'span'} class="math-edit" class:display bind:this={root}>
   <svelte:element this={display ? 'div' : 'span'} class="slot" class:hidden={tex} bind:this={slot}></svelte:element>
-  <svelte:element this={display ? 'div' : 'span'} class="tools" class:pop={!display} bind:this={tools} style:translate={shift ? `${shift}px 0` : null}>
+  <svelte:element this={display ? 'div' : 'span'} class="tools" class:pop={!display} bind:this={tools} style:left={popAt ? `${popAt.left}px` : null} style:top={popAt ? `${popAt.top}px` : null}>
     <span class="tabs">
       <span class="shelves" role="tablist">
         {#each SHELVES as s (s.id)}
-          <button type="button" role="tab" aria-selected={shelf === s.id} class:on={shelf === s.id && !tex} onmousedown={keep} onclick={() => { shelf = s.id; tex = false; mf?.focus(); }}>{s.label}</button>
+          <button type="button" role="tab" aria-selected={shelf === s.id} aria-label={s.label} title={s.label} class:on={shelf === s.id && !tex} onmousedown={keep} onclick={() => { shelf = s.id; backToBox(); }}>{isMobile ? s.short : s.label}</button>
         {/each}
       </span>
-      <button type="button" class="texb" class:on={tex} aria-pressed={tex} onmousedown={keep} onclick={() => { tex = !tex; if (!tex) mf?.focus(); }}>TeX</button>
+      <button type="button" class="texb" class:on={tex} aria-pressed={tex} onmousedown={keep} onclick={() => { if (tex) backToBox(); else tex = true; }}>TeX</button>
       <button type="button" class="done" onmousedown={keep} onclick={() => done('after')}>Done</button>
     </span>
     {#if tex}
-      <!-- svelte-ignore a11y_autofocus -->
-      <textarea class="texin" rows={display ? 3 : 1} spellcheck="false" autofocus value={texValue}
+      <textarea class="texin" rows={display ? 3 : 1} spellcheck="false" value={texValue} {@attach (el: HTMLTextAreaElement) => { el.focus(); }}
         oninput={(e) => typedTex((e.currentTarget as HTMLTextAreaElement).value)}
         onkeydown={(e) => { if (e.key === 'Escape' || (e.key === 'Enter' && !display)) { e.preventDefault(); e.stopPropagation(); done('after'); } }}></textarea>
     {:else}
@@ -180,10 +224,12 @@
   .math-edit:not(.display) .slot :global(math-field::part(container)) { padding: 0; }
   .slot :global(math-field::part(menu-toggle)) { display: none; }
   :global(html:not(.mobile)) .slot :global(math-field::part(virtual-keyboard-toggle)) { display: none; }
+  /* in a line its keyboard comes up by itself: the toggle only made the box taller than its line */
+  .math-edit:not(.display) .slot :global(math-field::part(virtual-keyboard-toggle)) { display: none; }
 
   .tools { display: block; margin-top: 8px; user-select: none; -webkit-user-select: none; font-size: 13px; line-height: 1.2; }
   .tools.pop {
-    position: absolute; left: -8px; top: calc(100% + 8px); z-index: 20; width: min(440px, calc(100vw - 24px)); margin: 0; padding: 8px;
+    position: fixed; z-index: 30; width: min(440px, calc(100vw - 24px)); margin: 0; padding: 8px;
     border-radius: 12px; background: var(--bg-pop); box-shadow: var(--pop-shadow);
   }
   .tabs { display: flex; align-items: center; gap: 2px; }

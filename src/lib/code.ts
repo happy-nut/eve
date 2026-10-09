@@ -5,7 +5,7 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
 import { isMobile } from './platform';
-import { starter, toCode, type Kind } from './diagram';
+import { starter, toCode, type Diagram, type Kind } from './diagram';
 import { mountDiagram } from './diagramBlock.svelte';
 
 /**
@@ -129,6 +129,24 @@ const editingDiagram = new Plugin({
 /** Syntax highlighting, plus a language chip (and its menu) that appears on hover. */
 export const CodeBlock = CodeBlockBase.extend({
   addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, editingDiagram]; },
+  // ↓ from the line above a diagram (↑ from the line under it) goes into its code, which then shows, with ⌘↵ to its
+  // drawing: its code hidden, the caret went past the diagram, and the keyboard could not reach it at all
+  addKeyboardShortcuts() {
+    const into = (dir: 'up' | 'down') => () => {
+      const { view, state } = this.editor;
+      const sel = state.selection;
+      if (!sel.empty || !view.endOfTextblock(dir)) return false;
+      const $h = sel.$head;
+      if ($h.parent.type.name === 'codeBlock') return false;
+      const at = dir === 'down' ? $h.after() : $h.before();
+      const $at = state.doc.resolve(at);
+      const n = dir === 'down' ? $at.nodeAfter : $at.nodeBefore;
+      if (n?.type.name !== 'codeBlock' || n.attrs.language !== 'mermaid') return false;
+      view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, dir === 'down' ? at + 1 : at - 1)).scrollIntoView());
+      return true;
+    };
+    return { ...this.parent?.(), ArrowDown: into('down'), ArrowUp: into('up') };
+  },
   addStorage() {
     return {
       ...this.parent?.(),
@@ -187,7 +205,8 @@ export const CodeBlock = CodeBlockBase.extend({
             if (editor.isDestroyed) return;
             const p = posNow();
             const cur = p == null ? null : editor.state.doc.nodeAt(p);
-            if (p == null || !cur || cur !== shownNode || cur.textContent === code) return;
+            // equal, not the same object: the note read anew keeps this view for an equal node without telling it
+            if (p == null || !cur || !cur.eq(shownNode) || cur.textContent === code) return;
             editor.view.dispatch(editor.state.tr.replaceWith(p + 1, p + cur.nodeSize - 1, code ? editor.schema.text(code) : []));
           },
           onHistory: (redo) => queueMicrotask(() => { if (redo) editor.commands.redo(); else editor.commands.undo(); }),
@@ -197,6 +216,13 @@ export const CodeBlock = CodeBlockBase.extend({
             if (p == null || !cur) return;
             editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, p + cur.nodeSize - 1)).scrollIntoView());
             editor.view.focus();
+          },
+          onCodeLeave: () => {
+            const p = posNow();
+            const cur = p == null ? null : editor.state.doc.nodeAt(p);
+            if (p == null || !cur) return;
+            const tr = editor.state.tr;
+            editor.view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(p + cur.nodeSize))));
           },
           onError: (failed) => dom.classList.toggle('mermaid-error', failed),
         });
@@ -257,8 +283,8 @@ export const CodeBlock = CodeBlockBase.extend({
 let startNext: string | null = null;
 
 /** the / menu's diagrams: a small example of the kind, put in at the caret and opened for editing there */
-export function insertDiagram(editor: Editor, kind: Kind) {
-  const code = toCode(starter(kind));
+export function insertDiagram(editor: Editor, kind: Kind | Diagram) {
+  const code = toCode(typeof kind === 'string' ? starter(kind) : kind);
   startNext = code;
   const { from } = editor.state.selection;
   const c = isMobile ? editor.chain() : editor.chain().focus();
