@@ -176,7 +176,7 @@
       <button class="done" onclick={() => (active = false)}>Done</button>
     </div>
     {#if flow}
-      <p class="tip">{isMobile ? 'Tap a box to type in it · its + adds the next step; drag the + onto another box to connect' : 'Click a box to type in it · its + adds the next step; drag the + onto another box to connect · Tab adds a step, ⌫ deletes'}</p>
+      <p class="tip">{isMobile ? 'Tap a box to type in it · its + adds the next step · to join two boxes, tap one, then Connect, then the other (or drag its + onto it)' : 'Click a box to type in it · its + adds the next step; drag the + onto another box to connect (or Connect in its bar) · Tab adds a step, ⌫ deletes'}</p>
     {:else}
       <DiagramForm {d} />
     {/if}

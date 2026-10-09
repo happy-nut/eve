@@ -143,6 +143,46 @@ try {
   console.log('ok   keys and clicks elsewhere, Esc, ⌘Z, a sync meanwhile');
   await page.close();
 
+  // ---- a phone: two boxes joined by taps (Connect, then the other box), and by dragging the + with a finger ----
+  {
+    const ctx = await browser.newContext({ viewport: { width: 400, height: 860 }, hasTouch: true, isMobile: true, userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36' });
+    page = await ctx.newPage();
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.addInitScript(() => { localStorage.clear(); localStorage.setItem('eve.notes.a', '---\nid: a\nupdated: 1\ndeleted: false\norder: 0\n---\n# F\n\n```mermaid\nflowchart TD\n  n1(["Start"])\n  n2("Middle")\n  n3(["Done"])\n  n1 --> n2\n```\n'); localStorage.setItem('eve.lastNote', 'a'); });
+    await page.goto(URL_);
+    await page.waitForSelector('.tiptap .mermaid-view svg');
+    const mid = async (sel, text) => { const b = await page.locator(sel, text ? { hasText: text } : {}).first().boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+    await page.locator('.tiptap .mermaid-view').tap();
+    await page.waitForSelector('.tiptap .dblock.active');
+    let c = await mid('.tiptap .mermaid-view g.node', 'Middle');
+    await page.touchscreen.tap(c.x, c.y);
+    await page.waitForSelector('.tiptap input.rename');
+    assert.equal(await page.locator('.layer .plus').count(), 1, 'the box being typed in has its + too');
+    await page.locator('.layer .bar button[aria-label="Connect to another box"]').tap();
+    await page.waitForSelector('.layer .pickhint');
+    c = await mid('.tiptap .mermaid-view g.node', 'Done');
+    await page.touchscreen.tap(c.x, c.y);
+    await settle(page);
+    assert.match(await md(page), /n2 --> n3/, 'joined by taps');
+    // Start, at the top: its bar opens under it, below its + (it sat over the +, and a press there changed the shape)
+    c = await mid('.tiptap .mermaid-view g.node', 'Start');
+    await page.touchscreen.tap(c.x, c.y);
+    await page.waitForSelector('.tiptap input.rename');
+    const plus = await mid('.layer .plus');
+    const to = await mid('.tiptap .mermaid-view g.node', 'Done');
+    const cdp = await ctx.newCDPSession(page);
+    const pt = (x, y) => [{ x, y, id: 1 }];
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(plus.x, plus.y) });
+    for (let i = 1; i <= 10; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pt(plus.x + ((to.x - plus.x) * i) / 10, plus.y + ((to.y - plus.y) * i) / 10) });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await settle(page);
+    const text = await md(page);
+    assert.match(text, /n1 --> n3/, 'joined by dragging the + with a finger');
+    assert.match(text, /n1\(\["Start"\]\)/, 'its shape untouched');
+    console.log('ok   phone: joined by Connect and a tap, and by dragging the +');
+    await ctx.close();
+  }
+
   // ---- a pie: its parts as rows under it, in the note ----
   page = await open('# Week\n\nx\n');
   await slash(page, 'pie');

@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte';
   import { freshId, type Flowchart, type Line, type Shape } from './lib/diagram';
   import { ui } from './lib/ui.svelte';
+  import { isMobile } from './lib/platform';
 
   /**
    * A flowchart drawn by hand on its own picture (the builder's preview): boxes are made, joined, renamed and removed
@@ -23,6 +24,9 @@
   let hover = $state<string | null>(null);
   let editing = $state<string | null>(null), editText = $state('');
   let drag = $state<{ from: string; x0: number; y0: number; x: number; y: number; moved: boolean } | null>(null);
+  /** "Connect" pressed on this box: the next box tapped gets a line from it (a phone's way to join two boxes, where
+   *  dragging the + is fiddly and the + of a box being typed in was not there at all) */
+  let linking = $state<string | null>(null);
 
   const nodeIdOf = (g: Element) => /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null;
   const boxOf = (id: string | null) => boxes.find((b) => b.id === id) ?? null;
@@ -116,6 +120,13 @@
     if (drag) return;
     const t = e.target as Element;
     const g = t.closest('g.node');
+    if (linking) {
+      const from = linking, id = g ? nodeIdOf(g) : null;
+      linking = null;
+      // joined, and nothing left selected: the line's bar would sit over the boxes above it (a tap on the line opens it)
+      if (id && id !== from) { join(from, id); sel = null; }
+      return; // a tap on anything else lets go of it
+    }
     if (g) { const id = nodeIdOf(g); if (id) { sel = { node: id }; startEdit(id); } return; } // a box clicked is typed in at once
     const hit = t.closest('path.hit') as SVGPathElement | null;
     const label = t.closest('g.edgeLabel g.label') as HTMLElement | null;
@@ -146,34 +157,54 @@
   });
 
   // ---- the + handle: click for the next step, drag to join ----
+  /** a finger on the + is the + being dragged: the page under it does not scroll (not passive, so the touch's default
+   *  can be refused; its pointer events still come) */
+  const holdTouch = (el: HTMLElement) => {
+    const stop = (e: TouchEvent) => { if (e.cancelable) e.preventDefault(); };
+    el.addEventListener('touchstart', stop, { passive: false });
+    el.addEventListener('touchmove', stop, { passive: false });
+    return () => { el.removeEventListener('touchstart', stop); el.removeEventListener('touchmove', stop); };
+  };
   function handleDown(e: PointerEvent, from: string) {
     e.preventDefault();
     e.stopPropagation();
+    if (editing) commitEdit(); // the box being typed in has its + too: its text is kept as it is
     const o = layer.getBoundingClientRect();
     drag = { from, x0: e.clientX - o.left, y0: e.clientY - o.top, x: e.clientX - o.left, y: e.clientY - o.top, moved: false };
-    const move = (ev: PointerEvent) => {
-      if (!drag) return;
-      const x = ev.clientX - o.left, y = ev.clientY - o.top;
-      drag = { ...drag, x, y, moved: drag.moved || Math.hypot(x - drag.x0, y - drag.y0) > 6 };
-      const under = document.elementsFromPoint(ev.clientX, ev.clientY).find((el) => host.contains(el) && el.closest('g.node'));
-      hover = under ? nodeIdOf(under.closest('g.node')!) : null;
+    const boxAt = (cx: number, cy: number) => {
+      const under = document.elementsFromPoint(cx, cy).find((el) => host.contains(el) && el.closest('g.node'));
+      return under ? nodeIdOf(under.closest('g.node')!) : null;
     };
-    const up = (ev: PointerEvent) => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
+    const move = (cx: number, cy: number) => {
+      if (!drag) return;
+      const x = cx - o.left, y = cy - o.top;
+      drag = { ...drag, x, y, moved: drag.moved || Math.hypot(x - drag.x0, y - drag.y0) > 6 };
+      hover = boxAt(cx, cy);
+    };
+    const end = (cx: number, cy: number, cancelled = false) => {
+      off();
       const d = drag;
       drag = null;
-      if (!d) return;
-      const under = document.elementsFromPoint(ev.clientX, ev.clientY).find((el) => host.contains(el) && el.closest('g.node'));
-      const to = under ? nodeIdOf(under.closest('g.node')!) : null;
+      if (!d || cancelled) return;
+      const to = boxAt(cx, cy);
       if (!d.moved || !to) addAfter(d.from); // a click, or let go on empty space: a new step after it
       else join(d.from, to);
     };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
+    const pMove = (ev: PointerEvent) => move(ev.clientX, ev.clientY);
+    const pUp = (ev: PointerEvent) => end(ev.clientX, ev.clientY);
+    const pCancel = () => end(0, 0, true); // the gesture taken away: nothing is made of it, and the drag does not stick
+    const off = () => {
+      window.removeEventListener('pointermove', pMove);
+      window.removeEventListener('pointerup', pUp);
+      window.removeEventListener('pointercancel', pCancel);
+    };
+    window.addEventListener('pointermove', pMove);
+    window.addEventListener('pointerup', pUp);
+    window.addEventListener('pointercancel', pCancel);
   }
 
   function onKey(e: KeyboardEvent) {
+    if (linking && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); linking = null; return; }
     if (editing || !sel) return;
     // only keys meant for this diagram: the keyboard on it, or on nothing (after a box's typing is done) — not keys
     // typed in the list, another note's page or the full-screen view, which deleted the box behind them
@@ -212,13 +243,17 @@
   const selBox = $derived(boxOf(selId));
   const selEdge = $derived(sel && 'edge' in sel ? flow.edges[sel.edge] ?? null : null);
   /** where the + sits on a box: after it, the way the chart reads */
-  const plusAt = (b: Box) => (flow.dir === 'LR' ? { x: b.x + b.w + 14, y: b.y + b.h / 2 } : { x: b.x + b.w / 2, y: b.y + b.h + 14 });
+  const plusAt = (b: Box) => {
+    // clear of the text box while the box is typed in (at least 140 wide, centred on it)
+    const w = b.id === editing ? Math.max(b.w, 140) : b.w;
+    return flow.dir === 'LR' ? { x: b.x + b.w / 2 + w / 2 + 14, y: b.y + b.h / 2 } : { x: b.x + b.w / 2, y: b.y + b.h + (b.id === editing ? 22 : 14) };
+  };
   /** a bar over (or, near the top, under) what it is for, kept inside the picture */
   function barAt(x: number, top: number, bottom: number, width: number) {
     const W = layer?.clientWidth ?? 600;
     return { left: Math.max(4, Math.min(W - width - 4, x - width / 2)), top: top > 52 ? top - 46 : bottom + 8 };
   }
-  const handles = $derived([...new Set([hover, selNode?.id ?? null, drag?.from ?? null].filter((x): x is string => !!x))].map(boxOf).filter((b): b is Box => !!b && b.id !== editing));
+  const handles = $derived([...new Set([hover, selNode?.id ?? null, drag?.from ?? null].filter((x): x is string => !!x))].map(boxOf).filter((b): b is Box => !!b));
 </script>
 
 <div class="layer" bind:this={layer}>
@@ -230,10 +265,17 @@
     <div class="ring target" style:left={`${b.x - 4}px`} style:top={`${b.y - 4}px`} style:width={`${b.w + 8}px`} style:height={`${b.h + 8}px`}></div>
   {/if}
 
+  {#if linking}
+    {#each boxes.filter((b) => b.id !== linking) as b (b.id)}
+      <div class="ring target pick" style:left={`${b.x - 4}px`} style:top={`${b.y - 4}px`} style:width={`${b.w + 8}px`} style:height={`${b.h + 8}px`}></div>
+    {/each}
+    <div class="pickhint">Tap the box to connect to · tap elsewhere to cancel</div>
+  {/if}
+
   {#each handles as b (b.id)}
     {@const p = plusAt(b)}
     <button class="plus" type="button" aria-label="Add a step after this, or drag onto another box to connect" title="Click: next step · Drag: connect"
-      style:left={`${p.x - 11}px`} style:top={`${p.y - 11}px`} onpointerdown={(e) => handleDown(e, b.id)}
+      style:left={`${p.x - 11}px`} style:top={`${p.y - 11}px`} onpointerdown={(e) => handleDown(e, b.id)} {@attach holdTouch}
       onpointerenter={() => (hover = b.id)}>
       <svg viewBox="0 0 16 16"><path d="M8 4v8M4 8h8" /></svg>
     </button>
@@ -251,13 +293,17 @@
       onblur={commitEdit} />
   {/if}
 
-  {#if selNode && selBox && !drag}
-    {@const at = barAt(selBox.x + selBox.w / 2, selBox.y, selBox.y + selBox.h, 300)}
+  {#if selNode && selBox && !drag && !linking}
+    <!-- under the box (one near the top) it goes below the + too: it sat over the + there, and a press on the + changed
+         the box's shape instead -->
+    {@const at = barAt(selBox.x + selBox.w / 2, selBox.y, selBox.y + selBox.h + (flow.dir === 'LR' ? 0 : isMobile ? 34 : 26), 336)}
     <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
       {#each SHAPES as [shape, label, icon] (shape)}
         <button type="button" class:on={selNode.shape === shape} aria-label={label} title={label} onmousedown={(e) => e.preventDefault()} onclick={() => (selNode.shape = shape)}><svg viewBox="0 0 16 16">{@html icon}</svg></button>
       {/each}
       <span class="sep"></span>
+      <button type="button" class:on={linking === selNode.id} aria-label="Connect to another box" title="Connect: then tap the box to connect to" onmousedown={(e) => e.preventDefault()}
+        onclick={() => { if (editing) commitEdit(); linking = selNode.id; }}><svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="2" /><path d="M5.5 8h7M10.5 5.5 13 8l-2.5 2.5" /></svg></button>
       <button type="button" class="danger" aria-label="Delete" title="Delete" onmousedown={(e) => e.preventDefault()} onclick={() => { editing = null; dropNode(selNode.id); }}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
     </div>
   {/if}
@@ -281,13 +327,22 @@
   .layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
   .layer > * { pointer-events: auto; }
   .ring { position: absolute; border-radius: 14px; box-shadow: 0 0 0 2px var(--accent); pointer-events: none; }
-  .ring.target { box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--accent-soft); }
+.ring.target { box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--accent-soft); }
+  .ring.pick { box-shadow: 0 0 0 2px var(--accent-soft); }
+  .pickhint {
+    position: absolute; left: 50%; bottom: 8px; translate: -50% 0; padding: 6px 12px; border-radius: 999px; white-space: nowrap; pointer-events: none;
+    font-size: 12.5px; font-weight: 500; background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(0, 40, 100, 0.2);
+  }
   .plus {
     position: absolute; width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; cursor: crosshair;
     display: inline-flex; align-items: center; justify-content: center; background: var(--accent); color: #fff;
     box-shadow: 0 2px 6px rgba(0, 40, 100, 0.25); touch-action: none; transition: transform 0.12s;
   }
   .plus:hover { transform: scale(1.15); }
+  /* a finger's size on a phone: a larger dot, and a larger place to press around it */
+  :global(html.mobile) .plus { width: 30px; height: 30px; margin: -4px 0 0 -4px; }
+  :global(html.mobile) .plus::before { content: ''; position: absolute; inset: -8px; border-radius: 50%; }
+  :global(html.mobile) .plus svg { width: 15px; height: 15px; }
   .plus svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
   .wire { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
   .wire line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; }
