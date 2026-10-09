@@ -29,6 +29,7 @@ import { Find } from './find';
 import { SelectionLayer } from './selectionLayer';
 import { ClickTarget } from './clickTarget';
 import { Divider } from './divider';
+import { MathBlock, MathInline, Text, insertMath } from './math';
 import { ui } from './ui.svelte';
 import { notes, titleOf, type Note } from './notes.svelte';
 import { headingsOf, splitLink } from './markdown';
@@ -182,6 +183,7 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
       return c().insertContent(before && !/\s/.test(before) ? ' /' : '/').run();
     },
     callout: () => c().toggleWrap('callout').run(),
+    math: () => (insertMath(editor, false), true),
     image: () => {
       pickImage().then((src) => src && c().setImage({ src }).run());
       return true;
@@ -494,7 +496,11 @@ export function createEditor(opts: {
         codeBlock: false, // replaced below: syntax highlighting + a language chip
         horizontalRule: false, // replaced below: no divider inside a list, and the caret can reach it
         blockquote: false, // replaced below: "> " makes a toggle, as in Notion, so a quote is "| "
+        text: false, // replaced below: text that would read back as a formula keeps its dollars escaped
       }),
+      Text,
+      MathInline,
+      MathBlock,
       Blockquote.extend({
         addInputRules() {
           return [wrappingInputRule({ find: /^\s*\|\s$/, type: this.type })];

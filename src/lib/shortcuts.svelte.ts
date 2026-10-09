@@ -43,6 +43,7 @@ export const DEFAULTS: Action[] = [
   { id: 'slash', label: 'Insert block menu (/)', scope: 'editor', keys: 'Mod-/' },
   { id: 'callout', label: 'Callout', scope: 'editor', keys: 'Mod-Shift-c' },
   { id: 'image', label: 'Insert image', scope: 'editor', keys: 'Mod-Shift-i' },
+  { id: 'math', label: 'Equation in the line ($)', scope: 'editor', keys: 'Mod-Alt-e' },
   { id: 'paragraph', label: 'Text', scope: 'editor', keys: 'Mod-Alt-0' },
   { id: 'h1', label: 'Heading 1', scope: 'editor', keys: 'Mod-Alt-1' },
   { id: 'h2', label: 'Heading 2', scope: 'editor', keys: 'Mod-Alt-2' },

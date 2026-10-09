@@ -2,6 +2,7 @@
 import type { Editor } from '@tiptap/core';
 import { insertKanban } from './kanban';
 import { insertDiagram } from './code';
+import { insertMath } from './math';
 import { ui } from './ui.svelte';
 import { notes, titleOf } from './notes.svelte';
 import { isCustom } from './icons';
@@ -126,6 +127,8 @@ export const ICONS = {
   mindmap: '<circle cx="8" cy="8" r="2"/><path d="M6.3 7 3.6 4.6M9.7 7l2.7-2.4M6.3 9l-2.7 2.4M9.7 9l2.7 2.4"/><circle cx="2.8" cy="3.9" r="1.2"/><circle cx="13.2" cy="3.9" r="1.2"/><circle cx="2.8" cy="12.1" r="1.2"/><circle cx="13.2" cy="12.1" r="1.2"/>',
   timeline: '<path d="M1.5 8h13"/><circle cx="4" cy="8" r="1.6"/><circle cx="8" cy="8" r="1.6"/><circle cx="12" cy="8" r="1.6"/><path d="M4 4.5v1.5M12 4.5v1.5M8 10v1.5"/>',
   gantt: '<path d="M2 2v12h12"/><rect x="4" y="3.5" width="5" height="2" rx="1"/><rect x="7" y="7" width="5" height="2" rx="1"/><rect x="9.5" y="10.5" width="4" height="2" rx="1"/>',
+  math: '<path d="M2.5 8.5h1.6l1.7 4L9 3.5h4.5"/><path d="M9.8 8.3l3 3.4M12.8 8.3l-3 3.4"/>',
+  mathInline: '<path d="M4.5 3.5c-1 0-1.5.6-1.5 1.5v1.5c0 .8-.5 1.5-1.2 1.5.7 0 1.2.7 1.2 1.5V11c0 .9.5 1.5 1.5 1.5M11.5 3.5c1 0 1.5.6 1.5 1.5v1.5c0 .8.5 1.5 1.2 1.5-.7 0-1.2.7-1.2 1.5V11c0 .9-.5 1.5-1.5 1.5"/><path d="M6.2 6.2l3.6 3.6M9.8 6.2l-3.6 3.6"/>',
   table: '<rect x="2.5" y="3.5" width="11" height="9" rx="1"/><path d="M2.5 6.6h11M6.5 6.6v5.9M10 6.6v5.9"/>',
   section: '<path d="M6.4 2.9 4.8 13.1M11.2 2.9 9.6 13.1M3.3 6.1h9.4M2.8 9.9h9.4"/>',
   emoji: '<circle cx="8" cy="8" r="6"/><path d="M5.8 9.4c.6.9 1.3 1.4 2.2 1.4s1.6-.5 2.2-1.4"/><path d="M6.3 6.4h.01M9.7 6.4h.01"/>',
@@ -146,6 +149,8 @@ export const SLASH: SuggestItem[] = [
   { label: 'Mind map', hint: 'Diagram: ideas branching out', icon: ICONS.mindmap, run: (e) => insertDiagram(e, 'mindmap') },
   { label: 'Timeline', hint: 'Diagram: what happened when', icon: ICONS.timeline, run: (e) => insertDiagram(e, 'timeline') },
   { label: 'Gantt chart', hint: 'Diagram: tasks on a calendar', icon: ICONS.gantt, run: (e) => insertDiagram(e, 'gantt') },
+  { label: 'Equation', hint: '∑ formula, its own line ($$)', icon: ICONS.math, run: (e) => insertMath(e, true) },
+  { label: 'Inline equation', hint: 'x² formula, in the line ($)', icon: ICONS.mathInline, run: (e) => insertMath(e, false) },
   { label: 'Table', hint: '3×3, with a header row', icon: ICONS.table, run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   { label: 'Image', hint: 'Pick a file', icon: ICONS.image, run: tip('image', (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); }) },
   { label: 'Video', hint: 'Pick a file', icon: ICONS.video, run: (e) => { pickVideo().then((src) => src && e.chain().focus().insertContent({ type: 'video', attrs: { src, name: src.split('/').pop() } }).run()); } },

@@ -14,7 +14,8 @@
     "e2e:selection": "node e2e/selection.mjs",
     "e2e:popups": "node e2e/popups.mjs",
     "e2e:diagrams": "node e2e/diagrams.mjs",
-    "test": "node --experimental-strip-types --no-warnings src/lib/board.test.mjs && node --experimental-strip-types --no-warnings src/lib/github.test.mjs && node --experimental-strip-types --no-warnings src/lib/paths.test.mjs && node --experimental-strip-types --no-warnings src/lib/markdown.test.mjs && node --experimental-strip-types --no-warnings src/lib/ql.test.mjs && node --experimental-strip-types --no-warnings src/lib/suggest.test.mjs && node --experimental-strip-types --no-warnings src/lib/blocks.test.mjs && node --experimental-strip-types --no-warnings src/lib/emoji.test.mjs && node --experimental-strip-types --no-warnings src/lib/date.test.mjs && node --experimental-strip-types --no-warnings src/lib/handoff.test.mjs && node --experimental-strip-types --no-warnings src/lib/update.test.mjs && node --experimental-strip-types --no-warnings src/lib/daily.test.mjs && node --experimental-strip-types --no-warnings src/lib/evelink.test.mjs && node --experimental-strip-types --no-warnings src/lib/keep.test.mjs && node --experimental-strip-types --no-warnings src/lib/diagram.test.mjs && vitest run"
+    "e2e:math": "node e2e/math.mjs",
+    "test": "node --experimental-strip-types --no-warnings src/lib/board.test.mjs && node --experimental-strip-types --no-warnings src/lib/github.test.mjs && node --experimental-strip-types --no-warnings src/lib/paths.test.mjs && node --experimental-strip-types --no-warnings src/lib/markdown.test.mjs && node --experimental-strip-types --no-warnings src/lib/ql.test.mjs && node --experimental-strip-types --no-warnings src/lib/suggest.test.mjs && node --experimental-strip-types --no-warnings src/lib/blocks.test.mjs && node --experimental-strip-types --no-warnings src/lib/emoji.test.mjs && node --experimental-strip-types --no-warnings src/lib/date.test.mjs && node --experimental-strip-types --no-warnings src/lib/handoff.test.mjs && node --experimental-strip-types --no-warnings src/lib/update.test.mjs && node --experimental-strip-types --no-warnings src/lib/daily.test.mjs && node --experimental-strip-types --no-warnings src/lib/evelink.test.mjs && node --experimental-strip-types --no-warnings src/lib/keep.test.mjs && node --experimental-strip-types --no-warnings src/lib/diagram.test.mjs && node --experimental-strip-types --no-warnings src/lib/mathParts.test.mjs && vitest run"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
@@ -53,6 +54,7 @@
     "emoji-picker-element": "^1.29.1",
     "emoji-picker-element-data": "^1.8.0",
     "lowlight": "^3.3.0",
+    "mathlive": "^0.111.0",
     "mermaid": "^11.17.2",
     "tiptap-markdown": "^0.9.0",
     "uqr": "^0.1.3"
