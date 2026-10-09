@@ -273,5 +273,9 @@
 
   :global(html.mobile) .s-msg { flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
   :global(html.mobile) .s-msg .grow { flex: 1 1 70%; }
+  /* a task: its name a line of its own, its start and length under it (four in a row left the name a few letters) */
+  :global(html.mobile) .g-task { flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  :global(html.mobile) .g-task .label { flex: 1 1 100%; }
+  :global(html.mobile) .g-task .date { flex: 1 1 auto; width: auto; }
   :global(html.mobile) input:not([type='checkbox']) { font-size: 16px; padding: 9px 10px; } /* 16px: a phone does not zoom in */
 </style>

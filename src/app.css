@@ -489,6 +489,8 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 .tiptap .mermaid-expand svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 @media (hover: hover) { .tiptap .code-block.mermaid:hover .mermaid-expand { opacity: 1; } .tiptap .mermaid-expand:hover { color: var(--fg); } }
 html.mobile .tiptap .code-block.mermaid .mermaid-expand { opacity: 0.9; } /* no hover on a phone: always there */
+/* …and so the drawing leaves it a corner of its own: on top of a chart's last row it hid a value or a bar */
+html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { padding-bottom: 52px; }
 .tiptap .code-block.mermaid.editing .mermaid-view { margin-top: -0.2em; cursor: default; }
 .tiptap .code-block.mermaid-error .mermaid-view, .diagram-canvas.error {
   justify-content: flex-start; align-items: flex-start; color: #ff453a; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;

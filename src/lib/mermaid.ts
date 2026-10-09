@@ -3,6 +3,7 @@
  * load, so it comes only with the first diagram shown, as the code grammars do (code.ts).
  */
 import { chartHtml } from './charts';
+import { isMobile } from './platform';
 
 type Mermaid = typeof import('mermaid').default;
 let lib: Promise<Mermaid> | null = null;
@@ -149,6 +150,8 @@ function load(): Promise<Mermaid> {
 /** One drawing at a time: mermaid's render is not made to run beside another (a note with three diagrams left the
  *  third undrawn). */
 let queue: Promise<unknown> = Promise.resolve();
+const MIN_SCALE = isMobile ? 0.6 : 0.8;
+
 export function renderMermaid(code: string): Promise<{ svg: string } | { error: string }> {
   const next = queue.then(() => draw(code));
   queue = next.catch(() => {});
@@ -163,9 +166,10 @@ async function draw(code: string): Promise<{ svg: string } | { error: string }> 
   try {
     const m = await load();
     const { svg } = await m.render(`eve-mermaid-${++seq}`, code);
-    // shrunk to the note's width, but never past 80% of its size, where its text stops being easy to read: wider
+    // shrunk to the note's width, but never past 80% of its size (60% on a phone, a third narrower: a two-part sequence
+    // diagram was cut off at the card's edge), where its text stops being easy to read: wider
     // than that, it scrolls sideways in its card (and opens full size from its expand button)
-    return { svg: svg.replace(/(<svg[^>]*?style="max-width: )([\d.]+)px;/, (_, head, w) => `${head}${w}px; min-width: ${Math.round(+w * 0.8)}px;`) };
+    return { svg: svg.replace(/(<svg[^>]*?style="max-width: )([\d.]+)px;/, (_, head, w) => `${head}${w}px; min-width: ${Math.round(+w * MIN_SCALE)}px;`) };
   } catch (e) {
     // mermaid leaves its error drawing in the page when a render fails
     document.querySelectorAll(`#deve-mermaid-${seq}, #eve-mermaid-${seq}`).forEach((el) => el.remove());

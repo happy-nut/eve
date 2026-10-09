@@ -166,8 +166,9 @@
       <span class="kind">{kindLabel}</span>
       {#if flow}
         <div class="seg">
-          <button class:on={flow.dir === 'LR'} onclick={() => (flow.dir = 'LR')}>→ Across</button>
-          <button class:on={flow.dir === 'TD'} onclick={() => (flow.dir = 'TD')}>↓ Down</button>
+          <!-- a phone's row has room for the arrows alone: with their words, Done went onto a line of its own -->
+          <button class:on={flow.dir === 'LR'} aria-label="Across" title="Across" onclick={() => (flow.dir = 'LR')}>{isMobile ? '→' : '→ Across'}</button>
+          <button class:on={flow.dir === 'TD'} aria-label="Down" title="Down" onclick={() => (flow.dir = 'TD')}>{isMobile ? '↓' : '↓ Down'}</button>
         </div>
         <button class="ghost" onclick={() => flowEd?.addBox()}>+ Box</button>
       {/if}
@@ -176,7 +177,7 @@
       <button class="done" onclick={() => (active = false)}>Done</button>
     </div>
     {#if flow}
-      <p class="tip">{isMobile ? 'Tap a box to type in it · its + adds the next step · to join two boxes, tap one, then Connect, then the other (or drag its + onto it)' : 'Click a box to type in it · its + adds the next step; drag the + onto another box to connect (or Connect in its bar) · Tab adds a step, ⌫ deletes'}</p>
+      <p class="tip">{isMobile ? 'Tap a box to pick it; ✎ Text in its bar (or a second tap) types in it · its + adds the next step · Connect, then another box, joins them' : 'Click a box to pick it; ✎ Text, a second click or Enter types in it · its + adds the next step; drag it onto another box, or Connect, to join them · Tab adds a step, ⌫ deletes'}</p>
     {:else}
       <DiagramForm {d} />
     {/if}

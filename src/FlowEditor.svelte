@@ -27,6 +27,9 @@
   /** "Connect" pressed on this box: the next box tapped gets a line from it (a phone's way to join two boxes, where
    *  dragging the + is fiddly and the + of a box being typed in was not there at all) */
   let linking = $state<string | null>(null);
+  /** a phone's bar showing the shapes in place of its other buttons */
+  let shapesOpen = $state(false);
+  $effect(() => { void selId; shapesOpen = false; }); // another box picked: its bar starts over
 
   const nodeIdOf = (g: Element) => /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null;
   const boxOf = (id: string | null) => boxes.find((b) => b.id === id) ?? null;
@@ -127,7 +130,20 @@
       if (id && id !== from) { join(from, id); sel = null; }
       return; // a tap on anything else lets go of it
     }
-    if (g) { const id = nodeIdOf(g); if (id) { sel = { node: id }; startEdit(id); } return; } // a box clicked is typed in at once
+    // a box tapped is picked (its +, its bar, its ✎); tapped again, or its ✎, it is typed in. Typed in at once, a phone's
+    // keyboard came up at every tap meant only to pick the box
+    if (g) {
+      const id = nodeIdOf(g);
+      if (!id) return;
+      if (editing && editing !== id) commitEdit();
+      if (sel && 'node' in sel && sel.node === id) startEdit(id);
+      else {
+        sel = { node: id };
+        // the keyboard off the note's text: its keys (⌫, Enter, Tab) are the box's now, and a phone's keyboard goes down
+        if (!editing) (document.activeElement as HTMLElement | null)?.blur?.();
+      }
+      return;
+    }
     const hit = t.closest('path.hit') as SVGPathElement | null;
     const label = t.closest('g.edgeLabel g.label') as HTMLElement | null;
     let at = hit ? Number(hit.dataset.index) : -1;
@@ -295,16 +311,33 @@
 
   {#if selNode && selBox && !drag && !linking}
     <!-- under the box (one near the top) it goes below the + too: it sat over the + there, and a press on the + changed
-         the box's shape instead -->
-    {@const at = barAt(selBox.x + selBox.w / 2, selBox.y, selBox.y + selBox.h + (flow.dir === 'LR' ? 0 : isMobile ? 34 : 26), 336)}
+         the box's shape instead. On a phone the shapes fold into one button: all six in a row ran off its narrow picture -->
+    {@const compact = isMobile && !shapesOpen}
+    {@const at = barAt(selBox.x + selBox.w / 2, selBox.y, selBox.y + selBox.h + (flow.dir === 'LR' ? 0 : isMobile ? 34 : 26), compact ? 250 : isMobile ? 290 : 400)}
+    {@const current = SHAPES.find(([sh]) => sh === selNode.shape) ?? SHAPES[0]}
     <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
-      {#each SHAPES as [shape, label, icon] (shape)}
-        <button type="button" class:on={selNode.shape === shape} aria-label={label} title={label} onmousedown={(e) => e.preventDefault()} onclick={() => (selNode.shape = shape)}><svg viewBox="0 0 16 16">{@html icon}</svg></button>
-      {/each}
-      <span class="sep"></span>
-      <button type="button" class:on={linking === selNode.id} aria-label="Connect to another box" title="Connect: then tap the box to connect to" onmousedown={(e) => e.preventDefault()}
-        onclick={() => { if (editing) commitEdit(); linking = selNode.id; }}><svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="2" /><path d="M5.5 8h7M10.5 5.5 13 8l-2.5 2.5" /></svg></button>
-      <button type="button" class="danger" aria-label="Delete" title="Delete" onmousedown={(e) => e.preventDefault()} onclick={() => { editing = null; dropNode(selNode.id); }}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
+      {#if isMobile && shapesOpen}
+        <button type="button" aria-label="Back" title="Back" onclick={() => (shapesOpen = false)}><svg viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg></button>
+        <span class="sep"></span>
+        {#each SHAPES as [shape, label, icon] (shape)}
+          <button type="button" class:on={selNode.shape === shape} aria-label={label} title={label} onmousedown={(e) => e.preventDefault()} onclick={() => { selNode.shape = shape; shapesOpen = false; }}><svg viewBox="0 0 16 16">{@html icon}</svg></button>
+        {/each}
+      {:else}
+        <button type="button" class="text" class:on={editing === selNode.id} aria-label="Edit the text" title="Edit the text (or click the box again)"
+          onmousedown={(e) => e.preventDefault()} onclick={() => startEdit(selNode.id)}><svg viewBox="0 0 16 16"><path d="M10.5 3.5l2 2L6 12l-2.6.6L4 10z" /></svg>Text</button>
+        <span class="sep"></span>
+        {#if isMobile}
+          <button type="button" aria-label="Shape" title="Shape" onmousedown={(e) => e.preventDefault()} onclick={() => { if (editing) commitEdit(); shapesOpen = true; }}><svg viewBox="0 0 16 16">{@html current[2]}</svg></button>
+        {:else}
+          {#each SHAPES as [shape, label, icon] (shape)}
+            <button type="button" class:on={selNode.shape === shape} aria-label={label} title={label} onmousedown={(e) => e.preventDefault()} onclick={() => (selNode.shape = shape)}><svg viewBox="0 0 16 16">{@html icon}</svg></button>
+          {/each}
+          <span class="sep"></span>
+        {/if}
+        <button type="button" class:on={linking === selNode.id} aria-label="Connect to another box" title="Connect: then tap the box to connect to" onmousedown={(e) => e.preventDefault()}
+          onclick={() => { if (editing) commitEdit(); linking = selNode.id; }}><svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="2" /><path d="M5.5 8h7M10.5 5.5 13 8l-2.5 2.5" /></svg>{#if isMobile}<span class="lbl">Connect</span>{/if}</button>
+        <button type="button" class="danger" aria-label="Delete" title="Delete" onmousedown={(e) => e.preventDefault()} onclick={() => { editing = null; dropNode(selNode.id); }}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
+      {/if}
     </div>
   {/if}
 
@@ -354,6 +387,7 @@
   .bar {
     position: absolute; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 12px;
     background: var(--bg-pop); box-shadow: var(--pop-shadow), 0 0 0 0.5px var(--line); white-space: nowrap;
+    max-width: calc(100% - 8px); flex-wrap: wrap; box-sizing: border-box; /* a phone's narrow picture: two rows, not off its edge */
   }
   .bar button {
     width: 30px; height: 30px; border: 0; border-radius: 8px; padding: 0; background: none; color: var(--fg-dim);
@@ -361,6 +395,9 @@
   }
   @media (hover: hover) { .bar button:hover { background: var(--bg-hover); color: var(--fg); } }
   .bar button.on { background: var(--accent-soft); color: var(--accent); }
+  .bar button .lbl { margin-left: 4px; font-size: 12.5px; font-weight: 500; }
+  .bar button:has(.lbl) { width: auto; padding: 0 9px 0 7px; }
+  .bar button.text { width: auto; gap: 4px; padding: 0 9px 0 7px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent); }
   .bar button.danger:hover { color: #ff453a; }
   .bar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
   .sep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; }

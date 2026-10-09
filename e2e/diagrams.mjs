@@ -43,6 +43,8 @@ try {
   assert.equal(await page.locator('.builder').count(), 0, 'no panel: it opens in the note');
   let at = await boxAt(page, 'Start');
   await page.mouse.click(at.x, at.y);
+  assert.equal(await page.locator('.tiptap input.rename').count(), 0, 'a click picks the box: no typing yet');
+  await page.locator('.layer .bar button[aria-label="Edit the text"]').click(); // ✎ Text in its bar: typed in
   await page.waitForSelector('.tiptap input.rename');
   await page.keyboard.type('Draft');
   await settle(page);
@@ -110,16 +112,16 @@ try {
   await page.locator('.tiptap .mermaid-view').click();
   at = await boxAt(page, 'One');
   await page.mouse.click(at.x, at.y);
-  await page.keyboard.press('Enter');
   await page.locator('aside input').first().focus();
   await page.keyboard.press('Backspace');
   await page.keyboard.press('Tab');
   await settle(page);
   assert.ok((await md(page)).includes(one), 'keys typed elsewhere leave the diagram alone');
   // ⌘Z with the keyboard on nothing (after a box is deleted) undoes into the diagram
+  const canvas = await page.locator('.tiptap .mermaid-view').boundingBox();
+  await page.mouse.click(canvas.x + 8, canvas.y + 8); // empty space: nothing picked
   at = await boxAt(page, 'One');
   await page.mouse.click(at.x, at.y);
-  await page.keyboard.press('Enter');
   await page.keyboard.press('Backspace');
   await settle(page);
   assert.ok(!(await md(page)).includes('One'), 'the box deleted');
@@ -136,6 +138,7 @@ try {
   await page.locator('.tiptap .mermaid-view').click();
   at = await boxAt(page, 'Two');
   await page.mouse.click(at.x, at.y);
+  await page.mouse.click(at.x, at.y); // a second click: typed in
   await page.keyboard.type('Z');
   await page.evaluate(() => { const e = window.__editor; e.commands.setContent(e.storage.markdown.getMarkdown().replace('"One"', '"Remote"')); });
   await settle(page);
@@ -156,6 +159,9 @@ try {
     await page.waitForSelector('.tiptap .dblock.active');
     let c = await mid('.tiptap .mermaid-view g.node', 'Middle');
     await page.touchscreen.tap(c.x, c.y);
+    await page.waitForTimeout(300);
+    assert.equal(await page.locator('.tiptap input.rename').count(), 0, 'a tap picks the box: no keyboard');
+    await page.touchscreen.tap(c.x, c.y); // a second tap: typed in
     await page.waitForSelector('.tiptap input.rename');
     assert.equal(await page.locator('.layer .plus').count(), 1, 'the box being typed in has its + too');
     await page.locator('.layer .bar button[aria-label="Connect to another box"]').tap();
@@ -167,7 +173,7 @@ try {
     // Start, at the top: its bar opens under it, below its + (it sat over the +, and a press there changed the shape)
     c = await mid('.tiptap .mermaid-view g.node', 'Start');
     await page.touchscreen.tap(c.x, c.y);
-    await page.waitForSelector('.tiptap input.rename');
+    await page.waitForSelector('.layer .plus');
     const plus = await mid('.layer .plus');
     const to = await mid('.tiptap .mermaid-view g.node', 'Done');
     const cdp = await ctx.newCDPSession(page);

@@ -80,7 +80,10 @@ function gantt(d: Gantt) {
     }
   }
   const label = span > 3660 ? (n: number) => String(new Date(n * DAY).getUTCFullYear()) : md;
-  const axis = ticks.map((n) => `<span style="left:${pct(n)}">${label(n)}</span>`).join('');
+  // the dates named at most six times along the axis (every line still drawn): a fortnight's daily dates ran into one
+  // another on a phone, "10/910/1010/11"
+  const every = Math.ceil(ticks.length / 6);
+  const axis = ticks.filter((_, i) => i % every === 0).map((n) => `<span style="left:${pct(n)}">${label(n)}</span>`).join('');
   const grid = ticks.map((n) => `<i style="left:${pct(n)}"></i>`).join('');
   const rows = d.sections.map((s, si) => {
     const head = `<div class="g-sec">${esc(s.name)}</div><div class="g-track g-sec-track">${grid}</div>`;
