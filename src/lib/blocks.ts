@@ -144,11 +144,25 @@ function hopOutOfList(state: any, range: any, dir: -1 | 1, done: number): any {
     : across && ownerEdge ? (dir < 0 ? $list.before(depth - 2) : $list.after(depth - 2))
     : dir < 0 ? $list.before(depth - 1) : $list.after(depth - 1);
   const items = state.doc.slice(start, end).content;
-  const moved = lift && !across ? items : alone && !lift ? state.doc.slice(listStart, listEnd).content : parent.copy(items);
+  // numbered items keep their numbers wherever they go: a copy of their list counts from where they were
+  const numbered = parent.type.name === 'orderedList', first = (parent.attrs.start ?? 1) + range.startIndex;
+  const moved = lift && !across ? items : alone && !lift ? state.doc.slice(listStart, listEnd).content
+    : numbered ? parent.type.create({ ...parent.attrs, start: first }, items) : parent.copy(items);
   const base = lift && !across ? start : alone && !lift ? listStart : start - 1; // where the moved piece began
   const tr = state.tr.delete(cut.from, cut.to);
+  // the first items gone up, the ones left behind go on counting from where they were (3. stays 3.)
+  if (numbered && !alone && dir < 0 && range.startIndex === 0) tr.setNodeAttribute(tr.mapping.map(listStart), 'start', (parent.attrs.start ?? 1) + range.endIndex);
   const at = tr.mapping.slice(done).map(target);
   tr.insert(at, moved);
+  // a list put between two items of a numbered list splits it: the half after it goes on counting
+  if (lift && across && !ownerEdge && outer!.type.name === 'orderedList') {
+    const $at = tr.doc.resolve(Math.min(at + (moved.nodeSize ?? moved.size), tr.doc.content.size));
+    let after = $at.nodeAfter ? $at.pos : -1;
+    // the split may leave the position just inside the closing of the inserted list: step to the next sibling
+    for (let p = $at.pos; after < 0 && p < Math.min($at.pos + 4, tr.doc.content.size); p++) if (tr.doc.resolve(p).nodeAfter?.type.name === 'orderedList') after = p;
+    const next = after >= 0 ? tr.doc.resolve(after).nodeAfter : null;
+    if (next?.type.name === 'orderedList') tr.setNodeAttribute(after, 'start', (outer!.attrs.start ?? 1) + ownerAt + 1);
+  }
   // the selection rides along: the caret, or every item that was selected
   const { anchor, head, empty } = state.selection;
   const pos = (p: number) => tr.doc.resolve(Math.min(at + p - base, tr.doc.content.size));
@@ -158,16 +172,20 @@ function hopOutOfList(state: any, range: any, dir: -1 | 1, done: number): any {
 
 /** Each line (textblock) in order, with how many list items it sits in: the level Tab and ⇧Tab change. */
 function lineDepths(doc: PMNode) {
-  const out: { pos: number; end: number; depth: number; item: string }[] = [];
+  const out: { pos: number; end: number; depth: number; item: string; list: string; first: boolean }[] = [];
   doc.descendants((n, pos) => {
     if (!n.isTextblock) return true;
-    const $p = doc.resolve(pos);
-    let depth = 0, item = '';
+    const $p = doc.resolve(pos + 1);
+    let depth = 0, item = '', list = '', first = false;
     for (let d = $p.depth; d > 0; d--) {
       const name = $p.node(d).type.name;
-      if (/Item$/.test(name)) { depth++; item ||= name; }
+      if (/Item$/.test(name)) {
+        depth++;
+        // the line's own item: its kind, its list's, and whether the line is the item's first (the marker's line)
+        if (!item) { item = name; list = $p.node(d - 1).type.name; first = $p.index(d) === 0; }
+      }
     }
-    out.push({ pos, end: pos + n.nodeSize, depth, item });
+    out.push({ pos, end: pos + n.nodeSize, depth, item, list, first });
     return false;
   });
   return out;
@@ -206,6 +224,14 @@ export function indentLines(dir: 1 | -1) {
         if (!step(now.depth < before[k].depth, now.item)) break;
       }
     }
+    // put back at its level, a line kept its new neighbours' kind (a bullet under a moved number became a number):
+    // it is the kind it was again. Back to front, so the lines not yet seen keep their places.
+    const schema = tr.doc.type.schema;
+    for (let k = before.length - 1; k >= 0; k--) {
+      const was = before[k], now = lineDepths(tr.doc)[k];
+      if (picked[k] || !was.item || !was.first || !now.first || now.list === was.list || !schema.nodes[was.list]) continue;
+      switchItem(tr, now.pos + 1, now.pos + 1, schema.nodes[was.list], schema.nodes[was.item]);
+    }
     // the same lines selected as before (lines are never added or removed by a level change)
     const after = lineDepths(tr.doc);
     const at = (k: number, p: number) => Math.min(after[k].pos + Math.max(1, p - before[k].pos), after[k].end - 1);
@@ -217,7 +243,7 @@ export function indentLines(dir: 1 | -1) {
 const offsetOf = (node: PMNode, i: number) => { let o = 0; for (let k = 0; k < i; k++) o += node.child(k).nodeSize; return o; };
 
 /**
- * ⇧Tab on items whose list hangs under an item of another kind (bullets under a to-do, a to-do under a
+ * ⇧Tab on items whose list hangs under an item of another kind (bullets under a to-do or a number, a to-do under a
  * number…). ProseMirror would turn them into plain lines inside that item; here they come out as a list of
  * their own kind right after it, the outer list split around them. Items below the lifted ones stay at their
  * level, under the last one lifted. null: not that case, the stock lift applies.
@@ -227,7 +253,9 @@ function liftAcross(tr: any): boolean | null {
   const range = $from.blockRange($to, (n: PMNode) => /List$/.test(n.type.name));
   if (!range || range.depth < 2) return null;
   const list: PMNode = range.parent, owner: PMNode = range.$from.node(range.depth - 1);
-  if (!/Item$/.test(owner.type.name) || owner.type === list.firstChild!.type) return null;
+  // of another kind: another kind of item (a to-do), or the same item in another kind of list (a bullet under a number)
+  const outerList: PMNode = range.$from.node(range.depth - 2);
+  if (!/Item$/.test(owner.type.name) || (owner.type === list.firstChild!.type && outerList.type === list.type)) return null;
   const { startIndex, endIndex } = range;
   const moved: PMNode[] = [];
   for (let k = startIndex; k < endIndex; k++) moved.push(list.child(k));
@@ -239,14 +267,21 @@ function liftAcross(tr: any): boolean | null {
   const listStart = range.$from.before(range.depth), contentEnd = range.$from.end(range.depth);
   const ownerEnd = range.$from.after(range.depth - 1), outerEnd = range.$from.after(range.depth - 2);
   const ownerIsLast = range.$from.index(range.depth - 2) === range.$from.node(range.depth - 2).childCount - 1;
+  // positions here are in the document as it is now: mapped through this lift's own steps only, not through the
+  // ones already in the transaction (Tab sinks a line first, then puts the lines under it back with this)
+  const steps = tr.steps.length;
+  const map = (p: number) => tr.mapping.slice(steps).map(p);
   if (startIndex === 0) tr.delete(listStart, contentEnd + 1);
   else tr.delete(range.start, contentEnd);
   const out = list.copy(Fragment.fromArray(moved));
-  if (ownerIsLast) tr.insert(tr.mapping.map(outerEnd), out);
+  if (ownerIsLast) tr.insert(map(outerEnd), out);
   else {
-    const at = tr.mapping.map(ownerEnd);
+    const at = map(ownerEnd);
     tr.split(at);
     tr.insert(at + 1, out);
+    // the numbered list split around them goes on counting after them (3. stays 3., not 1.)
+    const outer: PMNode = range.$from.node(range.depth - 2);
+    if (outer.type.name === 'orderedList') tr.setNodeAttribute(at + 1 + out.nodeSize, 'start', (outer.attrs.start ?? 1) + range.$from.index(range.depth - 2) + 1);
   }
   return true;
 }
@@ -272,11 +307,43 @@ export function switchItem(tr: any, from: number, to: number, listType: NodeType
   const parts: PMNode[] = [];
   if (i > 0) parts.push(list.copy(list.content.cut(0, offsetOf(list, i))));
   parts.push(listType.create(listAttrs, itemType.create(attrs, own.content)));
-  if (i < list.childCount - 1) parts.push(list.copy(list.content.cut(offsetOf(list, i + 1))));
+  // the numbered items after it keep their numbers (3. stays 3., not 1.); one inside an item counts from 1 (joinLists)
+  if (i < list.childCount - 1) {
+    const rest = list.content.cut(offsetOf(list, i + 1));
+    parts.push(list.type.name === 'orderedList' ? list.type.create({ ...list.attrs, start: (list.attrs.start ?? 1) + i + 1 }, rest) : list.copy(rest));
+  }
   const listPos = $q.before(d - 2);
   tr.replaceWith(listPos, $q.after(d - 2), parts);
   tr.setSelection(TextSelection.create(tr.doc, listPos + (i > 0 ? parts[0].nodeSize : 0) + 3));
   return true;
+}
+
+/**
+ * ⌘⇧7 / ⌘⇧8 / ⌘⇧9 on list lines of another kind: each selected item becomes that kind where it is, as typing its
+ * marker over it does (switchItem). The stock toggle lifted a nested item out of its parent to make it a list of
+ * its own, its list split in two and the count after it starting over. False when no selected line is an item of
+ * another kind (the stock toggle then does what it does: a plain line into a list, a list's lines plain again).
+ */
+export function switchLines(list: string, item: string) {
+  return ({ tr }: { tr: any }): boolean => {
+    const schema = tr.doc.type.schema;
+    const { from, to } = tr.selection;
+    const lines = lineDepths(tr.doc);
+    const picked = lines.map((l, k) => ({ l, k })).filter(({ l }) => l.pos + 1 <= to && l.end - 1 >= from);
+    if (!picked.length || picked.some(({ l }) => !l.item)) return false; // a plain line among them: the stock toggle
+    const change = picked.filter(({ l }) => l.first && l.list !== list);
+    if (!change.length) return false;
+    const offset = from - picked[0].l.pos, span = to - from;
+    for (const { k } of [...change].reverse()) {
+      const now = lineDepths(tr.doc)[k];
+      switchItem(tr, now.pos + 1, now.pos + 1, schema.nodes[list], schema.nodes[item]);
+    }
+    // the caret (or selection) where it was in its line
+    const first = lineDepths(tr.doc)[picked[0].k];
+    const a = Math.min(first.pos + offset, first.end - 1);
+    tr.setSelection(TextSelection.between(tr.doc.resolve(a), tr.doc.resolve(Math.min(a + span, tr.doc.content.size))));
+    return true;
+  };
 }
 
 /**

@@ -1,9 +1,12 @@
 import CodeBlockBase from '@tiptap/extension-code-block';
 import type { Editor } from '@tiptap/core';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
+import { isMobile } from './platform';
+import { starter, toCode, type Kind } from './diagram';
+import { mountDiagram } from './diagramBlock.svelte';
 
 /**
  * Syntax highlighting, loaded with the first code block shown: lowlight, highlight.js and the grammars
@@ -87,6 +90,7 @@ const LANGUAGES: [value: string, label: string][] = [
   ['kotlin', 'Kotlin'],
   ['lua', 'Lua'],
   ['markdown', 'Markdown'],
+  ['mermaid', 'Mermaid diagram'],
   ['php', 'PHP'],
   ['python', 'Python'],
   ['ruby', 'Ruby'],
@@ -101,9 +105,30 @@ const LANGUAGES: [value: string, label: string][] = [
 
 const labelOf = (language: string | null) => LANGUAGES.find(([v]) => v === (language ?? ''))?.[1] ?? language ?? 'Plain text';
 
+/**
+ * A ```mermaid block is drawn as its diagram; its code shows (above the diagram, which follows it as it is typed)
+ * while the caret is in it. The node decoration marks that block "editing".
+ */
+const EDITING = new PluginKey('mermaid-editing');
+const editingDiagram = new Plugin({
+  key: EDITING,
+  props: {
+    decorations(state) {
+      const { $head } = state.selection;
+      for (let d = $head.depth; d > 0; d--) {
+        const n = $head.node(d);
+        if (n.type.name === 'codeBlock') {
+          return n.attrs.language === 'mermaid' ? DecorationSet.create(state.doc, [Decoration.node($head.before(d), $head.after(d), { class: 'editing' }, { editing: true })]) : null;
+        }
+      }
+      return null;
+    },
+  },
+});
+
 /** Syntax highlighting, plus a language chip (and its menu) that appears on hover. */
 export const CodeBlock = CodeBlockBase.extend({
-  addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter]; },
+  addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, editingDiagram]; },
   addStorage() {
     return {
       ...this.parent?.(),
@@ -137,7 +162,46 @@ export const CodeBlock = CodeBlockBase.extend({
       chip.contentEditable = 'false';
       chip.tabIndex = -1; // a mouse affordance, not a tab stop
       chip.textContent = labelOf(node.attrs.language);
-      dom.append(chip, pre);
+      // a mermaid block: its drawing, edited right there (DiagramBlock.svelte); the code shows only with the caret in it
+      const host = document.createElement('div');
+      host.className = 'mermaid-host';
+      host.contentEditable = 'false';
+      dom.append(chip, pre, host);
+      const posNow = () => (typeof getPos === 'function' ? getPos() : null);
+      let block: ReturnType<typeof mountDiagram> | null = null;
+      let shown = false; // the caret in the code
+      let shownNode: PMNode = node; // the block as this view last drew it
+      const setDiagram = (n: PMNode) => {
+        const on = n.attrs.language === 'mermaid';
+        dom.classList.toggle('mermaid', on);
+        if (!on) { block?.destroy(); block = null; dom.classList.remove('mermaid-error'); return; }
+        if (block) { block.set({ code: n.textContent, codeShown: shown }); return; }
+        const start = startNext !== null && startNext === n.textContent;
+        if (start) startNext = null;
+        block = mountDiagram(host, {
+          code: n.textContent, start, codeShown: shown,
+          // what was drawn, written into the block: one step to undo, the caret left where it was
+          // only into this very block, where it still is: the node there must be the one this view last showed (a last
+          // change written as the block was deleted found the paragraph after it at its old place, and wrote over it)
+          onCode: (code) => {
+            if (editor.isDestroyed) return;
+            const p = posNow();
+            const cur = p == null ? null : editor.state.doc.nodeAt(p);
+            if (p == null || !cur || cur !== shownNode || cur.textContent === code) return;
+            editor.view.dispatch(editor.state.tr.replaceWith(p + 1, p + cur.nodeSize - 1, code ? editor.schema.text(code) : []));
+          },
+          onHistory: (redo) => queueMicrotask(() => { if (redo) editor.commands.redo(); else editor.commands.undo(); }),
+          onCodeEdit: () => {
+            const p = posNow();
+            const cur = p == null ? null : editor.state.doc.nodeAt(p);
+            if (p == null || !cur) return;
+            editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, p + cur.nodeSize - 1)).scrollIntoView());
+            editor.view.focus();
+          },
+          onError: (failed) => dom.classList.toggle('mermaid-error', failed),
+        });
+      };
+      setDiagram(node);
 
       const language = (): string => {
         const pos = typeof getPos === 'function' ? getPos() : null;
@@ -167,14 +231,44 @@ export const CodeBlock = CodeBlockBase.extend({
           () => chip.classList.remove('open'));
       });
 
-      const owns = (target: EventTarget | Node | null) => target === chip || (target instanceof Node && chip.contains(target));
+      const owns = (target: EventTarget | Node | null) => target instanceof Node && (chip.contains(target) || host.contains(target));
       return {
         dom,
         contentDOM: code,
-        update: (updated) => updated.type === node.type && ((chip.textContent = labelOf(updated.attrs.language)), true),
-        ignoreMutation: (m) => owns(m.target),
+        update: (updated, decorations) => {
+          if (updated.type !== node.type) return false;
+          chip.textContent = labelOf(updated.attrs.language);
+          shown = decorations.some((d) => (d as unknown as { spec?: { editing?: boolean } }).spec?.editing);
+          shownNode = updated;
+          setDiagram(updated);
+          return true;
+        },
+        // the block's own classes (mermaid, mermaid-error) are set here: read as an edit, ProseMirror made the block
+        // anew, which drew again, failed again and set them again, without end
+        ignoreMutation: (m) => owns(m.target) || (m.type === 'attributes' && m.target === dom),
         stopEvent: (e) => owns(e.target),
+        destroy: () => { block?.destroy(); },
       };
     };
   },
 }).configure({ languageClassPrefix: 'language-' });
+
+/** the code of a diagram just made from the / menu: its block opens for editing as it is first drawn */
+let startNext: string | null = null;
+
+/** the / menu's diagrams: a small example of the kind, put in at the caret and opened for editing there */
+export function insertDiagram(editor: Editor, kind: Kind) {
+  const code = toCode(starter(kind));
+  startNext = code;
+  const { from } = editor.state.selection;
+  const c = isMobile ? editor.chain() : editor.chain().focus();
+  c.insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: code }] }).run();
+  // out of the block it went into, onto the line under it: drawn, not shown as code
+  const $at = editor.state.doc.resolve(Math.min(editor.state.selection.from, editor.state.doc.content.size));
+  for (let d = $at.depth; d > 0; d--) {
+    if ($at.node(d).type.name !== 'codeBlock' || $at.before(d) < from - 2) continue;
+    const tr = editor.state.tr;
+    editor.view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve($at.after(d)))).scrollIntoView());
+    break;
+  }
+}

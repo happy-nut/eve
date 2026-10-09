@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { notes, CALENDAR } from './lib/notes.svelte';
@@ -66,7 +67,7 @@
   });
 
   // Android back: a popup or a dialog closes, a note goes back to the list, and only the list leaves the app
-  const popupOpen = $derived(!!(ui.photo || ui.sheetsOpen || ui.emoji || ui.menu || ui.pending || ui.find || ui.pdf || ui.card));
+  const popupOpen = $derived(!!(ui.photo || ui.sheetsOpen || ui.emoji || ui.menu || ui.pending || ui.find || ui.pdf || ui.card || ui.diagramView !== null));
   $effect(() => {
     if (!isMobile || !isTauri || (sidebarOpen && !settingsOpen && !popupOpen)) return;
     let off: (() => void) | undefined, gone = false;
@@ -96,7 +97,7 @@
       void links.onOpen((url) => {
         const link = parseEveLink(url);
         if (!link || !notes.all.some((n) => n.id === link.id && !n.deleted)) return;
-        settingsOpen = false;
+        putAway(); // whatever was open over the app (a full-screen diagram, a card) would sit over the note
         ui.focusOwner = 'editor';
         if (notes.currentId === link.id) {
           if (link.section) hooks.section?.(link.section);
@@ -171,7 +172,7 @@
   function restoreFocus() {
     const back = away;
     away = null;
-    if (ui.photo || ui.pending || ui.emoji || ui.menu || settingsOpen) return; // a dialog owns focus
+    if (ui.photo || ui.pending || ui.emoji || ui.menu || ui.diagramView !== null || settingsOpen) return; // a dialog owns focus
     const a = document.activeElement as HTMLElement | null;
     if (a && a.isConnected && a !== document.body) return;
     const el = back?.isConnected ? back : document.querySelector<HTMLElement>(ui.card ? '.card-page .tiptap' : '.tiptap');
@@ -272,6 +273,7 @@
     if (ui.pending) ui.done(null);
     if (ui.card) ui.closeCard();
     if (ui.pdf) ui.closePdf();
+    ui.closeDiagramView();
     ui.find = false;
     settingsOpen = false;
   }
@@ -323,6 +325,7 @@
     else if (ui.emoji) ui.emojiDone(null);
     else if (ui.menu) ui.closeMenu();
     else if (ui.pending) ui.done(null);
+    else if (ui.diagramView !== null) ui.closeDiagramView();
     else if (ui.find) { ui.find = false; focusNote(); }
     else if (ui.pdf) ui.closePdf();
     else if (ui.card) ui.closeCard();
@@ -331,6 +334,8 @@
     else sidebarOpen = true;
   }
   // daily notes on: the calendar's row exists; and opening that row (⌘1–9, back, next note) shows the calendar
+  // another note brought up (a link, the widget, a reminder): a diagram shown full screen was the last one's
+  $effect(() => { void notes.currentId; untrack(() => ui.closeDiagramView()); });
   $effect(() => { if (appearance.s.dailyNotes && notes.loaded) notes.ensureCalendar(); });
   $effect(() => { if (notes.currentId === CALENDAR_NOTE_ID) notes.currentId = CALENDAR; });
   // the phone's reminder alarm follows the settings
@@ -450,7 +455,7 @@
     if (sidebarOpen && appearance.s.closeSidebarOnWrite && isWriting(e)) sidebarOpen = false;
     // the right-click menu takes the keyboard while it is up, wherever the focus actually sits
     if (ui.menu) { if (e.key === 'Escape') { e.preventDefault(); ui.closeMenu(); } return; }
-    if (ui.pending || ui.emoji) return;
+    if (ui.pending || ui.emoji || ui.diagramView !== null) return; // the diagram viewer takes its own keys
     // Escape puts away whatever is open over the note — the find bar, then the PDF panel — and only a
     // bare note lets it through to hide the window. Tied to the key, not to the rebindable action:
     // closing the thing on top is what Escape means everywhere in the app.
@@ -592,6 +597,9 @@
   {#await import('./CardPage.svelte') then { default: CardPage }}<CardPage />{/await}
 {/if}
 {#if ui.photo}<ImageViewer />{/if}
+{#if ui.diagramView !== null}
+  {#await import('./DiagramViewer.svelte') then { default: DiagramViewer }}<DiagramViewer />{/await}
+{/if}
 {#if ui.pdf}
   {#await import('./PdfViewer.svelte') then { default: PdfViewer }}<PdfViewer />{/await}
 {/if}

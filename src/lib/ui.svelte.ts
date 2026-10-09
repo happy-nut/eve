@@ -67,6 +67,17 @@ class Ui {
     if (from?.isConnected && from !== document.body && !from.closest('.card-page')) from.focus();
     else focusNote();
   }
+  /** a diagram shown full screen, to zoom into (DiagramViewer.svelte): its drawing as the note has it */
+  diagramView = $state<string | null>(null);
+  private diagramViewFrom: HTMLElement | null = null;
+  viewDiagram(html: string) { this.diagramViewFrom = document.activeElement as HTMLElement | null; this.diagramView = html; }
+  closeDiagramView() {
+    if (this.diagramView === null) return;
+    this.diagramView = null;
+    const from = this.diagramViewFrom;
+    this.diagramViewFrom = null;
+    if (!isMobile && from?.isConnected && from !== document.body) from.focus();
+  }
   /** a picture shown full size over everything (ImageViewer.svelte): a double-click on it, or ↩ with it selected */
   photo = $state<{ src: string; alt: string } | null>(null);
   private photoFrom: HTMLElement | null = null;

@@ -92,6 +92,9 @@ export const Toggle = [
     addStorage: () => ({
       markdown: {
         serialize(state: any, node: any) {
+          // part of a toggle's body copied on its own (a selection starting below its title): just that body; written
+          // as a toggle, its first line became the title and was copied twice
+          if (node.firstChild?.type.name !== 'detailsSummary') { state.renderContent(node.lastChild ?? node); return; }
           state.write(node.attrs.open ? '<details open>' : '<details>');
           state.ensureNewLine();
           state.write(`<summary>${esc(node.firstChild.textContent)}</summary>`);

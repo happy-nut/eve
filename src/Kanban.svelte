@@ -26,9 +26,10 @@
   export async function set(c: Column[]) {
     const a = document.activeElement as HTMLElement | null;
     columns = c;
-    if (!a || !root.contains(a)) return;
+    // an update before the board is on the page (the note just opening) has no focus of its own to keep
+    if (!a || !root?.contains(a)) return;
     await tick();
-    if (root.contains(document.activeElement) && document.activeElement !== document.body) return;
+    if (!root || (root.contains(document.activeElement) && document.activeElement !== document.body)) return;
     const id = a.dataset.id ?? '', colId = a.closest<HTMLElement>('.kb-col')?.dataset.id ?? '';
     const col = a.dataset.kb === 'card' ? columns.find((x) => x.cards.some((k) => k.id === id)) : columns.find((x) => x.id === colId);
     if (col && a.dataset.kb === 'card') focusCard(col.id, id);

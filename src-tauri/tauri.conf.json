@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Eve",
-  "version": "0.7.31",
+  "version": "0.7.32",
   "identifier": "dev.happynut.eve",
   "build": {
     "frontendDist": "../dist",

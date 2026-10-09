@@ -57,7 +57,10 @@ button.icon {
   width: 26px; height: 26px; border-radius: 6px; padding: 0;
   transition: background 0.12s, color 0.12s, transform 0.12s;
 }
-button.icon:hover { background: var(--bg-hover); color: var(--fg); }
+/* only where there is a pointer to hover with: a tap leaves a phone's :hover on what was tapped, and the button
+   looked held down after its press (the list's group arrow) */
+@media (hover: hover) { button.icon:hover { background: var(--bg-hover); color: var(--fg); } }
+html.mobile button.icon:active { background: var(--bg-active); }
 button.icon.on { color: var(--accent); background: var(--accent-soft); } /* a toggle that is on */
 /* icon buttons show keyboard focus as a tinted pill, like hover, not a ring that gets clipped by their containers */
 button.icon:focus-visible { outline: none; background: var(--accent-soft); color: var(--fg); }
@@ -113,7 +116,7 @@ html.mobile aside .mtop .sync { font-size: 13px; color: var(--fg-dim); display: 
 html.mobile aside .mtop .gear:active { background: var(--bg-active); }
 
 html.mobile aside .ico-slot { width: 24px; height: 24px; }
-html.mobile aside .tools { display: none; } /* hover-only; a long-press opens the row's menu instead */
+html.mobile aside .tools { display: none; } /* hover-only; a phone deletes with a pull to the left */
 
 /* a row lifted by a long press: its copy rides under the finger, the row stays faint where it was */
 html.mobile aside .row.dragging { opacity: 0.3; }
@@ -276,33 +279,20 @@ html.mobile :is(aside, .lifted) .gname {
 }
 html.mobile :is(aside, .lifted) .fold { width: 44px; height: 44px; }
 
-/* a row pulled sideways (swipeRow.ts): it follows the finger, the action shows behind it, full colour past the mark */
-html.mobile :is(aside, .lifted) .note-row { position: relative; touch-action: pan-y; --sx: 0px; }
-html.mobile :is(aside, .lifted) .note-row > :not(.swipe-act) {
+/* a row pulled sideways (swipeRow.ts): it follows the finger, the delete shows behind it, full colour past the mark.
+   A note's row and a group's alike. */
+html.mobile :is(aside, .lifted) :is(.note-row, .ghead) { position: relative; touch-action: pan-y; --sx: 0px; }
+html.mobile :is(aside, .lifted) :is(.note-row, .ghead) > :not(.swipe-act) {
   position: relative; z-index: 1; transform: translateX(var(--sx)); transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-html.mobile :is(aside, .lifted) .note-row.swiping > :not(.swipe-act) { transition: none; }
-html.mobile :is(aside, .lifted) .note-row:is(.to-left, .to-right) > button:first-child { background: var(--bg); }
+html.mobile :is(aside, .lifted) :is(.note-row, .ghead).swiping > :not(.swipe-act) { transition: none; }
+html.mobile :is(aside, .lifted) :is(.note-row, .ghead).to-left > :not(.swipe-act) { background: var(--bg); }
 html.mobile :is(aside, .lifted) .swipe-act {
-  position: absolute; z-index: 0; inset: 1px 0; display: none; align-items: center; padding: 0 22px; border-radius: 8px;
-  font-size: 14.5px; font-weight: 600; color: #fff; opacity: 0.55; transition: opacity 0.12s;
+  position: absolute; z-index: 0; inset: 1px 0; display: none; align-items: center; justify-content: flex-end; padding: 0 22px;
+  border-radius: 8px; background: #ff453a; font-size: 14.5px; font-weight: 600; color: #fff; opacity: 0.55; transition: opacity 0.12s;
 }
-html.mobile :is(aside, .lifted) .swipe-act.del { justify-content: flex-end; background: #ff453a; }
-html.mobile :is(aside, .lifted) .swipe-act.move { justify-content: flex-start; background: var(--accent); }
-html.mobile :is(aside, .lifted) .note-row.to-left .swipe-act.del, html.mobile :is(aside, .lifted) .note-row.to-right .swipe-act.move { display: flex; }
-html.mobile :is(aside, .lifted) .note-row.armed .swipe-act { opacity: 1; }
-
-/* reordering: a handle on every row to drag it by; nothing else on the row answers a touch */
-html.mobile aside .mtop .done {
-  border: 0; background: none; color: var(--accent); font: inherit; font-size: 16px; font-weight: 600;
-  min-height: 44px; padding: 0 14px;
-}
-html.mobile aside .handle {
-  flex: none; width: 44px; height: 48px; display: inline-flex; align-items: center; justify-content: center;
-  color: var(--fg-dim); touch-action: none;
-}
-html.mobile aside .handle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
-html.mobile aside.reordering .note-row > button:first-child:active { transform: none; }
+html.mobile :is(aside, .lifted) :is(.note-row, .ghead).to-left .swipe-act { display: flex; }
+html.mobile :is(aside, .lifted) :is(.note-row, .ghead).armed .swipe-act { opacity: 1; }
 /* the note: a flat bar of grey icons, and a page head sized for a phone */
 html.mobile .mhead {
   position: absolute; top: 0; left: 0; right: 0; height: 52px; z-index: 6; display: flex; align-items: center;
@@ -373,11 +363,17 @@ aside.focus-flash::after, main.focus-flash::after {
    so WebKit fills the space between it and the text when a selection continues onto the line (the "2." lit up) */
 .tiptap li::before { position: absolute; right: calc(100% + 0.4em); top: 0; color: inherit; font-variant-numeric: tabular-nums; }
 .tiptap ol > li::before { content: counter(list-item) '.'; }
-/* a numbered list inside a numbered list counts in letters, the next in roman numerals, then numbers again (1. a. i. 1.);
-   only how it is shown: the note keeps 1. 2. as markdown writes them */
+/* a numbered list inside a numbered list counts in letters, the next in roman numerals, and round again
+   (1. a. i. 1. a. i. …, as word processors and Notion do), nine levels deep; only how it is shown: the note keeps
+   1. 2. as markdown writes them */
 .tiptap ol ol > li::before { content: counter(list-item, lower-alpha) '.'; }
 .tiptap ol ol ol > li::before { content: counter(list-item, lower-roman) '.'; }
 .tiptap ol ol ol ol > li::before { content: counter(list-item) '.'; }
+.tiptap ol ol ol ol ol > li::before { content: counter(list-item, lower-alpha) '.'; }
+.tiptap ol ol ol ol ol ol > li::before { content: counter(list-item, lower-roman) '.'; }
+.tiptap ol ol ol ol ol ol ol > li::before { content: counter(list-item) '.'; }
+.tiptap ol ol ol ol ol ol ol ol > li::before { content: counter(list-item, lower-alpha) '.'; }
+.tiptap ol ol ol ol ol ol ol ol ol > li::before { content: counter(list-item, lower-roman) '.'; }
 .tiptap ul > li::before { content: '•'; }
 .tiptap ul[data-type='taskList'] { padding-left: 0.2em; }
 .tiptap ul[data-type='taskList'] > li::before { content: none; }
@@ -412,7 +408,92 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 .tiptap .code-lang { pointer-events: none; }
 .tiptap .code-block:hover .code-lang, .tiptap .code-lang:hover, .tiptap .code-lang.open { opacity: 1; pointer-events: auto; }
 .tiptap .code-lang:hover, .tiptap .code-lang.open { color: var(--fg); background: var(--bg-side); } /* opaque: a tint would let the edge it straddles show through */
+/* a mermaid block: its diagram; the code above it only while the caret is in it (or the diagram failed, to fix it) */
+.tiptap .code-block:not(.mermaid) .mermaid-view { display: none; }
+.tiptap .code-block.mermaid:not(.editing):not(.mermaid-error) pre { display: none; }
+.tiptap .code-block.mermaid:not(.editing):not(.mermaid-error) .code-lang { display: none; } /* drawn: the builder changes it */
+/* the diagram's canvas: one look for the note and the builder's preview (DiagramBuilder.svelte), which must draw it
+   the same. Toss's manner: a soft grey card, no frame, white cards on it (lib/mermaid.ts holds the same colours). */
+.diagram-canvas {
+  --d-fg: light-dark(#333d4b, #e5e8eb); --d-strong: light-dark(#191f28, #f9fafb); --d-dim: light-dark(#8b95a1, #8b95a1);
+  --d-canvas: light-dark(#f9fafb, #17181d); --d-card: light-dark(#ffffff, #23252b); --d-line: light-dark(#e5e8eb, #2e3138);
+  --c0: light-dark(#3182f6, #4593fc); --c1: light-dark(#15c39a, #2bd4a9); --c2: light-dark(#ff9f2e, #ffae4d); --c3: light-dark(#8b5cf6, #a07bff);
+  --c4: light-dark(#f04452, #ff6673); --c5: light-dark(#f5b800, #ffcd3c); --c6: light-dark(#4cc3ff, #6cd1ff); --c7: light-dark(#5fbf4a, #7ed36a);
+  --c8: light-dark(#ec5fa8, #f47dbb); --c9: light-dark(#6366f1, #8187ff); --c10: light-dark(#c08457, #d39a6c); --c11: light-dark(#14b8a6, #3cc9b8);
+  display: flex; justify-content: flex-start; align-items: center; padding: 24px 20px; overflow-x: auto;
+  border-radius: 16px; background: var(--d-canvas); color: var(--d-fg); user-select: none; -webkit-user-select: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif; font-size: 14px; line-height: 1.4;
+  letter-spacing: -0.01em; text-align: left;
+}
+.diagram-canvas svg { max-width: 100%; height: auto; flex: none; }
+/* centred by its margins, not by the flex box: one wider than the card scrolls from its left edge instead of being
+   cut off on both sides */
+.diagram-canvas > * { margin-left: auto; margin-right: auto; }
+.diagram-canvas svg[aria-roledescription='pie'] { max-width: min(100%, 380px) !important; } /* over mermaid's own inline size */
+.diagram-canvas:empty { min-height: 72px; } /* drawing: the space it will take, not a jump */
+.diagram-canvas .c0 { --c: var(--c0); } .diagram-canvas .c1 { --c: var(--c1); } .diagram-canvas .c2 { --c: var(--c2); }
+.diagram-canvas .c3 { --c: var(--c3); } .diagram-canvas .c4 { --c: var(--c4); } .diagram-canvas .c5 { --c: var(--c5); }
+.diagram-canvas .c6 { --c: var(--c6); } .diagram-canvas .c7 { --c: var(--c7); } .diagram-canvas .c8 { --c: var(--c8); }
+.diagram-canvas .c9 { --c: var(--c9); } .diagram-canvas .c10 { --c: var(--c10); } .diagram-canvas .c11 { --c: var(--c11); }
 
+/* ---- the charts Eve draws (lib/charts.ts) ---- */
+.chart { width: 100%; }
+.chart-title { font-size: 16px; font-weight: 700; color: var(--d-strong); margin: 0 0 16px; letter-spacing: -0.02em; }
+.chart-empty p { margin: 0; color: var(--d-dim); }
+/* a donut, its biggest part named in the middle, every part listed beside it */
+.pie-body { display: flex; align-items: center; justify-content: center; gap: 28px 36px; flex-wrap: wrap; }
+.donut { position: relative; width: 168px; height: 168px; flex: none; }
+.donut svg { width: 100%; height: 100%; display: block; }
+.donut circle { fill: none; stroke: var(--c); stroke-width: 26; }
+.donut-mid { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 40px; }
+.donut-mid b { font-size: 22px; font-weight: 700; color: var(--d-strong); letter-spacing: -0.03em; }
+.donut-mid span { font-size: 12px; color: var(--d-dim); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pie-legend { min-width: 180px; flex: 0 1 260px; display: flex; flex-direction: column; gap: 10px; }
+.pie-legend .row { display: flex; align-items: center; gap: 10px; }
+.pie-legend .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+.pie-legend .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pie-legend .val { color: var(--d-dim); font-variant-numeric: tabular-nums; }
+.pie-legend .pct { font-weight: 700; color: var(--d-strong); font-variant-numeric: tabular-nums; min-width: 3.4em; text-align: right; }
+/* a timeline: a column of dates down a thin line, what happened beside each */
+.tl { position: relative; }
+.tl-row { display: grid; grid-template-columns: minmax(64px, max-content) 22px 1fr; column-gap: 12px; }
+.tl-when { font-size: 13px; font-weight: 600; color: var(--c); text-align: right; padding-top: 9px; white-space: nowrap; }
+.tl-dot { position: relative; }
+.tl-dot::before { content: ''; position: absolute; left: 5px; top: 12px; width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 4px var(--d-canvas); z-index: 1; }
+.tl-row:not(:last-child) .tl-dot::after { content: ''; position: absolute; left: 10px; top: 18px; bottom: -18px; width: 2px; border-radius: 1px; background: var(--d-line); }
+.tl-row:not(:last-child) .tl-what { padding-bottom: 18px; }
+.tl-what { display: flex; flex-direction: column; gap: 6px; }
+.tl-what > div { background: var(--d-card); border-radius: 12px; padding: 9px 14px; font-weight: 500; color: var(--d-fg); box-shadow: 0 1px 3px light-dark(rgba(0, 23, 51, 0.06), rgba(0, 0, 0, 0.3)); }
+.tl-what > .tl-none { background: none; box-shadow: none; color: var(--d-dim); padding-left: 2px; }
+/* a Gantt chart: task names on the left, rounded bars along a quiet date axis */
+.g-grid { display: grid; grid-template-columns: minmax(80px, 28%) 1fr; column-gap: 14px; align-items: center; }
+.g-axis { position: relative; height: 22px; font-size: 11px; color: var(--d-dim); }
+.g-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.g-sec { font-size: 12px; font-weight: 700; color: var(--d-dim); padding-top: 6px; }
+.g-name { display: flex; flex-direction: column; min-width: 0; }
+.g-name span { font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-name small { font-size: 11.5px; color: var(--d-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.g-track { position: relative; height: 44px; }
+.g-sec-track { height: 30px; }
+.g-track > i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--d-line); opacity: 0.7; }
+.g-bar { position: absolute; top: 10px; bottom: 10px; min-width: 6px; border-radius: 8px; background: var(--c); }
+.tiptap .mermaid-view { margin: 0.6em 0; cursor: pointer; transition: box-shadow 0.15s; }
+@media (hover: hover) { .tiptap .mermaid-view:hover { box-shadow: inset 0 0 0 1.5px var(--accent-soft); } }
+.tiptap .mermaid-expand { display: none; }
+.tiptap .code-block.mermaid:not(.mermaid-error) .mermaid-expand {
+  display: inline-flex; align-items: center; justify-content: center; position: absolute; right: 10px; bottom: calc(0.6em + 10px);
+  width: 30px; height: 30px; border: 0; border-radius: 9px; padding: 0; color: var(--fg-dim);
+  background: light-dark(rgba(255, 255, 255, 0.92), rgba(35, 37, 43, 0.92)); box-shadow: 0 1px 4px light-dark(rgba(0, 23, 51, 0.12), rgba(0, 0, 0, 0.4));
+  opacity: 0; transition: opacity 0.15s;
+}
+.tiptap .mermaid-expand svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+@media (hover: hover) { .tiptap .code-block.mermaid:hover .mermaid-expand { opacity: 1; } .tiptap .mermaid-expand:hover { color: var(--fg); } }
+html.mobile .tiptap .code-block.mermaid .mermaid-expand { opacity: 0.9; } /* no hover on a phone: always there */
+.tiptap .code-block.mermaid.editing .mermaid-view { margin-top: -0.2em; cursor: default; }
+.tiptap .code-block.mermaid-error .mermaid-view, .diagram-canvas.error {
+  justify-content: flex-start; align-items: flex-start; color: #ff453a; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap; cursor: default; background: light-dark(rgba(255, 69, 58, 0.05), rgba(255, 69, 58, 0.08));
+}
 
 /* ---- syntax highlighting (highlight.js class names, emitted by lowlight) ---- */
 .tiptap .hljs-comment, .tiptap .hljs-quote { color: var(--fg-dim); font-style: italic; }
@@ -672,9 +753,17 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
    toggle left the body's text unpainted (Chromium), as if the selection had a hole in it */
 .tiptap [data-type='details'] { position: relative; padding-left: calc(1.3em + 4px); margin: 0.15em 0; }
 .tiptap [data-type='details'] > button {
-  position: absolute; left: 0; top: 0; width: 1.3em; height: 1.6em; padding: 0; border: 0; background: none; color: var(--fg-dim); cursor: pointer;
+  position: absolute; left: 0; top: 0.1em; width: 1.3em; height: 1.4em; padding: 0; border: 0; border-radius: 5px;
+  background: none; color: var(--fg-dim); cursor: pointer; font-size: inherit; /* a button's own 13px made the twisty a speck */
+  display: flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s;
 }
-.tiptap [data-type='details'] > button::before { content: '▸'; display: inline-block; transition: transform 0.12s; }
+@media (hover: hover) { .tiptap [data-type='details'] > button:hover { background: var(--bg-hover); color: var(--fg); } }
+/* a filled triangle with soft corners, the size of the text's lower case, turning down when open */
+.tiptap [data-type='details'] > button::before {
+  content: ''; width: 0.72em; height: 0.72em; background: currentColor; transition: transform 0.15s ease;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3 1.6c0-.6.7-1 1.2-.6l4.2 3.4c.4.3.4.9 0 1.2L4.2 9c-.5.4-1.2 0-1.2-.6z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3 1.6c0-.6.7-1 1.2-.6l4.2 3.4c.4.3.4.9 0 1.2L4.2 9c-.5.4-1.2 0-1.2-.6z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
 .tiptap [data-type='details'].is-open > button::before { transform: rotate(90deg); }
 .tiptap [data-type='details'] summary { display: block; list-style: none; }
 .tiptap [data-type='details'] summary::-webkit-details-marker { display: none; }

@@ -40,7 +40,7 @@ import { shortcuts } from './shortcuts.svelte';
 import { calendar, emojiRow, popup, ICONS, SLASH, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
-import { moveBlock, indentLines, switchItem } from './blocks';
+import { moveBlock, indentLines, switchItem, switchLines } from './blocks';
 import { holdEdit, dropEdit } from './pending';
 
 /** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
@@ -62,13 +62,13 @@ const BlankLine = Paragraph.extend({
     return {
       markdown: {
         serialize(state: any, node: PMNode, parent?: PMNode, index?: number) {
-          // the empty line StarterKit's TrailingNode keeps after a note ending in a block (a code block, a table):
-          // the editor's, not the note's. Written down, merely opening such a note changed it ("edited just now",
-          // synced) — and the next opening added it again
+          // empty lines at the very end of the note are not written: the one StarterKit's TrailingNode keeps after a
+          // note ending in a block (a code block, a table) is the editor's, not the note's — written down, merely
+          // opening such a note changed it ("edited just now", synced), and the next opening added it again — and
+          // any other left at the end shows nothing, but came back as a blank line under the note's last line
           // (a copy renders a bare Fragment: no parent node there, and nothing to leave out)
-          const trailer = parent?.type?.name === 'doc' && index === parent.childCount - 1 && index > 0 && !node.content.size
-            && parent.child(index - 1).type.name !== 'paragraph';
-          if (trailer) return;
+          const atEnd = (p: PMNode, i: number) => { for (let k = i; k < p.childCount; k++) if (p.child(k).type.name !== 'paragraph' || p.child(k).content.size) return false; return true; };
+          if (parent?.type?.name === 'doc' && index !== undefined && index > 0 && !node.content.size && atEnd(parent, index)) return;
           if (node.content.size) state.renderInline(node);
           else state.write(BLANK);
           state.closeBlock(node);
@@ -210,9 +210,11 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     h3: () => c().toggleHeading({ level: 3 }).run(),
     h4: () => c().toggleHeading({ level: 4 }).run(),
     h5: () => c().toggleHeading({ level: 5 }).run(),
-    bulletList: () => c().toggleBulletList().run(),
-    orderedList: () => c().toggleOrderedList().run(),
-    taskList: () => c().toggleTaskList().run(),
+    // on list lines of another kind, only those lines change kind, where they are (a bullet under a number stays
+    // under it); otherwise the stock toggle (a line becomes a list, a list's lines plain again)
+    bulletList: () => editor.commands.command(switchLines('bulletList', 'listItem')) || c().toggleBulletList().run(),
+    orderedList: () => editor.commands.command(switchLines('orderedList', 'listItem')) || c().toggleOrderedList().run(),
+    taskList: () => editor.commands.command(switchLines('taskList', 'taskItem')) || c().toggleTaskList().run(),
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
     toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck),
     blockquote: () => c().toggleBlockquote().run(),
@@ -333,6 +335,38 @@ export function goToSection(editor: Editor, section: string) {
 
 let lastCut = { text: '', at: 0 };
 
+/**
+ * Where the "/" that may open the / menu was just written (typed, or put in by the phone's Insert block), followed
+ * through later edits; null once the caret goes back before it or it is deleted. A "/" pasted, or already in the
+ * text, is never it.
+ */
+const SLASH_AT = new PluginKey<number | null>('slashAt');
+const slashTyped = new Plugin<number | null>({
+  key: SLASH_AT,
+  state: {
+    init: () => null,
+    apply(tr, at, _old, state) {
+      if (at !== null) {
+        const r = tr.mapping.mapResult(at, 1);
+        at = r.deleted ? null : r.pos;
+      }
+      const { empty, $head } = state.selection;
+      // undo and redo put back a / that was already there: not one just typed
+      if (tr.docChanged && empty && !tr.getMeta('paste') && tr.getMeta('uiEvent') !== 'paste' && tr.getMeta('uiEvent') !== 'drop' && !tr.getMeta('history$')
+        && $head.parent.isTextblock && $head.parentOffset > 0
+        && $head.parent.textBetween($head.parentOffset - 1, $head.parentOffset) === '/'
+        && tr.steps.some((st) => { const c = (st as { slice?: { content: Fragment; size: number } }).slice; return !!c?.size && c.content.textBetween(0, c.content.size).endsWith('/'); })) {
+        return $head.pos - 1;
+      }
+      if (at !== null && (state.selection.head <= at || state.doc.resolve(at).parent !== $head.parent)) return null;
+      // done with once the menu has closed: a space typed after it, or the caret moved away (by a click, an arrow),
+      // so coming back to it later (a click, a ⌫) does not open it again
+      if (at !== null && (/\s/.test(state.doc.textBetween(at + 1, Math.max(at + 1, $head.pos))) || (!tr.docChanged && tr.selectionSet))) return null;
+      return at;
+    },
+  },
+});
+
 export function createEditor(opts: {
   element: HTMLElement;
   content: string;
@@ -379,7 +413,19 @@ export function createEditor(opts: {
         const serializer = (editor.storage as any).markdown.serializer;
         const inLine = $from.sameParent($to) && $from.parent.isTextblock;
         if (inLine && $from.parent.type.spec.code) return slice.content.textBetween(0, slice.content.size, '\n');
-        const content = inLine ? Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))) : slice.content;
+        let content = inLine ? Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))) : slice.content;
+        // a callout copied from below its title line: its first copied line is not its title
+        if (!inLine) for (let d = $from.depth; d > 0; d--) {
+          if ($from.node(d).type.name !== 'callout' || !$from.node(d).attrs.titled || $from.index(d) === 0) continue;
+          const untitle = (frag: Fragment): Fragment => {
+            const first = frag.firstChild;
+            if (!first) return frag;
+            const node = first.type.name === 'callout' ? first.type.create({ ...first.attrs, titled: false }, first.content, first.marks) : first.copy(untitle(first.content));
+            return frag.replaceChild(0, node);
+          };
+          content = untitle(content);
+          break;
+        }
         return (serializer.serialize(content) as string).replace(new RegExp(`^${BLANK}$`, 'gm'), ''); // an empty line is just empty
       },
       handlePaste: (view, event): boolean => {
@@ -468,6 +514,26 @@ export function createEditor(opts: {
       // Notion-style numbering: typing "1. " (any number) directly after a numbered list joins it and
       // continues the count. Stock TipTap only joins when the typed number is the next one.
       OrderedList.extend({
+        // written as tiptap-markdown does (")" for every other of two numbered lists in a row, so they stay two), but a
+        // list inside an item from 1: markdown reads one numbered from 5 right under the item's line as more of that
+        // line (a note from elsewhere may hold one, separated by a blank line, which a tight list does not keep)
+        addStorage: () => ({
+          markdown: {
+            serialize(state: any, node: PMNode, parent: PMNode, index: number) {
+              const nested = /Item$/.test((parent as any)?.type?.name ?? '');
+              const start = nested ? 1 : node.attrs.start || 1;
+              const width = String(start + node.childCount - 1).length;
+              let run = 0;
+              while (index - run > 0 && parent.child(index - run - 1).type.name === node.type.name) run++;
+              const sep = run % 2 ? ') ' : '. ';
+              state.renderList(node, state.repeat(' ', width + 2), (i: number) => {
+                const n = String(start + i);
+                return state.repeat(' ', width - n.length) + n + sep;
+              });
+            },
+            parse: {},
+          },
+        }),
         addInputRules() {
           return [wrappingInputRule({ find: /^(\d+)\.\s$/, type: this.type, getAttributes: (m) => ({ start: +m[1] }), joinPredicate: (_m, node) => !node.attrs.type || node.attrs.type === '1' })];
         },
@@ -544,6 +610,15 @@ export function createEditor(opts: {
           return {
             Tab: run(1),
             'Shift-Tab': run(-1),
+            // ⌫ at the very start of a nested item: it steps out a level as ⇧Tab does, still its own kind (a bullet
+            // under a number stays a bullet). The stock join made it an item of its parent's list, of that list's kind.
+            // A top-level item is left to the stock ⌫ (the line becomes plain text).
+            Backspace: () => {
+              const { $from, empty } = this.editor.state.selection;
+              if (!empty || $from.parentOffset !== 0 || !$from.parent.isTextblock || $from.depth < 4 || $from.index(-1) !== 0) return false;
+              if (!/Item$/.test($from.node(-1).type.name) || !/Item$/.test($from.node(-3).type.name)) return false;
+              return !suggestionVisible.get(this.editor)?.() && this.editor.commands.command(indentLines(-1));
+            },
             // Enter on an empty item under an item of another kind (a bullet under a to-do): it steps out as
             // ⇧Tab does, still a bullet. The stock lift made it an unmarked line inside the to-do, where the
             // caret could not be seen in WebKit
@@ -574,8 +649,28 @@ export function createEditor(opts: {
                 });
               };
               scan(state.doc, 0);
-              if (!at.length) return null;
+              // A numbered list inside an item counts from 1. Markdown lets only a list starting at 1 begin right under a
+              // line of text, so one numbered from 5 under its item's line ("5. " typed there, a list split in two) was
+              // read back as more of that line: the list gone, "a 5. x" in its place.
+              const restart: number[] = [], loose: number[] = [];
+              state.doc.descendants((node, pos, parent) => {
+                if (node.type.name === 'orderedList' && (node.attrs.start ?? 1) !== 1 && parent && /Item$/.test(parent.type.name)) restart.push(pos);
+                // a list with an item of two paragraphs is loose, as markdown reads it back: written tight, the note
+                // came back with blank lines between all its items, changed by being opened and saved
+                // and a list around a loose one is loose too, as markdown reads it: the note kept "inner loose, outer
+                // tight" only until it was opened again
+                if (/List$/.test(node.type.name) && node.attrs.tight) {
+                  let two = false;
+                  const twoIn = (item: PMNode) => { let n = 0; item.forEach((c) => { if (c.type.name === 'paragraph') n++; }); return n > 1; };
+                  node.forEach((item) => { if (twoIn(item)) two = true; });
+                  node.descendants((d) => { if (two) return false; if (/List$/.test(d.type.name) && !d.attrs.tight) two = true; if (/Item$/.test(d.type.name) && twoIn(d)) two = true; });
+                  if (two) loose.push(pos);
+                }
+              });
+              if (!at.length && !restart.length && !loose.length) return null;
               const tr = state.tr;
+              for (const p of restart) tr.setNodeAttribute(p, 'start', 1); // attributes only: no position moves
+              for (const p of loose) tr.setNodeAttribute(p, 'tight', false);
               for (const p of at.reverse()) if (canJoin(tr.doc, p)) tr.join(p); // back to front: earlier positions stay valid
               return tr;
             },
@@ -809,12 +904,23 @@ export function createEditor(opts: {
         name: 'slashMenu',
         addProseMirrorPlugins() {
           return [
+            slashTyped,
             Suggestion({
               editor: this.editor,
               char: '/',
               pluginKey: new PluginKey('slashMenu'),
               allowSpaces: false,
               // default prefixes (line start / after a space): a '/' already inside text like KRW/USD must not open the menu
+              // only the "/" just typed opens it: the caret coming back after one already in the sentence ("x / y",
+              // by an arrow, a click, a ⌫) opened it, and so did a "/" right after bold text or a link, where it
+              // starts its own text node and looked to the plugin like the start of the line
+              allow: ({ state, range }) => {
+                if (SLASH_AT.getState(state) !== range.from) return false;
+                const $at = state.doc.resolve(range.from);
+                if ($at.parent.type.spec.code) return false; // in code a / is code (Enter made a new page)
+                const before = $at.parent.textBetween(Math.max(0, $at.parentOffset - 1), $at.parentOffset, undefined, '\ufffc');
+                return !before || /\s/.test(before);
+              },
               items: ({ query }) => {
                 const q = query.toLowerCase();
                 return SLASH.filter((i) => i.label.toLowerCase().includes(q) || i.hint?.toLowerCase().includes(q));
