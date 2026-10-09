@@ -1,6 +1,7 @@
 /** A box wider than its place scrolls sideways; its edge fades where there is more past it (a diagram or a formula
  *  was cut off at the card's edge with nothing to say it went on). Returns its undoing. */
 export function scrollHint(el: HTMLElement): () => void {
+  if (typeof ResizeObserver === 'undefined') return () => {}; // no layout to watch (a test's page)
   const update = () => {
     const more = el.scrollWidth - el.clientWidth > 2;
     el.classList.toggle('more-l', more && el.scrollLeft > 2);

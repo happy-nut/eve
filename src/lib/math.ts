@@ -190,7 +190,7 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     void open({ x: m.clientX, y: m.clientY }); // the caret where it was clicked
   });
   if (openNext) { openNext = false; queueMicrotask(() => open()); }
-  const unhint = display && typeof ResizeObserver !== 'undefined' ? scrollHint(dom) : null; // a long one: cut off, it said nothing of it
+  const unhint = display ? scrollHint(dom) : null; // a long one: cut off, it said nothing of it
 
   return {
     dom,
