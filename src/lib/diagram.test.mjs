@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { KINDS, starter, toCode, fromCode } from './diagram.ts';
+import { KINDS, starter, toCode, fromCode, swimlaneStarter } from './diagram.ts';
+import { laneSvg } from './lanes.ts';
 
 // every kind's starter: written, read back the same, written again the same
 for (const { kind } of KINDS) {
@@ -37,7 +38,7 @@ assert.equal(fromCode('graph TD\n  A --> B').dir, 'TD');
 
 // what it cannot show is left to the code
 for (const code of [
-  'flowchart LR\n  subgraph one\n  A --> B\n  end',
+  'flowchart LR\n  A --> B\n  style A fill:#f9f',
   'flowchart LR\n  A --> B\n  style A fill:#f00',
   'flowchart LR\n  %% a note\n  A --> B',
   'flowchart LR\n  A --> B --> C',
@@ -83,3 +84,32 @@ assert.equal(fromCode('pie title A #35; B\n  "x" : 1').title, 'A # B');
 assert.deepEqual(fromCode(toCode({ kind: 'pie', title: 'A # B; C', showData: false, slices: [{ label: 'x', value: 1 }] })).title, 'A # B; C');
 
 console.log('diagram hunt ok');
+
+// ---- swimlanes: subgraphs as lanes ----
+{
+  const d = swimlaneStarter();
+  const code = toCode(d);
+  assert.deepEqual(fromCode(code), d, 'the swimlane starter reads back as written');
+  assert.equal(toCode(fromCode(code)), code);
+  assert.match(code, /subgraph L1\["Customer"\]\n {4}direction TD\n {4}n1\(\["Order"\]\)\n {4}n6\(\["Receive"\]\)\n {2}end/);
+  // written by hand: a lane named by its id, by [Text] or ["Text"]; a box first named outside, then inside a lane
+  const hand = fromCode('flowchart LR\n  a --> b\n  subgraph ops[Operations]\n    b\n    c\n  end\n  subgraph qa\n    direction TB\n    d\n  end\n  c --> d');
+  assert.deepEqual(hand.lanes, [{ id: 'ops', label: 'Operations' }, { id: 'qa', label: 'qa' }]);
+  assert.deepEqual(hand.nodes.map((n) => [n.id, n.lane]), [['a', undefined], ['b', 'ops'], ['c', 'ops'], ['d', 'qa']]);
+  // more than lanes: kept as code
+  assert.equal(fromCode('flowchart LR\n  subgraph a\n    subgraph b\n      x\n    end\n  end'), null, 'a lane in a lane');
+  assert.equal(fromCode('flowchart LR\n  subgraph a\n    x'), null, 'a lane never closed');
+  assert.equal(fromCode('flowchart LR\n  subgraph Two words\n    x\n  end'), null, 'a title with no id');
+  assert.equal(fromCode('flowchart LR\n  x\n  end'), null, 'an end with no lane');
+  assert.equal(fromCode('flowchart LR\n  direction TB\n  x'), null, 'a direction outside a lane');
+  // drawn: a lane per subgraph (and one for the boxes in none), every box, every line, in the chart's order
+  const svg = laneSvg(hand);
+  assert.equal((svg.match(/<g class="lane /g) ?? []).length, 3);
+  assert.deepEqual([...svg.matchAll(/-flowchart-([a-z]+)-0"/g)].map((m) => m[1]).sort(), ['a', 'b', 'c', 'd']);
+  assert.equal((svg.match(/class="flowchart-link/g) ?? []).length, hand.edges.length);
+  // a loop, a line to itself and a lane with nothing in it draw without trouble
+  const odd = laneSvg({ kind: 'flowchart', dir: 'TD', lanes: [{ id: 'A', label: 'A <&> "B"' }, { id: 'E', label: '' }], nodes: [{ id: 'x', label: 'x', shape: 'circle', lane: 'A' }, { id: 'y', label: 'y', shape: 'db', lane: 'A' }], edges: [{ from: 'x', to: 'y', label: '', line: 'solid' }, { from: 'y', to: 'x', label: 'again', line: 'dotted' }, { from: 'y', to: 'y', label: '', line: 'thick' }] });
+  assert.ok(!/NaN|undefined/.test(odd), 'no NaN in the drawing');
+  assert.match(odd, /A &#60;&#38;&#62; &#34;B&#34;/, 'a lane name is text, not markup');
+}
+console.log('swimlanes ok');

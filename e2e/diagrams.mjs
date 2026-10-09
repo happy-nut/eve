@@ -189,6 +189,41 @@ try {
     await ctx.close();
   }
 
+  // ---- swimlanes: drawn as lanes, a box moved to another lane, a lane renamed, one added, a step added in it ----
+  page = await open('# Process\n\nx\n');
+  await slash(page, 'swimlanes');
+  await page.waitForSelector('.tiptap .dblock.active svg.lanes');
+  assert.equal(await page.locator('.tiptap svg.lanes g.lane').count(), 3, 'three lanes');
+  const laneBox = async (label) => { const b = await page.locator('.tiptap svg.lanes g.node', { hasText: label }).first().boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+  at = await laneBox('Pack');
+  await page.mouse.click(at.x, at.y);
+  await page.locator('.layer .bar button[aria-label="Lane"]').click();
+  await page.locator('.menu button[role="menuitem"]', { hasText: 'Delivery' }).click();
+  await settle(page);
+  assert.match(await md(page), /subgraph L3\["Delivery"\]\n {4}direction TD\n {4}n4\("Pack"\)\n {4}n5\("Ship"\)\n {2}end/, 'Pack moved to Delivery');
+  const head = await page.locator('.tiptap svg.lanes g.lane-head').nth(1).boundingBox();
+  await page.mouse.click(head.x + head.width / 2, head.y + head.height / 2);
+  await page.locator('.layer .bar button[aria-label="Rename the lane"]').click();
+  await page.keyboard.type('Warehouse');
+  await page.keyboard.press('Enter');
+  await page.locator('.tiptap .dblock .tools button', { hasText: '+ Lane' }).click();
+  await page.waitForSelector('.layer input.lane-name');
+  await page.keyboard.type('Billing');
+  await page.keyboard.press('Enter');
+  await settle(page);
+  // the new lane is still picked: its bar is up
+  await page.locator('.layer .bar button[aria-label="Add a step in this lane"]').click();
+  await page.waitForSelector('.tiptap input.rename');
+  await page.keyboard.type('Invoice');
+  await page.keyboard.press('Enter');
+  await settle(page);
+  text = await md(page);
+  assert.match(text, /subgraph L2\["Warehouse"\]/, 'the lane renamed');
+  assert.match(text, /subgraph L4\["Billing"\]\n {4}direction TD\n {4}n7\("Invoice"\)\n {2}end/, 'a lane added, a step in it');
+  assert.equal(await page.locator('.tiptap svg.lanes g.lane').count(), 4);
+  console.log('ok   swimlanes: lanes drawn; a box moved, a lane renamed, added, a step in it');
+  await page.close();
+
   // ---- a pie: its parts as rows under it, in the note ----
   page = await open('# Week\n\nx\n');
   await slash(page, 'pie');
@@ -227,7 +262,7 @@ try {
   await page.close();
 
   // ---- written by hand: opens as its code ----
-  page = await open('# Plan\n\n```mermaid\nflowchart LR\n  subgraph one\n  A --> B\n  end\n```\n');
+  page = await open('# Plan\n\n```mermaid\nflowchart LR\n  A --> B\n  style A fill:#f9f\n```\n');
   await page.waitForSelector('.tiptap .mermaid-view svg');
   await page.locator('.tiptap .mermaid-view').click();
   await page.waitForSelector('.tiptap .code-block.editing');

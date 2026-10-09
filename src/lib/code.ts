@@ -5,7 +5,7 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
 import { isMobile } from './platform';
-import { starter, toCode, type Kind } from './diagram';
+import { starter, toCode, type Diagram, type Kind } from './diagram';
 import { mountDiagram } from './diagramBlock.svelte';
 
 /**
@@ -257,8 +257,8 @@ export const CodeBlock = CodeBlockBase.extend({
 let startNext: string | null = null;
 
 /** the / menu's diagrams: a small example of the kind, put in at the caret and opened for editing there */
-export function insertDiagram(editor: Editor, kind: Kind) {
-  const code = toCode(starter(kind));
+export function insertDiagram(editor: Editor, kind: Kind | Diagram) {
+  const code = toCode(typeof kind === 'string' ? starter(kind) : kind);
   startNext = code;
   const { from } = editor.state.selection;
   const c = isMobile ? editor.chain() : editor.chain().focus();

@@ -103,7 +103,7 @@
     // below, another diagram) landed on whatever moved up into their place
     const away = (e: MouseEvent) => {
       const t = e.target as Element | null;
-      if (active && t && !root.contains(t) && !t.closest('[role="listbox"], .scrim, .sheet, [role="dialog"]')) active = false;
+      if (active && t && !root.contains(t) && !t.closest('[role="listbox"], [role="menu"], .backdrop, .scrim, .sheet, [role="dialog"]')) active = false;
     };
     document.addEventListener('click', away, true);
     // keys meant for it while it is open: the keyboard on it, on nothing, or still in the note's text (a click on the
@@ -171,6 +171,7 @@
           <button class:on={flow.dir === 'TD'} aria-label="Down" title="Down" onclick={() => (flow.dir = 'TD')}>{isMobile ? '↓' : '↓ Down'}</button>
         </div>
         <button class="ghost" onclick={() => flowEd?.addBox()}>+ Box</button>
+        <button class="ghost" onclick={() => flowEd?.addLane()}>+ Lane</button>
       {/if}
       <span class="grow"></span>
       <button class="ghost" onclick={() => { active = false; onCodeEdit(); }}>Code</button>

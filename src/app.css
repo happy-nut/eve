@@ -436,6 +436,25 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 .diagram-canvas .c6 { --c: var(--c6); } .diagram-canvas .c7 { --c: var(--c7); } .diagram-canvas .c8 { --c: var(--c8); }
 .diagram-canvas .c9 { --c: var(--c9); } .diagram-canvas .c10 { --c: var(--c10); } .diagram-canvas .c11 { --c: var(--c11); }
 
+/* ---- swimlanes (lib/lanes.ts): bands side by side, each lane's name in its own tint; steps as in a flowchart ---- */
+.diagram-canvas:has(> svg.lanes) { padding: 16px; }
+svg.lanes { --d-head: light-dark(#f2f4f6, #2b2e35); --d-edge: light-dark(#c4cad1, #4e5560); font-family: inherit; }
+svg.lanes .lane-bg { fill: color-mix(in srgb, var(--c) 5%, transparent); }
+svg.lanes .lane-head rect { fill: color-mix(in srgb, var(--c) 12%, transparent); }
+svg.lanes .lane-name { fill: color-mix(in srgb, var(--c) 75%, var(--d-strong)); font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
+svg.lanes .lane.none { --c: var(--d-dim); }
+svg.lanes .lane-rule { stroke: var(--d-line); stroke-width: 1; }
+svg.lanes .sl-shape { fill: var(--d-card); stroke: var(--d-line); stroke-width: 1; filter: drop-shadow(0 1px 2px rgba(0, 23, 51, 0.06)); }
+svg.lanes .sl-shape.pill, svg.lanes .sl-circle .sl-shape { fill: var(--d-head); }
+svg.lanes .sl-text { fill: var(--d-strong); font-size: 14px; }
+svg.lanes .sl-edge { fill: none; stroke: var(--d-edge); stroke-width: 1.5; }
+svg.lanes .sl-edge.dotted { stroke-dasharray: 4 4; }
+svg.lanes .sl-edge.thick { stroke-width: 3; }
+svg.lanes .sl-head { fill: var(--d-edge); }
+svg.lanes .sl-chip { fill: var(--d-card); stroke: var(--d-line); stroke-width: 1; }
+svg.lanes .edgeLabel text { fill: var(--d-dim); font-size: 12px; }
+.dblock.active svg.lanes .lane-head { cursor: pointer; }
+
 /* ---- the charts Eve draws (lib/charts.ts) ---- */
 .chart { width: 100%; }
 .chart-title { font-size: 16px; font-weight: 700; color: var(--d-strong); margin: 0 0 16px; letter-spacing: -0.02em; }

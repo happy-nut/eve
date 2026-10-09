@@ -1,4 +1,5 @@
 import { fromCode, type Gantt, type Pie, type Timeline } from './diagram';
+import { laneSvg } from './lanes';
 
 /**
  * The charts Eve draws itself, from the same mermaid code: a pie as a donut with its parts listed beside it, a
@@ -8,9 +9,10 @@ import { fromCode, type Gantt, type Pie, type Timeline } from './diagram';
  * sections) is left to mermaid. HTML for the diagram canvas, styled by app.css (.chart-*), colours by CSS
  * variables, so the light and dark themes need no drawing again.
  */
-export function chartHtml(code: string): string | null {
+export function chartHtml(code: string, minScale = 0.8): string | null {
   const d = fromCode(code);
   if (!d) return null;
+  if (d.kind === 'flowchart' && d.lanes?.length) return laneSvg(d, minScale); // swimlanes (lanes.ts)
   if (d.kind === 'pie') return pie(d);
   if (d.kind === 'timeline') return timeline(d);
   if (d.kind === 'gantt') return gantt(d);

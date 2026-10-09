@@ -20,7 +20,10 @@
   type Box = { id: string; x: number; y: number; w: number; h: number };
   let layer: HTMLDivElement;
   let boxes = $state<Box[]>([]);
-  let sel = $state<{ node: string } | { edge: number; x: number; y: number } | null>(null);
+  let sel = $state<{ node: string } | { edge: number; x: number; y: number } | { lane: string } | null>(null);
+  /** where each swimlane's name is drawn (lanes.ts), to be clicked, renamed and moved */
+  let laneHeads = $state<Box[]>([]);
+  let laneEditing = $state<string | null>(null), laneText = $state('');
   let hover = $state<string | null>(null);
   let editing = $state<string | null>(null), editText = $state('');
   let drag = $state<{ from: string; x0: number; y0: number; x: number; y: number; moved: boolean } | null>(null);
@@ -39,6 +42,10 @@
   function measure() {
     if (!layer) return;
     const o = layer.getBoundingClientRect();
+    laneHeads = [...host.querySelectorAll<SVGGElement>('g.lane-head')].flatMap((g) => {
+      const id = g.dataset.lane, r = g.getBoundingClientRect();
+      return id ? [{ id, x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height }] : [];
+    });
     boxes = [...host.querySelectorAll('g.node')].flatMap((g) => {
       const id = nodeIdOf(g), r = g.getBoundingClientRect();
       return id ? [{ id, x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height }] : [];
@@ -61,15 +68,20 @@
   onMount(() => {
     const ro = new ResizeObserver(() => measure());
     ro.observe(host);
+    // a picture wider than the card scrolls in it: the layer's boxes follow it
+    host.addEventListener('scroll', measure, { passive: true });
     const key = (e: KeyboardEvent) => onKey(e);
     window.addEventListener('keydown', key, true);
-    return () => { ro.disconnect(); window.removeEventListener('keydown', key, true); };
+    return () => { ro.disconnect(); host.removeEventListener('scroll', measure); window.removeEventListener('keydown', key, true); };
   });
 
   // ---- what the chart becomes ----
-  function addAfter(from: string | null) {
+  function addAfter(from: string | null, inLane?: string) {
     const id = freshId('n', flow.nodes);
-    flow.nodes.push({ id, label: 'New step', shape: 'round' });
+    // in the lane of the step it follows, or the lane asked for (picked, or double-clicked in), or the first
+    const lanes = flow.lanes ?? [];
+    const lane = lanes.length ? (flow.nodes.find((n) => n.id === from)?.lane ?? inLane ?? (sel && 'lane' in sel ? sel.lane : lanes[0].id)) : undefined;
+    flow.nodes.push(lane ? { id, label: 'New step', shape: 'round', lane } : { id, label: 'New step', shape: 'round' });
     if (from) flow.edges.push({ from, to: id, label: '', line: 'solid' });
     sel = { node: id };
     // typed in at once: until the new box is drawn its text box sits by the one it grew from, so no key is lost
@@ -118,11 +130,72 @@
   /** a box on its own (the note's "+ Box"), typed in at once */
   export function addBox() { addAfter(null); }
 
+  // ---- swimlanes ----
+  /** a lane more (the note's "+ Lane"); the first one turns the chart into lanes, its steps all in the first */
+  export function addLane() {
+    if (editing) commitEdit();
+    const lanes = flow.lanes ?? [];
+    if (!lanes.length) {
+      flow.lanes = [{ id: 'L1', label: 'Lane 1' }, { id: 'L2', label: 'Lane 2' }];
+      for (const n of flow.nodes) n.lane = 'L1';
+      startLaneEdit('L1');
+      return;
+    }
+    const id = freshId('L', lanes);
+    flow.lanes = [...lanes, { id, label: `Lane ${lanes.length + 1}` }];
+    startLaneEdit(id);
+  }
+  function startLaneEdit(id: string) {
+    sel = { lane: id };
+    laneEditing = id;
+    laneText = flow.lanes?.find((l) => l.id === id)?.label ?? '';
+  }
+  function commitLane() {
+    const l = flow.lanes?.find((x) => x.id === laneEditing);
+    if (l && laneText.trim()) l.label = laneText.trim();
+    laneEditing = null;
+  }
+  function moveLane(id: string, by: -1 | 1) {
+    const lanes = [...(flow.lanes ?? [])];
+    const i = lanes.findIndex((l) => l.id === id), j = i + by;
+    if (i < 0 || j < 0 || j >= lanes.length) return;
+    [lanes[i], lanes[j]] = [lanes[j], lanes[i]];
+    flow.lanes = lanes;
+  }
+  /** a lane gone: its steps go to the lane beside it; the last lane gone, the chart is a plain flowchart again */
+  function dropLane(id: string) {
+    const lanes = flow.lanes ?? [];
+    const i = lanes.findIndex((l) => l.id === id);
+    if (i < 0) return;
+    const rest = lanes.filter((l) => l.id !== id);
+    const to = rest[Math.max(0, i - 1)]?.id;
+    for (const n of flow.nodes) if (n.lane === id) { if (to) n.lane = to; else delete n.lane; }
+    if (rest.length) flow.lanes = rest;
+    else { delete flow.lanes; for (const n of flow.nodes) delete n.lane; }
+    sel = null;
+    laneEditing = null;
+  }
+  /** the picked box into another lane, from a menu of them */
+  function pickLane(e: MouseEvent, nodeId: string) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const n = flow.nodes.find((x) => x.id === nodeId);
+    if (!n) return;
+    ui.openMenu({ clientX: r.left, clientY: r.bottom + 4 }, (flow.lanes ?? []).map((l) => ({ label: l.label, checked: n.lane === l.id, run: () => { n.lane = l.id; } })));
+  }
+
   // ---- the picture's own clicks ----
   function onHostClick(e: MouseEvent) {
     if (drag) return;
     const t = e.target as Element;
     const g = t.closest('g.node');
+    const head = t.closest('g.lane-head') as SVGGElement | null;
+    if (head && !linking && !g) {
+      const id = head.dataset.lane;
+      if (!id) return;
+      if (editing) commitEdit();
+      if (sel && 'lane' in sel && sel.lane === id) startLaneEdit(id); else { sel = { lane: id }; (document.activeElement as HTMLElement | null)?.blur?.(); }
+      return;
+    }
     if (linking) {
       const from = linking, id = g ? nodeIdOf(g) : null;
       linking = null;
@@ -159,7 +232,8 @@
   function onHostDouble(e: MouseEvent) {
     const g = (e.target as Element).closest('g.node');
     if (g) { const id = nodeIdOf(g); if (id) startEdit(id); }
-    else if (!(e.target as Element).closest('path.hit, g.edgeLabel')) addAfter(null);
+    else if ((e.target as Element).closest('g.lane-head')) return;
+    else if (!(e.target as Element).closest('path.hit, g.edgeLabel')) addAfter(null, ((e.target as Element).closest('g.lane') as SVGGElement | null)?.dataset.lane || undefined);
   }
   function onHostMove(e: PointerEvent) {
     const g = (e.target as Element).closest?.('g.node');
@@ -221,7 +295,7 @@
 
   function onKey(e: KeyboardEvent) {
     if (linking && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); linking = null; return; }
-    if (editing || !sel) return;
+    if (editing || laneEditing || !sel) return;
     // only keys meant for this diagram: the keyboard on it, or on nothing (after a box's typing is done) — not keys
     // typed in the list, another note's page or the full-screen view, which deleted the box behind them
     if (ui.diagramView !== null) return;
@@ -235,6 +309,7 @@
     }
     if (typing) return;
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sel = null; }
+    else if ('lane' in sel) { if (e.key === 'Enter') { e.preventDefault(); startLaneEdit(sel.lane); } }
     else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); if ('node' in sel) dropNode(sel.node); else dropEdge(sel.edge); }
     else if ('node' in sel && e.key === 'Enter' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); startEdit(sel.node); }
     else if ('node' in sel && e.key === 'Tab') { e.preventDefault(); addAfter(sel.node); }
@@ -281,6 +356,34 @@
     <div class="ring target" style:left={`${b.x - 4}px`} style:top={`${b.y - 4}px`} style:width={`${b.w + 8}px`} style:height={`${b.h + 8}px`}></div>
   {/if}
 
+  {#if sel && 'lane' in sel}
+    {@const lid = sel.lane}
+    {@const hb = laneHeads.find((h) => h.id === lid)}
+    {@const i = (flow.lanes ?? []).findIndex((l) => l.id === lid)}
+    {#if hb && i >= 0}
+      <div class="ring" style:left={`${hb.x - 2}px`} style:top={`${hb.y - 2}px`} style:width={`${hb.w + 4}px`} style:height={`${hb.h + 4}px`}></div>
+      {#if laneEditing === lid}
+        <!-- the keyboard in it as it appears: it comes only once the new lane is drawn and measured, after "+ Lane" was
+             pressed, and the keys typed went to that button (Enter made another lane) -->
+        <input class="lane-name" bind:value={laneText} aria-label="Lane name" placeholder="Lane" {@attach (el: HTMLInputElement) => { el.focus(); el.select(); }}
+          style:left={`${hb.x + hb.w / 2 - 70}px`} style:top={`${hb.y + hb.h / 2 - 16}px`}
+          onkeydown={(e) => { if (e.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); commitLane(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); laneEditing = null; } }}
+          onblur={commitLane} />
+      {:else}
+        {@const at = barAt(hb.x + hb.w / 2, hb.y, hb.y + hb.h, 240)}
+        {@const across = flow.dir === 'LR'}
+        <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
+          <button type="button" class="text" aria-label="Rename the lane" title="Rename (or click its name again)" onmousedown={(e) => e.preventDefault()} onclick={() => startLaneEdit(lid)}><svg viewBox="0 0 16 16"><path d="M10.5 3.5l2 2L6 12l-2.6.6L4 10z" /></svg>Name</button>
+          <span class="sep"></span>
+          <button type="button" aria-label={across ? 'Move up' : 'Move left'} title={across ? 'Move up' : 'Move left'} disabled={i === 0} onclick={() => moveLane(lid, -1)}><svg viewBox="0 0 16 16"><path d={across ? 'M8 12.5v-9M4.5 7 8 3.5 11.5 7' : 'M12.5 8h-9M7 4.5 3.5 8 7 11.5'} /></svg></button>
+          <button type="button" aria-label={across ? 'Move down' : 'Move right'} title={across ? 'Move down' : 'Move right'} disabled={i === (flow.lanes?.length ?? 0) - 1} onclick={() => moveLane(lid, 1)}><svg viewBox="0 0 16 16"><path d={across ? 'M8 3.5v9M4.5 9 8 12.5 11.5 9' : 'M3.5 8h9M9 4.5 12.5 8 9 11.5'} /></svg></button>
+          <button type="button" aria-label="Add a step in this lane" title="Add a step in this lane" onclick={() => addAfter(null, lid)}><svg viewBox="0 0 16 16"><rect x="2.5" y="4.5" width="11" height="7" rx="2.2" /><path d="M8 6.5v3M6.5 8h3" /></svg></button>
+          <button type="button" class="danger" aria-label="Delete the lane" title="Delete the lane (its steps go to the one beside it)" onclick={() => dropLane(lid)}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
+        </div>
+      {/if}
+    {/if}
+  {/if}
+
   {#if linking}
     {#each boxes.filter((b) => b.id !== linking) as b (b.id)}
       <div class="ring target pick" style:left={`${b.x - 4}px`} style:top={`${b.y - 4}px`} style:width={`${b.w + 8}px`} style:height={`${b.h + 8}px`}></div>
@@ -313,7 +416,7 @@
     <!-- under the box (one near the top) it goes below the + too: it sat over the + there, and a press on the + changed
          the box's shape instead. On a phone the shapes fold into one button: all six in a row ran off its narrow picture -->
     {@const compact = isMobile && !shapesOpen}
-    {@const at = barAt(selBox.x + selBox.w / 2, selBox.y, selBox.y + selBox.h + (flow.dir === 'LR' ? 0 : isMobile ? 34 : 26), compact ? 250 : isMobile ? 290 : 400)}
+    {@const at = barAt(selBox.x + selBox.w / 2, selBox.y, selBox.y + selBox.h + (flow.dir === 'LR' ? 0 : isMobile ? 34 : 26), compact ? 290 : isMobile ? 290 : 480)}
     {@const current = SHAPES.find(([sh]) => sh === selNode.shape) ?? SHAPES[0]}
     <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
       {#if isMobile && shapesOpen}
@@ -333,6 +436,9 @@
             <button type="button" class:on={selNode.shape === shape} aria-label={label} title={label} onmousedown={(e) => e.preventDefault()} onclick={() => (selNode.shape = shape)}><svg viewBox="0 0 16 16">{@html icon}</svg></button>
           {/each}
           <span class="sep"></span>
+        {/if}
+        {#if flow.lanes?.length}
+          <button type="button" aria-label="Lane" title="Move to another lane" onmousedown={(e) => e.preventDefault()} onclick={(e) => { if (editing) commitEdit(); pickLane(e, selNode.id); }}><svg viewBox="0 0 16 16"><path d="M2 4.5h12M2 8h12M2 11.5h12" /></svg>{#if !isMobile}<span class="lbl">{flow.lanes.find((l) => l.id === selNode.lane)?.label ?? 'Lane'}</span>{/if}</button>
         {/if}
         <button type="button" class:on={linking === selNode.id} aria-label="Connect to another box" title="Connect: then tap the box to connect to" onmousedown={(e) => e.preventDefault()}
           onclick={() => { if (editing) commitEdit(); linking = selNode.id; }}><svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="2" /><path d="M5.5 8h7M10.5 5.5 13 8l-2.5 2.5" /></svg>{#if isMobile}<span class="lbl">Connect</span>{/if}</button>
@@ -380,6 +486,12 @@
   .wire { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
   .wire line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; }
   .wire circle { fill: var(--accent); }
+  .lane-name {
+    position: absolute; width: 140px; height: 32px; box-sizing: border-box; padding: 0 10px; border: 0; border-radius: 10px; text-align: center;
+    font: inherit; font-size: 13px; font-weight: 600; color: var(--fg); background: var(--bg-pop); box-shadow: 0 0 0 2px var(--accent), 0 4px 14px rgba(0, 0, 0, 0.15); outline: none;
+  }
+  .bar button:disabled { opacity: 0.35; }
+  .bar button .lbl { max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
   .rename {
     position: absolute; height: 32px; box-sizing: border-box; padding: 0 10px; border: 0; border-radius: 10px; text-align: center;
     font: inherit; font-size: 14px; color: var(--fg); background: var(--bg-pop); box-shadow: 0 0 0 2px var(--accent), 0 4px 14px rgba(0, 0, 0, 0.15); outline: none;
