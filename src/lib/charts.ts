@@ -34,14 +34,14 @@ function pie(d: Pie) {
   let at = 0;
   const arcs = parts.map((s) => {
     const len = (s.value / total) * C;
-    const arc = `<circle class="c${d.slices.indexOf(s) % 12}" r="${R}" cx="90" cy="90" stroke-dasharray="${Math.max(0.01, len - gap).toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-at).toFixed(2)}"/>`;
+    const arc = `<circle class="c${d.slices.indexOf(s) % 12}${d.slices.indexOf(s) >= 12 ? ' deep' : ''}" r="${R}" cx="90" cy="90" stroke-dasharray="${Math.max(0.01, len - gap).toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-at).toFixed(2)}"/>`;
     at += len;
     return arc;
   }).join('');
   const top = parts.reduce((a, s) => (s.value > a.value ? s : a), parts[0]);
   const rows = d.slices.map((s, i) => {
     const pct = total && s.value > 0 ? Math.round((s.value / total) * 1000) / 10 : 0;
-    return `<div class="row"><span class="dot c${i % 12}"></span><span class="lbl">${esc(s.label)}</span>`
+    return `<div class="row"><span class="dot c${i % 12}${i >= 12 ? ' deep' : ''}"></span><span class="lbl">${esc(s.label)}</span>`
       + `${d.showData ? `<span class="val">${fmt(s.value)}</span>` : ''}<span class="pct">${pct}%</span></div>`;
   }).join('');
   return `<div class="chart chart-pie">${title(d.title)}<div class="pie-body">`
@@ -87,7 +87,9 @@ function gantt(d: Gantt) {
   // the dates named at most six times along the axis (every line still drawn): a fortnight's daily dates ran into one
   // another on a phone, "10/910/1010/11"
   const every = Math.ceil(ticks.length / 6);
-  const axis = ticks.filter((_, i) => i % every === 0).map((n) => `<span style="left:${pct(n)}">${label(n)}</span>`).join('');
+  const named = ticks.filter((_, i) => i % every === 0);
+  const end = (n: number) => ((n - from) / span < 0.04 ? ' class="first"' : (n - from) / span > 0.96 ? ' class="last"' : '');
+  const axis = named.map((n) => `<span${end(n)} style="left:${pct(n)}">${label(n)}</span>`).join('');
   const grid = ticks.map((n) => `<i style="left:${pct(n)}"></i>`).join('');
   const rows = d.sections.map((s, si) => {
     const head = `<div class="g-sec">${esc(s.name)}</div><div class="g-track g-sec-track">${grid}</div>`;

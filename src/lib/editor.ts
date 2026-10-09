@@ -45,7 +45,7 @@ import { moveBlock, indentLines, switchItem, switchLines } from './blocks';
 import { holdEdit, dropEdit } from './pending';
 
 /** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
-const MD_SYNTAX = /(\*\*|__|~~|^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|`|\[[^\]]*\]\(|^\|.*\|\s*$)/m;
+const MD_SYNTAX = /(\$[^\s$]|\*\*|__|~~|^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|`|\[[^\]]*\]\(|^\|.*\|\s*$)/m;
 /** clipboard HTML that carries formatting of its own, so it is more than a plain-text flavour */
 const RICH_HTML = /<(strong|b|em|i|u|s|a|h[1-6]|ul|ol|li|code|pre|blockquote|img|table|hr)\b/i;
 
@@ -442,7 +442,13 @@ export function createEditor(opts: {
         const html = event.clipboardData?.getData('text/html') ?? '';
         if (text && MD_SYNTAX.test(text) && !RICH_HTML.test(html) && !editor.isActive('codeBlock')) {
           const parsed = (editor.storage as any).markdown.parser.parse(raw);
-          return editor.chain().focus().insertContent(parsed).run();
+          // a line pasted into a line keeps the spaces at its ends (read as markdown, " $x$ ok" lost its first)
+          const lead = raw.includes('\n') ? '' : /^[ \t]+/.exec(raw)?.[0] ?? '', trail = raw.includes('\n') ? '' : /[ \t]+$/.exec(raw)?.[0] ?? '';
+          const c = editor.chain().focus();
+          if (lead) c.insertContent({ type: 'text', text: lead });
+          c.insertContent(parsed);
+          if (trail) c.insertContent({ type: 'text', text: trail });
+          return c.run();
         }
         return false;
       },

@@ -45,7 +45,20 @@
     s.messages.push({ from: a, to: b, text: '', reply: !!last && !last.reply }); // the answer to the one above
     void focusLast('.s-msg input');
   }
-  const peopleOptions = (s: Sequence) => s.people.map((p) => [p.id, p.name.trim() || p.id] as const);
+  // a participant with no name yet: said so, not its inner id ("p3")
+  const peopleOptions = (s: Sequence) => s.people.map((p) => [p.id, p.name.trim() || '(no name)'] as const);
+
+  /** Enter in a row: on to the same field of the next row, or, in the last, a row more (it did nothing but in a mind map) */
+  async function rowEnter(e: KeyboardEvent, sel: string, add: () => void) {
+    if (e.isComposing || e.key !== 'Enter' || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    e.preventDefault();
+    const all = [...box.querySelectorAll<HTMLInputElement>(sel)];
+    const i = all.indexOf(e.currentTarget as HTMLInputElement);
+    if (i >= 0 && i < all.length - 1) { all[i + 1].focus(); all[i + 1].select(); }
+    else add();
+  }
+  /** a value as the note keeps it (no negatives, under a quadrillion): the field shows the same once left */
+  const pieValue = (v: number) => (Number.isFinite(v) && v > 0 ? +Math.min(v, 1e15).toFixed(4) : 0);
 
   // ---- pie ----
   function addSlice(p: Pie) { p.slices.push({ label: `Part ${p.slices.length + 1}`, value: 10 }); void focusLast('.p-slice input.label'); }
@@ -126,7 +139,7 @@
       {#each seqD.people as p, i (p.id)}
         <div class="row s-person">
           <Select label="Person or system" value={p.actor ? 'actor' : 'box'} options={[['box', 'System'], ['actor', 'Person']]} onchange={(v) => (p.actor = v === 'actor')} />
-          <input class="grow" bind:value={p.name} placeholder="Name" aria-label="Participant name" />
+          <input class="grow" bind:value={p.name} placeholder="Name" aria-label="Participant name" onkeydown={(e) => rowEnter(e, '.s-person input.grow', () => addPerson(seqD))} />
           {@render remove(() => dropPerson(seqD, i), 'Remove participant')}
         </div>
       {/each}
@@ -141,7 +154,7 @@
           <Select label="From" value={m.from} options={peopleOptions(seqD)} onchange={(v) => (m.from = v)} />
           <Select label="Sends or replies" value={m.reply ? 'reply' : 'send'} options={[['send', '→  Sends'], ['reply', '⇠  Replies']]} onchange={(v) => (m.reply = v === 'reply')} />
           <Select label="To" value={m.to} options={peopleOptions(seqD)} onchange={(v) => (m.to = v)} />
-          <input class="grow" bind:value={m.text} placeholder="Message" aria-label="Message" />
+          <input class="grow" bind:value={m.text} placeholder="Message" aria-label="Message" onkeydown={(e) => rowEnter(e, '.s-msg input.grow', () => addMessage(seqD))} />
           {@render remove(() => seqD.messages.splice(i, 1), 'Remove message')}
         </div>
       {/each}
@@ -159,8 +172,10 @@
       {#each pie.slices as s, i (i)}
         <div class="row p-slice">
           <span class="swatch" style:background={sliceColor(i)}></span>
-          <input class="grow label" bind:value={s.label} placeholder="Part" aria-label="Part name" />
-          <input class="num" type="number" min="0" step="any" inputmode="decimal" bind:value={s.value} aria-label="Value" />
+          <input class="grow label" bind:value={s.label} placeholder="Part" aria-label="Part name" onkeydown={(e) => rowEnter(e, '.p-slice input.label', () => addSlice(pie))} />
+          <input class="num" type="number" min="0" step="any" inputmode="decimal" value={s.value} aria-label="Value"
+            oninput={(e) => { const v = e.currentTarget.value; if (v !== '') s.value = pieValue(+v); }} onblur={(e) => (e.currentTarget.value = String(s.value))}
+            onkeydown={(e) => rowEnter(e, '.p-slice input.num', () => addSlice(pie))} />
           {@render remove(() => pie.slices.splice(i, 1), 'Remove part')}
         </div>
       {/each}
@@ -198,11 +213,12 @@
       <div class="head">When · what</div>
       {#each time.periods as p, i (i)}
         <div class="row t-period top" data-i={i}>
-          <input class="label when" bind:value={p.label} placeholder="2026" aria-label="When" />
+          <input class="label when" bind:value={p.label} placeholder="2026" aria-label="When" onkeydown={(e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); void focusAt(`.t-period[data-i="${i}"] .events input`, 0); } }} />
           <div class="events grow">
             {#each p.events as _, j (j)}
               <div class="row">
-                <input class="grow" bind:value={p.events[j]} placeholder="What happened" aria-label="Event" />
+                <input class="grow" bind:value={p.events[j]} placeholder="What happened" aria-label="Event"
+                  onkeydown={(e) => rowEnter(e, `.t-period[data-i="${i}"] .events input`, () => { p.events.push(''); void focusAt(`.t-period[data-i="${i}"] .events input`, p.events.length - 1); })} />
                 {#if p.events.length > 1}{@render remove(() => p.events.splice(j, 1), 'Remove event')}{/if}
               </div>
             {/each}
@@ -221,14 +237,14 @@
       <input bind:value={gantt.title} placeholder="Optional" aria-label="Title" />
     </div>
     {#each gantt.sections as s, i (i)}
-      <div class="section g-phase">
+      <div class="section g-phase" data-i={i}>
         <div class="row">
           <input class="grow label phase" bind:value={s.name} placeholder="Phase" aria-label="Phase" />
           {@render remove(() => gantt.sections.splice(i, 1), 'Remove phase')}
         </div>
         {#each s.tasks as t, j (j)}
           <div class="row g-task">
-            <input class="grow label" bind:value={t.name} placeholder="Task" aria-label="Task" />
+            <input class="grow label" bind:value={t.name} placeholder="Task" aria-label="Task" onkeydown={(e) => rowEnter(e, `.g-phase[data-i="${i}"] .g-task input.label`, () => addTask(gantt, s))} />
             <input class="date" type="date" value={t.start} aria-label="Starts" oninput={(e) => { const v = e.currentTarget.value; if (plausible(v)) t.start = v; }} onblur={(e) => (e.currentTarget.value = t.start)} />
             <span class="days"><input class="num" type="number" min="1" max="3650" step="1" inputmode="numeric" value={t.days} aria-label="Days" oninput={(e) => { const n = Math.round(+e.currentTarget.value); if (n >= 1) t.days = Math.min(n, 3650); }} onblur={(e) => (e.currentTarget.value = String(t.days))} />d</span>
             {@render remove(() => s.tasks.splice(j, 1), 'Remove task')}

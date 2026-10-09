@@ -4,6 +4,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import type MarkdownIt from 'markdown-it';
 import { loadMath, mathMarkup, mathNow } from './mathRender';
 import { mountMath, type MathEditing } from './mathEdit.svelte';
+import { scrollHint } from './scrollHint';
 
 /**
  * Formulas: `$E = mc^2$` in a line of text, and a block of its own,
@@ -189,6 +190,7 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     void open({ x: m.clientX, y: m.clientY }); // the caret where it was clicked
   });
   if (openNext) { openNext = false; queueMicrotask(() => open()); }
+  const unhint = display && typeof ResizeObserver !== 'undefined' ? scrollHint(dom) : null; // a long one: cut off, it said nothing of it
 
   return {
     dom,
@@ -204,7 +206,7 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     deselectNode: () => dom.classList.remove('selected'),
     stopEvent: (e: Event) => !!editing && e.target instanceof globalThis.Node && dom.contains(e.target),
     ignoreMutation: () => true,
-    destroy: () => { editing?.destroy(); editing = null; },
+    destroy: () => { editing?.destroy(); editing = null; unhint?.(); },
     /** Enter on a selected formula */
     open,
   };

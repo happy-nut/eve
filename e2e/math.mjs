@@ -149,7 +149,7 @@ try {
   await page.locator('.tiptap .math-edit .part').first().click();
   await page.keyboard.type('a');
   await page.locator('.tiptap .math-edit .part[aria-label="Add a row (in a matrix)"]').click();
-  await settle(page);
+  await page.waitForFunction(() => ((window.__editor.storage.markdown.getMarkdown().match(/\$\$\n([\s\S]*?)\n\$\$/)?.[1] ?? '').match(/\\\\/g) ?? []).length >= 2, null, { timeout: 5000 }).catch(() => {});
   const rows = (await md(page)).match(/\$\$\n([\s\S]*?)\n\$\$/)?.[1] ?? '';
   assert.equal((rows.match(/\\\\/g) ?? []).length >= 2, true, 'a row added: ' + rows);
   await page.keyboard.press('ArrowDown');

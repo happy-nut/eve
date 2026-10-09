@@ -380,6 +380,22 @@ export function fromCode(code: string): Diagram | null {
   return null;
 }
 
+/** Why a diagram opens as its code, not its drawing: the kind the editor has no form for, or the first line it cannot
+ *  show (a `Note`, a `style`, a `loop`), found as the line without which the rest reads. null when it reads. */
+export function whyCode(code: string): { kind: string } | { line: string } | { other: true } | null {
+  if (fromCode(code)) return null;
+  const all = code.split('\n');
+  const head = all.find((l) => l.trim())?.trim() ?? '';
+  const word = head.split(/\s+/)[0];
+  if (!['flowchart', 'graph', 'sequenceDiagram', 'pie', 'mindmap', 'timeline', 'gantt'].includes(word)) return { kind: word || 'empty' };
+  const first = all.findIndex((l) => l.trim());
+  for (let i = first + 1; i < all.length; i++) {
+    if (!all[i].trim()) continue;
+    if (fromCode(all.filter((_, j) => j !== i).join('\n'))) return { line: all[i].trim() };
+  }
+  return { other: true };
+}
+
 /** a fresh id for a node or a person, not one the chart has */
 export function freshId(prefix: string, taken: { id: string }[]) {
   for (let i = taken.length + 1; ; i++) if (!taken.some((t) => t.id === `${prefix}${i}`)) return `${prefix}${i}`;

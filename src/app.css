@@ -469,6 +469,8 @@ svg.lanes .edgeLabel text { fill: var(--d-dim); font-size: 12px; }
 .donut-mid span { font-size: 12px; color: var(--d-dim); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pie-legend { min-width: 180px; flex: 0 1 260px; display: flex; flex-direction: column; gap: 10px; }
 .pie-legend .row { display: flex; align-items: center; gap: 10px; }
+/* a 13th part on: its colour deeper, not the first part's again */
+.diagram-canvas .c0.deep { --c: color-mix(in srgb, var(--c0) 62%, #000); } .diagram-canvas .c1.deep { --c: color-mix(in srgb, var(--c1) 62%, #000); } .diagram-canvas .c2.deep { --c: color-mix(in srgb, var(--c2) 62%, #000); } .diagram-canvas .c3.deep { --c: color-mix(in srgb, var(--c3) 62%, #000); } .diagram-canvas .c4.deep { --c: color-mix(in srgb, var(--c4) 62%, #000); } .diagram-canvas .c5.deep { --c: color-mix(in srgb, var(--c5) 62%, #000); } .diagram-canvas .c6.deep { --c: color-mix(in srgb, var(--c6) 62%, #000); } .diagram-canvas .c7.deep { --c: color-mix(in srgb, var(--c7) 62%, #000); } .diagram-canvas .c8.deep { --c: color-mix(in srgb, var(--c8) 62%, #000); } .diagram-canvas .c9.deep { --c: color-mix(in srgb, var(--c9) 62%, #000); } .diagram-canvas .c10.deep { --c: color-mix(in srgb, var(--c10) 62%, #000); } .diagram-canvas .c11.deep { --c: color-mix(in srgb, var(--c11) 62%, #000); }
 .pie-legend .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
 .pie-legend .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pie-legend .val { color: var(--d-dim); font-variant-numeric: tabular-nums; }
@@ -490,6 +492,8 @@ svg.lanes .edgeLabel text { fill: var(--d-dim); font-size: 12px; }
 .g-grid { display: grid; grid-template-columns: minmax(80px, 28%) 1fr; column-gap: 14px; align-items: center; }
 .g-axis { position: relative; height: 22px; font-size: 11px; color: var(--d-dim); }
 .g-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* the dates at the ends inside the chart (the last was cut off at its right edge) */
+.g-axis span.first { transform: none; } .g-axis span.last { transform: translateX(-100%); }
 .g-sec { font-size: 12px; font-weight: 700; color: var(--d-dim); padding-top: 6px; }
 .g-name { display: flex; flex-direction: column; min-width: 0; }
 .g-name span { font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -833,3 +837,9 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
 .tiptap .math-block.editing { cursor: default; text-align: left; overflow: visible; padding: 4px 0; }
 .tiptap .math-inline.editing { cursor: default; }
 .tiptap .math-shown .ML__latex { color: var(--fg); }
+
+/* more past the edge of a diagram or a formula (scrollHint.ts): that edge fades */
+.more-r { mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+.more-l { mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent); }
+.more-l.more-r { mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
+.tiptap .math-block.editing { mask-image: none; }

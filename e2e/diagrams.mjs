@@ -230,6 +230,40 @@ try {
     await ctx.close();
   }
 
+  // ---- a phone, swimlanes: the picked box dragged by a finger onto another lane; one not picked scrolls instead ----
+  {
+    const ctx = await browser.newContext({ viewport: { width: 400, height: 860 }, hasTouch: true, isMobile: true, userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36' });
+    page = await ctx.newPage();
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.addInitScript(() => { localStorage.clear(); localStorage.setItem('eve.notes.a', '---\nid: a\nupdated: 1\ndeleted: false\norder: 0\n---\n# L\n\n```mermaid\nflowchart TD\n  subgraph L1["Customer"]\n    direction TD\n    a("Order")\n  end\n  subgraph L2["Store"]\n    direction TD\n    b("Pack")\n  end\n  a --> b\n```\n'); localStorage.setItem('eve.lastNote', 'a'); });
+    await page.goto(URL_);
+    await page.waitForSelector('.tiptap svg.lanes');
+    await page.locator('.tiptap .mermaid-view').tap();
+    await page.waitForSelector('.tiptap .dblock.active');
+    const mid = async (sel, text) => { const b = await page.locator(sel, text ? { hasText: text } : {}).first().boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+    const cdp = await ctx.newCDPSession(page);
+    const pt = (x, y) => [{ x, y, id: 1 }];
+    const swipe = async (a, b) => {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(a.x, a.y) });
+      for (let i = 1; i <= 12; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pt(a.x + ((b.x - a.x) * i) / 12, a.y + ((b.y - a.y) * i) / 12) });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await settle(page);
+    };
+    const store = await page.locator('.tiptap svg.lanes g.lane[data-lane="L2"] rect.lane-bg').boundingBox();
+    const into = { x: store.x + store.width / 2, y: store.y + store.height - 16 };
+    let c = await mid('.tiptap svg.lanes g.node', 'Order');
+    await swipe(c, into); // not picked: no move
+    assert.match(await md(page), /subgraph L1\["Customer"\]\n {4}direction TD\n {4}a\("Order"\)/, 'a box not picked stays in its lane');
+    c = await mid('.tiptap svg.lanes g.node', 'Order');
+    await page.touchscreen.tap(c.x, c.y);
+    await page.waitForSelector('.layer .bar');
+    await swipe(c, into);
+    assert.match(await md(page), /subgraph L2\["Store"\]\n {4}direction TD\n {4}a\("Order"\)\n {4}b\("Pack"\)/, 'the picked box dragged into Store');
+    assert.equal(await page.locator('.tiptap input.rename').count(), 0, 'no typing started by the drag');
+    console.log('ok   phone: the picked box dragged by a finger onto another lane');
+    await ctx.close();
+  }
+
   // ---- swimlanes: drawn as lanes, a box moved to another lane, a lane renamed, one added, a step added in it ----
   page = await open('# Process\n\nx\n');
   await slash(page, 'swimlanes');
@@ -263,6 +297,28 @@ try {
   assert.match(text, /subgraph L4\["Billing"\]\n {4}direction TD\n {4}n7\("Invoice"\)\n {2}end/, 'a lane added, a step in it');
   assert.equal(await page.locator('.tiptap svg.lanes g.lane').count(), 4);
   console.log('ok   swimlanes: lanes drawn; a box moved, a lane renamed, added, a step in it');
+
+  // a box dragged onto another lane goes into it; the arrows go from box to box
+  at = await laneBox('Invoice');
+  const lane1 = await page.locator('.tiptap svg.lanes g.lane[data-lane="L1"] rect.lane-bg').boundingBox();
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x + 20, at.y + 10, { steps: 3 });
+  await page.mouse.move(lane1.x + lane1.width / 2, lane1.y + lane1.height - 20, { steps: 8 });
+  assert.equal(await page.locator('.layer .lane-drop').count(), 1, 'the lane under it shown');
+  await page.mouse.up();
+  await settle(page);
+  const laneOf = (t, id) => t.match(new RegExp(`subgraph ${id}\\[[^\\n]*\\n([\\s\\S]*?)\\n  end`))?.[1] ?? '';
+  text = await md(page);
+  assert.match(laneOf(text, 'L1'), /n7\("Invoice"\)/, 'Invoice dragged into Customer');
+  assert.doesNotMatch(laneOf(text, 'L4'), /n7/, 'and out of Billing');
+  assert.equal(await page.locator('.layer .ring').count(), 1, 'it stays picked');
+  const picked = async () => page.evaluate(() => { const r = document.querySelector('.layer .ring').getBoundingClientRect(); const g = [...document.querySelectorAll('.tiptap svg.lanes g.node')].find((n) => { const b = n.getBoundingClientRect(); return Math.abs(b.left - r.left - 4) < 3 && Math.abs(b.top - r.top - 4) < 3; }); return g?.textContent.trim(); });
+  const was = await picked();
+  await page.keyboard.press('ArrowDown');
+  const now = await picked();
+  assert.ok(now && now !== was, `↓ picks another box (${was} → ${now})`);
+  console.log('ok   swimlanes: a box dragged onto another lane; the arrows go from box to box');
   await page.close();
 
   // ---- a pie: its parts as rows under it, in the note ----
@@ -274,7 +330,16 @@ try {
   await settle(page);
   assert.equal(await page.locator('.tiptap .chart-pie .lbl').first().textContent(), 'Writing <b>&', 'a label is text, not markup');
   assert.match(await md(page), /pie\n {2}"Writing <b>&" : 70\n/);
-  console.log('ok   pie: its rows in the note');
+  // Enter: the next row's field, then, in the last, a row more; a value as the note keeps it
+  await page.locator('.tiptap .p-slice input.label').first().press('Enter');
+  assert.equal(await page.evaluate(() => document.activeElement === document.querySelectorAll('.tiptap .p-slice input.label')[1]), true, 'Enter: on to the next part');
+  const parts = await page.locator('.tiptap .p-slice').count();
+  await page.locator('.tiptap .p-slice input.label').last().press('Enter');
+  assert.equal(await page.locator('.tiptap .p-slice').count(), parts + 1, 'Enter in the last: a part more');
+  await page.locator('.tiptap .p-slice input.num').first().fill('-30');
+  await page.locator('.tiptap .p-slice input.label').first().click();
+  assert.equal(await page.locator('.tiptap .p-slice input.num').first().inputValue(), '0', 'the field shows what the note keeps');
+  console.log('ok   pie: its rows in the note; Enter goes on, a row more; a value as the note keeps it');
   await page.close();
 
   // ---- a Gantt chart's date emptied: the last one stays ----
@@ -308,7 +373,29 @@ try {
   await page.locator('.tiptap .mermaid-view').click();
   await page.waitForSelector('.tiptap .code-block.editing');
   assert.equal(await page.locator('.tiptap .dblock.active').count(), 0);
-  console.log('ok   hand-written: opens as code');
+  assert.match(await page.locator('.tiptap .codebar').textContent(), /style A fill:#f9f.*can't show/s, 'it says why: the line it cannot show');
+  await page.locator('.tiptap .codebar .done').click();
+  await page.waitForFunction(() => !document.querySelector('.tiptap .code-block.editing'));
+  console.log('ok   hand-written: opens as code, saying why; Done leaves it');
+  await page.close();
+
+  // ---- readable, its code shown: back to the drawing by a button or ⌘↵ ----
+  page = await open('# Plan\n\nAbove\n\n```mermaid\nflowchart LR\n  A --> B\n```\n');
+  await page.waitForSelector('.tiptap .mermaid-view svg');
+  await page.locator('.tiptap .mermaid-view').click();
+  await page.locator('.tiptap .dblock .tools button', { hasText: 'Code' }).click();
+  await page.waitForSelector('.tiptap .code-block.editing');
+  await page.locator('.tiptap .codebar button', { hasText: 'Edit as drawing' }).click();
+  await page.waitForSelector('.tiptap .dblock.active');
+  assert.equal(await page.locator('.tiptap .code-block.editing').count(), 0, 'the code gone, the drawing open');
+  await page.keyboard.press('Escape');
+  await page.locator('.tiptap p', { hasText: 'Above' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('ArrowDown'); // into its code, by the keyboard
+  await page.waitForSelector('.tiptap .code-block.editing');
+  await page.keyboard.press('Control+Enter');
+  await page.waitForSelector('.tiptap .dblock.active');
+  console.log('ok   its code shown: "Edit as drawing" or ⌘↵ opens the drawing');
   await page.close();
 
   assert.deepEqual(errors, []);

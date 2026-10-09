@@ -129,6 +129,24 @@ const editingDiagram = new Plugin({
 /** Syntax highlighting, plus a language chip (and its menu) that appears on hover. */
 export const CodeBlock = CodeBlockBase.extend({
   addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, editingDiagram]; },
+  // ↓ from the line above a diagram (↑ from the line under it) goes into its code, which then shows, with ⌘↵ to its
+  // drawing: its code hidden, the caret went past the diagram, and the keyboard could not reach it at all
+  addKeyboardShortcuts() {
+    const into = (dir: 'up' | 'down') => () => {
+      const { view, state } = this.editor;
+      const sel = state.selection;
+      if (!sel.empty || !view.endOfTextblock(dir)) return false;
+      const $h = sel.$head;
+      if ($h.parent.type.name === 'codeBlock') return false;
+      const at = dir === 'down' ? $h.after() : $h.before();
+      const $at = state.doc.resolve(at);
+      const n = dir === 'down' ? $at.nodeAfter : $at.nodeBefore;
+      if (n?.type.name !== 'codeBlock' || n.attrs.language !== 'mermaid') return false;
+      view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, dir === 'down' ? at + 1 : at - 1)).scrollIntoView());
+      return true;
+    };
+    return { ...this.parent?.(), ArrowDown: into('down'), ArrowUp: into('up') };
+  },
   addStorage() {
     return {
       ...this.parent?.(),

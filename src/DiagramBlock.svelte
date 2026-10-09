@@ -3,8 +3,9 @@
   import { isMobile } from './lib/platform';
   import { ui } from './lib/ui.svelte';
   import { renderMermaid, themeKey } from './lib/mermaid';
-  import { KINDS, fromCode, toCode, type Diagram } from './lib/diagram';
+  import { KINDS, fromCode, toCode, whyCode, type Diagram } from './lib/diagram';
   import FlowEditor from './FlowEditor.svelte';
+  import { scrollHint } from './lib/scrollHint';
   import DiagramForm from './DiagramForm.svelte';
 
   /**
@@ -111,6 +112,10 @@
     // keys meant for it while it is open: the keyboard on it, on nothing, or still in the note's text (a click on the
     // drawing leaves it there). Esc lets go of it (it fell through and hid the window); ⌘Z undoes into it
     const keys = (e: KeyboardEvent) => {
+      // ⌘↵ in its code: its drawing, from the keyboard (it could be opened by a click only)
+      if (!active && codeShown && d && (e.metaKey || e.ctrlKey) && e.key === 'Enter' && (e.target as Element).closest?.('.tiptap') === root.closest('.tiptap')) {
+        e.preventDefault(); e.stopPropagation(); toDrawing(); return;
+      }
       if (!active || e.defaultPrevented || ui.diagramView !== null) return;
       const t = e.target as Element;
       const typing = t instanceof HTMLElement && t.matches('input, textarea, select');
@@ -154,6 +159,15 @@
     if (e.key === 'Escape' && active && !e.defaultPrevented) { e.preventDefault(); e.stopPropagation(); active = false; }
   }
 
+  /** the code shown: to its drawing (the caret out of the code, the drawing open) */
+  function toDrawing() {
+    onCodeLeave();
+    pick = null;
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    active = true;
+  }
+  /** why a hand-written diagram is edited as code (it opened as code and said nothing of why) */
+  const why = $derived(codeShown && !d && !error ? whyCode(code) : null);
   const flow = $derived(active && d?.kind === 'flowchart' ? d : null);
   const kindLabel = $derived(d ? KINDS.find((k) => k.kind === d!.kind)?.label ?? '' : '');
   let flowEd = $state<ReturnType<typeof FlowEditor> | null>(null);
@@ -163,7 +177,7 @@
 <div class="dblock" class:active bind:this={root} onkeydown={onKey}>
   <div class="pic">
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="mermaid-view diagram-canvas" class:error={!!error} bind:this={canvas} onclick={open}>
+  <div class="mermaid-view diagram-canvas" class:error={!!error} bind:this={canvas} onclick={open} {@attach scrollHint}>
     {#if error}{error}{:else}{@html svg}{/if}
   </div>
   {#if flow && canvas && svg && !error}<FlowEditor bind:this={flowEd} {flow} host={canvas} version={svg} k={1} {pick} />{/if}
@@ -175,6 +189,24 @@
   {/if}
   </div>
 
+  {#if codeShown && !active && !error}
+    <!-- its code shown: the way back to the drawing, and, written by hand, why it is edited as code -->
+    <div class="tools codebar">
+      {#if d}
+        <span class="say">Editing the code</span>
+        <span class="grow"></span>
+        <button class="ghost" onmousedown={(e) => e.preventDefault()} onclick={toDrawing} title="Edit as a drawing (⌘↵)">Edit as drawing</button>
+      {:else if why}
+        <span class="say">
+          {#if 'kind' in why}This kind of diagram ({why.kind}) is edited as its code.
+          {:else if 'line' in why}Written by hand with <code>{why.line.length > 48 ? why.line.slice(0, 47) + '…' : why.line}</code>, which the drawing editor can't show, so it is edited as code. It still draws as written.
+          {:else}Written by hand with more than the drawing editor shows, so it is edited as code. It still draws as written.{/if}
+        </span>
+        <span class="grow"></span>
+      {/if}
+      <button class="done" onmousedown={(e) => e.preventDefault()} onclick={onCodeLeave}>Done</button>
+    </div>
+  {/if}
   {#if active && d}
     <div class="tools">
       <span class="kind">{kindLabel}</span>
@@ -232,6 +264,9 @@
   .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--bg-input); }
   .seg button { border-radius: 6px; padding: 3px 9px; }
   .seg button.on { background: var(--bg-pop); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+  .codebar { padding: 8px 10px 6px; }
+  .codebar .say { font-size: 12.5px; color: var(--fg-dim); flex: 1 1 220px; }
+  .codebar .say code { font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--bg-input); }
   .dtip { margin: 2px 12px 0; font-size: 12px; color: var(--fg-dim); user-select: none; -webkit-user-select: none; }
   .dblock :global(.form) { padding: 4px 12px 0; }
 </style>

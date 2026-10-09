@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { KINDS, starter, toCode, fromCode, swimlaneStarter } from './diagram.ts';
+import { KINDS, starter, toCode, fromCode, swimlaneStarter, whyCode } from './diagram.ts';
 import { laneSvg } from './lanes.ts';
 
 // every kind's starter: written, read back the same, written again the same
@@ -113,3 +113,10 @@ console.log('diagram hunt ok');
   assert.match(odd, /A &#60;&#38;&#62; &#34;B&#34;/, 'a lane name is text, not markup');
 }
 console.log('swimlanes ok');
+
+// why a diagram opens as its code: the line the editor cannot show, or the kind it has no form for
+assert.equal(whyCode('flowchart LR\n  A --> B'), null);
+assert.deepEqual(whyCode('flowchart LR\n  A --> B\n  style A fill:#f9f'), { line: 'style A fill:#f9f' });
+assert.deepEqual(whyCode('sequenceDiagram\n  A->>B: hi\n  Note over A: thinking'), { line: 'Note over A: thinking' });
+assert.deepEqual(whyCode('classDiagram\n  A <|-- B'), { kind: 'classDiagram' });
+console.log('why code ok');

@@ -183,6 +183,9 @@ async function draw(code: string): Promise<{ svg: string } | { error: string }> 
 export const themeKey = () => (dark() ? 'dark' : 'light');
 
 /** the colour mermaid gives a pie's `i`th slice (the builder's swatches) */
-export const sliceColor = (i: number) => PALETTE[themeKey()].hues[i % 12];
+export const sliceColor = (i: number) => {
+  const h = PALETTE[themeKey()].hues[i % 12];
+  return i >= 12 ? `color-mix(in srgb, ${h} 62%, #000)` : h; // as the chart draws a 13th part on (app.css .deep)
+};
 /** the colour a mind map's `i`th first-level branch is drawn in (the builder's bullets) */
 export const branchColor = (i: number) => PALETTE[themeKey()].hues[(i + 1) % 12];
