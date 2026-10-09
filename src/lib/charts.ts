@@ -9,10 +9,12 @@ import { laneSvg } from './lanes';
  * sections) is left to mermaid. HTML for the diagram canvas, styled by app.css (.chart-*), colours by CSS
  * variables, so the light and dark themes need no drawing again.
  */
-export function chartHtml(code: string, minScale = 0.8): string | null {
+export function chartHtml(code: string, laneMin = 0.64): string | null {
   const d = fromCode(code);
   if (!d) return null;
-  if (d.kind === 'flowchart' && d.lanes?.length) return laneSvg(d, minScale); // swimlanes (lanes.ts)
+  if (d.kind === 'flowchart' && d.lanes?.length) return laneSvg(d, laneMin); // swimlanes (lanes.ts)
+  // a sequence with no one in it: mermaid drew an empty card, with nothing to say what it was
+  if (d.kind === 'sequence' && !d.people.length) return `<div class="chart chart-empty"><p>Nothing to show yet</p></div>`;
   if (d.kind === 'pie') return pie(d);
   if (d.kind === 'timeline') return timeline(d);
   if (d.kind === 'gantt') return gantt(d);
@@ -44,7 +46,7 @@ function pie(d: Pie) {
   }).join('');
   return `<div class="chart chart-pie">${title(d.title)}<div class="pie-body">`
     + `<div class="donut"><svg viewBox="0 0 180 180" aria-hidden="true"><g transform="rotate(-90 90 90)">${arcs}</g></svg>`
-    + `<div class="donut-mid"><b>${Math.round((top.value / total) * 100)}%</b><span>${esc(top.label)}</span></div></div>`
+    + `<div class="donut-mid"><b>${Math.round((top.value / total) * 1000) / 10}%</b><span>${esc(top.label)}</span></div></div>`
     + `<div class="pie-legend">${rows}</div></div></div>`;
 }
 

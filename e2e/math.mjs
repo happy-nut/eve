@@ -122,6 +122,43 @@ try {
   console.log('ok   an emptied formula, or one left empty, is not kept');
   await page.close();
 
+  // ---- a note not in the editor's own spelling, a formula in a table ----
+  page = await open('Title\n=====\n\n* one\n* two\n\n| a | b |\n|---|---|\n| $x$ | 2 |\n');
+  // the note read anew, as a sync does: the editor keeps the formula's view for the equal node it now holds
+  await page.evaluate(() => { const e = window.__editor; e.commands.setContent(e.storage.markdown.getMarkdown()); });
+  await page.locator('.tiptap td .math-inline').click();
+  await field(page);
+  const pop = await page.locator('.tiptap .math-edit .tools.pop').boundingBox();
+  assert.ok(pop && pop.height > 40 && pop.y + pop.height <= 900 && pop.x >= 0, 'its row shows whole, not cut by the table');
+  await page.keyboard.press('End');
+  await page.keyboard.type('+a');
+  await page.locator('.tiptap .math-edit .part[aria-label="Fraction"]').click();
+  await page.keyboard.type('1');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('2');
+  await settle(page);
+  assert.match(await md(page), /\| \$x\+a\\frac\{1\}\{2\}\$ \| 2 \|/, 'kept in the note: an empty part, the term before it left alone');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('.tiptap math-field'));
+  console.log('ok   a note read anew (a sync): changes kept; in a table its row shows; a part does not take the term before it');
+
+  // a matrix, a row more; ↓ out of a block leaves without an error
+  await slash(page, 'equation');
+  await field(page);
+  await page.locator('.tiptap .math-edit button[role="tab"]', { hasText: 'Matrix' }).click();
+  await page.locator('.tiptap .math-edit .part').first().click();
+  await page.keyboard.type('a');
+  await page.locator('.tiptap .math-edit .part[aria-label="Add a row (in a matrix)"]').click();
+  await settle(page);
+  const rows = (await md(page)).match(/\$\$\n([\s\S]*?)\n\$\$/)?.[1] ?? '';
+  assert.equal((rows.match(/\\\\/g) ?? []).length >= 2, true, 'a row added: ' + rows);
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await page.waitForFunction(() => !document.querySelector('.tiptap math-field'));
+  console.log('ok   matrix: a row added from the row of parts; ↓ leaves the formula');
+  await page.close();
+
   assert.deepEqual(errors, []);
 } finally {
   await browser.close();

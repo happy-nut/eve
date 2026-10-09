@@ -62,7 +62,7 @@ function rounded(pts: [number, number][], r = 10): string {
   return d;
 }
 
-/** `minScale`: how far it may shrink to the note's width (a lane chart, long by nature, a fifth further than others) */
+/** `minScale`: how far it may shrink to the note's width before it scrolls sideways in its card */
 export function laneSvg(d: Flowchart, minScale = 0.8): string {
   const LR = d.dir === 'LR';
   const id = `sl${++uid}`;
@@ -121,27 +121,40 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   const colM = Array.from({ length: ranks }, (_, r) => Math.max(40, ...[...boxes.values()].filter((b) => b.rank === r).map(main)));
   const laneSlots = lanes.map((_, i) => Math.max(1, ...[...cells.entries()].filter(([k]) => +k.split(':')[0] === i).map(([, v]) => v.length)));
   const slotC = lanes.map((_, i) => Math.max(LR ? 44 : 96, ...[...boxes.values()].filter((b) => b.lane === i).map(cross)) + SLOT_GAP);
-  const HEAD = LR ? Math.max(84, Math.min(140, Math.ceil(Math.max(...lanes.map((l) => textW(l.label, 13, 600)))) + 28)) : 40;
+  // down the page, each name wrapped to its column; the head as tall as the longest (a fixed 40 cut a long name's lines)
+  const HEAD = LR
+    ? Math.max(84, Math.min(140, Math.ceil(Math.max(...lanes.map((l) => textW(l.label, 13, 600)))) + 28))
+    : 40;
   const laneC = lanes.map((_, i) => laneSlots[i] * slotC[i] + LANE_PAD * 2 - SLOT_GAP);
+  const names = lanes.map((l, i) => wrap(l.label, LR ? HEAD - 20 : laneC[i] - 20, 13, 600));
+  const HEAD_M = LR ? HEAD : Math.max(40, Math.max(...names.map((n) => n.length)) * 17 + 22);
   const laneAt = lanes.map((_, i) => laneC.slice(0, i).reduce((a, b) => a + b, 0));
-  const colAt = colM.map((_, r) => HEAD + PAD + colM.slice(0, r).reduce((a, b) => a + b, 0) + GAP * r);
+  const colAt = colM.map((_, r) => HEAD_M + PAD + colM.slice(0, r).reduce((a, b) => a + b, 0) + GAP * r);
   for (const b of boxes.values()) {
     b.m = colAt[b.rank] + colM[b.rank] / 2;
     b.c = laneAt[b.lane] + LANE_PAD + b.slot * slotC[b.lane] + (slotC[b.lane] - SLOT_GAP) / 2;
   }
-  const M = HEAD + PAD * 2 + colM.reduce((a, b) => a + b, 0) + GAP * (ranks - 1);
-  const C = Math.max(1, laneC.reduce((a, b) => a + b, 0));
+  const M = HEAD_M + PAD * 2 + colM.reduce((a, b) => a + b, 0) + GAP * (ranks - 1);
+  // a line back to an earlier step runs under the boxes: room for it (and its label) past the last lane's edge
+  let C = Math.max(1, laneC.reduce((a, b) => a + b, 0));
+  for (const e of d.edges) {
+    const a = boxes.get(e.from), b = boxes.get(e.to);
+    if (!a || !b || b.rank >= a.rank || a === b) continue;
+    C = Math.max(C, Math.max(a.c + cross(a) / 2, b.c + cross(b) / 2) + 14 + (e.label.trim() ? 14 : 4));
+  }
   const W = Math.ceil(LR ? M : C), H = Math.ceil(LR ? C : M);
   const xy = (m: number, c: number): [number, number] => (LR ? [m, c] : [c, m]);
 
   // ---- the lanes ----
-  let svg = `<svg class="lanes" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width: ${W}px; min-width: ${Math.round(W * minScale * 0.8)}px;" role="img" aria-label="Swimlanes">`;
+  let svg = `<svg class="lanes" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width: ${W}px; min-width: ${Math.round(W * minScale)}px;" role="img" aria-label="Swimlanes">`;
   svg += `<defs><marker id="${id}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sl-head" d="M0,1.5 L9,5 L0,8.5 z"/></marker></defs>`;
   lanes.forEach((l, i) => {
     const [x, y] = xy(0, laneAt[i]);
-    const [w, h] = LR ? [W, laneC[i]] : [laneC[i], H];
-    const [hw, hh] = LR ? [HEAD, laneC[i]] : [laneC[i], HEAD];
-    const name = wrap(l.label, LR ? HEAD - 20 : laneC[i] - 20, 13, 600);
+    const last = i === lanes.length - 1;
+    const [w, h] = LR ? [W, last ? C - laneAt[i] : laneC[i]] : [last ? C - laneAt[i] : laneC[i], H];
+    const span = last ? C - laneAt[i] : laneC[i]; // the last lane runs to the drawing's edge
+    const [hw, hh] = LR ? [HEAD_M, span] : [span, HEAD_M];
+    const name = names[i];
     const [cx, cy] = [x + hw / 2, y + hh / 2];
     const tspans = name.map((t, k) => `<tspan x="${cx}" y="${cy + (k - (name.length - 1) / 2) * 17}">${esc(t)}</tspan>`).join('');
     svg += `<g class="lane c${i % 12}${l.id ? '' : ' none'}" data-lane="${esc(l.id)}">`
@@ -197,7 +210,7 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
     switch (b.n.shape) {
       case 'diamond': shape = `<path class="sl-shape" d="M${x},${t} L${l + b.w},${y} L${x},${t + b.h} L${l},${y} Z"/>`; break;
       case 'circle': shape = `<circle class="sl-shape" cx="${x}" cy="${y}" r="${b.w / 2}"/>`; break;
-      case 'pill': shape = `<rect class="sl-shape pill" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="${b.h / 2}"/>`; break;
+      case 'pill': shape = `<rect class="sl-shape pill" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="${Math.min(b.h / 2, 22)}"/>`; break; // a tall one: rounded ends, not a blob
       case 'box': shape = `<rect class="sl-shape" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="3"/>`; break;
       case 'db': shape = `<path class="sl-shape" d="M${l},${t + 6} a${b.w / 2},6 0 0,0 ${b.w},0 a${b.w / 2},6 0 0,0 ${-b.w},0 v${b.h - 12} a${b.w / 2},6 0 0,0 ${b.w},0 v${-(b.h - 12)}"/>`; break;
       default: shape = `<rect class="sl-shape" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="12"/>`;

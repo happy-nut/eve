@@ -144,6 +144,47 @@ try {
   await settle(page);
   assert.ok((await md(page)).includes('"Remote"'), 'what came from elsewhere is not written over');
   console.log('ok   keys and clicks elsewhere, Esc, ⌘Z, a sync meanwhile');
+
+  // ---- a line: picked and deleted with ⌫ (not the note's text); a step put in it; that step deleted, rejoined ----
+  page = await open('# Line\n\n```mermaid\nflowchart LR\n  n1("One")\n  n2("Two")\n  n1 --> n2\n```\n\nText after.\n');
+  await page.waitForSelector('.tiptap .mermaid-view svg');
+  await page.locator('.tiptap .mermaid-view').click();
+  await page.waitForSelector('.tiptap .dblock.active');
+  const mid = () => page.evaluate(() => {
+    const p = document.querySelector('.tiptap .mermaid-view path.hit');
+    const m = p.getPointAtLength(p.getTotalLength() / 2), c = p.getScreenCTM();
+    return { x: m.x * c.a + m.y * c.c + c.e, y: m.x * c.b + m.y * c.d + c.f };
+  });
+  let m = await mid();
+  await page.mouse.click(m.x, m.y);
+  await page.waitForSelector('.layer .bar button[aria-label="Put a step in this line"]');
+  await page.keyboard.press('Backspace');
+  await settle(page);
+  text = await md(page);
+  assert.ok(!text.includes('n1 --> n2') && text.includes('Text after.') && text.includes('# Line'), 'the line gone, the note untouched: ' + text);
+  await page.keyboard.press('Control+z');
+  await settle(page);
+  assert.ok((await md(page)).includes('n1 --> n2'), 'undo brings the line back');
+  m = await mid();
+  await page.mouse.click(m.x, m.y);
+  await page.locator('.layer .bar button[aria-label="Put a step in this line"]').click();
+  await page.waitForSelector('.tiptap input.rename');
+  await page.keyboard.type('Middle');
+  await page.keyboard.press('Enter');
+  await settle(page);
+  text = await md(page);
+  const id = text.match(/\n  (\w+)\("Middle"\)/)?.[1];
+  assert.ok(id && text.includes(`n1 --> ${id}`) && text.includes(`${id} --> n2`), 'a step in the middle of the line: ' + text);
+  const cv = await page.locator('.tiptap .mermaid-view').boundingBox();
+  await page.mouse.click(cv.x + 8, cv.y + 8); // nothing picked
+  at = await boxAt(page, 'Middle');
+  await page.mouse.click(at.x, at.y);
+  await page.keyboard.press('Backspace');
+  await settle(page);
+  text = await md(page);
+  assert.ok(!text.includes('Middle') && text.includes('n1 --> n2'), 'the step deleted, its two lines one again: ' + text);
+  console.log('ok   a line: ⌫ deletes it, not the note; a step put in it; deleted, the line rejoins');
+  await page.close();
   await page.close();
 
   // ---- a phone: two boxes joined by taps (Connect, then the other box), and by dragging the + with a finger ----

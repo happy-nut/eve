@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { freshId, type Flowchart, type Line, type Shape } from './lib/diagram';
   import { ui } from './lib/ui.svelte';
   import { isMobile } from './lib/platform';
@@ -15,12 +15,17 @@
    *   empty space: a double-click adds a box on its own
    *   keys: Tab adds the next step, Enter is done typing (and types again), ⌫ deletes a box not being typed in, Esc lets go
    */
-  let { flow, host, version, k }: { flow: Flowchart; host: HTMLElement; version: string; k: number } = $props();
+  let { flow, host, version, k, pick = null }: {
+    flow: Flowchart; host: HTMLElement; version: string; k: number;
+    /** the box the click that opened the diagram landed on: picked at once (that click only opened it, and the keys
+     *  typed next went into the note) */
+    pick?: string | null;
+  } = $props();
 
   type Box = { id: string; x: number; y: number; w: number; h: number };
-  let layer: HTMLDivElement;
+  let layer = $state<HTMLDivElement>(null!);
   let boxes = $state<Box[]>([]);
-  let sel = $state<{ node: string } | { edge: number; x: number; y: number } | { lane: string } | null>(null);
+  let sel = $state<{ node: string } | { edge: number; x: number; y: number } | { lane: string } | null>(untrack(() => (pick ? { node: pick } : null)));
   /** where each swimlane's name is drawn (lanes.ts), to be clicked, renamed and moved */
   let laneHeads = $state<Box[]>([]);
   let laneEditing = $state<string | null>(null), laneText = $state('');
@@ -33,6 +38,11 @@
   /** a phone's bar showing the shapes in place of its other buttons */
   let shapesOpen = $state(false);
   $effect(() => { void selId; shapesOpen = false; }); // another box picked: its bar starts over
+
+  /** the keyboard off the note's text, onto nothing: the keys typed next (⌫, Enter, Tab) are the picture's. A line or a
+   *  lane picked left it in the note, and ⌫ deleted the note's last letter instead of the line */
+  const releaseKeys = () => { const a = document.activeElement as HTMLElement | null; if (a && a !== document.body && !layer?.contains(a)) a.blur?.(); };
+  $effect(() => { if (sel && !editing && !laneEditing) untrack(releaseKeys); });
 
   const nodeIdOf = (g: Element) => /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null;
   const boxOf = (id: string | null) => boxes.find((b) => b.id === id) ?? null;
@@ -87,6 +97,7 @@
     // typed in at once: until the new box is drawn its text box sits by the one it grew from, so no key is lost
     const b = boxOf(from);
     pendingAt = b ? plusAt(b) : { x: (layer?.clientWidth ?? 300) / 2, y: (layer?.clientHeight ?? 100) / 2 };
+    if (from) reveal(from);
     editing = null;
     startEdit(id);
   }
@@ -97,10 +108,29 @@
     sel = { edge: flow.edges.length - 1, x: 0, y: 0 };
     tick().then(() => { const b = boxOf(to); if (b && sel && 'edge' in sel) sel = { ...sel, x: b.x + b.w / 2, y: b.y }; });
   }
+  /** a box gone: one with a single line in and a single line out keeps the chain whole (A → x → B becomes A → B) */
   function dropNode(id: string) {
+    const ins = flow.edges.filter((e) => e.to === id && e.from !== id), outs = flow.edges.filter((e) => e.from === id && e.to !== id);
     flow.nodes = flow.nodes.filter((n) => n.id !== id);
     flow.edges = flow.edges.filter((e) => e.from !== id && e.to !== id);
+    if (ins.length === 1 && outs.length === 1 && ins[0].from !== outs[0].to && !flow.edges.some((e) => e.from === ins[0].from && e.to === outs[0].to)) {
+      flow.edges.push({ from: ins[0].from, to: outs[0].to, label: outs[0].label || ins[0].label, line: ins[0].line });
+    }
     sel = null;
+  }
+  /** a step put in the middle of a line: A → B becomes A → new → B, typed in at once */
+  function splitEdge(i: number) {
+    const e = flow.edges[i];
+    if (!e) return;
+    const id = freshId('n', flow.nodes);
+    const lane = flow.lanes?.length ? (flow.nodes.find((n) => n.id === e.to)?.lane ?? flow.nodes.find((n) => n.id === e.from)?.lane) : undefined;
+    flow.nodes.push(lane ? { id, label: 'New step', shape: 'round', lane } : { id, label: 'New step', shape: 'round' });
+    flow.edges.splice(i, 1, { from: e.from, to: id, label: e.label, line: e.line }, { from: id, to: e.to, label: '', line: e.line });
+    sel = { node: id };
+    const a = boxOf(e.from), b = boxOf(e.to);
+    pendingAt = a && b ? { x: (a.x + a.w / 2 + b.x + b.w / 2) / 2, y: (a.y + a.h / 2 + b.y + b.h / 2) / 2 } : pendingAt;
+    editing = null;
+    startEdit(id);
   }
   const dropEdge = (i: number) => { flow.edges.splice(i, 1); sel = null; };
   function reverse(i: number) { const e = flow.edges[i]; [e.from, e.to] = [e.to, e.from]; }
@@ -110,9 +140,26 @@
   let before = '';
   function startEdit(id: string) {
     if (editing === id) return;
+    reveal(id);
     editing = id;
     editText = before = flow.nodes.find((n) => n.id === id)?.label ?? '';
-    tick().then(() => { const el = layer.querySelector<HTMLInputElement>('input.rename'); el?.focus(); el?.select(); });
+    // focused without the page scrolling to it: a box past the card's edge scrolled the whole note sideways, under the list
+    tick().then(() => { const el = layer.querySelector<HTMLInputElement>('input.rename'); el?.focus({ preventScroll: true }); el?.select(); });
+  }
+  /** a box scrolled out of the card brought back into it (the picture scrolls sideways inside its card) */
+  function reveal(id: string) {
+    const b = boxOf(id);
+    if (!b || !layer) return;
+    const W = layer.clientWidth, pad = 24;
+    const by = b.x < pad ? b.x - pad : b.x + b.w + 80 > W ? b.x + b.w + 80 - W : 0;
+    if (by) { host.scrollLeft += by; measure(); }
+  }
+  /** Esc from the note: what is picked let go first; true when there was something (else the whole diagram closes) */
+  export function escape(): boolean {
+    if (editing) { cancelEdit(); return true; }
+    if (laneEditing) { laneEditing = null; return true; }
+    if (linking || sel) { linking = null; sel = null; return true; }
+    return false;
   }
   function typed() {
     const n = flow.nodes.find((x) => x.id === editing);
@@ -163,8 +210,12 @@
     flow.lanes = lanes;
   }
   /** a lane gone: its steps go to the lane beside it; the last lane gone, the chart is a plain flowchart again */
-  function dropLane(id: string) {
+  async function dropLane(id: string) {
     const lanes = flow.lanes ?? [];
+    const steps = flow.nodes.filter((n) => n.lane === id).length;
+    const name = lanes.find((l) => l.id === id)?.label ?? '';
+    // asked first when it holds steps: a slip onto its 🗑 (its bar sits by other lanes' names) cost a lane
+    if (steps && !(await ui.ask(`Delete the lane “${name}”? Its ${steps} step${steps > 1 ? 's' : ''} move to the lane beside it.`))) return;
     const i = lanes.findIndex((l) => l.id === id);
     if (i < 0) return;
     const rest = lanes.filter((l) => l.id !== id);
@@ -232,10 +283,12 @@
   function onHostDouble(e: MouseEvent) {
     const g = (e.target as Element).closest('g.node');
     if (g) { const id = nodeIdOf(g); if (id) startEdit(id); }
+    else if (isMobile) return; // a quick double tap on a phone made a stray "New step"; + and + Box make them there
     else if ((e.target as Element).closest('g.lane-head')) return;
     else if (!(e.target as Element).closest('path.hit, g.edgeLabel')) addAfter(null, ((e.target as Element).closest('g.lane') as SVGGElement | null)?.dataset.lane || undefined);
   }
   function onHostMove(e: PointerEvent) {
+    if (e.pointerType !== 'mouse') return; // a finger has no hover: it left a + on a box nothing was picked on
     const g = (e.target as Element).closest?.('g.node');
     hover = g ? nodeIdOf(g) : null;
   }
@@ -265,18 +318,32 @@
       const under = document.elementsFromPoint(cx, cy).find((el) => host.contains(el) && el.closest('g.node'));
       return under ? nodeIdOf(under.closest('g.node')!) : null;
     };
+    const card = () => host.getBoundingClientRect();
+    let lastX = e.clientX;
+    // near the card's side the picture scrolls on under the drag, to a box past its edge
+    const spin = setInterval(() => {
+      if (!drag) return;
+      const r = card();
+      const by = lastX < r.left + 28 ? -14 : lastX > r.right - 28 ? 14 : 0;
+      if (by) { host.scrollLeft += by; measure(); }
+    }, 30);
     const move = (cx: number, cy: number) => {
       if (!drag) return;
+      lastX = cx;
       const x = cx - o.left, y = cy - o.top;
       drag = { ...drag, x, y, moved: drag.moved || Math.hypot(x - drag.x0, y - drag.y0) > 6 };
       hover = boxAt(cx, cy);
     };
     const end = (cx: number, cy: number, cancelled = false) => {
       off();
+      clearInterval(spin);
       const d = drag;
       drag = null;
       if (!d || cancelled) return;
       const to = boxAt(cx, cy);
+      const r = card();
+      const outside = cx < r.left + 6 || cx > r.right - 6 || cy < r.top || cy > r.bottom;
+      if (d.moved && !to && outside) return; // let go past the picture: nothing (it made a stray step there)
       if (!d.moved || !to) addAfter(d.from); // a click, or let go on empty space: a new step after it
       else join(d.from, to);
     };
@@ -300,7 +367,7 @@
     // typed in the list, another note's page or the full-screen view, which deleted the box behind them
     if (ui.diagramView !== null) return;
     const t = e.target as Element;
-    if (t !== document.body && !layer.closest('.dblock')?.contains(t)) return;
+    if (t !== document.body && !layer.closest('.dblock')?.contains(t) && t !== layer.closest('.tiptap')) return;
     const typing = (e.target as HTMLElement).matches?.('input, textarea, [contenteditable="true"]');
     // in a line's label: Esc or Enter is done with it (Esc closed the whole builder), the rest is typing
     if (typing && layer.contains(e.target as Node)) {
@@ -309,8 +376,9 @@
     }
     if (typing) return;
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sel = null; }
+    else if ('lane' in sel && (e.key === 'Backspace' || e.key === 'Delete')) { e.preventDefault(); e.stopPropagation(); void dropLane(sel.lane); }
     else if ('lane' in sel) { if (e.key === 'Enter') { e.preventDefault(); startLaneEdit(sel.lane); } }
-    else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); if ('node' in sel) dropNode(sel.node); else dropEdge(sel.edge); }
+    else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); e.stopPropagation(); if ('node' in sel) dropNode(sel.node); else dropEdge(sel.edge); }
     else if ('node' in sel && e.key === 'Enter' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); startEdit(sel.node); }
     else if ('node' in sel && e.key === 'Tab') { e.preventDefault(); addAfter(sel.node); }
   }
@@ -339,11 +407,20 @@
     const w = b.id === editing ? Math.max(b.w, 140) : b.w;
     return flow.dir === 'LR' ? { x: b.x + b.w / 2 + w / 2 + 14, y: b.y + b.h / 2 } : { x: b.x + b.w / 2, y: b.y + b.h + (b.id === editing ? 22 : 14) };
   };
+  /** a text box `w` wide centred on x, kept inside the picture (at its edge it was cut off, past a phone's screen) */
+  const clampX = (x: number, w: number) => Math.max(4, Math.min((layer?.clientWidth ?? 600) - w - 4, x - w / 2));
   /** a bar over (or, near the top, under) what it is for, kept inside the picture */
   function barAt(x: number, top: number, bottom: number, width: number) {
     const W = layer?.clientWidth ?? 600;
     return { left: Math.max(4, Math.min(W - width - 4, x - width / 2)), top: top > 52 ? top - 46 : bottom + 8 };
   }
+  // the picked line drawn in the accent colour: a picked line looked like every other one
+  $effect(() => {
+    void version;
+    const at = sel && 'edge' in sel ? drawnEdges().findIndex(({ i }) => i === (sel as { edge: number }).edge) : -1;
+    const paths = [...host.querySelectorAll('path.flowchart-link')];
+    paths.forEach((p, j) => p.classList.toggle('picked', j === at));
+  });
   const handles = $derived([...new Set([hover, selNode?.id ?? null, drag?.from ?? null].filter((x): x is string => !!x))].map(boxOf).filter((b): b is Box => !!b));
 </script>
 
@@ -366,11 +443,13 @@
         <!-- the keyboard in it as it appears: it comes only once the new lane is drawn and measured, after "+ Lane" was
              pressed, and the keys typed went to that button (Enter made another lane) -->
         <input class="lane-name" bind:value={laneText} aria-label="Lane name" placeholder="Lane" {@attach (el: HTMLInputElement) => { el.focus(); el.select(); }}
-          style:left={`${hb.x + hb.w / 2 - 70}px`} style:top={`${hb.y + hb.h / 2 - 16}px`}
+          style:left={`${clampX(hb.x + hb.w / 2, 140)}px`} style:top={`${hb.y + hb.h / 2 - 16}px`}
           onkeydown={(e) => { if (e.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); commitLane(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); laneEditing = null; } }}
           onblur={commitLane} />
       {:else}
-        {@const at = barAt(hb.x + hb.w / 2, hb.y, hb.y + hb.h, 240)}
+        <!-- over the lane's own name (picked, it is ringed): above or under it, the bar covered the next lane's name and
+             boxes, and a click meant for them deleted the lane -->
+        {@const at = { left: clampX(hb.x + hb.w / 2, 240), top: Math.max(4, hb.y + hb.h / 2 - 21) }}
         {@const across = flow.dir === 'LR'}
         <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
           <button type="button" class="text" aria-label="Rename the lane" title="Rename (or click its name again)" onmousedown={(e) => e.preventDefault()} onclick={() => startLaneEdit(lid)}><svg viewBox="0 0 16 16"><path d="M10.5 3.5l2 2L6 12l-2.6.6L4 10z" /></svg>Name</button>
@@ -388,14 +467,14 @@
     {#each boxes.filter((b) => b.id !== linking) as b (b.id)}
       <div class="ring target pick" style:left={`${b.x - 4}px`} style:top={`${b.y - 4}px`} style:width={`${b.w + 8}px`} style:height={`${b.h + 8}px`}></div>
     {/each}
-    <div class="pickhint">Tap the box to connect to · tap elsewhere to cancel</div>
+    <div class="pickhint">{isMobile ? 'Tap the box to connect to · tap elsewhere to cancel' : 'Click the box to connect to · Esc or a click elsewhere cancels'}</div>
   {/if}
 
   {#each handles as b (b.id)}
     {@const p = plusAt(b)}
     <button class="plus" type="button" aria-label="Add a step after this, or drag onto another box to connect" title="Click: next step · Drag: connect"
       style:left={`${p.x - 11}px`} style:top={`${p.y - 11}px`} onpointerdown={(e) => handleDown(e, b.id)} {@attach holdTouch}
-      onpointerenter={() => (hover = b.id)}>
+      onpointerenter={(e) => { if (e.pointerType === 'mouse') hover = b.id; }}>
       <svg viewBox="0 0 16 16"><path d="M8 4v8M4 8h8" /></svg>
     </button>
   {/each}
@@ -407,7 +486,7 @@
   {#if editing}
     {@const b = boxOf(editing) ?? { id: editing, x: pendingAt.x - 70, y: pendingAt.y - 16, w: 140, h: 32 }}
     <input class="rename" bind:value={editText} aria-label="Step name" oninput={typed}
-      style:left={`${b.x + b.w / 2 - Math.max(b.w, 140) / 2}px`} style:top={`${b.y + b.h / 2 - 16}px`} style:width={`${Math.max(b.w, 140)}px`}
+      style:left={`${clampX(b.x + b.w / 2, Math.min(Math.max(b.w, 140), (layer?.clientWidth ?? 600) - 8))}px`} style:top={`${b.y + b.h / 2 - 16}px`} style:width={`${Math.min(Math.max(b.w, 140), (layer?.clientWidth ?? 600) - 8)}px`}
       onkeydown={(e) => { if (e.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); commitEdit(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelEdit(); } else if (e.key === 'Tab') { e.preventDefault(); const from = editing; commitEdit(); if (from) addAfter(from); } }}
       onblur={commitEdit} />
   {/if}
@@ -448,7 +527,7 @@
   {/if}
 
   {#if selEdge && sel && 'edge' in sel && !drag}
-    {@const at = barAt(sel.x, sel.y - 6, sel.y + 6, 330)}
+    {@const at = barAt(sel.x, sel.y - 6, sel.y + 6, isMobile ? 360 : 366)}
     {@const i = sel.edge}
     <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
       {#each LINES as [line, label, icon] (line)}
@@ -456,6 +535,7 @@
       {/each}
       <span class="sep"></span>
       <input class="edge-label" bind:value={selEdge.label} placeholder="Label" aria-label="Line label" />
+      <button type="button" aria-label="Put a step in this line" title="Put a step in the middle of this line" onclick={() => splitEdge(i)}><svg viewBox="0 0 16 16"><path d="M1.5 8h3M11.5 8h3" /><rect x="4.5" y="5" width="7" height="6" rx="1.6" /></svg></button>
       <button type="button" aria-label="Reverse" title="Reverse" onclick={() => reverse(i)}><svg viewBox="0 0 16 16"><path d="M3 5.5h9.5M10.5 3l2.5 2.5L10.5 8M13 10.5H3.5M5.5 8 3 10.5 5.5 13" /></svg></button>
       <button type="button" class="danger" aria-label="Delete" title="Delete (⌫)" onclick={() => dropEdge(i)}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
     </div>
@@ -519,5 +599,14 @@
   }
   .edge-label:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   :global(.diagram-canvas path.hit) { stroke: transparent !important; stroke-width: 14px !important; fill: none !important; pointer-events: stroke; cursor: pointer; }
+  /* a finger's width along a line: 14 was a hair to hit */
+  :global(html.mobile .diagram-canvas path.hit) { stroke-width: 30px !important; }
+  :global(.diagram-canvas path.flowchart-link.picked) { stroke: var(--accent) !important; stroke-width: 2.5px !important; }
+  /* a phone's finger: every button in a bar a finger's size */
+  :global(html.mobile) .bar button { width: 40px; height: 40px; }
+  :global(html.mobile) .bar button.text, :global(html.mobile) .bar button:has(.lbl) { width: auto; }
+  /* the boxes, the +, the bars and the rings stay inside the card: drawn past its edge they sat over the page, where a
+     click closed the diagram */
+  .layer { overflow: hidden; }
   :global(.builder .preview g.node) { cursor: pointer; }
 </style>

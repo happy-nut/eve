@@ -187,7 +187,8 @@ export const CodeBlock = CodeBlockBase.extend({
             if (editor.isDestroyed) return;
             const p = posNow();
             const cur = p == null ? null : editor.state.doc.nodeAt(p);
-            if (p == null || !cur || cur !== shownNode || cur.textContent === code) return;
+            // equal, not the same object: the note read anew keeps this view for an equal node without telling it
+            if (p == null || !cur || !cur.eq(shownNode) || cur.textContent === code) return;
             editor.view.dispatch(editor.state.tr.replaceWith(p + 1, p + cur.nodeSize - 1, code ? editor.schema.text(code) : []));
           },
           onHistory: (redo) => queueMicrotask(() => { if (redo) editor.commands.redo(); else editor.commands.undo(); }),
@@ -197,6 +198,13 @@ export const CodeBlock = CodeBlockBase.extend({
             if (p == null || !cur) return;
             editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, p + cur.nodeSize - 1)).scrollIntoView());
             editor.view.focus();
+          },
+          onCodeLeave: () => {
+            const p = posNow();
+            const cur = p == null ? null : editor.state.doc.nodeAt(p);
+            if (p == null || !cur) return;
+            const tr = editor.state.tr;
+            editor.view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(p + cur.nodeSize))));
           },
           onError: (failed) => dom.classList.toggle('mermaid-error', failed),
         });

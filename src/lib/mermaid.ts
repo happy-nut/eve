@@ -161,7 +161,8 @@ export function renderMermaid(code: string): Promise<{ svg: string } | { error: 
 /** The diagram's SVG, or the reason it could not be drawn. */
 async function draw(code: string): Promise<{ svg: string } | { error: string }> {
   if (!code.trim()) return { error: 'An empty diagram' };
-  const chart = chartHtml(code, MIN_SCALE); // a pie, a timeline, a Gantt chart: drawn by Eve, without loading mermaid
+  // lanes on a phone shrink less and scroll instead: five lanes at a phone's width left boxes too small for a finger
+  const chart = chartHtml(code, isMobile ? 0.75 : 0.64); // a pie, a timeline, a Gantt chart: drawn by Eve, without loading mermaid
   if (chart) return { svg: chart };
   try {
     const m = await load();

@@ -37,7 +37,8 @@
       svg.removeAttribute('style');
       svg.setAttribute('width', String(vb.width));
       svg.setAttribute('height', String(vb.height));
-    } else content.style.width = '720px';
+    } else content.style.width = `${Math.min(720, window.innerWidth - 32)}px`; // a phone: its own width, not a page shrunk to half
+    content.style.padding = '12px 20px'; // room for a label at its edge (fit to the screen cut the last date off)
     w = content.offsetWidth; h = content.offsetHeight;
     fit();
     // the keyboard is the viewer's while it is up: keys typed went into the note under it (where a click leaves the

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { isMobile } from './lib/platform';
+  import { ui } from './lib/ui.svelte';
   import { sliceColor, branchColor } from './lib/mermaid';
   import { starter, freshId, addDays, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt } from './lib/diagram';
   import Select from './Select.svelte';
@@ -29,8 +30,11 @@
     s.people.push({ id: freshId('p', s.people), name: `Person ${s.people.length + 1}`, actor: false });
     void focusLast('.s-person input');
   }
-  function dropPerson(s: Sequence, i: number) {
+  /** a participant gone, and the messages to and from it: asked first when there are any (they went without a word) */
+  async function dropPerson(s: Sequence, i: number) {
     const id = s.people[i].id;
+    const n = s.messages.filter((m) => m.from === id || m.to === id).length;
+    if (n && !(await ui.ask(`Remove “${s.people[i].name.trim() || id}” and the ${n} message${n > 1 ? 's' : ''} to or from them?`))) return;
     s.people.splice(i, 1);
     s.messages = s.messages.filter((m) => m.from !== id && m.to !== id);
   }
@@ -47,10 +51,20 @@
   function addSlice(p: Pie) { p.slices.push({ label: `Part ${p.slices.length + 1}`, value: 10 }); void focusLast('.p-slice input.label'); }
 
   // ---- mind map ----
+  /** a branch next to the one at `at`: after its own branches (right after it, it took them over as its own) */
   function addBranch(m: Mindmap, at = m.items.length - 1) {
     const depth = m.items[at]?.depth ?? 1;
-    m.items.splice(at + 1, 0, { text: '', depth });
-    void focusAt('.m-item input', at + 1);
+    let end = at + 1;
+    while (end < m.items.length && m.items[end].depth > depth) end++;
+    m.items.splice(end, 0, { text: '', depth });
+    void focusAt('.m-item input', end);
+  }
+  /** a branch gone: its own branches move up a level, under what held it (left where they were, the form showed them
+   *  indented while the drawing put them first-level) */
+  function dropBranch(m: Mindmap, i: number) {
+    const depth = m.items[i].depth;
+    m.items.splice(i, 1);
+    for (let j = i; j < m.items.length && m.items[j].depth > depth; j++) m.items[j].depth -= 1;
   }
   const deeper = (m: Mindmap, i: number) => i > 0 && m.items[i].depth <= m.items[i - 1].depth;
   function indent(m: Mindmap, i: number, by: number) {
@@ -66,13 +80,16 @@
     if (e.isComposing) return;
     if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); addBranch(m, i); }
     else if (e.key === 'Tab') { e.preventDefault(); indent(m, i, e.shiftKey ? -1 : 1); void focusAt('.m-item input', i); }
-    else if (e.key === 'Backspace' && !m.items[i].text && m.items.length > 1) { e.preventDefault(); m.items.splice(i, 1); void focusAt('.m-item input', Math.max(0, i - 1)); }
+    else if (e.key === 'Backspace' && !m.items[i].text && m.items.length > 1) { e.preventDefault(); dropBranch(m, i); void focusAt('.m-item input', Math.max(0, i - 1)); }
   }
 
   // ---- timeline ----
   function addPeriod(t: Timeline) { t.periods.push({ label: '', events: [''] }); void focusLast('.t-period input.label'); }
 
   // ---- gantt ----
+  /** a start the note keeps: a whole date in a year people plan in. Typed with the keys, a date field reports every
+   *  half-typed year (0002, 0020, 0202…), each written into the note, the drawing switching over and back with it */
+  const plausible = (v: string) => /^(19|20|21)\d{2}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`));
   const endOf = (g: Gantt) => {
     const all = g.sections.flatMap((s) => s.tasks).filter((t) => /^\d{4}-\d{2}-\d{2}$/.test(t.start)); // a real date to follow
     const last = all[all.length - 1];
@@ -108,7 +125,7 @@
       <div class="head">Participants</div>
       {#each seqD.people as p, i (p.id)}
         <div class="row s-person">
-          <Select label="Kind" value={p.actor ? 'actor' : 'box'} options={[['box', 'System'], ['actor', 'Person']]} onchange={(v) => (p.actor = v === 'actor')} />
+          <Select label="Person or system" value={p.actor ? 'actor' : 'box'} options={[['box', 'System'], ['actor', 'Person']]} onchange={(v) => (p.actor = v === 'actor')} />
           <input class="grow" bind:value={p.name} placeholder="Name" aria-label="Participant name" />
           {@render remove(() => dropPerson(seqD, i), 'Remove participant')}
         </div>
@@ -122,7 +139,7 @@
       {#each seqD.messages as m, i (i)}
         <div class="row s-msg">
           <Select label="From" value={m.from} options={peopleOptions(seqD)} onchange={(v) => (m.from = v)} />
-          <Select label="Kind" value={m.reply ? 'reply' : 'send'} options={[['send', '→  Sends'], ['reply', '⇠  Replies']]} onchange={(v) => (m.reply = v === 'reply')} />
+          <Select label="Sends or replies" value={m.reply ? 'reply' : 'send'} options={[['send', '→  Sends'], ['reply', '⇠  Replies']]} onchange={(v) => (m.reply = v === 'reply')} />
           <Select label="To" value={m.to} options={peopleOptions(seqD)} onchange={(v) => (m.to = v)} />
           <input class="grow" bind:value={m.text} placeholder="Message" aria-label="Message" />
           {@render remove(() => seqD.messages.splice(i, 1), 'Remove message')}
@@ -167,7 +184,7 @@
           <button class="x" type="button" aria-label="Deeper" title="Deeper" disabled={!deeper(mind, i)} onclick={() => indent(mind, i, 1)}>
             <svg viewBox="0 0 16 16"><path d="M6.5 4.5 10 8l-3.5 3.5" /></svg>
           </button>
-          {@render remove(() => mind.items.splice(i, 1), 'Remove branch')}
+          {@render remove(() => dropBranch(mind, i), 'Remove branch')}
         </div>
       {/each}
       {@render add(() => addBranch(mind), 'Add branch')}
@@ -212,8 +229,8 @@
         {#each s.tasks as t, j (j)}
           <div class="row g-task">
             <input class="grow label" bind:value={t.name} placeholder="Task" aria-label="Task" />
-            <input class="date" type="date" value={t.start} aria-label="Starts" oninput={(e) => { const v = e.currentTarget.value; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) t.start = v; }} onblur={(e) => (e.currentTarget.value = t.start)} />
-            <span class="days"><input class="num" type="number" min="1" step="1" inputmode="numeric" bind:value={t.days} aria-label="Days" />d</span>
+            <input class="date" type="date" value={t.start} aria-label="Starts" oninput={(e) => { const v = e.currentTarget.value; if (plausible(v)) t.start = v; }} onblur={(e) => (e.currentTarget.value = t.start)} />
+            <span class="days"><input class="num" type="number" min="1" max="3650" step="1" inputmode="numeric" value={t.days} aria-label="Days" oninput={(e) => { const n = Math.round(+e.currentTarget.value); if (n >= 1) t.days = Math.min(n, 3650); }} onblur={(e) => (e.currentTarget.value = String(t.days))} />d</span>
             {@render remove(() => s.tasks.splice(j, 1), 'Remove task')}
           </div>
         {/each}
@@ -277,5 +294,10 @@
   :global(html.mobile) .g-task { flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
   :global(html.mobile) .g-task .label { flex: 1 1 100%; }
   :global(html.mobile) .g-task .date { flex: 1 1 auto; width: auto; }
+  /* a finger's size: 26px ×s side by side were easy to miss into the wrong one */
+  :global(html.mobile) .x { width: 40px; height: 40px; }
+  :global(html.mobile) .add { min-height: 40px; }
+  :global(html.mobile) .check input { width: 20px; height: 20px; }
+  :global(html.mobile) .row { gap: 4px; }
   :global(html.mobile) input:not([type='checkbox']) { font-size: 16px; padding: 9px 10px; } /* 16px: a phone does not zoom in */
 </style>

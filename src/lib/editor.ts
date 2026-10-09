@@ -978,7 +978,12 @@ export function createEditor(opts: {
     const onResize = () => {
       const shrank = window.innerHeight < tall;
       tall = window.innerHeight;
-      if (shrank && editor.view.hasFocus()) requestAnimationFrame(() => editor.isDestroyed || editor.commands.scrollIntoView());
+      if (!shrank) return;
+      if (editor.view.hasFocus()) { requestAnimationFrame(() => editor.isDestroyed || editor.commands.scrollIntoView()); return; }
+      // a text box inside the note (a diagram's box name or row, a formula) with the keyboard: brought into view the
+      // same way, or it was typed into blind behind the keyboard
+      const a = document.activeElement as HTMLElement | null;
+      if (a && a !== editor.view.dom && editor.view.dom.contains(a)) requestAnimationFrame(() => a.scrollIntoView({ block: 'center', inline: 'nearest' }));
     };
     window.addEventListener('resize', onResize);
     editor.on('destroy', () => window.removeEventListener('resize', onResize));

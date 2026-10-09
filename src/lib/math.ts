@@ -142,23 +142,26 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     const p = getPos();
     const n = formulaAt(editor, p);
     // only into this very formula: the node there must be the one this view last drew
-    if (p == null || !n || n !== current || n.attrs.latex === latex) return;
+    // equal, not the same object: the note read anew (a sync, a note not in the editor's own spelling) keeps this view
+    // for an equal node without telling it, and every change typed was refused and lost
+    if (p == null || !n || !n.eq(current) || n.attrs.latex === latex) return;
     editor.view.dispatch(editor.state.tr.setNodeMarkup(p, undefined, { ...n.attrs, latex }));
   };
   const remove = () => {
     const p = getPos();
-    if (p == null || formulaAt(editor, p) !== current) return;
+    if (p == null || !formulaAt(editor, p)?.eq(current)) return;
     const tr = editor.state.tr.delete(p, p + current.nodeSize);
     tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(p, tr.doc.content.size)), -1));
     editor.view.dispatch(tr.scrollIntoView());
     editor.view.focus();
   };
-  const open = async () => {
+  const open = async (at: { x: number; y: number } | null = null) => {
     if (editing || !editor.isEditable) return;
     dom.classList.add('editing');
     editing = mountMath(dom, {
       latex: current.attrs.latex,
       display,
+      at,
       onInput: write,
       onDone: (how) => {
         close();
@@ -182,9 +185,10 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
   dom.addEventListener('mousedown', (e) => {
     if (editing || (e as MouseEvent).button !== 0) return;
     e.preventDefault();
-    void open();
+    const m = e as MouseEvent;
+    void open({ x: m.clientX, y: m.clientY }); // the caret where it was clicked
   });
-  if (openNext) { openNext = false; queueMicrotask(open); }
+  if (openNext) { openNext = false; queueMicrotask(() => open()); }
 
   return {
     dom,

@@ -14,7 +14,7 @@
    * an undo, a sync or the code typed by hand comes back as `code` and is read again. A diagram written with more
    * than these can show (styles, subgraphs, notes) is drawn, and edited as its code.
    */
-  let { code, start, codeShown, onCode, onCodeEdit, onError, onHistory }: {
+  let { code, start, codeShown, onCode, onCodeEdit, onCodeLeave, onError, onHistory }: {
     code: string;
     /** made just now from the / menu: open for editing at once */
     start: boolean;
@@ -22,6 +22,8 @@
     codeShown: boolean;
     onCode: (code: string) => void;
     onCodeEdit: () => void;
+    /** the caret out of the code, after the block: the drawing clicked while the code shows */
+    onCodeLeave: () => void;
     onError: (failed: boolean) => void;
     /** the note's undo (false) or redo (true): ⌘Z with the keyboard on the diagram */
     onHistory: (redo: boolean) => void;
@@ -112,11 +114,17 @@
       if (!active || e.defaultPrevented || ui.diagramView !== null) return;
       const t = e.target as Element;
       const typing = t instanceof HTMLElement && t.matches('input, textarea, select');
+      // ⌘Z in a row of the form: the note's undo, as everywhere else in it (the field's own undo and the note's took
+      // turns, and the diagram went with them)
+      if (typing && root.contains(t) && !t.closest('.layer') && (e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y'))) {
+        e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y'); return;
+      }
       const ours = t === document.body || (root.contains(t) && !typing) || (!typing && t.closest?.('.tiptap') === root.closest('.tiptap'));
       if (!ours) return;
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); active = false; }
-      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && t === document.body) {
-        e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey);
+      // Esc lets go of what is picked in the picture first (a box, a line, a lane, Connect), then of the diagram
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (!flowEd?.escape()) active = false; }
+      else if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y')) && t === document.body) {
+        e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y');
       }
     };
     window.addEventListener('keydown', keys, true);
@@ -130,10 +138,16 @@
   });
   $effect(() => { if (codeShown) active = false; });
 
+  /** the box the opening click landed on, picked as the editor comes up */
+  let pick = $state<string | null>(null);
   function open(e: MouseEvent) {
     if (active || error) return;
     if (!d) { onCodeEdit(); return; } // written by hand: its code is how it is edited
     e.preventDefault();
+    if (codeShown) onCodeLeave(); // the drawing clicked under its code: the code goes, the drawing opens
+    const g = (e.target as Element).closest?.('g.node');
+    pick = g ? /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null : null;
+    (document.activeElement as HTMLElement | null)?.blur?.(); // the keys typed next are the diagram's, not the note's
     active = true;
   }
   function onKey(e: KeyboardEvent) {
@@ -152,7 +166,7 @@
   <div class="mermaid-view diagram-canvas" class:error={!!error} bind:this={canvas} onclick={open}>
     {#if error}{error}{:else}{@html svg}{/if}
   </div>
-  {#if flow && canvas && svg && !error}<FlowEditor bind:this={flowEd} {flow} host={canvas} version={svg} k={1} />{/if}
+  {#if flow && canvas && svg && !error}<FlowEditor bind:this={flowEd} {flow} host={canvas} version={svg} k={1} {pick} />{/if}
   {#if !error && svg}
     <button class="mermaid-expand" type="button" aria-label="View full screen" data-tip="View full screen"
       onclick={(e) => { e.stopPropagation(); if (canvas?.firstElementChild) ui.viewDiagram(canvas.innerHTML); }}>
@@ -174,13 +188,18 @@
         <button class="ghost" onclick={() => flowEd?.addLane()}>+ Lane</button>
       {/if}
       <span class="grow"></span>
+      <!-- undo where there is no keyboard: a phone's bar with ↶ went with the keyboard as a box was picked -->
+      <button class="ghost icon" aria-label="Undo" title="Undo (⌘Z)" onclick={() => { flush(); onHistory(false); }}><svg viewBox="0 0 16 16"><path d="M5.5 4 2.5 7l3 3M2.5 7h7a4 4 0 0 1 0 8H8" /></svg></button>
+      <button class="ghost icon" aria-label="Redo" title="Redo (⇧⌘Z)" onclick={() => { flush(); onHistory(true); }}><svg viewBox="0 0 16 16"><path d="M10.5 4l3 3-3 3M13.5 7h-7a4 4 0 0 0 0 8H8" /></svg></button>
       <button class="ghost" onclick={() => { active = false; onCodeEdit(); }}>Code</button>
       <button class="done" onclick={() => (active = false)}>Done</button>
     </div>
     {#if flow}
-      <p class="tip">{isMobile ? 'Tap a box to pick it; ✎ Text in its bar (or a second tap) types in it · its + adds the next step · Connect, then another box, joins them' : 'Click a box to pick it; ✎ Text, a second click or Enter types in it · its + adds the next step; drag it onto another box, or Connect, to join them · Tab adds a step, ⌫ deletes'}</p>
+      <p class="dtip">{isMobile ? 'Tap a box to pick it; ✎ Text in its bar (or a second tap) types in it · its + adds the next step · Connect, then another box, joins them' : 'Click a box to pick it; ✎ Text, a second click or Enter types in it · its + adds the next step; drag it onto another box, or Connect, to join them · Tab adds a step, ⌫ deletes'}</p>
     {:else}
       <DiagramForm {d} />
+      <!-- a long form: Done at its foot too, not only out of sight at its top -->
+      <div class="foot"><button class="done" onclick={() => (active = false)}>Done</button></div>
     {/if}
   {/if}
 </div>
@@ -199,11 +218,20 @@
   }
   :global(html.mobile) .tools .kind { display: none; } /* a phone's row has room for the buttons only */
   @media (hover: hover) { .tools button:hover { background: var(--bg-hover); color: var(--fg); } }
-  .tools .done { background: var(--accent); color: #fff; }
+  .tools .done, .foot .done { background: var(--accent); color: #fff; }
+  /* white on the dark theme's light blue read poorly: a deeper blue under it */
+  .tools .done, .foot .done { background: light-dark(var(--accent), color-mix(in srgb, var(--accent) 70%, #00264f)); }
+  .foot { display: flex; justify-content: flex-end; padding: 6px 10px 0; }
+  .foot button { border: 0; border-radius: 8px; padding: 5px 14px; font: inherit; font-size: 12.5px; font-weight: 500; }
+  .tools .icon { padding: 5px 6px; display: inline-flex; }
+  .tools .icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  /* a finger's size on a phone */
+  :global(html.mobile) .tools button, :global(html.mobile) .foot button { min-height: 40px; }
+  :global(html.mobile) .tools .icon { min-width: 40px; justify-content: center; }
   @media (hover: hover) { .tools .done:hover { background: color-mix(in srgb, var(--accent) 88%, #000); color: #fff; } }
   .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--bg-input); }
   .seg button { border-radius: 6px; padding: 3px 9px; }
   .seg button.on { background: var(--bg-pop); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
-  .tip { margin: 2px 12px 0; font-size: 12px; color: var(--fg-dim); user-select: none; -webkit-user-select: none; }
+  .dtip { margin: 2px 12px 0; font-size: 12px; color: var(--fg-dim); user-select: none; -webkit-user-select: none; }
   .dblock :global(.form) { padding: 4px 12px 0; }
 </style>
