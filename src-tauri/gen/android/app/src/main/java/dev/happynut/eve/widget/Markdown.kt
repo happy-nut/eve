@@ -48,6 +48,25 @@ class Markdown(
         }
         continue
       }
+      // a formula of its own ($$ … $$): its TeX on one dimmed line; the app draws it, a widget has no math type
+      if (raw.trim().startsWith("$$")) {
+        val first = raw.trim().removePrefix("$$")
+        val tex = mutableListOf<String>()
+        var closed = first.trimEnd().endsWith("$$")
+        if (closed) tex += first.trimEnd().removeSuffix("$$")
+        else {
+          if (first.isNotBlank()) tex += first
+          var j = i + 1
+          while (j < lines.size && !lines[j].trimEnd().endsWith("$$")) tex += lines[j++]
+          if (j < lines.size) { tex += lines[j].trimEnd().removeSuffix("$$"); closed = true; i = j }
+        }
+        if (closed) {
+          out += dimmed("∑ " + tex.joinToString(" ") { it.trim() }.trim())
+          i++
+          continue
+        }
+        tex.clear()
+      }
       olLevel = listLevel(raw)
       block(raw)?.let { out += it }
       i++
