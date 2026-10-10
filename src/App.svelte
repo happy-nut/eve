@@ -23,7 +23,7 @@
   import Tooltip from './Tooltip.svelte';
   import Menu from './Menu.svelte';
   import { ui, hooks } from './lib/ui.svelte';
-  import { droppedFiles } from './lib/drop';
+  import { droppedFiles, isAsset } from './lib/drop';
   import { importTree } from './lib/importTree';
   import { importPaths, exportCurrent } from './lib/transfer';
   import { titleOf } from './lib/notes.svelte';
@@ -443,7 +443,9 @@
     const taken = e.defaultPrevented; // dropped into a note: the editor has that attachment already
     e.preventDefault();
     const on = listTarget(e.target);
-    const dropped = await droppedFiles(e.dataTransfer);
+    // a picture or a PDF the editor took is in the note already; made a note of its own as well, every
+    // file came back as an extra note in the list and was saved twice. A text file still becomes a note.
+    const dropped = (await droppedFiles(e.dataTransfer)).filter(({ file, dir }) => !taken || dir || !isAsset(file));
     const made = await importTree(dropped.map(({ file, dir }) => ({
       path: dir ? `${dir}/${file.name}` : file.name,
       text: () => file.text(),
