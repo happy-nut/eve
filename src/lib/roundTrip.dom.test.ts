@@ -62,6 +62,16 @@ test('an ampersand is written as it was typed', () => {
   expect(save('Tom & Jerry, a&b')).toBe('Tom & Jerry, a&b');
 });
 
+test.each([
+  ['two', '![a](x.png)\n![b](y.png)', '![a](x.png)\n\n![b](y.png)'],
+  ['three, in an item', '- ![a](x.png)\n  ![b](y.png)\n  ![c](z.png)', '- ![a](x.png)\n\n  ![b](y.png)\n\n  ![c](z.png)'],
+  ['two with a blank line between', '![a](x.png)\n\n![b](y.png)', '![a](x.png)\n\n![b](y.png)'],
+  ['a picture and text', '![a](x.png)\ntext', '![a](x.png)\n\ntext'],
+])('%s pictures on lines one after the other get no empty line between them', (_what, note, saved) => {
+  expect(save(note)).toBe(saved);
+  expect(save(saved)).toBe(saved);
+});
+
 test('a quote starting with "[!note]" as text stays a quote', () => {
   const note = '> \\[!note\\] x';
   expect(editorWith(note).state.doc.firstChild!.type.name).toBe('blockquote');

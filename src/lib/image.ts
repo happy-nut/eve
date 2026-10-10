@@ -53,6 +53,20 @@ export const LocalImage = Image.extend({
           state.write(imageMarkdown(state, node));
           state.closeBlock(node);
         },
+        parse: {
+          // pictures on lines one after the other are one paragraph to markdown, and the line break between them,
+          // left alone in it once each picture is a block, became an empty line under the first (written down as
+          // one, it stayed). Pictures alone in their paragraph are taken out of it.
+          updateDOM(root: HTMLElement) {
+            for (const p of root.querySelectorAll('p')) {
+              const parts = [...p.childNodes];
+              if (parts.filter((n) => n.nodeName === 'IMG').length < 2) continue;
+              if (parts.every((n) => n.nodeName === 'IMG' || n.nodeName === 'BR' || (n.nodeType === 3 && /^[ \t\r\n]*$/.test(n.textContent ?? '')))) {
+                p.replaceWith(...parts.filter((n) => n.nodeName === 'IMG'));
+              }
+            }
+          },
+        },
       },
     };
   },
