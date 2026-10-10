@@ -79,6 +79,30 @@ try {
   }
   console.log('ok   a board on a phone: the column × shown, a card deleted from its page');
 
+  // ---- Android's back to the list (focus left where it was, as the native key does): nothing of the note's over it ----
+  {
+    const page = await phone({ a: '# Groceries\n\nmilk\n\n| a | b |\n|---|---|\n| 1 | 2 |\n', b: '# Other' });
+    await page.locator('.tiptap p', { hasText: 'milk' }).tap();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('/');
+    await page.waitForSelector('.suggest');
+    await page.evaluate(() => document.querySelector('.mback').click()); // what the native key runs: phoneBack()
+    await page.waitForTimeout(400);
+    assert.equal(await page.locator('.suggest').count(), 0, 'the / menu is gone with the note');
+    await page.close();
+  }
+  {
+    const page = await phone({ a: '# Plans\n\n| a | b |\n|---|---|\n| 1 | 2 |\n', b: '# Other' });
+    await page.locator('.tiptap td').first().tap();
+    await page.waitForSelector('.tbl-tools');
+    await page.evaluate(() => document.querySelector('.mback').click());
+    await page.waitForTimeout(400);
+    assert.equal(await page.locator('.tbl-tools').count(), 0, 'the table\'s tools are gone with the note');
+    await page.close();
+  }
+  console.log('ok   back to the list leaves nothing of the note over it');
+
   assert.deepEqual(errors, []);
 } finally {
   await browser.close();

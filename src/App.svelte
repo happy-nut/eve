@@ -341,7 +341,12 @@
     else if (ui.card) ui.closeCard();
     else if (settingsOpen) settingsOpen = false;
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
-    else sidebarOpen = true;
+    else {
+      // the native back key leaves the focus where it was: the note kept its caret behind the list, and with it the
+      // "/" menu and a table's tools, drawn over the list. They go when the note lets go of the keyboard, as a swipe does
+      (document.activeElement as HTMLElement | null)?.blur();
+      sidebarOpen = true;
+    }
   }
   // another note brought up (a link, the widget, a reminder, ⌘1–9, ⌘N, back/forward): a diagram shown full
   // screen was the last one's, and so was a board's card or a day floating over it. A card left up wrote into
