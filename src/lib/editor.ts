@@ -744,6 +744,30 @@ export function createEditor(opts: {
           props: { decorations: (state) => FLASH.getState(state) },
         })],
       }),
+      // ⌫ at the start of the line under a picture (a PDF, a video, a link card, a formula block), or Delete at the
+      // end of the line over it: the first press selects it, the second removes it. In one keystroke the picture
+      // was gone, easy to miss when all that was meant was to join two lines.
+      Extension.create({
+        name: 'selectMediaFirst',
+        priority: 1000,
+        addKeyboardShortcuts() {
+          const MEDIA = /^(image|pdf|video|bookmark|mathBlock)$/;
+          const select = (dir: -1 | 1) => () => {
+            const { state, view } = this.editor;
+            const { $from, empty } = state.selection;
+            const line = $from.parent;
+            if (!empty || !line.isTextblock || !line.content.size) return false; // an empty line goes as it always did
+            if ($from.parentOffset !== (dir < 0 ? 0 : line.content.size) || $from.depth < 1) return false;
+            const i = $from.index(-1) + dir, holder = $from.node(-1);
+            const next = i >= 0 && i < holder.childCount ? holder.child(i) : null;
+            if (!next || !MEDIA.test(next.type.name)) return false;
+            const at = dir < 0 ? $from.before() - next.nodeSize : $from.after();
+            view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, at)).scrollIntoView());
+            return true;
+          };
+          return { Backspace: select(-1), Delete: select(1) };
+        },
+      }),
       // ahead of the list items' own Tab, which moves an item's sub-items along with it
       Extension.create({
         name: 'lineIndent',

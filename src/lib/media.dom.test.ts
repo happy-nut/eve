@@ -1,6 +1,7 @@
 // Pictures, PDFs, videos, link cards and math in a note: where they land, what they keep, how the keys treat them.
 import { test, expect, afterEach } from 'vitest';
 import { editorWith, md, posOf, press } from './testEditor';
+import { NodeSelection } from '@tiptap/pm/state';
 import { dropBlock } from './editor';
 
 afterEach(() => { document.body.innerHTML = ''; });
@@ -139,6 +140,37 @@ test('a formula with a digit right after it is still a formula, the digit still 
   expect(found).toEqual(['x']);
   expect(text).toBe('see 2 ok');
   expect(twice).toBe(once);
+});
+
+test.each([
+  ['a picture', '![cap](assets/a.png)', 'image'],
+  ['a PDF', '[d.pdf](assets/d.pdf)', 'pdf'],
+  ['a video', '[v.mp4](assets/v.mp4)', 'video'],
+  ['a link card', 'https://example.com/', 'bookmark'],
+  ['a formula block', '$$\nx^2\n$$', 'mathBlock'],
+])('⌫ under %s selects it first and removes it the second time; Delete over it does the same', (_what, block, type) => {
+  const note = `# t\n\nabove\n\n${block}\n\nbelow`;
+  const back = editorWith(note);
+  back.commands.setTextSelection(posOf(back, 'below'));
+  press(back, 'Backspace');
+  expect((back.state.selection as NodeSelection).node?.type.name).toBe(type);
+  expect(md(back)).toBe(md(editorWith(note)));
+  press(back, 'Backspace');
+  expect(md(back)).toBe('# t\n\nabove\n\nbelow');
+
+  const fwd = editorWith(note);
+  fwd.commands.setTextSelection(posOf(fwd, 'above', true));
+  press(fwd, 'Delete');
+  expect((fwd.state.selection as NodeSelection).node?.type.name).toBe(type);
+  press(fwd, 'Delete');
+  expect(md(fwd)).toBe('# t\n\nabove\n\nbelow');
+});
+
+test('⌫ at the start of a line under plain text still joins the two lines', () => {
+  const ed = editorWith('# t\n\nabove\n\nbelow');
+  ed.commands.setTextSelection(posOf(ed, 'below'));
+  press(ed, 'Backspace');
+  expect(md(ed)).toBe('# t\n\nabovebelow');
 });
 
 test('↩ after such an address leaves it a link instead of making a card that would not come back', () => {
