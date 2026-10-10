@@ -213,9 +213,15 @@
   let swipe: { x: number; y: number; at: number } | null = null;
   function swipeStart(e: TouchEvent) {
     swipe = null;
-    if (!isMobile || sidebarOpen || settingsOpen || ui.card || e.touches.length !== 1) return;
-    // things that scroll sideways themselves keep the gesture
-    if ((e.target as HTMLElement).closest('pre, table, .kanban, .mbar, .mhead, input, textarea, .menu, .suggest')) return;
+    // a diagram on the whole screen pans with the finger, and Find's bar would stay over the list
+    if (!isMobile || sidebarOpen || settingsOpen || ui.card || ui.diagramView !== null || ui.find || e.touches.length !== 1) return;
+    // things that scroll sideways themselves keep the gesture: a wide diagram or equation scrolled back to its start
+    // brought the list in instead
+    const t = e.target as HTMLElement;
+    if (t.closest('pre, table, .kanban, .mbar, .mhead, input, textarea, .menu, .suggest, .dblock, .diagram-canvas, .math-block')) return;
+    for (let el: HTMLElement | null = t; el && el !== document.body; el = el.parentElement) {
+      if (el.scrollWidth > el.clientWidth + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowX)) return;
+    }
     swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY, at: Date.now() };
   }
   function swipeEnd(e: TouchEvent) {

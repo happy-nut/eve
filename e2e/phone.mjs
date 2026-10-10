@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 
 const server = process.env.EVE_URL ? null : await (await import('vite')).createServer({ server: { port: 0 }, logLevel: 'error' }).then((v) => v.listen());
 const URL_ = process.env.EVE_URL ?? server.resolvedUrls.local[0];
-const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
+// no swipe back a page of the test browser's own: a finger dragged to the right where nothing scrolls left the app
+const browser = await chromium.launch({ ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}), args: ['--disable-features=OverscrollHistoryNavigation'] });
 const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36';
 const errors = [];
 const note = (id, body, order = 0) => `---\nid: ${id}\nupdated: 1\ndeleted: false\norder: ${order}\n---\n${body}`;
@@ -32,6 +33,15 @@ async function phone(notes, { w = 390, h = 844 } = {}) {
   return page;
 }
 const bar = (page) => page.evaluate(() => !!document.querySelector('.mbar'));
+// a finger dragged to the right from (x, y), quickly, as a swipe is
+async function swipeRight(page, x, y) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  for (let i = 1; i <= 10; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + i * 22, y }] }); await page.waitForTimeout(16); }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForTimeout(500);
+}
+const listShown = (page) => page.evaluate(() => !!document.querySelector('aside'));
 const body = (page, id = 'a') => page.evaluate((id) => localStorage.getItem('eve.notes.' + id).split('---\n').pop(), id);
 
 try {
@@ -102,6 +112,44 @@ try {
     await page.close();
   }
   console.log('ok   back to the list leaves nothing of the note over it');
+
+  // ---- a swipe to the right brings the list in, but not while scrolling something wide back, nor over Find or a
+  // diagram on the whole screen ----
+  {
+    const flow = '```mermaid\nflowchart LR\n' + Array.from({ length: 8 }, (_, i) => `  n${i}("Step number ${i}")`).join('\n') + '\n' + Array.from({ length: 7 }, (_, i) => `  n${i} --> n${i + 1}`).join('\n') + '\n```\n';
+    const tex = Array.from({ length: 30 }, (_, i) => `x_{${i}}^2`).join(' + ');
+    const page = await phone({ a: '# Wide\n\nintro text\n\n' + flow + '\n$$\n' + tex + '\n$$\n\nafter\n', b: '# Other' });
+    await page.waitForSelector('.tiptap .mermaid-view svg');
+    await page.waitForSelector('.tiptap .math-block');
+    for (const sel of ['.tiptap .mermaid-view', '.tiptap .math-block']) {
+      await page.evaluate((sel) => { document.querySelector(sel).scrollLeft = 600; }, sel);
+      const r = await page.locator(sel).boundingBox();
+      await swipeRight(page, 60, r.y + r.height / 2);
+      assert.equal(await listShown(page), false, `scrolling ${sel} back keeps the note`);
+    }
+    // the diagram on the whole screen: a finger to the right pans it
+    await page.locator('.mermaid-expand').tap();
+    await page.waitForSelector('.dblock.full .diagram-canvas');
+    // zoomed in and panned along, so there is somewhere for the finger to pan it back to
+    for (let i = 0; i < 6; i++) await page.locator('.zoombar button[aria-label="Zoom in"]').tap();
+    await page.evaluate(() => { document.querySelector('.dblock.full .diagram-canvas').scrollLeft = 400; });
+    await swipeRight(page, 60, 400);
+    assert.equal(await listShown(page), false, 'a full-screen diagram keeps the swipe');
+    await page.locator('.full-close').tap();
+    await page.waitForFunction(() => !document.querySelector('.dblock.full'));
+    const at = async () => { const r = await page.locator('.tiptap p', { hasText: 'intro text' }).boundingBox(); return r.y + r.height / 2; };
+    await page.locator('.mhead button[aria-label="More"]').tap();
+    await page.locator('button[role="menuitem"]', { hasText: 'Find & replace' }).tap();
+    await page.waitForSelector('.find');
+    await swipeRight(page, 30, await at());
+    assert.equal(await listShown(page), false, 'no list under Find\'s bar');
+    await page.evaluate(() => document.querySelector('.find button[aria-label="Close"]').click());
+    await page.waitForFunction(() => !document.querySelector('.find'));
+    await swipeRight(page, 30, await at());
+    assert.equal(await listShown(page), true, 'a swipe on the text brings the list in');
+    await page.close();
+  }
+  console.log('ok   the swipe to the list leaves wide things, Find and a full-screen diagram alone');
 
   assert.deepEqual(errors, []);
 } finally {
