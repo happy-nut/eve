@@ -1,4 +1,4 @@
-import { assets } from './platform';
+import { assetName, assets } from './platform';
 
 /**
  * A .hwp / .hwpx read straight in the app, by rhwp — a Rust parser compiled to WebAssembly that lays
@@ -45,7 +45,7 @@ function loader(): Promise<(bytes: Uint8Array) => Pages> {
 
 /** Every page of a stored .hwp as SVG. Throws when the file is not one rhwp can read. */
 export async function hwpPages(src: string): Promise<Pages> {
-  const name = /^assets\//.test(src) ? src.slice('assets/'.length) : null;
+  const name = assetName(src);
   if (!name) throw new Error('not a stored file');
   const [open, bytes] = await Promise.all([loader(), assets.read(name)]);
   return open(bytes);

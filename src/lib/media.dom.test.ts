@@ -4,6 +4,7 @@ import { editorWith, md, posOf, press } from './testEditor';
 import { NodeSelection } from '@tiptap/pm/state';
 import { createEditor, dropBlock } from './editor';
 import { sizeGrip } from './resize';
+import { assetName, onDisk } from './platform';
 
 afterEach(() => { document.body.innerHTML = ''; });
 
@@ -221,6 +222,18 @@ test.each([
   cap.dispatchEvent(new Event('input')); // and ⌘N comes before the pause is over
   ed.destroy();
   expect(saved.at(-1)).toContain('![hello](assets/a.png)');
+});
+
+test('a stored file is looked for under its own name, not the percent-encoded one markdown hands over', () => {
+  let src = '';
+  editorWith('# t\n\n![](<assets/my pic.png>)\n\n![](assets/사진.png)').state.doc.descendants((n) => {
+    if (n.type.name === 'image') src ||= n.attrs.src;
+  });
+  expect(src).toBe('assets/my%20pic.png');
+  expect(assetName(src)).toBe('my pic.png');
+  expect(assetName('assets/%EC%82%AC%EC%A7%84.png')).toBe('사진.png');
+  expect(onDisk('assets/100%.png')).toBe('assets/100%.png'); // not percent-encoding: as it is
+  expect(assetName('https://example.com/a.png')).toBe(null);
 });
 
 test('↩ after such an address leaves it a link instead of making a card that would not come back', () => {
