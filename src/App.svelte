@@ -354,7 +354,7 @@
   $effect(() => { if (isMobile) syncPhoneReminder(); });
   $effect(() => { if (isMobile) widget.daily(appearance.s.dailyNotes && appearance.s.dailyInWidget); });
   // daily notes switched off while the calendar was up: back to a note
-  $effect(() => { if (!appearance.s.dailyNotes && notes.currentId === CALENDAR) notes.currentId = notes.pages[0]?.id ?? null; });
+  $effect(() => { if (!appearance.s.dailyNotes && notes.currentId === CALENDAR) notes.currentId = notes.firstPage()?.id ?? null; });
 
   /** ⌘\\: closed -> open + focus list; focus already in list -> close + back to editor; else focus list. */
   function focusSidebar() {

@@ -221,3 +221,5 @@ class Groups {
 }
 
 export const groups = new Groups();
+// the notes open "the first one" or "the one next to it" as the list shows them, not by their bare rank
+notes.sidebar = { shown: () => groups.visibleOrdered(), all: () => groups.ordered() };
