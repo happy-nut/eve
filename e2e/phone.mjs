@@ -171,6 +171,22 @@ try {
   }
   console.log('ok   a table in a card: its tools reachable');
 
+  // ---- turned on its side with the keyboard up: the formatting bar is still there ----
+  {
+    const page = await phone({ a: '# Landscape\n\n' + Array.from({ length: 20 }, (_, i) => `line ${i}`).join('\n\n') + '\n' });
+    await page.locator('.tiptap p', { hasText: /^line 3$/ }).tap();
+    await page.kbd(true);
+    assert.equal(await bar(page), true, 'upright, keyboard up: the bar');
+    await page.setViewportSize({ width: 844, height: 220 }); // on its side, the keyboard still up
+    await page.waitForTimeout(300);
+    assert.equal(await bar(page), true, 'on its side, keyboard up: the bar');
+    await page.setViewportSize({ width: 844, height: 390 }); // the keyboard down
+    await page.waitForTimeout(300);
+    assert.equal(await bar(page), false, 'on its side, keyboard down: no bar');
+    await page.close();
+  }
+  console.log('ok   the formatting bar on a phone turned on its side');
+
   assert.deepEqual(errors, []);
 } finally {
   await browser.close();

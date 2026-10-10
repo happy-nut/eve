@@ -4,6 +4,20 @@
   // one height for both, a phone turned on its side read as a keyboard up, and the bar stayed over the note.
   const tallest = new Map<number, number>();
   if (typeof window !== 'undefined') tallest.set(window.innerWidth, window.innerHeight);
+
+  /**
+   * The full height at a width not seen yet: the phone turned with the keyboard up. Its first height there already had
+   * the keyboard taken off, was kept as the full one, and the bar never showed on its side. The page runs edge to edge
+   * (MainActivity), so turned, it is as tall as it was wide: an earlier height that is this width says how tall it is
+   * now; failing that, the screen's other side. Nothing to go by (a window beside another app): 0, the page as it is.
+   */
+  function guessFull(w: number): number {
+    for (const [w0, h0] of tallest) if (Math.abs(h0 - w) <= 2) return w0;
+    const s = window.screen;
+    if (s && Math.abs(s.height - w) <= 2) return s.width;
+    if (s && Math.abs(s.width - w) <= 2) return s.height;
+    return 0;
+  }
 </script>
 
 <script lang="ts">
@@ -21,7 +35,7 @@
 
   onMount(() => {
     const measure = () => {
-      const w = window.innerWidth, full = Math.max(tallest.get(w) ?? 0, window.innerHeight);
+      const w = window.innerWidth, full = Math.max(tallest.get(w) ?? guessFull(w), window.innerHeight);
       tallest.set(w, full);
       keyboard = window.innerHeight < full - 120;
     };
