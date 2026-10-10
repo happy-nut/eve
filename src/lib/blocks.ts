@@ -88,7 +88,15 @@ function moveOnce(state: any, dir: -1 | 1, done = 0): any {
       range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1));
       continue;
     }
+    // a cell moves its whole row, from any column: never the cell alone, sideways into its neighbour's column
+    if (parent.type.name === 'tableRow') {
+      range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1));
+      continue;
+    }
     const i = dir < 0 ? startIndex - 1 : endIndex;
+    // rows move among the body rows: the header stays on top (the markdown table needs it there), and a row at
+    // the body's edge stays in its table rather than taking the whole table along
+    if (parent.type.name === 'table' && (startIndex === 0 || i < 1 || i >= parent.childCount)) return true;
     if (isEdge(state.doc, parent, i, dir)) return true; // the note's title or its end: nothing to pass
     if (i >= 0 && i < parent.childCount) {
       const node = parent.child(i);

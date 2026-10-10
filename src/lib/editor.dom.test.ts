@@ -341,6 +341,31 @@ describe('Tab in the real keymap', () => {
   });
 });
 
+describe('⌥↑ / ⌥↓ in a table', () => {
+  const table = '| Name | Qty |\n| --- | --- |\n| Pen | 2 |\n| Ink | 5 |\n| Cap | 7 |';
+  const moved = (word: string, cmd: 'moveBlockDown' | 'moveBlockUp') => {
+    const ed = editorWith(table);
+    ed.commands.setTextSelection(posOf(ed, word, true));
+    runEditorCommand(ed, cmd);
+    return md(ed).trim().replace(/ +\|/g, ' |').replace(/-+/g, '-');
+  };
+
+  test('the caret\'s row moves, from any column, its cells kept together', () => {
+    const swapped = '| Name | Qty |\n| - | - |\n| Ink | 5 |\n| Pen | 2 |\n| Cap | 7 |';
+    expect(moved('Pen', 'moveBlockDown')).toBe(swapped);
+    expect(moved('2', 'moveBlockDown')).toBe(swapped);
+    expect(moved('Ink', 'moveBlockUp')).toBe(swapped);
+  });
+
+  test('the header row stays on top, and a row never leaves its table', () => {
+    const same = table.replace(/-+/g, '-');
+    expect(moved('Pen', 'moveBlockUp')).toBe(same);
+    expect(moved('Name', 'moveBlockDown')).toBe(same);
+    expect(moved('Qty', 'moveBlockDown')).toBe(same);
+    expect(moved('Cap', 'moveBlockDown')).toBe(same);
+  });
+});
+
 describe('Enter on the empty last line of a callout', () => {
   test('leaves the callout for a new line right after it; the block below stays whole', () => {
     const ed = editorWith('> [!💡]\n> one\n\n## Next');
