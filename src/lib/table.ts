@@ -29,13 +29,16 @@ function cellText(state: any, cell: PMNode): string {
   // a line break as `<br>` (tiptap-markdown's own way in a table): its usual backslash and newline came back as
   // "\ ", and one more backslash every save
   state.inTable = true;
-  cell.forEach((child) => {
-    if (!child.isTextblock && child.type.name !== 'image') return;
+  // every line in it, however deep: a list, quote or toggle typed into a cell is not a cell's markdown, but its
+  // text left out was gone from the note at the next save while still on screen
+  cell.descendants((child) => {
+    if (!child.isTextblock && child.type.name !== 'image') return true;
     // a cell holding two paragraphs is still one line (the text after a picture may bring its own space)
     if (state.out && !/\s$/.test(state.out) && !/^\s/.test(child.textContent)) state.out += ' ';
     // a picture read from a cell is a block of its own in it; it goes back in the line, not left out
     if (child.isTextblock) state.renderInline(child);
     else state.out += imageMarkdown(state, child);
+    return false;
   });
   const text = state.out;
   Object.assign(state, { out, delim, inlines, inTable: false });
