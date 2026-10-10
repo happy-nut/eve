@@ -40,6 +40,17 @@ assert.equal(plain('| [[DB\\|db]] |'), '| db |');
 // ==highlight== reads as its text; a lone == stays
 assert.equal(plain('# ==Important== plan'), 'Important plan');
 assert.equal(plain('a == b'), 'a == b');
+// a link reads as its words (so [[Meeting with Bob]] finds the page titled with one), a picture as its alt text
+assert.equal(plain('# Meeting with [Bob](https://bob.example.com/profile)'), 'Meeting with Bob');
+assert.equal(plain('[**Docs**](https://x.dev/a_b_c "the docs") page'), 'Docs page');
+assert.equal(plain('[](https://x.dev)'), 'https://x.dev'); // a link with no words reads as where it goes
+assert.equal(plain('![](https://example.com/photo.png)'), ''); // nothing to read: the note is "Untitled"
+assert.equal(plain('![Trip to Jeju](trip.png) notes'), 'Trip to Jeju notes');
+assert.equal(plain('\\[not](a link)'), '[not](a link)');
+// a formula reads as what is written in it; an escaped dollar is a dollar
+assert.equal(plain('# Energy $E=mc^2$'), 'Energy E=mc^2');
+assert.equal(plain('$x$ and $$y + 1$$'), 'x and y + 1');
+assert.equal(plain('costs \\$5 or \\$10'), 'costs $5 or $10');
 
 // callout types: the word picks icon and colour, any case; an emoji is its own
 assert.deepEqual(calloutKind('warning'), { icon: '⚠️', color: 'orange' });

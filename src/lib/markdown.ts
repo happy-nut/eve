@@ -8,6 +8,13 @@ export function plain(line: string): string {
     .replace(/<!--[\s\S]*?(-->|$)/g, '')
     .replace(/(?<!\\)<\/?[a-z][a-z0-9-]*(\s[^>]*?)?(?<!\\)>/gi, '')
     .replace(/^[#>\-*+\s]+|^\d+\.\s+|^\[[ x]\]\s*/g, '')
+    // a formula reads as what is written in it: "Energy $E=mc^2$" is the title "Energy E=mc^2" (a dollar that is
+    // only a dollar is saved escaped, \$, and stays)
+    .replace(/(?<!\\)\$\$(.+?)(?<!\\)\$\$/g, '$1')
+    .replace(/(?<![\\$])\$(?![\s$])((?:[^$\\]|\\.)*?[^\s\\])\$(?!\$)/g, '$1')
+    // a link reads as its words, a picture as what it shows (its alt text, else nothing): "Meeting with [Bob](https://…)"
+    // is "Meeting with Bob", the title a [[link]] to it is written with — not a page of its own made from the raw line
+    .replace(/(?<!\\)(!?)\[([^\]]*)\]\(([^)\s]*)(?:\s+"[^"]*")?\)/g, (_, img: string, text: string, url: string) => (img ? text : text || url))
     .replace(/\\(.)/g, '$1')
     .replace(/==(?=\S)(.+?)==/g, '$1')
     .replace(/[*_`~]/g, '')
