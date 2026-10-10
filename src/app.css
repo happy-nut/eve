@@ -568,6 +568,9 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
    selection did. Not over it with a blend: WebKit composited the rectangles on their own and they covered the
    text. z-index -1 inside the editor's own stacking context puts them above the page, under the note's text. */
 :has(> .sel-layer) { isolation: isolate; }
+/* …except while a diagram fills the screen from inside the note (DiagramBlock.svelte): kept in there, it went under
+   the app's own bars. The note is hidden behind it meanwhile, its selection with it. */
+:has(> .sel-layer):has(.dblock.full) { isolation: auto; }
 .sel-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: -1; }
 .sel-layer > div { position: absolute; background: var(--sel); }
 /* the note not focused (the list, a dialog): the selection stays, fainter, as the browser's own did */

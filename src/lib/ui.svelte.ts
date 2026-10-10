@@ -67,13 +67,15 @@ class Ui {
     if (from?.isConnected && from !== document.body && !from.closest('.card-page')) from.focus();
     else focusNote();
   }
-  /** a diagram shown full screen, to zoom into (DiagramViewer.svelte): its drawing as the note has it */
-  diagramView = $state<string | null>(null);
+  /** a diagram block filling the screen, to zoom into and edit there (DiagramBlock.svelte): how to put it back */
+  diagramView = $state<(() => void) | null>(null);
   private diagramViewFrom: HTMLElement | null = null;
-  viewDiagram(html: string) { this.diagramViewFrom = document.activeElement as HTMLElement | null; this.diagramView = html; }
+  viewDiagram(close: () => void) { this.diagramViewFrom = document.activeElement as HTMLElement | null; this.diagramView = close; }
   closeDiagramView() {
-    if (this.diagramView === null) return;
+    const close = this.diagramView;
+    if (close === null) return;
     this.diagramView = null;
+    close();
     const from = this.diagramViewFrom;
     this.diagramViewFrom = null;
     if (!isMobile && from?.isConnected && from !== document.body) from.focus();
