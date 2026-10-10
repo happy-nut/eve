@@ -3,6 +3,7 @@ import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
 import { Plugin, Selection, TextSelection } from '@tiptap/pm/state';
 import { imageMarkdown } from './image';
+import { hidePipesInMath } from './math';
 import { CellSelection, cellAround, columnResizingPluginKey, fixTables, inSameTable, nextCell, tableEditingKey } from '@tiptap/pm/tables';
 
 /**
@@ -48,8 +49,89 @@ function cellText(state: any, cell: PMNode): string {
 const line = (cells: string[], width: number) =>
   `| ${Array.from({ length: width }, (_, i) => cells[i] ?? '').join(' | ')} |`;
 
+/** a row's cells as markdown-it splits them: at each `|` not written `\|` (whose backslash goes), its outer bars off */
+function cellsOf(line: string): string[] {
+  const cells: string[] = [];
+  let current = '', last = 0;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] !== '|') continue;
+    if (line[i - 1] === '\\') { current += line.slice(last, i - 1); last = i; continue; }
+    cells.push(current + line.slice(last, i));
+    current = '';
+    last = i + 1;
+  }
+  cells.push(current + line.slice(last));
+  if (cells[0] === '') cells.shift();
+  if (cells.at(-1) === '') cells.pop();
+  return cells;
+}
+
+const HIDDEN = ''; // a `|` inside a formula, while markdown-it splits the row
+const widened = new WeakSet<object>();
+
+/**
+ * Tables as written by hand, which markdown-it reads short of what they hold: a row with more cells than the header
+ * lost the ones past it (gone from the note at the next save), and a `|` inside a formula (`$|x|$`) split its cell in
+ * two. A formula's bars are kept from the split, and the header gets empty cells up to the widest row, as it is
+ * written back.
+ */
+function wideTables(md: any) {
+  if (widened.has(md)) return;
+  widened.add(md);
+  const at = md.block.ruler.__find__('table');
+  if (at < 0) return;
+  const table = md.block.ruler.__rules__[at].fn;
+  md.block.ruler.at('table', (state: any, start: number, end: number, silent: boolean) => {
+    const src: string = state.src;
+    const lineOf = (l: number) => state.src.slice(state.bMarks[l] + state.tShift[l], state.eMarks[l]);
+    let patched = src;
+    for (let l = start; l < end && !state.isEmpty(l); l++) {
+      const from = state.bMarks[l] + state.tShift[l], to = state.eMarks[l];
+      if (!src.slice(from, to).includes('$')) continue;
+      patched = patched.slice(0, from) + hidePipesInMath(src.slice(from, to), HIDDEN) + patched.slice(to);
+    }
+    const first = state.tokens.length;
+    state.src = patched;
+    let ok: boolean;
+    try { ok = table(state, start, end, silent); } finally { state.src = src; }
+    if (!ok || silent) return ok;
+    const tokens: any[] = state.tokens;
+    for (let i = first; i < tokens.length; i++) if (tokens[i].type === 'inline') tokens[i].content = tokens[i].content.replaceAll(HIDDEN, '|');
+    const rows: { open: number; cells: string[] }[] = [];
+    for (let i = first; i < tokens.length; i++) {
+      if (tokens[i].type !== 'tr_open') continue;
+      state.src = patched;
+      const cells = cellsOf(lineOf(tokens[i].map[0]).trim());
+      state.src = src;
+      rows.push({ open: i, cells: cells.map((c) => c.replaceAll(HIDDEN, '|').trim()) });
+    }
+    let count = 0;
+    for (let i = rows[0]?.open + 1; tokens[i]?.type === 'th_open'; i += 3) count++;
+    const width = Math.max(count, ...rows.map((r) => r.cells.length));
+    if (width === count) return true;
+    for (const { open, cells } of [...rows].reverse()) {
+      const head = tokens[open + 1].type === 'th_open', level = tokens[open].level;
+      let close = open + 1;
+      while (tokens[close].type !== 'tr_close') close++;
+      const extra: any[] = [];
+      for (let k = count; k < width; k++) {
+        const o = new state.Token(head ? 'th_open' : 'td_open', head ? 'th' : 'td', 1);
+        const text = new state.Token('inline', '', 0);
+        const c = new state.Token(head ? 'th_close' : 'td_close', head ? 'th' : 'td', -1);
+        Object.assign(o, { level: level + 1, block: true });
+        Object.assign(text, { level: level + 2, block: true, content: head ? '' : cells[k] ?? '', children: [], map: tokens[open].map });
+        Object.assign(c, { level: level + 1, block: true });
+        extra.push(o, text, c);
+      }
+      tokens.splice(close, 0, ...extra);
+    }
+    return true;
+  }, { alt: md.block.ruler.__rules__[at].alt });
+}
+
 const tableMarkdown = {
   markdown: {
+    parse: { setup: wideTables },
     serialize(state: any, node: PMNode) {
       // the blank line that closes the block before this one, before any cell borrows the output buffer
       state.flushClose();

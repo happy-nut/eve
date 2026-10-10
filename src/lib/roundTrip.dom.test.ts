@@ -145,3 +145,133 @@ test.each([
   expect(save(note)).toBe(note);
   expect(save(save(note))).toBe(note);
 });
+
+test.each([
+  ['a type in angle brackets', 'a list of Array<string> here'],
+  ['a key in angle brackets', 'press <Enter> now'],
+  ['a type with words in it', 'x <T extends Foo> y'],
+  ['a video', '<video src="a.mp4"></video>'],
+  ['a video of more lines, in a quote', '> <video src="a">\n> </video>'],
+  ['an iframe', '<iframe src="https://x.com"></iframe>'],
+  ['an iframe, in a list', '- <iframe src="x"></iframe>\n- b'],
+  ['audio in a line', 'a <audio src="x.mp3" controls></audio> b'],
+  ['an anchor', 'a <a name="x"></a> b'],
+  ['an svg', '<svg width="10">\n<circle r="4"/>\n</svg>'],
+  ['a checkbox', '<input type="checkbox"> x'],
+])('%s is kept', (_what, note) => {
+  expect(save(note)).toBe(note);
+  expect(save(save(note))).toBe(note);
+});
+
+test.each([
+  ['a footnote', 'x[^1] y\n\n[^1]: note'],
+  ['a link address', '[ref]: https://x.com'],
+  ['two addresses, one under the other', 'see\n\n[a]: https://x.com "T"\n[b]: <https://y.com>'],
+  ['an address in a quote', '> [ref]: https://x.com'],
+  ['an address in a list', '- a\n\n  [r]: u'],
+])('%s given on a line of its own is kept', (_what, note) => {
+  expect(save(note)).toBe(note);
+  expect(save(save(note))).toBe(note);
+});
+
+test('a link to an address given below still links there, and a footnote mark stays a mark', () => {
+  const note = '[a][ref] and x[^1]\n\n[ref]: https://x.com\n\n[^1]: note';
+  expect(save(note)).toBe('[a](https://x.com) and x[^1]\n\n[ref]: https://x.com\n\n[^1]: note');
+  expect(save(save(note))).toBe(save(note));
+});
+
+test.each([
+  ['underscores next to each other', '\\_\\_init\\_\\_', '__init__'],
+  ['three underscores', '\\_\\_\\_', '___'],
+  ['a pair of ==', '\\=\\=x\\=\\=', '==x=='],
+  ['an @ before a day', '\\@2026-01-02', '@2026-01-02'],
+])('%s typed as text stays text', (_what, note, text) => {
+  expect(save(note)).toBe(note);
+  expect(save(save(note))).toBe(note);
+  expect(editorWith(save(note)).state.doc.firstChild!.textContent).toBe(text);
+});
+
+test.each([
+  ['a == b and c == d'],
+  ['x==y'],
+  ['snake_case_name a_b'],
+  ['mail me@2026-01-02x'],
+])('"%s" gets no backslashes it does not need', (note) => {
+  expect(save(note)).toBe(note);
+});
+
+test.each([
+  ['code', '- a\n  ```\n  c\n  ```\n- b', '- a\n\n  ```\n  c\n  ```\n\n- b'],
+  ['a heading', '- a\n  # h\n- b', '- a\n\n  # h\n\n- b'],
+  ['a formula', '- a\n  $$\n  x\n  $$\n- b', '- a\n\n  $$\n  x\n  $$\n\n- b'],
+  ['code, in a to-do', '- [ ] a\n  ```\n  c\n  ```\n- [ ] b', '- [ ] a\n\n  ```\n  c\n  ```\n\n- [ ] b'],
+  ['a line under code on the item\'s own line', '- a\n- ```\n  c\n  ```\n  more', '- a\n\n- ```\n  c\n  ```\n\n  more'],
+])('a tight list with %s under an item\'s line is written as it will be read, the first time', (_what, note, saved) => {
+  expect(save(note)).toBe(saved);
+  expect(save(saved)).toBe(saved);
+});
+
+test.each([
+  ['an item', '- <!-- c --> x [[w]]'],
+  ['a paragraph', '<!-- c --> x [[w]]'],
+  ['a tight list\'s item', '- <!-- c --> x\n- b'],
+  ['a loose list\'s item', '- a\n\n- <!-- c --> x\n\n- b'],
+  ['a quote', '> <!-- c --> **x**'],
+  ['a comment of two lines', '<!-- a\nb --> x'],
+])('%s starting with a comment keeps its line as it was', (_what, note) => {
+  expect(save(note)).toBe(note);
+  expect(save(save(note))).toBe(note);
+});
+
+test('a [[link]] after a comment at the start of a line is still a link', () => {
+  let link = false;
+  editorWith('<!-- c --> x [[w]]').state.doc.descendants((n) => { if (n.type.name === 'wikiLink') link = true; });
+  expect(link).toBe(true);
+});
+
+test.each([
+  ['a row wider than its header', '| a |\n| --- |\n| b | c |', '| a |  |\n| --- | --- |\n| b | c |\n'],
+  ['rows of different widths', '| a | b |\n| :-- | --: |\n| 1 | 2 | 3 | 4 |\n| 5 |', '| a | b |  |  |\n| :--- | ---: | --- | --- |\n| 1 | 2 | 3 | 4 |\n| 5 |  |  |  |\n'],
+  ['a wide row, in a quote', '> | a |\n> | --- |\n> | b | c \\| d | e |', '> | a |  |  |\n> | --- | --- | --- |\n> | b | c \\| d | e |\n'],
+  ['a formula with bars in a cell', '| a | b |\n| --- | --- |\n| $|x|$ | c |', '| a | b |\n| --- | --- |\n| $\\|x\\|$ | c |\n'],
+  ['a formula with bars in the header', '| $|x|$ | b |\n| --- | --- |\n| 1 | 2 |', '| $\\|x\\|$ | b |\n| --- | --- |\n| 1 | 2 |\n'],
+])('a table with %s keeps every cell', (_what, note, saved) => {
+  expect(save(note)).toBe(saved);
+  expect(save(saved)).toBe(saved);
+});
+
+test('a formula with bars in a cell is one formula', () => {
+  let tex = '';
+  editorWith('| a | b |\n| --- | --- |\n| $|x|$ | c |').state.doc.descendants((n) => { if (n.type.name === 'mathInline') tex = n.attrs.latex; });
+  expect(tex).toBe('|x|');
+});
+
+test.each([
+  ['a bullet', '- <details>\n  <summary>s</summary>\n\n  x\n\n  </details>'],
+  ['a numbered item', '1. <details>\n   <summary>s</summary>\n\n   x\n\n   </details>'],
+  ['an item among others', '- a\n\n- <details open>\n  <summary>s</summary>\n\n  x\n\n  </details>\n\n- b'],
+])('a toggle on the line of %s stays in the list', (_what, note) => {
+  expect(save(note)).toBe(note);
+  expect(save(save(note))).toBe(note);
+  expect(editorWith(note).state.doc.childCount).toBe(1);
+});
+
+test.each([
+  ['a width in percent', '<img src="a.png" width="50%">', '<img src="a.png" width="50%">'],
+  ['a width in percent, in an item', '- <img src="a.png" width="50%" alt="cat">', '- <img src="a.png" width="50%" alt="cat">'],
+  ['a width narrower than a drag makes', 'a <img src="a.png" width="20"> b', 'a\n\n![|120](a.png)\n\nb'],
+])('a picture written as HTML with %s is saved the same way every time', (_what, note, saved) => {
+  expect(save(note)).toBe(saved);
+  expect(save(saved)).toBe(saved);
+});
+
+test('a picture whose width was set in percent and then dragged is written with the dragged width', () => {
+  const ed = editorWith('<img src="a.png" width="50%">');
+  ed.commands.command(({ tr }) => { tr.setNodeAttribute(0, 'width', 300); return true; });
+  expect(md(ed)).toBe('![|300](a.png)');
+});
+
+test('words in angle brackets are text, and a line of them does not take the lines under it', () => {
+  expect(editorWith('Array<string> and <Enter>').state.doc.firstChild!.textContent).toBe('Array<string> and <Enter>');
+  expect(editorWith('<Enter>\n- item').state.doc.child(1).type.name).toBe('bulletList');
+});

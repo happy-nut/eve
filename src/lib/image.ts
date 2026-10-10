@@ -4,7 +4,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
 import { Plugin, PluginKey, NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { assetUrl } from './platform';
-import { escapeWidth, nameOf, sizeGrip, widthOf, withWidth } from './resize';
+import { MIN_WIDTH, escapeWidth, nameOf, sizeGrip, widthOf, withWidth } from './resize';
 
 /** `![caption](src "title")`, the picture as a block of its own or inside a table's cell */
 export function imageMarkdown(state: any, node: PMNode): string {
@@ -42,6 +42,17 @@ function captionOf(tokens: any[]): string {
   return out;
 }
 
+const keptTags = new WeakSet<object>();
+/** the <img> tag the picture was read from, while it still says what the picture is (not resized, not renamed) */
+function asWritten(node: PMNode): string | null {
+  const html: string | null = node.attrs.html;
+  if (!html || node.attrs.width) return null;
+  const box = document.createElement('template');
+  box.innerHTML = html;
+  const img = box.content.querySelector('img');
+  return img && img.getAttribute('src') === node.attrs.src && (nameOf(img.getAttribute('alt')) || null) === node.attrs.alt ? html : null;
+}
+
 /**
  * Images. Markdown keeps a portable relative path (`assets/x.png`, next to the notes);
  * only the rendered <img src> is mapped to something the webview can load.
@@ -53,12 +64,16 @@ export const LocalImage = Image.extend({
     return {
       ...this.parent?.(),
       // how wide the writer dragged it, carried in the caption as "caption|540" so the markdown keeps it
+      // an <img width="20"> is no narrower than a drag can make it, as a "|20" is not: read as 20 it was written
+      // "|20", which came back 120 the next time
       width: {
         default: null,
-        parseHTML: (el) => widthOf(el.getAttribute('alt')) ?? (el.getAttribute('width') ? Number(el.getAttribute('width')) : null),
+        parseHTML: (el) => widthOf(el.getAttribute('alt')) ?? (Number(el.getAttribute('width')) ? Math.max(MIN_WIDTH, Number(el.getAttribute('width'))) : null),
         renderHTML: (attrs: any) => (attrs.width ? { style: `width:${attrs.width}px` } : {}),
       },
       alt: { default: null, parseHTML: (el: HTMLElement) => nameOf(el.getAttribute('alt')) || null },
+      // an <img> whose width the note has no way to write (`width="50%"`): the tag as it was, written back so
+      html: { default: null, parseHTML: (el: HTMLElement) => el.getAttribute('data-eve-img'), rendered: false },
     };
   },
 
@@ -72,11 +87,26 @@ export const LocalImage = Image.extend({
         // the stock serializer writes the image inline and never closes the block, so whatever followed
         // it ("끝" right after a picture) was glued onto the same markdown line
         serialize(state: any, node: any) {
-          state.write(imageMarkdown(state, node));
+          state.write(asWritten(node) ?? imageMarkdown(state, node));
           state.closeBlock(node);
         },
         parse: {
           setup(md: any) {
+            // `<img width="50%">` came back as `![](…)`, its width gone: the tag is kept with the picture
+            if (!keptTags.has(md)) {
+              keptTags.add(md);
+              md.core.ruler.after('inline', 'eve-img-width', (state: any) => {
+                const keep = (t: any) => {
+                  if (/^<img\b[^>]*\bwidth\s*=\s*["']?\s*\d+(\.\d+)?%/i.test(t.content) && /^<img\b[^<]*>\s*$/i.test(t.content)) {
+                    t.content = t.content.replace(/^<img/i, `<img data-eve-img="${t.content.trim().replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`);
+                  }
+                };
+                for (const t of state.tokens) {
+                  if (t.type === 'html_block') keep(t);
+                  for (const c of t.children ?? []) if (c.type === 'html_inline') keep(c);
+                }
+              });
+            }
             md.renderer.rules.image = (tokens: any[], i: number, opts: any, _env: any, self: any) => {
               tokens[i].attrSet('alt', captionOf(tokens[i].children ?? []));
               return self.renderToken(tokens, i, opts);

@@ -5,6 +5,7 @@ import type MarkdownIt from 'markdown-it';
 import { loadMath, mathMarkup, mathNow } from './mathRender';
 import { mountMath, type MathEditing } from './mathEdit.svelte';
 import { scrollHint } from './scrollHint';
+import { HTML_TAGS } from './html';
 
 /**
  * Formulas: `$E = mc^2$` in a line of text, and a block of its own,
@@ -37,6 +38,19 @@ function closing(src: string, start: number): number {
     if (/\d/.test(src[j + 1] ?? '')) continue;
     return j;
   }
+}
+
+/** `line` with each `|` inside a `$…$` (not one written `\|`) as `hide`, a character of the same length */
+export function hidePipesInMath(line: string, hide: string): string {
+  let out = line;
+  for (let i = line.indexOf('$'); i >= 0; i = line.indexOf('$', i + 1)) {
+    if (line[i - 1] === '\\') continue;
+    const end = closing(line, i);
+    if (end < 0) continue;
+    for (let k = i + 1; k < end; k++) if (line[k] === '|' && line[k - 1] !== '\\') out = out.slice(0, k) + hide + out.slice(k + 1);
+    i = end;
+  }
+  return out;
 }
 
 /** a run of text that would be read back as a formula (some `$…$` in it) */
@@ -325,21 +339,78 @@ function isEntity(s: string): boolean {
   return known;
 }
 
+/** `<string>`, `<T extends Base>`: a tag in form, of no element HTML has, holding nothing markdown reads in a line */
+const LOOSE_TAG = /^<\/?([A-Za-z][A-Za-z0-9-]*)(\s+[A-Za-z:][A-Za-z0-9:.-]*(\s*=\s*([^\s"'=<>`]+|"[^"]*"|'[^']*'))?)*\s*\/?>$/;
+const wordInBrackets = (s: string) => {
+  const m = LOOSE_TAG.exec(s);
+  return !!m && !HTML_TAGS.has(m[1].toLowerCase()) && !/[$`[\]\\&*_~@]|==/.test(s);
+};
+
+/**
+ * Pieces of a text written just so, not through markdown's escaping: words in angle brackets (read back they are text
+ * anyway), and a footnote mark `[^1]`, which other apps read as one and which was written `\[^1\]`.
+ *
+ * And characters markdown's escaping left as they were, which were read back as formatting: underscores next to each
+ * other (`__init__` was written `\__init_\_` and came back with "init" in italics, one pair fewer each time), a pair
+ * of `==` (a highlight), and an `@` before a day (a date). These are written escaped.
+ */
+const SPECIAL = /<[^<>]*>|\[\^[A-Za-z0-9-]+\]|_{2,}|(?<![^\s([{])@(?=\d{4}-\d{2}-\d{2}(?![\d-]))|==/g;
+/** `rest`: this text and the rest of its line after it, where a `==` here may find the one that closes it */
+function piecesOf(text: string, rest: string): [text: string, written: string | null][] {
+  const pieces: [string, string | null][] = [];
+  const closers = new Set<number>();
+  let last = 0;
+  for (const m of text.matchAll(SPECIAL)) {
+    const s = m[0], at = m.index;
+    let out: string | null = s;
+    if (s[0] === '<') { if (!wordInBrackets(s)) continue; }
+    else if (s[0] === '_') out = '\\_'.repeat(s.length);
+    else if (s === '@') out = '\\@';
+    else if (s === '==') {
+      // as the highlight rule reads it: a `==` before a non-space, up to the next `==`, after a non-space
+      const end = rest.indexOf('==', at + 2);
+      const opens = /\S/.test(rest[at + 2] ?? ' ') && end > at + 2 && /\S/.test(rest[end - 1]);
+      if (!opens && !closers.has(at)) continue;
+      if (opens) closers.add(end);
+      out = '\\=\\=';
+    }
+    pieces.push([text.slice(last, at), null], [s, out]);
+    last = at + s.length;
+  }
+  pieces.push([text.slice(last), null]);
+  return pieces.filter(([s]) => s);
+}
+
+const plain = (text: string) => text
+  // "&lt;" typed as text came back as "<"; only a name markdown reads as a character is escaped, so "Q&A;" or
+  // "AT&T;" stay as typed (written "&amp;A;" they showed so in the title, and a [[link]] to it found nothing)
+  .replace(/&(#?[a-z0-9]+;)/gi, (m, rest) => (isEntity(m) ? `&amp;${rest}` : m))
+  .replace(/</g, '&lt;').replace(/>/g, '&gt;'); // tiptap-markdown's own escapeHTML
+
 const mathSafeText = {
-  serialize(state: any, node: PMNode) {
+  serialize(state: any, node: PMNode, parent?: PMNode, index?: number) {
     // a link written as <address>: markdown reads nothing inside it, so a backslash there stayed in the address
     // (`<https://a.com/\*x\*>` pointed somewhere else)
     if (state.inAutolink) return void state.text(node.text ?? '', false);
-    const text = (node.text ?? '')
-      // "&lt;" typed as text came back as "<"; only a name markdown reads as a character is escaped, so "Q&A;" or
-      // "AT&T;" stay as typed (written "&amp;A;" they showed so in the title, and a [[link]] to it found nothing)
-      .replace(/&(#?[a-z0-9]+;)/gi, (m, rest) => (isEntity(m) ? `&amp;${rest}` : m))
-      .replace(/</g, '&lt;').replace(/>/g, '&gt;'); // tiptap-markdown's own escapeHTML
-    if (!readsAsMath(text)) { state.text(text); return; }
-    text.split('$').forEach((part, i) => {
-      if (i) state.write('\\$');
-      if (part) state.text(part);
-    });
+    let rest = node.text ?? '';
+    if (parent && index !== undefined) {
+      for (let i = index + 1; i < parent.childCount; i++) rest += parent.child(i).isText ? parent.child(i).text : '￼';
+    }
+    const pieces = piecesOf(node.text ?? '', rest);
+    const dollars = readsAsMath(pieces.map(([s, out]) => out ?? plain(s)).join(''));
+    for (const [s, out] of pieces) {
+      if (out !== null) {
+        state.text(out, false);
+        state.atBlockStart = false;
+        continue;
+      }
+      const text = plain(s);
+      if (!dollars) { state.text(text); continue; }
+      text.split('$').forEach((part, i) => {
+        if (i) state.write('\\$');
+        if (part) state.text(part);
+      });
+    }
   },
   parse: {},
 };

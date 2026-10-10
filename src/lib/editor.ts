@@ -54,8 +54,11 @@ const RICH_HTML = /<(strong|b|em|i|u|s|a|h[1-6]|ul|ol|li|code|pre|blockquote|img
 /** list items hold text or an image first, then any block (stock TipTap insists on a paragraph) */
 const LIST_ITEM_CONTENT = '(paragraph|image) block*';
 
-/** blocks markdown may put on an item's own line (`- ```js`, `- # heading`, `- > quote`, `- | table |`, `- - item`) */
-const LEADS = 'pre, h1, h2, h3, h4, h5, h6, blockquote, table, ul, ol, div[data-math-block], div[data-kanban]';
+/**
+ * blocks markdown may put on an item's own line (`- ```js`, `- # heading`, `- > quote`, `- | table |`, `- - item`), and
+ * HTML there: a toggle (`- <details>`, which came out of the list), a <video> kept as written
+ */
+const LEADS = 'pre, h1, h2, h3, h4, h5, h6, blockquote, table, ul, ol, div[data-math-block], div[data-kanban], div[data-eve-raw], details';
 
 /**
  * A list item that starts with a block other than a line of text. The item's first line is text (blocks.ts, the
@@ -512,6 +515,53 @@ function markStartsAfterPrefix(editor: Editor) {
   });
 }
 
+/**
+ * An item of two blocks: two paragraphs, or a line and the code, formula, picture, table or heading under it. A blank
+ * line goes between them, so markdown reads the list back loose. A list inside the item is written without one; so is
+ * the empty line a block on the item's own line is read with.
+ */
+function twoBlocks(item: PMNode): boolean {
+  let n = 0;
+  item.forEach((c, _o, i) => { if (!/List$/.test(c.type.name) && !(i === 0 && item.attrs.lead && !c.content.size)) n++; });
+  return n > 1;
+}
+/** a list markdown reads back loose: one of its items holds two blocks, or a list in it is loose */
+function readsLoose(list: PMNode): boolean {
+  let two = false;
+  list.forEach((item) => { if (twoBlocks(item)) two = true; });
+  list.descendants((d) => {
+    if (two) return false;
+    if (/List$/.test(d.type.name) && !d.attrs.tight) two = true;
+    if (/Item$/.test(d.type.name) && twoBlocks(d)) two = true;
+  });
+  return two;
+}
+
+/**
+ * A tight list with an item holding a line and code under it (a formula, a picture, a table, a heading) was written
+ * tight with a blank line inside the item, read back loose, and written with blank lines between all its items: the
+ * note changed the second time it was saved. Such a list is written loose from the first (the editor marks it loose
+ * too, once the note is edited: joinLists).
+ */
+function looseLists(editor: Editor) {
+  const serializer = (editor.storage as any).markdown.serializer;
+  const nodesOf = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(serializer), 'nodes')?.get;
+  if (!nodesOf) return;
+  Object.defineProperty(serializer, 'nodes', {
+    configurable: true,
+    get() {
+      const nodes = nodesOf.call(serializer);
+      for (const name of ['bulletList', 'orderedList', 'taskList']) {
+        const write = nodes[name];
+        if (!write) continue;
+        nodes[name] = (state: any, node: PMNode, parent: PMNode, index: number) =>
+          write(state, node.attrs.tight && readsLoose(node) ? node.type.create({ ...node.attrs, tight: false }, node.content, node.marks) : node, parent, index);
+      }
+      return nodes;
+    },
+  });
+}
+
 export function createEditor(opts: {
   element: HTMLElement;
   content: string;
@@ -894,13 +944,7 @@ export function createEditor(opts: {
                 // came back with blank lines between all its items, changed by being opened and saved
                 // and a list around a loose one is loose too, as markdown reads it: the note kept "inner loose, outer
                 // tight" only until it was opened again
-                if (/List$/.test(node.type.name) && node.attrs.tight) {
-                  let two = false;
-                  const twoIn = (item: PMNode) => { let n = 0; item.forEach((c) => { if (c.type.name === 'paragraph') n++; }); return n > 1; };
-                  node.forEach((item) => { if (twoIn(item)) two = true; });
-                  node.descendants((d) => { if (two) return false; if (/List$/.test(d.type.name) && !d.attrs.tight) two = true; if (/Item$/.test(d.type.name) && twoIn(d)) two = true; });
-                  if (two) loose.push(pos);
-                }
+                if (/List$/.test(node.type.name) && node.attrs.tight && readsLoose(node)) loose.push(pos);
               });
               if (!at.length && !restart.length && !loose.length) return null;
               const tr = state.tr;
@@ -1202,6 +1246,7 @@ export function createEditor(opts: {
     onUpdate: ({ editor }) => handOver(editor),
   });
   markStartsAfterPrefix(editor);
+  looseLists(editor);
   editor.on('blur', flush); // leaving the note: the list, a dialog, another app
   // the note closed or switched (the document is still there to read)
   editor.on('destroy', () => { closing = true; flush(); });
