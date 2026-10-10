@@ -173,6 +173,21 @@ test('⌫ at the start of a line under plain text still joins the two lines', ()
   expect(md(ed)).toBe('# t\n\nabovebelow');
 });
 
+test('resizing a video leaves the player alone; only another file loads anew', () => {
+  const ed = editorWith('# t\n\n[v.mp4](assets/v.mp4)');
+  const video = ed.view.dom.querySelector('video')!;
+  let loads = 0;
+  const own = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src')!;
+  Object.defineProperty(video, 'src', { get: () => own.get!.call(video), set: (v) => { loads++; own.set!.call(video, v); } });
+  let pos = -1;
+  ed.state.doc.descendants((n, p) => { if (n.type.name === 'video') pos = p; });
+  ed.view.dispatch(ed.state.tr.setNodeMarkup(pos, undefined, { ...ed.state.doc.nodeAt(pos)!.attrs, width: 300 }));
+  expect(video.style.width).toBe('300px');
+  expect(loads).toBe(0);
+  ed.view.dispatch(ed.state.tr.setNodeMarkup(pos, undefined, { ...ed.state.doc.nodeAt(pos)!.attrs, src: 'assets/w.mp4' }));
+  expect(loads).toBe(1);
+});
+
 test('↩ after such an address leaves it a link instead of making a card that would not come back', () => {
   const ed = editorWith('# t\n\nhttps://example.com/*star*');
   ed.commands.setTextSelection(ed.state.doc.content.size - 1);

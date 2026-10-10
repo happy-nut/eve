@@ -38,7 +38,8 @@ export const Video = Node.create({
       dom.contentEditable = 'false';
 
       const video = document.createElement('video');
-      video.src = assetUrl(node.attrs.src) ?? node.attrs.src;
+      let shown: string = node.attrs.src; // the file the player has
+      video.src = assetUrl(shown) ?? shown;
       video.controls = true;
       video.preload = 'metadata'; // the first frame only, until it is played
       video.playsInline = true;
@@ -59,7 +60,9 @@ export const Video = Node.create({
         ignoreMutation: () => true,
         update: (updated) => {
           if (updated.type !== node.type) return false;
-          video.src = assetUrl(updated.attrs.src) ?? updated.attrs.src;
+          // only a new file is loaded anew: a <video> given its src again starts over, so a resize (only the
+          // width changed) blanked the player and stopped what was playing
+          if (updated.attrs.src !== shown) video.src = assetUrl((shown = updated.attrs.src)) ?? shown;
           video.style.width = updated.attrs.width ? `${updated.attrs.width}px` : '';
           return true;
         },
