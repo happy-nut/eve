@@ -10,15 +10,18 @@
 
   // A floating panel, not a dialog: no backdrop, nothing behind it blocked — a PDF can sit open beside
   // the text being written. Drag it by its bar, resize it by any edge or the corner.
-  const req = ui.pdf!;
+  // The document follows ui.pdf: another card clicked while the panel is up opens in it. Read once, the
+  // panel kept showing the first document whatever was clicked next. (The last one stays while it closes.)
+  let last = ui.pdf!;
+  const req = $derived.by(() => (last = ui.pdf ?? last));
 
   // Three ways a document reaches the panel, in order of how little this app has to know about it:
   // the webview draws a PDF itself; a spreadsheet arrives as Quick Look's own preview (plain HTML,
   // exported once and cached); a .hwp is laid out here, because macOS ships nothing that can read one.
   const match = (re: RegExp) => re.test(req.src) || re.test(req.name);
-  const kind = match(PDF_FILE) ? 'pdf' : match(HWP_FILE) ? 'hwp' : 'quicklook';
+  const kind = $derived(match(PDF_FILE) ? 'pdf' : match(HWP_FILE) ? 'hwp' : 'quicklook');
 
-  let src = $state(kind === 'pdf' ? pdfSrc(req.src) : ''); // a URL the iframe loads
+  let src = $state(''); // a URL the iframe loads
   let page = $state(''); // a whole document the iframe is handed instead
   let failed = $state('');
 
@@ -32,25 +35,35 @@
     `svg{max-width:100%;height:auto;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.22)}` +
     `</style>${pages.join('')}`;
 
-  if (kind === 'quicklook') {
-    void qlPreview(req.src).then((u) => {
-      if (u) src = u;
-      else failed = 'Quick Look has no preview for this file on this Mac.';
-    });
-  }
-  if (kind === 'hwp') {
-    // ponytail: every page is laid out at once. A long document makes that felt; render on scroll
-    // (as the cards in a note already do) if it ever does.
-    void hwpPages(req.src)
-      .then((doc) => {
-        page = sheet(Array.from({ length: doc.count }, (_, i) => doc.page(i)));
-      })
-      .catch(() => {
-        failed = import.meta.env.TAURI_ENV_PLATFORM === 'android'
-          ? 'Hangul documents open on the Mac.'
-          : 'This file could not be read as a Hangul document.';
+  $effect(() => {
+    const doc = req.src, k = kind;
+    src = k === 'pdf' ? pdfSrc(doc) : '';
+    page = '';
+    failed = '';
+    let live = true; // a document still loading when the next one is opened does not land over it
+    if (k === 'quicklook') {
+      void qlPreview(doc).then((u) => {
+        if (!live) return;
+        if (u) src = u;
+        else failed = 'Quick Look has no preview for this file on this Mac.';
       });
-  }
+    }
+    if (k === 'hwp') {
+      // ponytail: every page is laid out at once. A long document makes that felt; render on scroll
+      // (as the cards in a note already do) if it ever does.
+      void hwpPages(doc)
+        .then((d) => {
+          if (live) page = sheet(Array.from({ length: d.count }, (_, i) => d.page(i)));
+        })
+        .catch(() => {
+          if (!live) return;
+          failed = import.meta.env.TAURI_ENV_PLATFORM === 'android'
+            ? 'Hangul documents open on the Mac.'
+            : 'This file could not be read as a Hangul document.';
+        });
+    }
+    return () => { live = false; };
+  });
 
   const BAR = 33; // title bar height
   const EDGE = 7; // frame around the document: the grab handles live here, clear of the PDF view,
