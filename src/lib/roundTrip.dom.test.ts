@@ -246,6 +246,16 @@ test('a formula with bars in a cell is one formula', () => {
   expect(tex).toBe('|x|');
 });
 
+test.each([
+  ['a bullet', '- <details>\n  <summary>s</summary>\n\n  x\n\n  </details>'],
+  ['a numbered item', '1. <details>\n   <summary>s</summary>\n\n   x\n\n   </details>'],
+  ['an item among others', '- a\n\n- <details open>\n  <summary>s</summary>\n\n  x\n\n  </details>\n\n- b'],
+])('a toggle on the line of %s stays in the list', (_what, note) => {
+  expect(save(note)).toBe(note);
+  expect(save(save(note))).toBe(note);
+  expect(editorWith(note).state.doc.childCount).toBe(1);
+});
+
 test('words in angle brackets are text, and a line of them does not take the lines under it', () => {
   expect(editorWith('Array<string> and <Enter>').state.doc.firstChild!.textContent).toBe('Array<string> and <Enter>');
   expect(editorWith('<Enter>\n- item').state.doc.child(1).type.name).toBe('bulletList');

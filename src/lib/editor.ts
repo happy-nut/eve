@@ -54,8 +54,11 @@ const RICH_HTML = /<(strong|b|em|i|u|s|a|h[1-6]|ul|ol|li|code|pre|blockquote|img
 /** list items hold text or an image first, then any block (stock TipTap insists on a paragraph) */
 const LIST_ITEM_CONTENT = '(paragraph|image) block*';
 
-/** blocks markdown may put on an item's own line (`- ```js`, `- # heading`, `- > quote`, `- | table |`, `- - item`) */
-const LEADS = 'pre, h1, h2, h3, h4, h5, h6, blockquote, table, ul, ol, div[data-math-block], div[data-kanban], div[data-eve-raw]';
+/**
+ * blocks markdown may put on an item's own line (`- ```js`, `- # heading`, `- > quote`, `- | table |`, `- - item`), and
+ * HTML there: a toggle (`- <details>`, which came out of the list), a <video> kept as written
+ */
+const LEADS = 'pre, h1, h2, h3, h4, h5, h6, blockquote, table, ul, ol, div[data-math-block], div[data-kanban], div[data-eve-raw], details';
 
 /**
  * A list item that starts with a block other than a line of text. The item's first line is text (blocks.ts, the
