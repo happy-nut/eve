@@ -10,7 +10,14 @@ import { nameOf, sizeGrip, widthOf, withWidth } from './resize';
 export function imageMarkdown(state: any, node: PMNode): string {
   // the src is a URL, not text: escaping it would put backslashes into the file name
   const alt = withWidth(state.esc(node.attrs.alt ?? ''), node.attrs.width);
-  return `![${alt}](${node.attrs.src ?? ''}${node.attrs.title ? ` "${state.esc(node.attrs.title)}"` : ''})`;
+  const src: string = node.attrs.src ?? '';
+  // ...but one with a space, a "<" or ">", or a ")" with no "(" before it ends the link early (the rest was
+  // read back as text): markdown's <…> holds those
+  let depth = 0;
+  for (const c of src) if ((depth += c === '(' ? 1 : c === ')' ? -1 : 0) < 0) break;
+  const dest = depth || /[\s<>]/.test(src) ? `<${src.replace(/[<>]/g, '\\$&')}>` : src;
+  const title = node.attrs.title ? ` "${state.esc(node.attrs.title).replace(/"/g, '\\"')}"` : ''; // a " in it closed it
+  return `![${alt}](${dest}${title})`;
 }
 
 /**
