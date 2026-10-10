@@ -250,6 +250,7 @@
     void afterRemove(next, fromList);
   }
   async function removeNote(n: Note) {
+    if (n.id === CALENDAR_NOTE_ID) return; // the calendar's row goes with daily notes, in Settings
     if (n.id === notes.currentId) hints.action('deleteNote', 'Delete the open note');
     const next = neighbourOf(`[data-note="${n.id}"]`), fromList = inList();
     if (!(await ui.ask(`Delete “${titleOf(n)}”?`))) return;

@@ -2,8 +2,8 @@
   import { untrack } from 'svelte';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { notes, CALENDAR } from './lib/notes.svelte';
-  import { isDailyId, DAILY_TEMPLATE_ID, CALENDAR_NOTE_ID } from './lib/daily';
+  import { notes, CALENDAR, stepFrom } from './lib/notes.svelte';
+  import { isDailyId, DAILY_TEMPLATE_ID } from './lib/daily';
   import { startReminder, syncPhoneReminder } from './lib/reminder';
   import CalendarPage from './CalendarPage.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
@@ -189,9 +189,7 @@
   }
 
   function step(delta: number) {
-    const list = groups.ordered();
-    const i = list.findIndex((n) => n.id === notes.currentId);
-    const next = list[(i + delta + list.length) % list.length];
+    const next = stepFrom(groups.ordered(), notes.currentId, delta);
     if (next) notes.currentId = next.id;
   }
 
@@ -333,11 +331,10 @@
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
     else sidebarOpen = true;
   }
-  // daily notes on: the calendar's row exists; and opening that row (⌘1–9, back, next note) shows the calendar
   // another note brought up (a link, the widget, a reminder): a diagram shown full screen was the last one's
   $effect(() => { void notes.currentId; untrack(() => ui.closeDiagramView()); });
+  // daily notes on: the calendar's row exists (opening it shows the calendar: notes.currentId)
   $effect(() => { if (appearance.s.dailyNotes && notes.loaded) notes.ensureCalendar(); });
-  $effect(() => { if (notes.currentId === CALENDAR_NOTE_ID) notes.currentId = CALENDAR; });
   // the phone's reminder alarm follows the settings
   $effect(() => { if (isMobile) syncPhoneReminder(); });
   $effect(() => { if (isMobile) widget.daily(appearance.s.dailyNotes && appearance.s.dailyInWidget); });

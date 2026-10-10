@@ -97,6 +97,16 @@ export function nested(list: Note[], folded?: (id: string) => boolean): { n: Not
 /** Not a note: the daily notes' calendar, opened in the editor's place and kept in back/forward history. */
 export const CALENDAR = 'calendar';
 
+/**
+ * The note next to `current` in the list (⌘↓ / ⌘↑), round the end. The calendar is its row; a page not in
+ * the list (a daily note) steps to the list's first note, or back to its last.
+ */
+export function stepFrom<T extends { id: string }>(list: T[], current: string | null, delta: number): T | undefined {
+  const i = list.findIndex((n) => n.id === (current === CALENDAR ? CALENDAR_NOTE_ID : current));
+  if (i < 0) return list[delta > 0 ? 0 : list.length - 1];
+  return list[(i + delta + list.length) % list.length];
+}
+
 /** the note last looked at, kept on this device for the next start */
 const LAST = 'eve.lastNote';
 function remember(id: string | null) { try { if (id) localStorage.setItem(LAST, id); } catch { /* private mode: no memory, no harm */ } }
@@ -122,6 +132,7 @@ class NotesStore {
 
   get currentId() { return this._cur; }
   set currentId(id: string | null) {
+    if (id === CALENDAR_NOTE_ID) id = CALENDAR; // its row opens the calendar: history keeps the calendar, or Back opened it again
     if (id === this._cur) return;
     if (id) {
       this.history = this.history.slice(0, this.hIndex + 1).filter((h) => h !== id);
@@ -176,6 +187,11 @@ class NotesStore {
   /** The calendar's row: made the first time daily notes are on, at the top of Notes (it moves like a note, groups included). */
   ensureCalendar(): Note {
     let n = this.all.find((x) => x.id === CALENDAR_NOTE_ID);
+    if (n && n.deleted) { // deleted (from an older Eve, or another device): the row comes back, on every device
+      Object.assign(n, { deleted: false, updatedAt: Date.now() });
+      void storage.write(n.id, serialize(n));
+      this.dirty++;
+    }
     if (n) return n;
     const top = this.visible.filter((x) => x.group === '').reduce((m, x) => Math.min(m, x.order), 1);
     n = { id: CALENDAR_NOTE_ID, body: `# ${CALENDAR_NAME}\n`, updatedAt: UNWRITTEN, deleted: false, group: '', order: top - 1, icon: '🗓️' };
