@@ -257,7 +257,12 @@ export function applyKeymap(editor: Editor) {
   const cmds = editorCommands(editor);
   const bindings: Record<string, Command> = {};
   for (const a of shortcuts.actions) {
-    if (a.scope === 'editor' && a.keys && cmds[a.id]) bindings[a.keys] = () => cmds[a.id]();
+    if (a.scope !== 'editor' || !a.keys || !cmds[a.id]) continue;
+    // ProseMirror knows the minus key as "-" ("Minus" is the list's own name for it), and with Shift held the
+    // key reads "_": that is found by the key's code (Mod-Shift--), or as "_" without its Shift (Mod-_)
+    const keys = a.keys.replace(/Minus$/, '-');
+    bindings[keys] = () => cmds[a.id]();
+    if (keys !== a.keys && keys.includes('Shift-')) bindings[keys.replace('Shift-', '').replace(/-$/, '_')] = bindings[keys];
   }
   editor.unregisterPlugin(KEYMAP);
   editor.unregisterPlugin(APP_GUARD);

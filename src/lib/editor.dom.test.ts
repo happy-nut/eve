@@ -2,6 +2,7 @@ import { describe, test, expect, afterEach } from 'vitest';
 import { ui } from './ui.svelte';
 import { editorWith, md, posOf, type, press, paste } from './testEditor';
 import { runEditorCommand } from './editor';
+import { eventToKeys } from './shortcuts.svelte';
 
 afterEach(() => {
   ui.closeMenu();
@@ -363,6 +364,21 @@ describe('⌥↑ / ⌥↓ in a table', () => {
     expect(moved('Name', 'moveBlockDown')).toBe(same);
     expect(moved('Qty', 'moveBlockDown')).toBe(same);
     expect(moved('Cap', 'moveBlockDown')).toBe(same);
+  });
+});
+
+describe('⌘⇧- puts in a divider', () => {
+  test('with Shift held the key reads "_": the binding answers it all the same', () => {
+    const ed = editorWith('one');
+    ed.commands.setTextSelection(posOf(ed, 'one', true));
+    const e = press(ed, '_', { code: 'Minus', ctrlKey: true, shiftKey: true, keyCode: 189 } as KeyboardEventInit);
+    expect(e.defaultPrevented).toBe(true);
+    expect(md(ed)).toContain('---');
+  });
+
+  test('recorded, the key is the one the list writes', () => {
+    const e = new KeyboardEvent('keydown', { key: '_', code: 'Minus', ctrlKey: true, shiftKey: true });
+    expect(eventToKeys(e)).toBe('Mod-Shift-Minus');
   });
 });
 
