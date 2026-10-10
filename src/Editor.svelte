@@ -27,12 +27,16 @@
   let dateMenu: ReturnType<typeof DateMenu>; // the @ calendar
   let emojiRow: ReturnType<typeof EmojiRow>; // the :smile row
 
+  // the markdown the editor last handed over (or was given): a body that differs from it came from elsewhere
+  let lastEmitted = '';
+
   onMount(() => {
     const id = note.id;
+    lastEmitted = note.body;
     editor = createEditor({
       element: el,
       content: note.body,
-      onUpdate: (md) => notes.update(note.id, md),
+      onUpdate: (md) => { lastEmitted = md; notes.update(note.id, md); },
       onNoteMove: (dir, onTitle) => (onTitle || openedFromList.id === note.id) && nudgeNote(note.id, dir),
       onOpenNote: (title) => {
         notes.flush(note.id);
@@ -77,7 +81,8 @@
     // the empty line StarterKit keeps at the end of a note is only put there by the first transaction: before it, the
     // note's end is the end of its last block, and a caret sent there (opening a note) landed at the end of a closing
     // code block's last line, scrolling the code sideways to it. Put it there first, so the end is the empty line.
-    editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false));
+    // Opening a note is not writing in it: the editor's own spelling of it is not saved back, dated now.
+    editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false).setMeta('preventUpdate', true));
     const section = notes.section; // a [[Title#Section]] link brought us here
     notes.section = '';
     if (section) {
@@ -119,14 +124,22 @@
   // rebind editor shortcuts live when the user changes them
   $effect(() => { shortcuts.actions; if (editor) applyKeymap(editor); });
 
-  // remote sync may replace the body under us. Trailing newlines do not count as a difference: a note
-  // that ends in one (created from a template, imported from a file) would otherwise be re-set on every
-  // mount, throwing away where the caret was just put — the jump a [[Title#Section]] link makes, say.
+  // remote sync may replace the body under us — even while the caret is in it (a window in the background keeps
+  // its focus), or the next keystroke would save the old text over the other device's edit. Only a body the editor
+  // did not hand over itself counts: the editor writes `- a` for `* a`, and putting the note back as it was saved
+  // would just re-set it. Re-setting it is not an edit here, so it is not saved back, nor dated now. Trailing
+  // newlines do not count as a difference: a note that ends in one (created from a template, imported from a file)
+  // would otherwise be re-set on every mount, throwing away where the caret was just put — the jump a
+  // [[Title#Section]] link makes, say.
   $effect(() => {
     const body = note.body;
-    if (editor && !editor.isFocused && getMarkdown(editor).trimEnd() !== body.trimEnd()) {
-      editor.commands.setContent(body);
-    }
+    if (!editor || body.trimEnd() === lastEmitted.trimEnd()) return;
+    lastEmitted = body;
+    if (getMarkdown(editor).trimEnd() === body.trimEnd()) return;
+    const { from, to } = editor.state.selection;
+    editor.commands.setContent(body, { emitUpdate: false });
+    const end = editor.state.doc.content.size;
+    editor.commands.setTextSelection({ from: Math.min(from, end), to: Math.min(to, end) });
   });
 </script>
 
