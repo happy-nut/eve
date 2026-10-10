@@ -87,8 +87,22 @@
     });
   }
   $effect(() => { void version; void k; tick().then(measure); });
+  // the drawing's own size too: zoomed on the whole screen (DiagramBlock.svelte), it grows or shrinks inside a canvas
+  // that stays the same size, and each redraw comes in at its natural size before the zoom is put back — the boxes'
+  // rings and + stayed where the boxes had been
+  let watched: Element | null = null;
+  const ro = new ResizeObserver(() => measure());
+  $effect(() => {
+    void version;
+    tick().then(() => {
+      const pic = host.firstElementChild;
+      if (pic === watched) return;
+      if (watched) ro.unobserve(watched);
+      watched = pic;
+      if (pic) ro.observe(pic);
+    });
+  });
   onMount(() => {
-    const ro = new ResizeObserver(() => measure());
     ro.observe(host);
     // a picture wider than the card scrolls in it: the layer's boxes follow it
     host.addEventListener('scroll', measure, { passive: true });

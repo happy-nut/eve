@@ -114,6 +114,26 @@ try {
   await page.keyboard.press('Enter');
   await settle(page);
   assert.ok((await md(page)).includes('Big edit'), 'an edit on the whole screen is written into the note');
+  // zoomed out with the box picked: its ring follows the box (it stayed where the box had been)
+  at = await boxAt(page, 'Big edit');
+  await page.mouse.click(at.x, at.y); // picked again
+  await page.waitForSelector('.dblock.full .layer .ring');
+  await page.locator('.zoombar button[aria-label="Zoom out"]').click();
+  await page.waitForTimeout(200);
+  const off = await page.evaluate(() => {
+    const ring = document.querySelector('.dblock.full .layer .ring')?.getBoundingClientRect();
+    const node = [...document.querySelectorAll('.dblock.full g.node')].find((g) => g.textContent.includes('Big edit'))?.getBoundingClientRect();
+    return ring && node ? Math.abs(ring.x + ring.width / 2 - (node.x + node.width / 2)) + Math.abs(ring.width - node.width - 8) : -1;
+  });
+  assert.ok(off >= 0 && off < 3, `the picked box's ring stays on it after a zoom (off by ${off})`);
+  // ⌘Z on the whole screen is the note's undo
+  const beforeUndo = await md(page);
+  await page.keyboard.press('Control+z');
+  await settle(page);
+  assert.notEqual(await md(page), beforeUndo, '⌘Z undoes on the whole screen');
+  await page.keyboard.press('Control+Shift+z');
+  await settle(page);
+  assert.ok((await md(page)).includes('Big edit'), '⇧⌘Z redoes it');
   await page.keyboard.press('Escape'); // lets go of the box
   await page.keyboard.press('Escape'); // done editing
   await page.waitForSelector('.dblock.full:not(.active)');
@@ -130,6 +150,7 @@ try {
   assert.equal(await page.locator('.dblock.full.active').count(), 0, 'the drag that panned did not open the editor');
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('.dblock.full'));
+  assert.ok(await page.evaluate(() => !!document.activeElement?.closest('.tiptap')), 'the keyboard is back in the note');
   const back = await page.locator('.tiptap .mermaid-view svg').evaluate((s) => s.getBoundingClientRect().width);
   assert.ok(back < 1200, 'back in the note at its own size');
   console.log('ok   full screen: zoom, pan, edit');

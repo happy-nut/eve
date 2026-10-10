@@ -70,7 +70,7 @@ class Ui {
   /** a diagram block filling the screen, to zoom into and edit there (DiagramBlock.svelte): how to put it back */
   diagramView = $state<(() => void) | null>(null);
   private diagramViewFrom: HTMLElement | null = null;
-  viewDiagram(close: () => void) { this.diagramViewFrom = document.activeElement as HTMLElement | null; this.diagramView = close; }
+  viewDiagram(close: () => void, from: HTMLElement | null = document.activeElement as HTMLElement | null) { this.diagramViewFrom = from; this.diagramView = close; }
   closeDiagramView() {
     const close = this.diagramView;
     if (close === null) return;

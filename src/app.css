@@ -571,6 +571,9 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 /* …except while a diagram fills the screen from inside the note (DiagramBlock.svelte): kept in there, it went under
    the app's own bars. The note is hidden behind it meanwhile, its selection with it. */
 :has(> .sel-layer):has(.dblock.full) { isolation: auto; }
+/* a card's or a day's page floating over the note is moved into place by a transform, which made the whole screen
+   only the page's size: put in place without one while a diagram in it fills the screen */
+.card-page:has(.dblock.full) { transform: none !important; translate: none !important; }
 .sel-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: -1; }
 .sel-layer > div { position: absolute; background: var(--sel); }
 /* the note not focused (the list, a dialog): the selection stays, fainter, as the browser's own did */
