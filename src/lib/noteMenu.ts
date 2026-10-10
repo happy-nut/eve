@@ -1,7 +1,7 @@
 // The menu a note opens by itself: right-click (or ⌥↩) inside it; on a link, the link's own.
 import type { Editor } from '@tiptap/core';
 import type { NodeSelection } from '@tiptap/pm/state';
-import { cardToLink, linkToCard } from './bookmark';
+import { cardable, cardToLink, linkToCard } from './bookmark';
 import { ui, type MenuItem } from './ui.svelte';
 import { openUrl, clipboardText, copyText } from './platform';
 import { exportCurrent } from './transfer';
@@ -34,7 +34,9 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
   if (empty && linked) {
     const href = editor.getAttributes('link').href ?? '';
     const unlink = () => editor.chain().focus().extendMarkRange('link').unsetLink().run();
-    ui.openMenu(at, [{ label: 'Show as card', run: () => void linkToCard(editor) }, ...linkItems(href, unlink).map((i, n) => (n ? i : { ...i, sep: true }))]);
+    // an address that would not read back as a card is not offered as one (see cardable)
+    const card = cardable(editor, href) ? [{ label: 'Show as card', run: () => void linkToCard(editor) }] : [];
+    ui.openMenu(at, [...card, ...linkItems(href, unlink).map((i, n) => (n || !card.length ? i : { ...i, sep: true }))]);
     return;
   }
   /** execCommand is the one path that keeps ProseMirror's own clipboard serializer (markdown, nodes) */

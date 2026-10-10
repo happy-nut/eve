@@ -316,6 +316,9 @@ function isEntity(s: string): boolean {
 
 const mathSafeText = {
   serialize(state: any, node: PMNode) {
+    // a link written as <address>: markdown reads nothing inside it, so a backslash there stayed in the address
+    // (`<https://a.com/\*x\*>` pointed somewhere else)
+    if (state.inAutolink) return void state.text(node.text ?? '', false);
     const text = (node.text ?? '')
       // "&lt;" typed as text came back as "<"; only a name markdown reads as a character is escaped, so "Q&A;" or
       // "AT&T;" stay as typed (written "&amp;A;" they showed so in the title, and a [[link]] to it found nothing)

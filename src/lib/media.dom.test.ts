@@ -1,6 +1,6 @@
 // Pictures, PDFs, videos, link cards and math in a note: where they land, what they keep, how the keys treat them.
 import { test, expect, afterEach } from 'vitest';
-import { editorWith, posOf } from './testEditor';
+import { editorWith, md, posOf, press } from './testEditor';
 import { dropBlock } from './editor';
 
 afterEach(() => { document.body.innerHTML = ''; });
@@ -35,4 +35,46 @@ test('a file dropped on a plain line goes right under it', () => {
   const $p = dropOn('# P\n\nfirst\n\nsecond', 'first');
   expect($p.depth).toBe(0);
   expect($p.nodeBefore?.textContent).toBe('first');
+});
+
+/** a card put into a note, saved, and the note opened again — twice */
+function cardTwice(href: string) {
+  const ed = editorWith('# t\n\nx');
+  ed.commands.insertContentAt(ed.state.doc.content.size, { type: 'bookmark', attrs: { href } });
+  const once = md(ed);
+  const back = editorWith(once);
+  return { once, back, twice: md(back) };
+}
+
+test.each([
+  'https://ko.wikipedia.org/wiki/서울',
+  'https://ko.wikipedia.org/wiki/%EC%84%9C%EC%9A%B8',
+  'https://example.com/[x]',
+])('a card for %s is still a card when the note is opened again', (href) => {
+  const { back, twice } = cardTwice(href);
+  expect(back.state.doc.lastChild!.type.name).toBe('bookmark');
+  // the address may come back encoded (%EC…), the same page; from then on the file stays as it is
+  const again = editorWith(twice);
+  expect(again.state.doc.lastChild!.type.name).toBe('bookmark');
+  expect(md(again)).toBe(twice);
+});
+
+test.each([
+  'https://example.com/*star*',
+  'https://example.com/a)b',
+  'https://example.com/path.',
+])('a card markdown cannot write bare (%s) stays one whole link', (href) => {
+  const { back, once, twice } = cardTwice(href);
+  expect(once).toBe(`# t\n\nx\n\n<${href}>`);
+  const line = back.state.doc.lastChild!;
+  expect(line.textContent).toBe(href);
+  expect(line.firstChild!.marks[0]?.attrs.href).toBe(href);
+  expect(twice).toBe(once);
+});
+
+test('↩ after such an address leaves it a link instead of making a card that would not come back', () => {
+  const ed = editorWith('# t\n\nhttps://example.com/*star*');
+  ed.commands.setTextSelection(ed.state.doc.content.size - 1);
+  press(ed, 'Enter');
+  ed.state.doc.forEach((n) => expect(n.type.name).not.toBe('bookmark'));
 });
