@@ -46,7 +46,9 @@
 
 {#if items.length}
   <ul class="suggest" bind:this={list} style={place} transition:fly|global={caretIn}>
-    {#each shown as row, i (`${row.top}-${row.child}-${row.item.value ?? row.item.label}`)}
+    <!-- keyed by place: a page with two headings of the same name ("TODO" twice) gave two rows the same key, and
+         Svelte stopped with an error as soon as the page was opened into its sections -->
+    {#each shown as row, i (i)}
       {@const t = row.item}
       <li class:sel={i === sel} class:child={row.child}>
         <button onmousedown={(e) => { e.preventDefault(); pick(t); }}>
