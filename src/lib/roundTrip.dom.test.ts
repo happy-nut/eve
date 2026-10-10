@@ -229,6 +229,23 @@ test('a [[link]] after a comment at the start of a line is still a link', () => 
   expect(link).toBe(true);
 });
 
+test.each([
+  ['a row wider than its header', '| a |\n| --- |\n| b | c |', '| a |  |\n| --- | --- |\n| b | c |\n'],
+  ['rows of different widths', '| a | b |\n| :-- | --: |\n| 1 | 2 | 3 | 4 |\n| 5 |', '| a | b |  |  |\n| :--- | ---: | --- | --- |\n| 1 | 2 | 3 | 4 |\n| 5 |  |  |  |\n'],
+  ['a wide row, in a quote', '> | a |\n> | --- |\n> | b | c \\| d | e |', '> | a |  |  |\n> | --- | --- | --- |\n> | b | c \\| d | e |\n'],
+  ['a formula with bars in a cell', '| a | b |\n| --- | --- |\n| $|x|$ | c |', '| a | b |\n| --- | --- |\n| $\\|x\\|$ | c |\n'],
+  ['a formula with bars in the header', '| $|x|$ | b |\n| --- | --- |\n| 1 | 2 |', '| $\\|x\\|$ | b |\n| --- | --- |\n| 1 | 2 |\n'],
+])('a table with %s keeps every cell', (_what, note, saved) => {
+  expect(save(note)).toBe(saved);
+  expect(save(saved)).toBe(saved);
+});
+
+test('a formula with bars in a cell is one formula', () => {
+  let tex = '';
+  editorWith('| a | b |\n| --- | --- |\n| $|x|$ | c |').state.doc.descendants((n) => { if (n.type.name === 'mathInline') tex = n.attrs.latex; });
+  expect(tex).toBe('|x|');
+});
+
 test('words in angle brackets are text, and a line of them does not take the lines under it', () => {
   expect(editorWith('Array<string> and <Enter>').state.doc.firstChild!.textContent).toBe('Array<string> and <Enter>');
   expect(editorWith('<Enter>\n- item').state.doc.child(1).type.name).toBe('bulletList');

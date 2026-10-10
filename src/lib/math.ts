@@ -40,6 +40,19 @@ function closing(src: string, start: number): number {
   }
 }
 
+/** `line` with each `|` inside a `$…$` (not one written `\|`) as `hide`, a character of the same length */
+export function hidePipesInMath(line: string, hide: string): string {
+  let out = line;
+  for (let i = line.indexOf('$'); i >= 0; i = line.indexOf('$', i + 1)) {
+    if (line[i - 1] === '\\') continue;
+    const end = closing(line, i);
+    if (end < 0) continue;
+    for (let k = i + 1; k < end; k++) if (line[k] === '|' && line[k - 1] !== '\\') out = out.slice(0, k) + hide + out.slice(k + 1);
+    i = end;
+  }
+  return out;
+}
+
 /** a run of text that would be read back as a formula (some `$…$` in it) */
 export const readsAsMath = (text: string): boolean => {
   for (let i = text.indexOf('$'); i >= 0; i = text.indexOf('$', i + 1)) {
