@@ -303,7 +303,9 @@ export const MathBlock = mathNode(true);
  */
 const mathSafeText = {
   serialize(state: any, node: PMNode) {
-    const text = (node.text ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;'); // tiptap-markdown's own escapeHTML
+    const text = (node.text ?? '')
+      .replace(/&(?=#?[a-z0-9]+;)/gi, '&amp;') // "&lt;" typed as text came back as "<"
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;'); // tiptap-markdown's own escapeHTML
     if (!readsAsMath(text)) { state.text(text); return; }
     text.split('$').forEach((part, i) => {
       if (i) state.write('\\$');

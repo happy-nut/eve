@@ -45,6 +45,23 @@ test.each([
   expect(save(note)).toBe(note);
 });
 
+test.each([
+  ['an entity typed as text', '&lt;br&gt; and &amp;'],
+  ['a number written as an entity', '&#123; and &#x41;'],
+  ['an ampersand', 'Tom & Jerry, a&b'],
+])('%s stays the text it was', (_what, text) => {
+  const ed = editorWith('');
+  ed.commands.setContent({ type: 'doc', content: [{ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text }] }, { type: 'paragraph', content: [{ type: 'text', text }] }] });
+  const back = editorWith(md(ed));
+  expect(back.state.doc.child(0).textContent).toBe(text);
+  expect(back.state.doc.child(1).textContent).toBe(text);
+  expect(md(back)).toBe(md(ed));
+});
+
+test('an ampersand is written as it was typed', () => {
+  expect(save('Tom & Jerry, a&b')).toBe('Tom & Jerry, a&b');
+});
+
 test('a typed "1) Buy milk" stays text', () => {
   const ed = editorWith('');
   ed.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '1) Buy milk' }] }] });
