@@ -200,6 +200,17 @@ test.each([
   expect(save(note)).toBe(note);
 });
 
+test.each([
+  ['code', '- a\n  ```\n  c\n  ```\n- b', '- a\n\n  ```\n  c\n  ```\n\n- b'],
+  ['a heading', '- a\n  # h\n- b', '- a\n\n  # h\n\n- b'],
+  ['a formula', '- a\n  $$\n  x\n  $$\n- b', '- a\n\n  $$\n  x\n  $$\n\n- b'],
+  ['code, in a to-do', '- [ ] a\n  ```\n  c\n  ```\n- [ ] b', '- [ ] a\n\n  ```\n  c\n  ```\n\n- [ ] b'],
+  ['a line under code on the item\'s own line', '- a\n- ```\n  c\n  ```\n  more', '- a\n\n- ```\n  c\n  ```\n\n  more'],
+])('a tight list with %s under an item\'s line is written as it will be read, the first time', (_what, note, saved) => {
+  expect(save(note)).toBe(saved);
+  expect(save(saved)).toBe(saved);
+});
+
 test('words in angle brackets are text, and a line of them does not take the lines under it', () => {
   expect(editorWith('Array<string> and <Enter>').state.doc.firstChild!.textContent).toBe('Array<string> and <Enter>');
   expect(editorWith('<Enter>\n- item').state.doc.child(1).type.name).toBe('bulletList');
