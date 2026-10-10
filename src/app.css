@@ -653,6 +653,11 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 .tiptap th, .tiptap td { border: 1px solid var(--line); padding: 6px 9px; vertical-align: top; position: relative; min-width: 3em; }
 .tiptap th { background: var(--bg-input); font-weight: 600; text-align: left; }
 .tiptap th > p, .tiptap td > p { margin: 0; }
+/* a phone: eight columns shared out over its width left a few letters a line in each cell. There every column keeps
+   room for a word or two and the table runs as wide as that needs, scrolling sideways in its wrapper; one that fits
+   still fills the width */
+html.mobile .tiptap table { table-layout: auto; }
+html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 .tiptap .selectedCell::after {
   content: ''; position: absolute; inset: 0; background: var(--accent-soft); pointer-events: none;
 }

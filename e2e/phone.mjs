@@ -187,6 +187,32 @@ try {
   }
   console.log('ok   the formatting bar on a phone turned on its side');
 
+  // ---- a wide table: columns keep room for words and the table scrolls sideways; its tools are finger-sized ----
+  {
+    const row = (n, f) => '| ' + Array.from({ length: n }, (_, i) => f(i)).join(' | ') + ' |';
+    const table = (n) => [row(n, (i) => `Heading ${i}`), row(n, () => '---'), row(n, (i) => `cell value ${i}`)].join('\n');
+    const page = await phone({ a: '# Tables\n\nabove\n\n' + table(8) + '\n\nmid\n\n' + table(2) + '\n\nbelow\n' });
+    const sizes = await page.evaluate(() => [...document.querySelectorAll('.tableWrapper')].map((w) => ({
+      sw: w.scrollWidth, cw: w.clientWidth, cell: Math.min(...[...w.querySelectorAll('td')].map((c) => c.getBoundingClientRect().width)),
+    })));
+    assert.ok(sizes[0].sw > sizes[0].cw && sizes[0].cell >= 80, `8 columns: wide enough for words, scrolled sideways (${JSON.stringify(sizes[0])})`);
+    assert.ok(sizes[1].sw === sizes[1].cw, `2 columns: still the note's width (${JSON.stringify(sizes[1])})`);
+    await page.locator('.tiptap td').first().tap();
+    await page.waitForSelector('.tbl-tools');
+    await page.waitForTimeout(100);
+    const tools = await page.evaluate(() => {
+      const r = (el) => el.getBoundingClientRect();
+      const b = [...document.querySelectorAll('.tbl-tools button')];
+      const merge = r(b.find((x) => x.getAttribute('aria-label') === 'Merge or split')), del = r(b.find((x) => x.getAttribute('aria-label') === 'Delete table'));
+      return { min: Math.min(...b.map((x) => Math.min(r(x).width, r(x).height))), apart: del.left - merge.right, left: r(document.querySelector('.tbl-tools')).left, right: r(document.querySelector('.tbl-tools')).right, vw: innerWidth };
+    });
+    assert.ok(tools.min >= 36, `the table's buttons are finger-sized (${tools.min})`);
+    assert.ok(tools.apart >= 12, `Delete table set apart from Merge or split (${tools.apart})`);
+    assert.ok(tools.left >= 0 && tools.right <= tools.vw, 'the tools are on screen');
+    await page.close();
+  }
+  console.log('ok   a wide table on a phone scrolls sideways, its tools finger-sized');
+
   assert.deepEqual(errors, []);
 } finally {
   await browser.close();
