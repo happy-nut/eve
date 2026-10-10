@@ -20,6 +20,7 @@
     select: () => { if (!items.length) return false; pick(items[sel]); return true; },
     hide: () => { items = []; },
     visible: () => items.length > 0,
+    place: (rect) => { place = placeAt(rect, 64, 260); },
   };
 </script>
 

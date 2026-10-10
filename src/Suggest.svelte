@@ -38,6 +38,7 @@
     },
     hide: () => { items = []; open = new Set(); },
     visible: () => items.length > 0,
+    place: (rect) => { anchor = rect; place = placeAt(rect, 300, list?.offsetWidth ?? 340); },
   };
 
   let list = $state<HTMLUListElement | null>(null);
