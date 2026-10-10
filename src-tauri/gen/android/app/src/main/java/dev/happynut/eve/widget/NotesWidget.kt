@@ -153,7 +153,8 @@ class NotesWidget : AppWidgetProvider() {
       views.setTextViewText(R.id.row_preview, preview)
       views.setViewVisibility(R.id.row_preview, if (preview.isEmpty()) View.GONE else View.VISIBLE)
       val now = System.currentTimeMillis()
-      val time = if (now - n.updated < DateUtils.MINUTE_IN_MILLIS) context.getString(R.string.widget_now)
+      // 0 is "not written yet", not a time
+      val time = if (n.updated <= 0) "" else if (now - n.updated < DateUtils.MINUTE_IN_MILLIS) context.getString(R.string.widget_now)
         else DateUtils.getRelativeTimeSpanString(n.updated, now, DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE)
       views.setTextViewText(R.id.row_time, if (pinnedTop) "📌 $time" else time)
       views.setOnClickFillInIntent(R.id.row, Intent().putExtra(EXTRA_OPEN, "note:${n.id}"))
@@ -205,7 +206,9 @@ fun readNotes(dir: File, daily: Boolean = false): List<Note> =
     .filter { !it.second }
     .map { it.first }
     .filter { it.id != "daily-template" && it.id != "daily-calendar" } // the calendar's own notes (lib/daily.ts)
-    .filter { daily || !Regex("^daily-\\d{4}-\\d{2}-\\d{2}$").matches(it.id) }
+    // a day opened but not written in yet holds only the template and is dated 0 (notes.svelte.ts UNWRITTEN):
+    // listed, it sank to the bottom as "Jan 1, 1970"
+    .filter { !Regex("^daily-\\d{4}-\\d{2}-\\d{2}$").matches(it.id) || (daily && it.updated > 0) }
     .sortedByDescending { it.updated }
 
 /** The note and whether it is a tombstone. */
