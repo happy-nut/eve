@@ -2,6 +2,7 @@ import { Editor, Extension, InputRule, wrappingInputRule } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { ListItem, OrderedList } from '@tiptap/extension-list';
 import Paragraph from '@tiptap/extension-paragraph';
+import Code from '@tiptap/extension-code';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -513,8 +514,12 @@ export function createEditor(opts: {
         horizontalRule: false, // replaced below: no divider inside a list, and the caret can reach it
         blockquote: false, // replaced below: "> " makes a toggle, as in Notion, so a quote is "| "
         text: false, // replaced below: text that would read back as a formula keeps its dollars escaped
+        code: false, // replaced below: code in a link
       }),
       Text,
+      // code inside a link ([run `npm i` first](u)) stays in it: stock code shuts out every other mark, so the link
+      // was cut in two around it. Formatting still goes (nothing in code is bold).
+      Code.extend({ excludes: 'bold italic strike underline highlight' }),
       MathInline,
       MathBlock,
       Blockquote.extend({

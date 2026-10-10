@@ -25,3 +25,12 @@ test.each([
 ])('code with %s is written as it was read', (_what, note) => {
   expect(save(note)).toBe(note);
 });
+
+test.each([
+  ['code in a link', '[run `npm i` first](u)'],
+  ['a link that is all code', '[`npm i`](u)'],
+  ['code next to bold', '**a** `b` *c*'],
+  ['code next to a link', '[a](u) `b`'],
+])('%s is written as it was read', (_what, note) => {
+  expect(save(note)).toBe(note);
+});
