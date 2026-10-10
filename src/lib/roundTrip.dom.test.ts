@@ -62,6 +62,13 @@ test('an ampersand is written as it was typed', () => {
   expect(save('Tom & Jerry, a&b')).toBe('Tom & Jerry, a&b');
 });
 
+test('a quote starting with "[!note]" as text stays a quote', () => {
+  const note = '> \\[!note\\] x';
+  expect(editorWith(note).state.doc.firstChild!.type.name).toBe('blockquote');
+  expect(save(note)).toBe(note);
+  expect(editorWith('> [!note] x').state.doc.firstChild!.type.name).toBe('callout');
+});
+
 test('a typed "1) Buy milk" stays text', () => {
   const ed = editorWith('');
   ed.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '1) Buy milk' }] }] });

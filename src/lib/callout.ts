@@ -148,8 +148,18 @@ export const Callout = Node.create({
           });
         },
         parse: {
+          // the marker as it was written, before the HTML has it as text: a quote starting with "[!note]" typed as
+          // text is written "\[!note\]", and read from the HTML alone it was a callout the next time
+          setup(md: any) {
+            md.core.ruler.after('block', 'eve-callout-marker', (state: any) => {
+              const t = state.tokens;
+              for (let i = 0; i + 2 < t.length; i++) {
+                if (t[i].type === 'blockquote_open' && t[i + 1].type === 'paragraph_open' && /^\[![^\]]+\]/.test(t[i + 2].content)) t[i].attrSet('data-eve-callout', '');
+              }
+            });
+          },
           updateDOM(root: HTMLElement) {
-            for (const bq of [...root.querySelectorAll('blockquote')]) {
+            for (const bq of [...root.querySelectorAll('blockquote[data-eve-callout]')]) {
               const first = bq.firstElementChild;
               const m = first?.tagName === 'P' && /^\[!([^\]]+)\]([+-]?)[ \t]*/.exec(first.textContent ?? '');
               if (!m) continue;
