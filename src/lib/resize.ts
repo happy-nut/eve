@@ -4,13 +4,19 @@
  */
 export const MIN_WIDTH = 120;
 
-/** Width written into a name: `caption|540` → 540. */
+/**
+ * Width written into a name: `caption|540` → 540. A caption that itself ends in `|2024` is written `\|2024`
+ * (see escapeWidth), which is not a width. Never narrower than a drag can make it: a `|50` once read
+ * as a width drew the picture 50px wide.
+ */
 export function widthOf(text: string | null | undefined): number | null {
-  const m = /\|(\d{2,4})$/.exec(text ?? '');
-  return m ? Number(m[1]) : null;
+  const m = /(?<!\\)\|(\d{2,4})$/.exec(text ?? '');
+  return m ? Math.max(MIN_WIDTH, Number(m[1])) : null;
 }
-/** The name without the width. */
-export const nameOf = (text: string | null | undefined) => (text ?? '').replace(/\|\d{2,4}$/, '');
+/** The name without the width (and a `\|2024` that is part of it back to `|2024`). */
+export const nameOf = (text: string | null | undefined) => (text ?? '').replace(/(?<!\\)\|\d{2,4}$/, '').replace(/\\(\|\d{2,4})$/, '$1');
+/** A name ending in `|2024` of its own, kept from being read back as a width. */
+export const escapeWidth = (name: string) => name.replace(/\|(\d{2,4})$/, '\\|$1');
 /** Put the width back on a name for the markdown. */
 export const withWidth = (name: string, width: number | null | undefined) => (width ? `${name}|${width}` : name);
 

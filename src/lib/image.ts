@@ -4,12 +4,12 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
 import { Plugin, PluginKey, NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { assetUrl } from './platform';
-import { nameOf, sizeGrip, widthOf, withWidth } from './resize';
+import { escapeWidth, nameOf, sizeGrip, widthOf, withWidth } from './resize';
 
 /** `![caption](src "title")`, the picture as a block of its own or inside a table's cell */
 export function imageMarkdown(state: any, node: PMNode): string {
   // the src is a URL, not text: escaping it would put backslashes into the file name
-  const alt = withWidth(state.esc(node.attrs.alt ?? ''), node.attrs.width);
+  const alt = withWidth(escapeWidth(state.esc(node.attrs.alt ?? '')), node.attrs.width);
   const src: string = node.attrs.src ?? '';
   // ...but one with a space, a "<" or ">", or a ")" with no "(" before it ends the link early (the rest was
   // read back as text): markdown's <…> holds those
@@ -18,6 +18,28 @@ export function imageMarkdown(state: any, node: PMNode): string {
   const dest = depth || /[\s<>]/.test(src) ? `<${src.replace(/[<>]/g, '\\$&')}>` : src;
   const title = node.attrs.title ? ` "${state.esc(node.attrs.title).replace(/"/g, '\\"')}"` : ''; // a " in it closed it
   return `![${alt}](${dest}${title})`;
+}
+
+/**
+ * A caption as it was written, out of the tokens markdown read it into. markdown-it's own alt text drops a
+ * backslash-escaped character and every bit of markup: `2*3=6` (saved `2\*3=6`) came back `23=6`, `[draft]`
+ * as `draft`, `C:\path` as `C:path`, and a `==` or a backtick vanished, each time the note was opened.
+ */
+function captionOf(tokens: any[]): string {
+  let out = '';
+  for (const t of tokens) {
+    if (t.type === 'text') out += t.content;
+    // `\|` stays escaped: only a bare `|540` at the end is the width (see widthOf)
+    else if (t.type === 'text_special') out += t.content === '|' ? t.markup : t.content;
+    else if (t.type === 'code_inline') out += t.markup + t.content + t.markup;
+    else if (t.type === 'math_inline') out += `$${t.content}$`;
+    else if (t.type === 'softbreak' || t.type === 'hardbreak') out += '\n';
+    else if (t.type === 'image') out += captionOf(t.children ?? []);
+    else if (/^mark_(open|close)$/.test(t.type)) out += '==';
+    else if (/_(open|close)$/.test(t.type)) out += t.markup ?? '';
+    else out += t.content ?? '';
+  }
+  return out;
 }
 
 /**
@@ -54,6 +76,12 @@ export const LocalImage = Image.extend({
           state.closeBlock(node);
         },
         parse: {
+          setup(md: any) {
+            md.renderer.rules.image = (tokens: any[], i: number, opts: any, _env: any, self: any) => {
+              tokens[i].attrSet('alt', captionOf(tokens[i].children ?? []));
+              return self.renderToken(tokens, i, opts);
+            };
+          },
           // pictures on lines one after the other are one paragraph to markdown, and the line break between them,
           // left alone in it once each picture is a block, became an empty line under the first (written down as
           // one, it stayed). Pictures alone in their paragraph are taken out of it.

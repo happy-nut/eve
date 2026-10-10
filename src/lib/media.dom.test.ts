@@ -72,6 +72,44 @@ test.each([
   expect(twice).toBe(once);
 });
 
+/** the picture after the note is saved and opened again, three times over */
+function pictureAfterReopening(attrs: Record<string, unknown>, note = '# t\n\n![](assets/a.png)\n\nend') {
+  const ed = editorWith(note);
+  let pos = -1;
+  ed.state.doc.descendants((n, p) => { if (n.type.name === 'image') pos = p; });
+  ed.view.dispatch(ed.state.tr.setNodeMarkup(pos, undefined, { ...ed.state.doc.nodeAt(pos)!.attrs, ...attrs }));
+  let s = md(ed);
+  for (let i = 0; i < 3; i++) s = md(editorWith(s));
+  let image: any;
+  editorWith(s).state.doc.descendants((n) => { if (n.type.name === 'image') image = n.attrs; });
+  return image;
+}
+
+test.each(['2*3=6', '[draft]', 'C:\\path', '`code`', 'a ~~b~~', 'pic==hi==', 'cost $5$', 'a_b_c', 'Seoul|2024', 'v1.0|50', 'x <b> y', 'A & B'])(
+  'the caption %s comes back as it was written',
+  (alt) => {
+    const image = pictureAfterReopening({ alt });
+    expect(image.alt).toBe(alt);
+    expect(image.width).toBe(null);
+  },
+);
+
+test('a caption ending in |2024 keeps its own width beside it', () => {
+  const image = pictureAfterReopening({ alt: 'Seoul|2024', width: 540 });
+  expect(image).toMatchObject({ alt: 'Seoul|2024', width: 540 });
+});
+
+test('a caption in a table cell comes back as it was written', () => {
+  const image = pictureAfterReopening({ alt: '2*3=6 [x]' }, '# t\n\n| a |\n| --- |\n| ![](assets/a.png) |');
+  expect(image.alt).toBe('2*3=6 [x]');
+});
+
+test('a width written smaller than a drag can make is read as the smallest width', () => {
+  let image: any;
+  editorWith('# t\n\n![pic|50](assets/a.png)').state.doc.descendants((n) => { if (n.type.name === 'image') image = n.attrs; });
+  expect(image).toMatchObject({ alt: 'pic', width: 120 });
+});
+
 test('↩ after such an address leaves it a link instead of making a card that would not come back', () => {
   const ed = editorWith('# t\n\nhttps://example.com/*star*');
   ed.commands.setTextSelection(ed.state.doc.content.size - 1);
