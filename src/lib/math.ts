@@ -336,17 +336,35 @@ const wordInBrackets = (s: string) => {
 /**
  * Pieces of a text written just so, not through markdown's escaping: words in angle brackets (read back they are text
  * anyway), and a footnote mark `[^1]`, which other apps read as one and which was written `\[^1\]`.
+ *
+ * And characters markdown's escaping left as they were, which were read back as formatting: underscores next to each
+ * other (`__init__` was written `\__init_\_` and came back with "init" in italics, one pair fewer each time), a pair
+ * of `==` (a highlight), and an `@` before a day (a date). These are written escaped.
  */
-const VERBATIM = /<[^<>]*>|\[\^[A-Za-z0-9-]+\]/g;
-function piecesOf(text: string): [text: string, verbatim: boolean][] {
-  const pieces: [string, boolean][] = [];
+const SPECIAL = /<[^<>]*>|\[\^[A-Za-z0-9-]+\]|_{2,}|(?<![^\s([{])@(?=\d{4}-\d{2}-\d{2}(?![\d-]))|==/g;
+/** `rest`: this text and the rest of its line after it, where a `==` here may find the one that closes it */
+function piecesOf(text: string, rest: string): [text: string, written: string | null][] {
+  const pieces: [string, string | null][] = [];
+  const closers = new Set<number>();
   let last = 0;
-  for (const m of text.matchAll(VERBATIM)) {
-    if (m[0][0] === '<' && !wordInBrackets(m[0])) continue;
-    pieces.push([text.slice(last, m.index), false], [m[0], true]);
-    last = m.index + m[0].length;
+  for (const m of text.matchAll(SPECIAL)) {
+    const s = m[0], at = m.index;
+    let out: string | null = s;
+    if (s[0] === '<') { if (!wordInBrackets(s)) continue; }
+    else if (s[0] === '_') out = '\\_'.repeat(s.length);
+    else if (s === '@') out = '\\@';
+    else if (s === '==') {
+      // as the highlight rule reads it: a `==` before a non-space, up to the next `==`, after a non-space
+      const end = rest.indexOf('==', at + 2);
+      const opens = /\S/.test(rest[at + 2] ?? ' ') && end > at + 2 && /\S/.test(rest[end - 1]);
+      if (!opens && !closers.has(at)) continue;
+      if (opens) closers.add(end);
+      out = '\\=\\=';
+    }
+    pieces.push([text.slice(last, at), null], [s, out]);
+    last = at + s.length;
   }
-  pieces.push([text.slice(last), false]);
+  pieces.push([text.slice(last), null]);
   return pieces.filter(([s]) => s);
 }
 
@@ -357,15 +375,19 @@ const plain = (text: string) => text
   .replace(/</g, '&lt;').replace(/>/g, '&gt;'); // tiptap-markdown's own escapeHTML
 
 const mathSafeText = {
-  serialize(state: any, node: PMNode) {
+  serialize(state: any, node: PMNode, parent?: PMNode, index?: number) {
     // a link written as <address>: markdown reads nothing inside it, so a backslash there stayed in the address
     // (`<https://a.com/\*x\*>` pointed somewhere else)
     if (state.inAutolink) return void state.text(node.text ?? '', false);
-    const pieces = piecesOf(node.text ?? '');
-    const dollars = readsAsMath(pieces.map(([s, v]) => (v ? s : plain(s))).join(''));
-    for (const [s, verbatim] of pieces) {
-      if (verbatim) {
-        state.text(s, false);
+    let rest = node.text ?? '';
+    if (parent && index !== undefined) {
+      for (let i = index + 1; i < parent.childCount; i++) rest += parent.child(i).isText ? parent.child(i).text : '￼';
+    }
+    const pieces = piecesOf(node.text ?? '', rest);
+    const dollars = readsAsMath(pieces.map(([s, out]) => out ?? plain(s)).join(''));
+    for (const [s, out] of pieces) {
+      if (out !== null) {
+        state.text(out, false);
         state.atBlockStart = false;
         continue;
       }

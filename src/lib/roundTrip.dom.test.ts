@@ -180,6 +180,26 @@ test('a link to an address given below still links there, and a footnote mark st
   expect(save(save(note))).toBe(save(note));
 });
 
+test.each([
+  ['underscores next to each other', '\\_\\_init\\_\\_', '__init__'],
+  ['three underscores', '\\_\\_\\_', '___'],
+  ['a pair of ==', '\\=\\=x\\=\\=', '==x=='],
+  ['an @ before a day', '\\@2026-01-02', '@2026-01-02'],
+])('%s typed as text stays text', (_what, note, text) => {
+  expect(save(note)).toBe(note);
+  expect(save(save(note))).toBe(note);
+  expect(editorWith(save(note)).state.doc.firstChild!.textContent).toBe(text);
+});
+
+test.each([
+  ['a == b and c == d'],
+  ['x==y'],
+  ['snake_case_name a_b'],
+  ['mail me@2026-01-02x'],
+])('"%s" gets no backslashes it does not need', (note) => {
+  expect(save(note)).toBe(note);
+});
+
 test('words in angle brackets are text, and a line of them does not take the lines under it', () => {
   expect(editorWith('Array<string> and <Enter>').state.doc.firstChild!.textContent).toBe('Array<string> and <Enter>');
   expect(editorWith('<Enter>\n- item').state.doc.child(1).type.name).toBe('bulletList');
