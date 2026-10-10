@@ -11,6 +11,18 @@ test('a new group gets a random icon, as a new note does, unless the setting is 
   expect(groups.icon(b)).toBe('');
 });
 
+test('revealing a note opens the groups around it and unfolds the pages it sits under, and nothing else', async () => {
+  const { notes } = await import('./notes.svelte');
+  const outer = groups.create(), inner = groups.create(outer), other = groups.create();
+  const page = notes.create('# Page\n', inner);
+  const sub = notes.create('# Sub\n', inner, page.id);
+  groups.toggle(outer); groups.toggle(inner); groups.toggle(other); groups.fold(page.id);
+  groups.reveal(sub.id);
+  expect([groups.isCollapsed(outer), groups.isCollapsed(inner), groups.isFolded(page.id)]).toEqual([false, false, false]);
+  expect(groups.isCollapsed(other)).toBe(true);
+  expect(groups.visibleOrdered().some((n) => n.id === sub.id)).toBe(true);
+});
+
 test('deleting a group keeps its notes in their order, a sub-page still under its page', async () => {
   const { notes } = await import('./notes.svelte');
   const g = groups.create();

@@ -139,6 +139,13 @@ class Groups {
     this.persist();
   }
   expand(g: string) { if (this.isCollapsed(g)) this.toggle(g); }
+  /** A note's row brought into the list: the groups around it opened, the pages it sits under unfolded. */
+  reveal(id: string) {
+    const n = notes.all.find((x) => x.id === id && !x.deleted);
+    if (!n) return;
+    for (let g = n.group; g; g = parentOf(g)) this.expand(g);
+    for (let p = n.parent; p; p = notes.all.find((x) => x.id === p)?.parent) this.unfold(p);
+  }
 
   /** new empty group inside `parent` ('' = root); falls back to the parent's level when too deep */
   create(parent = ''): string {

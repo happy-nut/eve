@@ -5,7 +5,7 @@
   import { flip } from 'svelte/animate';
   import { fade, slide } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { notes, nested, titleOf, CALENDAR, type Note } from './lib/notes.svelte';
   import { isDailyId, DAILY_TEMPLATE_ID, CALENDAR_NOTE_ID } from './lib/daily';
   import { groups, parentOf, leafOf, depthOf, MAX_DEPTH } from './lib/groups.svelte';
@@ -66,6 +66,16 @@
     };
     walk('', 0);
     return out;
+  });
+
+  // The open note is shown where it sits in the list. Opened by ⌘⇧↓, back, a link or a new note in a folded group,
+  // its row used to stay hidden in the folded group (or under a folded page), or scrolled out of sight. Only when
+  // another note comes up: a group folded by hand while its note is open stays folded.
+  $effect(() => {
+    const id = notes.currentId === CALENDAR ? CALENDAR_NOTE_ID : notes.currentId;
+    if (!id) return;
+    untrack(() => groups.reveal(id));
+    void tick().then(() => document.querySelector(`aside [data-note="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' }));
   });
 
   // ---- "+" menu: new note / new group, relative to the focused row (the app's one menu, Menu.svelte) ----
