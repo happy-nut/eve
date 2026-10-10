@@ -112,6 +112,18 @@
         if (ticket) { settingsOpen = true; void sync.claim(ticket).then(offerUpdate); return; }
         // the reminder's notification: today's note
         if (ask === 'daily') { writeToday(); return; }
+        // a Markdown file opened with Eve or shared to it: MainActivity copied it (Opened.kt), and it joins the
+        // notes as a file from Finder does on the Mac
+        if (ask.startsWith('open:')) {
+          void importPaths(ask.slice(5).split('\n')).then((first) => {
+            if (!first) return;
+            putAway();
+            ui.focusOwner = 'editor';
+            notes.currentId = first.id;
+            sidebarOpen = false;
+          });
+          return;
+        }
         // the home-screen widget: straight into that note (or a new one), keyboard up
         const id = ask.startsWith('note:') ? ask.slice(5) : null;
         if (ask !== 'new' && !id) return;

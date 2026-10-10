@@ -63,12 +63,26 @@ class MainActivity : TauriActivity() {
   }
 
   private fun remember(intent: Intent?): Boolean {
+    if (Opened.wants(intent)) { open(intent!!); return false }
     // the widget's extra, or the phone-setup page's eve://signin?… link (eve://connect?… from older pages)
     val ask = intent?.getStringExtra(NotesWidget.EXTRA_OPEN)
       ?: intent?.dataString?.takeIf { it.startsWith("eve://signin?") || it.startsWith("eve://connect?") }
       ?: return false
     pending = ask
     return true
+  }
+
+  /** A file opened with Eve or shared to it: copied (Opened.kt) on a thread of its own, a provider may be slow
+   *  (Drive downloads it first), then "open:<path>\n<path>…" for the page, which imports the copies. */
+  private fun open(intent: Intent) {
+    val app = applicationContext
+    Thread {
+      val paths = try { Opened.copy(app, intent) } catch (e: Exception) { android.util.Log.w("eve", "open failed", e); emptyList() }
+      if (paths.isEmpty()) return@Thread
+      pending = "open:" + paths.joinToString("\n")
+      // a page not loaded yet takes it with its first takeIntent
+      runOnUiThread { webView?.evaluateJavascript("window.dispatchEvent(new Event('eve-intent'))", null) }
+    }.start()
   }
 
   /** window.EveAndroid in the page. */
