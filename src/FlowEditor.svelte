@@ -449,8 +449,7 @@
     if (linking && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); linking = null; return; }
     if (editing || laneEditing || !sel) return;
     // only keys meant for this diagram: the keyboard on it, or on nothing (after a box's typing is done) — not keys
-    // typed in the list, another note's page or the full-screen view, which deleted the box behind them
-    if (ui.diagramView !== null) return;
+    // typed in the list or another note's page, which deleted the box behind them
     const t = e.target as Element;
     if (t !== document.body && !layer.closest('.dblock')?.contains(t) && t !== layer.closest('.tiptap')) return;
     const typing = (e.target as HTMLElement).matches?.('input, textarea, [contenteditable="true"]');

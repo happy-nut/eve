@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { isMobile } from './lib/platform';
   import { ui } from './lib/ui.svelte';
   import { renderMermaid, themeKey } from './lib/mermaid';
@@ -116,9 +116,17 @@
       if (!active && codeShown && d && (e.metaKey || e.ctrlKey) && e.key === 'Enter' && (e.target as Element).closest?.('.tiptap') === root.closest('.tiptap')) {
         e.preventDefault(); e.stopPropagation(); toDrawing(); return;
       }
-      if (!active || e.defaultPrevented || ui.diagramView !== null) return;
+      if (e.defaultPrevented) return;
       const t = e.target as Element;
       const typing = t instanceof HTMLElement && t.matches('input, textarea, select');
+      // on the whole screen: + − 0 zoom, and Esc with nothing being edited puts it back in the note
+      if (full && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (e.key === 'Escape' && !active) { e.preventDefault(); e.stopPropagation(); leaveFull(); return; }
+        if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomBy(1.25); return; }
+        if (e.key === '-') { e.preventDefault(); zoomBy(0.8); return; }
+        if (e.key === '0') { e.preventDefault(); fit(); return; }
+      }
+      if (!active) return;
       // ⌘Z in a row of the form: the note's undo, as everywhere else in it (the field's own undo and the note's took
       // turns, and the diagram went with them)
       if (typing && root.contains(t) && !t.closest('.layer') && (e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y'))) {
@@ -134,6 +142,7 @@
     };
     window.addEventListener('keydown', keys, true);
     return () => {
+      if (full) ui.closeDiagramView(); // gone while on the whole screen (an undo took it out): the app's keys come back
       clearTimeout(drawTimer);
       flush(); // a change still waiting is not lost (code.ts writes it only into this same block, if it is still there)
       scheme?.removeEventListener('change', again); watch.disconnect();
@@ -142,6 +151,9 @@
     };
   });
   $effect(() => { if (codeShown) active = false; });
+  // edited as its code (written by hand, or Code pressed): that is the note's own text, under the whole screen, so the
+  // diagram goes back into the note to be edited there
+  $effect(() => { if (codeShown && full) untrack(leaveFull); });
 
   /** the box the opening click landed on, picked as the editor comes up */
   let pick = $state<string | null>(null);
@@ -171,19 +183,135 @@
   const flow = $derived(active && d?.kind === 'flowchart' ? d : null);
   const kindLabel = $derived(d ? KINDS.find((k) => k.kind === d!.kind)?.label ?? '' : '');
   let flowEd = $state<ReturnType<typeof FlowEditor> | null>(null);
+
+  // ---- the whole screen: this same block over everything, zoomed and panned, and edited there as in the note ----
+  // (a copy of its picture was shown before, which could only be looked at). Zooming sizes the drawing itself and
+  // panning scrolls it, so the flowchart editor's layer, which follows the picture's scroll, stays on its boxes.
+  let full = $state(false), zoom = $state(1);
+  const ZOOM_MIN = 0.1, ZOOM_MAX = 8;
+  function enterFull() {
+    (document.activeElement as HTMLElement | null)?.blur?.(); // keys are the diagram's now, not the note's text
+    full = true;
+    ui.viewDiagram(() => (full = false));
+    tick().then(fit);
+  }
+  /** back into the note (✕, Esc, the phone's back) */
+  const leaveFull = () => ui.closeDiagramView();
+  /** the drawing's own size, before any zoom */
+  function natural(): { el: HTMLElement | SVGSVGElement; w: number; h: number } | null {
+    const el = canvas?.firstElementChild as HTMLElement | SVGSVGElement | null;
+    if (!el) return null;
+    if (el instanceof SVGSVGElement) {
+      const vb = el.viewBox.baseVal;
+      return vb && vb.width ? { el, w: vb.width, h: vb.height } : null;
+    }
+    const z = +(el.style.zoom || 1);
+    return { el, w: el.offsetWidth / z || 1, h: el.offsetHeight / z || 1 };
+  }
+  /** the drawing at the zoom on the whole screen, or as the note draws it */
+  function size() {
+    const n = natural();
+    if (!n) return;
+    const { el } = n;
+    if (!full) {
+      if (el.dataset.style !== undefined) { el.setAttribute('style', el.dataset.style); delete el.dataset.style; }
+      return;
+    }
+    if (el.dataset.style === undefined) el.dataset.style = el.getAttribute('style') ?? '';
+    if (el instanceof SVGSVGElement) {
+      el.style.maxWidth = 'none'; el.style.minWidth = '0';
+      el.style.width = `${n.w * zoom}px`; el.style.height = `${n.h * zoom}px`;
+    } else el.style.zoom = String(zoom); // a chart Eve draws itself, as HTML
+  }
+  $effect(() => { void svg; void zoom; void full; tick().then(size); });
+  /** fitted to the screen (0, or the percentage clicked) */
+  function fit() {
+    const n = natural();
+    if (!canvas || !n) return;
+    zoom = Math.min(Math.max(Math.min((canvas.clientWidth - 48) / n.w, (canvas.clientHeight - 48) / n.h, 2), ZOOM_MIN), ZOOM_MAX);
+  }
+  /** zoomed by `f` about a point of the canvas (its middle), which stays where it is */
+  function zoomBy(f: number, px?: number, py?: number) {
+    if (!canvas) return;
+    px ??= canvas.clientWidth / 2; py ??= canvas.clientHeight / 2;
+    const next = Math.min(Math.max(zoom * f, ZOOM_MIN), ZOOM_MAX), r = next / zoom;
+    if (r === 1) return;
+    const x = canvas.scrollLeft + px, y = canvas.scrollTop + py;
+    zoom = next;
+    size();
+    canvas.scrollLeft = x * r - px;
+    canvas.scrollTop = y * r - py;
+  }
+  /** a trackpad's pinch (a wheel with ctrlKey) zooms; scrolling pans, as the canvas scrolls */
+  function onWheel(e: WheelEvent) {
+    if (!full || !e.ctrlKey || !canvas) return;
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    zoomBy(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+  }
+  /** dragging the empty canvas with the mouse pans it; a drag on a box or a line is the editor's */
+  function onPanDown(e: PointerEvent) {
+    if (!full || !canvas || e.pointerType !== 'mouse' || e.button !== 0) return;
+    if ((e.target as Element).closest('g.node, .edgeLabel, path, button, input, textarea, select, a')) return;
+    const c = canvas, x0 = e.clientX, y0 = e.clientY, sl = c.scrollLeft, st = c.scrollTop;
+    let moved = false;
+    const move = (m: PointerEvent) => {
+      if (!moved && Math.hypot(m.clientX - x0, m.clientY - y0) < 4) return;
+      moved = true;
+      c.classList.add('panning');
+      c.scrollLeft = sl - (m.clientX - x0);
+      c.scrollTop = st - (m.clientY - y0);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      c.classList.remove('panning');
+      // the click that ends a pan is not a click on the canvas (it opened the editor, or let go of the box picked)
+      if (moved) window.addEventListener('click', (k) => { k.stopPropagation(); k.preventDefault(); }, { capture: true, once: true });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }
+  /** two fingers pinch on a phone (one finger scrolls, as the canvas scrolls) */
+  function pinchZoom(el: HTMLElement) {
+    let d0 = 0;
+    const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const start = (e: TouchEvent) => { if (full && e.touches.length === 2) d0 = dist(e.touches); };
+    const move = (e: TouchEvent) => {
+      if (!full || e.touches.length !== 2 || !d0) return;
+      e.preventDefault();
+      const d = dist(e.touches), r = el.getBoundingClientRect();
+      zoomBy(d / d0, (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left, (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top);
+      d0 = d;
+    };
+    const end = (e: TouchEvent) => { if (e.touches.length < 2) d0 = 0; };
+    el.addEventListener('touchstart', start, { passive: true });
+    el.addEventListener('touchmove', move, { passive: false });
+    el.addEventListener('touchend', end);
+    return () => { el.removeEventListener('touchstart', start); el.removeEventListener('touchmove', move); el.removeEventListener('touchend', end); };
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="dblock" class:active bind:this={root} onkeydown={onKey}>
+<div class="dblock" class:active class:full bind:this={root} onkeydown={onKey} role={full ? 'dialog' : undefined} aria-modal={full ? 'true' : undefined} aria-label={full ? 'Diagram' : undefined}>
   <div class="pic">
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="mermaid-view diagram-canvas" class:error={!!error} bind:this={canvas} onclick={open} {@attach scrollHint}>
+  <div class="mermaid-view diagram-canvas" class:error={!!error} bind:this={canvas} onclick={open} onwheel={onWheel} onpointerdown={onPanDown} {@attach scrollHint} {@attach pinchZoom}>
     {#if error}{error}{:else}{@html svg}{/if}
   </div>
   {#if flow && canvas && svg && !error}<FlowEditor bind:this={flowEd} {flow} host={canvas} version={svg} k={1} {pick} />{/if}
-  {#if !error && svg}
-    <button class="mermaid-expand" type="button" aria-label="View full screen" data-tip="View full screen"
-      onclick={(e) => { e.stopPropagation(); if (canvas?.firstElementChild) ui.viewDiagram(canvas.innerHTML); }}>
+  {#if full}
+    <button class="full-close" type="button" aria-label="Back to the note" title="Back to the note (Esc)" onclick={leaveFull}>
+      <svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
+    </button>
+    <div class="zoombar">
+      <button aria-label="Zoom out" title="Zoom out (−)" onclick={() => zoomBy(0.8)}><svg viewBox="0 0 16 16"><path d="M4 8h8" /></svg></button>
+      <button class="pct" aria-label="Fit to screen" title="Fit to screen (0)" onclick={fit}>{Math.round(zoom * 100)}%</button>
+      <button aria-label="Zoom in" title="Zoom in (+)" onclick={() => zoomBy(1.25)}><svg viewBox="0 0 16 16"><path d="M8 4v8M4 8h8" /></svg></button>
+    </div>
+  {:else if !error && svg}
+    <button class="mermaid-expand" type="button" aria-label="Full screen" data-tip="Full screen: zoom in and edit"
+      onclick={(e) => { e.stopPropagation(); if (canvas?.firstElementChild) enterFull(); }}>
       <svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9" /></svg>
     </button>
   {/if}
@@ -269,4 +397,47 @@
   .codebar .say code { font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--bg-input); }
   .dtip { margin: 2px 12px 0; font-size: 12px; color: var(--fg-dim); user-select: none; -webkit-user-select: none; }
   .dblock :global(.form) { padding: 4px 12px 0; }
+
+  /* the whole screen: the picture fills it and scrolls; the tools along the top; a chart's rows beside it (under it on
+     a narrow screen) */
+  .dblock.full {
+    position: fixed; inset: 0; z-index: 40; border-radius: 0; box-shadow: none; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    background: light-dark(#f9fafb, #17181d); display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr) auto; outline: none;
+  }
+  .dblock.full > .tools, .dblock.full > .codebar { grid-column: 1 / -1; grid-row: 1; background: var(--bg); padding-right: 60px; }
+  .dblock.full > .dtip { grid-column: 1 / -1; grid-row: 2; margin: 0; padding: 2px 12px 6px; background: var(--bg); }
+  .dblock.full > .pic { grid-column: 1; grid-row: 3 / 5; min-height: 0; }
+  .dblock.full > :global(.form) { grid-column: 2; grid-row: 3; width: min(380px, 40vw); overflow: auto; padding: 12px; background: var(--bg); border-left: 1px solid var(--border, var(--bg-hover)); }
+  .dblock.full > .foot { grid-column: 2; grid-row: 4; padding: 8px 12px; background: var(--bg); border-left: 1px solid var(--border, var(--bg-hover)); }
+  @media (max-width: 700px) {
+    .dblock.full { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto; }
+    .dblock.full > .pic { grid-row: 3; }
+    .dblock.full > :global(.form) { grid-column: 1; grid-row: 4; width: auto; max-height: 45vh; border-left: 0; border-top: 1px solid var(--border, var(--bg-hover)); }
+    .dblock.full > .foot { grid-column: 1; grid-row: 5; border-left: 0; }
+  }
+  .dblock.full .pic { height: 100%; }
+  .dblock.full :global(.diagram-canvas) {
+    height: 100%; box-sizing: border-box; border-radius: 0; overflow: auto; overscroll-behavior: contain; align-items: flex-start; padding: 24px;
+  }
+  /* centred while it fits, from its top-left corner once it is larger (a centred one was cut off where it overflowed) */
+  .dblock.full :global(.diagram-canvas > *) { margin: auto; }
+  .dblock.full:not(.active) :global(.diagram-canvas) { cursor: grab; }
+  .dblock.full :global(.diagram-canvas.panning) { cursor: grabbing; }
+  .full-close {
+    position: absolute; top: 10px; right: 12px; z-index: 3; width: 36px; height: 36px; border: 0; border-radius: 50%; color: var(--fg);
+    display: inline-flex; align-items: center; justify-content: center; background: var(--bg-pop); box-shadow: var(--pop-shadow);
+  }
+  .dblock.full.active .full-close, .dblock.full:has(> .codebar) .full-close { position: fixed; top: calc(6px + env(safe-area-inset-top)); }
+  .zoombar {
+    position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 3; display: flex; gap: 2px; padding: 4px;
+    border-radius: 14px; background: var(--bg-pop); box-shadow: var(--pop-shadow);
+  }
+  .zoombar button {
+    min-width: 36px; height: 32px; border: 0; border-radius: 10px; background: none; color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums;
+  }
+  .zoombar .pct { min-width: 60px; }
+  @media (hover: hover) { .zoombar button:hover, .full-close:hover { background: var(--bg-hover); } }
+  .full-close svg, .zoombar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 </style>

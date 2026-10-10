@@ -469,7 +469,7 @@
     if (sidebarOpen && appearance.s.closeSidebarOnWrite && isWriting(e)) sidebarOpen = false;
     // the right-click menu takes the keyboard while it is up, wherever the focus actually sits
     if (ui.menu) { if (e.key === 'Escape') { e.preventDefault(); ui.closeMenu(); } return; }
-    if (ui.pending || ui.emoji || ui.diagramView !== null) return; // the diagram viewer takes its own keys
+    if (ui.pending || ui.emoji || ui.diagramView !== null) return; // a diagram on the whole screen takes its own keys
     // Escape puts away whatever is open over the note — the find bar, then the PDF panel — and only a
     // bare note lets it through to hide the window. Tied to the key, not to the rebindable action:
     // closing the thing on top is what Escape means everywhere in the app.
@@ -611,9 +611,6 @@
   {#await import('./CardPage.svelte') then { default: CardPage }}<CardPage />{/await}
 {/if}
 {#if ui.photo}<ImageViewer />{/if}
-{#if ui.diagramView !== null}
-  {#await import('./DiagramViewer.svelte') then { default: DiagramViewer }}<DiagramViewer />{/await}
-{/if}
 {#if ui.pdf}
   {#await import('./PdfViewer.svelte') then { default: PdfViewer }}<PdfViewer />{/await}
 {/if}

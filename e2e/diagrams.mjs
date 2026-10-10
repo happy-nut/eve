@@ -1,7 +1,8 @@
 // Diagrams edited in the note itself (DiagramBlock.svelte): `/flowchart` puts one in and opens it; a box is typed in
 // where it is drawn, its + adds a step or, dragged onto another box, joins them; a line's bar styles it; a click
 // elsewhere is done, and the note keeps mermaid code; ⌘Z undoes into the drawing. A pie's parts are rows under it.
-// A diagram written by hand with more than these show opens as its code. ⤢ opens one full screen.
+// A diagram written by hand with more than these show opens as its code. ⤢ puts the block on the whole screen, where
+// it zooms, pans and is edited as in the note.
 // Chromium: CHROMIUM_PATH=/path/to/chromium, else Playwright's own. It starts its own dev server, or uses EVE_URL.
 // Run: npm run e2e:diagrams
 import { chromium } from 'playwright-core';
@@ -90,13 +91,48 @@ try {
   await settle(page);
   console.log('ok   undo: into the drawing');
 
-  // ⤢: full screen
+  // ⤢: the block itself on the whole screen, zoomed, panned and edited there
   await page.locator('.tiptap .dblock .pic').hover();
   await page.locator('.tiptap .mermaid-expand').click();
-  await page.waitForSelector('.viewer svg');
+  await page.waitForSelector('.dblock.full .mermaid-view svg');
+  const fullBox = await page.locator('.dblock.full').boundingBox();
+  assert.ok(fullBox.width >= 1190 && fullBox.height >= 890, 'it fills the window');
+  const svgW = () => page.locator('.dblock.full .mermaid-view svg').evaluate((s) => s.getBoundingClientRect().width);
+  const w0 = await svgW();
+  await page.locator('.zoombar button[aria-label="Zoom in"]').click();
+  assert.ok((await svgW()) > w0 * 1.2, 'zoom in draws it larger');
+  await page.keyboard.press('-');
+  assert.ok(Math.abs((await svgW()) - w0) < 2, '− zooms back out');
+  at = await boxAt(page, 'Write');
+  await page.mouse.click(at.x, at.y); // opens the editor on the whole screen, the box picked
+  await page.waitForSelector('.dblock.full.active');
+  await page.locator('.layer .bar button[aria-label="Edit the text"]').click();
+  await page.waitForSelector('.tiptap input.rename');
+  await page.keyboard.press('Meta+a');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('Big edit');
+  await page.keyboard.press('Enter');
+  await settle(page);
+  assert.ok((await md(page)).includes('Big edit'), 'an edit on the whole screen is written into the note');
+  await page.keyboard.press('Escape'); // lets go of the box
+  await page.keyboard.press('Escape'); // done editing
+  await page.waitForSelector('.dblock.full:not(.active)');
+  // a drag on the empty canvas pans it (zoomed in, so there is somewhere to go)
+  for (let i = 0; i < 4; i++) await page.keyboard.press('+');
+  const canvasBox = await page.locator('.dblock.full .mermaid-view').boundingBox();
+  const scrolled = () => page.locator('.dblock.full .mermaid-view').evaluate((c) => c.scrollLeft + c.scrollTop);
+  const s0 = await scrolled();
+  await page.mouse.move(canvasBox.x + 30, canvasBox.y + canvasBox.height - 80);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox.x + 230, canvasBox.y + canvasBox.height - 280, { steps: 8 });
+  await page.mouse.up();
+  assert.ok((await scrolled()) !== s0, 'dragging the empty canvas pans it');
+  assert.equal(await page.locator('.dblock.full.active').count(), 0, 'the drag that panned did not open the editor');
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => !document.querySelector('.viewer'));
-  console.log('ok   full screen');
+  await page.waitForFunction(() => !document.querySelector('.dblock.full'));
+  const back = await page.locator('.tiptap .mermaid-view svg').evaluate((s) => s.getBoundingClientRect().width);
+  assert.ok(back < 1200, 'back in the note at its own size');
+  console.log('ok   full screen: zoom, pan, edit');
   await page.close();
 
   // ---- keys and clicks meant for something else (found in the bug hunt) ----
@@ -389,7 +425,11 @@ try {
   await page.waitForSelector('.tiptap .dblock.active');
   assert.equal(await page.locator('.tiptap .code-block.editing').count(), 0, 'the code gone, the drawing open');
   await page.keyboard.press('Escape');
-  await page.locator('.tiptap p', { hasText: 'Above' }).click();
+  // the caret into "Above": a click straight after Esc can land as the note puts its caret back where it was, and is
+  // undone by that, so it is clicked until the caret is there
+  const inAbove = () => page.evaluate(() => window.__editor.state.selection.$from.parent.textContent === 'Above');
+  for (let i = 0; i < 5 && !(await inAbove()); i++) { await page.locator('.tiptap p', { hasText: 'Above' }).click(); await page.waitForTimeout(150); }
+  assert.ok(await inAbove(), 'the caret in the line above the diagram');
   await page.keyboard.press('End');
   await page.keyboard.press('ArrowDown'); // into its code, by the keyboard
   await page.waitForSelector('.tiptap .code-block.editing');
