@@ -55,6 +55,12 @@ test('⌘⇧9 / ⌘⇧7 / ⌘⇧8 on a nested item change that item where it is'
   expect(after('- a\n  1. x\n- b', (ed) => { at(ed, 'x'); key(ed, 'Mod-Shift-8'); })).toBe('- a\n  - x\n- b');
 });
 
+test('"[x] " typed over a bullet or a number makes a to-do already done', () => {
+  expect(after('- one\n- two', (ed) => { at(ed, 'two', false); type(ed, '[x] '); })).toBe('- one\n\n- [x] two');
+  expect(after('1. one\n2. two', (ed) => { at(ed, 'two', false); type(ed, '[x] '); })).toBe('1. one\n\n- [x] two');
+  expect(after('- one\n- two', (ed) => { at(ed, 'two', false); type(ed, '[ ] '); })).toBe('- one\n\n- [ ] two');
+});
+
 test('a numbered list split in two goes on counting', () => {
   expect(after('1. a\n2. b\n3. c', (ed) => { at(ed, 'b', false); type(ed, '- '); })).toBe('1. a\n\n- b\n\n3. c');
   expect(after('1. a\n2. b\n3. c', (ed) => { at(ed, 'b'); key(ed, 'Mod-Shift-8'); })).toBe('1. a\n\n- b\n\n3. c');

@@ -323,10 +323,10 @@ function liftOverTrailing(tr: any, range: any): boolean | null {
 /**
  * A list line whose marker is typed over by another kind's ("- " on a to-do, "[] " or "1. " on a bullet):
  * that one line becomes the other kind, its list split around it (and joined with a neighbour of the same
- * kind afterwards, by joinLists). `from`–`to` is the typed marker, removed. False when the line is not the
- * first line of an item, or already that kind.
+ * kind afterwards, by joinLists). `from`–`to` is the typed marker, removed; `itemAttrs` the new item's (a to-do typed
+ * "[x] " is done). False when the line is not the first line of an item, or already that kind.
  */
-export function switchItem(tr: any, from: number, to: number, listType: NodeType, itemType: NodeType, listAttrs: Record<string, unknown> = {}): boolean {
+export function switchItem(tr: any, from: number, to: number, listType: NodeType, itemType: NodeType, listAttrs: Record<string, unknown> = {}, itemAttrs: Record<string, unknown> = {}): boolean {
   const $p = tr.doc.resolve(from);
   const d = $p.depth;
   if (d < 3 || $p.parentOffset !== 0 || !$p.parent.isTextblock) return false;
@@ -336,7 +336,7 @@ export function switchItem(tr: any, from: number, to: number, listType: NodeType
   tr.delete(from, to);
   const $q = tr.doc.resolve(from);
   const own: PMNode = $q.node(d - 1), list: PMNode = $q.node(d - 2), i = $q.index(d - 2);
-  const attrs = itemType.name === 'taskItem' ? { checked: false } : null;
+  const attrs = itemType.name === 'taskItem' ? { checked: false, ...itemAttrs } : null;
   if (!itemType.validContent(own.content)) return false;
   const parts: PMNode[] = [];
   if (i > 0) parts.push(list.copy(list.content.cut(0, offsetOf(list, i))));

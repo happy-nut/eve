@@ -570,11 +570,12 @@ export function createEditor(opts: {
         priority: 102,
         addInputRules() {
           const n = this.editor.schema.nodes;
-          const rule = (find: RegExp, list: string, item: string, attrs?: (m: RegExpMatchArray) => Record<string, unknown>) =>
-            new InputRule({ find, handler: ({ state, range, match }) => (switchItem(state.tr, range.from, range.to, n[list], n[item], attrs?.(match)) ? undefined : null) });
+          const rule = (find: RegExp, list: string, item: string, attrs?: (m: RegExpMatchArray) => Record<string, unknown>, itemAttrs?: (m: RegExpMatchArray) => Record<string, unknown>) =>
+            new InputRule({ find, handler: ({ state, range, match }) => (switchItem(state.tr, range.from, range.to, n[list], n[item], attrs?.(match), itemAttrs?.(match)) ? undefined : null) });
           return [
             rule(/^\s*[-+*]\s$/, 'bulletList', 'listItem'),
-            rule(/^\s*\[( |x)?\]\s$/, 'taskList', 'taskItem'),
+            // "[x] " makes a to-do already done, as it does on a plain line
+            rule(/^\s*\[( |x)?\]\s$/, 'taskList', 'taskItem', undefined, (m) => ({ checked: m[1] === 'x' })),
             rule(/^(\d+)\.\s$/, 'orderedList', 'listItem', (m) => ({ start: +m[1] })),
           ];
         },
