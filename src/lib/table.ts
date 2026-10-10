@@ -2,6 +2,7 @@ import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table
 import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
 import { Plugin, Selection, TextSelection } from '@tiptap/pm/state';
+import { imageMarkdown } from './image';
 import { CellSelection, cellAround, columnResizingPluginKey, fixTables, inSameTable, nextCell, tableEditingKey } from '@tiptap/pm/tables';
 
 /**
@@ -25,13 +26,19 @@ function cellText(state: any, cell: PMNode): string {
   state.out = '';
   state.delim = '';
   state.inlines = [];
+  // a line break as `<br>` (tiptap-markdown's own way in a table): its usual backslash and newline came back as
+  // "\ ", and one more backslash every save
+  state.inTable = true;
   cell.forEach((child) => {
-    if (!child.isTextblock) return;
-    if (state.out) state.out += ' '; // a cell holding two paragraphs is still one line
-    state.renderInline(child);
+    if (!child.isTextblock && child.type.name !== 'image') return;
+    // a cell holding two paragraphs is still one line (the text after a picture may bring its own space)
+    if (state.out && !/\s$/.test(state.out) && !/^\s/.test(child.textContent)) state.out += ' ';
+    // a picture read from a cell is a block of its own in it; it goes back in the line, not left out
+    if (child.isTextblock) state.renderInline(child);
+    else state.out += imageMarkdown(state, child);
   });
   const text = state.out;
-  Object.assign(state, { out, delim, inlines });
+  Object.assign(state, { out, delim, inlines, inTable: false });
   return text.replace(/\n+/g, ' ').replace(/\|/g, '\\|').trim();
 }
 

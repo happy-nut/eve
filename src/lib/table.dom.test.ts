@@ -37,6 +37,9 @@ test.each([
   ['marks at the end of a cell', '| A |\n| --- |\n| ***b*** |'],
   ['two marks in a cell', '| A |\n| --- |\n| ~~s~~ ==h== |'],
   ['a mark after text', '| A | B |\n| --- | --- |\n| c**q** | d |'],
+  ['with a picture', '| A |\n| --- |\n| ![i](a.png) |'],
+  ['with a sized picture and text', '| A |\n| --- |\n| a ![i\\|240](a.png) b |'],
+  ['with a line break', '| A |\n| --- |\n| a<br>b |'],
 ])('a table %s is written as it was read', (_what, note) => {
   expect(save(note).trimEnd()).toBe(note);
   expect(save(save(note))).toBe(save(note));

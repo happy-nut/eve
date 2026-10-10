@@ -1,9 +1,17 @@
 import Image from '@tiptap/extension-image';
 import { Extension } from '@tiptap/core';
+import type { Node as PMNode } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
 import { Plugin, PluginKey, NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { assetUrl } from './platform';
 import { nameOf, sizeGrip, widthOf, withWidth } from './resize';
+
+/** `![caption](src "title")`, the picture as a block of its own or inside a table's cell */
+export function imageMarkdown(state: any, node: PMNode): string {
+  // the src is a URL, not text: escaping it would put backslashes into the file name
+  const alt = withWidth(state.esc(node.attrs.alt ?? ''), node.attrs.width);
+  return `![${alt}](${node.attrs.src ?? ''}${node.attrs.title ? ` "${state.esc(node.attrs.title)}"` : ''})`;
+}
 
 /**
  * Images. Markdown keeps a portable relative path (`assets/x.png`, next to the notes);
@@ -35,9 +43,7 @@ export const LocalImage = Image.extend({
         // the stock serializer writes the image inline and never closes the block, so whatever followed
         // it ("끝" right after a picture) was glued onto the same markdown line
         serialize(state: any, node: any) {
-          // the src is a URL, not text: escaping it would put backslashes into the file name
-          const alt = withWidth(state.esc(node.attrs.alt ?? ''), node.attrs.width);
-          state.write(`![${alt}](${node.attrs.src ?? ''}${node.attrs.title ? ` "${state.esc(node.attrs.title)}"` : ''})`);
+          state.write(imageMarkdown(state, node));
           state.closeBlock(node);
         },
       },
