@@ -66,3 +66,10 @@ test('not while the [[ picker is open: "[[Meeting @to" is still the title being 
   await settle();
   expect(open()).toBe(false);
 });
+
+test('after a link typed out by hand ("see [[Bob]] due @to") the calendar comes up again', async () => {
+  const { ed, open } = editor();
+  type(ed, 'see [[Bob]] due @to');
+  await settle();
+  expect(open()).toBe(true);
+});

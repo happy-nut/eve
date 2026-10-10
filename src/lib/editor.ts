@@ -435,7 +435,7 @@ let lastCut = { text: '', at: 0 };
  * move of the caret; the [[ picker takes spaces, and only a click elsewhere (or leaving the line) ends it, so ← and
  * → can still fix a typo in the title being typed.
  */
-function typedTrigger(key: PluginKey<number | null>, char: string, endsAtSpace: boolean) {
+function typedTrigger(key: PluginKey<number | null>, char: string, endsAtSpace: boolean, closer?: string) {
   return new Plugin<number | null>({
     key,
     state: {
@@ -457,6 +457,9 @@ function typedTrigger(key: PluginKey<number | null>, char: string, endsAtSpace: 
         // done with once the menu has closed: a space typed after it, or the caret moved away (by a click, an arrow),
         // so coming back to it later (a click, a ⌫) does not open it again
         if (at !== null && endsAtSpace && /\s/.test(state.doc.textBetween(at + 1, Math.max(at + 1, $head.pos)))) return null;
+        // and once it is closed by hand ("[[Bob]]" typed out): the picker stayed on for the rest of the line, kept @ dates
+        // and :emoji from coming up, and Enter there turned what followed into a link
+        if (at !== null && closer && state.doc.textBetween(at + char.length, Math.max(at + char.length, $head.pos)).includes(closer)) return null;
         if (at !== null && !tr.docChanged && tr.selectionSet && (endsAtSpace || tr.getMeta('pointer'))) return null;
         return at;
       },
@@ -468,7 +471,7 @@ const slashTyped = typedTrigger(SLASH_AT, '/', true);
 // an earlier "[[" left open in a paragraph ("np.array([[1, 2", "if [[ -n $x ]]") opened the picker whenever the caret
 // came back after it, and Enter there turned the rest of the line into a link
 const WIKI_AT = new PluginKey<number | null>('wikiAt');
-const wikiTyped = typedTrigger(WIKI_AT, '[[', false);
+const wikiTyped = typedTrigger(WIKI_AT, '[[', false, ']]');
 
 export function createEditor(opts: {
   element: HTMLElement;
@@ -492,7 +495,7 @@ export function createEditor(opts: {
   const menuOpen = (ed: Editor, state: EditorState, ...menus: PluginKey[]) =>
     menus.some((k) => (k.getState(state) ?? k.getState(ed.state))?.active);
   const iconOf = (link: string) => {
-    const find = (t: string) => notes.visible.find((n) => titleOf(n).toLowerCase() === t.toLowerCase());
+    const find = (t: string) => notes.byTitle(t);
     return find(splitLink(link, (t) => !!find(t))[0])?.icon ?? ''; // a section link keeps the page's icon
   };
   // A long note's markdown is a few milliseconds per key (54 KB: 6.6 ms of a 7.9 ms keystroke), so it is made
