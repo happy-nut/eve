@@ -429,36 +429,46 @@ export function goToSection(editor: Editor, section: string) {
 let lastCut = { text: '', at: 0 };
 
 /**
- * Where the "/" that may open the / menu was just written (typed, or put in by the phone's Insert block), followed
- * through later edits; null once the caret goes back before it or it is deleted. A "/" pasted, or already in the
- * text, is never it.
+ * Where a trigger that may open a menu was just written (typed, or put in by the phone's Insert block), followed
+ * through later edits; null once the caret goes back before it, leaves its line, or it is deleted. One pasted, or
+ * already in the text, is never it. `endsAtSpace`: the / menu is a single word, so a space ends it, and so does any
+ * move of the caret; the [[ picker takes spaces, and only a click elsewhere (or leaving the line) ends it, so ← and
+ * → can still fix a typo in the title being typed.
  */
-const SLASH_AT = new PluginKey<number | null>('slashAt');
-const slashTyped = new Plugin<number | null>({
-  key: SLASH_AT,
-  state: {
-    init: () => null,
-    apply(tr, at, _old, state) {
-      if (at !== null) {
-        const r = tr.mapping.mapResult(at, 1);
-        at = r.deleted ? null : r.pos;
-      }
-      const { empty, $head } = state.selection;
-      // undo and redo put back a / that was already there: not one just typed
-      if (tr.docChanged && empty && !tr.getMeta('paste') && tr.getMeta('uiEvent') !== 'paste' && tr.getMeta('uiEvent') !== 'drop' && !tr.getMeta('history$')
-        && $head.parent.isTextblock && $head.parentOffset > 0
-        && $head.parent.textBetween($head.parentOffset - 1, $head.parentOffset) === '/'
-        && tr.steps.some((st) => { const c = (st as { slice?: { content: Fragment; size: number } }).slice; return !!c?.size && c.content.textBetween(0, c.content.size).endsWith('/'); })) {
-        return $head.pos - 1;
-      }
-      if (at !== null && (state.selection.head <= at || state.doc.resolve(at).parent !== $head.parent)) return null;
-      // done with once the menu has closed: a space typed after it, or the caret moved away (by a click, an arrow),
-      // so coming back to it later (a click, a ⌫) does not open it again
-      if (at !== null && (/\s/.test(state.doc.textBetween(at + 1, Math.max(at + 1, $head.pos))) || (!tr.docChanged && tr.selectionSet))) return null;
-      return at;
+function typedTrigger(key: PluginKey<number | null>, char: string, endsAtSpace: boolean) {
+  return new Plugin<number | null>({
+    key,
+    state: {
+      init: () => null,
+      apply(tr, at, _old, state) {
+        if (at !== null) {
+          const r = tr.mapping.mapResult(at, 1);
+          at = r.deleted ? null : r.pos;
+        }
+        const { empty, $head } = state.selection;
+        // undo and redo put back a trigger that was already there: not one just typed
+        if (tr.docChanged && empty && !tr.getMeta('paste') && tr.getMeta('uiEvent') !== 'paste' && tr.getMeta('uiEvent') !== 'drop' && !tr.getMeta('history$')
+          && $head.parent.isTextblock && $head.parentOffset >= char.length
+          && $head.parent.textBetween($head.parentOffset - char.length, $head.parentOffset) === char
+          && tr.steps.some((st) => { const c = (st as { slice?: { content: Fragment; size: number } }).slice; return !!c?.size && c.content.textBetween(0, c.content.size).endsWith(char.at(-1)!); })) {
+          return $head.pos - char.length;
+        }
+        if (at !== null && (state.selection.head <= at || state.doc.resolve(at).parent !== $head.parent)) return null;
+        // done with once the menu has closed: a space typed after it, or the caret moved away (by a click, an arrow),
+        // so coming back to it later (a click, a ⌫) does not open it again
+        if (at !== null && endsAtSpace && /\s/.test(state.doc.textBetween(at + 1, Math.max(at + 1, $head.pos)))) return null;
+        if (at !== null && !tr.docChanged && tr.selectionSet && (endsAtSpace || tr.getMeta('pointer'))) return null;
+        return at;
+      },
     },
-  },
-});
+  });
+}
+const SLASH_AT = new PluginKey<number | null>('slashAt');
+const slashTyped = typedTrigger(SLASH_AT, '/', true);
+// an earlier "[[" left open in a paragraph ("np.array([[1, 2", "if [[ -n $x ]]") opened the picker whenever the caret
+// came back after it, and Enter there turned the rest of the line into a link
+const WIKI_AT = new PluginKey<number | null>('wikiAt');
+const wikiTyped = typedTrigger(WIKI_AT, '[[', false);
 
 export function createEditor(opts: {
   element: HTMLElement;
@@ -991,6 +1001,8 @@ export function createEditor(opts: {
       // a phone's bar does the formatting; the markdown hint is for a keyboard
       Placeholder.configure({ placeholder: isMobile ? 'Start writing…' : 'Start typing… `#` heading, `-` list, `[[` link' }),
       Markdown.configure({ html: true, transformPastedText: true, transformCopiedText: true, linkify: true, breaks: false }),
+      // ahead of the picker's own plugin, which reads where the "[[" was typed in the same transaction
+      Extension.create({ name: 'wikiTyped', priority: 1000, addProseMirrorPlugins: () => [wikiTyped] }),
       WikiLink.configure({
         onOpen: opts.onOpenNote,
         iconOf,
@@ -1000,6 +1012,8 @@ export function createEditor(opts: {
           startOfLine: false,
           allowedPrefixes: null, // `[[` means a link wherever it is typed, not only after a space
           pluginKey: new PluginKey('wikiLinkSuggest'),
+          // only the "[[" just typed opens it (wikiTyped)
+          allow: ({ state, range }) => WIKI_AT.getState(state) === range.from,
           items: ({ query }) => {
             const q = query.toLowerCase();
             const pages: SuggestItem[] = [];
