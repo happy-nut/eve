@@ -15,11 +15,13 @@ export function plain(line: string): string {
     // a link reads as its words, a picture as what it shows (its alt text, else nothing): "Meeting with [Bob](https://…)"
     // is "Meeting with Bob", the title a [[link]] to it is written with — not a page of its own made from the raw line
     .replace(/(?<!\\)(!?)\[([^\]]*)\]\(([^)\s]*)(?:\s+"[^"]*")?\)/g, (_, img: string, text: string, url: string) => (img ? text : text || url))
-    .replace(/\\(.)/g, '$1')
     .replace(/==(?=\S)(.+?)==/g, '$1')
-    .replace(/[*_`~]/g, '')
+    // marks come off; a character written escaped is text and stays, and so does a "_" inside a word (no mark
+    // there either): "my\_func" and "my_func" read "my_func", as on screen
+    .replace(/(?<!\\)(?:[*`~]|(?<![\p{L}\p{N}])_|_(?![\p{L}\p{N}]))/gu, '')
     // a link reads as its alias when it has one
     .replace(/\[\[(.+?)\]\]/g, (_, inner: string) => { const [title, alias] = splitAlias(inner); return alias || title; })
+    .replace(/\\(.)/g, '$1')
     .trim();
 }
 

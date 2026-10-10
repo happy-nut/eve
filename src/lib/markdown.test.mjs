@@ -47,6 +47,9 @@ assert.equal(plain('[](https://x.dev)'), 'https://x.dev'); // a link with no wor
 assert.equal(plain('![](https://example.com/photo.png)'), ''); // nothing to read: the note is "Untitled"
 assert.equal(plain('![Trip to Jeju](trip.png) notes'), 'Trip to Jeju notes');
 assert.equal(plain('\\[not](a link)'), '[not](a link)');
+// marks come off, but an escaped character or a "_" inside a word is text
+assert.equal(plain('call my_func_name and my\\_var \\*now\\*'), 'call my_func_name and my_var *now*');
+assert.equal(plain('__bold__ _it_ ~~gone~~ `code`'), 'bold it gone code');
 // a formula reads as what is written in it; an escaped dollar is a dollar
 assert.equal(plain('# Energy $E=mc^2$'), 'Energy E=mc^2');
 assert.equal(plain('$x$ and $$y + 1$$'), 'x and y + 1');
