@@ -452,7 +452,12 @@ export function createEditor(opts: {
           const c = editor.chain().focus();
           if (lead) c.insertContent({ type: 'text', text: lead });
           c.insertContent(parsed);
-          if (trail) c.insertContent({ type: 'text', text: trail });
+          // the space after it is plain, and so is what is typed next: inserted as text, it took the last mark of
+          // what was pasted (" `y` " then "z" gave "`y z`")
+          if (trail) c.command(({ tr }) => {
+            tr.insert(tr.selection.from, editor.schema.text(trail)).setStoredMarks([]);
+            return true;
+          });
           return c.run();
         }
         return false;

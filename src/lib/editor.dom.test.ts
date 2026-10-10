@@ -382,6 +382,18 @@ describe('⌘⇧- puts in a divider', () => {
   });
 });
 
+describe('pasting markdown into a line', () => {
+  test('the space after it, and what is typed next, are outside its last mark', () => {
+    for (const [clip, out] of [[' `y` ', 'x `y` z'], [' **y** ', 'x **y** z']]) {
+      const ed = editorWith('x');
+      ed.commands.setTextSelection(posOf(ed, 'x', true));
+      paste(ed, clip);
+      type(ed, 'z');
+      expect(md(ed).trim()).toBe(out);
+    }
+  });
+});
+
 describe('Enter on the empty last line of a callout', () => {
   test('leaves the callout for a new line right after it; the block below stays whole', () => {
     const ed = editorWith('> [!💡]\n> one\n\n## Next');
