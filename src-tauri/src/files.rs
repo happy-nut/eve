@@ -61,12 +61,45 @@ pub(crate) fn safe_name(name: &str) -> Result<(), String> {
     if ok { Ok(()) } else { Err("invalid asset name".into()) }
 }
 
+/// `<ms-hex>-<6 hex>.<ext>`. The millisecond alone is not enough: an import copies a note's
+/// pictures at once, and two of them in one millisecond would share a name and the second
+/// would overwrite the first. The suffix counts up from a random start, so names never repeat
+/// within one run and two devices (or two runs) rarely pick the same one.
 pub(crate) fn stamp_name(ext: &str) -> String {
+    use std::hash::{BuildHasher, Hasher};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::OnceLock;
+    static START: OnceLock<u64> = OnceLock::new();
+    static COUNT: AtomicU64 = AtomicU64::new(0);
+    // std's hasher keys are random per process: enough randomness without another crate
+    let start = *START.get_or_init(|| std::collections::hash_map::RandomState::new().build_hasher().finish());
+    let n = start.wrapping_add(COUNT.fetch_add(1, Ordering::Relaxed)) & 0xff_ffff;
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    format!("{stamp:x}.{ext}")
+    format!("{stamp:x}-{n:06x}.{ext}")
+}
+
+/// A new file in notes/assets under a fresh name, filled by `fill`. Never replaces an
+/// existing file: a name already taken (synced in from another device) just draws another.
+fn create_asset(app: &AppHandle, ext: &str, mut fill: impl FnMut(&mut fs::File) -> std::io::Result<()>) -> Result<String, String> {
+    let dir = assets_dir(app)?;
+    for _ in 0..8 {
+        let name = stamp_name(ext);
+        let path = dir.join(&name);
+        let mut file = match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            r => r.map_err(|e| e.to_string())?,
+        };
+        if let Err(e) = fill(&mut file) {
+            // no half-written picture left behind for sync to pick up
+            let _ = fs::remove_file(&path);
+            return Err(e.to_string());
+        }
+        return Ok(format!("assets/{name}"));
+    }
+    Err("could not find a free asset name".into())
 }
 
 pub(crate) fn raw_body(request: &tauri::ipc::Request<'_>) -> Result<Vec<u8>, String> {
@@ -94,9 +127,8 @@ pub(crate) fn import_asset(app: AppHandle, src: String) -> Result<String, String
         .map(|e| e.to_ascii_lowercase())
         .filter(|e| ASSET_EXTS.contains(&e.as_str()))
         .ok_or("unsupported file type")?;
-    let name = stamp_name(&ext);
-    fs::copy(&src, assets_dir(&app)?.join(&name)).map_err(|e| e.to_string())?;
-    Ok(format!("assets/{name}"))
+    let mut from = fs::File::open(&src).map_err(|e| e.to_string())?;
+    create_asset(&app, &ext, |to| std::io::copy(&mut from, to).map(|_| ()))
 }
 
 /// File bytes from the clipboard / a drop, saved into notes/assets. Body = raw bytes, header x-ext = extension.
@@ -111,9 +143,8 @@ pub(crate) fn save_asset(app: AppHandle, request: tauri::ipc::Request<'_>) -> Re
     if !ASSET_EXTS.contains(&ext.as_str()) {
         return Err("unsupported file type".into());
     }
-    let name = stamp_name(&ext);
-    fs::write(assets_dir(&app)?.join(&name), raw_body(&request)?).map_err(|e| e.to_string())?;
-    Ok(format!("assets/{name}"))
+    let bytes = raw_body(&request)?;
+    create_asset(&app, &ext, |to| std::io::Write::write_all(to, &bytes))
 }
 
 // ---- sync: the assets folder as a list of immutable named blobs -------------
@@ -188,4 +219,21 @@ pub(crate) fn list_folder(root: String) -> Result<Vec<String>, String> {
 #[tauri::command]
 pub(crate) fn notes_path(app: AppHandle) -> Result<String, String> {
     Ok(notes_dir(&app)?.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An import copies a note's pictures together, many inside one millisecond.
+    #[test]
+    fn stamp_names_in_a_row_are_distinct_and_safe() {
+        let names: Vec<String> = (0..5000).map(|_| stamp_name("png")).collect();
+        let unique: std::collections::HashSet<&String> = names.iter().collect();
+        assert_eq!(unique.len(), names.len());
+        for n in &names {
+            assert!(safe_name(n).is_ok(), "{n}");
+        }
+        assert!(safe_name(&stamp_name("hwpx")).is_ok());
+    }
 }
