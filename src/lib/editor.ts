@@ -479,6 +479,39 @@ const slashTyped = typedTrigger(SLASH_AT, '/', true);
 const WIKI_AT = new PluginKey<number | null>('wikiAt');
 const wikiTyped = typedTrigger(WIKI_AT, '[[', false, ']]');
 
+/**
+ * Bold, italic, strike and highlight at the start of a line in a quote or a callout lost the line's "> ": tiptap-markdown
+ * notes where such a mark starts before the blank line and the "> " ahead of it are written, then moves the "**" it
+ * finds there past spaces, over the ">". The paragraph merged into the one above or fell out of the callout, and a
+ * "~~" could become a code fence that swallowed the rest of the note. The mark's start is taken again once they are out.
+ */
+function markStartsAfterPrefix(editor: Editor) {
+  const serializer = (editor.storage as any).markdown.serializer;
+  const marksOf = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(serializer), 'marks')?.get;
+  if (!marksOf) return;
+  Object.defineProperty(serializer, 'marks', {
+    configurable: true,
+    get() {
+      const marks = marksOf.call(serializer);
+      for (const [name, info] of Object.entries<any>(marks)) {
+        if (!info?.expelEnclosingWhitespace) continue;
+        const open = info.open;
+        marks[name] = {
+          ...info,
+          open(state: any, mark: any, parent: any, index: number) {
+            state.write(); // the blank line and the "> " before this line, which writing the mark would put out anyway
+            const delim = typeof open === 'function' ? open(state, mark, parent, index) : open;
+            const top = state.inlines?.at(-1);
+            if (top && top.end === undefined) Object.assign(top, { start: state.out.length, delimiter: delim });
+            return delim;
+          },
+        };
+      }
+      return marks;
+    },
+  });
+}
+
 export function createEditor(opts: {
   element: HTMLElement;
   content: string;
@@ -1168,6 +1201,7 @@ export function createEditor(opts: {
     ],
     onUpdate: ({ editor }) => handOver(editor),
   });
+  markStartsAfterPrefix(editor);
   editor.on('blur', flush); // leaving the note: the list, a dialog, another app
   // the note closed or switched (the document is still there to read)
   editor.on('destroy', () => { closing = true; flush(); });

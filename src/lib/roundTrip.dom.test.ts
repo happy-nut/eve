@@ -133,3 +133,15 @@ test.each([
   expect(save(note)).toBe(saved);
   expect(save(saved)).toBe(saved);
 });
+
+test.each([
+  ['bold, in a quote', '> a\n>\n> **b** c'],
+  ['italic, in a quote', '> a\n>\n> *b* c'],
+  ['a highlight, in a quote', '> a\n>\n> ==b== c'],
+  ['strike, in a callout', '> [!note] t\n> x\n>\n> ~~b~~ c\n\nafter'],
+  ['bold, in a list in a quote', '> - a\n>\n>   ~~b~~'],
+  ['bold, in both paragraphs of a quote', '> **a**\n>\n> **b**'],
+])('a paragraph starting with %s stays where it was', (_what, note) => {
+  expect(save(note)).toBe(note);
+  expect(save(save(note))).toBe(note);
+});
