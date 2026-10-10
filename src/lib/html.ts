@@ -78,6 +78,30 @@ function keepUnknownHtml(md: any) {
       return true;
     }, { alt: rules[ref].alt });
   }
+  // A line starting with a comment and going on after it (`<!-- c --> x [[w]]`) is all one HTML block to markdown: the
+  // words after the comment were read as they stood, the [[link]] as text, and an item's line grew a backslash before
+  // each bracket on every save. Such a line is a line of text with the comment in it.
+  md.core.ruler.after('block', 'eve-comment-line', (state: any) => {
+    const t = state.tokens;
+    for (let i = 0; i < t.length; i++) {
+      const tok = t[i];
+      if (tok.type !== 'html_block' || !/^<!--[\s\S]*?-->[^\S\n]*\S/.test(tok.content)) continue;
+      // in a tight list a line of text has no paragraph of its own: so with this one
+      let hidden = false;
+      for (let k = i - 1; k >= 0; k--) {
+        if (t[k].level !== tok.level - 2 || !/_list_open$/.test(t[k].type)) continue;
+        const paras: any[] = [];
+        for (let n = k + 1; n < t.length && t[n].level > t[k].level; n++) if (t[n].type === 'paragraph_open' && t[n].level === tok.level) paras.push(t[n]);
+        hidden = paras.every((p) => p.hidden);
+        break;
+      }
+      const open = new state.Token('paragraph_open', 'p', 1), inline = new state.Token('inline', '', 0), close = new state.Token('paragraph_close', 'p', -1);
+      Object.assign(open, { map: tok.map, level: tok.level, block: true, hidden });
+      Object.assign(inline, { map: tok.map, level: tok.level + 1, block: true, content: tok.content.replace(/\n$/, ''), children: [] });
+      Object.assign(close, { level: tok.level, block: true, hidden });
+      t.splice(i, 1, open, inline, close);
+    }
+  });
   md.core.ruler.after('inline', 'eve-unknown-html', (state: any) => {
     for (const t of state.tokens) {
       if (t.type === 'html_block') {

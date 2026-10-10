@@ -211,6 +211,24 @@ test.each([
   expect(save(saved)).toBe(saved);
 });
 
+test.each([
+  ['an item', '- <!-- c --> x [[w]]'],
+  ['a paragraph', '<!-- c --> x [[w]]'],
+  ['a tight list\'s item', '- <!-- c --> x\n- b'],
+  ['a loose list\'s item', '- a\n\n- <!-- c --> x\n\n- b'],
+  ['a quote', '> <!-- c --> **x**'],
+  ['a comment of two lines', '<!-- a\nb --> x'],
+])('%s starting with a comment keeps its line as it was', (_what, note) => {
+  expect(save(note)).toBe(note);
+  expect(save(save(note))).toBe(note);
+});
+
+test('a [[link]] after a comment at the start of a line is still a link', () => {
+  let link = false;
+  editorWith('<!-- c --> x [[w]]').state.doc.descendants((n) => { if (n.type.name === 'wikiLink') link = true; });
+  expect(link).toBe(true);
+});
+
 test('words in angle brackets are text, and a line of them does not take the lines under it', () => {
   expect(editorWith('Array<string> and <Enter>').state.doc.firstChild!.textContent).toBe('Array<string> and <Enter>');
   expect(editorWith('<Enter>\n- item').state.doc.child(1).type.name).toBe('bulletList');
