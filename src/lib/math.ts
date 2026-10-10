@@ -301,10 +301,25 @@ export const MathBlock = mathNode(true);
  * ProseMirror's text node (in place of StarterKit's, the same node), written as tiptap-markdown writes it, except
  * dollars that would be read back as a formula: those are escaped (`\$`), so "$a$" typed where no formula was made (pasted, or the rule undone) stays text.
  */
+const entities = new Map<string, boolean>();
+/** `&name;` that HTML (and so markdown) reads as one character */
+function isEntity(s: string): boolean {
+  if (/^&#/.test(s)) return /^&#(\d{1,7}|x[0-9a-f]{1,6});$/i.test(s);
+  let known = entities.get(s);
+  if (known === undefined) {
+    const el = document.createElement('textarea');
+    el.innerHTML = s;
+    entities.set(s, (known = el.value !== s));
+  }
+  return known;
+}
+
 const mathSafeText = {
   serialize(state: any, node: PMNode) {
     const text = (node.text ?? '')
-      .replace(/&(?=#?[a-z0-9]+;)/gi, '&amp;') // "&lt;" typed as text came back as "<"
+      // "&lt;" typed as text came back as "<"; only a name markdown reads as a character is escaped, so "Q&A;" or
+      // "AT&T;" stay as typed (written "&amp;A;" they showed so in the title, and a [[link]] to it found nothing)
+      .replace(/&(#?[a-z0-9]+;)/gi, (m, rest) => (isEntity(m) ? `&amp;${rest}` : m))
       .replace(/</g, '&lt;').replace(/>/g, '&gt;'); // tiptap-markdown's own escapeHTML
     if (!readsAsMath(text)) { state.text(text); return; }
     text.split('$').forEach((part, i) => {

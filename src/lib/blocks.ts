@@ -215,6 +215,8 @@ export function indentLines(dir: 1 | -1) {
   return ({ tr }: { tr: any }): boolean => {
     const { from, to, $from } = tr.selection;
     if ($from.parent.type.spec.code) return false;
+    // in a table, even one inside a list item, Tab walks the cells (and adds a row at the end), as anywhere else
+    for (let d = $from.depth; d > 0; d--) if (/^table(Cell|Header)$/.test($from.node(d).type.name)) return false;
     // ProseMirror's own list commands, run on the one transaction (tiptap's would read a stale selection)
     const step = (sink: boolean, item: string) => {
       const type = tr.doc.type.schema.nodes[item];

@@ -114,3 +114,17 @@ test('the same marks then a space still make the list, heading, to-do or toggle'
     expect(ed.state.doc.firstChild!.type.name).toBe(kind);
   }
 });
+
+test('Tab in a table inside a list item goes to the next cell', () => {
+  const ed = editorWith('- item\n\n  | a | b |\n  | --- | --- |\n  | one | two |');
+  ed.commands.setTextSelection(posOf(ed, 'one', true));
+  press(ed, 'Tab');
+  expect(ed.state.selection.$from.parent.textContent).toBe('two');
+});
+
+test('"Q&A;" and "AT&T;" are saved as typed, "&lt;" typed as text still comes back as text', () => {
+  for (const text of ['# Q&A; prep', 'AT&T; and R&D;']) expect(md(editorWith(text))).toBe(text);
+  const ed = editorWith('');
+  ed.commands.insertContent({ type: 'paragraph', content: [{ type: 'text', text: 'a &lt; b' }] });
+  expect(editorWith(md(ed)).state.doc.textContent).toBe('a &lt; b');
+});
