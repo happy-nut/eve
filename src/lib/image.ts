@@ -105,7 +105,10 @@ export const LocalImage = Image.extend({
       key: new PluginKey('imageWholeSelection'),
       // dragging across a picture is a text selection that happens to contain it, which reads as if
       // its insides were being selected. A range that holds nothing but the image becomes the image.
-      appendTransaction: (_trs, _old, state) => {
+      // Only a drag: ⇧ + an arrow across the picture turned into the picture alone too, which dropped the end the
+      // selection grew from, so the next ⇧ + arrow started over from the picture.
+      appendTransaction: (trs, _old, state) => {
+        if (!trs.some((tr) => tr.getMeta('pointer'))) return null;
         const sel = state.selection;
         if (!(sel instanceof TextSelection) || sel.empty) return null;
         let at: number | null = null;
