@@ -343,8 +343,11 @@
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
     else sidebarOpen = true;
   }
-  // another note brought up (a link, the widget, a reminder): a diagram shown full screen was the last one's
-  $effect(() => { void notes.currentId; untrack(() => ui.closeDiagramView()); });
+  // another note brought up (a link, the widget, a reminder, ⌘1–9, ⌘N, back/forward): a diagram shown full
+  // screen was the last one's, and so was a board's card or a day floating over it. A card left up wrote into
+  // a board no longer on screen: what was typed in it was lost, with an error at every key. Its last keys
+  // were handed over before the switch (notes.currentId flushes them), so closing it loses nothing.
+  $effect(() => { void notes.currentId; untrack(() => { ui.closeDiagramView(); ui.closeCard(); }); });
   // daily notes on: the calendar's row exists (opening it shows the calendar: notes.currentId)
   $effect(() => { if (appearance.s.dailyNotes && notes.loaded) notes.ensureCalendar(); });
   // the phone's reminder alarm follows the settings

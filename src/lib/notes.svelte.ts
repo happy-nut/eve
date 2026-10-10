@@ -134,6 +134,9 @@ class NotesStore {
   set currentId(id: string | null) {
     if (id === CALENDAR_NOTE_ID) id = CALENDAR; // its row opens the calendar: history keeps the calendar, or Back opened it again
     if (id === this._cur) return;
+    // a long note's (or a board card's) last keys, handed over while what they were typed into is still on
+    // screen: after the switch the board they belong to is gone, and they went nowhere
+    flushEdits();
     if (id) {
       this.history = this.history.slice(0, this.hIndex + 1).filter((h) => h !== id);
       this.history.push(id);
