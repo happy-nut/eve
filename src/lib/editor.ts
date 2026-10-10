@@ -71,8 +71,16 @@ const BlankLine = Paragraph.extend({
           // (a copy renders a bare Fragment: no parent node there, and nothing to leave out)
           const atEnd = (p: PMNode, i: number) => { for (let k = i; k < p.childCount; k++) if (p.child(k).type.name !== 'paragraph' || p.child(k).content.size) return false; return true; };
           if (parent?.type?.name === 'doc' && index !== undefined && index > 0 && !node.content.size && atEnd(parent, index)) return;
-          if (node.content.size) state.renderInline(node);
-          else state.write(BLANK);
+          if (node.content.size) {
+            // a line starting "1) " is a numbered list to markdown as much as "1. " is, which prosemirror-markdown
+            // escapes and this did not: "1) Buy milk" came back a list
+            const esc = state.esc;
+            state.esc = (str: string, start?: boolean) => {
+              const s: string = esc.call(state, str, start);
+              return start ? s.replace(/^(\s*\d+)\)(\s|$)/, '$1\\)$2') : s;
+            };
+            try { state.renderInline(node); } finally { state.esc = esc; }
+          } else state.write(BLANK);
           state.closeBlock(node);
         },
         parse: {

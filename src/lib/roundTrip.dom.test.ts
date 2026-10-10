@@ -34,3 +34,21 @@ test.each([
 ])('%s is written as it was read', (_what, note) => {
   expect(save(note)).toBe(note);
 });
+
+test.each([
+  ['a line starting "1) "', '1\\) Buy milk'],
+  ['an item starting "2) "', '- 2\\) Buy milk'],
+  ['"1)" alone', '1\\)'],
+  ['a numbered list', '1. a\n2. b'],
+  ['"1)" later in the line', 'a 1) b'],
+])('%s is written as it was read', (_what, note) => {
+  expect(save(note)).toBe(note);
+});
+
+test('a typed "1) Buy milk" stays text', () => {
+  const ed = editorWith('');
+  ed.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '1) Buy milk' }] }] });
+  const back = editorWith(md(ed));
+  expect(back.state.doc.firstChild!.type.name).toBe('paragraph');
+  expect(back.state.doc.firstChild!.textContent).toBe('1) Buy milk');
+});
