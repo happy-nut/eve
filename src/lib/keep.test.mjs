@@ -28,6 +28,15 @@ assert.ok(n.body.startsWith('# This is a very long first line of a note…\n\n' 
 n = keepToNote({ title: '', listContent: [{ text: 'a', isChecked: false }, { text: 'b', isChecked: true }], createdTimestampUsec: usec('2023-12-24T09:00:00Z'), isTrashed: false });
 assert.equal(n.body, '# 2023-12-24\n\n- [ ] a\n- [x] b\n');
 
+// …the day it was written where the user is, not in UTC: 08:30 in Seoul on 5 March is still 4 March in UTC
+{
+  const tz = process.env.TZ;
+  process.env.TZ = 'Asia/Seoul';
+  n = keepToNote({ title: '', textContent: '', createdTimestampUsec: usec('2026-03-04T23:30:00Z'), isTrashed: false });
+  assert.equal(n.body.split('\n')[0], '# 2026-03-05');
+  if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz;
+}
+
 // Keep is plain text: a "#", a ">" or a tag stays as typed
 n = keepToNote({ title: 't', textContent: '# not a heading\n> not a quote\na <b> tag', isTrashed: false });
 assert.equal(n.body, '# t\n\n\\# not a heading\n\n\\> not a quote\n\na \\<b\\> tag\n');

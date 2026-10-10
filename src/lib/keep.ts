@@ -49,7 +49,12 @@ export const plain = (line: string) =>
 /** a link's address as markdown takes it whatever it holds (a space, brackets) */
 const dest = (url: string) => (/[\s()<>]/.test(url) ? `<${url.replace(/[<>]/g, encodeURIComponent)}>` : url);
 const BLANK = ' '; // an empty line kept as one (editor.ts BlankLine)
-const day = (usec: number | undefined) => (usec ? new Date(usec / 1000).toISOString().slice(0, 10) : '');
+// the day it was written where the user is (daily.ts dayKey; a UTC date is the day before, mornings in Seoul)
+const day = (usec: number | undefined) => {
+  if (!usec) return '';
+  const d = new Date(usec / 1000), pad = (x: number) => String(x).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
 const groupName = (s: string) => s.trim().replace(/\//g, '-');
 
 export interface FromKeep {
