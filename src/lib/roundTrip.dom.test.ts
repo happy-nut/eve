@@ -145,3 +145,25 @@ test.each([
   expect(save(note)).toBe(note);
   expect(save(save(note))).toBe(note);
 });
+
+test.each([
+  ['a type in angle brackets', 'a list of Array<string> here'],
+  ['a key in angle brackets', 'press <Enter> now'],
+  ['a type with words in it', 'x <T extends Foo> y'],
+  ['a video', '<video src="a.mp4"></video>'],
+  ['a video of more lines, in a quote', '> <video src="a">\n> </video>'],
+  ['an iframe', '<iframe src="https://x.com"></iframe>'],
+  ['an iframe, in a list', '- <iframe src="x"></iframe>\n- b'],
+  ['audio in a line', 'a <audio src="x.mp3" controls></audio> b'],
+  ['an anchor', 'a <a name="x"></a> b'],
+  ['an svg', '<svg width="10">\n<circle r="4"/>\n</svg>'],
+  ['a checkbox', '<input type="checkbox"> x'],
+])('%s is kept', (_what, note) => {
+  expect(save(note)).toBe(note);
+  expect(save(save(note))).toBe(note);
+});
+
+test('words in angle brackets are text, and a line of them does not take the lines under it', () => {
+  expect(editorWith('Array<string> and <Enter>').state.doc.firstChild!.textContent).toBe('Array<string> and <Enter>');
+  expect(editorWith('<Enter>\n- item').state.doc.child(1).type.name).toBe('bulletList');
+});

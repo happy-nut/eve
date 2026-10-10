@@ -13,6 +13,67 @@ import { Mark, Node } from '@tiptap/core';
 const INLINE = ['span', 'kbd', 'sub', 'sup', 'abbr', 'small', 'var', 'samp', 'cite', 'q', 'dfn', 'ins', 'time', 'font'];
 const MARK = 'data-eve-html';
 
+/**
+ * Every element HTML has (and SVG's and MathML's root). Anything else in angle brackets is text: `Array<string>`,
+ * "press <Enter>". Read as a tag, it was dropped, the words with it.
+ */
+export const HTML_TAGS = new Set(('a abbr acronym address applet area article aside audio b base basefont bdi bdo bgsound big blink '
+  + 'blockquote body br button canvas caption center cite code col colgroup data datalist dd del details dfn dialog dir div dl dt em '
+  + 'embed fieldset figcaption figure font footer form frame frameset h1 h2 h3 h4 h5 h6 head header hgroup hr html i iframe image img '
+  + 'input ins isindex kbd keygen label legend li link listing main map mark marquee math menu menuitem meta meter nav nobr noembed '
+  + 'noframes noscript object ol optgroup option output p param picture plaintext portal pre progress q rb rp rt rtc ruby s samp '
+  + 'script search section select slot small source spacer span strike strong style sub summary sup svg table tbody td template '
+  + 'textarea tfoot th thead time title tr track tt u ul var video wbr xmp').split(' '));
+/** the HTML the note makes something of: formatting, a picture, a list, a table, a toggle, a box of blocks */
+const OWN = new Set([...INLINE, 'a', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'mark', 'code', 'br', 'img', 'div', 'p',
+  'details', 'summary', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'pre', 'table', 'thead', 'tbody', 'tfoot',
+  'tr', 'th', 'td', 'hr']);
+const TAG = /^<(\/?)([A-Za-z][A-Za-z0-9-]*)/;
+const quote = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const ready = new WeakSet<object>();
+
+/**
+ * Tags the note has nothing for (a <video>, an <iframe>, <audio>, <svg>, an <a name>, an <input>) and words in angle
+ * brackets that are no tag at all. Both were dropped when the note was read, and gone from the file once it was
+ * saved. Words stay text; a tag is kept as it was written, shown as its code, and written back unchanged.
+ */
+function keepUnknownHtml(md: any) {
+  if (ready.has(md)) return;
+  ready.add(md);
+  const rules = md.block.ruler.__rules__, at = md.block.ruler.__find__('html_block');
+  if (at >= 0) {
+    const html = rules[at].fn;
+    // a line starting "<Enter>" is a paragraph: as an HTML block it swallowed the lines under it
+    md.block.ruler.at('html_block', (state: any, start: number, end: number, silent: boolean) => {
+      const m = TAG.exec(state.src.slice(state.bMarks[start] + state.tShift[start], state.eMarks[start]));
+      return m && !HTML_TAGS.has(m[2].toLowerCase()) ? false : html(state, start, end, silent);
+    }, { alt: rules[at].alt });
+  }
+  md.core.ruler.after('inline', 'eve-unknown-html', (state: any) => {
+    for (const t of state.tokens) {
+      if (t.type === 'html_block') {
+        const name = TAG.exec(t.content)?.[2].toLowerCase();
+        if (name && HTML_TAGS.has(name) && !OWN.has(name)) t.content = `<div data-eve-raw="${quote(t.content.replace(/\n$/, ''))}"></div>\n`;
+      }
+      if (t.type !== 'inline' || !t.children) continue;
+      const anchors: boolean[] = []; // an <a> without an address is kept as written, and so is its </a>
+      for (const c of t.children) {
+        if (c.type !== 'html_inline') continue;
+        const m = TAG.exec(c.content);
+        if (!m) continue; // a comment
+        const name = m[2].toLowerCase();
+        if (!HTML_TAGS.has(name)) { c.type = 'text'; continue; }
+        let raw = !OWN.has(name) && !c.content.includes('task-list-item-checkbox');
+        if (name === 'a') {
+          if (m[1]) raw = anchors.pop() ?? false;
+          else anchors.push((raw = !/\shref\s*=/i.test(c.content)));
+        }
+        if (raw) c.content = `<span data-eve-raw-inline="${quote(c.content)}"></span>`;
+      }
+    }
+  });
+}
+
 const ATTRS = 'data-eve-attrs';
 
 type Attrs = [name: string, value: string][];
@@ -90,6 +151,7 @@ export const HtmlBlock = Node.create({
         state.closeBlock(node);
       },
       parse: {
+        setup: keepUnknownHtml,
         // what came from the note's markdown, as against what a paste or the app itself puts there: divs of the
         // app's own carry data-* (a board, a toggle's body); comments become a block that can hold them
         updateDOM(root: HTMLElement) {
@@ -150,4 +212,42 @@ export const HtmlCommentInline = Node.create({
   }),
 });
 
-export const Html = [HtmlInline, HtmlBlock, HtmlComment, HtmlCommentInline];
+/** HTML the note has nothing for, between blocks (a <video>, an <iframe>, <svg>): shown as its code, written back as it was */
+export const HtmlRaw = Node.create({
+  name: 'htmlRaw',
+  group: 'block',
+  atom: true,
+  selectable: true,
+  addAttributes: () => ({ html: { default: '', parseHTML: (el: HTMLElement) => el.getAttribute('data-eve-raw') ?? '', rendered: false } }),
+  parseHTML: () => [{ tag: 'div[data-eve-raw]', priority: 60 }],
+  renderHTML: ({ node }) => ['div', { 'data-eve-raw': node.attrs.html, class: 'html-comment' }, node.attrs.html],
+  addStorage: () => ({
+    markdown: {
+      serialize(state: any, node: any) {
+        state.text(node.attrs.html, false); // text(): each line of it keeps the "> " or the item's indent it is in
+        state.closeBlock(node);
+      },
+    },
+  }),
+});
+
+/** the same in a line of text (`a <a name="x"></a> b`, an <input>): each tag kept as it was written */
+export const HtmlRawInline = Node.create({
+  name: 'htmlRawInline',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes: () => ({ html: { default: '', parseHTML: (el: HTMLElement) => el.getAttribute('data-eve-raw-inline') ?? '', rendered: false } }),
+  parseHTML: () => [{ tag: 'span[data-eve-raw-inline]', priority: 60 }],
+  renderHTML: ({ node }) => ['span', { 'data-eve-raw-inline': node.attrs.html, class: 'html-comment' }, node.attrs.html],
+  addStorage: () => ({
+    markdown: {
+      serialize(state: any, node: any) {
+        state.text(node.attrs.html, false);
+      },
+    },
+  }),
+});
+
+export const Html = [HtmlInline, HtmlBlock, HtmlComment, HtmlCommentInline, HtmlRaw, HtmlRawInline];

@@ -5,6 +5,7 @@ import type MarkdownIt from 'markdown-it';
 import { loadMath, mathMarkup, mathNow } from './mathRender';
 import { mountMath, type MathEditing } from './mathEdit.svelte';
 import { scrollHint } from './scrollHint';
+import { HTML_TAGS } from './html';
 
 /**
  * Formulas: `$E = mc^2$` in a line of text, and a block of its own,
@@ -325,6 +326,13 @@ function isEntity(s: string): boolean {
   return known;
 }
 
+/** `<string>`, `<T extends Base>`: a tag in form, of no element HTML has, holding nothing markdown reads in a line */
+const LOOSE_TAG = /^<\/?([A-Za-z][A-Za-z0-9-]*)(\s+[A-Za-z:][A-Za-z0-9:.-]*(\s*=\s*([^\s"'=<>`]+|"[^"]*"|'[^']*'))?)*\s*\/?>$/;
+const wordInBrackets = (s: string) => {
+  const m = LOOSE_TAG.exec(s);
+  return !!m && !HTML_TAGS.has(m[1].toLowerCase()) && !/[$`[\]\\&*_~@]|==/.test(s);
+};
+
 const mathSafeText = {
   serialize(state: any, node: PMNode) {
     // a link written as <address>: markdown reads nothing inside it, so a backslash there stayed in the address
@@ -334,7 +342,9 @@ const mathSafeText = {
       // "&lt;" typed as text came back as "<"; only a name markdown reads as a character is escaped, so "Q&A;" or
       // "AT&T;" stay as typed (written "&amp;A;" they showed so in the title, and a [[link]] to it found nothing)
       .replace(/&(#?[a-z0-9]+;)/gi, (m, rest) => (isEntity(m) ? `&amp;${rest}` : m))
-      .replace(/</g, '&lt;').replace(/>/g, '&gt;'); // tiptap-markdown's own escapeHTML
+      // tiptap-markdown's own escapeHTML, but for words in angle brackets that are no HTML tag (`Array<string>`,
+      // "press <Enter>"): read back they are text anyway, so they are written as the note had them
+      .replace(/<[^<>]*>|[<>]/g, (m) => (wordInBrackets(m) ? m : m.replace(/</g, '&lt;').replace(/>/g, '&gt;')));
     if (!readsAsMath(text)) { state.text(text); return; }
     text.split('$').forEach((part, i) => {
       if (i) state.write('\\$');
