@@ -70,3 +70,16 @@ test('a "[[" just typed opens the picker, spaces and ← → included; a click e
   await settle();
   expect(b.shown()).toEqual([]);
 });
+
+test('"[[Bob]]" typed out by hand closes the picker: Enter after it is a new line, what follows stays text', async () => {
+  for (const tail of [' and more', '])']) {
+    const { ed, shown } = editor('# T\n\nNote:');
+    ed.commands.focus('end');
+    type(ed, ' see [[Bob]]' + tail);
+    await settle();
+    expect(shown()).toEqual([]);
+    press(ed, 'Enter');
+    expect(ed.state.doc.childCount).toBe(3);
+    expect(ed.state.doc.child(1).textContent).toBe('Note: see [[Bob]]' + tail);
+  }
+});

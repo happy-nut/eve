@@ -118,3 +118,30 @@ test('a typed "1) Buy milk" stays text', () => {
   expect(back.state.doc.firstChild!.type.name).toBe('paragraph');
   expect(back.state.doc.firstChild!.textContent).toBe('1) Buy milk');
 });
+
+test.each([
+  ['bold', 'Meeting with **Alice**\nand Bob', 'Meeting with **Alice** and Bob'],
+  ['code', 'run `npm i`\nfirst', 'run `npm i` first'],
+  ['a link', 'see [docs](u)\nfor more', 'see [docs](u) for more'],
+  ['a [[link]]', 'see [[Page]]\nfor more', 'see [[Page]] for more'],
+  ['a date', 'due @2026-01-02\nor later', 'due @2026-01-02 or later'],
+  ['a formula', 'so $x$\nholds', 'so $x$ holds'],
+  ['a highlight', 'a ==hi==\nthere', 'a ==hi== there'],
+  ['underline', 'a <u>u</u>\nthere', 'a <u>u</u> there'],
+  ['bold, in a to-do', '- [ ] call **Alice**\n  and Bob', '- [ ] call **Alice** and Bob'],
+])('a line break right after %s keeps the words apart', (_what, note, saved) => {
+  expect(save(note)).toBe(saved);
+  expect(save(saved)).toBe(saved);
+});
+
+test.each([
+  ['bold, in a quote', '> a\n>\n> **b** c'],
+  ['italic, in a quote', '> a\n>\n> *b* c'],
+  ['a highlight, in a quote', '> a\n>\n> ==b== c'],
+  ['strike, in a callout', '> [!note] t\n> x\n>\n> ~~b~~ c\n\nafter'],
+  ['bold, in a list in a quote', '> - a\n>\n>   ~~b~~'],
+  ['bold, in both paragraphs of a quote', '> **a**\n>\n> **b**'],
+])('a paragraph starting with %s stays where it was', (_what, note) => {
+  expect(save(note)).toBe(note);
+  expect(save(save(note))).toBe(note);
+});

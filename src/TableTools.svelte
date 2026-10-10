@@ -6,7 +6,9 @@
    * the way the outline rail sits beside the page — no grips to hunt for, and nothing on screen while
    * you are writing anywhere else.
    */
-  let { editor }: { editor: Editor | undefined } = $props();
+  /** `sheet`: the editor is a card's or a day's page (z-index 31), which drew over the bar and left a table there with
+   *  no way to add a row; the bar goes over that page then, still under the phone's formatting bar (33) */
+  let { editor, sheet = false }: { editor: Editor | undefined; sheet?: boolean } = $props();
 
   let at = $state<{ x: number; y: number } | null>(null);
 
@@ -25,7 +27,11 @@
     // the bar with it, out of sight above the note while the caret was in a row on screen. It stays at the top of
     // the note's scroll area then, as long as some of the table is still under it.
     const top = scrollTop(el) + 4 + (bar?.offsetHeight ?? 32);
-    at = { x: r.left, y: Math.min(Math.max(r.top - 8, top), r.bottom) };
+    // kept on screen: a table scrolled sideways (or a phone's bar, wider than a narrow table) left the bar's end off it
+    // (not drawn yet, its width is not known: placed again once it is)
+    if (!bar) requestAnimationFrame(() => { if (bar) place(); });
+    const w = bar?.offsetWidth ?? 0;
+    at = { x: Math.max(8, Math.min(r.left, window.innerWidth - w - 8)), y: Math.min(Math.max(r.top - 8, top), r.bottom) };
   }
 
   /** where the area the table scrolls in begins on screen (the window's top when nothing in between scrolls) */
@@ -78,17 +84,17 @@
     [
       { tip: 'Header row', cmd: 'toggleHeaderRow', icon: '<rect x="2.5" y="3" width="11" height="10" rx="1"/><path d="M2.5 6.2h11"/>' },
       { tip: 'Merge or split', cmd: 'mergeOrSplit', icon: '<rect x="2.5" y="3" width="11" height="10" rx="1"/><path d="M8 3v3M8 10v3"/>' },
-      { tip: 'Delete table', cmd: 'deleteTable', icon: '<path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9"/>' },
+      { tip: 'Delete table', cmd: 'deleteTable', gap: true, icon: '<path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9"/>' },
     ],
   ];
 </script>
 
 {#if at}
-  <div class="tbl-tools" bind:this={bar} style:left="{at.x}px" style:top="{at.y}px" onmousedown={hold} role="toolbar" tabindex="-1" aria-label="Table">
+  <div class="tbl-tools" class:sheet bind:this={bar} style:left="{at.x}px" style:top="{at.y}px" onmousedown={hold} role="toolbar" tabindex="-1" aria-label="Table">
     {#each GROUPS as group, g}
       {#if g}<span class="tbl-sep"></span>{/if}
       {#each group as b}
-        <button class="icon tip-up" data-tip={b.tip} aria-label={b.tip} onclick={run(b.cmd)}>
+        <button class="icon tip-up" class:gap={b.gap} data-tip={b.tip} aria-label={b.tip} onclick={run(b.cmd)}>
           <svg viewBox="0 0 16 16">{@html b.icon}</svg>
         </button>
       {/each}
@@ -102,7 +108,15 @@
     transform: translateY(-100%); padding: 3px;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }
+  .tbl-tools.sheet { z-index: 32; }
   .tbl-tools .icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
   .tbl-tools svg { width: 15px; height: 15px; display: block; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   .tbl-sep { width: 1px; height: 15px; background: var(--line); margin: 0 3px; }
+  /* a phone: buttons a finger can hit, and Delete table set apart from Merge or split beside it. Too wide for a
+     narrow screen, the row scrolls sideways */
+  :global(html.mobile) .tbl-tools { max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; }
+  :global(html.mobile) .tbl-tools .icon { flex: none; width: 38px; height: 38px; }
+  :global(html.mobile) .tbl-tools svg { width: 19px; height: 19px; }
+  :global(html.mobile) .tbl-tools .gap { margin-left: 14px; color: #ff453a; }
+  :global(html.mobile) .tbl-sep { flex: none; height: 20px; }
 </style>

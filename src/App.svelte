@@ -213,9 +213,15 @@
   let swipe: { x: number; y: number; at: number } | null = null;
   function swipeStart(e: TouchEvent) {
     swipe = null;
-    if (!isMobile || sidebarOpen || settingsOpen || ui.card || e.touches.length !== 1) return;
-    // things that scroll sideways themselves keep the gesture
-    if ((e.target as HTMLElement).closest('pre, table, .kanban, .mbar, .mhead, input, textarea, .menu, .suggest')) return;
+    // a diagram on the whole screen pans with the finger, and Find's bar would stay over the list
+    if (!isMobile || sidebarOpen || settingsOpen || ui.card || ui.diagramView !== null || ui.find || e.touches.length !== 1) return;
+    // things that scroll sideways themselves keep the gesture: a wide diagram or equation scrolled back to its start
+    // brought the list in instead
+    const t = e.target as HTMLElement;
+    if (t.closest('pre, table, .kanban, .mbar, .mhead, input, textarea, .menu, .suggest, .dblock, .diagram-canvas, .math-block')) return;
+    for (let el: HTMLElement | null = t; el && el !== document.body; el = el.parentElement) {
+      if (el.scrollWidth > el.clientWidth + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowX)) return;
+    }
     swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY, at: Date.now() };
   }
   function swipeEnd(e: TouchEvent) {
@@ -341,7 +347,12 @@
     else if (ui.card) ui.closeCard();
     else if (settingsOpen) settingsOpen = false;
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
-    else sidebarOpen = true;
+    else {
+      // the native back key leaves the focus where it was: the note kept its caret behind the list, and with it the
+      // "/" menu and a table's tools, drawn over the list. They go when the note lets go of the keyboard, as a swipe does
+      (document.activeElement as HTMLElement | null)?.blur();
+      sidebarOpen = true;
+    }
   }
   // another note brought up (a link, the widget, a reminder, ⌘1–9, ⌘N, back/forward): a diagram shown full
   // screen was the last one's, and so was a board's card or a day floating over it. A card left up wrote into

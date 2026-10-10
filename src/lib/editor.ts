@@ -149,6 +149,12 @@ const BlankLine = Paragraph.extend({
           state.closeBlock(node);
         },
         parse: {
+          setup(md: any) {
+            // a line break inside a paragraph is a space between words, but tiptap-markdown drops the newline at the
+            // start of the text after any bold, code, link, [[link]] or date: "**Alice**\nand Bob" came back as
+            // "**Alice**and Bob", the words run together. A space ahead of it keeps them apart.
+            md.renderer.rules.softbreak = () => ' \n';
+          },
           updateDOM(element: HTMLElement) {
             for (const p of element.querySelectorAll('p')) if (p.textContent === BLANK) p.replaceChildren();
           },
@@ -435,7 +441,7 @@ let lastCut = { text: '', at: 0 };
  * move of the caret; the [[ picker takes spaces, and only a click elsewhere (or leaving the line) ends it, so ← and
  * → can still fix a typo in the title being typed.
  */
-function typedTrigger(key: PluginKey<number | null>, char: string, endsAtSpace: boolean) {
+function typedTrigger(key: PluginKey<number | null>, char: string, endsAtSpace: boolean, closer?: string) {
   return new Plugin<number | null>({
     key,
     state: {
@@ -457,6 +463,9 @@ function typedTrigger(key: PluginKey<number | null>, char: string, endsAtSpace: 
         // done with once the menu has closed: a space typed after it, or the caret moved away (by a click, an arrow),
         // so coming back to it later (a click, a ⌫) does not open it again
         if (at !== null && endsAtSpace && /\s/.test(state.doc.textBetween(at + 1, Math.max(at + 1, $head.pos)))) return null;
+        // and once it is closed by hand ("[[Bob]]" typed out): the picker stayed on for the rest of the line, kept @ dates
+        // and :emoji from coming up, and Enter there turned what followed into a link
+        if (at !== null && closer && state.doc.textBetween(at + char.length, Math.max(at + char.length, $head.pos)).includes(closer)) return null;
         if (at !== null && !tr.docChanged && tr.selectionSet && (endsAtSpace || tr.getMeta('pointer'))) return null;
         return at;
       },
@@ -468,7 +477,40 @@ const slashTyped = typedTrigger(SLASH_AT, '/', true);
 // an earlier "[[" left open in a paragraph ("np.array([[1, 2", "if [[ -n $x ]]") opened the picker whenever the caret
 // came back after it, and Enter there turned the rest of the line into a link
 const WIKI_AT = new PluginKey<number | null>('wikiAt');
-const wikiTyped = typedTrigger(WIKI_AT, '[[', false);
+const wikiTyped = typedTrigger(WIKI_AT, '[[', false, ']]');
+
+/**
+ * Bold, italic, strike and highlight at the start of a line in a quote or a callout lost the line's "> ": tiptap-markdown
+ * notes where such a mark starts before the blank line and the "> " ahead of it are written, then moves the "**" it
+ * finds there past spaces, over the ">". The paragraph merged into the one above or fell out of the callout, and a
+ * "~~" could become a code fence that swallowed the rest of the note. The mark's start is taken again once they are out.
+ */
+function markStartsAfterPrefix(editor: Editor) {
+  const serializer = (editor.storage as any).markdown.serializer;
+  const marksOf = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(serializer), 'marks')?.get;
+  if (!marksOf) return;
+  Object.defineProperty(serializer, 'marks', {
+    configurable: true,
+    get() {
+      const marks = marksOf.call(serializer);
+      for (const [name, info] of Object.entries<any>(marks)) {
+        if (!info?.expelEnclosingWhitespace) continue;
+        const open = info.open;
+        marks[name] = {
+          ...info,
+          open(state: any, mark: any, parent: any, index: number) {
+            state.write(); // the blank line and the "> " before this line, which writing the mark would put out anyway
+            const delim = typeof open === 'function' ? open(state, mark, parent, index) : open;
+            const top = state.inlines?.at(-1);
+            if (top && top.end === undefined) Object.assign(top, { start: state.out.length, delimiter: delim });
+            return delim;
+          },
+        };
+      }
+      return marks;
+    },
+  });
+}
 
 export function createEditor(opts: {
   element: HTMLElement;
@@ -492,7 +534,7 @@ export function createEditor(opts: {
   const menuOpen = (ed: Editor, state: EditorState, ...menus: PluginKey[]) =>
     menus.some((k) => (k.getState(state) ?? k.getState(ed.state))?.active);
   const iconOf = (link: string) => {
-    const find = (t: string) => notes.visible.find((n) => titleOf(n).toLowerCase() === t.toLowerCase());
+    const find = (t: string) => notes.byTitle(t);
     return find(splitLink(link, (t) => !!find(t))[0])?.icon ?? ''; // a section link keeps the page's icon
   };
   // A long note's markdown is a few milliseconds per key (54 KB: 6.6 ms of a 7.9 ms keystroke), so it is made
@@ -1159,6 +1201,7 @@ export function createEditor(opts: {
     ],
     onUpdate: ({ editor }) => handOver(editor),
   });
+  markStartsAfterPrefix(editor);
   editor.on('blur', flush); // leaving the note: the list, a dialog, another app
   // the note closed or switched (the document is still there to read)
   editor.on('destroy', () => { closing = true; flush(); });

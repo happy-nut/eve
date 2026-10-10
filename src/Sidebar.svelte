@@ -19,7 +19,7 @@
   import { focusNote } from './lib/popup';
   import { touchReorder, type Reorder } from './lib/touchReorder';
   import { swipeRow } from './lib/swipeRow';
-  import { plain, previewOf } from './lib/markdown';
+  import { previewOf, rawQuery, searchText } from './lib/markdown';
   import { editedLabel } from './lib/date';
 
   let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings, onNew }:
@@ -35,7 +35,9 @@
   const q = $derived(query.trim().toLowerCase());
   // daily notes stay out of the tree, but a search still finds them
   // …only while daily notes are on here: off on this device, they are nowhere on it (list, search, widget)
-  const hits = $derived([...notes.visible, ...(appearance.s.dailyNotes ? notes.daily : [])].filter((n) => shownText(n).includes(q)));
+  // a query with a character markdown uses ("a*b", "~/projects", "List<String>") is looked for as written too: text
+  // brought in from elsewhere keeps such characters unescaped, and reading it as markdown took them out
+  const hits = $derived([...notes.visible, ...(appearance.s.dailyNotes ? notes.daily : [])].filter((n) => shownText(n).includes(q) || (rawQuery(q) && n.body.toLowerCase().includes(q))));
   // A search looks for what the note says, as it reads on screen: its raw markdown matched what nobody sees (a
   // link's address, "#" for every heading, "**") and missed what everyone does ("my_func" is saved my\_func).
   // Made once per version of a note, not at every key typed into the search.
@@ -43,7 +45,7 @@
   function shownText(n: Note): string {
     const had = shown.get(n.id);
     if (had?.body === n.body) return had.text;
-    const text = (titleOf(n) + '\n' + n.body.split('\n').map(plain).join('\n')).toLowerCase();
+    const text = (titleOf(n) + '\n' + searchText(n.body)).toLowerCase();
     shown.set(n.id, { body: n.body, text });
     return text;
   }

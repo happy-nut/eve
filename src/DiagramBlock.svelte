@@ -120,6 +120,12 @@
       const t = e.target as Element;
       const typing = t instanceof HTMLElement && t.matches('input, textarea, select');
       // on the whole screen: + − 0 zoom, and Esc with nothing being edited puts it back in the note
+      // ⌘Z on the whole screen, open for editing or not: the note's undo (the note itself has no keyboard there)
+      if (full && !typing && root.contains(t) || full && t === document.body) {
+        if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y'))) {
+          e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y'); return;
+        }
+      }
       if (full && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
         if (e.key === 'Escape' && !active) { e.preventDefault(); e.stopPropagation(); leaveFull(); return; }
         if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomBy(1.25); return; }
@@ -190,9 +196,15 @@
   let full = $state(false), zoom = $state(1);
   const ZOOM_MIN = 0.1, ZOOM_MAX = 8;
   function enterFull() {
+    // its code shown: that goes first (the code is the note's text, under the whole screen, which it would close again)
+    if (codeShown) onCodeLeave();
+    // where the keyboard was is kept before it is taken away: kept after, it was nowhere, and the keys typed after
+    // Esc went nowhere too
+    // (the ⤢ itself, focused by its click in some browsers, is gone on the whole screen: the note's text, then)
+    const was = document.activeElement as HTMLElement | null;
+    ui.viewDiagram(() => (full = false), was && was !== document.body && !root.contains(was) ? was : root.closest<HTMLElement>('.tiptap'));
     (document.activeElement as HTMLElement | null)?.blur?.(); // keys are the diagram's now, not the note's text
     full = true;
-    ui.viewDiagram(() => (full = false));
     tick().then(fit);
   }
   /** back into the note (✕, Esc, the phone's back) */
@@ -205,8 +217,18 @@
       const vb = el.viewBox.baseVal;
       return vb && vb.width ? { el, w: vb.width, h: vb.height } : null;
     }
-    const z = +(el.style.zoom || 1);
-    return { el, w: el.offsetWidth / z || 1, h: el.offsetHeight / z || 1 };
+    // a chart Eve draws as HTML takes the width it is given: on the whole screen it is given one of its own, a page's
+    // (it stretched to the screen, and zooming laid it out again narrower instead of making it larger)
+    if (full && el.dataset.nw === undefined) {
+      if (el.dataset.style === undefined) el.dataset.style = el.getAttribute('style') ?? '';
+      el.style.zoom = '1';
+      // it is the canvas that scrolls, not the chart that is held to its width (as a flex item it shrank to it)
+      el.style.maxWidth = 'none'; el.style.flex = 'none';
+      el.style.width = `${Math.min(720, window.innerWidth - 32)}px`;
+      el.dataset.nw = String(el.offsetWidth || 1);
+      el.dataset.nh = String(el.offsetHeight || 1);
+    }
+    return { el, w: +(el.dataset.nw ?? el.offsetWidth) || 1, h: +(el.dataset.nh ?? el.offsetHeight) || 1 };
   }
   /** the drawing at the zoom on the whole screen, or as the note draws it */
   function size() {
@@ -215,6 +237,7 @@
     const { el } = n;
     if (!full) {
       if (el.dataset.style !== undefined) { el.setAttribute('style', el.dataset.style); delete el.dataset.style; }
+      delete el.dataset.nw; delete el.dataset.nh;
       return;
     }
     if (el.dataset.style === undefined) el.dataset.style = el.getAttribute('style') ?? '';
@@ -265,12 +288,14 @@
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
       c.classList.remove('panning');
       // the click that ends a pan is not a click on the canvas (it opened the editor, or let go of the box picked)
       if (moved) window.addEventListener('click', (k) => { k.stopPropagation(); k.preventDefault(); }, { capture: true, once: true });
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up, { once: true });
   }
   /** two fingers pinch on a phone (one finger scrolls, as the canvas scrolls) */
   function pinchZoom(el: HTMLElement) {
@@ -419,6 +444,7 @@
   .dblock.full .pic { height: 100%; }
   .dblock.full :global(.diagram-canvas) {
     height: 100%; box-sizing: border-box; border-radius: 0; overflow: auto; overscroll-behavior: contain; align-items: flex-start; padding: 24px;
+    margin: 0; box-shadow: none; /* the note's spacing pushed its foot off the screen, and its hover ring framed the screen */
   }
   /* centred while it fits, from its top-left corner once it is larger (a centred one was cut off where it overflowed) */
   .dblock.full :global(.diagram-canvas > *) { margin: auto; }

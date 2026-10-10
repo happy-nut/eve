@@ -76,3 +76,22 @@ console.log('MARKDOWN_OK');
   assert.equal(previewOf('# T\n'), '');
   assert.equal(previewOf('# T\n\n' + 'word '.repeat(60), 20), 'word word word word…');
 }
+
+// a search reads what shows, and code as written, and a link's address too
+{
+  const { searchText, rawQuery } = await import('./markdown.ts');
+  const t = searchText('# T\n\nthe **main office** tomorrow\n\n```c\nList<String> names;\n```\n\nuse `Vec<u8>` and [docs](https://example.com/guide)\n').toLowerCase();
+  for (const q of ['main office tomorrow', 'list<string>', 'vec<u8>', 'example.com', 'docs']) assert.ok(t.includes(q), q);
+  assert.ok(!t.includes('**'), 'no markdown marks');
+  assert.ok(!t.includes('#'), 'no heading marks');
+  assert.ok(rawQuery('a*b') && rawQuery('~/projects') && !rawQuery('hello world') && !rawQuery('#'));
+}
+
+// a [[link]] written before titles read links, formulas and "_" as on screen still finds its page by the old title
+{
+  const { legacyPlain, plain } = await import('./markdown.ts');
+  assert.equal(legacyPlain('# my_func'), 'myfunc');
+  assert.equal(plain('# my_func'), 'my_func');
+  assert.equal(legacyPlain('# Energy $E=mc^2$'), 'Energy $E=mc^2$');
+  assert.equal(legacyPlain('# ![logo](a.png) Home'), '![logo](a.png) Home');
+}
