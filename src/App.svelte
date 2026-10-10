@@ -473,7 +473,7 @@
     // Escape puts away whatever is open over the note — the find bar, then the PDF panel — and only a
     // bare note lets it through to hide the window. Tied to the key, not to the rebindable action:
     // closing the thing on top is what Escape means everywhere in the app.
-    if (e.key === 'Escape' && (ui.find || ui.pdf)) {
+    if (e.key === 'Escape' && (!e.defaultPrevented || (e as any).eveApp) && (ui.find || ui.pdf)) { // not one the note took (closing its / menu)
       e.preventDefault();
       if (ui.find) { ui.find = false; queueMicrotask(focusNote); }
       else ui.closePdf();
