@@ -333,23 +333,49 @@ const wordInBrackets = (s: string) => {
   return !!m && !HTML_TAGS.has(m[1].toLowerCase()) && !/[$`[\]\\&*_~@]|==/.test(s);
 };
 
+/**
+ * Pieces of a text written just so, not through markdown's escaping: words in angle brackets (read back they are text
+ * anyway), and a footnote mark `[^1]`, which other apps read as one and which was written `\[^1\]`.
+ */
+const VERBATIM = /<[^<>]*>|\[\^[A-Za-z0-9-]+\]/g;
+function piecesOf(text: string): [text: string, verbatim: boolean][] {
+  const pieces: [string, boolean][] = [];
+  let last = 0;
+  for (const m of text.matchAll(VERBATIM)) {
+    if (m[0][0] === '<' && !wordInBrackets(m[0])) continue;
+    pieces.push([text.slice(last, m.index), false], [m[0], true]);
+    last = m.index + m[0].length;
+  }
+  pieces.push([text.slice(last), false]);
+  return pieces.filter(([s]) => s);
+}
+
+const plain = (text: string) => text
+  // "&lt;" typed as text came back as "<"; only a name markdown reads as a character is escaped, so "Q&A;" or
+  // "AT&T;" stay as typed (written "&amp;A;" they showed so in the title, and a [[link]] to it found nothing)
+  .replace(/&(#?[a-z0-9]+;)/gi, (m, rest) => (isEntity(m) ? `&amp;${rest}` : m))
+  .replace(/</g, '&lt;').replace(/>/g, '&gt;'); // tiptap-markdown's own escapeHTML
+
 const mathSafeText = {
   serialize(state: any, node: PMNode) {
     // a link written as <address>: markdown reads nothing inside it, so a backslash there stayed in the address
     // (`<https://a.com/\*x\*>` pointed somewhere else)
     if (state.inAutolink) return void state.text(node.text ?? '', false);
-    const text = (node.text ?? '')
-      // "&lt;" typed as text came back as "<"; only a name markdown reads as a character is escaped, so "Q&A;" or
-      // "AT&T;" stay as typed (written "&amp;A;" they showed so in the title, and a [[link]] to it found nothing)
-      .replace(/&(#?[a-z0-9]+;)/gi, (m, rest) => (isEntity(m) ? `&amp;${rest}` : m))
-      // tiptap-markdown's own escapeHTML, but for words in angle brackets that are no HTML tag (`Array<string>`,
-      // "press <Enter>"): read back they are text anyway, so they are written as the note had them
-      .replace(/<[^<>]*>|[<>]/g, (m) => (wordInBrackets(m) ? m : m.replace(/</g, '&lt;').replace(/>/g, '&gt;')));
-    if (!readsAsMath(text)) { state.text(text); return; }
-    text.split('$').forEach((part, i) => {
-      if (i) state.write('\\$');
-      if (part) state.text(part);
-    });
+    const pieces = piecesOf(node.text ?? '');
+    const dollars = readsAsMath(pieces.map(([s, v]) => (v ? s : plain(s))).join(''));
+    for (const [s, verbatim] of pieces) {
+      if (verbatim) {
+        state.text(s, false);
+        state.atBlockStart = false;
+        continue;
+      }
+      const text = plain(s);
+      if (!dollars) { state.text(text); continue; }
+      text.split('$').forEach((part, i) => {
+        if (i) state.write('\\$');
+        if (part) state.text(part);
+      });
+    }
   },
   parse: {},
 };

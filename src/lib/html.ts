@@ -49,6 +49,35 @@ function keepUnknownHtml(md: any) {
       return m && !HTML_TAGS.has(m[2].toLowerCase()) ? false : html(state, start, end, silent);
     }, { alt: rules[at].alt });
   }
+  // A link's address given further down (`[ref]: https://x.com`) or a short footnote (`[^1]: note`): markdown takes the
+  // line for the links that use it and shows nothing, so it was gone from the file once the note was saved. It is kept
+  // as it was written, like HTML the note has nothing for. A footnote is no address: `x[^1]` stays text, as it was
+  // before such a line under it made it a link to "note".
+  const ref = md.block.ruler.__find__('reference');
+  if (ref >= 0) {
+    const reference = rules[ref].fn;
+    md.block.ruler.at('reference', (state: any, start: number, end: number, silent: boolean) => {
+      if (silent) return reference(state, start, end, true);
+      const refs = (state.env.references ??= {});
+      const before = new Set(Object.keys(refs));
+      if (!reference(state, start, end, false)) return false;
+      for (const label of Object.keys(refs)) if (!before.has(label) && label.startsWith('^')) delete refs[label];
+      const lines = state.getLines(start, state.line, state.blkIndent, false).replace(/\n$/, '');
+      const prev = state.tokens.at(-1);
+      // definitions one under the other stay so, not a blank line between each
+      if (prev?.meta?.eveDefs !== undefined && prev.map?.[1] === start) {
+        prev.meta.eveDefs += `\n${lines}`;
+        prev.map[1] = state.line;
+        prev.content = `<div data-eve-raw="${quote(prev.meta.eveDefs)}"></div>\n`;
+        return true;
+      }
+      const t = state.push('html_block', '', 0);
+      t.map = [start, state.line];
+      t.meta = { eveDefs: lines };
+      t.content = `<div data-eve-raw="${quote(lines)}"></div>\n`;
+      return true;
+    }, { alt: rules[ref].alt });
+  }
   md.core.ruler.after('inline', 'eve-unknown-html', (state: any) => {
     for (const t of state.tokens) {
       if (t.type === 'html_block') {

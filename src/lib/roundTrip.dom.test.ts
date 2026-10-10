@@ -163,6 +163,23 @@ test.each([
   expect(save(save(note))).toBe(note);
 });
 
+test.each([
+  ['a footnote', 'x[^1] y\n\n[^1]: note'],
+  ['a link address', '[ref]: https://x.com'],
+  ['two addresses, one under the other', 'see\n\n[a]: https://x.com "T"\n[b]: <https://y.com>'],
+  ['an address in a quote', '> [ref]: https://x.com'],
+  ['an address in a list', '- a\n\n  [r]: u'],
+])('%s given on a line of its own is kept', (_what, note) => {
+  expect(save(note)).toBe(note);
+  expect(save(save(note))).toBe(note);
+});
+
+test('a link to an address given below still links there, and a footnote mark stays a mark', () => {
+  const note = '[a][ref] and x[^1]\n\n[ref]: https://x.com\n\n[^1]: note';
+  expect(save(note)).toBe('[a](https://x.com) and x[^1]\n\n[ref]: https://x.com\n\n[^1]: note');
+  expect(save(save(note))).toBe(save(note));
+});
+
 test('words in angle brackets are text, and a line of them does not take the lines under it', () => {
   expect(editorWith('Array<string> and <Enter>').state.doc.firstChild!.textContent).toBe('Array<string> and <Enter>');
   expect(editorWith('<Enter>\n- item').state.doc.child(1).type.name).toBe('bulletList');
