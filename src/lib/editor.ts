@@ -53,6 +53,70 @@ const RICH_HTML = /<(strong|b|em|i|u|s|a|h[1-6]|ul|ol|li|code|pre|blockquote|img
 /** list items hold text or an image first, then any block (stock TipTap insists on a paragraph) */
 const LIST_ITEM_CONTENT = '(paragraph|image) block*';
 
+/** blocks markdown may put on an item's own line (`- ```js`, `- # heading`, `- > quote`, `- | table |`, `- - item`) */
+const LEADS = 'pre, h1, h2, h3, h4, h5, h6, blockquote, table, ul, ol, div[data-math-block], div[data-kanban]';
+
+/**
+ * A list item that starts with a block other than a line of text. The item's first line is text (blocks.ts, the
+ * list commands and the keys all work from it), so such an item is read with an empty line first, and `lead` says
+ * the block was on the item's own line: it is written back there, not after an empty line (which was the item's
+ * text, the block coming out of the list after it). An item made in the editor never has it.
+ */
+const ListItemLead = ListItem.extend({
+  content: LIST_ITEM_CONTENT,
+  addAttributes() {
+    return { ...this.parent?.(), lead: { default: false, parseHTML: (el: HTMLElement) => el.hasAttribute('data-lead'), rendered: false } };
+  },
+  addStorage: () => ({
+    markdown: {
+      serialize(state: any, node: PMNode, parent: PMNode) {
+        const first = node.firstChild, text = first?.firstChild;
+        if (node.attrs.lead && first?.type.name === 'paragraph' && !first.content.size && node.childCount > 1) {
+          node.forEach((child, _o, i) => { if (i) state.render(child, node, i); });
+          return;
+        }
+        // a numbered to-do (`1. [ ] task`), which the note has no checkbox for, is read as that text: its brackets
+        // are written as they were, not escaped, so another app still finds its to-do there
+        if (parent?.type.name === 'orderedList' && first?.type.name === 'paragraph' && text?.isText && !text.marks.length && /^\[[ xX]\] \S/.test(text.text!)) {
+          state.write(text.text!.slice(0, 4));
+          state.render(first.cut(4), node, 0);
+          node.forEach((child, _o, i) => { if (i) state.render(child, node, i); });
+          return;
+        }
+        state.renderContent(node);
+      },
+      parse: {
+        setup(md: any) {
+          // `1. [ ] task`: a to-do in a numbered list, which a to-do list cannot be. Read as a to-do, it was taken out
+          // of the list, an empty item left in its place; its brackets are kept as text instead.
+          md.core.ruler.before('inline', 'eve-numbered-todo', (state: any) => {
+            const lists: string[] = [];
+            for (const [i, t] of (state.tokens as any[]).entries()) {
+              if (/_list_open$/.test(t.type)) lists.push(t.type);
+              else if (/_list_close$/.test(t.type)) lists.pop();
+              else if (t.type === 'inline' && lists.at(-1) === 'ordered_list_open' && state.tokens[i - 2]?.type === 'list_item_open'
+                && /^\[[ xX]\]([ \u00a0]|$)/.test(t.content)) t.content = `\\[${t.content[1]}\\]${t.content.slice(3)}`;
+            }
+          });
+        },
+        updateDOM(root: HTMLElement) {
+          const leads = [...root.querySelectorAll('li:not(.task-list-item)')].filter((li) => {
+            const first = [...li.childNodes].find((n) => n.nodeType !== 3 || n.textContent!.trim());
+            return first instanceof HTMLElement && first.matches(LEADS);
+          });
+          if (!leads.length) return;
+          // a list is tight when it has no <p> (tiptap-markdown): the empty line put in is not one of the note's
+          for (const list of root.querySelectorAll('ul, ol')) if (!list.hasAttribute('data-tight') && !list.querySelector('p')) list.setAttribute('data-tight', 'true');
+          for (const li of leads) {
+            li.prepend(document.createElement('p'));
+            li.setAttribute('data-lead', '');
+          }
+        },
+      },
+    },
+  }),
+});
+
 /**
  * A blank line the user pressed Enter for. Markdown has no empty paragraph — the blank lines around a
  * block are just separators — so an empty one used to vanish the next time the note was read back.
@@ -545,7 +609,7 @@ export function createEditor(opts: {
       ...TableNodes,
       Divider,
       Find,
-      ListItem.extend({ content: LIST_ITEM_CONTENT }),
+      ListItemLead,
       // Notion-style numbering: typing "1. " (any number) directly after a numbered list joins it and
       // continues the count. Stock TipTap only joins when the typed number is the next one.
       OrderedList.extend({

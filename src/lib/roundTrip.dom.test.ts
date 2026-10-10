@@ -72,6 +72,38 @@ test.each([
   expect(save(saved)).toBe(saved);
 });
 
+test.each([
+  ['code', '- a\n- ```\n  code\n  ```\n- c'],
+  ['a heading', '- # heading\n- b'],
+  ['a quote', '- > quote\n\n- b'],
+  ['a callout', '- > [!note]\n  > x'],
+  ['a table', '- | A |\n  | --- |\n  | x |'],
+  ['a formula', '1. $$\n   x\n   $$\n2. b'],
+  ['a list', '- - a\n  - b\n- c'],
+  ['code, in a loose list', '- a\n\n- ```\n  code\n  ```\n\n- c'],
+])('an item starting with %s keeps it on its line, in the list', (_what, note) => {
+  expect(save(note).trimEnd()).toBe(note);
+});
+
+test('an item with an empty line before its code is still written so', () => {
+  const note = '- \u00a0\n\n  ```\n  code\n  ```';
+  expect(save(note)).toBe(note);
+});
+
+test.each([
+  ['numbered to-dos', '1. [ ] task\n2. [x] done'],
+  ['a numbered to-do of two paragraphs', '1. [X] task\n\n   more'],
+])('%s keep their words and their numbers', (_what, note) => {
+  expect(save(note)).toBe(note);
+});
+
+test('the item a block starts is still an item whose first line is text', () => {
+  const item = editorWith('- ```\n  code\n  ```').state.doc.firstChild!.firstChild!;
+  expect(item.type.name).toBe('listItem');
+  expect(item.firstChild!.type.name).toBe('paragraph');
+  expect(item.child(1).type.name).toBe('codeBlock');
+});
+
 test('a quote starting with "[!note]" as text stays a quote', () => {
   const note = '> \\[!note\\] x';
   expect(editorWith(note).state.doc.firstChild!.type.name).toBe('blockquote');
