@@ -6,7 +6,7 @@ import './testEditor';
 import Editor from '../Editor.svelte';
 import { notes } from './notes.svelte';
 import { ui } from './ui.svelte';
-import { type } from './testEditor';
+import { type, md, posOf } from './testEditor';
 
 function open(note: any) {
   const target = document.createElement('div');
@@ -49,4 +49,36 @@ test('opening a note does not rewrite it or date it now', async () => {
   got = notes.all.find((x) => x.id === 'remote1')!;
   expect(got.body).toContain('c');
   expect(got.updatedAt).toBeGreaterThan(old);
+});
+
+test('the caret stays by its own text when the phone adds a line above it', async () => {
+  const { id } = notes.create('# Shopping\n\nmilk\n\nbread\n');
+  const n = notes.all.find((x) => x.id === id)!;
+  const ed = open(n);
+  ed.view.dom.setAttribute('tabindex', '0');
+  ed.view.focus();
+  ed.commands.setTextSelection(posOf(ed, 'bread', true));
+  notes.mergeRemote([{ ...n, body: '# Shopping\n\neggs and butter\n\nmilk\n\nbread\n', updatedAt: Date.now() + 1000 }], true);
+  flushSync();
+  await tick();
+  type(ed, '!');
+  expect(md(ed)).toBe('# Shopping\n\neggs and butter\n\nmilk\n\nbread!');
+});
+
+test('⌘Z after a merge undoes the writer\'s own typing, not the phone\'s edit', async () => {
+  const { id } = notes.create('# Shopping\n\nmilk\n');
+  const n = notes.all.find((x) => x.id === id)!;
+  const ed = open(n);
+  ed.view.dom.setAttribute('tabindex', '0');
+  ed.view.focus();
+  ed.commands.focus('end');
+  type(ed, 's');
+  notes.mergeRemote([{ ...notes.all.find((x) => x.id === id)!, body: '# Shopping\n\nmilks\n\neggs (added on phone)\n', updatedAt: Date.now() + 1000 }], true);
+  flushSync();
+  await tick();
+  ed.commands.undo();
+  flushSync();
+  expect(md(ed)).toBe('# Shopping\n\nmilk\n\neggs (added on phone)');
+  ed.commands.undo();
+  expect(md(ed)).toContain('eggs (added on phone)');
 });

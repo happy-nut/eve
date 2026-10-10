@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Editor as TipTap } from '@tiptap/core';
+  import { createDocument, type Editor as TipTap } from '@tiptap/core';
   import { createEditor, applyKeymap, getMarkdown, goToSection, runEditorCommand } from './lib/editor';
   import { isMobile } from './lib/platform';
   import { notes, type Note } from './lib/notes.svelte';
@@ -136,10 +136,19 @@
     if (!editor || body.trimEnd() === lastEmitted.trimEnd()) return;
     lastEmitted = body;
     if (getMarkdown(editor).trimEnd() === body.trimEnd()) return;
-    const { from, to } = editor.state.selection;
-    editor.commands.setContent(body, { emitUpdate: false });
-    const end = editor.state.doc.content.size;
-    editor.commands.setTextSelection({ from: Math.min(from, end), to: Math.min(to, end) });
+    // only the stretch that differs is replaced: the caret stays by the text it was in (put back at the same
+    // offset, it landed inside a line the other device added above, and the next keys went into that), and the
+    // writer's own steps before it can still be undone. Not a step of theirs to undo either: ⌘Z took the other
+    // device's edit back out, and saved that.
+    const doc = editor.state.doc;
+    const next = createDocument((editor.storage as any).markdown.parser.parse(body), editor.schema, editor.options.parseOptions);
+    const start = doc.content.findDiffStart(next.content);
+    if (start === null) return;
+    let { a: endA, b: endB } = doc.content.findDiffEnd(next.content)!;
+    const overlap = start - Math.min(endA, endB);
+    if (overlap > 0) { endA += overlap; endB += overlap; }
+    const tr = editor.state.tr.replace(start, endA, next.slice(start, endB));
+    editor.view.dispatch(tr.setMeta('addToHistory', false).setMeta('preventUpdate', true));
   });
 </script>
 
