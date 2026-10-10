@@ -256,6 +256,21 @@ test.each([
   expect(editorWith(note).state.doc.childCount).toBe(1);
 });
 
+test.each([
+  ['a width in percent', '<img src="a.png" width="50%">', '<img src="a.png" width="50%">'],
+  ['a width in percent, in an item', '- <img src="a.png" width="50%" alt="cat">', '- <img src="a.png" width="50%" alt="cat">'],
+  ['a width narrower than a drag makes', 'a <img src="a.png" width="20"> b', 'a\n\n![|120](a.png)\n\nb'],
+])('a picture written as HTML with %s is saved the same way every time', (_what, note, saved) => {
+  expect(save(note)).toBe(saved);
+  expect(save(saved)).toBe(saved);
+});
+
+test('a picture whose width was set in percent and then dragged is written with the dragged width', () => {
+  const ed = editorWith('<img src="a.png" width="50%">');
+  ed.commands.command(({ tr }) => { tr.setNodeAttribute(0, 'width', 300); return true; });
+  expect(md(ed)).toBe('![|300](a.png)');
+});
+
 test('words in angle brackets are text, and a line of them does not take the lines under it', () => {
   expect(editorWith('Array<string> and <Enter>').state.doc.firstChild!.textContent).toBe('Array<string> and <Enter>');
   expect(editorWith('<Enter>\n- item').state.doc.child(1).type.name).toBe('bulletList');
