@@ -93,6 +93,13 @@ function moveOnce(state: any, dir: -1 | 1, done = 0): any {
       range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1));
       continue;
     }
+    // a toggle is its title then its body, in that order: the title moves the whole toggle, and a body line at
+    // the body's edge stays inside it (swapping the two split it into a toggle with no title and one with no body)
+    if (parent.type.name === 'details') {
+      if (startIndex > 0) return true;
+      range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1));
+      continue;
+    }
     const i = dir < 0 ? startIndex - 1 : endIndex;
     // rows move among the body rows: the header stays on top (the markdown table needs it there), and a row at
     // the body's edge stays in its table rather than taking the whole table along
