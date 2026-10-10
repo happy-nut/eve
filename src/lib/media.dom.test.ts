@@ -110,6 +110,37 @@ test('a width written smaller than a drag can make is read as the smallest width
   expect(image).toMatchObject({ alt: 'pic', width: 120 });
 });
 
+/** a note with "see $x$ ok" whose formula is set to `latex` (and `after` typed right behind it), saved and reopened twice */
+function formulaReopened(latex: string, after = '') {
+  const ed = editorWith('# t\n\nsee $x$ ok');
+  let pos = -1;
+  ed.state.doc.descendants((n, p) => { if (n.type.name === 'mathInline') pos = p; });
+  ed.view.dispatch(ed.state.tr.setNodeMarkup(pos, undefined, { latex }));
+  if (after) ed.view.dispatch(ed.state.tr.insertText(after, pos + 1));
+  const once = md(ed);
+  const back = editorWith(once);
+  const found: string[] = [];
+  back.state.doc.descendants((n) => { if (n.type.name === 'mathInline') found.push(n.attrs.latex); });
+  return { found, text: back.state.doc.lastChild!.textContent, once, twice: md(back) };
+}
+
+test.each([
+  ['spaces typed around it', ' x^2 ', 'x^2'],
+  ['a TeX line break at its end', 'a\\\\', 'a\\\\{}'],
+  ['a line break inside', 'a\nb', 'a b'],
+])('a formula with %s is still a formula when the note is opened again', (_what, latex, back) => {
+  const { found, once, twice } = formulaReopened(latex);
+  expect(found).toEqual([back]);
+  expect(twice).toBe(once);
+});
+
+test('a formula with a digit right after it is still a formula, the digit still after it', () => {
+  const { found, text, once, twice } = formulaReopened('x', '2');
+  expect(found).toEqual(['x']);
+  expect(text).toBe('see 2 ok');
+  expect(twice).toBe(once);
+});
+
 test('↩ after such an address leaves it a link instead of making a card that would not come back', () => {
   const ed = editorWith('# t\n\nhttps://example.com/*star*');
   ed.commands.setTextSelection(ed.state.doc.content.size - 1);

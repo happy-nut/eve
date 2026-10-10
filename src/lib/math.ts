@@ -279,9 +279,20 @@ const mathNode = (display: boolean) => Node.create({
   addStorage() {
     return {
       markdown: {
-        serialize(state: any, node: PMNode) {
+        serialize(state: any, node: PMNode, parent: PMNode, index: number) {
           const latex: string = node.attrs.latex;
-          if (!display) { state.write(`$${latex}$`); return; }
+          if (!display) {
+            // written so that it is read back as this formula. Each of these was text when the note was opened
+            // again: a space just inside a dollar (typed in the TeX line), a line break, a TeX line break `\\`
+            // at the end (its `\$` reads as an escaped dollar, so `{}` goes after it), and a digit right after
+            // the closing dollar ("$x$2", money's rule) — an empty HTML comment stands between them.
+            let tex = latex.replace(/\s*\n\s*/g, ' ').trim();
+            if (!tex) return;
+            if (tex.endsWith('\\')) tex += '{}';
+            const next = parent.maybeChild(index + 1);
+            state.write(`$${tex}$${next?.isText && /^\d/.test(next.text ?? '') ? '<!---->' : ''}`);
+            return;
+          }
           state.write('$$\n');
           state.text(latex, false);
           state.ensureNewLine();
