@@ -46,7 +46,9 @@ function load(): Appearance {
 
 class AppearanceStore {
   s = $state<Appearance>(load());
-  get stack() { return this.s.font === 'custom' ? this.s.custom || DEFAULTS.font : FONTS.find((f) => f.id === this.s.font)?.stack ?? FONTS[0].stack; }
+  // Custom with no font named yet: the system font's stack. It fell back to the word "system", which is no font
+  // at all, and the note came out in the webview's default serif.
+  get stack() { return (this.s.font === 'custom' ? this.s.custom.trim() : FONTS.find((f) => f.id === this.s.font)?.stack) || FONTS[0].stack; }
   set(patch: Partial<Appearance>) { Object.assign(this.s, patch); localStorage.setItem(LS, JSON.stringify(this.s)); }
   /** ⌘+ / ⌘- / ⌘0: the note's text a step larger or smaller (1px, within the Size slider's range), or back to the default */
   textSize(step: 1 | -1 | 0): number {
