@@ -15,7 +15,11 @@ assert.equal(top('tada')[0], '🎉');
 assert.equal(top('cat')[0], '🐈');
 assert.ok(top('cat').includes('🐱'));
 // at most five, none for a word that is nowhere, none for what is not a shortcode's letters
-assert.equal(top('h').length, 5);
+assert.equal(top('he').length, 5);
+// one letter is not a search: ":D", ":P", ":O" are faces typed as text, and Enter after them is a new line
+assert.deepEqual(top('h'), []);
+assert.deepEqual(top('D'), []);
+assert.deepEqual(top('p'), []);
 assert.deepEqual(top('zzzzqq'), []);
 assert.deepEqual(top('30'), []);
 assert.deepEqual(top(''), []);

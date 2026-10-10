@@ -8,9 +8,10 @@ export interface EmojiEntry {
   code?: string;
 }
 
-/** What may follow the colon: a letter first (or Slack's +1 / -1), then a shortcode's own characters.
- *  Anything else (a space, `12:30`, `//`) is not a search. */
-export const EMOJI_QUERY = /^([a-z]|[+-]1)[a-z0-9_+-]*$/i;
+/** What may follow the colon: a letter first (or Slack's +1 / -1), then a shortcode's own characters, two of them
+ *  at least, as Slack asks. Anything else (a space, `12:30`, `//`) is not a search. One letter is a face, not a
+ *  search: "great :D" then Enter put an emoji in place of the :D and ate the new line. */
+export const EMOJI_QUERY = /^([a-z][a-z0-9_+-]|[+-]1)[a-z0-9_+-]*$/i;
 
 /**
  * The best `limit` emoji for `query`, best first: a shortcode that is the word, then a name or tag that is

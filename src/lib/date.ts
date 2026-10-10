@@ -53,7 +53,10 @@ export function typedDay(text: string): string | null {
   return daysFrom(iso, new Date(+m[1], +m[2] - 1, +m[3])) === null ? null : iso;
 }
 
-/** The days the `@` picker offers, narrowed by what has been typed so far. */
+/**
+ * The days the `@` picker offers, narrowed by what has been typed so far. `exact`: what was typed names that day
+ * in full (`today`, `오늘`, `2026-09-24`), not just the start of it.
+ */
 export function dayChoices(query: string, now: Date = new Date(), locale?: string) {
   const q = query.trim().toLowerCase();
   const typed = typedDay(q);
@@ -64,10 +67,12 @@ export function dayChoices(query: string, now: Date = new Date(), locale?: strin
   ]
     .map(({ n, alias }) => ({ iso: dayFrom(n, now), label: dateLabel(dayFrom(n, now), now, locale), alias }))
     // the name in the reader's language, the English one whatever the language (`@tod` has to work on
-    // a Korean machine, where nothing else on screen is English), or the date being typed out
-    .filter((d) => !q || d.label.toLowerCase().includes(q) || d.alias.startsWith(q) || d.iso.includes(q));
-  const out = days.map(({ iso, label }) => ({ iso, label }));
-  if (typed && !out.some((d) => d.iso === typed)) out.unshift({ iso: typed, label: dateLabel(typed, now, locale) });
+    // a Korean machine, where nothing else on screen is English), or the date being typed out. From the start of a
+    // word only: "cc @a" found the "a" inside "today" and the calendar came up over a name
+    .filter((d) => !q || d.label.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)) || d.alias.startsWith(q) || d.iso.startsWith(q));
+  const out = days.map(({ iso, label, alias }) => ({ iso, label, exact: q === alias || q === label.toLowerCase() || q === iso }));
+  if (typed && !out.some((d) => d.iso === typed)) out.unshift({ iso: typed, label: dateLabel(typed, now, locale), exact: true });
+  else if (typed) for (const d of out) if (d.iso === typed) d.exact = true;
   return out;
 }
 

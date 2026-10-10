@@ -1113,7 +1113,7 @@ export function createEditor(opts: {
           ];
         },
       }),
-      // Slack's `:smile`: a colon (at a line's start or after a space) and a letter bring up the best
+      // Slack's `:smile`: a colon (at a line's start or after a space) and two letters bring up the best
       // few emoji in a row; the pick replaces what was typed. Not in code, where `:x` is just text.
       Extension.create({
         name: 'emojiSuggest',

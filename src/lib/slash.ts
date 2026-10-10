@@ -71,18 +71,27 @@ export function emojiRow(uiRef: EmojiUI) {
  */
 export function calendar(uiRef: CalendarUI) {
   const day = (p: any) => (p.items as { iso: string }[])[0]?.iso ?? null;
-  const open = (p: any) => uiRef.show(day(p), p.clientRect?.() ?? null, (iso: string) => p.command({ value: iso }));
+  // whether ↩ picks: the calendar comes up over the start of a name too ("ask @Tom" is "tomorrow" so far), and ↩
+  // there put a date in place of the name and ate the new line. It picks after a bare @, a day named in full
+  // (@today, @2026-09-24), or once the arrows chose one; ⇥ picks whatever is under the cursor.
+  let sure = false;
+  const open = (p: any) => {
+    sure = !p.query || (p.items as { exact?: boolean }[]).some((d) => d.exact);
+    uiRef.show(day(p), p.clientRect?.() ?? null, (iso: string) => p.command({ value: iso }));
+  };
+  const move = (run: () => void) => (run(), (sure = true));
   return {
     onStart: open,
     onUpdate: open,
     onKeyDown: ({ event }: { event: KeyboardEvent }) => {
       if (!uiRef.visible()) return false;
-      if (event.key === 'ArrowLeft') return (uiRef.move(-1), true);
-      if (event.key === 'ArrowRight') return (uiRef.move(1), true);
-      if (event.key === 'ArrowUp') return (uiRef.move(-7), true);
-      if (event.key === 'ArrowDown') return (uiRef.move(7), true);
-      if (event.key === 'PageUp') return (uiRef.month(-1), true);
-      if (event.key === 'PageDown') return (uiRef.month(1), true);
+      if (event.key === 'ArrowLeft') return move(() => uiRef.move(-1));
+      if (event.key === 'ArrowRight') return move(() => uiRef.move(1));
+      if (event.key === 'ArrowUp') return move(() => uiRef.move(-7));
+      if (event.key === 'ArrowDown') return move(() => uiRef.move(7));
+      if (event.key === 'PageUp') return move(() => uiRef.month(-1));
+      if (event.key === 'PageDown') return move(() => uiRef.month(1));
+      if (event.key === 'Enter' && !sure) return (uiRef.hide(), false);
       if (event.key === 'Enter' || event.key === 'Tab') return uiRef.select();
       if (event.key === 'Escape') return (uiRef.hide(), true);
       return false;
