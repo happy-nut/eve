@@ -26,10 +26,12 @@
       keyboard = window.innerHeight < full - 120;
     };
     // the note's own text only: a box's name, a form's row or a formula being typed in a diagram or an equation inside
-    // the note is not it, and the bar's buttons wrote into the note (bold, a to-do) from there
+    // the note is not it, and the bar's buttons wrote into the note (bold, a to-do) from there. Only the editor itself
+    // counts: a board's column being renamed or a picture's caption being written sit inside it too, and the bar's
+    // To-do turned the note's title into a to-do from there
     const check = () => {
       const a = document.activeElement;
-      editing = !!a?.closest('.page .tiptap, .card-page .tiptap') && !a.closest('.dblock, .math-edit, .mermaid-host, .math-inline, .math-block');
+      editing = !!a?.matches('.page .tiptap, .card-page .tiptap') && !a.closest('.dblock, .math-edit, .mermaid-host, .math-inline, .math-block');
       measure();
     };
     const out = () => setTimeout(check, 0); // focus lands on the next element a tick later
