@@ -387,15 +387,27 @@ function insertFiles(editor: Editor, files?: FileList | null, at?: number): bool
 /**
  * Where a dropped file belongs: between blocks, on the side of the line the pointer is nearer to.
  * The raw coordinate would land mid-word and split the heading it was dropped on.
+ *
+ * It goes next to the innermost line that can have a picture beside it: a file let go on the second item of
+ * a list, in a table's cell or on a line in a callout went above or below the whole list, table or callout.
  */
-function dropBlock(view: EditorView, event: DragEvent): number | undefined {
+export function dropBlock(view: EditorView, event: DragEvent): number | undefined {
   const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
   if (!at) return undefined;
   const $pos = view.state.doc.resolve(at.pos);
   if ($pos.depth < 1) return at.pos;
-  const before = $pos.before(1);
-  const box = (view.nodeDOM(before) as HTMLElement | null)?.getBoundingClientRect?.();
-  return box && event.clientY < box.top + box.height / 2 ? before : $pos.after(1);
+  const block = view.state.schema.nodes.image; // every attachment is a block, as a picture is
+  for (let d = $pos.depth; d >= 1; d--) {
+    const parent = $pos.node(d - 1), i = $pos.index(d - 1);
+    const fitsAbove = parent.canReplaceWith(i, i, block), fitsBelow = parent.canReplaceWith(i + 1, i + 1, block);
+    if (!fitsAbove && !fitsBelow) continue;
+    const before = $pos.before(d);
+    const box = (view.nodeDOM(before) as HTMLElement | null)?.getBoundingClientRect?.();
+    const above = !!box && event.clientY < box.top + box.height / 2;
+    // a list item's first line has nothing above it inside the item, so the file goes under that line
+    return (above && fitsAbove) || !fitsBelow ? before : $pos.after(d);
+  }
+  return at.pos;
 }
 
 /**
