@@ -59,3 +59,10 @@ test('a day named in full, a bare @, Tab, or the arrows still pick', async () =>
     expect(chips(ed), text).toEqual([day]);
   }
 });
+
+test('not while the [[ picker is open: "[[Meeting @to" is still the title being typed', async () => {
+  const { ed, open } = editor();
+  type(ed, 'see [[Meeting @to');
+  await settle();
+  expect(open()).toBe(false);
+});

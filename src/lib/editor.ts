@@ -9,7 +9,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
-import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
 import { Fragment, type Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
@@ -484,6 +484,13 @@ export function createEditor(opts: {
   /** ⌥↑ / ⌥↓ that should move the note itself, not a line: true when it did (`onTitle`: the caret is on the title) */
   onNoteMove?: (dir: -1 | 1, onTitle: boolean) => boolean;
 }) {
+  // the menus at the caret, so one can stay shut while another is open: in "[[Meeting :sm" both the link picker and
+  // the emoji row came up, one over the other, and Enter picked from whichever answered first
+  const WIKI_MENU = new PluginKey('wikiLinkSuggest'), DATE_MENU = new PluginKey('dateMention'), SLASH_MENU = new PluginKey('slashMenu');
+  // the state being made has a menu's say only once that menu's plugin has run on it, and tiptap runs them in no
+  // order to count on; until then, the say it had before this keystroke
+  const menuOpen = (ed: Editor, state: EditorState, ...menus: PluginKey[]) =>
+    menus.some((k) => (k.getState(state) ?? k.getState(ed.state))?.active);
   const iconOf = (link: string) => {
     const find = (t: string) => notes.visible.find((n) => titleOf(n).toLowerCase() === t.toLowerCase());
     return find(splitLink(link, (t) => !!find(t))[0])?.icon ?? ''; // a section link keeps the page's icon
@@ -1011,7 +1018,7 @@ export function createEditor(opts: {
           allowSpaces: true,
           startOfLine: false,
           allowedPrefixes: null, // `[[` means a link wherever it is typed, not only after a space
-          pluginKey: new PluginKey('wikiLinkSuggest'),
+          pluginKey: WIKI_MENU,
           // only the "[[" just typed opens it (wikiTyped)
           allow: ({ state, range }) => WIKI_AT.getState(state) === range.from,
           items: ({ query }) => {
@@ -1056,7 +1063,8 @@ export function createEditor(opts: {
         suggestion: {
           char: '@',
           allowSpaces: false,
-          pluginKey: new PluginKey('dateMention'),
+          pluginKey: DATE_MENU,
+          allow: ({ editor, state }) => !menuOpen(editor, state, WIKI_MENU, SLASH_MENU),
           // the days a query could mean; the calendar opens on the first and closes when there is none
           items: ({ query }) => dayChoices(query),
           command: ({ editor, range, props }) =>
@@ -1101,7 +1109,7 @@ export function createEditor(opts: {
             Suggestion({
               editor: this.editor,
               char: '/',
-              pluginKey: new PluginKey('slashMenu'),
+              pluginKey: SLASH_MENU,
               allowSpaces: false,
               // default prefixes (line start / after a space): a '/' already inside text like KRW/USD must not open the menu
               // only the "/" just typed opens it: the caret coming back after one already in the sentence ("x / y",
@@ -1138,7 +1146,7 @@ export function createEditor(opts: {
               char: ':',
               pluginKey: new PluginKey('emojiSuggest'),
               allowSpaces: false,
-              allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
+              allow: ({ editor, state, range }) => !state.doc.resolve(range.from).parent.type.spec.code && !menuOpen(editor, state, WIKI_MENU, DATE_MENU, SLASH_MENU),
               items: async ({ query }) => searchEmoji(await loadEmoji().catch(() => []), query, 5, newestEmoji()),
               command: ({ editor, range, props }) => {
                 editor.chain().focus().insertContentAt(range, (props as EmojiEntry).emoji).run();

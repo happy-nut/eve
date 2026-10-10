@@ -85,3 +85,15 @@ test('not after a digit, inside a word, or in code', async () => {
   await settle();
   expect(row()).toEqual([]);
 });
+
+test('not while the [[ picker is open: "[[Meeting :sm" is still the title being typed', async () => {
+  const { ed, row } = editor();
+  type(ed, 'see [[Meeting :sm');
+  await settle();
+  expect(row()).toEqual([]);
+  // and as soon as nothing else is open, it comes up as before
+  const b = editor();
+  type(b.ed, 'see :sm');
+  await settle();
+  expect(b.row().length).toBeGreaterThan(0);
+});
