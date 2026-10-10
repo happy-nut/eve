@@ -149,6 +149,12 @@ const BlankLine = Paragraph.extend({
           state.closeBlock(node);
         },
         parse: {
+          setup(md: any) {
+            // a line break inside a paragraph is a space between words, but tiptap-markdown drops the newline at the
+            // start of the text after any bold, code, link, [[link]] or date: "**Alice**\nand Bob" came back as
+            // "**Alice**and Bob", the words run together. A space ahead of it keeps them apart.
+            md.renderer.rules.softbreak = () => ' \n';
+          },
           updateDOM(element: HTMLElement) {
             for (const p of element.querySelectorAll('p')) if (p.textContent === BLANK) p.replaceChildren();
           },
