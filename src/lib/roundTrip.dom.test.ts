@@ -13,3 +13,15 @@ test.each([
   expect(save(note)).toBe(note);
   expect(editorWith(note).state.doc.firstChild!.type.name).toBe('image');
 });
+
+test.each([
+  ['an empty line at its end', '```\nx\n\n```'],
+  ['two empty lines at its end', '```js\nx\n\n\n```'],
+  ['no empty line at its end', '```\nx\n```'],
+  ['nothing in it', '```\n```'],
+  ['more after its language', '```js title="a.js" {1,3}\nx\n```'],
+  ['an empty line at its end, in a quote', '> ```\n> x\n> \n> ```'],
+  ['an empty line at its end, in a list', '- a\n\n  ```\n  x\n  \n  ```'],
+])('code with %s is written as it was read', (_what, note) => {
+  expect(save(note)).toBe(note);
+});
