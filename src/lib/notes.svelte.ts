@@ -2,7 +2,7 @@ import { storage } from './platform';
 import { flushEdits } from './pending';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
-import { onlyHtml, plain, splitLink } from './markdown';
+import { legacyPlain, onlyHtml, plain, splitLink } from './markdown';
 import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isDailyId, isWritten } from './daily';
 
 export { plain };
@@ -72,6 +72,8 @@ const plainTitleLine = (body: string) => plain(titleLine(body));
 export function titleOf(n: Pick<Note, 'body'>): string {
   return plain(titleLine(n.body)) || 'Untitled';
 }
+/** the title as it was read before 0.7.35, which the [[links]] written then still say (see legacyPlain) */
+export const legacyTitleOf = (n: Pick<Note, 'body'>): string => legacyPlain(titleLine(n.body)) || 'Untitled';
 
 /** `list` depth-first: every page is followed by its sub-pages (`folded` hides a page's sub-pages,
  *  it still reports `kids`). A sub-page whose parent is not in `list` (deleted, or dragged into
@@ -520,8 +522,13 @@ class NotesStore {
 
   /** Open note by title, creating it if missing (used by [[wiki links]]). */
   /** Follow a `[[link]]`. `Title#Section` opens the page at that heading (Editor reads `section`). */
+  /** the page a [[link]] names: by its title, else by the title it had when the link was written */
+  byTitle(t: string): Note | undefined {
+    const want = t.toLowerCase();
+    return this.visible.find((n) => titleOf(n).toLowerCase() === want) ?? this.visible.find((n) => legacyTitleOf(n).toLowerCase() === want);
+  }
   openByTitle(link: string) {
-    const find = (t: string) => this.visible.find((n) => titleOf(n).toLowerCase() === t.toLowerCase());
+    const find = (t: string) => this.byTitle(t);
     const [title, section] = splitLink(link, (t) => !!find(t));
     const hit = find(title);
     this.section = hit ? section : '';

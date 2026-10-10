@@ -38,3 +38,13 @@ test("the first note is the list's first as it shows it, not the lowest rank", (
   groups.toggle(g);
   expect(notes.firstPage()?.id).toBe(a.id);
 });
+
+test('a [[link]] written with a title as it read before (my_func was "myfunc") opens that page, not a new one', () => {
+  for (const [body, old] of [['# my_func\n\nx\n', 'myfunc'], ['# Energy $E=mc^2$\n\nx\n', 'Energy $E=mc^2$']]) {
+    const { id } = notes.create(body);
+    const count = notes.all.length;
+    notes.openByTitle(old);
+    expect(notes.currentId).toBe(id);
+    expect(notes.all.length).toBe(count);
+  }
+});

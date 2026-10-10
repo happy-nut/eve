@@ -25,6 +25,22 @@ export function plain(line: string): string {
     .trim();
 }
 
+/**
+ * A line as titles were read before links, pictures, formulas and "_" inside words read as on screen: what the
+ * [[links]] written then say. Only to find their pages (they opened a new empty page instead).
+ */
+export function legacyPlain(line: string): string {
+  return line
+    .replace(/<!--[\s\S]*?(-->|$)/g, '')
+    .replace(/(?<!\\)<\/?[a-z][a-z0-9-]*(\s[^>]*?)?(?<!\\)>/gi, '')
+    .replace(/^[#>\-*+\s]+|^\d+\.\s+|^\[[ x]\]\s*/g, '')
+    .replace(/\\(.)/g, '$1')
+    .replace(/==(?=\S)(.+?)==/g, '$1')
+    .replace(/[*_`~]/g, '')
+    .replace(/\[\[(.+?)\]\]/g, (_, inner: string) => { const [title, alias] = splitAlias(inner); return alias || title; })
+    .trim();
+}
+
 /** A line that is only HTML tags or a comment (a README's <div align="center">, a <!-- note -->): no title. */
 export const onlyHtml = (line: string) => /^\s*(<!--.*?(-->|$)\s*|<\/?[a-z][a-z0-9-]*(\s[^>]*?)?>\s*)+$/i.test(line);
 
@@ -101,3 +117,22 @@ export function previewOf(body: string, max = 160): string {
   const all = out.join(' ');
   return all.length > max ? all.slice(0, max).trimEnd() + '…' : all;
 }
+
+/**
+ * A note's text as a search reads it: as it shows on screen, except code, which reads as it is written (a fence's
+ * lines, `inline code`), and with each link's address beside its words. Raw markdown matched what nobody sees ("#" for
+ * every heading, "**"); markdown read everywhere took "List<String>" out of code and the address out of a link.
+ */
+export function searchText(body: string): string {
+  let fenced = false;
+  return body.split('\n').map((l) => {
+    if (/^\s*(```|~~~)/.test(l)) { fenced = !fenced; return ''; }
+    if (fenced) return l;
+    const extra = [...l.matchAll(/`([^`]+)`/g), ...l.matchAll(/\]\(<?([^)\s>]+)/g)].map((m) => m[1]);
+    return extra.length ? `${plain(l)} ${extra.join(' ')}` : plain(l);
+  }).join('\n');
+}
+
+/** a query with a character markdown uses ("a*b", "~/projects", "x<y") is also looked for as written: text brought
+ *  in from elsewhere keeps such characters unescaped, and reading it as markdown took them out */
+export const rawQuery = (q: string) => /[*_~`<>[\]\\]/.test(q);
