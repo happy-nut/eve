@@ -1,6 +1,6 @@
 import { test, expect, afterEach } from 'vitest';
 import { TextSelection } from '@tiptap/pm/state';
-import { editorWith, posOf } from './testEditor';
+import { editorWith, md, posOf } from './testEditor';
 
 afterEach(() => { document.body.innerHTML = ''; });
 
@@ -27,4 +27,17 @@ test('ending at the very start of a line below the table, or of the table, it is
 
 test('one that stays in the table still folds the way prosemirror-tables does it', () => {
   expect(selected(['a1'], ['b1'])).toBe('a1');
+});
+
+const save = (s: string) => md(editorWith(s));
+
+test.each([
+  ['in a callout', '> [!note]\n> | A |\n> | --- |\n> | x |'],
+  ['in a quote', '> | A |\n> | --- |\n> | x |'],
+  ['marks at the end of a cell', '| A |\n| --- |\n| ***b*** |'],
+  ['two marks in a cell', '| A |\n| --- |\n| ~~s~~ ==h== |'],
+  ['a mark after text', '| A | B |\n| --- | --- |\n| c**q** | d |'],
+])('a table %s is written as it was read', (_what, note) => {
+  expect(save(note).trimEnd()).toBe(note);
+  expect(save(save(note))).toBe(save(note));
 });

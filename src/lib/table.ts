@@ -18,15 +18,20 @@ import { CellSelection, cellAround, columnResizingPluginKey, fixTables, inSameTa
 
 /** One cell as a single line of markdown, marks and all (`**bold**` survives a round trip). */
 function cellText(state: any, cell: PMNode): string {
-  const before = state.out;
+  // the cell borrows the output buffer, and with it what is kept about the buffer: the quote's "> " (written at
+  // what looked like the start of a line: a table in a quote got one more "> " in each cell every save) and where
+  // a mark opened (tiptap-markdown fixes the mark's spaces at those offsets later, in the table's own text instead)
+  const { out, delim, inlines } = state;
   state.out = '';
+  state.delim = '';
+  state.inlines = [];
   cell.forEach((child) => {
     if (!child.isTextblock) return;
     if (state.out) state.out += ' '; // a cell holding two paragraphs is still one line
     state.renderInline(child);
   });
   const text = state.out;
-  state.out = before;
+  Object.assign(state, { out, delim, inlines });
   return text.replace(/\n+/g, ' ').replace(/\|/g, '\\|').trim();
 }
 
