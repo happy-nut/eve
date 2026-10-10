@@ -151,6 +151,26 @@ try {
   }
   console.log('ok   the swipe to the list leaves wide things, Find and a full-screen diagram alone');
 
+  // ---- a table in a card's page: its tools are over the page, and work ----
+  {
+    const board = JSON.stringify({ columns: [{ title: 'To do', cards: [{ title: 'Card one', body: 'Intro\n\n| a | b |\n|---|---|\n| 1 | 2 |\n' }] }] });
+    const page = await phone({ a: '# Board\n\n```kanban\n' + board + '\n```\n\nend\n' });
+    await page.locator('.kb-card').tap();
+    await page.waitForSelector('.card-page td');
+    await page.locator('.card-page td').first().tap();
+    await page.waitForSelector('.tbl-tools');
+    const onTop = await page.evaluate(() => {
+      const b = document.querySelector('.tbl-tools button[aria-label="Row below"]').getBoundingClientRect();
+      return !!document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)?.closest('.tbl-tools');
+    });
+    assert.ok(onTop, 'the table\'s tools are over the card\'s page');
+    await page.locator('.tbl-tools button[aria-label="Row below"]').tap();
+    await page.waitForTimeout(300);
+    assert.equal(await page.locator('.card-page tr').count(), 3, 'Row below adds a row in the card');
+    await page.close();
+  }
+  console.log('ok   a table in a card: its tools reachable');
+
   assert.deepEqual(errors, []);
 } finally {
   await browser.close();

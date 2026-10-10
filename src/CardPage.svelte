@@ -98,7 +98,7 @@
   <Outline {scrollEl} {editor} />
 </div>
 <!-- outside the card: it is transformed, which would clip a fixed bar hanging over the table's top -->
-<TableTools {editor} />
+<TableTools {editor} sheet />
 <Suggest bind:this={suggest} />
 <DateMenu bind:this={dateMenu} />
 <EmojiRow bind:this={emojiRow} />

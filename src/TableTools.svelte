@@ -6,7 +6,9 @@
    * the way the outline rail sits beside the page — no grips to hunt for, and nothing on screen while
    * you are writing anywhere else.
    */
-  let { editor }: { editor: Editor | undefined } = $props();
+  /** `sheet`: the editor is a card's or a day's page (z-index 31), which drew over the bar and left a table there with
+   *  no way to add a row; the bar goes over that page then, still under the phone's formatting bar (33) */
+  let { editor, sheet = false }: { editor: Editor | undefined; sheet?: boolean } = $props();
 
   let at = $state<{ x: number; y: number } | null>(null);
 
@@ -84,7 +86,7 @@
 </script>
 
 {#if at}
-  <div class="tbl-tools" bind:this={bar} style:left="{at.x}px" style:top="{at.y}px" onmousedown={hold} role="toolbar" tabindex="-1" aria-label="Table">
+  <div class="tbl-tools" class:sheet bind:this={bar} style:left="{at.x}px" style:top="{at.y}px" onmousedown={hold} role="toolbar" tabindex="-1" aria-label="Table">
     {#each GROUPS as group, g}
       {#if g}<span class="tbl-sep"></span>{/if}
       {#each group as b}
@@ -102,6 +104,7 @@
     transform: translateY(-100%); padding: 3px;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }
+  .tbl-tools.sheet { z-index: 32; }
   .tbl-tools .icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
   .tbl-tools svg { width: 15px; height: 15px; display: block; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   .tbl-sep { width: 1px; height: 15px; background: var(--line); margin: 0 3px; }
