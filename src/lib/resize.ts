@@ -36,7 +36,10 @@ export function sizeGrip(media: HTMLElement, commit: (width: number | null) => v
     const x0 = e.clientX;
     const w0 = media.getBoundingClientRect().width;
     const column = media.closest('.tiptap')?.getBoundingClientRect().width ?? Infinity;
+    let moved = false;
     const move = (m: PointerEvent) => {
+      if (m.clientX === x0) return;
+      moved = true;
       media.style.width = `${Math.round(Math.min(column, Math.max(MIN_WIDTH, w0 + (m.clientX - x0))))}px`;
     };
     const up = () => {
@@ -44,7 +47,9 @@ export function sizeGrip(media: HTMLElement, commit: (width: number | null) => v
       grip.removeEventListener('pointermove', move);
       grip.removeEventListener('pointerup', up);
       grip.removeEventListener('pointercancel', up);
-      commit(Math.round(media.getBoundingClientRect().width));
+      // a plain click on the grip is no resize: committed all the same, it fixed a picture that followed the
+      // column's width at whatever width it happened to be drawn
+      if (moved) commit(Math.round(media.getBoundingClientRect().width));
     };
     grip.addEventListener('pointermove', move);
     grip.addEventListener('pointerup', up);

@@ -3,6 +3,7 @@ import { test, expect, afterEach } from 'vitest';
 import { editorWith, md, posOf, press } from './testEditor';
 import { NodeSelection } from '@tiptap/pm/state';
 import { dropBlock } from './editor';
+import { sizeGrip } from './resize';
 
 afterEach(() => { document.body.innerHTML = ''; });
 
@@ -186,6 +187,21 @@ test('resizing a video leaves the player alone; only another file loads anew', (
   expect(loads).toBe(0);
   ed.view.dispatch(ed.state.tr.setNodeMarkup(pos, undefined, { ...ed.state.doc.nodeAt(pos)!.attrs, src: 'assets/w.mp4' }));
   expect(loads).toBe(1);
+});
+
+test('a plain click on the resize grip sets no width; a drag does', () => {
+  const media = document.createElement('img');
+  const widths: (number | null)[] = [];
+  const grip = sizeGrip(media, (w) => widths.push(w));
+  grip.setPointerCapture = grip.releasePointerCapture = () => {}; // jsdom has no pointer capture
+  const at = (type: string, clientX: number) => grip.dispatchEvent(new MouseEvent(type, { clientX, bubbles: true, cancelable: true }));
+  at('pointerdown', 100);
+  at('pointerup', 100);
+  expect(widths).toEqual([]);
+  at('pointerdown', 100);
+  at('pointermove', 140);
+  at('pointerup', 140);
+  expect(widths).toHaveLength(1);
 });
 
 test('↩ after such an address leaves it a link instead of making a card that would not come back', () => {
