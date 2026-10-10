@@ -36,3 +36,21 @@ test('a deleted calendar row comes back', () => {
   expect(notes.visible.some((n) => n.id === CALENDAR_NOTE_ID)).toBe(true);
   expect(notes.dirty).toBeGreaterThan(dirty); // and sync hears of it
 });
+
+test('looking at a day in the calendar makes no note; writing in it does', () => {
+  const id = 'daily-2026-03-04';
+  const look = notes.dayDraft('2026-03-04');
+  expect(look.body).toContain('2026-03-04');
+  look.write(look.body); // the editor handing back what it was given
+  look.write(look.body + '\n \n'); // an empty line
+  expect(look.note).toBeNull();
+  expect(notes.all.some((n) => n.id === id)).toBe(false);
+  look.write(look.body + 'went hiking\n');
+  expect(look.note?.id).toBe(id);
+  expect(notes.all.find((n) => n.id === id)?.body).toContain('went hiking');
+  // a day already written: its page shows it, and edits go to it
+  const again = notes.dayDraft('2026-03-04');
+  expect(again.body).toContain('went hiking');
+  again.write('# 2026-03-04\n');
+  expect(notes.all.find((n) => n.id === id)?.body).toBe('# 2026-03-04\n');
+});

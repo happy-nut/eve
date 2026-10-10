@@ -3,7 +3,7 @@ import { flushEdits } from './pending';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
 import { onlyHtml, plain, splitLink } from './markdown';
-import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isDailyId } from './daily';
+import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isDailyId, isWritten } from './daily';
 
 export { plain };
 
@@ -256,6 +256,25 @@ class NotesStore {
     void storage.write(id, serialize(n));
     this.dirty++;
     return n;
+  }
+  /**
+   * A day picked in the calendar, to look at: what its page shows, and where what is typed there goes. A day
+   * with no note yet gets one only once something is written in it. Looking used to be enough to make the
+   * note, save it and sync it, and the calendar then marked every day merely looked at.
+   */
+  dayDraft(key: string): { body: string; write(md: string): void; readonly note: Note | null } {
+    const id = dailyId(key);
+    let note = this.all.find((x) => x.id === id && !x.deleted) ?? null;
+    const body = note?.body ?? dailyBody(this.dailyTemplate, key);
+    return {
+      body,
+      write: (md) => {
+        if (!note && !isWritten(md, this.dailyTemplate, key)) return; // still only the template (or less)
+        note ??= this.dayNote(key);
+        this.update(note.id, md);
+      },
+      get note() { return note; },
+    };
   }
   /** Open a day's note in the editor (to write today's, from the reminder or the phone's +). */
   openDaily(key = dayKey(new Date())): Note {
