@@ -23,6 +23,17 @@ assert.equal(parseBoard('## To do\n- old line format'), null);
 assert.equal(parseBoard('[]'), null);
 assert.deepEqual(strip(parseBoard('{"columns":[{"cards":[{"title":5}]},{"title":"x"}]}')), [{ title: '', cards: [{ title: '', body: '' }] }, { title: 'x', cards: [] }]);
 
+// what the board has no field for is kept, not dropped on the next save; a card that is just its words is that title
+const more = '{"columns":[{"title":"A","cards":["Buy milk",{"title":"x","due":"2026-10-11"}],"wip":3}]}';
+const moreCols = parseBoard(more);
+assert.deepEqual(strip(moreCols), [{ title: 'A', cards: [{ title: 'Buy milk', body: '' }, { title: 'x', body: '' }] }]);
+assert.deepEqual(JSON.parse(serializeBoard(moreCols)), { columns: [{ title: 'A', cards: [{ title: 'Buy milk', body: '' }, { title: 'x', body: '', due: '2026-10-11' }], wip: 3 }] });
+assert.equal(JSON.parse(serializeBoard(patchCard(moreCols, moreCols[0].cards[1].id, { title: 'y' }))).columns[0].cards[1].due, '2026-10-11');
+// more at the top than the board writes: it stays code
+assert.equal(parseBoard('{"columns":[],"owner":"me"}'), null);
+assert.equal(parseBoard('{"columns":[],"template":{"title":"t","tags":["a"]}}'), null);
+assert.notEqual(parseBoard('{"columns":[],"template":{"title":"t","body":""}}'), null);
+
 // moves
 const [a, b, c] = cols;
 const ship = c.cards[0], spec = a.cards[0];
