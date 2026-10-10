@@ -630,6 +630,12 @@ export function createEditor(opts: {
         priority: 101,
         addKeyboardShortcuts() {
           const run = (dir: 1 | -1) => () => !suggestionVisible.get(this.editor)?.() && this.editor.commands.command(indentLines(dir));
+          // ⌫ / Enter step out as ⇧Tab does — but where the line cannot move, the key's own meaning still applies
+          // (⇧Tab keeps the key even then; these would otherwise do nothing at all)
+          const stepOut = () => {
+            const doc = this.editor.state.doc;
+            return run(-1)() && this.editor.state.doc !== doc;
+          };
           return {
             Tab: run(1),
             'Shift-Tab': run(-1),
@@ -640,7 +646,7 @@ export function createEditor(opts: {
               const { $from, empty } = this.editor.state.selection;
               if (!empty || $from.parentOffset !== 0 || !$from.parent.isTextblock || $from.depth < 4 || $from.index(-1) !== 0) return false;
               if (!/Item$/.test($from.node(-1).type.name) || !/Item$/.test($from.node(-3).type.name)) return false;
-              return !suggestionVisible.get(this.editor)?.() && this.editor.commands.command(indentLines(-1));
+              return stepOut();
             },
             // Enter on an empty item under an item of another kind (a bullet under a to-do): it steps out as
             // ⇧Tab does, still a bullet. The stock lift made it an unmarked line inside the to-do, where the
@@ -650,7 +656,7 @@ export function createEditor(opts: {
               if (!empty || $from.parent.content.size || $from.depth < 4 || $from.index(-1) !== 0) return false;
               const item = $from.node(-1), owner = $from.node(-3);
               if (!/Item$/.test(item.type.name) || !/Item$/.test(owner.type.name) || owner.type === item.type) return false;
-              return !suggestionVisible.get(this.editor)?.() && this.editor.commands.command(indentLines(-1));
+              return stepOut();
             },
           };
         },
