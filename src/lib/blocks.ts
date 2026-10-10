@@ -214,7 +214,8 @@ export function indentLines(dir: 1 | -1) {
     if (first < 0 || !before[first].item) return false; // not in a list: Tab belongs to someone else
     // ⇧Tab at the outermost level has nowhere to go: the line stays an item (a to-do keeps its box)
     if (dir < 0 && before.some((l, k) => picked[k] && l.item && l.depth <= 1)) return true;
-    if (!step(dir > 0, before[first].item)) return false;
+    // nowhere to go, but the line is in a list all the same: the key stays ours (the webview's Tab leaves the note)
+    if (!step(dir > 0, before[first].item)) return true;
     for (let k = 0; k < before.length; k++) {
       if (picked[k] || !before[k].item) continue;
       for (let tries = 0; tries < 4; tries++) {
@@ -255,7 +256,8 @@ function liftAcross(tr: any): boolean | null {
   const list: PMNode = range.parent, owner: PMNode = range.$from.node(range.depth - 1);
   // of another kind: another kind of item (a to-do), or the same item in another kind of list (a bullet under a number)
   const outerList: PMNode = range.$from.node(range.depth - 2);
-  if (!/Item$/.test(owner.type.name) || (owner.type === list.firstChild!.type && outerList.type === list.type)) return null;
+  if (!/Item$/.test(owner.type.name)) return null;
+  if (owner.type === list.firstChild!.type && outerList.type === list.type) return liftOverTrailing(tr, range);
   const { startIndex, endIndex } = range;
   const moved: PMNode[] = [];
   for (let k = startIndex; k < endIndex; k++) moved.push(list.child(k));
@@ -283,6 +285,30 @@ function liftAcross(tr: any): boolean | null {
     const outer: PMNode = range.$from.node(range.depth - 2);
     if (outer.type.name === 'orderedList') tr.setNodeAttribute(at + 1 + out.nodeSize, 'start', (outer.attrs.start ?? 1) + range.$from.index(range.depth - 2) + 1);
   }
+  return true;
+}
+
+/**
+ * ⇧Tab on items of the same kind as their parent item, when the parent goes on after their list with blocks of
+ * its own (a list of another kind, left there by Tab: "1. two" sunk under "1. one" above its "- x"). The stock lift
+ * would start a new item with those blocks, and an item must start with a line, so it did nothing. They go
+ * under the last item lifted instead, as the items below it in its own list do: Tab then ⇧Tab is back where it
+ * was. null: nothing after the list in the parent item, the stock lift applies.
+ */
+function liftOverTrailing(tr: any, range: any): boolean | null {
+  const list: PMNode = range.parent, $r = range.$from, d = range.depth;
+  const owner: PMNode = $r.node(d - 1), at = $r.index(d - 1);
+  if (at === owner.childCount - 1) return null;
+  const { startIndex, endIndex } = range;
+  const moved: PMNode[] = [];
+  for (let k = startIndex; k < endIndex; k++) moved.push(list.child(k));
+  let below = owner.content.cut(offsetOf(owner, at + 1));
+  if (endIndex < list.childCount) below = Fragment.from(list.copy(list.content.cut(offsetOf(list, endIndex)))).append(below);
+  const last = moved.pop()!;
+  moved.push(last.copy(last.content.append(below)));
+  let kept = owner.content.cut(0, offsetOf(owner, at));
+  if (startIndex > 0) kept = kept.addToEnd(list.copy(list.content.cut(0, offsetOf(list, startIndex))));
+  tr.replaceWith($r.before(d - 1), $r.after(d - 1), [owner.copy(kept), ...moved]);
   return true;
 }
 

@@ -32,6 +32,23 @@ test('Tab on a numbered item leaves the bullets under it bullets', () => {
   expect(after('1. a\n2. b\n   - x\n3. c', (ed) => { at(ed, 'b'); key(ed, 'Tab'); })).toBe('1. a\n   1. b\n   - x\n2. c');
 });
 
+test('⇧Tab undoes Tab on an item whose sub-items are of another kind', () => {
+  for (const [note, word] of [
+    ['1. one\n2. two\n   - x\n3. three', 'two'],
+    ['- [ ] one\n- [ ] two\n  - x\n- [ ] three', 'two'],
+    ['- one\n- two\n  1. x\n- three', 'two'],
+  ]) {
+    const ed = editorWith(note);
+    at(ed, word);
+    key(ed, 'Tab');
+    expect(md(ed).trim()).not.toBe(note);
+    const e = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+    ed.view.dom.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+    expect(md(ed).trim()).toBe(note);
+  }
+});
+
 test('⌘⇧9 / ⌘⇧7 / ⌘⇧8 on a nested item change that item where it is', () => {
   expect(after('1. a\n   - x\n2. b', (ed) => { at(ed, 'x'); key(ed, 'Mod-Shift-9'); })).toBe('1. a\n   - [ ] x\n2. b');
   expect(after('1. a\n   - x\n   - y\n   - z\n2. b', (ed) => { at(ed, 'y'); key(ed, 'Mod-Shift-7'); })).toBe('1. a\n   - x\n   1. y\n   - z\n2. b');
