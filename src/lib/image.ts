@@ -160,14 +160,21 @@ export const LocalImage = Image.extend({
       // the caption lives outside the document flow, so its edits reach the node as attribute changes
       let timer: ReturnType<typeof setTimeout> | undefined;
       const save = () => {
+        clearTimeout(timer);
+        timer = undefined;
         const pos = typeof getPos === 'function' ? getPos() : null;
-        if (pos == null) return;
+        if (pos == null || editor.isDestroyed) return;
         const current = editor.state.doc.nodeAt(pos);
         if (!current || current.attrs.alt === cap.textContent) return;
         editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, alt: cap.textContent || null }));
       };
       cap.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(save, 300); }); // one undo step per pause, not per key
-      cap.addEventListener('blur', () => { clearTimeout(timer); save(); });
+      // A caption typed just before ⌘N (another note, the note closed) was lost: the pause was cut short with the
+      // editor, and the blur that comes as the caption is taken off the page lands in the middle of Svelte
+      // redrawing it, which refuses a change to the notes there. It is saved as the editor goes instead (Svelte
+      // lets that one through), and a blur waits a microtask, past the redraw (by then a no-op if the editor went).
+      editor.on('destroy', save);
+      cap.addEventListener('blur', () => queueMicrotask(save));
       // a click in the body has to land on the first press: the caption is its own editable island,
       // and the editor's own mousedown handling leaves the caret sitting in it otherwise
       const release = (e: MouseEvent) => { if (!owns(e.target)) cap.blur(); };
@@ -216,7 +223,7 @@ export const LocalImage = Image.extend({
         // caption is the editor's business; every other change in here is this view's own.
         ignoreMutation: (m) => m.type !== 'selection' || owns(m.target),
         stopEvent: (e) => owns(e.target) || e.target === grip,
-        destroy: () => { clearTimeout(timer); document.removeEventListener('mousedown', release, true); },
+        destroy: () => { clearTimeout(timer); editor.off('destroy', save); document.removeEventListener('mousedown', release, true); },
       };
     };
   },

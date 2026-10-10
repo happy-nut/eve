@@ -2,7 +2,7 @@
 import { test, expect, afterEach } from 'vitest';
 import { editorWith, md, posOf, press } from './testEditor';
 import { NodeSelection } from '@tiptap/pm/state';
-import { dropBlock } from './editor';
+import { createEditor, dropBlock } from './editor';
 import { sizeGrip } from './resize';
 
 afterEach(() => { document.body.innerHTML = ''; });
@@ -202,6 +202,25 @@ test('a plain click on the resize grip sets no width; a drag does', () => {
   at('pointermove', 140);
   at('pointerup', 140);
   expect(widths).toHaveLength(1);
+});
+
+test.each([
+  ['a short note', ''],
+  ['a long note', `${'lorem ipsum dolor sit amet '.repeat(40)}\n\n`.repeat(15)],
+])('a caption typed just before the note closes (%s) is saved with it', (_what, filler) => {
+  const saved: string[] = [];
+  const element = document.createElement('div');
+  document.body.append(element);
+  const popup = { visible: () => false, show() {}, hide() {}, update() {}, key: () => false } as any;
+  const ed = createEditor({
+    element, content: `# t\n\n${filler}![](assets/a.png)\n\nend`, onUpdate: (m) => saved.push(m), onOpenNote() {},
+    targets: () => [], suggestionUI: popup, calendarUI: popup, emojiUI: popup,
+  });
+  const cap = element.querySelector<HTMLElement>('.img-cap')!;
+  cap.textContent = 'hello';
+  cap.dispatchEvent(new Event('input')); // and ⌘N comes before the pause is over
+  ed.destroy();
+  expect(saved.at(-1)).toContain('![hello](assets/a.png)');
 });
 
 test('↩ after such an address leaves it a link instead of making a card that would not come back', () => {

@@ -483,8 +483,9 @@ export function createEditor(opts: {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const cancel = () => { clearTimeout(timer); timer = undefined; dropEdit(flush); };
   const flush = () => { if (timer === undefined) return; cancel(); opts.onUpdate(getMarkdown(editor)); };
+  let closing = false; // the editor is going: an edit made now (a caption saved on the way out) is handed over at once
   function handOver(ed: Editor) {
-    if (ed.state.doc.content.size < LONG) { cancel(); opts.onUpdate(getMarkdown(ed)); return; }
+    if (closing || ed.state.doc.content.size < LONG) { cancel(); opts.onUpdate(getMarkdown(ed)); return; }
     clearTimeout(timer);
     timer = setTimeout(flush, 150);
     holdEdit(flush);
@@ -1137,7 +1138,8 @@ export function createEditor(opts: {
     onUpdate: ({ editor }) => handOver(editor),
   });
   editor.on('blur', flush); // leaving the note: the list, a dialog, another app
-  editor.on('destroy', flush); // the note closed or switched (the document is still there to read)
+  // the note closed or switched (the document is still there to read)
+  editor.on('destroy', () => { closing = true; flush(); });
   suggestionVisible.set(editor, () => opts.suggestionUI.visible() || opts.calendarUI.visible() || opts.emojiUI.visible());
   if (opts.onNoteMove) noteMove.set(editor, opts.onNoteMove);
   applyKeymap(editor);
