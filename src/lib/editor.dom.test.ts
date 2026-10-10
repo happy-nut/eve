@@ -340,3 +340,19 @@ describe('Tab in the real keymap', () => {
     expect(md(ed).trimEnd()).toBe('- [ ] a\n  - [ ] b\n  - [ ] c\n- [ ] d');
   });
 });
+
+describe('Enter on the empty last line of a callout', () => {
+  test('leaves the callout for a new line right after it; the block below stays whole', () => {
+    const ed = editorWith('> [!💡]\n> one\n\n## Next');
+    ed.commands.setTextSelection(posOf(ed, 'one', true));
+    press(ed, 'Enter');
+    press(ed, 'Enter');
+    expect(md(ed)).toContain('## Next');
+    const { $from } = ed.state.selection;
+    expect($from.parent.type.name).toBe('paragraph');
+    expect($from.parent.content.size).toBe(0);
+    expect($from.depth).toBe(1);
+    expect(ed.state.doc.child($from.index(0) - 1).type.name).toBe('callout');
+    expect(ed.state.doc.child($from.index(0) + 1).type.name).toBe('heading');
+  });
+});

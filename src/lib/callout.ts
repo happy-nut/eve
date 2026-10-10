@@ -1,4 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core';
+import { TextSelection } from '@tiptap/pm/state';
 import { ui } from './ui.svelte';
 import { isMobile } from './platform';
 import { customIcon } from './icons';
@@ -112,7 +113,15 @@ export const Callout = Node.create({
         if (!empty || $from.parent.content.size !== 0) return false;
         const callout = $from.node(-1);
         if (callout?.type.name !== 'callout' || $from.index(-1) !== callout.childCount - 1 || callout.childCount < 2) return false;
-        return editor.chain().deleteNode('paragraph').insertContentAt($from.after(-1), { type: 'paragraph' }).focus().run();
+        // one step after the other on the same transaction: the place after the callout is mapped past the
+        // deleted line (worked out on the old note, it landed two inside whatever came next)
+        return editor.chain().command(({ tr }) => {
+          tr.delete($from.before(), $from.after());
+          const at = tr.mapping.map($from.after(-1));
+          tr.insert(at, editor.schema.nodes.paragraph.create());
+          tr.setSelection(TextSelection.create(tr.doc, at + 1));
+          return true;
+        }).focus().run();
       },
     };
   },
