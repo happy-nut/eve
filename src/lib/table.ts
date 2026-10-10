@@ -2,6 +2,7 @@ import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table
 import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
 import { Plugin, Selection, TextSelection } from '@tiptap/pm/state';
+import { imageMarkdown } from './image';
 import { CellSelection, cellAround, columnResizingPluginKey, fixTables, inSameTable, nextCell, tableEditingKey } from '@tiptap/pm/tables';
 
 /**
@@ -18,15 +19,29 @@ import { CellSelection, cellAround, columnResizingPluginKey, fixTables, inSameTa
 
 /** One cell as a single line of markdown, marks and all (`**bold**` survives a round trip). */
 function cellText(state: any, cell: PMNode): string {
-  const before = state.out;
+  // the cell borrows the output buffer, and with it what is kept about the buffer: the quote's "> " (written at
+  // what looked like the start of a line: a table in a quote got one more "> " in each cell every save) and where
+  // a mark opened (tiptap-markdown fixes the mark's spaces at those offsets later, in the table's own text instead)
+  const { out, delim, inlines } = state;
   state.out = '';
-  cell.forEach((child) => {
-    if (!child.isTextblock) return;
-    if (state.out) state.out += ' '; // a cell holding two paragraphs is still one line
-    state.renderInline(child);
+  state.delim = '';
+  state.inlines = [];
+  // a line break as `<br>` (tiptap-markdown's own way in a table): its usual backslash and newline came back as
+  // "\ ", and one more backslash every save
+  state.inTable = true;
+  // every line in it, however deep: a list, quote or toggle typed into a cell is not a cell's markdown, but its
+  // text left out was gone from the note at the next save while still on screen
+  cell.descendants((child) => {
+    if (!child.isTextblock && child.type.name !== 'image') return true;
+    // a cell holding two paragraphs is still one line (the text after a picture may bring its own space)
+    if (state.out && !/\s$/.test(state.out) && !/^\s/.test(child.textContent)) state.out += ' ';
+    // a picture read from a cell is a block of its own in it; it goes back in the line, not left out
+    if (child.isTextblock) state.renderInline(child);
+    else state.out += imageMarkdown(state, child);
+    return false;
   });
   const text = state.out;
-  state.out = before;
+  Object.assign(state, { out, delim, inlines, inTable: false });
   return text.replace(/\n+/g, ' ').replace(/\|/g, '\\|').trim();
 }
 

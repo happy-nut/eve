@@ -18,14 +18,13 @@ export interface FindState { query: string; index: number; hits: Hit[] }
 
 function search(doc: PMNode, query: string): Hit[] {
   const hits: Hit[] = [];
-  const q = query.toLowerCase();
-  if (!q) return hits;
+  if (!query) return hits;
+  // the case is ignored by the match itself, on the text as it is: lower-casing the text first changed its length
+  // ("İ" becomes two characters), and every match after it was off by one
+  const q = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'giu');
   doc.descendants((node, pos) => {
     if (!node.isText || !node.text) return;
-    const text = node.text.toLowerCase();
-    for (let i = text.indexOf(q); i !== -1; i = text.indexOf(q, i + q.length)) {
-      hits.push({ from: pos + i, to: pos + i + q.length });
-    }
+    for (const m of node.text.matchAll(q)) hits.push({ from: pos + m.index, to: pos + m.index + m[0].length });
   });
   return hits;
 }

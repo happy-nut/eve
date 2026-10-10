@@ -176,12 +176,12 @@
     {/if}
     <span class="tab">이모지</span>
     <span class="acts">
-      <!-- the same pool the "아이콘 추가" button rolls from, so a page can be given a face without choosing one -->
-      <button class="act" aria-label="랜덤" title="랜덤" onclick={() => ui.emojiDone(randomIcon(req.current))}>
+      <!-- the same pool the "Add icon" button rolls from, so a page can be given a face without choosing one -->
+      <button class="act" aria-label="Random icon" title="Random icon" onclick={() => ui.emojiDone(randomIcon(req.current))}>
         <svg viewBox="0 0 16 16"><path d="M2 4.5h2.2c1.3 0 2.4.7 3 1.8l1.6 3.4c.6 1.1 1.7 1.8 3 1.8H14M2 11.5h2.2c.9 0 1.8-.4 2.4-1.1M9.4 5.6c.6-.7 1.5-1.1 2.4-1.1H14M12.3 2.8 14 4.5l-1.7 1.7M12.3 9.8 14 11.5l-1.7 1.7"/></svg>
       </button>
       {#if req.current}
-        <button class="act" aria-label="제거" title="제거" onclick={() => ui.emojiDone('')}>
+        <button class="act" aria-label="Remove icon" title="Remove icon" onclick={() => ui.emojiDone('')}>
           <svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9"/></svg>
         </button>
       {/if}

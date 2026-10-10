@@ -23,7 +23,9 @@
     e.stopPropagation();
     if (e.timeStamp < openedAt) return;
     if (e.key === 'Escape') { e.preventDefault(); done(null); }
-    if (e.key === 'Enter') {
+    // the Enter that ends a Korean or Japanese word being put together is the word's: it answered the dialog with
+    // the name half typed
+    if (e.key === 'Enter' && !e.isComposing) {
       e.preventDefault();
       // Enter presses the button that has the keyboard: Tab to Cancel, then Enter, deleted all the same
       const on = document.activeElement;

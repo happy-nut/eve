@@ -19,6 +19,7 @@ export function syncPhoneReminder() {
 async function look() {
   const s = appearance.s;
   if (!s.dailyNotes || !s.dailyReminder) return;
+  if (!notes.loaded) return; // the app just started and today's note is not read yet: the next look sees it
   const now = new Date(), key = dayKey(now);
   const [h, m] = s.reminderAt.split(':').map(Number);
   if (now.getHours() * 60 + now.getMinutes() < h * 60 + m) return;

@@ -24,13 +24,22 @@ object Reminder {
   private const val PREFS = "reminder"
   private const val CHANNEL = "daily"
 
+  /** The page calls this on every start and every change of the notes, so only a new time (or turning it on
+   *  or off) sets the alarm again: setting it again cancels today's alarm, and Eve opened at 21:05 with
+   *  today's 21:00 still on its way (inexact, later under Doze) moved it to tomorrow, today's reminder lost.
+   *  An alarm gone altogether (a force stop drops it, and its PendingIntent with it) is still set again. */
   fun set(context: Context, on: Boolean, at: String, template: String) {
-    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-      .putBoolean("on", on).putString("at", at).putString("template", template).apply()
-    schedule(context)
+    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    val same = prefs.contains("on") && prefs.getBoolean("on", false) == on && prefs.getString("at", null) == at
+    prefs.edit().putBoolean("on", on).putString("at", at).putString("template", template).apply()
+    val pending = PendingIntent.getBroadcast(context, 7, Intent(context, ReminderReceiver::class.java),
+      PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE) != null
+    if (!same || (on && !pending)) schedule(context)
   }
 
   private const val DAY = "day"
+  /** the last day whose alarm came (yyyy-MM-dd), so setting it again knows whether today's is still to come */
+  private const val FIRED = "fired"
   private fun keyOf(day: Calendar) = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(day.time)
 
   /** the alarm, carrying the day it is for (yyyy-MM-dd) */
@@ -39,10 +48,10 @@ object Reminder {
 
   /** The next occurrence of the time: later today, or tomorrow. Inexact (a window of ten minutes): no
    *  exact-alarm permission to ask for, and a reminder a few minutes late is still a reminder. */
-  /** `clockMoved`: set again because the clock or the time zone changed. The phone corrects its clock by itself
-   *  too, and inside the ten minutes today's alarm may still be on its way that moved it to tomorrow, today's
-   *  reminder lost: within them, today's is still due (now). */
-  fun schedule(context: Context, clockMoved: Boolean = false) {
+  /** Set again just after the time (the clock or the time zone changed, a reboot, an update of the app, a new
+   *  time from the page): inside the ten minutes today's alarm may still be on its way, and moving it to
+   *  tomorrow lost today's reminder. Within them, unless today's has come already, today's is still due (now). */
+  fun schedule(context: Context) {
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     val am = context.getSystemService(AlarmManager::class.java)
     am.cancel(alarm(context))
@@ -55,7 +64,7 @@ object Reminder {
     }
     val day = keyOf(next)
     if (next.timeInMillis <= now) {
-      if (clockMoved && now - next.timeInMillis < window) {
+      if (now - next.timeInMillis < window && prefs.getString(FIRED, null) != day) {
         am.setWindow(AlarmManager.RTC_WAKEUP, now + 1000L, window, alarm(context, day))
         return
       }
@@ -84,6 +93,7 @@ object Reminder {
   fun fire(context: Context, day: String?) {
     val today = Calendar.getInstance()
     val due = day == null || day == keyOf(today)
+    if (due) context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(FIRED, keyOf(today)).apply()
     if (due && context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("on", false) && !written(context, today)) {
       val nm = context.getSystemService(NotificationManager::class.java)
       nm.createNotificationChannel(NotificationChannel(CHANNEL, "Daily note reminder", NotificationManager.IMPORTANCE_DEFAULT))
@@ -109,8 +119,8 @@ object Reminder {
 class ReminderReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     when (intent.action) {
-      Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> Reminder.schedule(context)
-      Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED -> Reminder.schedule(context, clockMoved = true)
+      Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED,
+      Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED -> Reminder.schedule(context)
       else -> Reminder.fire(context, intent.getStringExtra("day"))
     }
   }

@@ -5,7 +5,7 @@
   import { flip } from 'svelte/animate';
   import { fade, slide } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { notes, nested, titleOf, CALENDAR, type Note } from './lib/notes.svelte';
   import { isDailyId, DAILY_TEMPLATE_ID, CALENDAR_NOTE_ID } from './lib/daily';
   import { groups, parentOf, leafOf, depthOf, MAX_DEPTH } from './lib/groups.svelte';
@@ -19,7 +19,7 @@
   import { focusNote } from './lib/popup';
   import { touchReorder, type Reorder } from './lib/touchReorder';
   import { swipeRow } from './lib/swipeRow';
-  import { previewOf } from './lib/markdown';
+  import { plain, previewOf } from './lib/markdown';
   import { editedLabel } from './lib/date';
 
   let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings, onNew }:
@@ -35,7 +35,18 @@
   const q = $derived(query.trim().toLowerCase());
   // daily notes stay out of the tree, but a search still finds them
   // …only while daily notes are on here: off on this device, they are nowhere on it (list, search, widget)
-  const hits = $derived([...notes.visible, ...(appearance.s.dailyNotes ? notes.daily : [])].filter((n) => n.body.toLowerCase().includes(q)));
+  const hits = $derived([...notes.visible, ...(appearance.s.dailyNotes ? notes.daily : [])].filter((n) => shownText(n).includes(q)));
+  // A search looks for what the note says, as it reads on screen: its raw markdown matched what nobody sees (a
+  // link's address, "#" for every heading, "**") and missed what everyone does ("my_func" is saved my\_func).
+  // Made once per version of a note, not at every key typed into the search.
+  const shown = new Map<string, { body: string; text: string }>();
+  function shownText(n: Note): string {
+    const had = shown.get(n.id);
+    if (had?.body === n.body) return had.text;
+    const text = (titleOf(n) + '\n' + n.body.split('\n').map(plain).join('\n')).toLowerCase();
+    shown.set(n.id, { body: n.body, text });
+    return text;
+  }
 
   /**
    * One flat, keyed list of rows (groups, notes, placeholders). A single {#each} lets
@@ -66,6 +77,16 @@
     };
     walk('', 0);
     return out;
+  });
+
+  // The open note is shown where it sits in the list. Opened by ⌘⇧↓, back, a link or a new note in a folded group,
+  // its row used to stay hidden in the folded group (or under a folded page), or scrolled out of sight. Only when
+  // another note comes up: a group folded by hand while its note is open stays folded.
+  $effect(() => {
+    const id = notes.currentId === CALENDAR ? CALENDAR_NOTE_ID : notes.currentId;
+    if (!id) return;
+    untrack(() => groups.reveal(id));
+    void tick().then(() => document.querySelector(`aside [data-note="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' }));
   });
 
   // ---- "+" menu: new note / new group, relative to the focused row (the app's one menu, Menu.svelte) ----
@@ -250,6 +271,7 @@
     void afterRemove(next, fromList);
   }
   async function removeNote(n: Note) {
+    if (n.id === CALENDAR_NOTE_ID) return; // the calendar's row goes with daily notes, in Settings
     if (n.id === notes.currentId) hints.action('deleteNote', 'Delete the open note');
     const next = neighbourOf(`[data-note="${n.id}"]`), fromList = inList();
     if (!(await ui.ask(`Delete “${titleOf(n)}”?`))) return;

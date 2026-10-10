@@ -279,9 +279,20 @@ const mathNode = (display: boolean) => Node.create({
   addStorage() {
     return {
       markdown: {
-        serialize(state: any, node: PMNode) {
+        serialize(state: any, node: PMNode, parent: PMNode, index: number) {
           const latex: string = node.attrs.latex;
-          if (!display) { state.write(`$${latex}$`); return; }
+          if (!display) {
+            // written so that it is read back as this formula. Each of these was text when the note was opened
+            // again: a space just inside a dollar (typed in the TeX line), a line break, a TeX line break `\\`
+            // at the end (its `\$` reads as an escaped dollar, so `{}` goes after it), and a digit right after
+            // the closing dollar ("$x$2", money's rule) — an empty HTML comment stands between them.
+            let tex = latex.replace(/\s*\n\s*/g, ' ').trim();
+            if (!tex) return;
+            if (tex.endsWith('\\')) tex += '{}';
+            const next = parent.maybeChild(index + 1);
+            state.write(`$${tex}$${next?.isText && /^\d/.test(next.text ?? '') ? '<!---->' : ''}`);
+            return;
+          }
           state.write('$$\n');
           state.text(latex, false);
           state.ensureNewLine();
@@ -301,9 +312,29 @@ export const MathBlock = mathNode(true);
  * ProseMirror's text node (in place of StarterKit's, the same node), written as tiptap-markdown writes it, except
  * dollars that would be read back as a formula: those are escaped (`\$`), so "$a$" typed where no formula was made (pasted, or the rule undone) stays text.
  */
+const entities = new Map<string, boolean>();
+/** `&name;` that HTML (and so markdown) reads as one character */
+function isEntity(s: string): boolean {
+  if (/^&#/.test(s)) return /^&#(\d{1,7}|x[0-9a-f]{1,6});$/i.test(s);
+  let known = entities.get(s);
+  if (known === undefined) {
+    const el = document.createElement('textarea');
+    el.innerHTML = s;
+    entities.set(s, (known = el.value !== s));
+  }
+  return known;
+}
+
 const mathSafeText = {
   serialize(state: any, node: PMNode) {
-    const text = (node.text ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;'); // tiptap-markdown's own escapeHTML
+    // a link written as <address>: markdown reads nothing inside it, so a backslash there stayed in the address
+    // (`<https://a.com/\*x\*>` pointed somewhere else)
+    if (state.inAutolink) return void state.text(node.text ?? '', false);
+    const text = (node.text ?? '')
+      // "&lt;" typed as text came back as "<"; only a name markdown reads as a character is escaped, so "Q&A;" or
+      // "AT&T;" stay as typed (written "&amp;A;" they showed so in the title, and a [[link]] to it found nothing)
+      .replace(/&(#?[a-z0-9]+;)/gi, (m, rest) => (isEntity(m) ? `&amp;${rest}` : m))
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;'); // tiptap-markdown's own escapeHTML
     if (!readsAsMath(text)) { state.text(text); return; }
     text.split('$').forEach((part, i) => {
       if (i) state.write('\\$');

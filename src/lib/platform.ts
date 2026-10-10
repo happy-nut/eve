@@ -82,12 +82,24 @@ export const widget = {
   },
 };
 
+/**
+ * A src as the file is named on disk. Markdown hands a link over percent-encoded (`my%20pic.png`,
+ * `%EC%82%AC%EC%A7%84.png` for 사진.png), and the webview's URL for it encodes it once more: a picture or a PDF
+ * whose name had a space or Korean in it was looked for under a name no file has. A src that is not valid
+ * percent-encoding is taken as it is.
+ */
+export function onDisk(src: string): string {
+  try { return decodeURI(src); } catch { return src; }
+}
+/** the name of a file of ours in notes/assets (`assets/…`), as it is on disk; null for anything else */
+export const assetName = (src: string): string | null => (/^assets\//.test(src) ? onDisk(src.slice('assets/'.length)) : null);
+
 /** Map a markdown image src to something the webview can load. Relative paths live under notes/. */
 export function assetUrl(src: string | undefined): string | undefined {
   if (!src || !isTauri || /^(https?:|data:|asset:|file:)/.test(src)) return src;
   if (!notesDir) return src;
   // lazy import keeps the browser bundle Tauri-free
-  return convertFileSrcSync(`${notesDir}/${src}`);
+  return convertFileSrcSync(`${notesDir}/${onDisk(src)}`);
 }
 let convertFileSrcSync: (p: string) => string = (p) => p; // set by storage.path()
 
@@ -131,7 +143,7 @@ export async function pickImage(): Promise<string | null> {
 
 /** First page of a stored PDF as a PNG object URL (Quick Look, cached on disk). Null when unavailable. */
 export async function pdfThumb(src: string): Promise<string | null> {
-  const name = /^assets\//.test(src) ? src.slice('assets/'.length) : null;
+  const name = assetName(src);
   if (!isTauri || !name) return null; // only a file of ours has a thumbnail to ask for
   try {
     const png = await invoke<ArrayBuffer>('pdf_thumb', { name });
@@ -147,7 +159,7 @@ export async function pdfThumb(src: string): Promise<string | null> {
  * has no Quick Look generator for the format (a .hwp without Hancom Office is the usual one).
  */
 export async function qlPreview(src: string): Promise<string | null> {
-  const name = /^assets\//.test(src) ? src.slice('assets/'.length) : null;
+  const name = assetName(src);
   if (!isTauri || !name) return null;
   try {
     const path = await invoke<string>('ql_preview', { name });
@@ -213,7 +225,7 @@ export const openUrl = (url: string) => (isTauri ? invoke<void>('open_url', { ur
 
 /** Open a stored asset (a PDF, say) in the app that owns it; a web URL goes to the browser. */
 export async function openAsset(src: string): Promise<void> {
-  const name = /^assets\//.test(src) ? src.slice('assets/'.length) : null;
+  const name = assetName(src);
   if (isTauri && name) return invoke('open_asset', { name });
   await openUrl(src);
 }

@@ -10,6 +10,10 @@ test.each([
   ['kbd, sub, sup and abbr', 'press <kbd>Ctrl</kbd>, H<sub>2</sub>O, x<sup>2</sup>, <abbr title="HyperText">HTML</abbr>'],
   ['a div around markdown', '<div align="center">\n\n**inside**\n\n</div>'],
   ['a comment', '<!-- a comment -->\n\ntext'],
+  ['a comment in a line', 'para <!-- todo: check --> more'],
+  ['a comment at the end of an item', '- a <!-- c -->\n- b'],
+  ['a comment in a heading', '# Title <!-- draft -->'],
+  ['a comment in a quote', '> a <!-- c --> b'],
 ])('%s in a note is written back as it was', (_what, note) => {
   const once = md(editorWith(note));
   expect(once).toBe(note);

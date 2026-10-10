@@ -55,6 +55,26 @@ export async function linkMeta(url: string): Promise<Meta> {
 
 const el = (tag: string, cls: string, text = '') => { const e = document.createElement(tag); e.className = cls; if (text) e.textContent = text; return e; };
 const trim = (u: string) => u.replace(/\/$/, '');
+/** an address as one reads it: `서울` and `%EC%84%9C%EC%9A%B8` are the same page */
+const plain = (u: string) => { try { return trim(decodeURI(u)); } catch { return trim(u); } };
+
+const reads = new Map<string, boolean>();
+/**
+ * Whether the address, written bare on its line, is read back as this same card. Markdown takes some apart:
+ * a `*x*` or `[x]` in it is emphasis or a bracket, a `)` or a closing `.` is left out of the link. Made a card
+ * anyway, such a link was a plain link (or a link and some text) the next time the note was opened.
+ */
+export function cardable(editor: Editor, href: string): boolean {
+  let ok = reads.get(href);
+  if (ok === undefined) {
+    const t = document.createElement('template');
+    t.innerHTML = (editor.storage as any).markdown.parser.parse(href);
+    const card = t.content.querySelector('[data-bookmark]');
+    ok = t.content.children.length === 1 && !!card && plain(card.getAttribute('data-bookmark') ?? '') === plain(href);
+    reads.set(href, ok);
+  }
+  return ok;
+}
 
 export const Bookmark = Node.create({
   name: 'bookmark',
@@ -112,7 +132,7 @@ export const Bookmark = Node.create({
         const p = $from.parent;
         if (!empty || p.type.name !== 'paragraph' || $from.parentOffset !== p.content.size || $from.depth !== 1) return false;
         const text = p.textContent.trim();
-        if (!URL_RE.test(text)) return false;
+        if (!URL_RE.test(text) || !cardable(editor, text)) return false;
         return editor.chain()
           .insertContentAt({ from: $from.before(), to: $from.after() }, [{ type: 'bookmark', attrs: { href: text } }, { type: 'paragraph' }])
           .focus()
@@ -160,8 +180,10 @@ export const Bookmark = Node.create({
   addStorage() {
     return {
       markdown: {
-        serialize(state: any, node: any) {
-          state.write(node.attrs.href);
+        serialize(this: { editor: Editor }, state: any, node: any) {
+          // one that would not read back as a card (see cardable) stays a whole link, in markdown's <…>
+          const href: string = node.attrs.href;
+          state.write(cardable(this.editor, href) ? href : `<${href.replace(/[<>\s]/g, encodeURI)}>`);
           state.closeBlock(node);
         },
         parse: {
@@ -183,7 +205,10 @@ export const Bookmark = Node.create({
               const a = p.firstElementChild as HTMLAnchorElement;
               const href = a.getAttribute('href') ?? '';
               if (a.tagName !== 'A' || !a.hasAttribute('data-bare')) continue;
-              if (!URL_RE.test(href) || trim(p.textContent?.trim() ?? '') !== trim(href)) continue;
+              // the link's text is the address decoded (`서울`), its href encoded (`%EC%84…`): the same address.
+              // Compared as written, a Korean address was never a card again, and once a plain link it was
+              // saved as [text](address).
+              if (!URL_RE.test(href) || plain(p.textContent?.trim() ?? '') !== plain(href)) continue;
               const b = document.createElement('div');
               b.setAttribute('data-bookmark', href);
               b.textContent = href;
@@ -225,7 +250,7 @@ export function openLinkHere(editor: Editor): boolean {
  */
 export function linkToCard(editor: Editor): boolean {
   const link = linkAt(editor);
-  if (!link) return false;
+  if (!link || !cardable(editor, link.href)) return false;
   const { state } = editor, $from = state.selection.$from, card = state.schema.nodes.bookmark.create({ href: link.href });
   const line = $from.parent, holder = $from.node(-1), at = $from.index(-1);
   const alone = line.type.name === 'paragraph' && line.textContent.trim() === state.doc.textBetween(link.from, link.to).trim();

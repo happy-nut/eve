@@ -105,7 +105,8 @@ export function eventToKeys(e: KeyboardEvent): string {
   let key = e.key;
   if (['Meta', 'Control', 'Alt', 'Shift'].includes(key)) return '';
   if (key === ' ') key = 'Space';
-  else if (key === '-') key = 'Minus';
+  // the physical key, as for digits: with Shift held it reads "_", and ⌘⇧- was recorded as a key no list writes
+  else if (key === '-' || e.code === 'Minus') key = 'Minus';
   else if (key.length === 1) {
     // use the physical key for letters/digits so Alt/Shift combos are stable ("Alt-3" not "Alt-#")
     const code = e.code;

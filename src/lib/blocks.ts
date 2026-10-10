@@ -88,7 +88,22 @@ function moveOnce(state: any, dir: -1 | 1, done = 0): any {
       range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1));
       continue;
     }
+    // a cell moves its whole row, from any column: never the cell alone, sideways into its neighbour's column
+    if (parent.type.name === 'tableRow') {
+      range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1));
+      continue;
+    }
+    // a toggle is its title then its body, in that order: the title moves the whole toggle, and a body line at
+    // the body's edge stays inside it (swapping the two split it into a toggle with no title and one with no body)
+    if (parent.type.name === 'details') {
+      if (startIndex > 0) return true;
+      range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1));
+      continue;
+    }
     const i = dir < 0 ? startIndex - 1 : endIndex;
+    // rows move among the body rows: the header stays on top (the markdown table needs it there), and a row at
+    // the body's edge stays in its table rather than taking the whole table along
+    if (parent.type.name === 'table' && (startIndex === 0 || i < 1 || i >= parent.childCount)) return true;
     if (isEdge(state.doc, parent, i, dir)) return true; // the note's title or its end: nothing to pass
     if (i >= 0 && i < parent.childCount) {
       const node = parent.child(i);
@@ -200,6 +215,8 @@ export function indentLines(dir: 1 | -1) {
   return ({ tr }: { tr: any }): boolean => {
     const { from, to, $from } = tr.selection;
     if ($from.parent.type.spec.code) return false;
+    // in a table, even one inside a list item, Tab walks the cells (and adds a row at the end), as anywhere else
+    for (let d = $from.depth; d > 0; d--) if (/^table(Cell|Header)$/.test($from.node(d).type.name)) return false;
     // ProseMirror's own list commands, run on the one transaction (tiptap's would read a stale selection)
     const step = (sink: boolean, item: string) => {
       const type = tr.doc.type.schema.nodes[item];
@@ -214,7 +231,8 @@ export function indentLines(dir: 1 | -1) {
     if (first < 0 || !before[first].item) return false; // not in a list: Tab belongs to someone else
     // ⇧Tab at the outermost level has nowhere to go: the line stays an item (a to-do keeps its box)
     if (dir < 0 && before.some((l, k) => picked[k] && l.item && l.depth <= 1)) return true;
-    if (!step(dir > 0, before[first].item)) return false;
+    // nowhere to go, but the line is in a list all the same: the key stays ours (the webview's Tab leaves the note)
+    if (!step(dir > 0, before[first].item)) return true;
     for (let k = 0; k < before.length; k++) {
       if (picked[k] || !before[k].item) continue;
       for (let tries = 0; tries < 4; tries++) {
@@ -255,7 +273,8 @@ function liftAcross(tr: any): boolean | null {
   const list: PMNode = range.parent, owner: PMNode = range.$from.node(range.depth - 1);
   // of another kind: another kind of item (a to-do), or the same item in another kind of list (a bullet under a number)
   const outerList: PMNode = range.$from.node(range.depth - 2);
-  if (!/Item$/.test(owner.type.name) || (owner.type === list.firstChild!.type && outerList.type === list.type)) return null;
+  if (!/Item$/.test(owner.type.name)) return null;
+  if (owner.type === list.firstChild!.type && outerList.type === list.type) return liftOverTrailing(tr, range);
   const { startIndex, endIndex } = range;
   const moved: PMNode[] = [];
   for (let k = startIndex; k < endIndex; k++) moved.push(list.child(k));
@@ -287,12 +306,36 @@ function liftAcross(tr: any): boolean | null {
 }
 
 /**
+ * ⇧Tab on items of the same kind as their parent item, when the parent goes on after their list with blocks of
+ * its own (a list of another kind, left there by Tab: "1. two" sunk under "1. one" above its "- x"). The stock lift
+ * would start a new item with those blocks, and an item must start with a line, so it did nothing. They go
+ * under the last item lifted instead, as the items below it in its own list do: Tab then ⇧Tab is back where it
+ * was. null: nothing after the list in the parent item, the stock lift applies.
+ */
+function liftOverTrailing(tr: any, range: any): boolean | null {
+  const list: PMNode = range.parent, $r = range.$from, d = range.depth;
+  const owner: PMNode = $r.node(d - 1), at = $r.index(d - 1);
+  if (at === owner.childCount - 1) return null;
+  const { startIndex, endIndex } = range;
+  const moved: PMNode[] = [];
+  for (let k = startIndex; k < endIndex; k++) moved.push(list.child(k));
+  let below = owner.content.cut(offsetOf(owner, at + 1));
+  if (endIndex < list.childCount) below = Fragment.from(list.copy(list.content.cut(offsetOf(list, endIndex)))).append(below);
+  const last = moved.pop()!;
+  moved.push(last.copy(last.content.append(below)));
+  let kept = owner.content.cut(0, offsetOf(owner, at));
+  if (startIndex > 0) kept = kept.addToEnd(list.copy(list.content.cut(0, offsetOf(list, startIndex))));
+  tr.replaceWith($r.before(d - 1), $r.after(d - 1), [owner.copy(kept), ...moved]);
+  return true;
+}
+
+/**
  * A list line whose marker is typed over by another kind's ("- " on a to-do, "[] " or "1. " on a bullet):
  * that one line becomes the other kind, its list split around it (and joined with a neighbour of the same
- * kind afterwards, by joinLists). `from`–`to` is the typed marker, removed. False when the line is not the
- * first line of an item, or already that kind.
+ * kind afterwards, by joinLists). `from`–`to` is the typed marker, removed; `itemAttrs` the new item's (a to-do typed
+ * "[x] " is done). False when the line is not the first line of an item, or already that kind.
  */
-export function switchItem(tr: any, from: number, to: number, listType: NodeType, itemType: NodeType, listAttrs: Record<string, unknown> = {}): boolean {
+export function switchItem(tr: any, from: number, to: number, listType: NodeType, itemType: NodeType, listAttrs: Record<string, unknown> = {}, itemAttrs: Record<string, unknown> = {}): boolean {
   const $p = tr.doc.resolve(from);
   const d = $p.depth;
   if (d < 3 || $p.parentOffset !== 0 || !$p.parent.isTextblock) return false;
@@ -302,7 +345,7 @@ export function switchItem(tr: any, from: number, to: number, listType: NodeType
   tr.delete(from, to);
   const $q = tr.doc.resolve(from);
   const own: PMNode = $q.node(d - 1), list: PMNode = $q.node(d - 2), i = $q.index(d - 2);
-  const attrs = itemType.name === 'taskItem' ? { checked: false } : null;
+  const attrs = itemType.name === 'taskItem' ? { checked: false, ...itemAttrs } : null;
   if (!itemType.validContent(own.content)) return false;
   const parts: PMNode[] = [];
   if (i > 0) parts.push(list.copy(list.content.cut(0, offsetOf(list, i))));

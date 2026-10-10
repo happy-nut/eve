@@ -156,13 +156,39 @@ export const CodeBlock = CodeBlockBase.extend({
         serialize(state: any, node: any) {
           const longest = Math.max(0, ...(node.textContent.match(/`+/g) ?? []).map((r: string) => r.length));
           const fence = '`'.repeat(Math.max(3, longest + 1));
-          state.write(fence + (node.attrs.language || '') + '\n');
+          state.write(fence + (node.attrs.language || '') + (node.attrs.info ? ` ${node.attrs.info}` : '') + '\n');
           state.text(node.textContent, false);
-          state.ensureNewLine();
+          // code ending in an empty line: that line break is the code's, and the fence's own comes after it (taken
+          // for the fence's, the empty line went, one each save)
+          if (node.textContent.endsWith('\n')) state.out += '\n';
+          else state.ensureNewLine();
           state.write(fence);
           state.closeBlock(node);
         },
+        // the rest of the fence's line after the language (```js title="a.js"): markdown-it leaves it out of the
+        // HTML, and the next save wrote the fence without it. (In place of tiptap-markdown's own parse, so its two
+        // steps are here too.)
+        parse: {
+          updateDOM(element: HTMLElement) {
+            element.innerHTML = element.innerHTML.replace(/\n<\/code><\/pre>/g, '</code></pre>'); // markdown-it's own last line break
+          },
+          setup(md: any) {
+            md.set({ langPrefix: 'language-' });
+            const fence = md.renderer.rules.fence;
+            md.renderer.rules.fence = (tokens: any[], idx: number, ...rest: unknown[]) => {
+              const html: string = fence(tokens, idx, ...rest);
+              const info = tokens[idx].info.trim().replace(/^\S+\s*/, ''); // as written, escapes and all
+              return info ? html.replace(/^<pre/, `<pre data-info="${md.utils.escapeHtml(info)}"`) : html;
+            };
+          },
+        },
       },
+    };
+  },
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      info: { default: null, parseHTML: (el: HTMLElement) => el.getAttribute('data-info'), renderHTML: (a: { info?: string | null }) => (a.info ? { 'data-info': a.info } : {}) },
     };
   },
   addNodeView() {

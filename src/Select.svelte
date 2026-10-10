@@ -18,7 +18,7 @@
   let open = $state(false);
   let at = $state(0); // the highlighted row while open
   let btn = $state<HTMLButtonElement | null>(null);
-  let pos = $state({ left: 0, top: 0, width: 0 });
+  let pos = $state({ left: 0, width: 0, edge: '' }); // edge: its top (under the button) or bottom (over it), and the room it has
 
   // the list lives on <body>: a transformed ancestor (the settings panel) would otherwise become the
   // box its position:fixed is measured from
@@ -30,8 +30,12 @@
     at = Math.max(0, options.findIndex(([id]) => id === value));
     if (btn && !isMobile) {
       const r = btn.getBoundingClientRect();
-      const below = window.innerHeight - r.bottom > options.length * 34 + 16;
-      pos = { left: r.right, top: below ? r.bottom + 4 : r.top - 4, width: r.width };
+      const room = { below: window.innerHeight - r.bottom - 12, above: r.top - 12 };
+      const below = room.below > options.length * 34 + 8 || room.below >= room.above;
+      // over the button its bottom edge sits just above it: placed by its top at the button's top, the list covered
+      // the button and ran off the bottom of the window. Cut to the room it has either way, and scrolls.
+      const edge = below ? `top: ${r.bottom + 4}px; max-height: ${room.below}px` : `bottom: ${window.innerHeight - r.top + 4}px; max-height: ${room.above}px; transform-origin: bottom right`;
+      pos = { left: r.right, width: r.width, edge };
     }
     open = true;
   }
@@ -74,7 +78,7 @@
   {:else}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div class="scrim" use:portal role="presentation" onmousedown={(e) => { e.preventDefault(); open = false; }}></div>
-    <div class="pop" use:portal role="listbox" style="left: {pos.left}px; top: {pos.top}px; min-width: {Math.max(pos.width, 160)}px"
+    <div class="pop" use:portal role="listbox" style="left: {pos.left}px; {pos.edge}; min-width: {Math.max(pos.width, 160)}px"
       transition:scale|global={popIn}>
       {#each options as [id, text], i (id)}
         <button role="option" aria-selected={id === value} class:at={i === at} tabindex="-1"
@@ -103,7 +107,7 @@
   .scrim { position: fixed; inset: 0; z-index: 40; }
 
   .pop {
-    position: fixed; z-index: 41; transform: translateX(-100%); transform-origin: top right; padding: 4px;
+    position: fixed; z-index: 41; transform: translateX(-100%); transform-origin: top right; padding: 4px; overflow-y: auto;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }
   .pop button {

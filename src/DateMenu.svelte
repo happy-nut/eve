@@ -27,6 +27,7 @@
     select: () => { if (!day) return false; pick(day); return true; },
     hide: () => { day = ''; },
     visible: () => !!day,
+    place: (rect) => { place = placeAt(rect, 290, 250); },
   };
 
   // mousedown, not click: a click would take focus out of the editor before the day is picked

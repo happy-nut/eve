@@ -1,5 +1,6 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
 import { groups } from './groups.svelte';
+import { flushEdits } from './pending';
 import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText } from './platform';
 import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, signInError, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
@@ -184,6 +185,9 @@ class Sync {
           if (!f.path.endsWith('.md')) continue;
           const r = parse(dec.decode(f.data));
           if (!r) continue;
+          // a long note's last keys may still be on their way from the editor: counted, the note is not "untouched"
+          // and the other device's copy does not simply replace it (it replaced the words on screen too, unsaved)
+          flushEdits();
           const local = notes.all.find((n) => n.id === r.id);
           const untouched = local && f.prev && (await this.hashes.file(f.path, serialize(local))).sha === f.prev;
           (untouched ? force : lww).push(r);

@@ -99,10 +99,11 @@ export const HtmlBlock = Node.create({
           while (walk.nextNode()) comments.push(walk.currentNode as Comment);
           for (const c of comments) {
             const parent = c.parentElement;
-            // one between blocks (in a paragraph it would split it): a block of its own
-            if (parent && parent !== root && !(parent.tagName === 'DIV' && parent.hasAttribute(MARK))) continue;
-            const box = document.createElement('div');
-            box.setAttribute('data-eve-comment', c.data);
+            // one between blocks: a block of its own; one in a line of text (a paragraph, an item, a heading) is
+            // kept in the line, where it used to be dropped (a block there would split the paragraph)
+            const between = !parent || parent === root || (parent.tagName === 'DIV' && parent.hasAttribute(MARK));
+            const box = document.createElement(between ? 'div' : 'span');
+            box.setAttribute(between ? 'data-eve-comment' : 'data-eve-inline-comment', c.data);
             c.replaceWith(box);
           }
         },
@@ -130,4 +131,23 @@ export const HtmlComment = Node.create({
   }),
 });
 
-export const Html = [HtmlInline, HtmlBlock, HtmlComment];
+/** an HTML comment in a line of text (`para <!-- todo --> more`), the same, in the line */
+export const HtmlCommentInline = Node.create({
+  name: 'htmlCommentInline',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes: () => ({ text: { default: '', parseHTML: (el: HTMLElement) => el.getAttribute('data-eve-inline-comment') ?? '', rendered: false } }),
+  parseHTML: () => [{ tag: 'span[data-eve-inline-comment]', priority: 60 }],
+  renderHTML: ({ node }) => ['span', { 'data-eve-inline-comment': node.attrs.text, class: 'html-comment' }, `<!--${node.attrs.text}-->`],
+  addStorage: () => ({
+    markdown: {
+      serialize(state: any, node: any) {
+        state.text(`<!--${node.attrs.text}-->`, false); // text(), not write(): a comment of more lines inside a quote keeps its "> "
+      },
+    },
+  }),
+});
+
+export const Html = [HtmlInline, HtmlBlock, HtmlComment, HtmlCommentInline];

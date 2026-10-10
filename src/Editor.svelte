@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Editor as TipTap } from '@tiptap/core';
+  import { createDocument, type Editor as TipTap } from '@tiptap/core';
   import { createEditor, applyKeymap, getMarkdown, goToSection, runEditorCommand } from './lib/editor';
   import { isMobile } from './lib/platform';
   import { notes, type Note } from './lib/notes.svelte';
@@ -27,12 +27,16 @@
   let dateMenu: ReturnType<typeof DateMenu>; // the @ calendar
   let emojiRow: ReturnType<typeof EmojiRow>; // the :smile row
 
+  // the markdown the editor last handed over (or was given): a body that differs from it came from elsewhere
+  let lastEmitted = '';
+
   onMount(() => {
     const id = note.id;
+    lastEmitted = note.body;
     editor = createEditor({
       element: el,
       content: note.body,
-      onUpdate: (md) => notes.update(note.id, md),
+      onUpdate: (md) => { lastEmitted = md; notes.update(note.id, md); },
       onNoteMove: (dir, onTitle) => (onTitle || openedFromList.id === note.id) && nudgeNote(note.id, dir),
       onOpenNote: (title) => {
         notes.flush(note.id);
@@ -77,7 +81,8 @@
     // the empty line StarterKit keeps at the end of a note is only put there by the first transaction: before it, the
     // note's end is the end of its last block, and a caret sent there (opening a note) landed at the end of a closing
     // code block's last line, scrolling the code sideways to it. Put it there first, so the end is the empty line.
-    editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false));
+    // Opening a note is not writing in it: the editor's own spelling of it is not saved back, dated now.
+    editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false).setMeta('preventUpdate', true));
     const section = notes.section; // a [[Title#Section]] link brought us here
     notes.section = '';
     if (section) {
@@ -119,25 +124,42 @@
   // rebind editor shortcuts live when the user changes them
   $effect(() => { shortcuts.actions; if (editor) applyKeymap(editor); });
 
-  // remote sync may replace the body under us. Trailing newlines do not count as a difference: a note
-  // that ends in one (created from a template, imported from a file) would otherwise be re-set on every
-  // mount, throwing away where the caret was just put — the jump a [[Title#Section]] link makes, say.
+  // remote sync may replace the body under us — even while the caret is in it (a window in the background keeps
+  // its focus), or the next keystroke would save the old text over the other device's edit. Only a body the editor
+  // did not hand over itself counts: the editor writes `- a` for `* a`, and putting the note back as it was saved
+  // would just re-set it. Re-setting it is not an edit here, so it is not saved back, nor dated now. Trailing
+  // newlines do not count as a difference: a note that ends in one (created from a template, imported from a file)
+  // would otherwise be re-set on every mount, throwing away where the caret was just put — the jump a
+  // [[Title#Section]] link makes, say.
   $effect(() => {
     const body = note.body;
-    if (editor && !editor.isFocused && getMarkdown(editor).trimEnd() !== body.trimEnd()) {
-      editor.commands.setContent(body);
-    }
+    if (!editor || body.trimEnd() === lastEmitted.trimEnd()) return;
+    lastEmitted = body;
+    if (getMarkdown(editor).trimEnd() === body.trimEnd()) return;
+    // only the stretch that differs is replaced: the caret stays by the text it was in (put back at the same
+    // offset, it landed inside a line the other device added above, and the next keys went into that), and the
+    // writer's own steps before it can still be undone. Not a step of theirs to undo either: ⌘Z took the other
+    // device's edit back out, and saved that.
+    const doc = editor.state.doc;
+    const next = createDocument((editor.storage as any).markdown.parser.parse(body), editor.schema, editor.options.parseOptions);
+    const start = doc.content.findDiffStart(next.content);
+    if (start === null) return;
+    let { a: endA, b: endB } = doc.content.findDiffEnd(next.content)!;
+    const overlap = start - Math.min(endA, endB);
+    if (overlap > 0) { endA += overlap; endB += overlap; }
+    const tr = editor.state.tr.replace(start, endA, next.slice(start, endB));
+    editor.view.dispatch(tr.setMeta('addToHistory', false).setMeta('preventUpdate', true));
   });
 </script>
 
 <div class="scroll" bind:this={scrollEl}>
   <div class="page-head" class:with-icon={!!note.icon}>
     {#if note.icon}
-      <button class="big-icon" title="아이콘 변경" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={isMobile ? 44 : 56} /></button>
+      <button class="big-icon" title="Change icon" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={isMobile ? 44 : 56} /></button>
     {:else}
       <button class="add-icon" onclick={() => notes.setIcon(note.id, randomIcon())}>
         <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 9.5c.6.9 1.5 1.5 2.5 1.5s1.9-.6 2.5-1.5M6 6.5h.01M10 6.5h.01"/></svg>
-        아이콘 추가
+        Add icon
       </button>
     {/if}
   </div>

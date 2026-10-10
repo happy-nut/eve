@@ -2,8 +2,8 @@
   import { untrack } from 'svelte';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { notes, CALENDAR } from './lib/notes.svelte';
-  import { isDailyId, DAILY_TEMPLATE_ID, CALENDAR_NOTE_ID } from './lib/daily';
+  import { notes, CALENDAR, stepFrom } from './lib/notes.svelte';
+  import { isDailyId, DAILY_TEMPLATE_ID } from './lib/daily';
   import { startReminder, syncPhoneReminder } from './lib/reminder';
   import CalendarPage from './CalendarPage.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
@@ -23,7 +23,7 @@
   import Tooltip from './Tooltip.svelte';
   import Menu from './Menu.svelte';
   import { ui, hooks } from './lib/ui.svelte';
-  import { droppedFiles } from './lib/drop';
+  import { droppedFiles, isAsset } from './lib/drop';
   import { importTree } from './lib/importTree';
   import { importPaths, exportCurrent } from './lib/transfer';
   import { titleOf } from './lib/notes.svelte';
@@ -112,6 +112,18 @@
         if (ticket) { settingsOpen = true; void sync.claim(ticket).then(offerUpdate); return; }
         // the reminder's notification: today's note
         if (ask === 'daily') { writeToday(); return; }
+        // a Markdown file opened with Eve or shared to it: MainActivity copied it (Opened.kt), and it joins the
+        // notes as a file from Finder does on the Mac
+        if (ask.startsWith('open:')) {
+          void importPaths(ask.slice(5).split('\n')).then((first) => {
+            if (!first) return;
+            putAway();
+            ui.focusOwner = 'editor';
+            notes.currentId = first.id;
+            sidebarOpen = false;
+          });
+          return;
+        }
         // the home-screen widget: straight into that note (or a new one), keyboard up
         const id = ask.startsWith('note:') ? ask.slice(5) : null;
         if (ask !== 'new' && !id) return;
@@ -189,9 +201,7 @@
   }
 
   function step(delta: number) {
-    const list = groups.ordered();
-    const i = list.findIndex((n) => n.id === notes.currentId);
-    const next = list[(i + delta + list.length) % list.length];
+    const next = stepFrom(groups.ordered(), notes.currentId, delta);
     if (next) notes.currentId = next.id;
   }
 
@@ -294,8 +304,8 @@
   }
   /** A day picked in the calendar: its note, floating over the calendar like a board's card. */
   function openDay(key: string) {
-    const n = notes.dayNote(key);
-    void ui.openPage(n.body, (md) => notes.update(n.id, md)).then(() => notes.flush(n.id));
+    const day = notes.dayDraft(key); // made only once something is written in it
+    void ui.openPage(day.body, (md) => day.write(md)).then(() => { if (day.note) notes.flush(day.note.id); });
   }
   /**
    * Where is the keyboard? The pane it just moved to (the list ↔ the note) flashes blue once. Only on a
@@ -333,16 +343,18 @@
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
     else sidebarOpen = true;
   }
-  // daily notes on: the calendar's row exists; and opening that row (⌘1–9, back, next note) shows the calendar
-  // another note brought up (a link, the widget, a reminder): a diagram shown full screen was the last one's
-  $effect(() => { void notes.currentId; untrack(() => ui.closeDiagramView()); });
+  // another note brought up (a link, the widget, a reminder, ⌘1–9, ⌘N, back/forward): a diagram shown full
+  // screen was the last one's, and so was a board's card or a day floating over it. A card left up wrote into
+  // a board no longer on screen: what was typed in it was lost, with an error at every key. Its last keys
+  // were handed over before the switch (notes.currentId flushes them), so closing it loses nothing.
+  $effect(() => { void notes.currentId; untrack(() => { ui.closeDiagramView(); ui.closeCard(); }); });
+  // daily notes on: the calendar's row exists (opening it shows the calendar: notes.currentId)
   $effect(() => { if (appearance.s.dailyNotes && notes.loaded) notes.ensureCalendar(); });
-  $effect(() => { if (notes.currentId === CALENDAR_NOTE_ID) notes.currentId = CALENDAR; });
   // the phone's reminder alarm follows the settings
   $effect(() => { if (isMobile) syncPhoneReminder(); });
   $effect(() => { if (isMobile) widget.daily(appearance.s.dailyNotes && appearance.s.dailyInWidget); });
   // daily notes switched off while the calendar was up: back to a note
-  $effect(() => { if (!appearance.s.dailyNotes && notes.currentId === CALENDAR) notes.currentId = notes.pages[0]?.id ?? null; });
+  $effect(() => { if (!appearance.s.dailyNotes && notes.currentId === CALENDAR) notes.currentId = notes.firstPage()?.id ?? null; });
 
   /** ⌘\\: closed -> open + focus list; focus already in list -> close + back to editor; else focus list. */
   function focusSidebar() {
@@ -431,7 +443,9 @@
     const taken = e.defaultPrevented; // dropped into a note: the editor has that attachment already
     e.preventDefault();
     const on = listTarget(e.target);
-    const dropped = await droppedFiles(e.dataTransfer);
+    // a picture or a PDF the editor took is in the note already; made a note of its own as well, every
+    // file came back as an extra note in the list and was saved twice. A text file still becomes a note.
+    const dropped = (await droppedFiles(e.dataTransfer)).filter(({ file, dir }) => !taken || dir || !isAsset(file));
     const made = await importTree(dropped.map(({ file, dir }) => ({
       path: dir ? `${dir}/${file.name}` : file.name,
       text: () => file.text(),
@@ -459,7 +473,7 @@
     // Escape puts away whatever is open over the note — the find bar, then the PDF panel — and only a
     // bare note lets it through to hide the window. Tied to the key, not to the rebindable action:
     // closing the thing on top is what Escape means everywhere in the app.
-    if (e.key === 'Escape' && (ui.find || ui.pdf)) {
+    if (e.key === 'Escape' && (!e.defaultPrevented || (e as any).eveApp) && (ui.find || ui.pdf)) { // not one the note took (closing its / menu)
       e.preventDefault();
       if (ui.find) { ui.find = false; queueMicrotask(focusNote); }
       else ui.closePdf();

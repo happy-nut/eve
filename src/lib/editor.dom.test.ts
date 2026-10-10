@@ -2,6 +2,7 @@ import { describe, test, expect, afterEach } from 'vitest';
 import { ui } from './ui.svelte';
 import { editorWith, md, posOf, type, press, paste } from './testEditor';
 import { runEditorCommand } from './editor';
+import { eventToKeys } from './shortcuts.svelte';
 
 afterEach(() => {
   ui.closeMenu();
@@ -338,5 +339,73 @@ describe('Tab in the real keymap', () => {
     ed.commands.setTextSelection(posOf(ed, 'b', true));
     press(ed, 'Tab');
     expect(md(ed).trimEnd()).toBe('- [ ] a\n  - [ ] b\n  - [ ] c\n- [ ] d');
+  });
+});
+
+describe('⌥↑ / ⌥↓ in a table', () => {
+  const table = '| Name | Qty |\n| --- | --- |\n| Pen | 2 |\n| Ink | 5 |\n| Cap | 7 |';
+  const moved = (word: string, cmd: 'moveBlockDown' | 'moveBlockUp') => {
+    const ed = editorWith(table);
+    ed.commands.setTextSelection(posOf(ed, word, true));
+    runEditorCommand(ed, cmd);
+    return md(ed).trim().replace(/ +\|/g, ' |').replace(/-+/g, '-');
+  };
+
+  test('the caret\'s row moves, from any column, its cells kept together', () => {
+    const swapped = '| Name | Qty |\n| - | - |\n| Ink | 5 |\n| Pen | 2 |\n| Cap | 7 |';
+    expect(moved('Pen', 'moveBlockDown')).toBe(swapped);
+    expect(moved('2', 'moveBlockDown')).toBe(swapped);
+    expect(moved('Ink', 'moveBlockUp')).toBe(swapped);
+  });
+
+  test('the header row stays on top, and a row never leaves its table', () => {
+    const same = table.replace(/-+/g, '-');
+    expect(moved('Pen', 'moveBlockUp')).toBe(same);
+    expect(moved('Name', 'moveBlockDown')).toBe(same);
+    expect(moved('Qty', 'moveBlockDown')).toBe(same);
+    expect(moved('Cap', 'moveBlockDown')).toBe(same);
+  });
+});
+
+describe('⌘⇧- puts in a divider', () => {
+  test('with Shift held the key reads "_": the binding answers it all the same', () => {
+    const ed = editorWith('one');
+    ed.commands.setTextSelection(posOf(ed, 'one', true));
+    const e = press(ed, '_', { code: 'Minus', ctrlKey: true, shiftKey: true, keyCode: 189 } as KeyboardEventInit);
+    expect(e.defaultPrevented).toBe(true);
+    expect(md(ed)).toContain('---');
+  });
+
+  test('recorded, the key is the one the list writes', () => {
+    const e = new KeyboardEvent('keydown', { key: '_', code: 'Minus', ctrlKey: true, shiftKey: true });
+    expect(eventToKeys(e)).toBe('Mod-Shift-Minus');
+  });
+});
+
+describe('pasting markdown into a line', () => {
+  test('the space after it, and what is typed next, are outside its last mark', () => {
+    for (const [clip, out] of [[' `y` ', 'x `y` z'], [' **y** ', 'x **y** z']]) {
+      const ed = editorWith('x');
+      ed.commands.setTextSelection(posOf(ed, 'x', true));
+      paste(ed, clip);
+      type(ed, 'z');
+      expect(md(ed).trim()).toBe(out);
+    }
+  });
+});
+
+describe('Enter on the empty last line of a callout', () => {
+  test('leaves the callout for a new line right after it; the block below stays whole', () => {
+    const ed = editorWith('> [!💡]\n> one\n\n## Next');
+    ed.commands.setTextSelection(posOf(ed, 'one', true));
+    press(ed, 'Enter');
+    press(ed, 'Enter');
+    expect(md(ed)).toContain('## Next');
+    const { $from } = ed.state.selection;
+    expect($from.parent.type.name).toBe('paragraph');
+    expect($from.parent.content.size).toBe(0);
+    expect($from.depth).toBe(1);
+    expect(ed.state.doc.child($from.index(0) - 1).type.name).toBe('callout');
+    expect(ed.state.doc.child($from.index(0) + 1).type.name).toBe('heading');
   });
 });

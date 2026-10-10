@@ -78,4 +78,6 @@ test('$$ and a space on an empty line makes a block, in a list item too', () => 
   type(list, '$$ ');
   expect(list.state.doc.textContent).not.toContain('$$');
   expect(nodes(list, 'mathBlock')).toEqual(['']);
+  // a new block opens its formula box, whose MathLive cannot run in jsdom: closed before it has loaded
+  ed.destroy(); list.destroy();
 });

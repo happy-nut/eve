@@ -48,7 +48,7 @@
   onMount(() => {
     let gone = false;
     loadMath().then((m) => {
-      if (gone) return;
+      if (gone || !slot.isConnected) return; // the formula left the page while MathLive loaded
       const f = new m.MathfieldElement() as unknown as NonNullable<typeof mf>;
       const el = f as unknown as InstanceType<typeof m.MathfieldElement>;
       el.defaultMode = display ? 'math' : 'inline-math';

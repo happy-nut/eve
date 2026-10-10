@@ -21,8 +21,21 @@
     const el = (dom instanceof HTMLElement ? dom : dom.parentElement)?.closest('table');
     if (!el) { at = null; return; }
     const r = el.getBoundingClientRect();
-    at = { x: r.left, y: r.top - 8 };
+    // over the table's top while that is in view; in a table taller than the window the top had scrolled away and
+    // the bar with it, out of sight above the note while the caret was in a row on screen. It stays at the top of
+    // the note's scroll area then, as long as some of the table is still under it.
+    const top = scrollTop(el) + 4 + (bar?.offsetHeight ?? 32);
+    at = { x: r.left, y: Math.min(Math.max(r.top - 8, top), r.bottom) };
   }
+
+  /** where the area the table scrolls in begins on screen (the window's top when nothing in between scrolls) */
+  function scrollTop(el: HTMLElement): number {
+    for (let p = el.parentElement; p; p = p.parentElement) {
+      if (/(auto|scroll)/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight) return Math.max(0, p.getBoundingClientRect().top);
+    }
+    return 0;
+  }
+  let bar = $state<HTMLDivElement | null>(null);
 
   $effect(() => {
     const e = editor;
@@ -71,7 +84,7 @@
 </script>
 
 {#if at}
-  <div class="tbl-tools" style:left="{at.x}px" style:top="{at.y}px" onmousedown={hold} role="toolbar" tabindex="-1" aria-label="Table">
+  <div class="tbl-tools" bind:this={bar} style:left="{at.x}px" style:top="{at.y}px" onmousedown={hold} role="toolbar" tabindex="-1" aria-label="Table">
     {#each GROUPS as group, g}
       {#if g}<span class="tbl-sep"></span>{/if}
       {#each group as b}

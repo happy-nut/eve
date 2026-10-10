@@ -3,7 +3,7 @@ import { flushEdits } from './pending';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
 import { onlyHtml, plain, splitLink } from './markdown';
-import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isDailyId } from './daily';
+import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isDailyId, isWritten } from './daily';
 
 export { plain };
 
@@ -97,6 +97,16 @@ export function nested(list: Note[], folded?: (id: string) => boolean): { n: Not
 /** Not a note: the daily notes' calendar, opened in the editor's place and kept in back/forward history. */
 export const CALENDAR = 'calendar';
 
+/**
+ * The note next to `current` in the list (⌘↓ / ⌘↑), round the end. The calendar is its row; a page not in
+ * the list (a daily note) steps to the list's first note, or back to its last.
+ */
+export function stepFrom<T extends { id: string }>(list: T[], current: string | null, delta: number): T | undefined {
+  const i = list.findIndex((n) => n.id === (current === CALENDAR ? CALENDAR_NOTE_ID : current));
+  if (i < 0) return list[delta > 0 ? 0 : list.length - 1];
+  return list[(i + delta + list.length) % list.length];
+}
+
 /** the note last looked at, kept on this device for the next start */
 const LAST = 'eve.lastNote';
 function remember(id: string | null) { try { if (id) localStorage.setItem(LAST, id); } catch { /* private mode: no memory, no harm */ } }
@@ -122,7 +132,11 @@ class NotesStore {
 
   get currentId() { return this._cur; }
   set currentId(id: string | null) {
+    if (id === CALENDAR_NOTE_ID) id = CALENDAR; // its row opens the calendar: history keeps the calendar, or Back opened it again
     if (id === this._cur) return;
+    // a long note's (or a board card's) last keys, handed over while what they were typed into is still on
+    // screen: after the switch the board they belong to is gone, and they went nowhere
+    flushEdits();
     if (id) {
       this.history = this.history.slice(0, this.hIndex + 1).filter((h) => h !== id);
       this.history.push(id);
@@ -154,6 +168,27 @@ class NotesStore {
   get visible() {
     return this.all.filter((n) => !n.deleted && !isDailyId(n.id) && n.id !== DAILY_TEMPLATE_ID && (n.id !== CALENDAR_NOTE_ID || appearance.s.dailyNotes)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt);
   }
+  /**
+   * The list as the sidebar stacks it: `shown` without what folded groups and pages hide, `all` with it.
+   * groups.svelte.ts fills this in (it reads the notes, so they cannot import it back); until then, rank order.
+   */
+  sidebar: { shown: () => Note[]; all: () => Note[] } = { shown: () => this.visible, all: () => this.visible };
+  /** the list's first note, as the sidebar shows it (not one tucked away in a folded group, when there is another) */
+  firstPage(): Note | undefined {
+    const page = (n: Note) => n.id !== CALENDAR_NOTE_ID;
+    return this.sidebar.shown().find(page) ?? this.sidebar.all().find(page);
+  }
+  /** The note to open in place of `id` going away: the row below it in the list, else the one above, else the first. */
+  private neighbourOf(id: string): Note | undefined {
+    const page = (n: Note) => n.id !== id && n.id !== CALENDAR_NOTE_ID;
+    for (const list of [this.sidebar.shown(), this.sidebar.all()]) {
+      const i = list.findIndex((n) => n.id === id);
+      const nb = i < 0 ? undefined : list.slice(i + 1).find(page) ?? list.slice(0, i).findLast(page);
+      if (nb) return nb;
+    }
+    return this.sidebar.shown().find(page) ?? this.sidebar.all().find(page); // not in the list (a day's note): the list's first
+  }
+
   /** daily notes, newest day first */
   get daily() {
     return this.all.filter((n) => !n.deleted && isDailyId(n.id)).sort((a, b) => (a.id < b.id ? 1 : -1));
@@ -176,6 +211,11 @@ class NotesStore {
   /** The calendar's row: made the first time daily notes are on, at the top of Notes (it moves like a note, groups included). */
   ensureCalendar(): Note {
     let n = this.all.find((x) => x.id === CALENDAR_NOTE_ID);
+    if (n && n.deleted) { // deleted (from an older Eve, or another device): the row comes back, on every device
+      Object.assign(n, { deleted: false, updatedAt: Date.now() });
+      void storage.write(n.id, serialize(n));
+      this.dirty++;
+    }
     if (n) return n;
     const top = this.visible.filter((x) => x.group === '').reduce((m, x) => Math.min(m, x.order), 1);
     n = { id: CALENDAR_NOTE_ID, body: `# ${CALENDAR_NAME}\n`, updatedAt: UNWRITTEN, deleted: false, group: '', order: top - 1, icon: '🗓️' };
@@ -217,6 +257,25 @@ class NotesStore {
     this.dirty++;
     return n;
   }
+  /**
+   * A day picked in the calendar, to look at: what its page shows, and where what is typed there goes. A day
+   * with no note yet gets one only once something is written in it. Looking used to be enough to make the
+   * note, save it and sync it, and the calendar then marked every day merely looked at.
+   */
+  dayDraft(key: string): { body: string; write(md: string): void; readonly note: Note | null } {
+    const id = dailyId(key);
+    let note = this.all.find((x) => x.id === id && !x.deleted) ?? null;
+    const body = note?.body ?? dailyBody(this.dailyTemplate, key);
+    return {
+      body,
+      write: (md) => {
+        if (!note && !isWritten(md, this.dailyTemplate, key)) return; // still only the template (or less)
+        note ??= this.dayNote(key);
+        this.update(note.id, md);
+      },
+      get note() { return note; },
+    };
+  }
   /** Open a day's note in the editor (to write today's, from the reminder or the phone's +). */
   openDaily(key = dayKey(new Date())): Note {
     const n = this.dayNote(key);
@@ -236,7 +295,7 @@ class NotesStore {
     // the note last looked at, as it was left (a phone opens on it, not on the list); else the list's first
     const last = lastSeen();
     this.resumed = !!last && (last === CALENDAR ? appearance.s.dailyNotes : this.all.some((n) => n.id === last && !n.deleted));
-    this.currentId = this.resumed ? last : this.pages[0]?.id ?? null;
+    this.currentId = this.resumed ? last : this.firstPage()?.id ?? null;
     if (!this.currentId) this.create();
     this.loaded = true;
   }
@@ -449,10 +508,13 @@ class NotesStore {
   remove(id: string) {
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
+    // the open note deleted: the one next to it in the list comes up. The list's first by rank was opened
+    // before, often a note deep in a folded group, nowhere near where the user was.
+    const next = this.currentId === id ? this.neighbourOf(id) : undefined;
     n.deleted = true;
     n.updatedAt = Date.now();
     this.flush(id);
-    if (this.currentId === id) this.currentId = this.pages[0]?.id ?? null;
+    if (this.currentId === id) this.currentId = next?.id ?? null;
     if (!this.currentId) this.create();
   }
 

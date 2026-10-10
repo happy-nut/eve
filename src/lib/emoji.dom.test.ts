@@ -58,6 +58,18 @@ test('Tab picks too, and is not taken for indenting while the row is up', async 
   expect(ed.state.doc.firstChild!.childCount).toBe(2); // b is still an item of its own, not under a
 });
 
+test('a face typed as text (":D", ":P") opens nothing, and Enter after it is a new line', async () => {
+  for (const text of ['great :D', 'ok :P']) {
+    const { ed, row } = editor();
+    type(ed, text);
+    await settle();
+    expect(row()).toEqual([]);
+    press(ed, 'Enter');
+    expect(ed.state.doc.childCount).toBe(2);
+    expect(ed.state.doc.firstChild!.textContent).toBe(text);
+  }
+});
+
 test('not after a digit, inside a word, or in code', async () => {
   const { ed, row } = editor();
   for (const text of ['12:30', 'http://x', 'a:b']) {
@@ -72,4 +84,16 @@ test('not after a digit, inside a word, or in code', async () => {
   type(ed, ':fire');
   await settle();
   expect(row()).toEqual([]);
+});
+
+test('not while the [[ picker is open: "[[Meeting :sm" is still the title being typed', async () => {
+  const { ed, row } = editor();
+  type(ed, 'see [[Meeting :sm');
+  await settle();
+  expect(row()).toEqual([]);
+  // and as soon as nothing else is open, it comes up as before
+  const b = editor();
+  type(b.ed, 'see :sm');
+  await settle();
+  expect(b.row().length).toBeGreaterThan(0);
 });

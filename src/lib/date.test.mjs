@@ -44,6 +44,19 @@ assert.deepEqual(isos('yes', now, 'ko'), ['2026-09-23'], 'the English name works
 assert.deepEqual(isos('2026-09-25'), ['2026-09-25'], 'a day typed out that is also on the list, once');
 assert.deepEqual(isos('2001-01-01'), ['2001-01-01'], 'a day typed out that is not');
 assert.deepEqual(isos('zzz'), [], 'nothing matches, so the popup does not open');
+assert.deepEqual(isos('a'), [], 'a name is not a day: the "a" inside "today" does not count');
+assert.deepEqual(isos('day'), [], 'nor the end of one');
+assert.deepEqual(isos('tom'), ['2026-09-25'], 'the start of a name does');
+assert.deepEqual(isos('2026-09'), ['2026-09-24', '2026-09-23', '2026-09-25'], 'a date half typed out');
+// a name typed in full is the day; only the start of one is not yet (Enter after "ask @Tom" is a new line)
+const exact = (q, loc = 'en') => dayChoices(q, now, loc).filter((d) => d.exact).map((d) => d.iso);
+assert.deepEqual(exact('today'), ['2026-09-24']);
+assert.deepEqual(exact('Tomorrow'), ['2026-09-25']);
+assert.deepEqual(exact('어제', 'ko'), ['2026-09-23']);
+assert.deepEqual(exact('2026-09-25'), ['2026-09-25']);
+assert.deepEqual(exact('2001-01-01'), ['2001-01-01']);
+assert.deepEqual(exact('tom'), []);
+assert.deepEqual(exact(''), []);
 
 assert.equal(dayChoices('', now, 'ko')[0].label, '오늘');
 

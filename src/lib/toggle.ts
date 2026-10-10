@@ -20,14 +20,17 @@ export const Toggle = [
   Details.extend({
     addInputRules() {
       return [new InputRule({
-        find: /^>\s$/,
+        find: /^>[^\S\n]$/,
         handler: ({ state, range }) => {
           const $from = state.doc.resolve(range.from);
           const para = $from.parent;
           const at = $from.index(-1);
           if (para.type.name !== 'paragraph' || !$from.node(-1).canReplaceWith(at, at + 1, this.type)) return null;
           const s = state.schema;
-          const title = para.textContent.slice(range.to - $from.start());
+          // the line's text as it reads, a [[link]] or @date in it too (textContent left them out: the words around
+          // them stayed with a double space where the link was)
+          const shown = (n: any) => n.type.name === 'wikiLink' ? n.attrs.alias || n.attrs.title : n.type.name === 'dateMention' ? `@${n.attrs.date}` : n.textContent ?? '';
+          const title = state.doc.textBetween(range.to, $from.end(), undefined, shown);
           const toggle = this.type.create({ open: true }, [
             s.nodes.detailsSummary.create(null, title ? s.text(title) : null),
             s.nodes.detailsContent.create(null, s.nodes.paragraph.create()),

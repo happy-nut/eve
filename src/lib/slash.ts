@@ -26,6 +26,8 @@ export interface SuggestionUI {
   collapse(): boolean;
   hide(): void;
   visible(): boolean;
+  /** put it at the caret again, as it is (the note scrolled under it) */
+  place?(rect: DOMRect): void;
 }
 
 /** The `@` calendar, driven the same way but by one day rather than a list of items. */
@@ -36,6 +38,7 @@ export interface CalendarUI {
   select(): boolean;
   hide(): void;
   visible(): boolean;
+  place?(rect: DOMRect): void;
 }
 
 /** The `:smile` emoji row: one line of the best few, driven like the others. */
@@ -45,14 +48,68 @@ export interface EmojiUI {
   select(): boolean;
   hide(): void;
   visible(): boolean;
+  place?(rect: DOMRect): void;
+}
+
+/** the popups at the caret, as drawn (Suggest, DateMenu, EmojiRow) */
+const POPUPS = '.suggest, .cal, .emoji-row';
+
+/**
+ * A popup at the caret that stays with it. It stayed where it was drawn while the note scrolled under it, over
+ * other lines and pointing at nothing, and it stayed up when the note lost the keyboard (a click in the list), where
+ * Enter in the list then still picked from it. Now it follows the caret as the note scrolls, goes away while the caret
+ * is scrolled out of sight, and goes away when the note loses the keyboard; the next key typed there brings it back.
+ * A press inside the popup itself keeps the keyboard in the note (its buttons act on mousedown), so it is not a blur.
+ */
+function stayAtCaret(ui: { hide(): void; visible(): boolean; place?(rect: DOMRect): void }) {
+  let last: any = null;
+  const onScroll = (e: Event) => {
+    if (!last || !ui.visible() || (e.target instanceof Element && e.target.closest(POPUPS))) return; // its own list scrolling
+    const r: DOMRect | null = last.clientRect?.() ?? null;
+    if (!r) return;
+    const box = scrollBox(last.editor.view.dom);
+    if (r.bottom < box.top || r.top > box.bottom) ui.hide();
+    else ui.place?.(r);
+  };
+  const onBlur = ({ event }: { event: FocusEvent }) => {
+    if (event.relatedTarget instanceof Element && event.relatedTarget.closest(POPUPS)) return;
+    ui.hide();
+  };
+  return {
+    start(p: any) {
+      if (last) this.stop();
+      last = p;
+      window.addEventListener('scroll', onScroll, true);
+      p.editor.on('blur', onBlur);
+    },
+    update(p: any) { last = p; },
+    stop() {
+      window.removeEventListener('scroll', onScroll, true);
+      last?.editor.off('blur', onBlur);
+      last = null;
+    },
+  };
+}
+
+/** the part of the window `el` is seen through: its nearest scrolling ancestor, or the window */
+function scrollBox(el: Element): { top: number; bottom: number } {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const o = getComputedStyle(p).overflowY;
+    if ((o === 'auto' || o === 'scroll') && p.scrollHeight > p.clientHeight) {
+      const r = p.getBoundingClientRect();
+      return { top: Math.max(0, r.top), bottom: Math.min(window.innerHeight, r.bottom) };
+    }
+  }
+  return { top: 0, bottom: window.innerHeight };
 }
 
 /** `:` wiring: the row runs sideways, so ←→ choose; ↑↓ are the editor's (the caret leaves, the row goes). */
 export function emojiRow(uiRef: EmojiUI) {
+  const follow = stayAtCaret(uiRef);
   const open = (p: any) => uiRef.show(p.items, p.clientRect?.() ?? null, (e: EmojiEntry) => p.command(e));
   return {
-    onStart: open,
-    onUpdate: open,
+    onStart: (p: any) => { follow.start(p); open(p); },
+    onUpdate: (p: any) => { follow.update(p); open(p); },
     onKeyDown: ({ event }: { event: KeyboardEvent }) => {
       if (!uiRef.visible()) return false;
       if (event.key === 'ArrowLeft') return (uiRef.move(-1), true);
@@ -61,7 +118,7 @@ export function emojiRow(uiRef: EmojiUI) {
       if (event.key === 'Escape') return (uiRef.hide(), true);
       return false;
     },
-    onExit: () => uiRef.hide(),
+    onExit: () => { follow.stop(); uiRef.hide(); },
   };
 }
 
@@ -71,31 +128,42 @@ export function emojiRow(uiRef: EmojiUI) {
  */
 export function calendar(uiRef: CalendarUI) {
   const day = (p: any) => (p.items as { iso: string }[])[0]?.iso ?? null;
-  const open = (p: any) => uiRef.show(day(p), p.clientRect?.() ?? null, (iso: string) => p.command({ value: iso }));
+  // whether ↩ picks: the calendar comes up over the start of a name too ("ask @Tom" is "tomorrow" so far), and ↩
+  // there put a date in place of the name and ate the new line. It picks after a bare @, a day named in full
+  // (@today, @2026-09-24), or once the arrows chose one; ⇥ picks whatever is under the cursor.
+  let sure = false;
+  const follow = stayAtCaret(uiRef);
+  const open = (p: any) => {
+    sure = !p.query || (p.items as { exact?: boolean }[]).some((d) => d.exact);
+    uiRef.show(day(p), p.clientRect?.() ?? null, (iso: string) => p.command({ value: iso }));
+  };
+  const move = (run: () => void) => (run(), (sure = true));
   return {
-    onStart: open,
-    onUpdate: open,
+    onStart: (p: any) => { follow.start(p); open(p); },
+    onUpdate: (p: any) => { follow.update(p); open(p); },
     onKeyDown: ({ event }: { event: KeyboardEvent }) => {
       if (!uiRef.visible()) return false;
-      if (event.key === 'ArrowLeft') return (uiRef.move(-1), true);
-      if (event.key === 'ArrowRight') return (uiRef.move(1), true);
-      if (event.key === 'ArrowUp') return (uiRef.move(-7), true);
-      if (event.key === 'ArrowDown') return (uiRef.move(7), true);
-      if (event.key === 'PageUp') return (uiRef.month(-1), true);
-      if (event.key === 'PageDown') return (uiRef.month(1), true);
+      if (event.key === 'ArrowLeft') return move(() => uiRef.move(-1));
+      if (event.key === 'ArrowRight') return move(() => uiRef.move(1));
+      if (event.key === 'ArrowUp') return move(() => uiRef.move(-7));
+      if (event.key === 'ArrowDown') return move(() => uiRef.move(7));
+      if (event.key === 'PageUp') return move(() => uiRef.month(-1));
+      if (event.key === 'PageDown') return move(() => uiRef.month(1));
+      if (event.key === 'Enter' && !sure) return (uiRef.hide(), false);
       if (event.key === 'Enter' || event.key === 'Tab') return uiRef.select();
       if (event.key === 'Escape') return (uiRef.hide(), true);
       return false;
     },
-    onExit: () => uiRef.hide(),
+    onExit: () => { follow.stop(); uiRef.hide(); },
   };
 }
 
 /** Shared suggestion popup wiring for [[ and / menus. */
 export function popup(uiRef: SuggestionUI) {
+  const follow = stayAtCaret(uiRef);
   return {
-    onStart: (p: any) => uiRef.show(p.items, p.clientRect?.() ?? null, (i: SuggestItem) => p.command(i)),
-    onUpdate: (p: any) => uiRef.show(p.items, p.clientRect?.() ?? null, (i: SuggestItem) => p.command(i)),
+    onStart: (p: any) => { follow.start(p); uiRef.show(p.items, p.clientRect?.() ?? null, (i: SuggestItem) => p.command(i)); },
+    onUpdate: (p: any) => { follow.update(p); uiRef.show(p.items, p.clientRect?.() ?? null, (i: SuggestItem) => p.command(i)); },
     onKeyDown: ({ event }: { event: KeyboardEvent }) => {
       if (!uiRef.visible()) return false;
       if (event.key === 'ArrowDown') return (uiRef.move(1), true);
@@ -108,7 +176,7 @@ export function popup(uiRef: SuggestionUI) {
       if (event.key === 'Escape') return (uiRef.hide(), true);
       return false;
     },
-    onExit: () => uiRef.hide(),
+    onExit: () => { follow.stop(); uiRef.hide(); },
   };
 }
 
