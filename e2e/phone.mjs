@@ -61,6 +61,24 @@ try {
   }
   console.log('ok   the formatting bar only for the note\'s own text');
 
+  // ---- a board: the column's × is seen before it takes a tap; a card is deleted from its page ----
+  {
+    const board = JSON.stringify({ columns: [{ title: 'Doing', cards: [] }, { title: 'To do', cards: ['Card one', 'Card two'] }] });
+    const page = await phone({ a: '# Board\n\n```kanban\n' + board + '\n```\n\nend\n' });
+    const del = await page.locator('.kb-del').first().evaluate((b) => { const r = b.getBoundingClientRect(); return { opacity: +getComputedStyle(b).opacity, w: r.width, h: r.height }; });
+    assert.ok(del.opacity === 1 && del.w >= 40 && del.h >= 40, `the column's × is shown, finger-sized (${JSON.stringify(del)})`);
+    await page.locator('.kb-card', { hasText: 'Card one' }).tap();
+    await page.waitForSelector('.card-page .cdel');
+    await page.locator('.card-page .cdel').tap();
+    await page.locator('.box button.danger').tap();
+    await page.waitForFunction(() => !document.querySelector('.card-page'));
+    await page.waitForTimeout(400);
+    const b = await body(page);
+    assert.ok(!b.includes('Card one') && b.includes('Card two'), 'the card is deleted from its page');
+    await page.close();
+  }
+  console.log('ok   a board on a phone: the column × shown, a card deleted from its page');
+
   assert.deepEqual(errors, []);
 } finally {
   await browser.close();

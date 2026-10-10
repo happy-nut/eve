@@ -12,6 +12,8 @@ export interface CardReq {
   /** a line above the page (a template says what it is) */
   note?: string;
   onChange: (c: { title: string; body: string }) => void;
+  /** deletes the card from its board (a phone's way to; the Mac has ⌫ on the focused card) */
+  onDelete?: () => void;
   /** a whole note's markdown, edited as it is (a daily note: its first line need not be a title) */
   markdown?: string; onMarkdown?: (md: string) => void;
   resolve: () => void;
@@ -46,9 +48,9 @@ class Ui {
   }
   card = $state<CardReq | null>(null);
   /** Open a card as a floating page; resolves when it closes. */
-  openCard(c: { title: string; body: string; note?: string }, onChange: CardReq['onChange']): Promise<void> {
+  openCard(c: { title: string; body: string; note?: string }, onChange: CardReq['onChange'], onDelete?: () => void): Promise<void> {
     this.cardFrom = document.activeElement as HTMLElement | null;
-    return new Promise((res) => { this.card = { ...c, onChange, resolve: res }; });
+    return new Promise((res) => { this.card = { ...c, onChange, onDelete, resolve: res }; });
   }
   /** A note's markdown as a floating page (a day from the calendar, the daily template); resolves when it closes. */
   openPage(markdown: string, onMarkdown: (md: string) => void, note?: string): Promise<void> {

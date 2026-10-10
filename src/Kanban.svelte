@@ -89,7 +89,11 @@
 
   // ---- edits ----
   async function open(card: Card) {
-    await ui.openCard(card, (patch) => commit(patchCard(columns, card.id, patch)));
+    // a phone has no ⌫ on a focused card: the card's page carries a delete of its own
+    await ui.openCard(card, (patch) => commit(patchCard(columns, card.id, patch)), () => {
+      const col = columns.find((c) => c.cards.some((k) => k.id === card.id));
+      if (col) removeCard(col, col.cards.findIndex((k) => k.id === card.id));
+    });
   }
   async function addCard(col: Column) {
     const t = template(), today = dayKey(new Date());
@@ -268,6 +272,10 @@
   /* hover: a delete × at the right edge of the header */
   .kb-del { margin-left: auto; width: 20px; height: 20px; font-size: 14px; flex: none; opacity: 0; transition: opacity 0.12s, background 0.12s; }
   .kb-head:hover .kb-del { opacity: 1; }
+  /* a phone has no hover: an unseen × still took a tap at the header's right end, where a thumb lands to rename the
+     column, and deleted it. There it is shown, with a finger-sized target; the board's own × likewise */
+  :global(html.mobile) .kb-del { opacity: 1; width: 40px; height: 40px; margin: -6px -8px -6px auto; font-size: 17px; color: var(--fg-dim); }
+  :global(html.mobile) .kb-x { opacity: 1; }
   /* keyboard focus ring: decided by the app's own input tracking (App.svelte sets data-input), not by the browser's
      :focus-visible guess, which drops the ring after stepping between the editor and the board */
   :global(html[data-input='keyboard']) :is(.kb-head, .kb-card, .kb-add):focus { box-shadow: 0 0 0 2px var(--accent), var(--glow); }
