@@ -1,8 +1,9 @@
-import { Editor, Extension, InputRule, wrappingInputRule } from '@tiptap/core';
+import { Editor, Extension, InputRule, textblockTypeInputRule, wrappingInputRule } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { ListItem, OrderedList } from '@tiptap/extension-list';
+import { BulletList, ListItem, OrderedList } from '@tiptap/extension-list';
 import Paragraph from '@tiptap/extension-paragraph';
 import Code from '@tiptap/extension-code';
+import Heading from '@tiptap/extension-heading';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -580,23 +581,53 @@ export function createEditor(opts: {
         paragraph: false, // replaced below: an empty paragraph survives the markdown round trip
         orderedList: false, // replaced below: a new "1. " right after a numbered list continues it
         listItem: false, // replaced below: an image may be an item's first block
-        heading: { levels: [1, 2, 3, 4, 5] },
+        heading: false, // replaced below: a line break in a heading
         link: { openOnClick: false, autolink: true },
         codeBlock: false, // replaced below: syntax highlighting + a language chip
         horizontalRule: false, // replaced below: no divider inside a list, and the caret can reach it
         blockquote: false, // replaced below: "> " makes a toggle, as in Notion, so a quote is "| "
         text: false, // replaced below: text that would read back as a formula keeps its dollars escaped
         code: false, // replaced below: code in a link
+        bulletList: false, // replaced below: "-" then Enter is a line of its own
       }),
       Text,
       // code inside a link ([run `npm i` first](u)) stays in it: stock code shuts out every other mark, so the link
       // was cut in two around it. Formatting still goes (nothing in code is bold).
       Code.extend({ excludes: 'bold italic strike underline highlight' }),
+      // TipTap runs the markdown rules on Enter too, as if a newline had been typed: "-", "1.", "#" or ">" alone on
+      // a line and then Enter made a list, heading or toggle instead of a new line. The rules here and below take
+      // a typed space only (any whitespace but a newline).
+      BulletList.extend({
+        addInputRules() {
+          return [wrappingInputRule({ find: /^\s*([-+*])[^\S\n]$/, type: this.type })];
+        },
+      }),
+      // a heading is one line in markdown: a line break in it goes out as `<br>` (as in a table cell), not as the
+      // usual backslash and newline, which read back as a heading ending in "\" and a paragraph under it
+      Heading.configure({ levels: [1, 2, 3, 4, 5] }).extend({
+        addInputRules() {
+          return this.options.levels.map((level: number) => textblockTypeInputRule({ find: new RegExp(`^(#{1,${level}})[^\\S\\n]$`), type: this.type, getAttributes: { level } }));
+        },
+        addStorage() {
+          return {
+            markdown: {
+              serialize(state: any, node: PMNode) {
+                state.write(`${state.repeat('#', node.attrs.level)} `);
+                const inTable = state.inTable;
+                state.inTable = true;
+                state.renderInline(node, false);
+                state.inTable = inTable;
+                state.closeBlock(node);
+              },
+            },
+          };
+        },
+      }),
       MathInline,
       MathBlock,
       Blockquote.extend({
         addInputRules() {
-          return [wrappingInputRule({ find: /^\s*\|\s$/, type: this.type })];
+          return [wrappingInputRule({ find: /^\s*\|[^\S\n]$/, type: this.type })];
         },
       }),
       ...Toggle,
@@ -634,7 +665,7 @@ export function createEditor(opts: {
           },
         }),
         addInputRules() {
-          return [wrappingInputRule({ find: /^(\d+)\.\s$/, type: this.type, getAttributes: (m) => ({ start: +m[1] }), joinPredicate: (_m, node) => !node.attrs.type || node.attrs.type === '1' })];
+          return [wrappingInputRule({ find: /^(\d+)\.[^\S\n]$/, type: this.type, getAttributes: (m) => ({ start: +m[1] }), joinPredicate: (_m, node) => !node.attrs.type || node.attrs.type === '1' })];
         },
       }),
       // Two lists that end up touching (a blank line between them deleted, a paragraph between them
@@ -650,10 +681,10 @@ export function createEditor(opts: {
           const rule = (find: RegExp, list: string, item: string, attrs?: (m: RegExpMatchArray) => Record<string, unknown>, itemAttrs?: (m: RegExpMatchArray) => Record<string, unknown>) =>
             new InputRule({ find, handler: ({ state, range, match }) => (switchItem(state.tr, range.from, range.to, n[list], n[item], attrs?.(match), itemAttrs?.(match)) ? undefined : null) });
           return [
-            rule(/^\s*[-+*]\s$/, 'bulletList', 'listItem'),
+            rule(/^\s*[-+*][^\S\n]$/, 'bulletList', 'listItem'),
             // "[x] " makes a to-do already done, as it does on a plain line
-            rule(/^\s*\[( |x)?\]\s$/, 'taskList', 'taskItem', undefined, (m) => ({ checked: m[1] === 'x' })),
-            rule(/^(\d+)\.\s$/, 'orderedList', 'listItem', (m) => ({ start: +m[1] })),
+            rule(/^\s*\[( |x)?\][^\S\n]$/, 'taskList', 'taskItem', undefined, (m) => ({ checked: m[1] === 'x' })),
+            rule(/^(\d+)\.[^\S\n]$/, 'orderedList', 'listItem', (m) => ({ start: +m[1] })),
           ];
         },
       }),
@@ -727,12 +758,14 @@ export function createEditor(opts: {
             },
             // Enter on an empty item under an item of another kind (a bullet under a to-do): it steps out as
             // ⇧Tab does, still a bullet. The stock lift made it an unmarked line inside the to-do, where the
-            // caret could not be seen in WebKit
+            // caret could not be seen in WebKit. A number under a bullet is one too (both are list items, but the
+            // stock lift made it a bullet, where ⇧Tab and ⌫ keep it a number)
             Enter: () => {
               const { $from, empty } = this.editor.state.selection;
               if (!empty || $from.parent.content.size || $from.depth < 4 || $from.index(-1) !== 0) return false;
               const item = $from.node(-1), owner = $from.node(-3);
-              if (!/Item$/.test(item.type.name) || !/Item$/.test(owner.type.name) || owner.type === item.type) return false;
+              if (!/Item$/.test(item.type.name) || !/Item$/.test(owner.type.name)) return false;
+              if (owner.type === item.type && $from.node(-2).type === $from.node(-4).type) return false;
               return stepOut();
             },
           };
@@ -896,6 +929,9 @@ export function createEditor(opts: {
       }),
       TaskItem.extend({
         content: LIST_ITEM_CONTENT,
+        addInputRules() {
+          return [wrappingInputRule({ find: /^\s*(\[([( |x])?\])[^\S\n]$/, type: this.type, getAttributes: (m) => ({ checked: m[m.length - 1] === 'x' }) })];
+        },
         // the item's own content wrapper only where the editor drew one (its label, then a div: copied HTML), else
         // the item itself (read from markdown) — not the first div anywhere in it: a toggle's or a board's div in
         // a to-do was taken for the whole item, and its text and the rest were gone the next time it was read
