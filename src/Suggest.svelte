@@ -11,17 +11,18 @@
   let open = $state<ReadonlySet<number>>(new Set()); // pages showing their sections ([[ only)
   let sel = $state(0);
   let place = $state(''); // its left/top-or-bottom/max-height (lib/popup.ts)
+  let anchor: DOMRect | null = null; // the caret it was placed at, to place it again once its width is known
   let pick: (t: SuggestItem) => void = () => {};
 
   // what is actually on screen: the items, with the sections of an opened page folded in after it
   const shown = $derived(rows(items, open));
 
   export const ui: SuggestionUI = {
-    show(list, rect, cb) {
+    show(next, rect, cb) {
       // a keystroke rebuilds the list, so nothing stays open across one: the page under row 3 is not
       // the page that was there before the letter was typed
-      items = list; open = new Set(); sel = 0; pick = cb;
-      if (rect) place = placeAt(rect, 300, 200);
+      items = next; open = new Set(); sel = 0; pick = cb;
+      if (rect) { anchor = rect; place = placeAt(rect, 300, list?.offsetWidth ?? 340); }
     },
     move: (d) => { sel = (sel + d + shown.length) % shown.length; },
     select: () => { if (!shown.length) return false; pick(shown[sel].item); return true; },
@@ -40,6 +41,9 @@
   };
 
   let list = $state<HTMLUListElement | null>(null);
+  // placed by its real width, once drawn: it was placed as if 200 px wide, and a menu of long titles (up to 340)
+  // near the right edge of the window ran off it
+  $effect(() => { shown; if (list && anchor) place = placeAt(anchor, 300, list.offsetWidth); });
   // keep the highlighted suggestion visible while arrowing through a long list
   $effect(() => { sel; list?.querySelector('li.sel')?.scrollIntoView({ block: 'nearest' }); });
 </script>
@@ -75,6 +79,7 @@
     list-style: none;
     margin: 0;
     padding: 4px;
+    width: max-content; /* its own width, not what is left of the window right of the caret: placed by it */
     min-width: 200px;
     max-width: 340px;
     max-height: 300px;
@@ -89,8 +94,10 @@
   .chev.down { transform: rotate(90deg); }
   .suggest li.child button { padding-left: 25px; }
   .suggest li.sel button { background: var(--accent-soft); }
-  .s-label { overflow: hidden; text-overflow: ellipsis; }
+  /* the title keeps its width and the hint gives way first: shrunk side by side, "Swimlanes" came out "Swimlan…" next to
+     a whole hint. Only a title longer than the row itself is cut (the twisty and the icon keep their 40px) */
+  .s-label { flex: none; max-width: calc(100% - 40px); overflow: hidden; text-overflow: ellipsis; }
   .s-emoji { width: 15px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
   .s-ico { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; opacity: 0.7; }
-  .suggest .hint { margin-left: auto; padding-left: 12px; color: var(--fg-dim); font-size: 11.5px; }
+  .suggest .hint { margin-left: auto; padding-left: 12px; color: var(--fg-dim); font-size: 11.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 </style>
