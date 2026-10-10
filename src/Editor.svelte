@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { createDocument, type Editor as TipTap } from '@tiptap/core';
+  import { TextSelection } from '@tiptap/pm/state';
+  import type { Node as PMNode } from '@tiptap/pm/model';
   import { createEditor, applyKeymap, getMarkdown, goToSection, runEditorCommand } from './lib/editor';
   import { isMobile } from './lib/platform';
   import { notes, type Note } from './lib/notes.svelte';
@@ -141,13 +143,33 @@
     // writer's own steps before it can still be undone. Not a step of theirs to undo either: ⌘Z took the other
     // device's edit back out, and saved that.
     const doc = editor.state.doc;
-    const next = createDocument((editor.storage as any).markdown.parser.parse(body), editor.schema, editor.options.parseOptions);
+    let next = createDocument((editor.storage as any).markdown.parser.parse(body), editor.schema, editor.options.parseOptions);
+    // the empty line the editor keeps after a last block that is not a line of text (a picture, a toggle, a list) is
+    // not in the note read again: without it the two never ended alike, and everything from the change to the end
+    // was replaced (the caret landed on the picture, and the next key replaced it)
+    const tail = doc.lastChild, nextTail = next.lastChild;
+    if (tail?.type.name === 'paragraph' && !tail.content.size && nextTail && nextTail.type.name !== 'paragraph') {
+      next = next.copy(next.content.addToEnd(tail.type.create()));
+    }
     const start = doc.content.findDiffStart(next.content);
     if (start === null) return;
     let { a: endA, b: endB } = doc.content.findDiffEnd(next.content)!;
-    const overlap = start - Math.min(endA, endB);
+    const overlap = start - Math.min(endA, endB); // a line added next to one like it: the two ends cross
     if (overlap > 0) { endA += overlap; endB += overlap; }
-    const tr = editor.state.tr.replace(start, endA, next.slice(start, endB));
+    // whole blocks of the note are replaced, the first and the last that changed: a piece cut from inside a toggle or
+    // a list was fitted into whatever stood there (a toggle with no title around the new line, a title split in two)
+    const edges: number[] = [0];
+    doc.forEach((c) => edges.push(edges[edges.length - 1] + c.nodeSize));
+    const from = Math.max(...edges.filter((p) => p <= start));
+    const toA = Math.min(...edges.filter((p) => p >= endA)), toB = toA + endB - endA;
+    const { selection } = editor.state;
+    const tr = editor.state.tr.replace(from, toA, next.slice(from, toB));
+    // the caret stays by the text it was in: before the change and after it, where it was; in the blocks replaced, as
+    // far into them as it was, or at their end
+    if (selection instanceof TextSelection) {
+      const map = (p: number) => (p <= from ? p : p >= toA ? p + toB - toA : Math.min(p, toB));
+      tr.setSelection(TextSelection.between(tr.doc.resolve(map(selection.anchor)), tr.doc.resolve(map(selection.head))));
+    }
     editor.view.dispatch(tr.setMeta('addToHistory', false).setMeta('preventUpdate', true));
   });
 </script>

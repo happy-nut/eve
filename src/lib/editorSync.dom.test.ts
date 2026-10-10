@@ -6,7 +6,7 @@ import './testEditor';
 import Editor from '../Editor.svelte';
 import { notes } from './notes.svelte';
 import { ui } from './ui.svelte';
-import { type, md, posOf } from './testEditor';
+import { type, md, posOf, editorWith } from './testEditor';
 
 function open(note: any) {
   const target = document.createElement('div');
@@ -81,4 +81,45 @@ test('⌘Z after a merge undoes the writer\'s own typing, not the phone\'s edit'
   expect(md(ed)).toBe('# Shopping\n\nmilk\n\neggs (added on phone)');
   ed.commands.undo();
   expect(md(ed)).toContain('eggs (added on phone)');
+});
+
+// A note ending in a picture, a toggle or a list: the editor keeps an empty line after a last block that is not one
+// (the note read again does not), and the merge replaced everything from the change to the end, open slices and all
+test.each([
+  ['a picture at the end', '# S\n\nday one\n\n![x](a.png)\n', '# S\n\nday one, edited on phone\n\n![x](a.png)\n'],
+  ['a picture at the end changed', '# S\n\n![x](a.png)\n', '# S\n\n![y](a.png)\n'],
+  ['a formula at the end', '# S\n\n$$\nx^2\n$$\n', '# S\n\n$$\nx^3\n$$\n'],
+  ['a line added in a toggle', '# S\n\n<details open>\n<summary>T</summary>\n\nbody\n\n</details>\n', '# S\n\n<details open>\n<summary>T</summary>\n\nbody\n\nmore\n\n</details>\n'],
+  ['a toggle renamed', '# S\n\n<details open>\n<summary>T</summary>\n\nbody\n\n</details>\n', '# S\n\n<details open>\n<summary>Title</summary>\n\nbody\n\n</details>\n'],
+  ['a list item added', '# S\n\n- a\n  - b\n', '# S\n\n- a\n  - b\n  - c\n'],
+  ['a callout followed', '# S\n\n> [!💡]\n> one\n', '# S\n\n> [!💡]\n> one\n\nafter\n'],
+])('a merge into a note with %s is the other device\'s note, and the caret stays a caret', async (_name, local, remote) => {
+  const { id } = notes.create(local);
+  const n = notes.all.find((x) => x.id === id)!;
+  const ed = open(n);
+  ed.view.dom.setAttribute('tabindex', '0');
+  ed.view.focus();
+  ed.commands.setTextSelection(ed.state.doc.content.size - 1); // the caret at the end, where opening a note puts it
+  notes.mergeRemote([{ ...n, body: remote, updatedAt: Date.now() + 1000 }], true);
+  flushSync();
+  await tick();
+  expect(md(ed)).toBe(md(editorWith(remote)));
+  expect(ed.state.selection.constructor.name).toBe('TextSelection');
+  type(ed, 'Z');
+  const saved = notes.all.find((x) => x.id === id)!.body;
+  expect(saved.replace('Z', '').trimEnd()).toBe(md(editorWith(remote)));
+});
+
+test('the caret stays in its own line when the phone changes a line above it, in a note ending in a list', async () => {
+  const { id } = notes.create('# S\n\nfirst\n\n- a\n- b\n');
+  const n = notes.all.find((x) => x.id === id)!;
+  const ed = open(n);
+  ed.view.dom.setAttribute('tabindex', '0');
+  ed.view.focus();
+  ed.commands.setTextSelection(posOf(ed, 'a', true));
+  notes.mergeRemote([{ ...n, body: '# S\n\nfirst, from the phone\n\n- a\n- b\n', updatedAt: Date.now() + 1000 }], true);
+  flushSync();
+  await tick();
+  type(ed, '!');
+  expect(md(ed)).toBe('# S\n\nfirst, from the phone\n\n- a!\n- b');
 });
