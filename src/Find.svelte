@@ -55,7 +55,8 @@
 
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
-    else if (e.key !== 'Enter') return;
+    // the Enter that ends a Korean or Japanese word being put together is the word's, not a step to the next match
+    else if (e.key !== 'Enter' || e.isComposing) return;
     e.preventDefault();
     // with the replace field open, Enter works through the matches one replacement at a time;
     // ⇧Enter still just walks back, so a match can be stepped over
