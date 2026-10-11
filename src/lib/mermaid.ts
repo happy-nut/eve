@@ -86,6 +86,9 @@ function config(mode: 'light' | 'dark') {
       .edgeLabel .labelBkg span, .edgeLabel .labelBkg p { background: transparent !important; } /* mermaid's own label fill: only the chip shows */
       .lineWrapper line { stroke: ${c.line}; stroke-width: 2px; } [id$='arrowhead'] path { fill: ${c.line}; }
       .actor-line { stroke-dasharray: 3 4; }
+      /* an actor's stick figure in the text's quiet grey (in the boxes' hairline it was barely there), its lines a
+         little heavier for being drawn smaller (smallActors) */
+      .actor-man line, .actor-man circle { stroke: ${c.dim} !important; stroke-width: 2.5px; }
       .mindmap-node .node-bkg { filter: none; } .mindmap-edges path { stroke-width: 2px !important; } ${branches}
       /* a database table (erDiagram): a soft grey header with its name; white rows split by hairlines, the type quiet,
          the keys (PK, FK, UK) small and blue */
@@ -170,13 +173,32 @@ async function draw(code: string): Promise<{ svg: string } | { error: string }> 
     // shrunk to the note's width, but never past 80% of its size (60% on a phone, a third narrower: a two-part sequence
     // diagram was cut off at the card's edge), where its text stops being easy to read: wider
     // than that, it scrolls sideways in its card (and opens full size from its expand button)
-    return { svg: svg.replace(/(<svg[^>]*?style="max-width: )([\d.]+)px;/, (_, head, w) => `${head}${w}px; min-width: ${Math.round(+w * MIN_SCALE)}px;`) };
+    const sized = svg.replace(/(<svg[^>]*?style="max-width: )([\d.]+)px;/, (_, head, w) => `${head}${w}px; min-width: ${Math.round(+w * MIN_SCALE)}px;`);
+    return { svg: sized.includes('actor-man') ? smallActors(sized) : sized };
   } catch (e) {
     // mermaid leaves its error drawing in the page when a render fails
     document.querySelectorAll(`#deve-mermaid-${seq}, #eve-mermaid-${seq}`).forEach((el) => el.remove());
     const msg = e instanceof Error ? e.message : String(e);
     return { error: msg.split('\n').slice(0, 3).join('\n') };
   }
+}
+
+/**
+ * A sequence diagram's `actor` drawn to the size of the other participants' boxes. Mermaid draws its stick figure at
+ * a fixed size, its head poking out above the boxes and its name below them, so the one person in a diagram stood
+ * a head taller than everything beside it: the figure is drawn at 60%, inside the boxes' height, its name under it.
+ */
+const ACTOR_SCALE = 0.6;
+export function smallActors(svg: string): string {
+  return svg.replace(/(<g class="actor-man[^"]*"[^>]*>)([\s\S]*?)(<text[^>]*?\sy=")([\d.-]+)("[\s\S]*?<\/g>)/g, (all, open: string, figure: string, textHead: string, y: string, rest: string) => {
+    const head = /<circle[^>]*?cx="([\d.-]+)"[^>]*?cy="([\d.-]+)"[^>]*?r="([\d.]+)"/.exec(figure);
+    if (!head) return all;
+    const [cx, cy, r] = [+head[1], +head[2], +head[3]];
+    const top = cy - r, feet = Math.max(...[...figure.matchAll(/y[12]="([\d.-]+)"/g)].map((m) => +m[1]));
+    const to = top + r * 0.6; // the head's top a little inside the box's top edge, not above it
+    const label = to + (feet - top) * ACTOR_SCALE + (+y - feet) + 4; // as far under its feet as before, and a little more
+    return `${open}<g transform="translate(${cx} ${to}) scale(${ACTOR_SCALE}) translate(${-cx} ${-top})">${figure}</g>${textHead}${label.toFixed(1)}${rest}`;
+  });
 }
 
 /** the theme to draw in changed (Settings, or the system's dark mode): diagrams drawn again */
