@@ -9,7 +9,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
-import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
 import { Fragment, type Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
@@ -23,7 +23,7 @@ import Blockquote from '@tiptap/extension-blockquote';
 import { ImageView, LocalImage } from './image';
 import { Bookmark, URL_RE, openLinkHere } from './bookmark';
 import { Kanban } from './kanban';
-import { CodeBlock } from './code';
+import { CodeBlock, inCell } from './code';
 import { Pdf } from './pdf';
 import { Video } from './video';
 import { TableNodes } from './table';
@@ -145,7 +145,8 @@ const BlankLine = Paragraph.extend({
             const esc = state.esc;
             state.esc = (str: string, start?: boolean) => {
               const s: string = esc.call(state, str, start);
-              return start ? s.replace(/^(\s*\d+)\)(\s|$)/, '$1\\)$2') : s;
+              // and a line of = or - after a line break, which underlines the lines above it into a heading
+              return start ? s.replace(/^(\s*\d+)\)(\s|$)/, '$1\\)$2').replace(/^(\s*)(=+\s*)$/, '$1\\$2') : s;
             };
             try { state.renderInline(node); } finally { state.esc = esc; }
           } else state.write(BLANK);
@@ -255,6 +256,36 @@ const arrow = (find: RegExp, replace: string) => new InputRule({
 export const runEditorCommand = (editor: Editor, id: string): boolean => editorCommands(editor)[id]?.() ?? false;
 
 /** Editor-scoped actions, by id. Rebindable at runtime (see applyKeymap). */
+/** all the text from `from` to `to` (in one line) inline code */
+function allCode(state: EditorState, from: number, to: number) {
+  if (from === to) return false;
+  let all = true;
+  state.doc.nodesBetween(from, to, (n) => {
+    if (n.isInline && !state.schema.marks.code.isInSet(n.marks)) all = false;
+  });
+  return all;
+}
+
+/** Several lines (paragraphs, list lines) made code at once: one block of them all, a line each, where they were.
+ * The stock toggle made each a code block of its own. */
+const linesToCode = ({ state, tr, dispatch }: { state: EditorState; tr: Transaction; dispatch?: unknown }) => {
+  const { $from, $to } = state.selection, code = state.schema.nodes.codeBlock;
+  const lines: string[] = [];
+  state.doc.nodesBetween($from.pos, $to.pos, (n) => {
+    if (!n.isTextblock) return true;
+    lines.push(n.textBetween(0, n.content.size, '\n', (leaf) => (leaf.type.name === 'hardBreak' ? '\n' : leaf.textContent)));
+    return false;
+  });
+  if (lines.length < 2 || $from.parent.type === code) return false;
+  const range = $from.blockRange($to, (n) => n.type.contentMatch.matchType(code) != null && !/^table(Cell|Header)$/.test(n.type.name));
+  if (!range) return false;
+  if (dispatch) {
+    tr.replaceWith(range.start, range.end, code.create(null, state.schema.text(lines.join('\n'))));
+    tr.setSelection(TextSelection.near(tr.doc.resolve(range.start + 1)));
+  }
+  return true;
+};
+
 function editorCommands(editor: Editor): Record<string, () => boolean> {
   const c = () => editor.chain().focus();
   return {
@@ -303,7 +334,7 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
     toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck),
     blockquote: () => c().toggleBlockquote().run(),
-    codeBlock: () => c().toggleCodeBlock().run(),
+    codeBlock: () => !inCell(editor.state.selection.$from) && (editor.commands.command(linesToCode) || c().toggleCodeBlock().run()),
     divider: () => c().setHorizontalRule().run(),
     selectAll: () => c().selectAll().run(),
     undo: () => c().undo().run(),
@@ -616,6 +647,8 @@ export function createEditor(opts: {
         const serializer = (editor.storage as any).markdown.serializer;
         const inLine = $from.sameParent($to) && $from.parent.isTextblock;
         if (inLine && $from.parent.type.spec.code) return slice.content.textBetween(0, slice.content.size, '\n');
+        // words inside inline code: just them, no backticks (pasted in a terminal, those ran a command)
+        if (inLine && allCode(view.state, $from.pos, $to.pos)) return view.state.doc.textBetween($from.pos, $to.pos);
         let content = inLine ? Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))) : slice.content;
         // a callout copied from below its title line: its first copied line is not its title
         if (!inLine) for (let d = $from.depth; d > 0; d--) {
@@ -633,6 +666,15 @@ export function createEditor(opts: {
       },
       handlePaste: (view, event): boolean => {
         if (insertFiles(editor, event.clipboardData?.files)) return true;
+        // text pasted in inline code (over it, or with the caret in it) is code too, as typed there: it came in
+        // plain, cut the code in two, and a file name in it became a link
+        const { state } = view, { from, to, empty } = state.selection, code = state.schema.marks.code;
+        const pasted = event.clipboardData?.getData('text/plain') ?? '';
+        if (pasted && !editor.isActive('codeBlock') && (empty ? code.isInSet(state.storedMarks ?? state.selection.$from.marks()) : allCode(state, from, to))) {
+          const marks = empty ? state.storedMarks ?? state.selection.$from.marks() : state.doc.nodeAt(from)!.marks;
+          view.dispatch(state.tr.replaceWith(from, to, state.schema.text(pasted.replace(/\r?\n/g, ' '), marks)).scrollIntoView());
+          return true;
+        }
         // a URL pasted over selected text links that text instead of replacing it (a bare URL on its own
         // line still becomes a bookmark card — that is the empty-selection case, further down the chain)
         const raw = event.clipboardData?.getData('text/plain') ?? '';
@@ -715,7 +757,71 @@ export function createEditor(opts: {
       Text,
       // code inside a link ([run `npm i` first](u)) stays in it: stock code shuts out every other mark, so the link
       // was cut in two around it. Formatting still goes (nothing in code is bold).
-      Code.extend({ excludes: 'bold italic strike underline highlight' }),
+      // Inline code all deleted, the next text typed there is not code again. The webview deletes the letters
+      // itself, and ProseMirror keeps the deleted letters' marks for the next keys (as with bold): after `abc` was
+      // cleared out (in WebKit), everything typed after it came out as code.
+      Code.extend({
+        excludes: 'bold italic strike underline highlight',
+        // → at the end of a line ending in code (← at the start of one starting with it): what is typed next is
+        // plain. The stock exit typed a space there, one more each time the caret came by
+        exitable: false,
+        addKeyboardShortcuts() {
+          const out = (dir: -1 | 1) => () => {
+            const { state, view } = this.editor, sel = state.selection;
+            if (!sel.empty) return false;
+            const $c = sel.$from, marks = state.storedMarks ?? $c.marks();
+            if ((dir > 0 ? $c.pos !== $c.end() : $c.parentOffset !== 0) || !this.type.isInSet(marks)) return false;
+            view.dispatch(state.tr.setStoredMarks(this.type.removeFromSet(marks)));
+            return true;
+          };
+          return { ...this.parent?.(), ArrowRight: out(1), ArrowLeft: out(-1) };
+        },
+        // its spaces as written (`a  b`, `  `): read as any text, a run of them was one space when the note opened,
+        // and code of spaces only went altogether
+        parseHTML() {
+          return [
+            {
+              tag: 'code',
+              getAttrs: (el) => (!el.closest('pre') && [...el.childNodes].every((n) => n.nodeType === 3) ? null : false),
+              getContent: (el, schema) => {
+                const text = el.textContent!.replace(/\r?\n/g, ' ');
+                return text ? Fragment.from(schema.text(text)) : Fragment.empty;
+              },
+            },
+            { tag: 'code' },
+          ];
+        },
+        addStorage() {
+          // the fence one backtick longer than any run in the code, with a space inside it where the code has a backtick
+          // or a space at both ends (markdown takes one off each: ` x ` read back "x")
+          const fence = (n: PMNode, side: -1 | 1) => {
+            const text = n.isText ? n.text! : '';
+            const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((r) => r.length));
+            const ticks = '`'.repeat(longest + 1), pad = longest || /^ [^]*[^ ][^]* $/.test(text) ? ' ' : '';
+            return side < 0 ? ticks + pad : pad + ticks;
+          };
+          return {
+            markdown: {
+              serialize: {
+                open: (_st: unknown, _m: unknown, parent: PMNode, i: number) => fence(parent.child(i), -1),
+                close: (_st: unknown, _m: unknown, parent: PMNode, i: number) => fence(parent.child(i - 1), 1),
+                escape: false,
+              },
+              parse: {},
+            },
+          };
+        },
+        addProseMirrorPlugins() {
+          return [...(this.parent?.() ?? []), new Plugin({
+            key: new PluginKey('codeNotCarried'),
+            appendTransaction: (trs, _old, state) => {
+              const code = state.schema.marks.code, stored = state.storedMarks, $cur = (state.selection as TextSelection).$cursor;
+              if (!stored || !$cur || !trs.some((tr) => tr.docChanged) || !code.isInSet(stored) || code.isInSet($cur.marks())) return null;
+              return state.tr.setStoredMarks(code.removeFromSet(stored));
+            },
+          })];
+        },
+      }),
       // TipTap runs the markdown rules on Enter too, as if a newline had been typed: "-", "1.", "#" or ">" alone on
       // a line and then Enter made a list, heading or toggle instead of a new line. The rules here and below take
       // a typed space only (any whitespace but a newline).

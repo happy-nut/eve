@@ -284,6 +284,8 @@ const mathNode = (display: boolean) => Node.create({
     return [new InputRule({
       find: /(^|[^\\$\w])\$([^\s$](?:[^$]*[^\s$\\])?)\$$/,
       handler: ({ state, range, match }) => {
+        // in code being typed (`$x$`): the closing backtick makes it code, the dollars and all
+        if (((match.input ?? '').slice(0, (match.index ?? 0) + match[1].length).match(/`/g)?.length ?? 0) % 2) return null;
         const start = range.from + match[1].length;
         state.tr.replaceWith(start, range.to, this.type.create({ latex: match[2] }));
       },
@@ -392,6 +394,9 @@ const mathSafeText = {
     // a link written as <address>: markdown reads nothing inside it, so a backslash there stayed in the address
     // (`<https://a.com/\*x\*>` pointed somewhere else)
     if (state.inAutolink) return void state.text(node.text ?? '', false);
+    // the text after a line break starts a line of the markdown: "# y", "- y", "1. y" there are escaped as at a
+    // paragraph's start (they came back as a heading or a list, the line before it cut off)
+    if (parent && index && parent.child(index - 1).type.name === 'hardBreak') state.atBlockStart = true;
     let rest = node.text ?? '';
     if (parent && index !== undefined) {
       for (let i = index + 1; i < parent.childCount; i++) rest += parent.child(i).isText ? parent.child(i).text : '￼';

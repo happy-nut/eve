@@ -1,8 +1,8 @@
 import CodeBlockBase from '@tiptap/extension-code-block';
-import type { Editor } from '@tiptap/core';
-import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import type { Node as PMNode } from '@tiptap/pm/model';
+import { textblockTypeInputRule, type Editor } from '@tiptap/core';
+import { Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/state';
+import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
+import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
 import { isMobile } from './platform';
 import { starter, toCode, type Diagram, type Kind } from './diagram';
@@ -30,25 +30,43 @@ function withGrammars(editor: Editor) {
   }, () => { loading = null; }); // offline or failed: the next code block tries again
 }
 
-/** lowlight's tree for every code block, as inline decorations carrying its hljs-* classes */
+/** Language guessed only for code up to this long: the guess runs every grammar over it, and a long block without a
+ * language took a second and more each key */
+const AUTO_MAX = 2000;
+
+/** Each block's highlighting (spans from its start, with their hljs-* classes), kept while the block is unchanged:
+ * a key typed in one block highlighted every block in the note again */
+const spans = new WeakMap<PMNode, [from: number, to: number, cls: string][]>();
+
+/** lowlight's tree for one code block */
+function spansOf(node: PMNode) {
+  let got = spans.get(node);
+  if (got) return got;
+  const ll = lowlight!, text = node.textContent, lang: string | null = node.attrs.language;
+  const tree = lang && ll.registered(lang) ? ll.highlight(lang, text) : text.length <= AUTO_MAX ? ll.highlightAuto(text) : null;
+  got = [];
+  let at = 0;
+  const walk = (nodes: Hast[] = [], classes: string[]) => {
+    for (const n of nodes) {
+      if (n.type === 'text') {
+        const to = at + (n.value?.length ?? 0);
+        if (classes.length) got!.push([at, to, classes.join(' ')]);
+        at = to;
+      } else walk(n.children, [...classes, ...(n.properties?.className ?? [])]);
+    }
+  };
+  if (tree) walk(tree.children, []);
+  spans.set(node, got);
+  return got;
+}
+
+/** every code block in the note highlighted, as inline decorations */
 function highlight(doc: PMNode): DecorationSet {
   if (!lowlight) return DecorationSet.empty;
-  const ll = lowlight, out: Decoration[] = [];
+  const out: Decoration[] = [];
   doc.descendants((node, pos) => {
     if (node.type.name !== 'codeBlock') return true;
-    const lang: string | null = node.attrs.language;
-    const tree = lang && ll.registered(lang) ? ll.highlight(lang, node.textContent) : ll.highlightAuto(node.textContent);
-    let at = pos + 1;
-    const walk = (nodes: Hast[] = [], classes: string[]) => {
-      for (const n of nodes) {
-        if (n.type === 'text') {
-          const to = at + (n.value?.length ?? 0);
-          if (classes.length) out.push(Decoration.inline(at, to, { class: classes.join(' ') }));
-          at = to;
-        } else walk(n.children, [...classes, ...(n.properties?.className ?? [])]);
-      }
-    };
-    walk(tree.children, []);
+    for (const [from, to, cls] of spansOf(node)) out.push(Decoration.inline(pos + 1 + from, pos + 1 + to, { class: cls }));
     return false;
   });
   return DecorationSet.create(doc, out);
@@ -157,7 +175,24 @@ const caretInSight = new Plugin({
   }),
 });
 
+/** In a table cell: no code block there, a table's markdown holds one line of text a cell */
+export const inCell = ($pos: ResolvedPos) => {
+  for (let d = $pos.depth; d > 0; d--) if (/^table(Cell|Header)$/.test($pos.node(d).type.name)) return true;
+  return false;
+};
+
+/** the caret from the start of the code at `at` to the end of the line over it, or that line gone when empty */
+function toLineBefore(state: EditorState, view: EditorView, at: number) {
+  const before = state.doc.resolve(at).nodeBefore;
+  if (!before?.isTextblock) return false;
+  const tr = before.content.size ? state.tr.setSelection(TextSelection.create(state.doc, at - 1)) : state.tr.delete(at - before.nodeSize, at);
+  view.dispatch(tr.scrollIntoView());
+  return true;
+}
+
 export const CodeBlock = CodeBlockBase.extend({
+  // ahead of a list's own keys: Tab in code inside a list indents the code, not the whole list item
+  priority: 1000,
   addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, editingDiagram, caretInSight]; },
   // ↓ from the line above a diagram (↑ from the line under it) goes into its code, which then shows, with ⌘↵ to its
   // drawing: its code hidden, the caret went past the diagram, and the keyboard could not reach it at all
@@ -175,7 +210,55 @@ export const CodeBlock = CodeBlockBase.extend({
       view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, dir === 'down' ? at + 1 : at - 1)).scrollIntoView());
       return true;
     };
-    return { ...this.parent?.(), ArrowDown: into('down'), ArrowUp: into('up') };
+    const stock = this.parent?.() ?? {};
+    return {
+      ...stock,
+      // ↑ at the start of a code block heading the note still makes a line above it (the stock exit)
+      ArrowDown: (p) => into('down')() || (stock.ArrowDown?.(p) ?? false),
+      ArrowUp: (p) => into('up')() || (stock.ArrowUp?.(p) ?? false),
+      // ⌫ in an emptied block, or at the start of the note's first: the line is plain again where it is. The stock
+      // one lifted it out of every list or callout around it too (cutting that in two), and its lines ran into one
+      // on save (no line breaks put in for the code's newlines)
+      Backspace: () => {
+        const { state, view } = this.editor, { empty, $anchor } = state.selection;
+        if (!empty || $anchor.parent.type.name !== this.name) return false;
+        if ($anchor.pos === 1 || !$anchor.parent.textContent.length) return this.editor.commands.setNode('paragraph');
+        // ⌫ at the start of code under a line: to that line's end (an empty line goes). Joined, the code ran into
+        // the line as text, its # and - lines read back as headings and lists
+        return $anchor.parentOffset === 0 && toLineBefore(state, view, $anchor.before());
+      },
+      // Tab with no selection: four spaces typed (the stock one put them in as HTML, which dropped them)
+      Tab: (p) => {
+        const { state, view } = this.editor;
+        if (!state.selection.empty || state.selection.$from.parent.type.name !== this.name) return stock.Tab?.(p) ?? false;
+        view.dispatch(state.tr.insertText(' '.repeat(this.options.tabSize ?? 4)).scrollIntoView());
+        return true;
+      },
+      // ⌦ at the end of a line over code: into the code (an empty line goes), as ⌫ from the code's side
+      Delete: () => {
+        const { state, view } = this.editor, { empty, $head } = state.selection;
+        if (!empty || !$head.parent.isTextblock || $head.parent.type.name === this.name || $head.parentOffset !== $head.parent.content.size) return false;
+        const after = $head.after();
+        if (state.doc.resolve(after).nodeAfter?.type.name !== this.name) return false;
+        const tr = $head.parent.content.size ? state.tr.setSelection(TextSelection.create(state.doc, after + 1)) : state.tr.delete($head.before(), after);
+        view.dispatch(tr.scrollIntoView());
+        return true;
+      },
+    };
+  },
+  // ```lang then a space or Enter: a language with capitals or signs too (```TypeScript, ```c++, ```C#); not in a
+  // table cell, whose code a table can't keep (it came back as plain text)
+  addInputRules() {
+    return ['```', '~~~'].map((fence) => {
+      const rule = textblockTypeInputRule({
+        find: new RegExp(`^${fence}([\\w+#.-]+)?[\\s\\n]$`, 'i'),
+        type: this.type,
+        getAttributes: (m) => ({ language: m[1]?.toLowerCase() || null }),
+      });
+      const run = rule.handler;
+      rule.handler = (props) => (inCell(props.state.selection.$from) ? null : run(props));
+      return rule;
+    });
   },
   addStorage() {
     return {
@@ -333,7 +416,7 @@ export const CodeBlock = CodeBlockBase.extend({
       };
     };
   },
-}).configure({ languageClassPrefix: 'language-' });
+}).configure({ languageClassPrefix: 'language-', enableTabIndentation: true, tabSize: 4 });
 
 /** the code of a diagram just made from the / menu: its block opens for editing as it is first drawn */
 let startNext: string | null = null;

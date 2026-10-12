@@ -409,3 +409,44 @@ describe('Enter on the empty last line of a callout', () => {
     expect(ed.state.doc.child($from.index(0) + 1).type.name).toBe('heading');
   });
 });
+
+describe('inline code deleted', () => {
+  /** the webview deleting letters itself, as ProseMirror takes it in: the letters go, their marks kept for the next keys */
+  const domDelete = (ed: ReturnType<typeof editorWith>, from: number, to: number) => {
+    ed.commands.setTextSelection(to);
+    const marks = ed.state.doc.resolve(from).marksAcross(ed.state.doc.resolve(to));
+    const tr = ed.state.tr.delete(from, to);
+    if (marks) tr.ensureMarks(marks);
+    ed.view.dispatch(tr);
+  };
+
+  test('all of it cleared out: the text typed next is not code', () => {
+    const ed = editorWith('# T\n\n`abc`');
+    domDelete(ed, posOf(ed, 'abc'), posOf(ed, 'abc', true));
+    type(ed, 'hi');
+    expect(md(ed)).toBe('# T\n\nhi');
+  });
+
+  test('cleared out after other text: the text typed next is plain too', () => {
+    const ed = editorWith('# T\n\nsee `abc`');
+    domDelete(ed, posOf(ed, 'abc'), posOf(ed, 'abc', true));
+    type(ed, 'hi');
+    expect(md(ed)).toBe('# T\n\nsee hi');
+  });
+
+  test('part of it deleted: typing there goes on in the code', () => {
+    const ed = editorWith('# T\n\n`abc`');
+    domDelete(ed, posOf(ed, 'abc') + 2, posOf(ed, 'abc', true));
+    type(ed, 'x');
+    expect(md(ed)).toBe('# T\n\n`abx`');
+  });
+
+  test('code turned on with nothing typed yet: the next text is code', () => {
+    const ed = editorWith('# T\n\nsee');
+    ed.commands.focus('end');
+    type(ed, ' ');
+    ed.commands.toggleCode();
+    type(ed, 'hi');
+    expect(md(ed)).toBe('# T\n\nsee `hi`');
+  });
+});
