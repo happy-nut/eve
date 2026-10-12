@@ -2,6 +2,7 @@
 // start of a long line (⌘←, Home, a click), the block scrolls back with it. The webview moves the caret itself for those
 // keys and scrolled only the page, not the block, so the caret was left out of sight at the block's left.
 // A selection from the code's first line back to its start (⌘⇧←, ⌘⇧↑) and deleted leaves the caret in the code.
+// Inline code deleted letter by letter leaves no code behind for the next keys.
 // WebKit (the Mac app's engine) when installed (npx playwright-core install webkit), else Chromium (CHROMIUM_PATH).
 // It starts its own dev server, or uses EVE_URL. Run: npm run e2e:code
 import { webkit, chromium } from 'playwright-core';
@@ -63,6 +64,19 @@ try {
     await page.evaluate(() => window.__editor.commands.undo());
   }
   console.log('ok   a selection from the code\'s first line to its start, deleted: the caret stays in the code');
+
+  // inline code backspaced away letter by letter, then typing: plain text, not code again (the webview's own
+  // deletions left the deleted code's mark for the next keys, with nothing on screen to show it)
+  await page.evaluate(() => {
+    const ed = window.__editor;
+    ed.commands.setContent('<h1>Code</h1><p>x <code>abc</code></p>');
+    ed.commands.focus('end');
+  });
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Backspace');
+  await page.keyboard.type('new');
+  await page.waitForTimeout(100);
+  assert.equal((await page.evaluate(() => window.__editor.storage.markdown.getMarkdown())).trim(), '# Code\n\nx new', 'typed after the code was all deleted: plain text');
+  console.log('ok   inline code all deleted: what is typed next is not code');
 } finally {
   await browser.close();
   await server?.close();

@@ -9,7 +9,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
-import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
 import { Fragment, type Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
@@ -23,7 +23,7 @@ import Blockquote from '@tiptap/extension-blockquote';
 import { ImageView, LocalImage } from './image';
 import { Bookmark, URL_RE, openLinkHere } from './bookmark';
 import { Kanban } from './kanban';
-import { CodeBlock } from './code';
+import { CodeBlock, inCell } from './code';
 import { Pdf } from './pdf';
 import { Video } from './video';
 import { TableNodes } from './table';
@@ -255,6 +255,26 @@ const arrow = (find: RegExp, replace: string) => new InputRule({
 export const runEditorCommand = (editor: Editor, id: string): boolean => editorCommands(editor)[id]?.() ?? false;
 
 /** Editor-scoped actions, by id. Rebindable at runtime (see applyKeymap). */
+/** Several lines (paragraphs, list lines) made code at once: one block of them all, a line each, where they were.
+ * The stock toggle made each a code block of its own. */
+const linesToCode = ({ state, tr, dispatch }: { state: EditorState; tr: Transaction; dispatch?: unknown }) => {
+  const { $from, $to } = state.selection, code = state.schema.nodes.codeBlock;
+  const lines: string[] = [];
+  state.doc.nodesBetween($from.pos, $to.pos, (n) => {
+    if (!n.isTextblock) return true;
+    lines.push(n.textBetween(0, n.content.size, '\n', (leaf) => (leaf.type.name === 'hardBreak' ? '\n' : leaf.textContent)));
+    return false;
+  });
+  if (lines.length < 2 || $from.parent.type === code) return false;
+  const range = $from.blockRange($to, (n) => n.type.contentMatch.matchType(code) != null && !/^table(Cell|Header)$/.test(n.type.name));
+  if (!range) return false;
+  if (dispatch) {
+    tr.replaceWith(range.start, range.end, code.create(null, state.schema.text(lines.join('\n'))));
+    tr.setSelection(TextSelection.near(tr.doc.resolve(range.start + 1)));
+  }
+  return true;
+};
+
 function editorCommands(editor: Editor): Record<string, () => boolean> {
   const c = () => editor.chain().focus();
   return {
@@ -303,7 +323,7 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
     toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck),
     blockquote: () => c().toggleBlockquote().run(),
-    codeBlock: () => c().toggleCodeBlock().run(),
+    codeBlock: () => !inCell(editor.state.selection.$from) && (editor.commands.command(linesToCode) || c().toggleCodeBlock().run()),
     divider: () => c().setHorizontalRule().run(),
     selectAll: () => c().selectAll().run(),
     undo: () => c().undo().run(),
@@ -715,7 +735,22 @@ export function createEditor(opts: {
       Text,
       // code inside a link ([run `npm i` first](u)) stays in it: stock code shuts out every other mark, so the link
       // was cut in two around it. Formatting still goes (nothing in code is bold).
-      Code.extend({ excludes: 'bold italic strike underline highlight' }),
+      // Inline code all deleted, the next text typed there is not code again. The webview deletes the letters
+      // itself, and ProseMirror keeps the deleted letters' marks for the next keys (as with bold): after `abc` was
+      // cleared out (in WebKit), everything typed after it came out as code.
+      Code.extend({
+        excludes: 'bold italic strike underline highlight',
+        addProseMirrorPlugins() {
+          return [...(this.parent?.() ?? []), new Plugin({
+            key: new PluginKey('codeNotCarried'),
+            appendTransaction: (trs, _old, state) => {
+              const code = state.schema.marks.code, stored = state.storedMarks, $cur = (state.selection as TextSelection).$cursor;
+              if (!stored || !$cur || !trs.some((tr) => tr.docChanged) || !code.isInSet(stored) || code.isInSet($cur.marks())) return null;
+              return state.tr.setStoredMarks(code.removeFromSet(stored));
+            },
+          })];
+        },
+      }),
       // TipTap runs the markdown rules on Enter too, as if a newline had been typed: "-", "1.", "#" or ">" alone on
       // a line and then Enter made a list, heading or toggle instead of a new line. The rules here and below take
       // a typed space only (any whitespace but a newline).

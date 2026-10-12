@@ -1,8 +1,8 @@
 import CodeBlockBase from '@tiptap/extension-code-block';
-import type { Editor } from '@tiptap/core';
+import { textblockTypeInputRule, type Editor } from '@tiptap/core';
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import type { Node as PMNode } from '@tiptap/pm/model';
+import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
 import { isMobile } from './platform';
 import { starter, toCode, type Diagram, type Kind } from './diagram';
@@ -157,6 +157,12 @@ const caretInSight = new Plugin({
   }),
 });
 
+/** In a table cell: no code block there, a table's markdown holds one line of text a cell */
+export const inCell = ($pos: ResolvedPos) => {
+  for (let d = $pos.depth; d > 0; d--) if (/^table(Cell|Header)$/.test($pos.node(d).type.name)) return true;
+  return false;
+};
+
 export const CodeBlock = CodeBlockBase.extend({
   addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, editingDiagram, caretInSight]; },
   // ↓ from the line above a diagram (↑ from the line under it) goes into its code, which then shows, with ⌘↵ to its
@@ -175,7 +181,36 @@ export const CodeBlock = CodeBlockBase.extend({
       view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, dir === 'down' ? at + 1 : at - 1)).scrollIntoView());
       return true;
     };
-    return { ...this.parent?.(), ArrowDown: into('down'), ArrowUp: into('up') };
+    const stock = this.parent?.() ?? {};
+    return {
+      ...stock,
+      // ↑ at the start of a code block heading the note still makes a line above it (the stock exit)
+      ArrowDown: (p) => into('down')() || (stock.ArrowDown?.(p) ?? false),
+      ArrowUp: (p) => into('up')() || (stock.ArrowUp?.(p) ?? false),
+      // ⌫ in an emptied block, or at the start of the note's first: the line is plain again where it is. The stock
+      // one lifted it out of every list or callout around it too (cutting that in two), and its lines ran into one
+      // on save (no line breaks put in for the code's newlines)
+      Backspace: () => {
+        const { empty, $anchor } = this.editor.state.selection;
+        if (!empty || $anchor.parent.type.name !== this.name) return false;
+        if ($anchor.pos !== 1 && $anchor.parent.textContent.length) return false;
+        return this.editor.commands.setNode('paragraph');
+      },
+    };
+  },
+  // ```lang then a space or Enter: a language with capitals or signs too (```TypeScript, ```c++, ```C#); not in a
+  // table cell, whose code a table can't keep (it came back as plain text)
+  addInputRules() {
+    return ['```', '~~~'].map((fence) => {
+      const rule = textblockTypeInputRule({
+        find: new RegExp(`^${fence}([\\w+#.-]+)?[\\s\\n]$`, 'i'),
+        type: this.type,
+        getAttributes: (m) => ({ language: m[1]?.toLowerCase() || null }),
+      });
+      const run = rule.handler;
+      rule.handler = (props) => (inCell(props.state.selection.$from) ? null : run(props));
+      return rule;
+    });
   },
   addStorage() {
     return {
