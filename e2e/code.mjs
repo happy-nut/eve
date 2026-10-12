@@ -1,6 +1,7 @@
 // A code block whose line is wider than the block scrolls sideways in it, and the caret is followed there: back to the
 // start of a long line (⌘←, Home, a click), the block scrolls back with it. The webview moves the caret itself for those
 // keys and scrolled only the page, not the block, so the caret was left out of sight at the block's left.
+// A selection from the code's first line back to its start (⌘⇧←, ⌘⇧↑) and deleted leaves the caret in the code.
 // WebKit (the Mac app's engine) when installed (npx playwright-core install webkit), else Chromium (CHROMIUM_PATH).
 // It starts its own dev server, or uses EVE_URL. Run: npm run e2e:code
 import { webkit, chromium } from 'playwright-core';
@@ -38,6 +39,30 @@ try {
   await page.waitForTimeout(100);
   assert.equal(await scrolled(), 0, 'Home: the line start in sight, not cut off at the edge');
   console.log('ok   a long code line: the block follows the caret to either end');
+
+  // ⌘⇧← / ⌘⇧↑ (the webview extending the selection to the line's or the note's start) from the code's first line,
+  // then deleted: the caret stays in the code and takes the next keys (in WebKit it was left in the language chip
+  // ahead of the code, out of sight, and the keys went nowhere)
+  for (const unit of ['lineboundary', 'documentboundary', 'line']) {
+    await page.evaluate((unit) => {
+      const ed = window.__editor;
+      let start = 0;
+      ed.state.doc.descendants((n, p) => { if (n.type.name === 'codeBlock') start = p + 1; });
+      ed.commands.focus();
+      ed.commands.setTextSelection(start + 5);
+      getSelection().modify('extend', 'backward', unit);
+    }, unit);
+    await page.waitForTimeout(100);
+    const at = await page.evaluate(() => { const n = getSelection().focusNode; return (n?.nodeType === 1 ? n : n?.parentElement)?.closest('.code-lang') ? 'the language chip' : 'text'; });
+    assert.equal(at, 'text', `selection extended by ${unit}: its end is not in the language chip`);
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type('Q');
+    await page.waitForTimeout(100);
+    assert.ok(await page.evaluate(() => window.__editor.storage.markdown.getMarkdown().includes('Q')), `after deleting a selection extended by ${unit}, the next key is typed`);
+    await page.evaluate(() => window.__editor.commands.undo());
+    await page.evaluate(() => window.__editor.commands.undo());
+  }
+  console.log('ok   a selection from the code\'s first line to its start, deleted: the caret stays in the code');
 } finally {
   await browser.close();
   await server?.close();
