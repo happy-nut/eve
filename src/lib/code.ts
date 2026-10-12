@@ -127,8 +127,38 @@ const editingDiagram = new Plugin({
 });
 
 /** Syntax highlighting, plus a language chip (and its menu) that appears on hover. */
+/**
+ * How far a code block scrolled sideways must go to show the caret: 0 when it already shows. `box` is the block's
+ * visible stretch (its padding inside), `caret` where the caret is drawn.
+ */
+export function scrollToShow(box: { left: number; right: number }, caret: { left: number; right: number }): number {
+  if (caret.left < box.left) return caret.left - box.left;
+  if (caret.right > box.right) return caret.right - box.right;
+  return 0;
+}
+/** A code line wider than its block scrolls in it, and the caret is followed there: ⌘← (or Home) back to the start of a
+ *  line scrolled to its end left the block where it was, the caret out of sight. The webview moves the caret itself
+ *  for those keys, and scrolls only the page, not the block. */
+const caretInSight = new Plugin({
+  view: () => ({
+    update(view, prev) {
+      const { selection } = view.state;
+      if (prev.selection.eq(selection) && prev.doc.eq(view.state.doc)) return;
+      if (!selection.$head.parent.type.spec.code) return;
+      const at = view.domAtPos(selection.head).node;
+      const pre = (at instanceof Element ? at : at.parentElement)?.closest('pre');
+      if (!pre || pre.scrollWidth <= pre.clientWidth) return;
+      let c: { left: number; right: number };
+      try { c = view.coordsAtPos(selection.head); } catch { return; }
+      const r = pre.getBoundingClientRect(), pad = parseFloat(getComputedStyle(pre).paddingLeft) || 0;
+      const by = scrollToShow({ left: r.left + pad, right: r.right - pad }, { left: c.left, right: c.right + 1 });
+      if (by) pre.scrollLeft += by;
+    },
+  }),
+});
+
 export const CodeBlock = CodeBlockBase.extend({
-  addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, editingDiagram]; },
+  addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, editingDiagram, caretInSight]; },
   // ↓ from the line above a diagram (↑ from the line under it) goes into its code, which then shows, with ⌘↵ to its
   // drawing: its code hidden, the caret went past the diagram, and the keyboard could not reach it at all
   addKeyboardShortcuts() {
