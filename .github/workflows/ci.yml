@@ -19,6 +19,9 @@ jobs:
       - run: npm run e2e:selection
       - run: npm run e2e:popups
       - run: npm run e2e:code
+      - name: code block keys (diagnostic)
+        continue-on-error: true
+        run: node e2e/codeKeys.mjs
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
