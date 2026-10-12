@@ -1,5 +1,5 @@
 import { describe, test, expect, afterEach } from 'vitest';
-import { editorWith, md, posOf, type, press } from './testEditor';
+import { editorWith, md, posOf, type, press, paste } from './testEditor';
 import { runEditorCommand } from './editor';
 
 afterEach(() => { document.body.innerHTML = ''; });
@@ -150,4 +150,96 @@ describe('a line after a line break (⇧↵) stays a line of the paragraph', () 
       expect(back.state.doc.firstChild!.type.name).toBe('paragraph');
       expect(back.state.doc.firstChild!.textBetween(0, back.state.doc.firstChild!.content.size, '', '\n')).toBe('line\n' + line);
     });
+});
+
+describe('inline code: keys, paste, copy', () => {
+  test('→ at the end of a line ending in code: no space typed, the next text plain', () => {
+    const ed = editorWith('# T\n\na `xy`\n\nnext');
+    ed.commands.setTextSelection(posOf(ed, 'xy', true));
+    press(ed, 'ArrowRight');
+    type(ed, 'z');
+    expect(md(ed)).toBe('# T\n\na `xy`z\n\nnext');
+  });
+
+  test('← at the start of a line starting with code: the next text plain', () => {
+    const ed = editorWith('# T\n\n`xy` b');
+    ed.commands.setTextSelection(posOf(ed, 'xy'));
+    press(ed, 'ArrowLeft');
+    type(ed, 'z');
+    expect(md(ed)).toBe('# T\n\nz`xy` b');
+  });
+
+  test('pasted over code: code still', () => {
+    const ed = editorWith('# T\n\ncall `oldName` now');
+    ed.commands.setTextSelection({ from: posOf(ed, 'oldName'), to: posOf(ed, 'oldName', true) });
+    paste(ed, 'newName');
+    expect(md(ed)).toBe('# T\n\ncall `newName` now');
+  });
+
+  test('pasted in code: in it, not cut in two, no link made of a file name', () => {
+    const ed = editorWith('# T\n\na `code` b');
+    ed.commands.setTextSelection(posOf(ed, 'code') + 2);
+    paste(ed, 'main.py');
+    expect(md(ed)).toBe('# T\n\na `comain.pyde` b');
+  });
+
+  test('copied from inside code: no backticks', () => {
+    const ed = editorWith('# T\n\nrun `npm install` now');
+    ed.commands.setTextSelection({ from: posOf(ed, 'npm'), to: posOf(ed, 'install', true) });
+    const text = ed.view.someProp('clipboardTextSerializer', (f) => f(ed.state.selection.content(), ed.view));
+    expect(text).toBe('npm install');
+  });
+
+  test('`$x$` typed: code, not a formula', () => {
+    const ed = editorWith('# T\n\nz');
+    ed.commands.setTextSelection({ from: posOf(ed, 'z'), to: posOf(ed, 'z', true) });
+    type(ed, 'a `$x$` b');
+    expect(md(ed)).toBe('# T\n\na `$x$` b');
+  });
+
+  test('$x$ typed: still a formula', () => {
+    const ed = editorWith('# T\n\nz');
+    ed.commands.setTextSelection({ from: posOf(ed, 'z'), to: posOf(ed, 'z', true) });
+    type(ed, 'a $x$ b');
+    expect(md(ed)).toBe('# T\n\na $x$ b');
+  });
+});
+
+describe('code block edges', () => {
+  test('⌫ at the start of code under a line: the caret to that line, the code kept', () => {
+    const ed = editorWith('para\n\n```py\nx = 1\n# y *z*\n```');
+    ed.commands.setTextSelection(posOf(ed, 'x = 1'));
+    press(ed, 'Backspace');
+    type(ed, '!');
+    expect(md(ed)).toBe('para!\n\n```py\nx = 1\n# y *z*\n```');
+  });
+
+  test('⌫ at the start of code under an empty line: that line goes', () => {
+    const ed = editorWith('para');
+    ed.commands.setContent({ type: 'doc', content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'para' }] }, { type: 'paragraph' },
+      { type: 'codeBlock', attrs: { language: 'py' }, content: [{ type: 'text', text: 'x = 1' }] }] });
+    ed.commands.setTextSelection(posOf(ed, 'x = 1'));
+    press(ed, 'Backspace');
+    expect(md(ed)).toBe('para\n\n```py\nx = 1\n```');
+    expect(ed.state.doc.resolve(ed.state.selection.from).parent.type.name).toBe('codeBlock');
+  });
+
+  test('⌦ at the end of a line over code: into the code, both kept', () => {
+    const ed = editorWith('para\n\n```py\nx = 1\n```');
+    ed.commands.setTextSelection(posOf(ed, 'para', true));
+    press(ed, 'Delete');
+    type(ed, '!');
+    expect(md(ed)).toBe('para\n\n```py\n!x = 1\n```');
+  });
+
+  test('Tab in code: indents the line; in code in a list, the list item stays', () => {
+    const ed = editorWith('# T\n\n- one\n- two\n\n  ```js\n  return 1\n  ```');
+    const before = md(ed);
+    ed.commands.setTextSelection(posOf(ed, 'return'));
+    press(ed, 'Tab');
+    expect(md(ed)).toBe(before.replace('  return', '      return'));
+    press(ed, 'Tab', { shiftKey: true });
+    expect(md(ed)).toBe(before);
+  });
 });

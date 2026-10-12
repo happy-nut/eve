@@ -1,7 +1,7 @@
 import CodeBlockBase from '@tiptap/extension-code-block';
 import { textblockTypeInputRule, type Editor } from '@tiptap/core';
-import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/state';
+import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
 import { isMobile } from './platform';
@@ -181,7 +181,18 @@ export const inCell = ($pos: ResolvedPos) => {
   return false;
 };
 
+/** the caret from the start of the code at `at` to the end of the line over it, or that line gone when empty */
+function toLineBefore(state: EditorState, view: EditorView, at: number) {
+  const before = state.doc.resolve(at).nodeBefore;
+  if (!before?.isTextblock) return false;
+  const tr = before.content.size ? state.tr.setSelection(TextSelection.create(state.doc, at - 1)) : state.tr.delete(at - before.nodeSize, at);
+  view.dispatch(tr.scrollIntoView());
+  return true;
+}
+
 export const CodeBlock = CodeBlockBase.extend({
+  // ahead of a list's own keys: Tab in code inside a list indents the code, not the whole list item
+  priority: 1000,
   addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, editingDiagram, caretInSight]; },
   // ↓ from the line above a diagram (↑ from the line under it) goes into its code, which then shows, with ⌘↵ to its
   // drawing: its code hidden, the caret went past the diagram, and the keyboard could not reach it at all
@@ -209,10 +220,29 @@ export const CodeBlock = CodeBlockBase.extend({
       // one lifted it out of every list or callout around it too (cutting that in two), and its lines ran into one
       // on save (no line breaks put in for the code's newlines)
       Backspace: () => {
-        const { empty, $anchor } = this.editor.state.selection;
+        const { state, view } = this.editor, { empty, $anchor } = state.selection;
         if (!empty || $anchor.parent.type.name !== this.name) return false;
-        if ($anchor.pos !== 1 && $anchor.parent.textContent.length) return false;
-        return this.editor.commands.setNode('paragraph');
+        if ($anchor.pos === 1 || !$anchor.parent.textContent.length) return this.editor.commands.setNode('paragraph');
+        // ⌫ at the start of code under a line: to that line's end (an empty line goes). Joined, the code ran into
+        // the line as text, its # and - lines read back as headings and lists
+        return $anchor.parentOffset === 0 && toLineBefore(state, view, $anchor.before());
+      },
+      // Tab with no selection: four spaces typed (the stock one put them in as HTML, which dropped them)
+      Tab: (p) => {
+        const { state, view } = this.editor;
+        if (!state.selection.empty || state.selection.$from.parent.type.name !== this.name) return stock.Tab?.(p) ?? false;
+        view.dispatch(state.tr.insertText(' '.repeat(this.options.tabSize ?? 4)).scrollIntoView());
+        return true;
+      },
+      // ⌦ at the end of a line over code: into the code (an empty line goes), as ⌫ from the code's side
+      Delete: () => {
+        const { state, view } = this.editor, { empty, $head } = state.selection;
+        if (!empty || !$head.parent.isTextblock || $head.parent.type.name === this.name || $head.parentOffset !== $head.parent.content.size) return false;
+        const after = $head.after();
+        if (state.doc.resolve(after).nodeAfter?.type.name !== this.name) return false;
+        const tr = $head.parent.content.size ? state.tr.setSelection(TextSelection.create(state.doc, after + 1)) : state.tr.delete($head.before(), after);
+        view.dispatch(tr.scrollIntoView());
+        return true;
       },
     };
   },
@@ -386,7 +416,7 @@ export const CodeBlock = CodeBlockBase.extend({
       };
     };
   },
-}).configure({ languageClassPrefix: 'language-' });
+}).configure({ languageClassPrefix: 'language-', enableTabIndentation: true, tabSize: 4 });
 
 /** the code of a diagram just made from the / menu: its block opens for editing as it is first drawn */
 let startNext: string | null = null;

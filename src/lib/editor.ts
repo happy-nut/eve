@@ -256,6 +256,16 @@ const arrow = (find: RegExp, replace: string) => new InputRule({
 export const runEditorCommand = (editor: Editor, id: string): boolean => editorCommands(editor)[id]?.() ?? false;
 
 /** Editor-scoped actions, by id. Rebindable at runtime (see applyKeymap). */
+/** all the text from `from` to `to` (in one line) inline code */
+function allCode(state: EditorState, from: number, to: number) {
+  if (from === to) return false;
+  let all = true;
+  state.doc.nodesBetween(from, to, (n) => {
+    if (n.isInline && !state.schema.marks.code.isInSet(n.marks)) all = false;
+  });
+  return all;
+}
+
 /** Several lines (paragraphs, list lines) made code at once: one block of them all, a line each, where they were.
  * The stock toggle made each a code block of its own. */
 const linesToCode = ({ state, tr, dispatch }: { state: EditorState; tr: Transaction; dispatch?: unknown }) => {
@@ -637,6 +647,8 @@ export function createEditor(opts: {
         const serializer = (editor.storage as any).markdown.serializer;
         const inLine = $from.sameParent($to) && $from.parent.isTextblock;
         if (inLine && $from.parent.type.spec.code) return slice.content.textBetween(0, slice.content.size, '\n');
+        // words inside inline code: just them, no backticks (pasted in a terminal, those ran a command)
+        if (inLine && allCode(view.state, $from.pos, $to.pos)) return view.state.doc.textBetween($from.pos, $to.pos);
         let content = inLine ? Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))) : slice.content;
         // a callout copied from below its title line: its first copied line is not its title
         if (!inLine) for (let d = $from.depth; d > 0; d--) {
@@ -654,6 +666,15 @@ export function createEditor(opts: {
       },
       handlePaste: (view, event): boolean => {
         if (insertFiles(editor, event.clipboardData?.files)) return true;
+        // text pasted in inline code (over it, or with the caret in it) is code too, as typed there: it came in
+        // plain, cut the code in two, and a file name in it became a link
+        const { state } = view, { from, to, empty } = state.selection, code = state.schema.marks.code;
+        const pasted = event.clipboardData?.getData('text/plain') ?? '';
+        if (pasted && !editor.isActive('codeBlock') && (empty ? code.isInSet(state.storedMarks ?? state.selection.$from.marks()) : allCode(state, from, to))) {
+          const marks = empty ? state.storedMarks ?? state.selection.$from.marks() : state.doc.nodeAt(from)!.marks;
+          view.dispatch(state.tr.replaceWith(from, to, state.schema.text(pasted.replace(/\r?\n/g, ' '), marks)).scrollIntoView());
+          return true;
+        }
         // a URL pasted over selected text links that text instead of replacing it (a bare URL on its own
         // line still becomes a bookmark card — that is the empty-selection case, further down the chain)
         const raw = event.clipboardData?.getData('text/plain') ?? '';
@@ -741,6 +762,20 @@ export function createEditor(opts: {
       // cleared out (in WebKit), everything typed after it came out as code.
       Code.extend({
         excludes: 'bold italic strike underline highlight',
+        // → at the end of a line ending in code (← at the start of one starting with it): what is typed next is
+        // plain. The stock exit typed a space there, one more each time the caret came by
+        exitable: false,
+        addKeyboardShortcuts() {
+          const out = (dir: -1 | 1) => () => {
+            const { state, view } = this.editor, sel = state.selection;
+            if (!sel.empty) return false;
+            const $c = sel.$from, marks = state.storedMarks ?? $c.marks();
+            if ((dir > 0 ? $c.pos !== $c.end() : $c.parentOffset !== 0) || !this.type.isInSet(marks)) return false;
+            view.dispatch(state.tr.setStoredMarks(this.type.removeFromSet(marks)));
+            return true;
+          };
+          return { ...this.parent?.(), ArrowRight: out(1), ArrowLeft: out(-1) };
+        },
         // its spaces as written (`a  b`, `  `): read as any text, a run of them was one space when the note opened,
         // and code of spaces only went altogether
         parseHTML() {
