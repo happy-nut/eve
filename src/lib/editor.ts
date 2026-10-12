@@ -145,7 +145,8 @@ const BlankLine = Paragraph.extend({
             const esc = state.esc;
             state.esc = (str: string, start?: boolean) => {
               const s: string = esc.call(state, str, start);
-              return start ? s.replace(/^(\s*\d+)\)(\s|$)/, '$1\\)$2') : s;
+              // and a line of = or - after a line break, which underlines the lines above it into a heading
+              return start ? s.replace(/^(\s*\d+)\)(\s|$)/, '$1\\)$2').replace(/^(\s*)(=+\s*)$/, '$1\\$2') : s;
             };
             try { state.renderInline(node); } finally { state.esc = esc; }
           } else state.write(BLANK);
@@ -740,6 +741,41 @@ export function createEditor(opts: {
       // cleared out (in WebKit), everything typed after it came out as code.
       Code.extend({
         excludes: 'bold italic strike underline highlight',
+        // its spaces as written (`a  b`, `  `): read as any text, a run of them was one space when the note opened,
+        // and code of spaces only went altogether
+        parseHTML() {
+          return [
+            {
+              tag: 'code',
+              getAttrs: (el) => (!el.closest('pre') && [...el.childNodes].every((n) => n.nodeType === 3) ? null : false),
+              getContent: (el, schema) => {
+                const text = el.textContent!.replace(/\r?\n/g, ' ');
+                return text ? Fragment.from(schema.text(text)) : Fragment.empty;
+              },
+            },
+            { tag: 'code' },
+          ];
+        },
+        addStorage() {
+          // the fence one backtick longer than any run in the code, with a space inside it where the code has a backtick
+          // or a space at both ends (markdown takes one off each: ` x ` read back "x")
+          const fence = (n: PMNode, side: -1 | 1) => {
+            const text = n.isText ? n.text! : '';
+            const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((r) => r.length));
+            const ticks = '`'.repeat(longest + 1), pad = longest || /^ [^]*[^ ][^]* $/.test(text) ? ' ' : '';
+            return side < 0 ? ticks + pad : pad + ticks;
+          };
+          return {
+            markdown: {
+              serialize: {
+                open: (_st: unknown, _m: unknown, parent: PMNode, i: number) => fence(parent.child(i), -1),
+                close: (_st: unknown, _m: unknown, parent: PMNode, i: number) => fence(parent.child(i - 1), 1),
+                escape: false,
+              },
+              parse: {},
+            },
+          };
+        },
         addProseMirrorPlugins() {
           return [...(this.parent?.() ?? []), new Plugin({
             key: new PluginKey('codeNotCarried'),

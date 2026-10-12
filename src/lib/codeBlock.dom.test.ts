@@ -93,3 +93,61 @@ describe('⌘⌥C', () => {
     expect(md(ed)).toBe('# T\n\none');
   });
 });
+
+describe('highlighting', () => {
+  const grammars = async (ed: ReturnType<typeof editorWith>) => {
+    for (let i = 0; i < 100 && !ed.view.dom.querySelector('[class*="hljs-"]'); i++) await new Promise((r) => setTimeout(r, 20));
+  };
+  const keywords = (ed: ReturnType<typeof editorWith>, i: number) =>
+    [...ed.view.dom.querySelectorAll('pre')[i].querySelectorAll('.hljs-keyword')].map((e) => e.textContent);
+
+  test('typing in one block: it is highlighted again, the others keep theirs', async () => {
+    const ed = editorWith('# T\n\n```js\nlet a = 1\n```\n\n```js\nconst b = 2\n```');
+    await grammars(ed);
+    expect(keywords(ed, 0)).toEqual(['let']);
+    expect(keywords(ed, 1)).toEqual(['const']);
+    ed.commands.setTextSelection(posOf(ed, '1', true));
+    type(ed, '; return');
+    expect(keywords(ed, 0)).toEqual(['let', 'return']);
+    expect(keywords(ed, 1)).toEqual(['const']);
+    ed.commands.setTextSelection(posOf(ed, 'const'));
+    type(ed, 'var x; ');
+    expect(keywords(ed, 0)).toEqual(['let', 'return']);
+    expect(keywords(ed, 1)).toEqual(['var', 'const']);
+  });
+
+  test('a long block with no language: drawn plain, its language not guessed', async () => {
+    const ed = editorWith('# T\n\n```js\nlet a\n```\n\n```\n' + 'let x = 1;\n'.repeat(300) + '```');
+    await grammars(ed);
+    expect(keywords(ed, 0)).toEqual(['let']);
+    expect(ed.view.dom.querySelectorAll('pre')[1].querySelector('[class*="hljs-"]')).toBeNull();
+  });
+});
+
+describe('inline code keeps its spaces', () => {
+  for (const code of ['a  b', '  ', ' ', 'x ', ' x ', '  x', 'a`b', '`a`'])
+    test(JSON.stringify(code), () => {
+      const ed = editorWith('# T');
+      ed.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [
+        { type: 'text', text: 'p ' }, { type: 'text', text: code, marks: [{ type: 'code' }] }, { type: 'text', text: '.' }] }] });
+      const saved = md(ed);
+      const back = editorWith(saved);
+      let got = '';
+      back.state.doc.descendants((n) => { if (n.isText && n.marks.some((m) => m.type.name === 'code')) got += n.text; });
+      expect(got).toBe(code);
+      expect(md(back)).toBe(saved);
+    });
+});
+
+describe('a line after a line break (⇧↵) stays a line of the paragraph', () => {
+  for (const line of ['# y', '- y', '+ y', '1. y', '1) y', '> y', '---', '===', '## y *z*'])
+    test(JSON.stringify(line), () => {
+      const ed = editorWith('# T');
+      ed.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [
+        { type: 'text', text: 'line' }, { type: 'hardBreak' }, { type: 'text', text: line }] }] });
+      const back = editorWith(md(ed));
+      expect(back.state.doc.childCount).toBe(1);
+      expect(back.state.doc.firstChild!.type.name).toBe('paragraph');
+      expect(back.state.doc.firstChild!.textBetween(0, back.state.doc.firstChild!.content.size, '', '\n')).toBe('line\n' + line);
+    });
+});

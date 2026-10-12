@@ -30,25 +30,43 @@ function withGrammars(editor: Editor) {
   }, () => { loading = null; }); // offline or failed: the next code block tries again
 }
 
-/** lowlight's tree for every code block, as inline decorations carrying its hljs-* classes */
+/** Language guessed only for code up to this long: the guess runs every grammar over it, and a long block without a
+ * language took a second and more each key */
+const AUTO_MAX = 2000;
+
+/** Each block's highlighting (spans from its start, with their hljs-* classes), kept while the block is unchanged:
+ * a key typed in one block highlighted every block in the note again */
+const spans = new WeakMap<PMNode, [from: number, to: number, cls: string][]>();
+
+/** lowlight's tree for one code block */
+function spansOf(node: PMNode) {
+  let got = spans.get(node);
+  if (got) return got;
+  const ll = lowlight!, text = node.textContent, lang: string | null = node.attrs.language;
+  const tree = lang && ll.registered(lang) ? ll.highlight(lang, text) : text.length <= AUTO_MAX ? ll.highlightAuto(text) : null;
+  got = [];
+  let at = 0;
+  const walk = (nodes: Hast[] = [], classes: string[]) => {
+    for (const n of nodes) {
+      if (n.type === 'text') {
+        const to = at + (n.value?.length ?? 0);
+        if (classes.length) got!.push([at, to, classes.join(' ')]);
+        at = to;
+      } else walk(n.children, [...classes, ...(n.properties?.className ?? [])]);
+    }
+  };
+  if (tree) walk(tree.children, []);
+  spans.set(node, got);
+  return got;
+}
+
+/** every code block in the note highlighted, as inline decorations */
 function highlight(doc: PMNode): DecorationSet {
   if (!lowlight) return DecorationSet.empty;
-  const ll = lowlight, out: Decoration[] = [];
+  const out: Decoration[] = [];
   doc.descendants((node, pos) => {
     if (node.type.name !== 'codeBlock') return true;
-    const lang: string | null = node.attrs.language;
-    const tree = lang && ll.registered(lang) ? ll.highlight(lang, node.textContent) : ll.highlightAuto(node.textContent);
-    let at = pos + 1;
-    const walk = (nodes: Hast[] = [], classes: string[]) => {
-      for (const n of nodes) {
-        if (n.type === 'text') {
-          const to = at + (n.value?.length ?? 0);
-          if (classes.length) out.push(Decoration.inline(at, to, { class: classes.join(' ') }));
-          at = to;
-        } else walk(n.children, [...classes, ...(n.properties?.className ?? [])]);
-      }
-    };
-    walk(tree.children, []);
+    for (const [from, to, cls] of spansOf(node)) out.push(Decoration.inline(pos + 1 + from, pos + 1 + to, { class: cls }));
     return false;
   });
   return DecorationSet.create(doc, out);
