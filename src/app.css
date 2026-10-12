@@ -386,6 +386,18 @@ aside.focus-flash::after, main.focus-flash::after {
 /* grows with the text (15px at the default 15px), so a larger note's to-dos are not left with small boxes; the
    font-size is the text's, as an input's own would not be */
 .tiptap input[type='checkbox'] { accent-color: var(--accent); font-size: inherit; width: calc(0.6em + 6px); height: calc(0.6em + 6px); margin: 0; }
+/* drawn by Eve, not the system: the Mac's own box went the system's grey in a window that was not the front one (and
+   with a graphite accent), so done to-dos showed blue in one place and grey in another. Now always the app's blue. */
+.tiptap ul[data-type='taskList'] input[type='checkbox'] {
+  appearance: none; -webkit-appearance: none; flex: none; box-sizing: border-box; cursor: pointer;
+  border: 1.5px solid var(--fg-dim); border-radius: 4px; background: var(--bg) center / 78% no-repeat;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+.tiptap ul[data-type='taskList'] input[type='checkbox']:checked {
+  border-color: var(--accent); background-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.tiptap ul[data-type='taskList'] input[type='checkbox']:focus-visible { outline: 2px solid var(--accent-soft); outline-offset: 1px; }
 /* a phone's caret in the app's blue (its WebView would draw the Android theme's teal); the Mac keeps its own */
 html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(--accent); }
 .tiptap blockquote { border-left: 3px solid var(--line); margin: 0.5em 0; padding-left: 1em; color: var(--fg-dim); }
