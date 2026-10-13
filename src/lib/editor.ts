@@ -11,7 +11,7 @@ import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
-import { Fragment, type Node as PMNode } from '@tiptap/pm/model';
+import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
 import { DateMention, dayChoices } from './date';
@@ -663,6 +663,17 @@ export function createEditor(opts: {
           break;
         }
         return (serializer.serialize(content) as string).replace(new RegExp(`^${BLANK}$`, 'gm'), ''); // an empty line is just empty
+      },
+      // lines copied from inside a toggle's body come with the toggle around them (no title): pasted elsewhere, a
+      // new untitled toggle was made of them. They are just the lines; a whole toggle copied is still a toggle.
+      transformPasted: (slice) => {
+        let { content, openStart, openEnd } = slice;
+        while (openStart >= 2 && content.childCount === 1 && content.firstChild!.type.name === 'details' && content.firstChild!.firstChild?.type.name === 'detailsContent') {
+          content = content.firstChild!.firstChild!.content;
+          openStart -= 2;
+          openEnd = Math.max(0, openEnd - 2);
+        }
+        return content === slice.content ? slice : new Slice(content, openStart, openEnd);
       },
       handlePaste: (view, event): boolean => {
         if (insertFiles(editor, event.clipboardData?.files)) return true;
