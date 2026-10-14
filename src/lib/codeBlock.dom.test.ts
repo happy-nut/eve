@@ -43,15 +43,71 @@ test('↑ at the start of a code block heading the note: a line above it', () =>
   expect(md(ed)).toBe('new\n\n```\nline1\n```\n\nafter');
 });
 
-describe('```lang typed', () => {
-  for (const [lang, saved] of [['c++', 'c++'], ['TypeScript', 'typescript'], ['C#', 'c#'], ['python3', 'python3']])
-    test(`${lang}: a code block in it`, () => {
+describe('``` typed: a code block at once, the keyboard in its language field', () => {
+  const field = (ed: ReturnType<typeof editorWith>) => ed.view.dom.querySelector<HTMLInputElement>('.code-lang-ask input')!;
+  const typed = async (ed: ReturnType<typeof editorWith>) => {
+    const ed2 = ed;
+    ed2.commands.setTextSelection({ from: posOf(ed2, 'z'), to: posOf(ed2, 'z', true) });
+    type(ed2, '```');
+    await Promise.resolve(); // the field opens once the block is drawn
+    return field(ed2);
+  };
+  const fill = (f: HTMLInputElement, value: string) => { f.value = value; f.dispatchEvent(new Event('input')); };
+  const key = (f: HTMLInputElement, k: string) => f.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+
+  test('the third ` makes the block, with the field focused', async () => {
+    const ed = editorWith('# T\n\nz');
+    const f = await typed(ed);
+    expect(ed.state.selection.$from.parent.type.name).toBe('codeBlock');
+    expect(document.activeElement).toBe(f);
+    expect(f.closest('.code-block')!.classList.contains('asking')).toBe(true);
+  });
+
+  for (const [lang, k, saved] of [['c++', 'Enter', 'cpp'], ['TypeScript', 'ArrowDown', 'typescript'], ['ty', 'Tab', 'typescript'], ['C#', ' ', 'csharp'], ['js', 'Enter', 'javascript'], ['python3', 'ArrowDown', 'python3'], ['', 'ArrowDown', '']])
+    test(`"${lang}" then ${k === ' ' ? 'space' : k}: the code in it, the caret in the code`, async () => {
       const ed = editorWith('# T\n\nz');
-      ed.commands.setTextSelection({ from: posOf(ed, 'z'), to: posOf(ed, 'z', true) });
-      type(ed, '```' + lang + ' ');
+      const f = await typed(ed);
+      fill(f, lang);
+      key(f, k);
+      expect(f.closest('.code-block')!.classList.contains('asking')).toBe(false);
       type(ed, 'x');
       expect(md(ed)).toBe('# T\n\n```' + saved + '\nx\n```');
     });
+
+  test('Esc: on into the code with no language', async () => {
+    const ed = editorWith('# T\n\nz');
+    const f = await typed(ed);
+    fill(f, 'py');
+    key(f, 'Escape');
+    type(ed, 'x');
+    expect(md(ed)).toBe('# T\n\n```\nx\n```');
+  });
+
+  test('⌫ with nothing typed: the ``` back as text, less the last `', async () => {
+    const ed = editorWith('# T\n\nz');
+    const f = await typed(ed);
+    key(f, 'Backspace');
+    expect(ed.state.selection.$from.parent.type.name).toBe('paragraph');
+    expect(ed.state.selection.$from.parent.textContent).toBe('``');
+    type(ed, '`'); // and the third again: the block again
+    expect(ed.state.selection.$from.parent.type.name).toBe('codeBlock');
+  });
+
+  test('a click away keeps what was typed', async () => {
+    const ed = editorWith('# T\n\nz');
+    const f = await typed(ed);
+    fill(f, 'rust');
+    f.dispatchEvent(new FocusEvent('blur'));
+    expect(md(ed)).toBe('# T\n\n```rust\n```');
+  });
+
+  test('~~~lang and a space still makes one', () => {
+    const ed = editorWith('# T\n\nz');
+    ed.commands.setTextSelection({ from: posOf(ed, 'z'), to: posOf(ed, 'z', true) });
+    type(ed, '~~~go ');
+    type(ed, 'x');
+    expect(md(ed)).toBe('# T\n\n```go\nx\n```');
+  });
 
   test('not in a table cell (a table keeps no code block)', () => {
     const ed = editorWith('| a | b |\n| - | - |\n| c | d |');

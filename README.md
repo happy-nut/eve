@@ -12,6 +12,9 @@ type Notion-style markdown, link notes with `[[wiki links]]`, and sync through a
 - **Instant** — Tauri 2 shell (native WKWebView, ~10 MB), Svelte 5 UI, TipTap editor. No Electron.
 - **Global hotkey** — `⌘⇧Space` (default) shows/hides Eve over any app; focus returns to where you were. Like Raycast, Eve stays out of the Dock and ⌘Tab (toggle in Settings → Sync & app). Eve launches at login (toggle in Settings); closing the window only hides it, so the hotkey keeps working. `⌘Q` quits.
 - **Live markdown** — `# `, `- `, `1. `, `[ ] `, `> `, ` ``` `, `**bold**`, `` `code` ``… render as you type.
+- **Code blocks at once** — ` ``` ` at the start of a line is a code block the moment the third backtick is typed, with the
+  keyboard in its language field: type a name or the start of one (`py`, `ty` → TypeScript, `js`, `c++`), then ↓, Tab, ↩
+  or a space to write the code. Esc goes on with no language; ⌫ in the empty field takes the backticks back.
 - **Lists that nest like a document** — an indented numbered list counts `1.` → `a.` → `i.` and on (nine levels, then round again), in the editor and on the phone's widget. Bullets, numbers and to-dos mix freely: Tab under a numbered item makes a bullet stay a bullet, `⌘⇧7/8/9` switch only the lines you picked, and ⌫ / ⇧Tab at the start of an indented item bring it out a level as what it was. Numbering carries on across a list split around it.
 - **Every shortcut is rebindable** live in Settings (`⌘,`): system hotkey, app actions, editor formatting.
 - **Notes link to notes** — type `[[` for a picker; click a link to jump (creates the note if missing). `[[Note|shown as]]` links under another name, as in Obsidian. `⌘[` / `⌘]` go back and forward through the notes you visited, restoring the cursor.

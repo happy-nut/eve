@@ -424,6 +424,22 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 .tiptap .code-lang { pointer-events: none; }
 .tiptap .code-block:hover .code-lang, .tiptap .code-lang:hover, .tiptap .code-lang.open { opacity: 1; pointer-events: auto; }
 .tiptap .code-lang:hover, .tiptap .code-lang.open { color: var(--fg); background: var(--bg-side); } /* opaque: a tint would let the edge it straddles show through */
+/* the language field ``` opens, where the chip sits: a name, and what it is taken for beside it */
+.tiptap .code-lang-ask { display: none; }
+.tiptap .code-block.asking .code-lang { display: none; }
+.tiptap .code-block.asking .code-lang-ask {
+  position: absolute; top: 0; left: 12px; transform: translateY(-50%); z-index: 1;
+  display: inline-flex; align-items: center; gap: 6px; padding: 1px 3px 1px 1px;
+  border: 1px solid var(--accent); border-radius: 6px; background: var(--bg-pop); box-shadow: var(--glow);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px; line-height: 1.5;
+}
+.tiptap .code-lang-ask input {
+  width: 11ch; border: 0; outline: none; background: none; color: var(--fg); font: inherit; padding: 0 5px;
+}
+.tiptap .code-lang-ask input::placeholder { color: var(--fg-dim); }
+.tiptap .code-lang-hint { color: var(--fg-dim); padding-right: 4px; white-space: nowrap; }
+html.mobile .tiptap .code-block.asking .code-lang-ask { font-size: 14px; }
+html.mobile .tiptap .code-lang-ask input { font-size: 16px; } /* under 16px a phone zooms the page in on focus */
 /* a mermaid block: its diagram; the code above it only while the caret is in it (or the diagram failed, to fix it) */
 .tiptap .code-block:not(.mermaid) .mermaid-view { display: none; }
 .tiptap .code-block.mermaid:not(.editing):not(.mermaid-error) pre { display: none; }
