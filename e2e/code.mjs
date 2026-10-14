@@ -3,10 +3,12 @@
 // keys and scrolled only the page, not the block, so the caret was left out of sight at the block's left.
 // A selection from the code's first line back to its start (⌘⇧←, ⌘⇧↑) and deleted leaves the caret in the code.
 // Inline code deleted letter by letter leaves no code behind for the next keys.
+// The caret on a line with inline code is as tall as on one without (WebKit drew it as tall as the code's padded box).
 // WebKit (the Mac app's engine) when installed (npx playwright-core install webkit), else Chromium (CHROMIUM_PATH).
 // It starts its own dev server, or uses EVE_URL. Run: npm run e2e:code
 import { webkit, chromium } from 'playwright-core';
 import assert from 'node:assert/strict';
+import { PNG } from 'pngjs';
 
 const server = process.env.EVE_URL ? null : await (await import('vite')).createServer({ server: { port: 0 }, logLevel: 'error' }).then((v) => v.listen());
 const URL_ = process.env.EVE_URL ?? server.resolvedUrls.local[0];
@@ -77,6 +79,32 @@ try {
   await page.waitForTimeout(100);
   assert.equal((await page.evaluate(() => window.__editor.storage.markdown.getMarkdown())).trim(), '# Code\n\nx new', 'typed after the code was all deleted: plain text');
   console.log('ok   inline code all deleted: what is typed next is not code');
+
+  // the caret as painted (drawn magenta, found in a screenshot; it blinks, so a few tries), on a plain line and on a
+  // line with inline code, the same font: the same height
+  await page.addStyleTag({ content: '.tiptap, .tiptap * { caret-color: #ff00ff !important; }' });
+  const caretHeight = async () => {
+    let best = 0;
+    for (let i = 0; i < 16; i++) {
+      const png = PNG.sync.read(await page.screenshot({ caret: 'initial' }));
+      let y0 = 1e9, y1 = -1;
+      for (let k = 0; k < png.data.length; k += 4) {
+        if (png.data[k] > 200 && png.data[k + 1] < 80 && png.data[k + 2] > 200) { const y = Math.floor(k / 4 / png.width); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      }
+      best = Math.max(best, y1 - y0 + 1);
+      await page.waitForTimeout(60);
+    }
+    return best;
+  };
+  await page.evaluate(() => { const ed = window.__editor; ed.commands.setContent('<h1>Code</h1><p>plain words here</p><p>run <code>npm install</code> then go</p>'); });
+  await page.evaluate(() => { const ed = window.__editor; let p = 0; ed.state.doc.descendants((n, q) => { if (!p && n.isText && n.text.includes('words')) p = q + 5; }); ed.commands.focus(); ed.commands.setTextSelection(p); });
+  await page.waitForTimeout(300);
+  const plain = await caretHeight();
+  await page.evaluate(() => { const ed = window.__editor; let p = 0; ed.state.doc.descendants((n, q) => { if (!p && n.isText && n.text.includes('then')) p = q + 3; }); ed.commands.setTextSelection(p); });
+  await page.waitForTimeout(300);
+  const withCode = await caretHeight();
+  assert.ok(plain > 0 && Math.abs(withCode - plain) <= 1, `caret on a line with inline code ${withCode}px, on a plain line ${plain}px`);
+  console.log(`ok   the caret on a line with inline code is as tall as on a plain one (${withCode}px / ${plain}px)`);
 } finally {
   await browser.close();
   await server?.close();
