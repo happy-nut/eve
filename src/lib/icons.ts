@@ -1,5 +1,5 @@
 /**
- * Custom (non-emoji) icons offered in the picker's "기타" tab. Stored as ":name:" tokens.
+ * Custom (non-emoji) icons offered in the picker's "Eve" tab. Stored as ":name:" tokens.
  * Claude mark: Simple Icons (CC0). OpenAI blossom: Wikimedia Commons (simple geometry). Inline SVG uses
  * currentColor where the brand mark is monochrome (theme-aware); the picker gets a data-URI copy in grey.
  */

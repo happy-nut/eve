@@ -4,7 +4,7 @@ import { isMobile } from './platform';
 export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean; checked?: boolean }
 
 /** In-app confirm/prompt (WKWebView has no native JS dialogs). Rendered by Confirm.svelte. */
-interface Pending { message: string; input?: string; danger?: boolean; yes?: string; resolve: (v: string | null) => void }
+interface Pending { message: string; input?: string; danger?: boolean; yes?: string; alert?: boolean; resolve: (v: string | null) => void }
 
 /** a kanban card opened as a floating page; edits stream back through onChange */
 export interface CardReq {
@@ -129,9 +129,17 @@ class Ui {
     this.menuClosed?.();
     this.menuClosed = onclose;
     this.menuFrom = document.activeElement as HTMLElement | null;
-    const shown = items.filter((i) => !i.hide);
-    // a group whose items all went away must not leave its divider at the top of the menu
-    this.menu = { x: at.clientX, y: at.clientY, items: shown.map((i, n) => (n === 0 && i.sep ? { ...i, sep: false } : i)) };
+    // a hidden item that started a group hands its divider on to the next one shown, and a group whose items
+    // all went away must not leave its divider at the top of the menu
+    const shown: MenuItem[] = [];
+    let sep = false;
+    for (const i of items) {
+      sep ||= !!i.sep;
+      if (i.hide) continue;
+      shown.push({ ...i, sep: sep && shown.length > 0 });
+      sep = false;
+    }
+    this.menu = { x: at.clientX, y: at.clientY, items: shown };
   }
   /** Dismissed or picked: whatever had the keyboard gets it back (a picked item may take it again). */
   closeMenu() {
@@ -167,6 +175,10 @@ class Ui {
   /** Yes/no. `danger` is a deletion: a bin, a red "Delete". Anything else confirms with `yes` (default "OK"). */
   ask(message: string, danger = true, yes?: string): Promise<boolean> {
     return new Promise((res) => { this.pending = { message, danger, yes, resolve: (v) => res(v !== null) }; });
+  }
+  /** Something to know, not a choice: one OK, no Cancel. */
+  tell(message: string): Promise<void> {
+    return new Promise((res) => { this.pending = { message, danger: false, alert: true, resolve: () => res() }; });
   }
   /** Text input; resolves null on cancel. */
   prompt(message: string, initial = ''): Promise<string | null> {

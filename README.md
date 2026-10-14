@@ -15,7 +15,7 @@ type Notion-style markdown, link notes with `[[wiki links]]`, and sync through a
 - **Lists that nest like a document** — an indented numbered list counts `1.` → `a.` → `i.` and on (nine levels, then round again), in the editor and on the phone's widget. Bullets, numbers and to-dos mix freely: Tab under a numbered item makes a bullet stay a bullet, `⌘⇧7/8/9` switch only the lines you picked, and ⌫ / ⇧Tab at the start of an indented item bring it out a level as what it was. Numbering carries on across a list split around it.
 - **Every shortcut is rebindable** live in Settings (`⌘,`): system hotkey, app actions, editor formatting.
 - **Notes link to notes** — type `[[` for a picker; click a link to jump (creates the note if missing). `[[Note|shown as]]` links under another name, as in Obsidian. `⌘[` / `⌘]` go back and forward through the notes you visited, restoring the cursor.
-- **Link cards** — paste a URL on an empty line (or type one and press Enter) and it becomes a compact preview card: favicon, title, description, thumbnail; click opens the browser. The file keeps just the bare URL.
+- **Link cards** — type a URL on an empty line and press Enter (or `⌥↩` on a pasted link) and it becomes a compact preview card: favicon, title, description, thumbnail; click opens the browser. The file keeps just the bare URL.
 - **Find & replace in a note** — `⌘F` (or the note's right-click menu; on a phone, the note's ⋯) opens a bar over the note: ↩ / ⇧↩ walk the matches, the replace field replaces one at a time (↩) or all at once.
 - **Section outline** instead of a scrollbar — when a note is taller than the window, one tick per heading sits at the left edge, dark for the sections on screen; hover to see the titles, click to jump.
 - **Obsidian's syntax** — `[[Note|alias]]` links, `==highlights==` (`⌘⇧H`), and callouts by type: `> [!warning] Title` shows the type's icon and colour, the text on its line as the title; the fold mark (`-`/`+`) is kept. A vault's notes read and save back unchanged.
@@ -67,8 +67,7 @@ Sign in from Settings → Sync on the phone too.
   down and the widget redraws. The app pushes when it leaves the screen.
 - **Opens where you left off** — the note you had open, not the list.
 - **A list made for a thumb** — each row shows the note's title, when it was edited and two lines of it. Swipe a
-  row left to delete it, right to move it to another group; long-press for its menu (icon, move to a group, reorder, export, delete).
-  *Reorder* gives every row a handle to drag it by.
+  row left to delete it; long-press it to pick it up and drag it to another place or group.
 - Back goes from a note to the list, and from the list out of the app.
 
 ```bash

@@ -61,7 +61,7 @@
     <input bind:value use:focus spellcheck="false" />
   {/if}
   <div class="actions">
-    <button onclick={() => done(null)}>Cancel<kbd>esc</kbd></button>
+    {#if !p.alert}<button onclick={() => done(null)}>Cancel<kbd>esc</kbd></button>{/if}
     {#if p.input !== undefined}
       <button class="primary" onclick={() => done(value)}>OK<kbd>↩</kbd></button>
     {:else}
@@ -101,7 +101,7 @@
   button:hover { background: var(--bg-hover); }
   button:active { transform: scale(0.97); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .primary { background: var(--accent); color: #fff; }
+  .primary { background: var(--accent); color: var(--on-accent); }
   .primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
   .primary.danger { background: #ff453a; }
   .primary.danger:hover { background: color-mix(in srgb, #ff453a 88%, #000); }

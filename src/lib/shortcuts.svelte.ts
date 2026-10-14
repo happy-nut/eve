@@ -100,6 +100,12 @@ function load(): Record<string, string> {
 
 const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
 
+/** the character a punctuation key types without Shift (a US layout's, as the default keys are written) */
+const UNSHIFTED: Record<string, string> = {
+  Period: '.', Comma: ',', Slash: '/', Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']',
+  Backslash: '\\', Backquote: '`', Equal: '=',
+};
+
 /** KeyboardEvent -> "Mod-Shift-k". Returns '' for a bare modifier press. */
 export function eventToKeys(e: KeyboardEvent): string {
   let key = e.key;
@@ -112,6 +118,8 @@ export function eventToKeys(e: KeyboardEvent): string {
     const code = e.code;
     if (/^Key[A-Z]$/.test(code)) key = code[3].toLowerCase();
     else if (/^Digit\d$/.test(code)) key = code[5];
+    // and for punctuation under Shift: ⌘⇧. reads ">", recorded as a key nothing listens for (the default writes ".")
+    else if (e.shiftKey && code in UNSHIFTED) key = UNSHIFTED[code];
     else key = key.toLowerCase();
   }
   const mods = [

@@ -106,8 +106,10 @@
 {#if overflow && marks.length > 1}
   <nav class="outline" class:peeking={hover !== null} aria-label="Sections" onmouseleave={leave}>
     {#each marks as h, i (i)}
-      <!-- tabindex -1: a mouse-only jump strip, Tab from the editor should not land in it -->
-      <button class="tick" tabindex="-1" class:on={h.on} class:hov={hover === i} style="--w: {tickWidth(i)}px" onmouseenter={() => enter(i)} onclick={() => go(h.top)}>
+      <!-- tabindex -1: a mouse-only jump strip, Tab from the editor should not land in it; nor a click (the keys went
+           to the tick, not the note) -->
+      <button class="tick" tabindex="-1" class:on={h.on} class:hov={hover === i} style="--w: {tickWidth(i)}px" onmouseenter={() => enter(i)}
+        onmousedown={(e) => e.preventDefault()} onclick={() => go(h.top)}>
         <i></i>
         {#if peek === i}
           <span class="peek"><span class="peek-in" in:fade={{ duration: 180 }}>

@@ -94,6 +94,6 @@
   /* today is marked even when the cursor is elsewhere: it is the one day you navigate from */
   .cal-day.now { font-weight: 600; }
   .cal-day:hover { background: var(--accent-soft); }
-  .cal-day.on { background: var(--accent); color: #fff; }
+  .cal-day.on { background: var(--accent); color: var(--on-accent); }
   .cal-foot { padding: 5px 2px 1px; text-align: center; color: var(--fg-dim); font-size: 11.5px; }
 </style>

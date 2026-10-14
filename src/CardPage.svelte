@@ -25,12 +25,21 @@
   let emojiRow: ReturnType<typeof EmojiRow>;
   let editor = $state<TipTap | undefined>();
   const close = () => ui.closeCard(); // it puts the keyboard back
+  /** the card's fields: the title as its line reads, not as markdown writes it (`2*3*4 > 1` came back `234 &gt; 1`) */
+  function cardOf(md: string) {
+    const card = splitCard(md), first = editor?.state.doc.firstChild;
+    // (a title holding more than text, a date or a formula, is left to the markdown's plain reading)
+    let text = first?.type.name === 'heading';
+    first?.forEach((n) => { if (!n.isText) text = false; });
+    if (card.title && text) card.title = first!.textContent;
+    return card;
+  }
 
   onMount(() => {
     editor = createEditor({
       element: el,
       content: req.markdown ?? cardDoc(req.title, req.body),
-      onUpdate: (md) => (req.onMarkdown ? req.onMarkdown(md) : req.onChange(splitCard(md))),
+      onUpdate: (md) => (req.onMarkdown ? req.onMarkdown(md) : req.onChange(cardOf(md))),
       onOpenNote: (t) => { close(); notes.openByTitle(t); },
       targets: () => notes.pages,
       suggestionUI: suggest.ui,

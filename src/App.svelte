@@ -8,7 +8,7 @@
   import CalendarPage from './CalendarPage.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
-  import { groups, leafOf } from './lib/groups.svelte';
+  import { groups, leafOf, parentOf } from './lib/groups.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
   import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, widget, links, saveAsset } from './lib/platform';
@@ -261,7 +261,7 @@
   let widgetTop = $state(widget.top());
   function pinToHome() {
     const n = notes.current;
-    if (n && !widget.pin(n.id)) void ui.ask('This home screen can\u2019t add a widget from an app. Long-press the home screen → Widgets → Eve; pinned notes sit at the top of its list.', false);
+    if (n && !widget.pin(n.id)) void ui.tell('This home screen can\u2019t add a widget from an app. Long-press the home screen → Widgets → Eve; pinned notes sit at the top of its list.');
     widgetTop = widget.top();
   }
   async function deleteOnPhone() {
@@ -375,7 +375,20 @@
       return;
     }
     sidebarOpen = true;
-    queueMicrotask(() => (document.querySelector<HTMLElement>('aside [data-row].active') ?? document.querySelector<HTMLElement>('aside [data-row]'))?.focus());
+    queueMicrotask(() => (document.querySelector<HTMLElement>('aside [data-row].active') ?? foldedOver() ?? document.querySelector<HTMLElement>('aside [data-row]'))?.focus());
+  }
+  /** the open note's row is folded away: the row it is folded under (a parent page, else its innermost group showing) */
+  function foldedOver() {
+    const row = (sel: string) => document.querySelector<HTMLElement>(`aside ${sel}`);
+    for (let n = notes.current; n?.parent; n = notes.all.find((m) => m.id === n!.parent) ?? null) {
+      const up = row(`[data-note="${CSS.escape(n.parent)}"]`);
+      if (up) return up;
+    }
+    for (let g = notes.current?.group ?? ''; g; g = parentOf(g)) {
+      const up = row(`[data-group="${CSS.escape(g)}"]`);
+      if (up) return up;
+    }
+    return null;
   }
   async function deleteCurrent() {
     const n = notes.current;

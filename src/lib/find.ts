@@ -87,7 +87,9 @@ export function step(editor: Editor, dir: 1 | -1) {
 const BAR = 96; // the find bar's reach down the top of the note
 function reveal(editor: Editor, from: number) {
   const box = editor.view.coordsAtPos(from);
-  if (box.top > BAR && box.bottom < window.innerHeight - 24) return;
+  // where the bar really ends (a phone's, with its replace row, reaches further than the Mac's)
+  const bar = document.querySelector('.find')?.getBoundingClientRect().bottom ?? BAR;
+  if (box.top > Math.max(BAR, bar + 4) && box.bottom < window.innerHeight - 24) return;
   const dom = editor.view.domAtPos(from).node;
   const el = dom.nodeType === Node.TEXT_NODE ? dom.parentElement : (dom as HTMLElement);
   el?.scrollIntoView({ block: 'center' });
@@ -98,6 +100,15 @@ function show(editor: Editor, index: number) {
   const { hits } = findState(editor);
   const hit = hits[index];
   const tr = editor.state.tr.setMeta(FIND, { index });
+  // a match inside a folded toggle is shown, not counted out of sight: its toggles open
+  if (hit) {
+    const $at = tr.doc.resolve(hit.from);
+    for (let d = $at.depth; d > 0; d--) {
+      const n = $at.node(d);
+      if (n.type.name === 'details' && !n.attrs.open) tr.setNodeAttribute($at.before(d), 'open', true);
+    }
+    tr.setMeta('addToHistory', false);
+  }
   if (hit) tr.setSelection(TextSelection.create(tr.doc, hit.from, hit.to));
   editor.view.dispatch(tr);
   if (hit) reveal(editor, hit.from);
