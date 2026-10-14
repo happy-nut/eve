@@ -489,8 +489,9 @@
     // (including a modifier already held when ⌘ goes down — ⇧⌘ waiting for its third key is not a peek)
     if (e.key === 'Meta' && !e.shiftKey && !e.altKey && !e.ctrlKey) cmdDown();
     else cmdUp();
-    // writing takes the window: the list folds away the moment you type inside the editor
-    if (sidebarOpen && appearance.s.closeSidebarOnWrite && isWriting(e)) sidebarOpen = false;
+    // writing takes the window: the list folds away the moment you type inside the editor. Not in a floating page
+    // (a card, a day): it is over the note, and the list behind it stays as it was
+    if (sidebarOpen && appearance.s.closeSidebarOnWrite && !ui.card && isWriting(e)) sidebarOpen = false;
     // the right-click menu takes the keyboard while it is up, wherever the focus actually sits
     if (ui.menu) { if (e.key === 'Escape') { e.preventDefault(); ui.closeMenu(); } return; }
     if (ui.pending || ui.emoji || ui.diagramView !== null) return; // a diagram on the whole screen takes its own keys
@@ -524,6 +525,8 @@
     // window hide once it is gone)
     if (a.id === 'hide' && (settingsOpen || document.activeElement === searchEl)) return; // handled locally
     e.preventDefault();
+    // the list behind a floating page is left as it is: opened, folded or focused from there, it changed unseen
+    if (ui.card && (a.id === 'search' || a.id === 'focusSidebar')) return;
     switch (a.id) {
       case 'newNote':
         // from the sidebar, ask what to create (note or group) via the + menu
