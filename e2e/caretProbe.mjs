@@ -40,12 +40,16 @@ try {
     return { range: r ? { x: Math.round(r.left), top: Math.round(r.top), h: Math.round(r.height) } : null, pm: { x: Math.round(c.left), top: Math.round(c.top), h: Math.round(c.bottom - c.top) },
       in: el?.tagName + '.' + (el?.className || ''), font: cs ? `${cs.fontSize}/${cs.lineHeight}` : '' };
   });
+  // at once, and again half a second on: a caret drawn in the wrong place for a frame is not one left there
   const probe = async (label) => {
-    const e = await expected(), p = await painted();
-    const ref = e.range ?? e.pm;
-    const off = p ? { dx: p.x - ref.x, dy: p.top - ref.top, dh: p.h - ref.h } : null;
-    rows.push({ label, painted: p, range: e.range, pm: e.pm, in: e.in, font: e.font, off });
-    console.log(`${label.padEnd(46)} painted ${JSON.stringify(p)} range ${JSON.stringify(e.range)} pm ${JSON.stringify(e.pm)} ${e.in} ${e.font} OFF ${JSON.stringify(off)}`);
+    for (const when of ['now', 'settled']) {
+      if (when === 'settled') await page.waitForTimeout(500);
+      const e = await expected(), p = await painted();
+      const ref = e.range ?? e.pm;
+      const off = p ? { dx: p.x - ref.x, dy: p.top - ref.top, dh: p.h - ref.h } : null;
+      rows.push({ label: `${label} (${when})`, painted: p, range: e.range, pm: e.pm, in: e.in, font: e.font, off });
+      console.log(`${(label + ' ' + when).padEnd(54)} painted ${JSON.stringify(p)} range ${JSON.stringify(e.range)} pm ${JSON.stringify(e.pm)} ${e.in} ${e.font} OFF ${JSON.stringify(off)}`);
+    }
   };
 
   await page.click('.tiptap p');
