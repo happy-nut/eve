@@ -113,10 +113,11 @@ try {
   await probe('12 just after inline code');
   await page.keyboard.press('ArrowLeft');
   await probe('13 inside inline code end');
-  await page.keyboard.press('Enter');
-  await page.keyboard.type('$x^2$ z');
-  await page.waitForTimeout(600);
-  await probe('14 after a formula');
+  await page.evaluate(() => { const ed = window.__editor; ed.commands.focus('end'); ed.commands.insertContent([{ type: 'paragraph', content: [{ type: 'text', text: 'plain line' }] }]); });
+  await probe('14 a plain line under it');
+  await page.evaluate(() => { const ed = window.__editor; ed.commands.insertContent([{ type: 'paragraph', content: [{ type: 'text', text: 'area ' }, { type: 'mathInline', attrs: { latex: 'x^2' } }, { type: 'text', text: ' z' }] }]); });
+  await page.waitForTimeout(800);
+  await probe('15 a line with a formula');
   const worst = rows.filter((r) => r.off && (Math.abs(r.off.dx) > 2 || Math.abs(r.off.dy) > 2 || Math.abs(r.off.dh) > 3));
   console.log(`${rows.length} probes, ${worst.length} off by more than 2px: ${worst.map((r) => r.label).join(' | ') || 'none'}`);
   console.log(`not painted: ${rows.filter((r) => !r.painted).map((r) => r.label).join(' | ') || 'none'}`);

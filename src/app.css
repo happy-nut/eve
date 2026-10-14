@@ -401,12 +401,14 @@ aside.focus-flash::after, main.focus-flash::after {
 /* a phone's caret in the app's blue (its WebView would draw the Android theme's teal); the Mac keeps its own */
 html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(--accent); }
 .tiptap blockquote { border-left: 3px solid var(--line); margin: 0.5em 0; padding-left: 1em; color: var(--fg-dim); }
-.tiptap code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.88em; background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 4px; }
+/* line-height 1: the monospace font's own heights made the line taller than one without code, and WebKit draws the
+   caret as tall as the line (taller and higher on any line with code in it, the text no bigger) */
+.tiptap code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.88em; line-height: 1; background: var(--code-bg); padding: 0.15em 0.35em; border-radius: 4px; }
 .tiptap pre { background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; margin: 0.6em 0; }
 /* ProseMirror's own stylesheet sets pre-wrap on code blocks and loads after this one; the extra class
    outweighs it, so a long line scrolls sideways instead of folding onto the next */
 .tiptap .code-block pre, .tiptap .code-block pre code { white-space: pre; }
-.tiptap pre code { background: none; padding: 0; font-size: 0.85em; }
+.tiptap pre code { background: none; padding: 0; font-size: 0.85em; line-height: inherit; }
 /* the chip sits on the wrapper, not the <pre>: inside a scrolling <pre> it would slide away with long lines */
 .tiptap .code-block { position: relative; }
 .tiptap .code-lang {
