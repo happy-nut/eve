@@ -170,7 +170,9 @@ const caretInSight = new Plugin({
       try { c = view.coordsAtPos(selection.head); } catch { return; }
       const r = pre.getBoundingClientRect(), pad = parseFloat(getComputedStyle(pre).paddingLeft) || 0;
       const by = scrollToShow({ left: r.left + pad, right: r.right - pad }, { left: c.left, right: c.right + 1 });
-      if (by) pre.scrollLeft += by;
+      // whole pixels, rounded away from the caret: by a fraction, the webview rounded a line's start to 1px off the
+      // block's left edge, its first letter's edge cut
+      if (by) pre.scrollLeft = Math.max(0, by < 0 ? Math.floor(pre.scrollLeft + by) : Math.ceil(pre.scrollLeft + by));
     },
   }),
 });
