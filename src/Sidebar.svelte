@@ -94,7 +94,7 @@
   /** the list comes back (a phone's Back, the list folded and opened again) with the open note's row in sight:
    *  it started from the top, the row far below */
   function showOpen(tree: HTMLElement) {
-    void tick().then(() => tree.querySelector('[data-row].active')?.scrollIntoView({ block: 'nearest' }));
+    void tick().then(() => tree.querySelector('[data-row].active')?.scrollIntoView({ block: isMobile ? 'center' : 'nearest' }));
   }
 
   // ---- "+" menu: new note / new group, relative to the focused row (the app's one menu, Menu.svelte) ----

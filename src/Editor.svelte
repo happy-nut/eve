@@ -221,7 +221,7 @@
   .add-icon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; }
   :global(main:hover) .add-icon, .add-icon:focus-visible { opacity: 1; }
   /* a phone has no hover: an unseen button above the title took a tap there and gave the note a random icon */
-  :global(html.mobile) .add-icon { opacity: 1; min-height: 40px; }
+  :global(html.mobile) .add-icon { opacity: 1; }
   .add-icon:hover { background: var(--bg-hover); color: var(--fg); }
   .big-icon {
     border: 0; background: none; font-size: 56px; line-height: 1; padding: 4px; margin-left: -4px; border-radius: 10px;

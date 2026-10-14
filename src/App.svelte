@@ -42,7 +42,8 @@
     settingsFrom = null;
     if (!from || isMobile) return;
     const a = document.activeElement;
-    if (a && a !== document.body && a.isConnected) return;
+    // (Settings itself still holds it while it fades out: that is no one having taken it)
+    if (a && a !== document.body && a.isConnected && !a.closest('[aria-label="Settings"]')) return;
     if (from.isConnected && from !== document.body) from.focus(); else focusNote();
   });
   let searchEl = $state<HTMLInputElement | null>(null);

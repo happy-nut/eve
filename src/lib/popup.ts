@@ -14,8 +14,11 @@ export function placeAt(rect: DOMRect, want = 300, width = 220): string {
   const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
   // under the caret when all of it fits there, or that side has more room: going under with less room than the other
   // side cut the @ calendar's last week off; and the room is all it gets (more ran under the phone's bar)
-  if (below >= want || below >= above) return `left:${left}px; top:${rect.bottom + 4}px; max-height:${Math.max(0, below)}px`;
-  return `left:${left}px; bottom:${window.innerHeight - rect.top + 4}px; max-height:${Math.max(0, above)}px`;
+  // with little room either side (a phone on its side, the keyboard up) it may reach over a bar to show two rows,
+  // but never past the window
+  const floor = (room: number, edge: number) => Math.max(room, Math.min(72, edge));
+  if (below >= want || below >= above) return `left:${left}px; top:${rect.bottom + 4}px; max-height:${floor(below, window.innerHeight - rect.bottom - 8)}px`;
+  return `left:${left}px; bottom:${window.innerHeight - rect.top + 4}px; max-height:${floor(above, rect.top - 8)}px`;
 }
 
 /**
