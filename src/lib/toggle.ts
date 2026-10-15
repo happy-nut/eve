@@ -1,5 +1,6 @@
 import { InputRule } from '@tiptap/core';
 import { Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/state';
+import type { Node as PMNode } from '@tiptap/pm/model';
 import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -28,6 +29,12 @@ function outOfClosed(state: EditorState): number | null {
   }
   return null;
 }
+
+const toggles = (doc: PMNode) => {
+  let n = 0;
+  doc.descendants((x) => { if (x.type.name === 'details') n++; });
+  return n;
+};
 
 export const Toggle = [
   Details.extend({
@@ -60,6 +67,13 @@ export const Toggle = [
     addProseMirrorPlugins() {
       return [...(this.parent?.() ?? []), new Plugin({
         key: new PluginKey('toggleCaretShown'),
+        // A toggle's title holds a line of text and nothing else: a block put there (a divider, a formula, anything
+        // the / menu makes) cut the toggle in two or three around it, its body left in a title-less one. Whatever
+        // would make more toggles out of one, from a caret in a title, does not happen.
+        filterTransaction: (tr, state) => {
+          if (!tr.docChanged || state.selection.$from.parent.type.name !== 'detailsSummary') return true;
+          return toggles(tr.doc) <= toggles(state.doc);
+        },
         appendTransaction: (_trs, _old, state) => {
           const to = outOfClosed(state);
           return to === null ? null : state.tr.setSelection(TextSelection.create(state.doc, to)).scrollIntoView();

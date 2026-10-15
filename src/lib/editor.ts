@@ -279,6 +279,11 @@ const linesToCode = ({ state, tr, dispatch }: { state: EditorState; tr: Transact
   if (lines.length < 2 || $from.parent.type === code) return false;
   const range = $from.blockRange($to, (n) => n.type.contentMatch.matchType(code) != null && !/^table(Cell|Header)$/.test(n.type.name));
   if (!range) return false;
+  // the block made goes where the whole range was: a range that also holds lines outside the selection (the rest of a
+  // list, a callout, a toggle the selection reached into) lost them. Only lines that are all selected become code
+  let inRange = 0;
+  state.doc.nodesBetween(range.start, range.end, (n) => (n.isTextblock ? (inRange++, false) : true));
+  if (inRange !== lines.length) return false;
   if (dispatch) {
     tr.replaceWith(range.start, range.end, code.create(null, state.schema.text(lines.join('\n'))));
     tr.setSelection(TextSelection.near(tr.doc.resolve(range.start + 1)));
@@ -335,7 +340,12 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck),
     blockquote: () => c().toggleBlockquote().run(),
     codeBlock: () => !inCell(editor.state.selection.$from) && (editor.commands.command(linesToCode) || c().toggleCodeBlock().run()),
-    divider: () => c().setHorizontalRule().run(),
+    // in a toggle's title, under the toggle: the title holds text only
+    divider: () => {
+      const { $from } = editor.state.selection;
+      if ($from.parent.type.name === 'detailsSummary') return c().insertContentAt($from.after(-1), { type: 'horizontalRule' }).run();
+      return c().setHorizontalRule().run();
+    },
     selectAll: () => c().selectAll().run(),
     undo: () => c().undo().run(),
     redo: () => c().redo().run(),
@@ -1335,6 +1345,7 @@ export function createEditor(opts: {
                 if (SLASH_AT.getState(state) !== range.from) return false;
                 const $at = state.doc.resolve(range.from);
                 if ($at.parent.type.spec.code) return false; // in code a / is code (Enter made a new page)
+                if ($at.parent.type.name === 'detailsSummary') return false; // a toggle's title: text only, no block fits
                 const before = $at.parent.textBetween(Math.max(0, $at.parentOffset - 1), $at.parentOffset, undefined, '\ufffc');
                 return !before || /\s/.test(before);
               },

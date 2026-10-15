@@ -169,7 +169,8 @@ export const Callout = Node.create({
               let titled = false;
               if (text && text.nodeType === 3 && text.textContent!.startsWith('\n')) text.textContent = text.textContent!.slice(1);
               else if (first.textContent?.trim()) titled = splitTitle(first);
-              if (!first.textContent?.trim() && first.children.length === 0) first.remove();
+              // an empty line kept on purpose is written as a no-break space (trim() takes that too, and dropped the line)
+              if (!/[^\s]|\u00a0/.test(first.textContent ?? '') && first.children.length === 0) first.remove();
               const div = document.createElement('div');
               div.setAttribute('data-callout', m[1]);
               if (m[2]) div.setAttribute('data-fold', m[2]);
