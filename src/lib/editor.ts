@@ -1345,6 +1345,7 @@ export function createEditor(opts: {
       WikiLink.configure({
         onOpen: opts.onOpenNote,
         iconOf,
+        exists: (t) => { const find = (x: string) => notes.byTitle(x); return !!find(splitLink(t, (x) => !!find(x))[0]); },
         suggestion: {
           char: '[[',
           allowSpaces: true,

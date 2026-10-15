@@ -1,4 +1,4 @@
-import { Node, mergeAttributes } from '@tiptap/core';
+import { Node, InputRule, mergeAttributes } from '@tiptap/core';
 import Suggestion, { type SuggestionOptions } from '@tiptap/suggestion';
 import { NodeSelection, TextSelection, PluginKey } from '@tiptap/pm/state';
 import { customIcon } from './icons';
@@ -17,6 +17,8 @@ export interface WikiLinkOptions {
   onOpen: (title: string) => void;
   /** the linked note's icon, so a link reads like its row in the sidebar ('' = none) */
   iconOf: (title: string) => string;
+  /** is there a page by this title (a link typed out whole becomes a link only then) */
+  exists: (title: string) => boolean;
   suggestion: Omit<SuggestionOptions, 'editor'>;
 }
 
@@ -28,7 +30,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
   selectable: true,
 
   addOptions() {
-    return { onOpen: () => {}, iconOf: () => '', suggestion: { char: '[[', pluginKey: new PluginKey('wikiLink') } };
+    return { onOpen: () => {}, iconOf: () => '', exists: () => false, suggestion: { char: '[[', pluginKey: new PluginKey('wikiLink') } };
   },
 
   addAttributes() {
@@ -97,6 +99,22 @@ export const WikiLink = Node.create<WikiLinkOptions>({
       return true;
     };
     return { Enter: open, 'Mod-ArrowDown': open, ArrowRight: step(1), ArrowLeft: step(-1) };
+  },
+
+  // `[[Title]]` (`[[Title|shown as]]`) typed out whole, past the picker, is a link when a page answers to Title: it
+  // stayed text, saved `\[\[Title\]\]`, which no app reads as a link. Brackets that name no page (`[[1, 2]]`, a shell's
+  // `[[ -n $x ]]`) stay as typed.
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /\[\[([^[\]\n]+)\]\]$/,
+        handler: ({ state, range, match }) => {
+          const [title, alias] = splitAlias(match[1]);
+          if (!title || !this.options.exists(title)) return null;
+          state.tr.replaceWith(range.from, range.to, this.type.create({ title, alias }));
+        },
+      }),
+    ];
   },
 
   addProseMirrorPlugins() {
