@@ -328,7 +328,10 @@ export function imageMenu(editor: Editor, getPos: () => number | null | undefine
     const p = getPos();
     const cur = p == null ? null : editor.state.doc.nodeAt(p);
     if (p == null || cur?.type.name !== 'image') return;
-    editor.view.dispatch(editor.state.tr.setNodeMarkup(p, undefined, { ...cur.attrs, align: to === 'left' ? null : to }));
+    // the picture stays picked, the keyboard on it: moved across the page, the caret was left behind somewhere else
+    const tr = editor.state.tr.setNodeMarkup(p, undefined, { ...cur.attrs, align: to === 'left' ? null : to });
+    editor.view.dispatch(tr.setSelection(NodeSelection.create(tr.doc, p)));
+    if (!ui.photo) editor.view.focus();
   };
   ui.openMenu(at, [
     { label: 'Copy image', run: () => void copyImage(src).then((ok) => { if (!ok) void ui.tell('The picture could not be copied.'); }) },

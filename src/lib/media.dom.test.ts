@@ -129,6 +129,8 @@ test('a picture\'s menu: copy and where it sits, nothing else; picking a side mo
   ui.menu!.items[2].run!();
   ui.closeMenu();
   expect(ed.state.doc.nodeAt(pos)!.attrs.align).toBe('center');
+  expect(ed.state.selection).toBeInstanceOf(NodeSelection); // the picture stays picked, the caret on it
+  expect(ed.state.selection.from).toBe(pos);
   expect(md(ed)).toContain('![|center](assets/a.png)');
 });
 
