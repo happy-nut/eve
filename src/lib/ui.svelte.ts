@@ -43,7 +43,7 @@ class Ui {
     setTimeout(() => {
       const a = document.activeElement;
       if (a && a !== document.body && a.isConnected) return;
-      if (from?.isConnected && from !== document.body) from.focus(); else focusNote();
+      if (from?.isConnected && from !== document.body) from.focus({ preventScroll: true }); else focusNote();
     }, 60);
   }
   card = $state<CardReq | null>(null);
@@ -66,7 +66,7 @@ class Ui {
     this.card = null;
     const from = this.cardFrom;
     this.cardFrom = null;
-    if (from?.isConnected && from !== document.body && !from.closest('.card-page')) from.focus();
+    if (from?.isConnected && from !== document.body && !from.closest('.card-page')) from.focus({ preventScroll: true });
     else focusNote();
   }
   /** a diagram block filling the screen, to zoom into and edit there (DiagramBlock.svelte): how to put it back */
@@ -80,7 +80,7 @@ class Ui {
     close();
     const from = this.diagramViewFrom;
     this.diagramViewFrom = null;
-    if (!isMobile && from?.isConnected && from !== document.body) from.focus();
+    if (!isMobile && from?.isConnected && from !== document.body) from.focus({ preventScroll: true });
   }
   /** a picture shown full size over everything (ImageViewer.svelte): a double-click on it, or ↩ with it selected */
   photo = $state<{ src: string; alt: string; menu?: (at: { clientX: number; clientY: number }) => void } | null>(null);
@@ -93,7 +93,7 @@ class Ui {
     this.photo = null;
     const from = this.photoFrom;
     this.photoFrom = null;
-    if (from?.isConnected && from !== document.body) from.focus(); else focusNote();
+    if (from?.isConnected && from !== document.body) from.focus({ preventScroll: true }); else focusNote();
   }
   /** a PDF opened from a note, shown by PdfViewer.svelte as a floating panel (nothing modal about it) */
   pdf = $state<{ src: string; name: string } | null>(null);
@@ -112,13 +112,13 @@ class Ui {
     if (isMobile) return; // a phone has no keyboard focus to lose, and focusing a note would raise its keyboard
     const a = document.activeElement;
     if (a && a !== document.body && a.isConnected && !a.closest('.pdf-panel')) return;
-    if (from?.isConnected && from !== document.body) from.focus(); else focusNote();
+    if (from?.isConnected && from !== document.body) from.focus({ preventScroll: true }); else focusNote();
   }
   /** The document took the keyboard by itself as it loaded: back to where it was (the panel is not modal). */
   pdfGiveBack() {
     if (isMobile) return;
     const from = this.pdfFrom;
-    if (from?.isConnected && from !== document.body) from.focus(); else focusNote();
+    if (from?.isConnected && from !== document.body) from.focus({ preventScroll: true }); else focusNote();
   }
 
   /** every menu (a right click, the list's "+", a code block's language) at a point; the app draws its own
@@ -147,7 +147,7 @@ class Ui {
     this.menu = null;
     this.menuClosed?.();
     this.menuClosed = undefined;
-    if (this.menuFrom?.isConnected) this.menuFrom.focus();
+    if (this.menuFrom?.isConnected) this.menuFrom.focus({ preventScroll: true });
     this.menuFrom = null;
   }
 

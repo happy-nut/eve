@@ -713,6 +713,9 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 .tiptap .img-fig[data-align='right'] .img-cap { text-align: right; }
 .tiptap .img-fig img { margin: 0; }
 .tiptap .img-fig.ProseMirror-selectednode img { outline: 2px solid var(--accent); box-shadow: var(--glow); }
+/* a picked picture is its outline and nothing else: the page's own selection, which covers the whole figure, painted
+   its caption (and in WebKit the picture itself) as selected text */
+.tiptap .img-fig.ProseMirror-selectednode::selection, .tiptap .img-fig.ProseMirror-selectednode *::selection { background: transparent; }
 .tiptap .img-cap {
   margin-top: 5px; text-align: center; font-size: 0.85em; color: var(--fg-dim); outline: none;
   border-radius: 4px; padding: 1px 4px;
