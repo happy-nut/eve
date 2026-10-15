@@ -220,6 +220,39 @@ export const clipboardText = (): Promise<string> =>
 export const copyText = (text: string): Promise<void> =>
   (isTauri ? invoke<void>('plugin:clipboard-manager|write_text', { label: null, text }) : navigator.clipboard.writeText(text)).catch(() => {});
 
+/**
+ * A picture onto the clipboard as a picture, to paste into any app. Handed over as PNG: the Mac's side takes it
+ * (the webview's own clipboard asks for a gesture it does not always grant), a phone's or a browser's own
+ * clipboard elsewhere. false when it could not be read or put there.
+ */
+export async function copyImage(src: string): Promise<boolean> {
+  try {
+    const blob = await (await fetch(src)).blob(); // the asset protocol lets the page read its pictures (CORS)
+    const png = blob.type === 'image/png' ? blob : await asPng(blob);
+    if (isTauri && !isMobile) await invoke<void>('plugin:clipboard-manager|write_image', { image: [...new Uint8Array(await png.arrayBuffer())] });
+    else await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+/** any picture the webview can draw (JPEG, GIF, WebP, SVG) redrawn as a PNG */
+async function asPng(blob: Blob): Promise<Blob> {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || 1024;
+    canvas.height = img.naturalHeight || 1024;
+    canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('no picture'))), 'image/png'));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 /** Open a link in the default browser. */
 export const openUrl = (url: string) => (isTauri ? invoke<void>('open_url', { url }) : Promise.resolve(void window.open(url, '_blank')));
 

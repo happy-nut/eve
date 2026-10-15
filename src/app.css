@@ -706,6 +706,11 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 .tiptap img.ProseMirror-selectednode { outline: 2px solid var(--accent); box-shadow: var(--glow); }
 /* an image and its caption: the caption is the alt text, shown under the picture */
 .tiptap .img-fig { margin: 0.6em 0; width: fit-content; max-width: 100%; } /* shrink to the picture, so the caption sits under it */
+/* where it sits across the page (its menu: a click on it) */
+.tiptap .img-fig[data-align='center'] { margin-left: auto; margin-right: auto; }
+.tiptap .img-fig[data-align='right'] { margin-left: auto; margin-right: 0; }
+.tiptap .img-fig[data-align='center'] .img-cap { text-align: center; }
+.tiptap .img-fig[data-align='right'] .img-cap { text-align: right; }
 .tiptap .img-fig img { margin: 0; }
 .tiptap .img-fig.ProseMirror-selectednode img { outline: 2px solid var(--accent); box-shadow: var(--glow); }
 .tiptap .img-cap {

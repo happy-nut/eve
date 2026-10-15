@@ -83,9 +83,10 @@ class Ui {
     if (!isMobile && from?.isConnected && from !== document.body) from.focus();
   }
   /** a picture shown full size over everything (ImageViewer.svelte): a double-click on it, or ↩ with it selected */
-  photo = $state<{ src: string; alt: string } | null>(null);
+  photo = $state<{ src: string; alt: string; menu?: (at: { clientX: number; clientY: number }) => void } | null>(null);
   private photoFrom: HTMLElement | null = null;
-  viewImage(src: string, alt = '') { this.photoFrom = document.activeElement as HTMLElement | null; this.photo = { src, alt }; }
+  /** `menu`: the picture's own menu, opened by a click (or right-click) on it as it is shown */
+  viewImage(src: string, alt = '', menu?: (at: { clientX: number; clientY: number }) => void) { this.photoFrom = document.activeElement as HTMLElement | null; this.photo = { src, alt, menu }; }
   /** the keyboard goes back to where it was: the note (or the card) with the picture still selected */
   closeImage() {
     if (!this.photo) return;

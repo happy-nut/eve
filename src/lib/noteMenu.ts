@@ -6,6 +6,7 @@ import { ui, type MenuItem } from './ui.svelte';
 import { openUrl, clipboardText, copyText } from './platform';
 import { exportCurrent } from './transfer';
 import { shortcuts } from './shortcuts.svelte';
+import { imageMenu } from './image';
 
 /**
  * Right-click inside a note. The webview's own menu is Look Up / Translate / Speech / AutoFill — a wall
@@ -28,6 +29,13 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
   if (sel.node?.type.name === 'bookmark') {
     const href: string = sel.node.attrs.href;
     ui.openMenu(at, [{ label: 'Show as link', run: () => void cardToLink(editor) }, ...linkItems(href, null).map((i, n) => (n ? i : { ...i, sep: true }))]);
+    return;
+  }
+  // a picture selected (⌥↩ on it): the picture's own menu
+  if (sel.node?.type.name === 'image') {
+    const pos = sel.from;
+    const shown = (editor.view.nodeDOM(pos) as HTMLElement | null)?.querySelector('img');
+    imageMenu(editor, () => pos, at, shown?.src || sel.node.attrs.src);
     return;
   }
   // the caret on a link (⌥↩ there, or a right-click on it): the link's own menu, its card first

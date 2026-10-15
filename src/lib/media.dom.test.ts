@@ -102,6 +102,36 @@ test('a caption ending in |2024 keeps its own width beside it', () => {
   expect(image).toMatchObject({ alt: 'Seoul|2024', width: 540 });
 });
 
+test.each([
+  [{ align: 'center' }, '![|center](assets/a.png)'],
+  [{ align: 'right', width: 540, alt: 'Seoul' }, '![Seoul|540|right](assets/a.png)'],
+  [{ align: 'center', alt: 'ends|center' }, '![ends\\|center|center](assets/a.png)'],
+  [{ alt: 'ends|right' }, '![ends\\|right](assets/a.png)'],
+])('where a picture sits is saved with it: %o', (attrs, written) => {
+  const image = pictureAfterReopening(attrs);
+  expect(image).toMatchObject({ alt: null, width: null, align: null, ...attrs });
+  const ed = editorWith('# t\n\n![](assets/a.png)');
+  let pos = -1;
+  ed.state.doc.descendants((n, p) => { if (n.type.name === 'image') pos = p; });
+  ed.view.dispatch(ed.state.tr.setNodeMarkup(pos, undefined, { ...ed.state.doc.nodeAt(pos)!.attrs, ...attrs }));
+  expect(md(ed)).toContain(written);
+  expect((ed.view.nodeDOM(pos) as HTMLElement).dataset.align).toBe(attrs.align);
+});
+
+test('a picture\'s menu: copy and where it sits, nothing else; picking a side moves it', async () => {
+  const { ui } = await import('./ui.svelte');
+  const { imageMenu } = await import('./image');
+  const ed = editorWith('# t\n\n![](assets/a.png)');
+  let pos = -1;
+  ed.state.doc.descendants((n, p) => { if (n.type.name === 'image') pos = p; });
+  imageMenu(ed, () => pos, { clientX: 0, clientY: 0 }, 'assets/a.png');
+  expect(ui.menu!.items.map((i) => [i.label, !!i.checked])).toEqual([['Copy image', false], ['Align left', true], ['Align center', false], ['Align right', false]]);
+  ui.menu!.items[2].run!();
+  ui.closeMenu();
+  expect(ed.state.doc.nodeAt(pos)!.attrs.align).toBe('center');
+  expect(md(ed)).toContain('![|center](assets/a.png)');
+});
+
 test('a caption in a table cell comes back as it was written', () => {
   const image = pictureAfterReopening({ alt: '2*3=6 [x]' }, '# t\n\n| a |\n| --- |\n| ![](assets/a.png) |');
   expect(image.alt).toBe('2*3=6 [x]');

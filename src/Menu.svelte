@@ -97,9 +97,9 @@
   .check { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .items .check { width: 20px; height: 20px; }
   .items li.sep { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
-  .backdrop { position: fixed; inset: 0; z-index: 44; }
+  .backdrop { position: fixed; inset: 0; z-index: 54; } /* over a picture shown full size (50), which has a menu too */
   .menu {
-    position: fixed; z-index: 45; min-width: 184px; max-width: 280px; max-height: min(360px, 70vh); overflow-y: auto;
+    position: fixed; z-index: 55; min-width: 184px; max-width: 280px; max-height: min(360px, 70vh); overflow-y: auto;
     list-style: none; margin: 0; padding: 4px; outline: none; transform-origin: top left;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }

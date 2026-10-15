@@ -10,13 +10,26 @@ export const MIN_WIDTH = 120;
  * as a width drew the picture 50px wide.
  */
 export function widthOf(text: string | null | undefined): number | null {
-  const m = /(?<!\\)\|(\d{2,4})$/.exec(text ?? '');
+  const m = /(?<!\\)\|(\d{2,4})$/.exec(unAligned(text));
   return m ? Math.max(MIN_WIDTH, Number(m[1])) : null;
 }
-/** The name without the width (and a `\|2024` that is part of it back to `|2024`). */
-export const nameOf = (text: string | null | undefined) => (text ?? '').replace(/(?<!\\)\|\d{2,4}$/, '').replace(/\\(\|\d{2,4})$/, '$1');
-/** A name ending in `|2024` of its own, kept from being read back as a width. */
-export const escapeWidth = (name: string) => name.replace(/\|(\d{2,4})$/, '\\|$1');
+
+/**
+ * Where a picture sits across the page, written after its width as `caption|540|center` (`|right`); the left
+ * is where a picture sits anyway, so it is not written. A caption that itself ends in `|center` is escaped.
+ */
+export type Align = 'center' | 'right';
+const ALIGN = /(?<!\\)\|(center|right)$/;
+export const alignOf = (text: string | null | undefined): Align | null => (ALIGN.exec(text ?? '')?.[1] as Align | undefined) ?? null;
+const unAligned = (text: string | null | undefined) => (text ?? '').replace(ALIGN, '');
+/** Put the alignment back on a name (with its width) for the markdown. */
+export const withAlign = (name: string, align: string | null | undefined) => (align === 'center' || align === 'right' ? `${name}|${align}` : name);
+
+/** The name without the width or alignment (and a `\|2024` or `\|center` that is part of it back as it was). */
+export const nameOf = (text: string | null | undefined) =>
+  unAligned(text).replace(/(?<!\\)\|\d{2,4}$/, '').replace(/\\(\|\d{2,4})$/, '$1').replace(/\\(\|(?:center|right))$/, '$1');
+/** A name ending in `|2024` or `|center` of its own, kept from being read back as a width or an alignment. */
+export const escapeWidth = (name: string) => name.replace(/\|(\d{2,4})$/, '\\|$1').replace(/\|(center|right)$/, '\\|$1');
 /** Put the width back on a name for the markdown. */
 export const withWidth = (name: string, width: number | null | undefined) => (width ? `${name}|${width}` : name);
 
