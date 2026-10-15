@@ -275,10 +275,11 @@
   /** A phone's +: a new note, open, keyboard up — or, with daily notes on, the choice of that or today's. */
   function newOnPhone() {
     const write = (open: () => void) => () => { ui.focusOwner = 'editor'; open(); sidebarOpen = false; widget.keyboard(); };
-    if (!appearance.s.dailyNotes) return write(() => notes.create())();
+    // a group too: a phone has no row menu or "+" beside a group to make one with, so it could not make any
     ui.openMenu({ clientX: 0, clientY: 0 }, [
       { label: 'New note', run: write(() => notes.create()) },
-      { label: "Today's daily note", run: writeToday },
+      { label: 'New group', run: () => groups.create('') },
+      { label: "Today's daily note", run: writeToday, hide: !appearance.s.dailyNotes },
     ]);
   }
   /** Whatever was left open over the app (a picture, a picker, a menu, a dialog, a card, a PDF, Find, Settings),

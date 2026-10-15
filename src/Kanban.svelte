@@ -253,7 +253,13 @@
 </div>
 
 <style>
-  .kb-end { flex: none; display: flex; flex-direction: column; gap: 4px; }
+  /* held at the board's right edge while the columns scroll under it: past the last of many columns, the board's ×
+     (and + and the template) sat off the side of the note, out of sight until scrolled to */
+  .kb-end {
+    flex: none; display: flex; flex-direction: column; gap: 4px; position: sticky; right: 0; z-index: 1;
+    align-self: flex-start; padding-left: 4px; background: var(--bg);
+  }
+  :global(.card-page) .kb-end { background: var(--bg-pop); }
   .kb-x { width: 28px; height: 28px; font-size: 16px; opacity: 0; transition: opacity 0.12s, background 0.12s; }
   .kb-wrap:hover .kb-x, .kb-x.on { opacity: 1; }
   /* the card template: shown while hovering the board, like the ×; always there on a phone */
