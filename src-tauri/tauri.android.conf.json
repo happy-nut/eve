@@ -1,4 +1,4 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "version": "0.7.43"
+  "version": "0.7.44"
 }

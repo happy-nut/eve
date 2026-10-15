@@ -18,7 +18,7 @@ export const insertKanban = (editor: { chain: () => any }) => {
 };
 
 /** Delete the board at `pos` (asks first when it holds cards; ⌘Z brings it back either way). */
-async function deleteBoard(editor: Editor, pos: number) {
+export async function deleteBoard(editor: Editor, pos: number) {
   const node = editor.state.doc.nodeAt(pos);
   if (node?.type.name !== 'kanban') return;
   const n = (node.attrs.columns as Column[]).reduce((s, c) => s + c.cards.length, 0);
@@ -92,7 +92,7 @@ export const Kanban = Node.create({
   },
 
   addKeyboardShortcuts() {
-    // ↓ from the text above / ↑ from the text below step into the board; ⌫ at the start of the line after it deletes it
+    // ↓ from the text above / ↑ from the text below step into the board (⌫ / Delete beside it: selectMediaFirst)
     const top = (editor: Editor) => {
       const s = editor.state.selection;
       return s instanceof TextSelection && s.empty && s.$from.depth >= 1 ? s.$from : null;
@@ -112,14 +112,6 @@ export const Kanban = Node.create({
         const before = editor.state.doc.resolve($f.before(1)).nodeBefore;
         if (before?.type.name !== 'kanban') return false;
         enterBoard(editor, $f.before(1) - before.nodeSize);
-        return true;
-      },
-      Backspace: ({ editor }) => {
-        const $f = top(editor);
-        if (!$f || $f.parentOffset !== 0 || $f.depth !== 1) return false;
-        const before = editor.state.doc.resolve($f.before(1)).nodeBefore;
-        if (before?.type.name !== 'kanban') return false;
-        void deleteBoard(editor, $f.before(1) - before.nodeSize);
         return true;
       },
     };

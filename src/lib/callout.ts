@@ -1,5 +1,6 @@
-import { Node, mergeAttributes } from '@tiptap/core';
-import { TextSelection } from '@tiptap/pm/state';
+import { Extension, Node, mergeAttributes } from '@tiptap/core';
+import { Selection, TextSelection } from '@tiptap/pm/state';
+import { liftTarget } from '@tiptap/pm/transform';
 import { ui } from './ui.svelte';
 import { isMobile } from './platform';
 import { customIcon } from './icons';
@@ -169,7 +170,8 @@ export const Callout = Node.create({
               let titled = false;
               if (text && text.nodeType === 3 && text.textContent!.startsWith('\n')) text.textContent = text.textContent!.slice(1);
               else if (first.textContent?.trim()) titled = splitTitle(first);
-              if (!first.textContent?.trim() && first.children.length === 0) first.remove();
+              // an empty line kept on purpose is written as a no-break space (trim() takes that too, and dropped the line)
+              if (!/[^\s]|\u00a0/.test(first.textContent ?? '') && first.children.length === 0) first.remove();
               const div = document.createElement('div');
               div.setAttribute('data-callout', m[1]);
               if (m[2]) div.setAttribute('data-fold', m[2]);
@@ -180,6 +182,44 @@ export const Callout = Node.create({
             }
           },
         },
+      },
+    };
+  },
+});
+
+/** The callout's ⌫ and Delete at its edges, ahead of the list and line keys that otherwise take them first. */
+export const CalloutEdges = Extension.create({
+  name: 'calloutEdges',
+  priority: 1000,
+  addKeyboardShortcuts() {
+    return {
+      // ⌫ at the start of a titled callout's title: the title steps out, and the callout has no title now (the body
+      // line under it had become the title, in bold, untouched)
+      Backspace: ({ editor }) => {
+        const { state, view } = editor;
+        const { $from, empty } = state.selection;
+        const callout = $from.depth > 1 ? $from.node(-1) : null;
+        if (!empty || $from.parentOffset !== 0 || callout?.type.name !== 'callout' || !callout.attrs.titled || $from.index(-1) !== 0) return false;
+        // the range read off the note with the title cleared: lift copies the callout around what it lifts out
+        const tr = state.tr.setNodeAttribute($from.before(-1), 'titled', false);
+        const range = tr.doc.resolve($from.pos).blockRange();
+        const target = range && liftTarget(range);
+        if (!range || target == null) return false;
+        view.dispatch(tr.lift(range, target).scrollIntoView());
+        return true;
+      },
+      // Delete at the end of the line just before a callout: the caret goes into its first line (an empty line goes).
+      // The stock join pulled that first line out of the callout and left the caret where it was.
+      Delete: ({ editor }) => {
+        const { state, view } = editor;
+        const { $from, empty } = state.selection;
+        if (!empty || !$from.parent.isTextblock || $from.depth === 0 || $from.parentOffset !== $from.parent.content.size) return false;
+        if (state.doc.resolve($from.after()).nodeAfter?.type.name !== 'callout') return false;
+        const tr = state.tr;
+        if (!$from.parent.content.size) tr.delete($from.before(), $from.after());
+        const into = Selection.findFrom(tr.doc.resolve(tr.mapping.map($from.after()) + 1), 1, true);
+        if (into) view.dispatch(tr.setSelection(into).scrollIntoView());
+        return !!into;
       },
     };
   },

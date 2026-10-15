@@ -199,6 +199,68 @@ function outOfTable(view: EditorView, dir: 1 | -1): boolean {
   return true;
 }
 
+/**
+ * A selection from text above a table into a cell (or from a cell to text below) cleared: the text out of the table
+ * goes, the cells it covers are emptied, every row and column stays. Deleted as one range, the cells taken out left
+ * their rows short, and fixTables filled them from the rows below: rows were lost, cells moved up into the header.
+ * The caret ends where the selection began; `text` is typed there.
+ */
+function clearHalf(view: EditorView, text = '') {
+  const { state } = view, { from, to } = state.selection;
+  const $cell = cellAround(state.selection.$to) ?? cellAround(state.selection.$from)!;
+  const start = $cell.before(-1), end = $cell.after(-1);
+  // the part out of the table, then the part of each cell in the selection; the last first, so the rest stay put
+  const parts: [number, number][] = [start > from ? [from, start] : [end, to]];
+  const lo = Math.max(from, start), hi = Math.min(to, end);
+  state.doc.nodesBetween(lo, hi, (node, pos) => {
+    if (!/^table(Cell|Header)$/.test(node.type.name)) return true;
+    const a = Math.max(lo, pos + 1), b = Math.min(hi, pos + node.nodeSize - 1);
+    if (a < b) parts.push([a, b]);
+    return false;
+  });
+  const tr = state.tr;
+  for (const [a, b] of parts.sort((x, y) => y[0] - x[0])) {
+    const $a = tr.doc.resolve(a);
+    // a whole cell keeps an empty line: a cell cannot be left with none
+    if (/^table(Cell|Header)$/.test($a.parent.type.name) && b === $a.end()) tr.replaceWith(a, b, state.schema.nodes.paragraph.create());
+    else tr.delete(a, b);
+  }
+  const at = tr.mapping.map(from, -1);
+  tr.setSelection(TextSelection.create(tr.doc, at));
+  if (text) tr.insertText(text);
+  view.dispatch(tr.scrollIntoView());
+  return true;
+}
+
+/** a line put above a table that opens the note, the caret on it: with nothing above the table, no key could make one */
+function lineAbove(view: EditorView) {
+  const tr = view.state.tr.insert(0, view.state.schema.nodes.paragraph.create());
+  view.dispatch(tr.setSelection(TextSelection.create(tr.doc, 1)).scrollIntoView());
+  return true;
+}
+
+/** the caret's cell, in the first row of a table opening the note */
+function topRow(view: EditorView) {
+  const sel = view.state.selection;
+  const $cell = sel instanceof TextSelection && sel.empty ? cellAround(sel.$head) : null;
+  return !!$cell && $cell.before(1) === 0 && $cell.index(1) === 0;
+}
+
+/**
+ * Enter in a table cell: a line break in it (`<br>` in the note, as ⇧Enter). The stock Enter split the cell into two
+ * lines, which a cell's one line of markdown cannot hold: the second ran into the first on save ("a1 next"). At the
+ * very start of a table opening the note, the line above it instead (no line break leads a cell).
+ */
+export function cellEnter(view: EditorView, hardBreak: () => boolean): boolean {
+  const sel = view.state.selection;
+  if (sel instanceof CellSelection || !cellAround(sel.$head)) return false;
+  if (topRow(view) && sel.head === Selection.atStart(view.state.doc).head) return lineAbove(view);
+  return hardBreak();
+}
+
+/** ↑ in the first row of a table opening the note: a line above it, as ↑ makes one over code opening the note */
+export const upAboveTable = (view: EditorView) => topRow(view) && view.endOfTextblock('up') && lineAbove(view);
+
 function lessTableEditing(plugin: Plugin): Plugin {
   const { appendTransaction, props } = plugin.spec;
   return new Plugin({
@@ -206,8 +268,10 @@ function lessTableEditing(plugin: Plugin): Plugin {
     appendTransaction: (trs, old, state) => (halfInTable(state.selection) ? fixTables(state, old) : appendTransaction!(trs, old, state)),
     props: {
       ...props,
+      handleTextInput: (view, _from, _to, text) => halfInTable(view.state.selection) && clearHalf(view, text),
       handleKeyDown(view, e) {
         const sel = view.state.selection;
+        if ((e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey && !e.altKey && !e.ctrlKey && halfInTable(sel)) return clearHalf(view);
         if (e.shiftKey && sel instanceof TextSelection && !cellAround(sel.$anchor)) return false;
         if (e.shiftKey && !e.altKey && !e.metaKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp') && outOfTable(view, e.key === 'ArrowDown' ? 1 : -1)) return true;
         return props!.handleKeyDown!.call(plugin, view, e);

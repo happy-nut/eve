@@ -7,6 +7,7 @@ import { ui } from './ui.svelte';
 import { isMobile } from './platform';
 import { starter, toCode, type Diagram, type Kind } from './diagram';
 import { mountDiagram } from './diagramBlock.svelte';
+import { blockBeside } from './blocks';
 
 /**
  * Syntax highlighting, loaded with the first code block shown: lowlight, highlight.js and the grammars
@@ -215,6 +216,21 @@ function toLineBefore(state: EditorState, view: EditorView, at: number) {
   return true;
 }
 
+/**
+ * ⌫ at the start of a line under code (a diagram's too, or code ending the list item above): the caret to the end of
+ * the code, an empty line gone, as ⌦ from above goes into it. The stock join ran the line into the code
+ * ("A --> Bbelow"), where it was code from then on. The caret goes in rather than the code being selected first, as
+ * a picture is: code is text the caret can be in, and nothing is lost by a press.
+ */
+function toCodeBefore(state: EditorState, view: EditorView, $at: ResolvedPos) {
+  if (!$at.parent.isTextblock || $at.parentOffset !== 0) return false;
+  const code = blockBeside($at, -1);
+  if (code?.node.type.name !== 'codeBlock') return false;
+  const tr = $at.parent.content.size ? state.tr : state.tr.delete($at.before(), $at.after());
+  view.dispatch(tr.setSelection(TextSelection.create(tr.doc, code.pos + code.node.nodeSize - 1)).scrollIntoView());
+  return true;
+}
+
 export const CodeBlock = CodeBlockBase.extend({
   // ahead of a list's own keys: Tab in code inside a list indents the code, not the whole list item
   priority: 1000,
@@ -246,7 +262,8 @@ export const CodeBlock = CodeBlockBase.extend({
       // on save (no line breaks put in for the code's newlines)
       Backspace: () => {
         const { state, view } = this.editor, { empty, $anchor } = state.selection;
-        if (!empty || $anchor.parent.type.name !== this.name) return false;
+        if (empty && $anchor.parent.type.name !== this.name) return toCodeBefore(state, view, $anchor);
+        if (!empty) return false;
         if ($anchor.pos === 1 || !$anchor.parent.textContent.length) return this.editor.commands.setNode('paragraph');
         // ⌫ at the start of code under a line: to that line's end (an empty line goes). Joined, the code ran into
         // the line as text, its # and - lines read back as headings and lists
@@ -263,9 +280,9 @@ export const CodeBlock = CodeBlockBase.extend({
       Delete: () => {
         const { state, view } = this.editor, { empty, $head } = state.selection;
         if (!empty || !$head.parent.isTextblock || $head.parent.type.name === this.name || $head.parentOffset !== $head.parent.content.size) return false;
-        const after = $head.after();
-        if (state.doc.resolve(after).nodeAfter?.type.name !== this.name) return false;
-        const tr = $head.parent.content.size ? state.tr.setSelection(TextSelection.create(state.doc, after + 1)) : state.tr.delete($head.before(), after);
+        const code = blockBeside($head, 1);
+        if (code?.node.type.name !== this.name) return false;
+        const tr = $head.parent.content.size ? state.tr.setSelection(TextSelection.create(state.doc, code.pos + 1)) : state.tr.delete($head.before(), $head.after());
         view.dispatch(tr.scrollIntoView());
         return true;
       },

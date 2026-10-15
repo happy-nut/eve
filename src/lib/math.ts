@@ -425,6 +425,11 @@ export const Text = Node.create({ name: 'text', group: 'inline', addStorage: () 
 export function insertMath(editor: Editor, display: boolean) {
   const { state } = editor;
   const sel = state.selection;
+  // a toggle's title is a line of text: a block formula goes under the toggle, one in the line has no place there
+  if (sel.$from.parent.type.name === 'detailsSummary') {
+    if (display) editor.chain().focus().insertContentAt(sel.$from.after(-1), { type: 'mathBlock', attrs: { latex: '' } }).run();
+    return;
+  }
   const text = sel.empty ? '' : state.doc.textBetween(sel.from, sel.to, ' ');
   openNext = true;
   const node = display

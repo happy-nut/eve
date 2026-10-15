@@ -53,7 +53,8 @@ export const Divider = HorizontalRule.extend({
       }),
     ].map((rule) => {
       const run = rule.handler.bind(rule);
-      rule.handler = (props: any) => (inList(props.state.selection.$from) ? null : run(props));
+      // nor in a toggle's title, a line of text only
+      rule.handler = (props: any) => (inList(props.state.selection.$from) || props.state.selection.$from.parent.type.name === 'detailsSummary' ? null : run(props));
       return rule;
     });
   },

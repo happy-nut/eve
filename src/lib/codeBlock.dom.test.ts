@@ -35,6 +35,35 @@ describe('code block: ⌫ makes it plain where it is', () => {
   });
 });
 
+describe('⌫ at the start of the line under code: to the end of the code, nothing joined', () => {
+  test.each([
+    ['a diagram', '# t\n\n```mermaid\nA --> B\n```\n\nbelow', 'B'],
+    ['code in a list item', '# t\n\n- x\n\n  ```js\n  A\n  ```\n\n  below', 'A'],
+    ['code ending the list item above', '# t\n\n- x\n\n  ```js\n  A\n  ```\n\nbelow', 'A'],
+  ])('under %s: the line stays, the caret at the end of the code', (_what, note, last) => {
+    const ed = editorWith(note);
+    const before = md(ed);
+    ed.commands.setTextSelection(posOf(ed, 'below'));
+    press(ed, 'Backspace');
+    expect(md(ed)).toBe(before);
+    expect(ed.state.selection.from).toBe(posOf(ed, last, true));
+    expect(blockAt(ed, last)).toBe('codeBlock');
+  });
+
+  test('an empty line under it goes, the caret at the end of the code; ⌘Z puts it back', () => {
+    const ed = editorWith('# t\n\n```mermaid\nA --> B\n```\n\nbelow');
+    const line = posOf(ed, 'below') - 1;
+    ed.view.dispatch(ed.state.tr.insert(line, ed.schema.nodes.paragraph.create()).setMeta('addToHistory', false));
+    const before = md(ed);
+    ed.commands.setTextSelection(line + 1);
+    press(ed, 'Backspace');
+    expect(md(ed)).toBe('# t\n\n```mermaid\nA --> B\n```\n\nbelow');
+    expect(ed.state.selection.from).toBe(posOf(ed, 'B', true));
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+  });
+});
+
 test('↑ at the start of a code block heading the note: a line above it', () => {
   const ed = editorWith('```\nline1\n```\n\nafter');
   ed.commands.setTextSelection(1);

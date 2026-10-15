@@ -11,22 +11,22 @@ import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
-import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
+import { DOMParser, Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
 import { DateMention, dayChoices } from './date';
-import { Callout } from './callout';
+import { Callout, CalloutEdges } from './callout';
 import { Highlight } from './highlight';
 import { Html } from './html';
 import { Toggle } from './toggle';
 import Blockquote from '@tiptap/extension-blockquote';
 import { ImageView, LocalImage } from './image';
 import { Bookmark, URL_RE, openLinkHere } from './bookmark';
-import { Kanban } from './kanban';
+import { Kanban, deleteBoard } from './kanban';
 import { CodeBlock, inCell } from './code';
 import { Pdf } from './pdf';
 import { Video } from './video';
-import { TableNodes } from './table';
+import { TableNodes, cellEnter, upAboveTable } from './table';
 import { Find } from './find';
 import { SelectionLayer } from './selectionLayer';
 import { ClickTarget } from './clickTarget';
@@ -43,7 +43,7 @@ import { shortcuts } from './shortcuts.svelte';
 import { calendar, emojiRow, popup, ICONS, SLASH, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
-import { moveBlock, indentLines, switchItem, switchLines } from './blocks';
+import { blockBeside, moveBlock, indentLines, switchItem, switchLines, joinNextItem, itemAbove, liftCounting, leaveTrailer } from './blocks';
 import { holdEdit, dropEdit } from './pending';
 
 /** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
@@ -266,6 +266,49 @@ function allCode(state: EditorState, from: number, to: number) {
   return all;
 }
 
+const LISTS = /^(bulletList|orderedList|taskList)$/;
+
+/**
+ * Markdown (as HTML) pasted where the caret is, fitted in as any paste is: the first line runs on in the caret's line,
+ * the last one takes the rest of it. Put in with insertContent it was a document of its own, every newline and space
+ * of it kept: a list pasted into a list came in as a loose sublist under an empty item, a to-do's text began with a
+ * space, and "# H" in the middle of a heading cut the heading in three. `lead` and `trail` are spaces kept at the ends.
+ */
+function pasteMarkdown(view: EditorView, html: string, lead = '', trail = ''): Transaction {
+  const { state } = view, { schema } = state, $from = state.selection.$from;
+  const el = document.createElement('div');
+  el.innerHTML = html;
+  // open into the lines, not into a table's cells: a table pasted is a table (as ProseMirror's own paste does)
+  let slice = Slice.maxOpen(DOMParser.fromSchema(schema).parseSlice(el, { preserveWhitespace: false, context: $from }).content, false);
+  const item = $from.depth > 1 && /^(listItem|taskItem)$/.test($from.node(-1).type.name) ? $from.node(-1) : null;
+  const fresh = item?.type.name === 'taskItem' ? { checked: false } : null;
+  // lines pasted into a list item are items of its list, as if typed with Enter between them, not lines of the one item
+  let paras = slice.content.childCount > 1;
+  slice.content.forEach((n) => { if (n.type.name !== 'paragraph') paras = false; });
+  if (item && paras) {
+    const items: PMNode[] = [];
+    slice.content.forEach((p) => items.push(item.type.create(fresh, p)));
+    slice = new Slice(Fragment.from(items), slice.openStart + 1, slice.openEnd + 1);
+  }
+  const tr = state.tr;
+  if (lead) tr.replaceSelectionWith(schema.text(lead), false);
+  // a list (a heading, a quote) pasted at the start or the end of a line goes before or after that line, a list in a
+  // list as items of it. Run into the line, "- a" pasted after "one" gave "onea", its sublist one level in.
+  const $at = tr.selection.$from, first = slice.content.firstChild;
+  const block = first && first.type.name !== 'paragraph' && first.type !== $at.parent.type && (item ? LISTS.test(first.type.name) : true);
+  if (block && tr.selection.empty && $at.parent.content.size && ($at.parentOffset === 0 || $at.pos === $at.end())) {
+    const end = $at.parentOffset > 0, depth = item ? 2 : 1, empty = item ? item.type.create(fresh, schema.nodes.paragraph.create()) : schema.nodes.paragraph.create();
+    if (end) tr.split($at.pos, depth, item ? [{ type: item.type, attrs: fresh }] : [{ type: schema.nodes.paragraph }]);
+    else tr.insert($at.before(1 + $at.depth - depth), empty);
+    tr.setSelection(TextSelection.create(tr.doc, end ? $at.pos + 2 * depth : $at.before(1 + $at.depth - depth) + depth));
+  }
+  tr.replaceSelection(slice);
+  // the space after it is plain, and so is what is typed next: inserted as text, it took the last mark of what was
+  // pasted (" `y` " then "z" gave "`y z`")
+  if (trail) tr.insert(tr.selection.from, schema.text(trail)).setStoredMarks([]);
+  return tr.scrollIntoView();
+}
+
 /** Several lines (paragraphs, list lines) made code at once: one block of them all, a line each, where they were.
  * The stock toggle made each a code block of its own. */
 const linesToCode = ({ state, tr, dispatch }: { state: EditorState; tr: Transaction; dispatch?: unknown }) => {
@@ -279,6 +322,11 @@ const linesToCode = ({ state, tr, dispatch }: { state: EditorState; tr: Transact
   if (lines.length < 2 || $from.parent.type === code) return false;
   const range = $from.blockRange($to, (n) => n.type.contentMatch.matchType(code) != null && !/^table(Cell|Header)$/.test(n.type.name));
   if (!range) return false;
+  // the block made goes where the whole range was: a range that also holds lines outside the selection (the rest of a
+  // list, a callout, a toggle the selection reached into) lost them. Only lines that are all selected become code
+  let inRange = 0;
+  state.doc.nodesBetween(range.start, range.end, (n) => (n.isTextblock ? (inRange++, false) : true));
+  if (inRange !== lines.length) return false;
   if (dispatch) {
     tr.replaceWith(range.start, range.end, code.create(null, state.schema.text(lines.join('\n'))));
     tr.setSelection(TextSelection.near(tr.doc.resolve(range.start + 1)));
@@ -327,15 +375,21 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     h4: () => c().toggleHeading({ level: 4 }).run(),
     h5: () => c().toggleHeading({ level: 5 }).run(),
     // on list lines of another kind, only those lines change kind, where they are (a bullet under a number stays
-    // under it); otherwise the stock toggle (a line becomes a list, a list's lines plain again)
-    bulletList: () => editor.commands.command(switchLines('bulletList', 'listItem')) || c().toggleBulletList().run(),
-    orderedList: () => editor.commands.command(switchLines('orderedList', 'listItem')) || c().toggleOrderedList().run(),
-    taskList: () => editor.commands.command(switchLines('taskList', 'taskItem')) || c().toggleTaskList().run(),
+    // under it); otherwise the stock toggle (a line becomes a list, a list's lines plain again), never over the
+    // empty line at the note's end
+    bulletList: () => editor.commands.command(switchLines('bulletList', 'listItem')) || c().command(leaveTrailer).toggleBulletList().run(),
+    orderedList: () => editor.commands.command(switchLines('orderedList', 'listItem')) || c().command(leaveTrailer).toggleOrderedList().run(),
+    taskList: () => editor.commands.command(switchLines('taskList', 'taskItem')) || c().command(leaveTrailer).toggleTaskList().run(),
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
     toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck),
     blockquote: () => c().toggleBlockquote().run(),
     codeBlock: () => !inCell(editor.state.selection.$from) && (editor.commands.command(linesToCode) || c().toggleCodeBlock().run()),
-    divider: () => c().setHorizontalRule().run(),
+    // in a toggle's title, under the toggle: the title holds text only
+    divider: () => {
+      const { $from } = editor.state.selection;
+      if ($from.parent.type.name === 'detailsSummary') return c().insertContentAt($from.after(-1), { type: 'horizontalRule' }).run();
+      return c().setHorizontalRule().run();
+    },
     selectAll: () => c().selectAll().run(),
     undo: () => c().undo().run(),
     redo: () => c().redo().run(),
@@ -633,6 +687,9 @@ export function createEditor(opts: {
   const editor: Editor = new Editor({
     element: opts.element,
     autofocus: false, // Editor.svelte decides (the sidebar may own focus, e.g. after deleting from the list)
+    // text pasted is read as markdown already; bold's and italic's own rules read it again, looser than markdown
+    // does, and "x * y * z" came out with "y" in italics
+    enablePasteRules: ['link', 'code', 'strike', 'highlight'],
     content: opts.content,
     editorProps: {
       attributes: { class: 'prose', spellcheck: 'true' },
@@ -650,6 +707,12 @@ export function createEditor(opts: {
         // words inside inline code: just them, no backticks (pasted in a terminal, those ran a command)
         if (inLine && allCode(view.state, $from.pos, $to.pos)) return view.state.doc.textBetween($from.pos, $to.pos);
         let content = inLine ? Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))) : slice.content;
+        // part of a nested list, from below an item's own line: the items it sits in, whose lines were not copied,
+        // are left out (they wrote "- - two")
+        for (let open = slice.openStart; !inLine && open >= 2 && content.childCount === 1 && LISTS.test(content.firstChild!.type.name)
+          && content.firstChild!.childCount === 1 && LISTS.test(content.firstChild!.firstChild!.firstChild?.type.name ?? ''); open -= 2) {
+          content = content.firstChild!.firstChild!.content;
+        }
         // a callout copied from below its title line: its first copied line is not its title
         if (!inLine) for (let d = $from.depth; d > 0; d--) {
           if ($from.node(d).type.name !== 'callout' || !$from.node(d).attrs.titled || $from.index(d) === 0) continue;
@@ -666,12 +729,27 @@ export function createEditor(opts: {
       },
       // lines copied from inside a toggle's body come with the toggle around them (no title): pasted elsewhere, a
       // new untitled toggle was made of them. They are just the lines; a whole toggle copied is still a toggle.
-      transformPasted: (slice) => {
+      transformPasted: (slice, view) => {
         let { content, openStart, openEnd } = slice;
+        // rows copied from a table come as rows, open: pasted outside a table, ProseMirror made a table around them
+        // and left the empty line above it. They are a table of their own. (Into a table, prosemirror-tables pastes
+        // the cells.)
+        if (content.firstChild?.type.name === 'tableRow' && !inCell(view.state.selection.$from)) {
+          return new Slice(Fragment.from(view.state.schema.nodes.table.create(null, content)), 0, 0);
+        }
         while (openStart >= 2 && content.childCount === 1 && content.firstChild!.type.name === 'details' && content.firstChild!.firstChild?.type.name === 'detailsContent') {
           content = content.firstChild!.firstChild!.content;
           openStart -= 2;
           openEnd = Math.max(0, openEnd - 2);
+        }
+        // words copied from inside one line come with its block around them (a to-do, a heading, a callout's title):
+        // pasted on an empty line, that block was made again. They are just the words, their marks kept.
+        let inner = content, depth = 0;
+        while (inner.childCount === 1 && !inner.firstChild!.isTextblock && depth < Math.min(openStart, openEnd)) inner = inner.firstChild!.content, depth++;
+        const line = inner.childCount === 1 ? inner.firstChild! : null;
+        // (several lines of code stay code: a line of text holds no newline)
+        if (line?.isTextblock && openStart === depth + 1 && openEnd === depth + 1 && !(line.type.spec.code && line.textContent.includes('\n'))) {
+          return new Slice(line.content, 0, 0);
         }
         return content === slice.content ? slice : new Slice(content, openStart, openEnd);
       },
@@ -691,6 +769,13 @@ export function createEditor(opts: {
         const raw = event.clipboardData?.getData('text/plain') ?? '';
         const text = raw.trim();
         if (URL_RE.test(text) && !view.state.selection.empty) return editor.chain().focus().setLink({ href: text }).run();
+        // a line that holds no line break (a toggle's title) takes lines pasted in it as one, a space between them:
+        // they cut the toggle in two, the rest of it under a new one
+        const $from = state.selection.$from;
+        if (/\n/.test(text) && $from.parent.isTextblock && !$from.parent.type.spec.code && !$from.parent.type.contentMatch.matchType(state.schema.nodes.hardBreak)) {
+          view.dispatch(state.tr.insertText(text.replace(/\s*\r?\n\s*/g, ' ')).scrollIntoView());
+          return true;
+        }
         // markdown copied from a chat or a terminal comes as plain text that happens to carry HTML of the
         // same characters; render it instead of pasting the ** and # in literally. Real formatting wins.
         const html = event.clipboardData?.getData('text/html') ?? '';
@@ -698,16 +783,15 @@ export function createEditor(opts: {
           const parsed = (editor.storage as any).markdown.parser.parse(raw);
           // a line pasted into a line keeps the spaces at its ends (read as markdown, " $x$ ok" lost its first)
           const lead = raw.includes('\n') ? '' : /^[ \t]+/.exec(raw)?.[0] ?? '', trail = raw.includes('\n') ? '' : /[ \t]+$/.exec(raw)?.[0] ?? '';
-          const c = editor.chain().focus();
-          if (lead) c.insertContent({ type: 'text', text: lead });
-          c.insertContent(parsed);
-          // the space after it is plain, and so is what is typed next: inserted as text, it took the last mark of
-          // what was pasted (" `y` " then "z" gave "`y z`")
-          if (trail) c.command(({ tr }) => {
-            tr.insert(tr.selection.from, editor.schema.text(trail)).setStoredMarks([]);
-            return true;
-          });
-          return c.run();
+          view.dispatch(pasteMarkdown(view, parsed, lead, trail));
+          return true;
+        }
+        // lines of plain text are lines, as if typed with Enter between them (in a list: items of it). Read as
+        // markdown they were one paragraph, a line break between each. A cell, a heading, a toggle's title and code
+        // keep them in the one line. Lines copied in the editor come with its own HTML, which says what they were.
+        if (text && /\n/.test(text) && !RICH_HTML.test(html) && !html.includes('data-pm-slice') && $from.parent.type.name === 'paragraph' && !inCell($from)) {
+          view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse(raw.replace(/\r?\n/g, '\n\n'))));
+          return true;
         }
         return false;
       },
@@ -971,28 +1055,53 @@ export function createEditor(opts: {
           props: { decorations: (state) => FLASH.getState(state) },
         })],
       }),
-      // ⌫ at the start of the line under a picture (a PDF, a video, a link card, a formula block), or Delete at the
-      // end of the line over it: the first press selects it, the second removes it. In one keystroke the picture
-      // was gone, easy to miss when all that was meant was to join two lines.
+      // ⌫ at the start of the line under a picture (a PDF, a video, a link card, a formula block, a divider, a table),
+      // or Delete at the end of the line over it: the first press selects it, the second removes it. In one keystroke
+      // the picture was gone, easy to miss when all that was meant was to join two lines. One at the end of a list
+      // item (a callout, a quote) is under the line as much: the stock ⌫ pulled the line into the item and the
+      // picture went. A divider or a table in a quote never went: the line went in and out of the quote instead.
+      // A board, which is never selected, asks as its own × does (gone at once when it has no cards).
       Extension.create({
         name: 'selectMediaFirst',
         priority: 1000,
         addKeyboardShortcuts() {
-          const MEDIA = /^(image|pdf|video|bookmark|mathBlock)$/;
+          const MEDIA = /^(image|pdf|video|bookmark|mathBlock|horizontalRule|table|kanban)$/;
           const select = (dir: -1 | 1) => () => {
             const { state, view } = this.editor;
             const { $from, empty } = state.selection;
             const line = $from.parent;
-            if (!empty || !line.isTextblock || !line.content.size) return false; // an empty line goes as it always did
-            if ($from.parentOffset !== (dir < 0 ? 0 : line.content.size) || $from.depth < 1) return false;
-            const i = $from.index(-1) + dir, holder = $from.node(-1);
-            const next = i >= 0 && i < holder.childCount ? holder.child(i) : null;
-            if (!next || !MEDIA.test(next.type.name)) return false;
-            const at = dir < 0 ? $from.before() - next.nodeSize : $from.after();
-            view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, at)).scrollIntoView());
+            if (!empty || !line.isTextblock || $from.parentOffset !== (dir < 0 ? 0 : line.content.size)) return false;
+            const next = blockBeside($from, dir, (n) => MEDIA.test(n.type.name));
+            if (!next || !MEDIA.test(next.node.type.name)) return false;
+            const board = next.node.type.name === 'kanban';
+            // an empty line goes as it always did (under a board too it asked, as ⌫ there always has)
+            if (!line.content.size && !(board && dir < 0)) return false;
+            if (board) return void deleteBoard(this.editor, next.pos), true;
+            view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, next.pos)).scrollIntoView());
             return true;
           };
           return { Backspace: select(-1), Delete: select(1) };
+        },
+      }),
+      // Enter and ↑ in a table (table.ts), while no menu at the caret wants them for its own list
+      Extension.create({
+        name: 'tableKeys',
+        priority: 1000,
+        addKeyboardShortcuts() {
+          const free = () => !suggestionVisible.get(this.editor)?.();
+          return {
+            Enter: () => free() && cellEnter(this.editor.view, () => this.editor.commands.setHardBreak()),
+            ArrowUp: () => free() && upAboveTable(this.editor.view),
+          };
+        },
+      }),
+      // Delete at the end of a list line over an item at another level or of another kind: that item's text joins the
+      // line (joinNextItem). Ahead of the lists' own Delete (priority 101), which took over once that item had sub-items
+      Extension.create({
+        name: 'joinNextItem',
+        priority: 102,
+        addKeyboardShortcuts() {
+          return { Delete: () => this.editor.commands.command(joinNextItem) };
         },
       }),
       // ahead of the list items' own Tab, which moves an item's sub-items along with it
@@ -1012,23 +1121,43 @@ export function createEditor(opts: {
             'Shift-Tab': run(-1),
             // ⌫ at the very start of a nested item: it steps out a level as ⇧Tab does, still its own kind (a bullet
             // under a number stays a bullet). The stock join made it an item of its parent's list, of that list's kind.
-            // A top-level item is left to the stock ⌫ (the line becomes plain text).
+            // A top-level item is left to the stock ⌫ (the line becomes plain text), the numbers after it counting on.
             Backspace: () => {
+              if (this.editor.commands.command(liftCounting(false))) return true;
               const { $from, empty } = this.editor.state.selection;
               if (!empty || $from.parentOffset !== 0 || !$from.parent.isTextblock || $from.depth < 4 || $from.index(-1) !== 0) return false;
               if (!/Item$/.test($from.node(-1).type.name) || !/Item$/.test($from.node(-3).type.name)) return false;
+              // an empty item with nothing under it: ⌫ deletes the line, the caret to the end of the line above. Stepped
+              // out instead, it took the items after it along as its own sub-items, and the next ⌫ (on a top-level item,
+              // the line made plain) left them all at the top level: deleting one sub-item unindented the rest
+              const item = $from.node(-1);
+              if (!$from.parent.content.size && item.childCount === 1) {
+                const { state, view } = this.editor;
+                const list = $from.node(-2);
+                const from = list.childCount === 1 ? $from.before(-2) : $from.before(-1);
+                const to = list.childCount === 1 ? $from.after(-2) : $from.after(-1);
+                const tr = state.tr.delete(from, to);
+                view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(from), -1)).scrollIntoView());
+                return true;
+              }
               return stepOut();
             },
             // Enter on an empty item under an item of another kind (a bullet under a to-do): it steps out as
             // ⇧Tab does, still a bullet. The stock lift made it an unmarked line inside the to-do, where the
             // caret could not be seen in WebKit. A number under a bullet is one too (both are list items, but the
             // stock lift made it a bullet, where ⇧Tab and ⌫ keep it a number)
+            // In the middle of its list, one of the same kind steps out as ⇧Tab does too: the stock lift left it a bare
+            // line inside the item above, the items after it under it and the list loose. Enter at the start of
+            // a line puts an empty item above it (itemAbove); on an empty numbered one, the count carries on.
             Enter: () => {
+              const c = this.editor.commands;
+              if (c.command(itemAbove) || c.command(liftCounting(true))) return true;
               const { $from, empty } = this.editor.state.selection;
               if (!empty || $from.parent.content.size || $from.depth < 4 || $from.index(-1) !== 0) return false;
               const item = $from.node(-1), owner = $from.node(-3);
               if (!/Item$/.test(item.type.name) || !/Item$/.test(owner.type.name)) return false;
-              if (owner.type === item.type && $from.node(-2).type === $from.node(-4).type) return false;
+              const last = $from.index(-2) === $from.node(-2).childCount - 1;
+              if (last && owner.type === item.type && $from.node(-2).type === $from.node(-4).type) return false;
               return stepOut();
             },
           };
@@ -1281,6 +1410,7 @@ export function createEditor(opts: {
         },
       }),
       Callout,
+      CalloutEdges,
       Highlight,
       ...Html,
       Extension.create({
@@ -1322,6 +1452,7 @@ export function createEditor(opts: {
                 if (SLASH_AT.getState(state) !== range.from) return false;
                 const $at = state.doc.resolve(range.from);
                 if ($at.parent.type.spec.code) return false; // in code a / is code (Enter made a new page)
+                if ($at.parent.type.name === 'detailsSummary') return false; // a toggle's title: text only, no block fits
                 const before = $at.parent.textBetween(Math.max(0, $at.parentOffset - 1), $at.parentOffset, undefined, '\ufffc');
                 return !before || /\s/.test(before);
               },

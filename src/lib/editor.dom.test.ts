@@ -466,3 +466,165 @@ describe('inline code deleted', () => {
     expect(md(ed)).toBe('# T\n\nsee `hi`');
   });
 });
+
+describe('⌫ on an emptied sub-item deletes that line, the items after it stay where they were', () => {
+  for (const [name, note, after] of [
+    ['to-dos, in the middle', '# T\n\n- [ ] parent\n  - [ ] aa\n  - [ ] bb\n  - [ ] cc\n  - [ ] dd\n- [ ] next', '# T\n\n- [ ] parent\n  - [ ] aaZ\n  - [ ] cc\n  - [ ] dd\n- [ ] next'],
+    ['to-dos, the first', '# T\n\n- [ ] parent\n  - [ ] bb\n  - [ ] cc\n- [ ] next', '# T\n\n- [ ] parentZ\n  - [ ] cc\n- [ ] next'],
+    ['to-dos, the only one', '# T\n\n- [ ] parent\n  - [ ] bb\n- [ ] next', '# T\n\n- [ ] parentZ\n- [ ] next'],
+    ['bullets', '# T\n\n- parent\n  - aa\n  - bb\n  - cc\n- next', '# T\n\n- parent\n  - aaZ\n  - cc\n- next'],
+    ['numbers, after an item with its own sub-items', '# T\n\n1. one\n   1. aa\n      - x\n   2. bb\n   3. cc', '# T\n\n1. one\n   1. aa\n      - xZ\n   2. cc'],
+  ] as const)
+    test(name, () => {
+      const ed = editorWith(note);
+      ed.commands.setTextSelection({ from: posOf(ed, 'bb'), to: posOf(ed, 'bb', true) });
+      press(ed, 'Backspace');
+      press(ed, 'Backspace');
+      type(ed, 'Z');
+      expect(md(ed)).toBe(after);
+    });
+});
+
+describe('toggles and callouts keep their shape at their edges', () => {
+  const tog = (open: boolean) => `<details${open ? ' open' : ''}>\n<summary>tog</summary>\n\nsecret\n\n</details>\n\nafter`;
+  const at = (ed: ReturnType<typeof editorWith>) => [ed.state.selection.$from.parent.type.name, ed.state.selection.$from.parentOffset];
+  test('⌫ after an open toggle joins its last line; after a closed one it goes to the title, the toggle kept', () => {
+    let ed = editorWith(tog(true));
+    ed.commands.setTextSelection(posOf(ed, 'after'));
+    press(ed, 'Backspace');
+    expect(md(ed)).toBe('<details open>\n<summary>tog</summary>\n\nsecretafter\n\n</details>');
+    ed = editorWith(tog(false));
+    ed.commands.setTextSelection(posOf(ed, 'after'));
+    press(ed, 'Backspace');
+    expect(md(ed)).toBe(tog(false));
+    expect(at(ed)).toEqual(['detailsSummary', 3]);
+  });
+  test('Delete before a toggle or a callout goes into it; an empty line before it goes', () => {
+    let ed = editorWith('before\n\n' + tog(false));
+    ed.commands.setTextSelection(posOf(ed, 'before', true));
+    press(ed, 'Delete');
+    expect(md(ed)).toBe('before\n\n' + tog(false));
+    expect(at(ed)).toEqual(['detailsSummary', 0]);
+    ed = editorWith('before\n\n> [!💡]\n> one\n>\n> two');
+    ed.commands.setTextSelection(posOf(ed, 'before', true));
+    press(ed, 'Delete');
+    type(ed, 'Z');
+    expect(md(ed)).toBe('before\n\n> [!💡]\n> Zone\n>\n> two');
+  });
+  test('a title\'s divider goes under the toggle; --- typed there stays text', () => {
+    const ed = editorWith('<details open>\n<summary>tog</summary>\n\none\n\n</details>');
+    ed.commands.setTextSelection(posOf(ed, 'tog', true));
+    runEditorCommand(ed, 'divider');
+    expect(md(ed)).toBe('<details open>\n<summary>tog</summary>\n\none\n\n</details>\n\n---');
+    ed.commands.setTextSelection(posOf(ed, 'tog', true));
+    type(ed, '---');
+    expect(md(ed)).toContain('<summary>tog---</summary>');
+  });
+  test('⌫ at the start of a callout\'s title: out it goes, and the callout has no title', () => {
+    const ed = editorWith('before\n\n> [!warning] Heads up\n> one two');
+    ed.commands.setTextSelection(posOf(ed, 'Heads'));
+    press(ed, 'Backspace');
+    expect(md(ed)).toBe('before\n\nHeads up\n\n> [!warning]\n> one two');
+  });
+  test('⌥↑ / ⌥↓ step an edge line out of a callout or quote; a callout\'s title and body keep their order', () => {
+    const move = (note: string, word: string, key: string) => {
+      const ed = editorWith(note);
+      ed.commands.setTextSelection(posOf(ed, word));
+      press(ed, key, { altKey: true });
+      return md(ed);
+    };
+    expect(move('before\n\n> [!💡]\n> one\n>\n> two', 'one', 'ArrowUp')).toBe('before\n\none\n\n> [!💡]\n> two');
+    expect(move('before\n\n> [!💡]\n> one\n>\n> two\n\nafter', 'two', 'ArrowDown')).toBe('before\n\n> [!💡]\n> one\n\ntwo\n\nafter');
+    expect(move('before\n\n> q1\n>\n> q2', 'q1', 'ArrowUp')).toBe('before\n\nq1\n\n> q2');
+    expect(move('before\n\n> [!warning] Heads up\n> one two', 'one', 'ArrowUp')).toBe('before\n\n> [!warning] Heads up\n> one two');
+  });
+  test('an empty first line of a callout survives the round trip', () => {
+    const ed = editorWith('> [!💡]\n> one two');
+    ed.commands.setTextSelection(posOf(ed, 'one'));
+    press(ed, 'Enter');
+    expect(md(editorWith(md(ed)))).toBe(md(ed));
+  });
+  test('⌘⌥C over a range reaching into a list takes no unselected line', () => {
+    const ed = editorWith('bef\n\n- aa\n- bb\n- cc');
+    ed.commands.setTextSelection({ from: posOf(ed, 'bef'), to: posOf(ed, 'aa', true) });
+    runEditorCommand(ed, 'codeBlock');
+    expect(md(ed)).toContain('bb');
+    expect(md(ed)).toContain('cc');
+  });
+});
+
+describe('list keys that leave the rest of the list as it was', () => {
+  /** the key at `word` (its end with `end`): the markdown after it, which reads back the same, and ⌘Z undoes it */
+  const after = (note: string, word: string, end: boolean, key: string, init: KeyboardEventInit = {}) => {
+    const ed = editorWith(note);
+    ed.commands.setTextSelection(posOf(ed, word, end));
+    const before = md(ed);
+    press(ed, key, init);
+    const out = md(ed);
+    expect(md(editorWith(out))).toBe(out);
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+    return out.trimEnd();
+  };
+  /** the note with `x` taken out, the caret on the empty line left */
+  const emptied = (note: string) => {
+    const ed = editorWith(note);
+    const p = posOf(ed, 'x');
+    ed.view.dispatch(ed.state.tr.delete(p, p + 1));
+    ed.commands.setTextSelection(p);
+    return ed;
+  };
+
+  test('Delete at the end of a line over an item at another level or of another kind: only its text comes up', () => {
+    expect(after('- [ ] alpha\n  - [ ] bravo\n  - [x] charlie\n- [x] foxtrot', 'alpha', true, 'Delete')).toBe('- [ ] alphabravo\n  - [x] charlie\n- [x] foxtrot');
+    expect(after('- [ ] alpha\n  - [ ] bravo\n  - [ ] echo\n- [x] foxtrot', 'echo', true, 'Delete')).toBe('- [ ] alpha\n  - [ ] bravo\n  - [ ] echofoxtrot');
+    expect(after('- [ ] alpha\n  - [x] charlie\n    - [ ] delta\n  - [ ] echo', 'charlie', true, 'Delete')).toBe('- [ ] alpha\n  - [x] charliedelta\n  - [ ] echo');
+    expect(after('- alpha\n- [ ] bravo\n- c', 'alpha', true, 'Delete')).toBe('- alphabravo\n- c');
+    // its sub-items keep their level, under the item the line is in at that level
+    expect(after('- a\n  - b\n- [ ] c\n  - d', 'b', true, 'Delete')).toBe('- a\n  - bc\n  - d');
+  });
+
+  test('Enter at the start of a ticked to-do: an empty to-do above, the tick stays with its text', () => {
+    expect(after('- [x] alpha\n- [ ] charlie', 'alpha', false, 'Enter')).toBe('- [ ] \u00a0\n- [x] alpha\n- [ ] charlie');
+    expect(after('- [ ] z\n  - [x] alpha\n  - [ ] charlie', 'alpha', false, 'Enter')).toBe('- [ ] z\n  - [ ] \u00a0\n  - [x] alpha\n  - [ ] charlie');
+  });
+
+  test('Enter on an empty sub-item in the middle of its list steps out as ⇧Tab does, the list tight', () => {
+    for (const [note, out] of [['- a\n  - b\n  - x\n  - c\n- d', '- a\n  - b\n- \u00a0\n  - c\n- d'], ['1. a\n   1. b\n   2. x\n   3. c\n2. d', '1. a\n   1. b\n2. \u00a0\n   1. c\n3. d']]) {
+      const ed = emptied(note), tab = emptied(note);
+      const before = md(ed);
+      press(ed, 'Enter');
+      press(tab, 'Tab', { shiftKey: true });
+      expect(md(ed).trimEnd()).toBe(out);
+      expect(md(tab)).toBe(md(ed));
+      ed.commands.undo();
+      expect(md(ed)).toBe(before);
+    }
+  });
+
+  test('⌘A then ⌘⇧8 / ⌘⇧7 on a nested to-do list: every line changes kind where it is, one ⌘Z back', () => {
+    const note = '- [ ] a\n  - [ ] b\n  - [x] c\n- [x] f';
+    for (const [id, out] of [['bulletList', '- a\n  - b\n  - c\n- f'], ['orderedList', '1. a\n   1. b\n   2. c\n2. f']]) {
+      const ed = editorWith(note);
+      ed.commands.selectAll();
+      runEditorCommand(ed, id);
+      expect(md(ed).trimEnd()).toBe(out);
+      ed.commands.undo();
+      expect(md(ed)).toBe(note);
+    }
+    // ⌘⇧9 on to-dos takes them out of the list, with no empty to-do left at the end
+    const ed = editorWith('- [ ] a\n- [x] f');
+    ed.commands.selectAll();
+    runEditorCommand(ed, 'taskList');
+    expect(md(ed).trimEnd()).toBe('a\n\nf');
+  });
+
+  test('a numbered item taken out of the middle of its list: the numbers after it carry on', () => {
+    expect(after('1. a\n2. b\n3. c\n4. d', 'b', false, 'Backspace')).toBe('1. a\n\nb\n\n3. c\n4. d');
+    for (const key of ['Enter', 'Backspace']) {
+      const ed = emptied('1. a\n2. b\n3. x\n4. c');
+      press(ed, key);
+      expect(md(ed).trimEnd()).toBe('1. a\n2. b\n\n\u00a0\n\n4. c');
+    }
+  });
+});
