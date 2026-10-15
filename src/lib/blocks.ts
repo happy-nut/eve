@@ -1,7 +1,26 @@
 // Moving and indenting lines: plain ProseMirror, no editor or DOM, so it runs in Node (blocks.test.mjs).
-import { Fragment, type Node as PMNode, type NodeType } from '@tiptap/pm/model';
+import { Fragment, type Node as PMNode, type NodeType, type ResolvedPos } from '@tiptap/pm/model';
 import { Selection, TextSelection } from '@tiptap/pm/state';
 import { liftListItem, sinkListItem } from '@tiptap/pm/schema-list';
+
+/**
+ * The block a ⌫ at the start of the line at `$pos` runs into (dir -1), or a Delete at its end (1): the line's
+ * neighbour, or the last (first) block deep in it as far as `stop` lets it go, since a list ending in a picture ends
+ * in that picture. Null when the line is the first (last) in what holds it, which ⌫ lifts it out of instead. A closed
+ * toggle is not looked into: its body is not on screen.
+ */
+export function blockBeside($pos: ResolvedPos, dir: -1 | 1, stop: (n: PMNode) => boolean = () => false): { node: PMNode; pos: number } | null {
+  if ($pos.depth < 1) return null;
+  const i = $pos.index(-1) + dir, holder = $pos.node(-1);
+  if (i < 0 || i >= holder.childCount) return null;
+  let node = holder.child(i), pos = dir < 0 ? $pos.before() - node.nodeSize : $pos.after();
+  while (!node.isTextblock && !node.isAtom && node.childCount && !stop(node) && !(node.type.name === 'details' && !node.attrs.open)) {
+    const inner = dir < 0 ? node.lastChild! : node.firstChild!;
+    pos = dir < 0 ? pos + node.nodeSize - 1 - inner.nodeSize : pos + 1;
+    node = inner;
+  }
+  return { node, pos };
+}
 
 /**
  * Move whatever the selection covers one step up or down among its siblings — a line, a list item, a
