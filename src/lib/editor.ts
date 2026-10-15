@@ -22,11 +22,11 @@ import { Toggle } from './toggle';
 import Blockquote from '@tiptap/extension-blockquote';
 import { ImageView, LocalImage } from './image';
 import { Bookmark, URL_RE, openLinkHere } from './bookmark';
-import { Kanban } from './kanban';
+import { Kanban, deleteBoard } from './kanban';
 import { CodeBlock, inCell } from './code';
 import { Pdf } from './pdf';
 import { Video } from './video';
-import { TableNodes } from './table';
+import { TableNodes, cellEnter, upAboveTable } from './table';
 import { Find } from './find';
 import { SelectionLayer } from './selectionLayer';
 import { ClickTarget } from './clickTarget';
@@ -43,7 +43,7 @@ import { shortcuts } from './shortcuts.svelte';
 import { calendar, emojiRow, popup, ICONS, SLASH, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
-import { moveBlock, indentLines, switchItem, switchLines } from './blocks';
+import { blockBeside, moveBlock, indentLines, switchItem, switchLines } from './blocks';
 import { holdEdit, dropEdit } from './pending';
 
 /** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
@@ -981,28 +981,44 @@ export function createEditor(opts: {
           props: { decorations: (state) => FLASH.getState(state) },
         })],
       }),
-      // ⌫ at the start of the line under a picture (a PDF, a video, a link card, a formula block), or Delete at the
-      // end of the line over it: the first press selects it, the second removes it. In one keystroke the picture
-      // was gone, easy to miss when all that was meant was to join two lines.
+      // ⌫ at the start of the line under a picture (a PDF, a video, a link card, a formula block, a divider, a table),
+      // or Delete at the end of the line over it: the first press selects it, the second removes it. In one keystroke
+      // the picture was gone, easy to miss when all that was meant was to join two lines. One at the end of a list
+      // item (a callout, a quote) is under the line as much: the stock ⌫ pulled the line into the item and the
+      // picture went. A divider or a table in a quote never went: the line went in and out of the quote instead.
+      // A board, which is never selected, asks as its own × does (gone at once when it has no cards).
       Extension.create({
         name: 'selectMediaFirst',
         priority: 1000,
         addKeyboardShortcuts() {
-          const MEDIA = /^(image|pdf|video|bookmark|mathBlock)$/;
+          const MEDIA = /^(image|pdf|video|bookmark|mathBlock|horizontalRule|table|kanban)$/;
           const select = (dir: -1 | 1) => () => {
             const { state, view } = this.editor;
             const { $from, empty } = state.selection;
             const line = $from.parent;
-            if (!empty || !line.isTextblock || !line.content.size) return false; // an empty line goes as it always did
-            if ($from.parentOffset !== (dir < 0 ? 0 : line.content.size) || $from.depth < 1) return false;
-            const i = $from.index(-1) + dir, holder = $from.node(-1);
-            const next = i >= 0 && i < holder.childCount ? holder.child(i) : null;
-            if (!next || !MEDIA.test(next.type.name)) return false;
-            const at = dir < 0 ? $from.before() - next.nodeSize : $from.after();
-            view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, at)).scrollIntoView());
+            if (!empty || !line.isTextblock || $from.parentOffset !== (dir < 0 ? 0 : line.content.size)) return false;
+            const next = blockBeside($from, dir, (n) => MEDIA.test(n.type.name));
+            if (!next || !MEDIA.test(next.node.type.name)) return false;
+            const board = next.node.type.name === 'kanban';
+            // an empty line goes as it always did (under a board too it asked, as ⌫ there always has)
+            if (!line.content.size && !(board && dir < 0)) return false;
+            if (board) return void deleteBoard(this.editor, next.pos), true;
+            view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, next.pos)).scrollIntoView());
             return true;
           };
           return { Backspace: select(-1), Delete: select(1) };
+        },
+      }),
+      // Enter and ↑ in a table (table.ts), while no menu at the caret wants them for its own list
+      Extension.create({
+        name: 'tableKeys',
+        priority: 1000,
+        addKeyboardShortcuts() {
+          const free = () => !suggestionVisible.get(this.editor)?.();
+          return {
+            Enter: () => free() && cellEnter(this.editor.view, () => this.editor.commands.setHardBreak()),
+            ArrowUp: () => free() && upAboveTable(this.editor.view),
+          };
         },
       }),
       // ahead of the list items' own Tab, which moves an item's sub-items along with it

@@ -1,7 +1,9 @@
 // Pictures, PDFs, videos, link cards and math in a note: where they land, what they keep, how the keys treat them.
-import { test, expect, afterEach } from 'vitest';
+import { test, expect, afterEach, describe, vi } from 'vitest';
 import { editorWith, md, posOf, press } from './testEditor';
 import { NodeSelection } from '@tiptap/pm/state';
+import { CellSelection } from '@tiptap/pm/tables';
+import { ui } from './ui.svelte';
 import { createEditor, dropBlock } from './editor';
 import { sizeGrip } from './resize';
 import { assetName, onDisk } from './platform';
@@ -182,6 +184,7 @@ test.each([
   ['a video', '[v.mp4](assets/v.mp4)', 'video'],
   ['a link card', 'https://example.com/', 'bookmark'],
   ['a formula block', '$$\nx^2\n$$', 'mathBlock'],
+  ['a divider', '---', 'horizontalRule'],
 ])('⌫ under %s selects it first and removes it the second time; Delete over it does the same', (_what, block, type) => {
   const note = `# t\n\nabove\n\n${block}\n\nbelow`;
   const back = editorWith(note);
@@ -198,6 +201,95 @@ test.each([
   expect((fwd.state.selection as NodeSelection).node?.type.name).toBe(type);
   press(fwd, 'Delete');
   expect(md(fwd)).toBe('# t\n\nabove\n\nbelow');
+});
+
+test.each([
+  ['a picture', '![cap](x.png)', 'image'],
+  ['a divider', '---', 'horizontalRule'],
+  ['a formula block', '$$\nx^2\n$$', 'mathBlock'],
+])('%s ending the list item above: ⌫ under the list selects it first, the item\'s text untouched', (_what, block, type) => {
+  const note = `# t\n\n- one\n\n  ${block.replaceAll('\n', '\n  ')}\n\ntwo`;
+  const ed = editorWith(note);
+  const before = md(ed);
+  ed.commands.setTextSelection(posOf(ed, 'two'));
+  press(ed, 'Backspace');
+  expect((ed.state.selection as NodeSelection).node?.type.name).toBe(type);
+  expect(md(ed)).toBe(before);
+  press(ed, 'Backspace');
+  expect(md(ed)).toBe('# t\n\n- one\n\ntwo');
+  ed.commands.undo();
+  expect(md(ed)).toBe(before);
+  expect(md(editorWith(before))).toBe(before);
+});
+
+test('Delete over a list whose first item opens with a picture selects it first', () => {
+  const ed = editorWith('# t\n\nabove\n\n- ![cap](x.png)\n\n  one');
+  ed.commands.setTextSelection(posOf(ed, 'above', true));
+  press(ed, 'Delete');
+  expect((ed.state.selection as NodeSelection).node?.type.name).toBe('image');
+});
+
+describe('a board beside the line asks before it goes, from either side and at the end of a list item', () => {
+  const board = '```kanban\n{"columns":[{"title":"A","cards":[{"title":"c1","body":""}]}]}\n```';
+  const asked = async (note: string, word: string, key: 'Backspace' | 'Delete', yes: boolean) => {
+    const ask = vi.spyOn(ui, 'ask').mockResolvedValue(yes);
+    const ed = editorWith(note);
+    const before = md(ed);
+    ed.commands.setTextSelection(posOf(ed, word, key === 'Delete'));
+    press(ed, key);
+    await vi.waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    ask.mockRestore();
+    return { ed, before };
+  };
+
+  test.each(['Backspace', 'Delete'] as const)('%s next to it, answered no: the board and both lines as they were', async (key) => {
+    const { ed, before } = await asked(`# t\n\nabove\n\n${board}\n\nbelow`, key === 'Delete' ? 'above' : 'below', key, false);
+    expect(md(ed)).toBe(before);
+  });
+
+  test('Delete at the end of the line over it, answered yes: the board gone, the lines kept, ⌘Z brings it back', async () => {
+    const { ed, before } = await asked(`# t\n\nabove\n\n${board}\n\nbelow`, 'above', 'Delete', true);
+    expect(md(ed)).toBe('# t\n\nabove\n\nbelow');
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+  });
+
+  test('⌫ under a list whose last item ends in a board: asked, and the item\'s text is left alone', async () => {
+    const { ed, before } = await asked(`# t\n\n- one\n\n  ${board.replaceAll('\n', '\n  ')}\n\ntwo`, 'two', 'Backspace', false);
+    expect(md(ed)).toBe(before);
+    expect(ed.state.selection.from).toBe(posOf(ed, 'two'));
+  });
+});
+
+test('⌫ under a divider in a quote selects it, then removes it; the line stays in the quote', () => {
+  const ed = editorWith('# t\n\n> q\n>\n> ---\n>\n> after');
+  ed.commands.setTextSelection(posOf(ed, 'after'));
+  press(ed, 'Backspace');
+  expect((ed.state.selection as NodeSelection).node?.type.name).toBe('horizontalRule');
+  expect(md(ed)).toBe('# t\n\n> q\n>\n> ---\n>\n> after');
+  press(ed, 'Backspace');
+  expect(md(ed)).toBe('# t\n\n> q\n>\n> after');
+  ed.commands.undo();
+  expect(md(ed)).toBe('# t\n\n> q\n>\n> ---\n>\n> after');
+});
+
+test('⌫ under a table (in a quote too) selects the whole table first, the second ⌫ removes it', () => {
+  for (const [note, left] of [
+    ['# t\n\n| h |\n| --- |\n| x |\n\nafter', '# t\n\nafter'],
+    ['# t\n\n> q\n>\n> | h |\n> | --- |\n> | x |\n>\n> after', '# t\n\n> q\n>\n> after'],
+  ]) {
+    const ed = editorWith(note);
+    const before = md(ed);
+    ed.commands.setTextSelection(posOf(ed, 'after'));
+    press(ed, 'Backspace');
+    expect(ed.state.selection).toBeInstanceOf(CellSelection);
+    expect(md(ed)).toBe(before);
+    press(ed, 'Backspace');
+    expect(md(ed)).toBe(left);
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+  }
 });
 
 test('⌫ at the start of a line under plain text still joins the two lines', () => {

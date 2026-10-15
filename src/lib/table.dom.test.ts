@@ -1,6 +1,6 @@
-import { test, expect, afterEach } from 'vitest';
+import { describe, test, expect, afterEach } from 'vitest';
 import { TextSelection } from '@tiptap/pm/state';
-import { editorWith, md, posOf } from './testEditor';
+import { editorWith, md, posOf, press, type } from './testEditor';
 
 afterEach(() => { document.body.innerHTML = ''; });
 
@@ -43,4 +43,74 @@ test.each([
 ])('a table %s is written as it was read', (_what, note) => {
   expect(save(note).trimEnd()).toBe(note);
   expect(save(save(note))).toBe(save(note));
+});
+
+test('Enter in a cell is a line break in it, saved as <br> the way ⇧Enter saves one', () => {
+  const ed = editorWith('# t\n\n| h |\n| --- |\n| a1 |');
+  const before = md(ed);
+  ed.commands.setTextSelection(posOf(ed, 'a1', true));
+  press(ed, 'Enter');
+  type(ed, 'next');
+  expect(md(ed)).toBe('# t\n\n| h |\n| --- |\n| a1<br>next |\n');
+  expect(md(editorWith(md(ed)))).toBe(md(ed));
+  ed.commands.undo();
+  expect(md(ed)).toBe(before);
+});
+
+describe('a selection from text into a cell, cleared: the text out of the table goes, the cells it covers are emptied', () => {
+  const grid = '| h1 | h2 |\n| --- | --- |\n| a1 | a2 |\n| b1 | b2 |';
+  const cleared = (note: string, from: [string, boolean?], to: [string, boolean?], act: (ed: ReturnType<typeof editorWith>) => void) => {
+    const ed = editorWith(note);
+    const before = md(ed);
+    ed.view.dispatch(ed.state.tr.setSelection(TextSelection.create(ed.state.doc, posOf(ed, ...from), posOf(ed, ...to))));
+    act(ed);
+    const after = md(ed);
+    expect(md(editorWith(after))).toBe(after);
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+    return { ed, after };
+  };
+
+  test.each(['Backspace', 'Delete'])('from the line above, %s: every row and column kept', (key) => {
+    const { after } = cleared(`above\n\n${grid}`, ['bove'], ['a1', true], (ed) => press(ed, key));
+    expect(after).toBe('a\n\n|  |  |\n| --- | --- |\n|  | a2 |\n| b1 | b2 |\n');
+  });
+
+  test('from the line above, typing: the letter where the selection began', () => {
+    const { after } = cleared(`above\n\n${grid}`, ['bove'], ['a1', true], (ed) => type(ed, 'X'));
+    expect(after).toBe('aX\n\n|  |  |\n| --- | --- |\n|  | a2 |\n| b1 | b2 |\n');
+  });
+
+  test('from a cell to the line below', () => {
+    let left = '';
+    const { after } = cleared(`${grid}\n\nbelow`, ['b1', true], ['elow'], (ed) => {
+      press(ed, 'Backspace');
+      left = ed.state.doc.resolve(ed.state.selection.from).parent.textContent;
+    });
+    expect(after).toBe('| h1 | h2 |\n| --- | --- |\n| a1 | a2 |\n| b1 |  |\n\nelow');
+    expect(left).toBe('b1');
+  });
+});
+
+describe('a table opening the note: a line can be made above it', () => {
+  test.each([
+    ['↑ in its first row', 'h2', 'ArrowUp'],
+    ['Enter at the very start of its first cell', 'h1', 'Enter'],
+  ])('%s', (_what, word, key) => {
+    const ed = editorWith('| h1 | h2 |\n| --- | --- |\n| a1 | a2 |');
+    const before = md(ed);
+    ed.commands.setTextSelection(posOf(ed, word));
+    press(ed, key);
+    type(ed, 'new');
+    expect(md(ed)).toBe('new\n\n| h1 | h2 |\n| --- | --- |\n| a1 | a2 |\n');
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+  });
+
+  test('↑ in a table with a line above it moves as it did, nothing made', () => {
+    const ed = editorWith('above\n\n| h1 | h2 |\n| --- | --- |\n| a1 | a2 |');
+    ed.commands.setTextSelection(posOf(ed, 'h1'));
+    press(ed, 'ArrowUp');
+    expect(md(ed)).toBe('above\n\n| h1 | h2 |\n| --- | --- |\n| a1 | a2 |\n');
+  });
 });
