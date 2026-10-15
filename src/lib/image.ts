@@ -261,6 +261,9 @@ export const LocalImage = Image.extend({
         e.preventDefault();
         e.stopPropagation();
         clearTimeout(pending);
+        // the picture is what the menu acts on: picked, as a left click picks it (the caret stayed wherever it was)
+        const p = pos();
+        if (p != null) editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, p)));
         imageMenu(editor, pos, e, img.src);
       });
 
