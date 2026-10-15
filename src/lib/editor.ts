@@ -15,7 +15,7 @@ import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
 import { DateMention, dayChoices } from './date';
-import { Callout } from './callout';
+import { Callout, CalloutEdges } from './callout';
 import { Highlight } from './highlight';
 import { Html } from './html';
 import { Toggle } from './toggle';
@@ -1304,6 +1304,7 @@ export function createEditor(opts: {
         },
       }),
       Callout,
+      CalloutEdges,
       Highlight,
       ...Html,
       Extension.create({

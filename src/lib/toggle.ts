@@ -1,5 +1,5 @@
 import { InputRule } from '@tiptap/core';
-import { Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/state';
+import { Plugin, PluginKey, Selection, TextSelection, type EditorState } from '@tiptap/pm/state';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details';
 
@@ -93,6 +93,41 @@ export const Toggle = [
             return p.editor.commands.setTextSelection($head.after() + 2);
           }
           return stock.Enter?.(p) ?? false;
+        },
+        Backspace: (p) => {
+          const { state, view } = p.editor;
+          const { $from, empty } = state.selection;
+          // a letter in the title: the webview's own ⌫, by whole characters (the stock one took one code unit, and
+          // left half an emoji written into the file)
+          if (empty && $from.parent.type.name === 'detailsSummary' && $from.parentOffset > 0) return false;
+          // the line just after a toggle: into the toggle's last line (open) or to its title (closed), never the whole
+          // toggle selected, then deleted with its folded body unseen by the next key
+          const before = empty && $from.parentOffset === 0 && $from.parent.isTextblock && $from.depth > 0 ? state.doc.resolve($from.before()).nodeBefore : null;
+          if (before?.type === this.type) {
+            const at = $from.before() - before.nodeSize;
+            const into = before.attrs.open ? Selection.findFrom(state.doc.resolve($from.before()), -1, true) : null;
+            const end = into ? into.from : at + 1 + before.firstChild!.nodeSize - 1;
+            const line = $from.parent;
+            const tr = state.tr;
+            if (!line.content.size) tr.delete($from.before(), $from.after());
+            else if (into && into.$from.parent.inlineContent) tr.delete($from.before(), $from.after()).insert(end, line.content);
+            view.dispatch(tr.setSelection(TextSelection.create(tr.doc, end)).scrollIntoView());
+            return true;
+          }
+          return stock.Backspace?.(p) ?? false;
+        },
+        // the line just before a toggle: Delete takes the caret to its title (an empty line goes), never the toggle
+        Delete: (p) => {
+          const { state, view } = p.editor;
+          const { $from, empty } = state.selection;
+          if (!empty || !$from.parent.isTextblock || $from.depth === 0 || $from.parentOffset !== $from.parent.content.size) return false;
+          const next = state.doc.resolve($from.after()).nodeAfter;
+          if (next?.type !== this.type) return false;
+          const tr = state.tr;
+          if (!$from.parent.content.size) tr.delete($from.before(), $from.after());
+          const title = tr.mapping.map($from.after()) + 2;
+          view.dispatch(tr.setSelection(TextSelection.create(tr.doc, title)).scrollIntoView());
+          return true;
         },
       };
     },

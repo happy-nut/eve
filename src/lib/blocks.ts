@@ -2,6 +2,7 @@
 import { Fragment, type Node as PMNode, type NodeType } from '@tiptap/pm/model';
 import { Selection, TextSelection } from '@tiptap/pm/state';
 import { liftListItem, sinkListItem } from '@tiptap/pm/schema-list';
+import { liftTarget } from '@tiptap/pm/transform';
 
 /**
  * Move whatever the selection covers one step up or down among its siblings — a line, a list item, a
@@ -100,7 +101,24 @@ function moveOnce(state: any, dir: -1 | 1, done = 0): any {
       range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1));
       continue;
     }
+    // a callout with a title: the title moves the whole callout, and the body line under it stays under it (swapped,
+    // the body line became the title)
+    if (parent.type.name === 'callout' && parent.attrs.titled) {
+      if (startIndex === 1 && dir < 0) return true;
+      if (startIndex === 0) {
+        range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1));
+        continue;
+      }
+    }
     const i = dir < 0 ? startIndex - 1 : endIndex;
+    // a line at the edge of a callout or a quote steps out of it, past its edge, as a list item hops out of its list:
+    // the whole box went along, past the block beside it. A box of that one line moves whole, as before.
+    if (/^(callout|blockquote)$/.test(parent.type.name) && (i < 0 || i >= parent.childCount) && endIndex - startIndex < parent.childCount) {
+      const target = liftTarget(range);
+      if (target == null) return true;
+      state.tr.lift(range, target);
+      return true;
+    }
     // rows move among the body rows: the header stays on top (the markdown table needs it there), and a row at
     // the body's edge stays in its table rather than taking the whole table along
     if (parent.type.name === 'table' && (startIndex === 0 || i < 1 || i >= parent.childCount)) return true;

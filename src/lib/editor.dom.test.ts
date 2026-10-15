@@ -484,3 +484,71 @@ describe('⌫ on an emptied sub-item deletes that line, the items after it stay 
       expect(md(ed)).toBe(after);
     });
 });
+
+describe('toggles and callouts keep their shape at their edges', () => {
+  const tog = (open: boolean) => `<details${open ? ' open' : ''}>\n<summary>tog</summary>\n\nsecret\n\n</details>\n\nafter`;
+  const at = (ed: ReturnType<typeof editorWith>) => [ed.state.selection.$from.parent.type.name, ed.state.selection.$from.parentOffset];
+  test('⌫ after an open toggle joins its last line; after a closed one it goes to the title, the toggle kept', () => {
+    let ed = editorWith(tog(true));
+    ed.commands.setTextSelection(posOf(ed, 'after'));
+    press(ed, 'Backspace');
+    expect(md(ed)).toBe('<details open>\n<summary>tog</summary>\n\nsecretafter\n\n</details>');
+    ed = editorWith(tog(false));
+    ed.commands.setTextSelection(posOf(ed, 'after'));
+    press(ed, 'Backspace');
+    expect(md(ed)).toBe(tog(false));
+    expect(at(ed)).toEqual(['detailsSummary', 3]);
+  });
+  test('Delete before a toggle or a callout goes into it; an empty line before it goes', () => {
+    let ed = editorWith('before\n\n' + tog(false));
+    ed.commands.setTextSelection(posOf(ed, 'before', true));
+    press(ed, 'Delete');
+    expect(md(ed)).toBe('before\n\n' + tog(false));
+    expect(at(ed)).toEqual(['detailsSummary', 0]);
+    ed = editorWith('before\n\n> [!💡]\n> one\n>\n> two');
+    ed.commands.setTextSelection(posOf(ed, 'before', true));
+    press(ed, 'Delete');
+    type(ed, 'Z');
+    expect(md(ed)).toBe('before\n\n> [!💡]\n> Zone\n>\n> two');
+  });
+  test('a title\'s divider goes under the toggle; --- typed there stays text', () => {
+    const ed = editorWith('<details open>\n<summary>tog</summary>\n\none\n\n</details>');
+    ed.commands.setTextSelection(posOf(ed, 'tog', true));
+    runEditorCommand(ed, 'divider');
+    expect(md(ed)).toBe('<details open>\n<summary>tog</summary>\n\none\n\n</details>\n\n---');
+    ed.commands.setTextSelection(posOf(ed, 'tog', true));
+    type(ed, '---');
+    expect(md(ed)).toContain('<summary>tog---</summary>');
+  });
+  test('⌫ at the start of a callout\'s title: out it goes, and the callout has no title', () => {
+    const ed = editorWith('before\n\n> [!warning] Heads up\n> one two');
+    ed.commands.setTextSelection(posOf(ed, 'Heads'));
+    press(ed, 'Backspace');
+    expect(md(ed)).toBe('before\n\nHeads up\n\n> [!warning]\n> one two');
+  });
+  test('⌥↑ / ⌥↓ step an edge line out of a callout or quote; a callout\'s title and body keep their order', () => {
+    const move = (note: string, word: string, key: string) => {
+      const ed = editorWith(note);
+      ed.commands.setTextSelection(posOf(ed, word));
+      press(ed, key, { altKey: true });
+      return md(ed);
+    };
+    expect(move('before\n\n> [!💡]\n> one\n>\n> two', 'one', 'ArrowUp')).toBe('before\n\none\n\n> [!💡]\n> two');
+    expect(move('before\n\n> [!💡]\n> one\n>\n> two\n\nafter', 'two', 'ArrowDown')).toBe('before\n\n> [!💡]\n> one\n\ntwo\n\nafter');
+    expect(move('before\n\n> q1\n>\n> q2', 'q1', 'ArrowUp')).toBe('before\n\nq1\n\n> q2');
+    expect(move('before\n\n> [!warning] Heads up\n> one two', 'one', 'ArrowUp')).toBe('before\n\n> [!warning] Heads up\n> one two');
+  });
+  test('an empty first line of a callout survives the round trip', () => {
+    const ed = editorWith('> [!💡]\n> one two');
+    ed.commands.setTextSelection(posOf(ed, 'one'));
+    press(ed, 'Enter');
+    expect(md(editorWith(md(ed)))).toBe(md(ed));
+  });
+  test('⌘⌥C over a range reaching into a list takes no unselected line', () => {
+    const ed = editorWith('bef\n\n- aa\n- bb\n- cc');
+    ed.commands.setTextSelection({ from: posOf(ed, 'bef'), to: posOf(ed, 'aa', true) });
+    runEditorCommand(ed, 'codeBlock');
+    expect(md(ed)).toContain('bb');
+    expect(md(ed)).toContain('cc');
+  });
+});
