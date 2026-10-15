@@ -466,3 +466,79 @@ describe('inline code deleted', () => {
     expect(md(ed)).toBe('# T\n\nsee `hi`');
   });
 });
+
+describe('list keys that leave the rest of the list as it was', () => {
+  /** the key at `word` (its end with `end`): the markdown after it, which reads back the same, and ⌘Z undoes it */
+  const after = (note: string, word: string, end: boolean, key: string, init: KeyboardEventInit = {}) => {
+    const ed = editorWith(note);
+    ed.commands.setTextSelection(posOf(ed, word, end));
+    const before = md(ed);
+    press(ed, key, init);
+    const out = md(ed);
+    expect(md(editorWith(out))).toBe(out);
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+    return out.trimEnd();
+  };
+  /** the note with `x` taken out, the caret on the empty line left */
+  const emptied = (note: string) => {
+    const ed = editorWith(note);
+    const p = posOf(ed, 'x');
+    ed.view.dispatch(ed.state.tr.delete(p, p + 1));
+    ed.commands.setTextSelection(p);
+    return ed;
+  };
+
+  test('Delete at the end of a line over an item at another level or of another kind: only its text comes up', () => {
+    expect(after('- [ ] alpha\n  - [ ] bravo\n  - [x] charlie\n- [x] foxtrot', 'alpha', true, 'Delete')).toBe('- [ ] alphabravo\n  - [x] charlie\n- [x] foxtrot');
+    expect(after('- [ ] alpha\n  - [ ] bravo\n  - [ ] echo\n- [x] foxtrot', 'echo', true, 'Delete')).toBe('- [ ] alpha\n  - [ ] bravo\n  - [ ] echofoxtrot');
+    expect(after('- [ ] alpha\n  - [x] charlie\n    - [ ] delta\n  - [ ] echo', 'charlie', true, 'Delete')).toBe('- [ ] alpha\n  - [x] charliedelta\n  - [ ] echo');
+    expect(after('- alpha\n- [ ] bravo\n- c', 'alpha', true, 'Delete')).toBe('- alphabravo\n- c');
+    // its sub-items keep their level, under the item the line is in at that level
+    expect(after('- a\n  - b\n- [ ] c\n  - d', 'b', true, 'Delete')).toBe('- a\n  - bc\n  - d');
+  });
+
+  test('Enter at the start of a ticked to-do: an empty to-do above, the tick stays with its text', () => {
+    expect(after('- [x] alpha\n- [ ] charlie', 'alpha', false, 'Enter')).toBe('- [ ] \u00a0\n- [x] alpha\n- [ ] charlie');
+    expect(after('- [ ] z\n  - [x] alpha\n  - [ ] charlie', 'alpha', false, 'Enter')).toBe('- [ ] z\n  - [ ] \u00a0\n  - [x] alpha\n  - [ ] charlie');
+  });
+
+  test('Enter on an empty sub-item in the middle of its list steps out as ⇧Tab does, the list tight', () => {
+    for (const [note, out] of [['- a\n  - b\n  - x\n  - c\n- d', '- a\n  - b\n- \u00a0\n  - c\n- d'], ['1. a\n   1. b\n   2. x\n   3. c\n2. d', '1. a\n   1. b\n2. \u00a0\n   1. c\n3. d']]) {
+      const ed = emptied(note), tab = emptied(note);
+      const before = md(ed);
+      press(ed, 'Enter');
+      press(tab, 'Tab', { shiftKey: true });
+      expect(md(ed).trimEnd()).toBe(out);
+      expect(md(tab)).toBe(md(ed));
+      ed.commands.undo();
+      expect(md(ed)).toBe(before);
+    }
+  });
+
+  test('⌘A then ⌘⇧8 / ⌘⇧7 on a nested to-do list: every line changes kind where it is, one ⌘Z back', () => {
+    const note = '- [ ] a\n  - [ ] b\n  - [x] c\n- [x] f';
+    for (const [id, out] of [['bulletList', '- a\n  - b\n  - c\n- f'], ['orderedList', '1. a\n   1. b\n   2. c\n2. f']]) {
+      const ed = editorWith(note);
+      ed.commands.selectAll();
+      runEditorCommand(ed, id);
+      expect(md(ed).trimEnd()).toBe(out);
+      ed.commands.undo();
+      expect(md(ed)).toBe(note);
+    }
+    // ⌘⇧9 on to-dos takes them out of the list, with no empty to-do left at the end
+    const ed = editorWith('- [ ] a\n- [x] f');
+    ed.commands.selectAll();
+    runEditorCommand(ed, 'taskList');
+    expect(md(ed).trimEnd()).toBe('a\n\nf');
+  });
+
+  test('a numbered item taken out of the middle of its list: the numbers after it carry on', () => {
+    expect(after('1. a\n2. b\n3. c\n4. d', 'b', false, 'Backspace')).toBe('1. a\n\nb\n\n3. c\n4. d');
+    for (const key of ['Enter', 'Backspace']) {
+      const ed = emptied('1. a\n2. b\n3. x\n4. c');
+      press(ed, key);
+      expect(md(ed).trimEnd()).toBe('1. a\n2. b\n\n\u00a0\n\n4. c');
+    }
+  });
+});

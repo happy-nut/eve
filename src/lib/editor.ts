@@ -43,7 +43,7 @@ import { shortcuts } from './shortcuts.svelte';
 import { calendar, emojiRow, popup, ICONS, SLASH, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
-import { moveBlock, indentLines, switchItem, switchLines } from './blocks';
+import { moveBlock, indentLines, switchItem, switchLines, joinNextItem, itemAbove, liftCounting, leaveTrailer } from './blocks';
 import { holdEdit, dropEdit } from './pending';
 
 /** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
@@ -327,10 +327,11 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     h4: () => c().toggleHeading({ level: 4 }).run(),
     h5: () => c().toggleHeading({ level: 5 }).run(),
     // on list lines of another kind, only those lines change kind, where they are (a bullet under a number stays
-    // under it); otherwise the stock toggle (a line becomes a list, a list's lines plain again)
-    bulletList: () => editor.commands.command(switchLines('bulletList', 'listItem')) || c().toggleBulletList().run(),
-    orderedList: () => editor.commands.command(switchLines('orderedList', 'listItem')) || c().toggleOrderedList().run(),
-    taskList: () => editor.commands.command(switchLines('taskList', 'taskItem')) || c().toggleTaskList().run(),
+    // under it); otherwise the stock toggle (a line becomes a list, a list's lines plain again), never over the
+    // empty line at the note's end
+    bulletList: () => editor.commands.command(switchLines('bulletList', 'listItem')) || c().command(leaveTrailer).toggleBulletList().run(),
+    orderedList: () => editor.commands.command(switchLines('orderedList', 'listItem')) || c().command(leaveTrailer).toggleOrderedList().run(),
+    taskList: () => editor.commands.command(switchLines('taskList', 'taskItem')) || c().command(leaveTrailer).toggleTaskList().run(),
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
     toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck),
     blockquote: () => c().toggleBlockquote().run(),
@@ -995,6 +996,15 @@ export function createEditor(opts: {
           return { Backspace: select(-1), Delete: select(1) };
         },
       }),
+      // Delete at the end of a list line over an item at another level or of another kind: that item's text joins the
+      // line (joinNextItem). Ahead of the lists' own Delete (priority 101), which took over once that item had sub-items
+      Extension.create({
+        name: 'joinNextItem',
+        priority: 102,
+        addKeyboardShortcuts() {
+          return { Delete: () => this.editor.commands.command(joinNextItem) };
+        },
+      }),
       // ahead of the list items' own Tab, which moves an item's sub-items along with it
       Extension.create({
         name: 'lineIndent',
@@ -1012,8 +1022,9 @@ export function createEditor(opts: {
             'Shift-Tab': run(-1),
             // ⌫ at the very start of a nested item: it steps out a level as ⇧Tab does, still its own kind (a bullet
             // under a number stays a bullet). The stock join made it an item of its parent's list, of that list's kind.
-            // A top-level item is left to the stock ⌫ (the line becomes plain text).
+            // A top-level item is left to the stock ⌫ (the line becomes plain text), the numbers after it counting on.
             Backspace: () => {
+              if (this.editor.commands.command(liftCounting(false))) return true;
               const { $from, empty } = this.editor.state.selection;
               if (!empty || $from.parentOffset !== 0 || !$from.parent.isTextblock || $from.depth < 4 || $from.index(-1) !== 0) return false;
               if (!/Item$/.test($from.node(-1).type.name) || !/Item$/.test($from.node(-3).type.name)) return false;
@@ -1023,12 +1034,18 @@ export function createEditor(opts: {
             // ⇧Tab does, still a bullet. The stock lift made it an unmarked line inside the to-do, where the
             // caret could not be seen in WebKit. A number under a bullet is one too (both are list items, but the
             // stock lift made it a bullet, where ⇧Tab and ⌫ keep it a number)
+            // In the middle of its list, one of the same kind steps out as ⇧Tab does too: the stock lift left it a bare
+            // line inside the item above, the items after it under it and the list loose. Enter at the start of
+            // a line puts an empty item above it (itemAbove); on an empty numbered one, the count carries on.
             Enter: () => {
+              const c = this.editor.commands;
+              if (c.command(itemAbove) || c.command(liftCounting(true))) return true;
               const { $from, empty } = this.editor.state.selection;
               if (!empty || $from.parent.content.size || $from.depth < 4 || $from.index(-1) !== 0) return false;
               const item = $from.node(-1), owner = $from.node(-3);
               if (!/Item$/.test(item.type.name) || !/Item$/.test(owner.type.name)) return false;
-              if (owner.type === item.type && $from.node(-2).type === $from.node(-4).type) return false;
+              const last = $from.index(-2) === $from.node(-2).childCount - 1;
+              if (last && owner.type === item.type && $from.node(-2).type === $from.node(-4).type) return false;
               return stepOut();
             },
           };

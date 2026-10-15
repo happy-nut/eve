@@ -372,7 +372,9 @@ export function switchLines(list: string, item: string) {
     const schema = tr.doc.type.schema;
     const { from, to } = tr.selection;
     const lines = lineDepths(tr.doc);
-    const picked = lines.map((l, k) => ({ l, k })).filter(({ l }) => l.pos + 1 <= to && l.end - 1 >= from);
+    // an empty plain line is not one to switch (⌘A takes in the empty line the editor keeps at the note's end,
+    // and with it there the stock toggle flattened every level, ticks and all)
+    const picked = lines.map((l, k) => ({ l, k })).filter(({ l }) => l.pos + 1 <= to && l.end - 1 >= from && (l.item || l.end - l.pos > 2));
     if (!picked.length || picked.some(({ l }) => !l.item)) return false; // a plain line among them: the stock toggle
     const change = picked.filter(({ l }) => l.first && l.list !== list);
     if (!change.length) return false;
@@ -406,5 +408,97 @@ function sinkAcross(tr: any): boolean | null {
   if (range.endIndex === list.childCount) tr.delete(listStart, listEnd);
   else tr.delete(listStart + 1, listStart + 1 + offsetOf(list, range.endIndex));
   tr.insert(listStart - 2, moved); // the end of the last item above, inside it
+  return true;
+}
+
+/** How many list items the position sits in: the line's level. */
+const levelOf = ($p: any) => { let n = 0; for (let d = $p.depth; d > 0; d--) if (/Item$/.test($p.node(d).type.name)) n++; return n; };
+
+/**
+ * Delete at the end of a list line whose next line starts an item at another level or of another kind (a to-do
+ * under a bullet, the next item one level out): that item's text comes up onto this line and its own line goes.
+ * What hangs under it keeps its level, under the item this line is in at that level (with none, where it was).
+ * The stock join pulled the whole item into this one: its marker gone, its text a loose line, its sub-items a
+ * level off. False: not that case (the next item at the same level and of the same kind joins as it always did).
+ */
+export function joinNextItem({ tr }: { tr: any }): boolean {
+  const { $from, empty } = tr.selection;
+  const line: PMNode = $from.parent;
+  if (!empty || !line.isTextblock || line.type.spec.code || $from.parentOffset !== line.content.size || $from.depth < 3) return false;
+  if (!/Item$/.test($from.node(-1).type.name)) return false;
+  const after = $from.after(), next = Selection.findFrom(tr.doc.resolve(after), 1, true);
+  if (!next) return false;
+  const $n = next.$from, s = $from.sharedDepth($n.pos);
+  // the very next line: nothing between the two but blocks closing and opening (no picture, no other line)
+  if ($n.parentOffset !== 0 || $n.before() - after !== $from.depth - 1 - s + ($n.depth - 1 - s)) return false;
+  const text: PMNode = $n.parent, item: PMNode = $n.node(-1), list: PMNode = $n.node(-2);
+  if (text.type.spec.code || !/Item$/.test(item.type.name) || $n.index(-1) !== 0) return false;
+  const level = levelOf($n);
+  if (level === levelOf($from) && item.type === $from.node(-1).type && list.type === $from.node(-2).type) return false;
+  if (!line.type.validContent(line.content.append(text.content))) return false;
+  const rest = item.content.cut(text.nodeSize);
+  let home = -1; // the end of the item this line is in at the next item's level: its sub-items go there
+  for (let d = $from.depth - 1; d > 0 && home < 0; d--) if (/Item$/.test($from.node(d).type.name) && levelOf(tr.doc.resolve($from.before(d) + 1)) === level) home = $from.end(d);
+  // back to front, so the positions before each change stay as they were
+  const itemPos = $n.before(-1), listPos = $n.before(-2);
+  if (list.childCount === 1) tr.delete(listPos, listPos + list.nodeSize);
+  else tr.delete(itemPos, itemPos + item.nodeSize);
+  if (rest.size) tr.insert(home >= 0 ? home : list.childCount === 1 ? listPos : itemPos, rest);
+  tr.insert($from.pos, text.content);
+  tr.setSelection(TextSelection.create(tr.doc, $from.pos));
+  return true;
+}
+
+/**
+ * Enter at the start of an item's line: an empty item of its kind goes in above it, the item itself untouched.
+ * The stock split cut the item in two at the caret, the text going down as a new item: a ticked to-do left
+ * its tick on the empty line above and came down unticked.
+ */
+export function itemAbove({ tr }: { tr: any }): boolean {
+  const { $from, empty } = tr.selection;
+  const line: PMNode = $from.parent;
+  if (!empty || $from.parentOffset !== 0 || !line.isTextblock || line.type.spec.code || !line.content.size || $from.depth < 3) return false;
+  const item: PMNode = $from.node(-1);
+  if (!/Item$/.test(item.type.name) || $from.index(-1) !== 0) return false;
+  const fresh = item.type.createAndFill();
+  if (!fresh) return false;
+  tr.insert($from.before(-1), fresh); // the caret, mapped past it, stays at the start of its own line
+  return true;
+}
+
+/**
+ * ⌫ at the start of a numbered item in the middle of its list, or Enter on an empty one (`blank`): the line comes
+ * out of the list as the stock lift takes it, and the items after it go on counting (3. stays 3., not 1.).
+ * A numbered list inside an item counts from 1 anyway (joinLists), so only one that is not is taken here.
+ */
+export function liftCounting(blank: boolean) {
+  return ({ tr }: { tr: any }): boolean => {
+    const { $from, empty } = tr.selection;
+    if (!empty || $from.parentOffset !== 0 || !$from.parent.isTextblock || $from.depth < 3 || (blank && $from.parent.content.size)) return false;
+    const item: PMNode = $from.node(-1), list: PMNode = $from.node(-2), i = $from.index(-2);
+    if (!/Item$/.test(item.type.name) || $from.index(-1) !== 0 || list.type.name !== 'orderedList') return false;
+    if (i === 0 || i === list.childCount - 1 || /Item$/.test($from.node(-3).type.name)) return false;
+    const steps = tr.steps.length;
+    const state = { doc: tr.doc, selection: tr.selection, schema: tr.doc.type.schema, tr };
+    if (!liftListItem(item.type)(state as any, () => {})) return false;
+    // the item's blocks now stand where it was; the rest of the list comes right after them
+    const $p = tr.doc.resolve(tr.mapping.slice(steps).map($from.pos)), holder = $p.node(-1);
+    let pos = $p.before();
+    for (let k = 0; k < item.childCount; k++) pos += holder.child($p.index(-1) + k).nodeSize;
+    if (tr.doc.nodeAt(pos)?.type === list.type) tr.setNodeAttribute(pos, 'start', (list.attrs.start ?? 1) + i + 1);
+    return true;
+  };
+}
+
+/**
+ * A selection running on into the empty line the editor keeps at the note's end (⌘A) stops at the line before it,
+ * for the stock list toggle after it: over that line too, it left an empty to-do at the end, the ticks cleared.
+ */
+export function leaveTrailer({ tr }: { tr: any }): boolean {
+  const doc: PMNode = tr.doc, { from, to } = tr.selection;
+  const start = doc.content.size - doc.lastChild!.nodeSize;
+  if (!isTrailer(doc, doc, doc.childCount - 1) || to <= start || from >= start) return true;
+  const end = Selection.findFrom(doc.resolve(start), -1, true);
+  if (end) tr.setSelection(TextSelection.between(doc.resolve(from), end.$from));
   return true;
 }
