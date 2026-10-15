@@ -91,3 +91,21 @@ test('⌫ at the start of a nested item steps it out a level, still its own kind
   // at the top level the line becomes plain text, as before
   expect(after('1. a\n2. b', (ed) => { at(ed, 'b', false); key(ed, 'Backspace'); })).toBe('1. a\n\nb');
 });
+
+test('⌘⇧8 / ⌘⇧7 / ⌘⇧9 over lines with a toggle or a callout among them: the lines are items, the blocks stay as they were', () => {
+  const toggle = '<details open>\n<summary>T</summary>\n\nbody\n\n</details>', callout = '> [!info] C\n> tip';
+  const over = (ed: Editor) => ed.commands.setTextSelection({ from: posOf(ed, 'bef'), to: posOf(ed, 'aft', true) });
+  const note = `bef\n\n${toggle}\n\nmid\n\n${callout}\n\naft`;
+  for (const [k, a, b, c] of [['Mod-Shift-8', '- ', '- ', '- '], ['Mod-Shift-7', '1. ', '2. ', '3. '], ['Mod-Shift-9', '- [ ] ', '- [ ] ', '- [ ] ']]) {
+    expect(after(note, (ed) => { over(ed); key(ed, k); })).toBe(`${a}bef\n\n${toggle}\n\n${b}mid\n\n${callout}\n\n${c}aft`);
+    const ed = editorWith(note);
+    const before = md(ed);
+    over(ed);
+    key(ed, k);
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+  }
+  // lines side by side are one list
+  expect(after(`bef\n\nbef2\n\n${toggle}`, (ed) => { ed.commands.setTextSelection({ from: posOf(ed, 'bef'), to: posOf(ed, 'body', true) }); key(ed, 'Mod-Shift-8'); }))
+    .toBe(`- bef\n- bef2\n\n${toggle}`);
+});

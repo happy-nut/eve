@@ -89,6 +89,77 @@ describe('toggle', () => {
     expect(body.hasAttribute('hidden')).toBe(false); // CSS hides a closed body, not the stock timer
     expect(md(ed).startsWith('<details open>')).toBe(true);
   });
+
+  const toggle = (title: string, body: string[], open = true) =>
+    `<details${open ? ' open' : ''}>\n<summary>${title}</summary>\n\n${body.join('\n\n')}\n\n</details>`;
+  /** the note after `act` with the caret at `at` (a word, and an offset into it); undo gives the note back, and what is
+   *  left reads back as itself. `line` is the text of the caret's line, a | where the caret is. */
+  function keyed(note: string, at: [string, number], act: (ed: ReturnType<typeof editorWith>) => void) {
+    const ed = editorWith(note);
+    ed.commands.setTextSelection(posOf(ed, at[0]) + at[1]);
+    const before = md(ed);
+    act(ed);
+    const out = md(ed), { $head } = ed.state.selection;
+    const line = `${$head.parent.textContent.slice(0, $head.parentOffset)}|${$head.parent.textContent.slice($head.parentOffset)}`;
+    expect(md(editorWith(out))).toBe(out);
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+    return { out, line, where: $head.parent.type.name };
+  }
+
+  test('Enter in the middle of a title: the rest of it is the first line of the body, the toggle opened', () => {
+    expect(keyed(toggle('Title', ['body']), ['Title', 2], (ed) => press(ed, 'Enter')))
+      .toEqual({ out: toggle('Ti', ['tle', 'body']), line: '|tle', where: 'paragraph' });
+    expect(keyed(toggle('Title', ['body'], false), ['Title', 2], (ed) => press(ed, 'Enter')).out).toBe(toggle('Ti', ['tle', 'body']));
+  });
+
+  test('Enter at the start of a title: an empty line above the toggle; at its end, still into the body', () => {
+    expect(keyed(`a\n\n${toggle('Title', ['body'])}`, ['Title', 0], (ed) => press(ed, 'Enter')))
+      .toEqual({ out: `a\n\n\u00a0\n\n${toggle('Title', ['body'])}`, line: '|', where: 'paragraph' });
+    expect(keyed(toggle('Title', ['\u00a0']), ['Title', 5], (ed) => press(ed, 'Enter')).line).toBe('|');
+  });
+
+  test('⌫ at the start of the body\'s first line joins it onto the title, as plain text', () => {
+    expect(keyed(toggle('Title', ['one', 'two']), ['one', 0], (ed) => press(ed, 'Backspace')))
+      .toEqual({ out: toggle('Titleone', ['two']), line: 'Title|one', where: 'detailsSummary' });
+    // the only line: the body keeps an empty one
+    expect(keyed(toggle('Title', ['one']), ['one', 0], (ed) => press(ed, 'Backspace')).out).toBe(toggle('Titleone', ['\u00a0']));
+    // bold and a [[link]] come as their text; nothing of it is lost
+    expect(keyed(toggle('T', ['a **b** [[Note|c]]']), ['a', 0], (ed) => press(ed, 'Backspace')).out).toBe(toggle('Ta b c', ['\u00a0']));
+  });
+
+  test('⌫ on an empty first line of the body: the line goes, but never the body\'s only one; the caret ends the title', () => {
+    const empty = (body: string[]) => {
+      const ed = editorWith(toggle('Title', body));
+      ed.commands.setTextSelection(posOf(ed, 'Title', true) + 3);
+      const before = md(ed);
+      press(ed, 'Backspace');
+      const { $head } = ed.state.selection;
+      expect([$head.parent.type.name, $head.parentOffset]).toEqual(['detailsSummary', 5]);
+      const out = md(ed);
+      ed.commands.undo();
+      expect(md(ed)).toBe(before);
+      return out;
+    };
+    expect(empty(['\u00a0'])).toBe(toggle('Title', ['\u00a0']));
+    expect(empty(['\u00a0', 'two'])).toBe(toggle('Title', ['two']));
+  });
+
+  test('⌫ at the start of a heading opening the body: only the caret goes up, the heading stays', () => {
+    expect(keyed(toggle('Title', ['# Head']), ['Head', 0], (ed) => press(ed, 'Backspace')))
+      .toEqual({ out: toggle('Title', ['# Head']), line: 'Title|', where: 'detailsSummary' });
+  });
+
+  test('a title ending (or starting) in a space keeps it when read back', () => {
+    for (const title of ['- ', '$$ ', '  two  spaces ']) {
+      const ed = editorWith('x');
+      ed.commands.setTextSelection(posOf(ed, 'x', true));
+      press(ed, 'Enter');
+      type(ed, '> ');
+      type(ed, title);
+      expect(editorWith(md(ed)).state.doc.child(1).firstChild!.textContent).toBe(title);
+    }
+  });
 });
 
 describe('insert block (the phone bar\'s /)', () => {

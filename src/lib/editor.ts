@@ -26,7 +26,7 @@ import { Kanban, deleteBoard } from './kanban';
 import { CodeBlock, inCell } from './code';
 import { Pdf } from './pdf';
 import { Video } from './video';
-import { TableNodes, cellEnter, upAboveTable } from './table';
+import { TableNodes, cellEnter, clearForPaste, upAboveTable } from './table';
 import { Find } from './find';
 import { SelectionLayer } from './selectionLayer';
 import { ClickTarget } from './clickTarget';
@@ -43,7 +43,7 @@ import { shortcuts } from './shortcuts.svelte';
 import { calendar, emojiRow, popup, ICONS, SLASH, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
-import { blockBeside, moveBlock, indentLines, switchItem, switchLines, joinNextItem, itemAbove, liftCounting, leaveTrailer } from './blocks';
+import { blockBeside, moveBlock, indentLines, switchItem, switchLines, wrapLines, joinNextItem, itemAbove, liftCounting, leaveTrailer } from './blocks';
 import { holdEdit, dropEdit } from './pending';
 
 /** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
@@ -168,6 +168,50 @@ const BlankLine = Paragraph.extend({
       },
     };
   },
+});
+
+/**
+ * Spaces and tabs in text as they were typed: ProseMirror reads HTML the way a browser shows it, every run of them
+ * one space and none at a line's start, so "col1⇥col2", "foo  bar" and "  indented" came back changed each time the
+ * note opened. Such a run is set in `white-space: pre`, which ProseMirror keeps as it is (with the letter after it:
+ * spaces alone opening a list item were dropped before ProseMirror made the item's line). Not one beside a newline:
+ * that is how hand-written HTML lays out its lines, not text. A line's leading ones are written as `&#32;` / `&#9;`,
+ * which markdown does not trim (the text serializer in math.ts). It runs after every other extension has reshaped
+ * the page (a callout's title split off its first line), so it sees the lines as they will be.
+ */
+function keepSpaces(root: HTMLElement) {
+  // the space after a to-do's "[ ]" is markdown's, not the text's (the checkbox it stood after is gone by now)
+  for (const li of root.querySelectorAll('li[data-checked]')) {
+    const first = document.createTreeWalker(li, NodeFilter.SHOW_TEXT).nextNode();
+    if (first?.parentElement?.closest('li') === li && first.nodeValue?.startsWith(' ')) first.nodeValue = first.nodeValue.slice(1);
+  }
+  const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), found: Text[] = [];
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) if (/[ \t]/.test(n.nodeValue!) && !n.parentElement?.closest('pre, code')) found.push(n as Text);
+  for (const t of found) {
+    const text = t.nodeValue!, parts: (string | Node)[] = [];
+    let last = 0;
+    for (const m of text.matchAll(/[ \t]+/g)) {
+      const a = m.index!, b = a + m[0].length;
+      if (/\s/.test(text[a - 1] ?? '') || /\s/.test(text[b] ?? '')) continue;
+      // one space reads the same either way, but not at the ends of a line, nor after code ending in one ("`a ` b"
+      // lost it); one after a checkbox or a picture is markdown's own, and goes
+      const prev = t.previousSibling;
+      const lead = a === 0 && (!prev || prev.nodeName === 'BR' || /\s$/.test(prev.textContent ?? ''));
+      if (m[0] === ' ' && !lead && (b < text.length || t.nextSibling)) continue;
+      const to = b + (text.codePointAt(b)! > 0xffff ? 2 : b < text.length ? 1 : 0);
+      const span = document.createElement('eve-space'); // no tag of HTML's: the Html extension keeps those
+      span.style.whiteSpace = 'pre';
+      span.textContent = text.slice(a, to);
+      parts.push(text.slice(last, a), span);
+      last = to;
+    }
+    if (parts.length) t.replaceWith(...parts, text.slice(last));
+  }
+}
+const KeepSpaces = Extension.create({
+  name: 'keepSpaces',
+  priority: 1, // the last to see the page
+  addStorage: () => ({ markdown: { parse: { updateDOM: keepSpaces } } }),
 });
 
 const KEYMAP = new PluginKey('eve-keymap');
@@ -377,11 +421,11 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     h4: () => c().toggleHeading({ level: 4 }).run(),
     h5: () => c().toggleHeading({ level: 5 }).run(),
     // on list lines of another kind, only those lines change kind, where they are (a bullet under a number stays
-    // under it); otherwise the stock toggle (a line becomes a list, a list's lines plain again), never over the
-    // empty line at the note's end
-    bulletList: () => editor.commands.command(switchLines('bulletList', 'listItem')) || c().command(leaveTrailer).toggleBulletList().run(),
-    orderedList: () => editor.commands.command(switchLines('orderedList', 'listItem')) || c().command(leaveTrailer).toggleOrderedList().run(),
-    taskList: () => editor.commands.command(switchLines('taskList', 'taskItem')) || c().command(leaveTrailer).toggleTaskList().run(),
+    // under it); over a toggle or a callout, only the lines around it; otherwise the stock toggle (a line becomes a
+    // list, a list's lines plain again), never over the empty line at the note's end
+    bulletList: () => editor.commands.command(switchLines('bulletList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('bulletList', 'listItem')).run() || c().command(leaveTrailer).toggleBulletList().run(),
+    orderedList: () => editor.commands.command(switchLines('orderedList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('orderedList', 'listItem')).run() || c().command(leaveTrailer).toggleOrderedList().run(),
+    taskList: () => editor.commands.command(switchLines('taskList', 'taskItem')) || c().command(leaveTrailer).command(wrapLines('taskList', 'taskItem')).run() || c().command(leaveTrailer).toggleTaskList().run(),
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
     toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck),
     blockquote: () => c().toggleBlockquote().run(),
@@ -727,7 +771,12 @@ export function createEditor(opts: {
           content = untitle(content);
           break;
         }
-        return (serializer.serialize(content) as string).replace(new RegExp(`^${BLANK}$`, 'gm'), ''); // an empty line is just empty
+        // an empty line is just empty, and spaces opening a line (or ending one before a line break) just spaces:
+        // another app shows the `&#32;` they are saved as as written
+        const spaces = (s: string) => s.replace(/&#32;/g, ' ').replace(/&#9;/g, '\t');
+        return (serializer.serialize(content) as string).replace(new RegExp(`^${BLANK}$`, 'gm'), '')
+          .replace(/^([ \t>]*(?:[-*+] (?:\[[ xX]\] )?|\d+[.)] )?)((?:&#(?:32|9);)+)/gm, (_, pre, run) => pre + spaces(run))
+          .replace(/(?:&#(?:32|9);)+(?=\\\n)/g, spaces);
       },
       // lines copied from inside a toggle's body come with the toggle around them (no title): pasted elsewhere, a
       // new untitled toggle was made of them. They are just the lines; a whole toggle copied is still a toggle.
@@ -757,6 +806,7 @@ export function createEditor(opts: {
       },
       handlePaste: (view, event): boolean => {
         if (insertFiles(editor, event.clipboardData?.files)) return true;
+        clearForPaste(view);
         // text pasted in inline code (over it, or with the caret in it) is code too, as typed there: it came in
         // plain, cut the code in two, and a file name in it became a link
         const { state } = view, { from, to, empty } = state.selection, code = state.schema.marks.code;
@@ -959,6 +1009,7 @@ export function createEditor(opts: {
       // An image pasted onto an empty list item takes that line. Stock list items are `paragraph block*`, so
       // the image could only go *after* the item's paragraph and the empty line stayed above it.
       BlankLine,
+      KeepSpaces,
       CodeBlock,
       Pdf,
       Video,

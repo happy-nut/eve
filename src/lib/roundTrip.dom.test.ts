@@ -1,5 +1,5 @@
 import { test, expect, afterEach } from 'vitest';
-import { editorWith, md } from './testEditor';
+import { editorWith, md, posOf } from './testEditor';
 
 afterEach(() => { document.body.innerHTML = ''; });
 
@@ -269,6 +269,30 @@ test('a picture whose width was set in percent and then dragged is written with 
   const ed = editorWith('<img src="a.png" width="50%">');
   ed.commands.command(({ tr }) => { tr.setNodeAttribute(0, 'width', 300); return true; });
   expect(md(ed)).toBe('![|300](a.png)');
+});
+
+test.each([
+  ['a tab', ['col1\tcol2']],
+  ['spaces between words', ['foo  bar   baz']],
+  ['spaces at the start', ['  indented']],
+  ['a tab at the start', ['\tstep']],
+  ['spaces around a line break', ['a  ', '  b']],
+  // (spaces at the very end of a paragraph still go: ProseMirror trims a line's last spaces, however written)
+])('%s in a line read back as typed', (_what, parts) => {
+  for (const wrap of ['', '- ', '- [ ] ', '1. ', '> [!info] T\n> ', '# ']) {
+    const ed = editorWith(`${wrap}x`);
+    ed.commands.setTextSelection({ from: posOf(ed, 'x'), to: posOf(ed, 'x', true) });
+    parts.forEach((p, i) => { if (i) ed.commands.setHardBreak(); ed.view.dispatch(ed.state.tr.insertText(p)); });
+    if (wrap === '# ' && parts.length > 1) continue; // (a heading's line break is <br>, its own story)
+    const once = md(ed), back = editorWith(once);
+    expect(back.state.doc.firstChild!.toJSON()).toEqual(ed.state.doc.firstChild!.toJSON());
+    expect(md(back)).toBe(once);
+  }
+});
+
+test('spaces between words already in a file stay as written there', () => {
+  expect(save('col1\tcol2  x   y')).toBe('col1\tcol2  x   y');
+  expect(save('x `  a  b  ` y')).toBe('x `  a  b  ` y');
 });
 
 test('words in angle brackets are text, and a line of them does not take the lines under it', () => {

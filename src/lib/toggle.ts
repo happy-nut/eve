@@ -1,6 +1,6 @@
 import { InputRule } from '@tiptap/core';
 import { Plugin, PluginKey, Selection, TextSelection, type EditorState } from '@tiptap/pm/state';
-import type { Node as PMNode } from '@tiptap/pm/model';
+import { Fragment, type Node as PMNode, type Schema } from '@tiptap/pm/model';
 import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -30,6 +30,9 @@ function outOfClosed(state: EditorState): number | null {
   return null;
 }
 
+/** an inline node as it reads, in a title's plain text: a [[link]] or @date too (textContent left them out) */
+const shown = (n: PMNode) => n.type.name === 'wikiLink' ? n.attrs.alias || n.attrs.title : n.type.name === 'dateMention' ? `@${n.attrs.date}` : n.type.name === 'hardBreak' ? ' ' : n.textContent ?? '';
+
 const toggles = (doc: PMNode) => {
   let n = 0;
   doc.descendants((x) => { if (x.type.name === 'details') n++; });
@@ -49,7 +52,6 @@ export const Toggle = [
           const s = state.schema;
           // the line's text as it reads, a [[link]] or @date in it too (textContent left them out: the words around
           // them stayed with a double space where the link was)
-          const shown = (n: any) => n.type.name === 'wikiLink' ? n.attrs.alias || n.attrs.title : n.type.name === 'dateMention' ? `@${n.attrs.date}` : n.textContent ?? '';
           const title = state.doc.textBetween(range.to, $from.end(), undefined, shown);
           const toggle = this.type.create({ open: true }, [
             s.nodes.detailsSummary.create(null, title ? s.text(title) : null),
@@ -84,9 +86,30 @@ export const Toggle = [
       const stock = this.parent?.() ?? {};
       return {
         ...stock,
-        // a new toggle already holds one empty line: Enter in the title steps into it rather than adding another
         Enter: (p) => {
-          const { $head } = p.editor.state.selection;
+          const { state, view } = p.editor;
+          const { $head, $from, $to, empty } = state.selection;
+          const title = $from.parent;
+          if (title.type.name === 'detailsSummary' && $from.sameParent($to)) {
+            // at the start of a title with text, a line above the toggle: the title stays as it was
+            if (empty && $from.parentOffset === 0 && title.content.size) {
+              const tr = state.tr.insert($from.before(-1), state.schema.nodes.paragraph.create());
+              view.dispatch(tr.setSelection(TextSelection.create(tr.doc, $from.before(-1) + 1)).scrollIntoView());
+              return true;
+            }
+            // in the middle of it, the rest of the title is the body's first line (the toggle opened to show it);
+            // the stock Enter did nothing there
+            if ($to.parentOffset < title.content.size) {
+              const rest = state.schema.nodes.paragraph.create(null, title.content.cut($to.parentOffset));
+              const tr = state.tr.delete($from.pos, $from.end());
+              const at = tr.mapping.map($from.after()) + 1;
+              tr.insert(at, rest).setNodeAttribute($from.before(-1), 'open', true);
+              view.dispatch(tr.setSelection(TextSelection.create(tr.doc, at + 1)).scrollIntoView());
+              return true;
+            }
+          }
+          // a new toggle already holds one empty line: Enter at the end of the title steps into it rather than adding
+          // another
           const toggle = $head.node(-1);
           const body = toggle?.type === this.type && toggle.attrs.open ? toggle.lastChild : null;
           if ($head.parent.type.name === 'detailsSummary' && body?.childCount === 1 && !body.firstChild!.content.size) {
@@ -103,6 +126,23 @@ export const Toggle = [
           // the line just after a toggle: into the toggle's last line (open) or to its title (closed), never the whole
           // toggle selected, then deleted with its folded body unseen by the next key
           const before = empty && $from.parentOffset === 0 && $from.parent.isTextblock && $from.depth > 0 ? state.doc.resolve($from.before()).nodeBefore : null;
+          // the start of a toggle's first line: up into its title, the line's text joined on as plain text (the title
+          // holds nothing else); an empty line goes, but never the body's only one. The stock ⌫ did nothing there.
+          const box = $from.depth > 2 ? $from.node(-1) : null;
+          if (empty && $from.parentOffset === 0 && box?.type.name === 'detailsContent' && $from.index(-1) === 0 && $from.node(-2).type === this.type) {
+            const end = $from.before(-1) - 1, line = $from.parent, tr = state.tr;
+            let text = '', whole = true;
+            line.forEach((n) => { const s = n.isText ? n.text! : shown(n); if (!s && n.isLeaf) whole = false; text += s; });
+            if (!line.content.size) { if (box.childCount > 1) tr.delete($from.before(), $from.after()); }
+            // a heading, code or a line holding what has no text: only the caret goes up, nothing of it lost
+            else if (line.type.name === 'paragraph' && whole) {
+              if (box.childCount > 1) tr.delete($from.before(), $from.after());
+              else tr.replaceWith($from.before(), $from.after(), line.type.create());
+              if (text) tr.insert(end, state.schema.text(text));
+            }
+            view.dispatch(tr.setSelection(TextSelection.create(tr.doc, end)).scrollIntoView());
+            return true;
+          }
           if (before?.type === this.type) {
             const at = $from.before() - before.nodeSize;
             const into = before.attrs.open ? Selection.findFrom(state.doc.resolve($from.before()), -1, true) : null;
@@ -196,6 +236,19 @@ export const Toggle = [
       },
     }),
   }).configure({ persist: true }),
-  DetailsSummary,
+  // its text as the note has it: a title ending in a space ("- ", "$$ ") lost it at the next opening, ProseMirror
+  // trimming a line's last spaces (the runs keepSpaces in editor.ts marks are kept; any other is one space, as in HTML)
+  DetailsSummary.extend({
+    parseHTML: () => [{
+      tag: 'summary',
+      preserveWhitespace: true, // (what getContent gives is trimmed already: this keeps ProseMirror from trimming it again)
+      getContent: (el: HTMLElement | Node, schema: Schema) => {
+        const keep = (s: string) => s.replace(/ /g, '\ue000').replace(/\t/g, '\ue001');
+        const read = (n: Node): string => n.nodeType === 3 ? n.nodeValue! : n.nodeName === 'EVE-SPACE' ? keep(n.textContent!) : [...n.childNodes].map(read).join('');
+        const text = read(el).replace(/[ \t\r\n\f]+/g, ' ').trim().replace(/\ue000/g, ' ').replace(/\ue001/g, '\t');
+        return text ? Fragment.from(schema.text(text)) : Fragment.empty;
+      },
+    }],
+  }),
   DetailsContent.extend({ addNodeView: () => null }),
 ];

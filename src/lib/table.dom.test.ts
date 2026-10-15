@@ -90,6 +90,39 @@ describe('a selection from text into a cell, cleared: the text out of the table 
     expect(after).toBe('| h1 | h2 |\n| --- | --- |\n| a1 | a2 |\n| b1 |  |\n\nelow');
     expect(left).toBe('b1');
   });
+
+  /** a clipboard event as the webview fires it, its data kept in `data` */
+  const clip = (type: 'cut' | 'paste', data: Record<string, string> = {}) => {
+    const clipboardData = { getData: (t: string) => data[t] ?? '', setData: (t: string, v: string) => { data[t] = v; }, clearData: () => {}, files: [], types: Object.keys(data) };
+    const e = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(e, 'clipboardData', { value: clipboardData });
+    return { e, data };
+  };
+
+  test('cut: copied whole, then cleared as ⌫ clears it', () => {
+    let data: Record<string, string> = {};
+    const { after } = cleared(`above\n\n${grid}`, ['bove'], ['a1', true], (ed) => {
+      const cut = clip('cut');
+      ed.view.dom.dispatchEvent(cut.e);
+      data = cut.data;
+    });
+    expect(after).toBe('a\n\n|  |  |\n| --- | --- |\n|  | a2 |\n| b1 | b2 |\n');
+    expect(data['text/plain']).toContain('bove');
+    expect(data['text/plain']).toContain('a1');
+    const { after: below } = cleared(`${grid}\n\nbelow`, ['b1', true], ['elow'], (ed) => { ed.view.dom.dispatchEvent(clip('cut').e); });
+    expect(below).toBe('| h1 | h2 |\n| --- | --- |\n| a1 | a2 |\n| b1 |  |\n\nelow');
+  });
+
+  test.each([
+    ['a word', 'X', 'aX', 'Xelow'],
+    ['lines', 'X\nY', 'aX\n\nY', 'X\n\nYelow'],
+    ['a list', '- X\n- Y', 'a\n\n- X\n- Y', '- X\n- Y\n\nelow'],
+  ])('paste of %s: cleared, then put in out of the table, as at the end (the start) of a line', (_what, text, top, bottom) => {
+    const { after } = cleared(`above\n\n${grid}`, ['bove'], ['a1', true], (ed) => { ed.view.dom.dispatchEvent(clip('paste', { 'text/plain': text }).e); });
+    expect(after).toBe(`${top}\n\n|  |  |\n| --- | --- |\n|  | a2 |\n| b1 | b2 |\n`);
+    const { after: below } = cleared(`${grid}\n\nbelow`, ['b1', true], ['elow'], (ed) => { ed.view.dom.dispatchEvent(clip('paste', { 'text/plain': text }).e); });
+    expect(below).toBe(`| h1 | h2 |\n| --- | --- |\n| a1 | a2 |\n| b1 |  |\n\n${bottom}`);
+  });
 });
 
 describe('a table opening the note: a line can be made above it', () => {

@@ -23,6 +23,11 @@ test.each([
   expect(copied(md, from, to).trim()).toBe(want);
 });
 
+test('spaces opening a line are copied as spaces, not as the `&#32;` the note keeps them as', () => {
+  expect(copied('&#32;&#32;indented\n\n- &#9;item', 'indented', 'item').trim()).toBe('indented\n\n- \titem');
+  expect(copied('&#32;&#32;indented\n\nx', '', '', { all: true }).trimEnd()).toBe('  indented\n\nx');
+});
+
 test('a table is copied as a markdown table', () => {
   const md = '| A | B |\n| --- | --- |\n| 1 | 2 |';
   expect(copied(md, '', '', { all: true }).trim()).toBe(md);
@@ -182,6 +187,13 @@ describe('pasted', () => {
     expect(pasted('| a | b |\n| --- | --- |\n| 1 | 2 |', after('1'), 'milk')).toContain('| 1milk | 2 |');
     const toggle = '<details open>\n<summary>Title</summary>\n\nbody\n\n</details>';
     expect(pasted(toggle, after('Title'), 'milk\neggs')).toBe(toggle.replace('Title', 'Titlemilk eggs'));
+  });
+
+  test('markdown pasted in the middle of a line: both halves keep their own text, no letter added or lost', () => {
+    const mid = (ed: Editor) => { ed.commands.setTextSelection(posOf(ed, 'hello', true)); };
+    expect(pasted('hello world', mid, '- item')).toBe('helloitem world');
+    expect(pasted('hello world', mid, '- a\n- b')).toBe('helloa\n\n- b world');
+    expect(pasted('hello world', (ed) => { ed.commands.setTextSelection(posOf(ed, 'world')); }, '- a\n- b')).toBe('hello a\n\n- bworld');
   });
 
   test('stars with spaces around them are not italics', () => {
