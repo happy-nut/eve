@@ -1017,6 +1017,19 @@ export function createEditor(opts: {
               const { $from, empty } = this.editor.state.selection;
               if (!empty || $from.parentOffset !== 0 || !$from.parent.isTextblock || $from.depth < 4 || $from.index(-1) !== 0) return false;
               if (!/Item$/.test($from.node(-1).type.name) || !/Item$/.test($from.node(-3).type.name)) return false;
+              // an empty item with nothing under it: ⌫ deletes the line, the caret to the end of the line above. Stepped
+              // out instead, it took the items after it along as its own sub-items, and the next ⌫ (on a top-level item,
+              // the line made plain) left them all at the top level: deleting one sub-item unindented the rest
+              const item = $from.node(-1);
+              if (!$from.parent.content.size && item.childCount === 1) {
+                const { state, view } = this.editor;
+                const list = $from.node(-2);
+                const from = list.childCount === 1 ? $from.before(-2) : $from.before(-1);
+                const to = list.childCount === 1 ? $from.after(-2) : $from.after(-1);
+                const tr = state.tr.delete(from, to);
+                view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(from), -1)).scrollIntoView());
+                return true;
+              }
               return stepOut();
             },
             // Enter on an empty item under an item of another kind (a bullet under a to-do): it steps out as

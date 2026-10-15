@@ -466,3 +466,21 @@ describe('inline code deleted', () => {
     expect(md(ed)).toBe('# T\n\nsee `hi`');
   });
 });
+
+describe('⌫ on an emptied sub-item deletes that line, the items after it stay where they were', () => {
+  for (const [name, note, after] of [
+    ['to-dos, in the middle', '# T\n\n- [ ] parent\n  - [ ] aa\n  - [ ] bb\n  - [ ] cc\n  - [ ] dd\n- [ ] next', '# T\n\n- [ ] parent\n  - [ ] aaZ\n  - [ ] cc\n  - [ ] dd\n- [ ] next'],
+    ['to-dos, the first', '# T\n\n- [ ] parent\n  - [ ] bb\n  - [ ] cc\n- [ ] next', '# T\n\n- [ ] parentZ\n  - [ ] cc\n- [ ] next'],
+    ['to-dos, the only one', '# T\n\n- [ ] parent\n  - [ ] bb\n- [ ] next', '# T\n\n- [ ] parentZ\n- [ ] next'],
+    ['bullets', '# T\n\n- parent\n  - aa\n  - bb\n  - cc\n- next', '# T\n\n- parent\n  - aaZ\n  - cc\n- next'],
+    ['numbers, after an item with its own sub-items', '# T\n\n1. one\n   1. aa\n      - x\n   2. bb\n   3. cc', '# T\n\n1. one\n   1. aa\n      - xZ\n   2. cc'],
+  ] as const)
+    test(name, () => {
+      const ed = editorWith(note);
+      ed.commands.setTextSelection({ from: posOf(ed, 'bb'), to: posOf(ed, 'bb', true) });
+      press(ed, 'Backspace');
+      press(ed, 'Backspace');
+      type(ed, 'Z');
+      expect(md(ed)).toBe(after);
+    });
+});
