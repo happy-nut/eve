@@ -91,6 +91,12 @@
     void tick().then(() => document.querySelector(`aside [data-note="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' }));
   });
 
+  /** the list comes back (a phone's Back, the list folded and opened again) with the open note's row in sight:
+   *  it started from the top, the row far below */
+  function showOpen(tree: HTMLElement) {
+    void tick().then(() => tree.querySelector('[data-row].active')?.scrollIntoView({ block: isMobile ? 'center' : 'nearest' }));
+  }
+
   // ---- "+" menu: new note / new group, relative to the focused row (the app's one menu, Menu.svelte) ----
   let ctxGroup = $state('');
   hooks.openPlus = (anchor?: HTMLElement) => {
@@ -116,7 +122,8 @@
   const plusItems = $derived.by(() => {
     const items: { label: string; run: () => void; sep?: boolean }[] = [
       { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', run: newNote(ctxGroup) },
-      { label: ctxGroup && depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : 'New group', run: () => groups.create(ctxGroup) },
+      // a group as deep as groups go takes no group inside: the new one goes beside it, and says so
+      { label: !ctxGroup ? 'New group' : depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : `New group in “${leafOf(parentOf(ctxGroup))}”`, run: () => groups.create(ctxGroup) },
     ];
     if (ctxGroup) items.push({ label: 'New note at top level', run: newNote('') }, { label: 'New group at top level', run: () => groups.create('') });
     if (appearance.s.dailyNotes) items.push({ label: "Today's daily note", run: () => { ui.focusOwner = 'editor'; notes.caretEnd = true; notes.openDaily(); } });
@@ -280,19 +287,23 @@
     notes.remove(n.id);
     void afterRemove(next, fromList);
   }
-  const rowsNow = () => [...document.querySelectorAll<HTMLElement>('aside [data-row]')];
+  // a row sliding out (a search just narrowed the list) is inert: it can't take the focus, and is going
+  const rowsNow = () => [...document.querySelectorAll<HTMLElement>('aside [data-row]')].filter((r) => !r.closest('[inert]'));
   async function focusRow(sel: string) {
     await tick();
-    (document.querySelector<HTMLElement>(`aside ${sel}`) ?? document.querySelector<HTMLElement>('aside [data-row]'))?.focus();
+    (document.querySelector<HTMLElement>(`aside ${sel}`) ?? rowsNow()[0])?.focus();
   }
   const groupSel = (g: string) => `[data-group="${CSS.escape(g)}"]`;
 
   // ⌥ + arrows (lib/moves.ts), then the moved row keeps the focus
   function nudgeNote(id: string, dir: 1 | -1) { if (moves.nudgeNote(id, dir)) focusRow(`[data-note="${id}"]`); }
-  function nestNote(id: string, dir: 'in' | 'out') {
+  /** the note's row above it in the list, the page ⌥→ would tuck it under */
+  function rowAbove(id: string) {
     const rows = rowsNow();
-    const above = rows[rows.findIndex((r) => r.dataset.note === id) - 1]?.dataset.note;
-    if (moves.nestNote(id, dir, above)) focusRow(`[data-note="${id}"]`);
+    return rows[rows.findIndex((r) => r.dataset.note === id) - 1]?.dataset.note;
+  }
+  function nestNote(id: string, dir: 'in' | 'out') {
+    if (moves.nestNote(id, dir, rowAbove(id))) focusRow(`[data-note="${id}"]`);
   }
   function nudgeGroup(g: string, key: string) { const np = moves.nudgeGroup(g, key); if (np) focusRow(groupSel(np)); }
   function treeKey(e: KeyboardEvent) {
@@ -395,8 +406,8 @@
           { label: 'New group inside', run: () => groups.create(g), hide: depthOf(g) >= MAX_DEPTH },
           { label: 'Rename', sep: true, run: () => (groups.editing = g) },
           { label: 'Change icon…', run: () => pickIcon({ group: g }) },
-          { label: 'Move up', sep: true, run: () => nudgeGroup(g, 'ArrowUp') },
-          { label: 'Move down', run: () => nudgeGroup(g, 'ArrowDown') },
+          { label: 'Move up', sep: true, run: () => nudgeGroup(g, 'ArrowUp'), hide: !moves.canNudgeGroup(g, 'ArrowUp') },
+          { label: 'Move down', run: () => nudgeGroup(g, 'ArrowDown'), hide: !moves.canNudgeGroup(g, 'ArrowDown') },
           { label: 'Move out', run: () => nudgeGroup(g, 'ArrowLeft'), hide: !parentOf(g) },
           { label: 'Nest under previous', run: () => nudgeGroup(g, 'ArrowRight'), hide: !groups.prevSibling(g) },
           { label: 'Delete group', sep: true, danger: true, run: () => removeGroup(g) },
@@ -408,10 +419,11 @@
             { label: 'Export as Markdown…', sep: true, keys: shortcuts.keysFor('exportMd'), run: () => exportRow(n, 'md') },
             { label: 'Export as PDF…', keys: shortcuts.keysFor('exportPdf'), run: () => exportRow(n, 'pdf') },
             { label: 'Export as image…', keys: shortcuts.keysFor('exportPng'), run: () => exportRow(n, 'png') },
-            { label: 'Move up', sep: true, run: () => nudgeNote(n.id, -1) },
-            { label: 'Move down', run: () => nudgeNote(n.id, 1) },
-            { label: 'Nest under previous', run: () => nestNote(n.id, 'in') },
-            { label: 'Move out', run: () => nestNote(n.id, 'out'), hide: !n.parent },
+            // a move that would do nothing (the first row up, no page above to nest under) is left out
+            { label: 'Move up', sep: true, run: () => nudgeNote(n.id, -1), hide: !moves.nudgeNote(n.id, -1, true) },
+            { label: 'Move down', run: () => nudgeNote(n.id, 1), hide: !moves.nudgeNote(n.id, 1, true) },
+            { label: 'Nest under previous', run: () => nestNote(n.id, 'in'), hide: !moves.nestNote(n.id, 'in', rowAbove(n.id), true) },
+            { label: 'Move out', run: () => nestNote(n.id, 'out'), hide: !moves.nestNote(n.id, 'out', undefined, true) },
             { label: 'Delete note', sep: true, danger: true, run: () => removeNote(n) },
           ]
         : [];
@@ -422,12 +434,18 @@
   }
 
   // ---- rename ----
+  /** the name typed for a group is a sibling's already: ↩ keeps the field open and says so (a click away still drops it) */
+  let nameTaken = $state(false);
   function renameKey(e: KeyboardEvent, g: string) {
-    if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+    const input = e.currentTarget as HTMLInputElement;
+    const leaf = input.value.trim().replace(/\//g, '-');
+    if (e.key === 'Enter' && leaf && leaf !== leafOf(g) && !groups.canPlace(g, parentOf(g), leaf)) { nameTaken = true; e.preventDefault(); e.stopPropagation(); return; }
+    if (e.key === 'Enter') input.blur();
     if (e.key === 'Escape') { groups.editing = null; focusRow(groupSel(g)); }
     e.stopPropagation();
   }
   function finishRename(g: string, value: string) {
+    nameTaken = false;
     if (groups.editing !== g) return; // Esc already handled
     const renamed = groups.rename(g, value);
     // ↩ ends it with the keyboard nowhere: back to the group's row. A click elsewhere (into the note) took the
@@ -445,7 +463,7 @@
     // the first match, opened as a click on it would: the keyboard goes into the note (a bare blur left it nowhere)
     if (e.key === 'Enter' && hits[0]) { e.preventDefault(); void openNote(hits[0]); }
     // ↓ walks on into the matches below; ↑ from the first one comes back here (treeKey)
-    if (e.key === 'ArrowDown' && !e.isComposing) { document.querySelector<HTMLElement>('aside [data-row]')?.focus(); e.preventDefault(); }
+    if (e.key === 'ArrowDown' && !e.isComposing) { rowsNow()[0]?.focus(); e.preventDefault(); }
   }
   /**
    * On a phone the list is a drawer: it slides in from the left and out again, and a swipe to the left
@@ -547,7 +565,7 @@
     </div>
 
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <ul class="tree" role="tree" tabindex="-1" onkeydown={treeKey} use:touchReorder={reorder}
+    <ul class="tree" role="tree" tabindex="-1" use:showOpen onkeydown={treeKey} use:touchReorder={reorder}
       oncontextmenu={(e) => { if (isMobile) e.preventDefault(); else rowMenu(e); }}
       ondragover={(e) => overSection(e, '')} ondrop={drop}>
       {#each rows as r (r.key)}
@@ -602,8 +620,10 @@
             {@const g = r.g}
             <div class="ghead" class:collapsed={groups.isCollapsed(g)} use:swipeRow={{ left: () => removeGroup(g), enabled: () => !drag }}>
               {#if groups.editing === g}
-                <input class="rename" value={leafOf(g)} use:focusInput onkeydown={(e) => renameKey(e, g)}
+                <input class="rename" class:taken={nameTaken} aria-invalid={nameTaken} aria-describedby={nameTaken ? 'name-taken' : undefined}
+                  value={leafOf(g)} use:focusInput onkeydown={(e) => renameKey(e, g)} oninput={() => (nameTaken = false)}
                   onblur={(e) => finishRename(g, e.currentTarget.value)} spellcheck="false" />
+                {#if nameTaken}<span class="taken-note" id="name-taken" role="alert">Name taken</span>{/if}
               {:else}
                 <button class="gname" data-row data-group={g} draggable={!isMobile}
                   ondragstart={(e) => dragStartGroup(e, g)} ondragend={dragEnd} ondragover={(e) => overGroup(e, g)} ondrop={drop}
@@ -687,7 +707,7 @@
 
   .ghead { position: relative; display: flex; align-items: center; padding: 1px 2px 1px 0; border-radius: 6px; transition: background 0.12s; }
   /* keyboard cursor colours the whole header row (not just the name button) */
-  .ghead:focus-within { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .ghead:focus-within { transition: none; background: color-mix(in srgb, var(--accent) 22%, transparent); }
   /* + and × unfold between the count and the chevron on hover; the chevron never moves */
   .tools { display: flex; gap: 2px; width: 0; opacity: 0; overflow: hidden; transform: translateX(6px);
     transition: width 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.16s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
@@ -712,6 +732,8 @@
     flex: 1; min-width: 0; font: inherit; font-size: 12.5px; padding: 3px 6px; border-radius: 4px;
     border: 1px solid var(--accent); background: var(--bg-input); color: var(--fg); outline: none; box-shadow: var(--glow);
   }
+  .rename.taken { border-color: #ff453a; box-shadow: none; }
+  .taken-note { flex: none; margin: 0 6px; font-size: 11px; color: #ff453a; white-space: nowrap; }
 
   .empty { padding: 5px 10px; font-size: 11.5px; color: var(--fg-dim); opacity: 0.7; }
 
@@ -732,9 +754,11 @@
   /* Keyboard cursor: the row's own background, and it appears at once. The rows fade their background
      over 0.12s, which a held arrow key never gives them — focus moved on before the colour arrived, so
      the list looked unmarked while scrolling through it. A group row had no focus colour at all. */
-  .note-row > [data-row]:focus, .gname:focus {
+  .note-row > [data-row]:focus {
     outline: none; transition: none; background: color-mix(in srgb, var(--accent) 22%, transparent);
   }
+  /* a group's name is one colour with the rest of its header, which .ghead:focus-within paints */
+  .gname:focus { outline: none; background: transparent; }
   .note-row > button.active:focus { transition: none; background: color-mix(in srgb, var(--accent) 24%, var(--bg-active)); }
   .title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

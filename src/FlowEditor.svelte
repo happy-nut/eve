@@ -684,11 +684,11 @@
   .ring.pick { box-shadow: 0 0 0 2px var(--accent-soft); }
   .pickhint {
     position: absolute; left: 50%; bottom: 8px; translate: -50% 0; padding: 6px 12px; border-radius: 999px; white-space: nowrap; pointer-events: none;
-    font-size: 12.5px; font-weight: 500; background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(0, 40, 100, 0.2);
+    font-size: 12.5px; font-weight: 500; background: var(--accent); color: var(--on-accent); box-shadow: 0 2px 8px rgba(0, 40, 100, 0.2);
   }
   .plus {
     position: absolute; width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; cursor: crosshair;
-    display: inline-flex; align-items: center; justify-content: center; background: var(--accent); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; background: var(--accent); color: var(--on-accent);
     box-shadow: 0 2px 6px rgba(0, 40, 100, 0.25); touch-action: none; transition: transform 0.12s;
   }
   .plus:hover { transform: scale(1.15); }

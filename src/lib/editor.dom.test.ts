@@ -22,6 +22,22 @@ describe('toggle', () => {
     expect(md(ed)).toBe(note);
   });
 
+  test('closed with the caret in its body: the caret goes to the end of the title, where it can be seen', () => {
+    const ed = editorWith('<details open>\n<summary>Title</summary>\n\n' + Array.from({ length: 40 }, (_, i) => `line ${i}`).join('\n\n') + '\n\n</details>\n\nafter');
+    ed.commands.setTextSelection(posOf(ed, 'line 39', true));
+    const button = ed.view.dom.querySelector<HTMLElement>('[data-type="details"] > button')!;
+    button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    expect(ed.state.doc.firstChild!.attrs.open).toBe(false);
+    const { $head } = ed.state.selection;
+    expect($head.parent.type.name).toBe('detailsSummary');
+    expect($head.parentOffset).toBe('Title'.length);
+    type(ed, '!');
+    expect(md(ed)).toContain('<summary>Title!</summary>');
+    // and a closed toggle cannot be typed into unseen: a caret put inside its body comes out again
+    ed.commands.setTextSelection(posOf(ed, 'line 5'));
+    expect(ed.state.selection.$head.parent.type.name).toBe('detailsSummary');
+  });
+
   test('a <details> written elsewhere, with no <summary>, keeps its body inside', () => {
     const ed = editorWith('<details>\n\nbody only\n\n</details>');
     const toggle = ed.state.doc.firstChild!;

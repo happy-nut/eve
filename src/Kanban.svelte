@@ -108,6 +108,8 @@
     let t = template() ?? { title: '', body: '' };
     await ui.openCard({ ...t, note: 'Card template — every new card on this board starts like this. {{date}} and {{weekday}} are filled in.' },
       (patch) => { t = { ...t, ...patch }; saveTemplate(t); });
+    // back on the board's keys: the template's button (shown only on hover) takes none, and the keyboard was stuck there
+    if (document.activeElement?.classList.contains('kb-tpl')) q('.kb-addcol');
   }
   function addColumn() {
     const col = { id: uid(), title: '', cards: [] };
@@ -128,11 +130,12 @@
     await tick();
     next ? focusHead(next.id) : q('.kb-addcol');
   }
-  async function rename(col: Column, title: string | null) {
+  /** `back`: the keyboard returns to the header (↩, Esc); a click elsewhere (into the note) keeps it where it went */
+  async function rename(col: Column, title: string | null, back = true) {
     editing = null;
     if (title !== null && title.trim() !== col.title) commit(columns.map((c) => (c.id === col.id ? { ...c, title: title.trim() } : c)));
     await tick();
-    focusHead(col.id);
+    if (back) focusHead(col.id);
   }
   function renameKey(e: KeyboardEvent, col: Column) {
     e.stopPropagation();
@@ -217,7 +220,7 @@
   {#each view as col (col.id)}
     <div class="kb-col" data-id={col.id} animate:flip={{ duration: 220 }} ondragover={(e) => dragOver(e, col)} ondrop={drop}>
       {#if editing === col.id}
-        <input class="kb-rename" value={col.title} use:focusInput onkeydown={(e) => renameKey(e, col)} onblur={(e) => editing === col.id && rename(col, e.currentTarget.value)} spellcheck="false" />
+        <input class="kb-rename" value={col.title} use:focusInput onkeydown={(e) => renameKey(e, col)} onblur={(e) => editing === col.id && rename(col, e.currentTarget.value, false)} spellcheck="false" />
       {:else}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div class="kb-head" data-kb="head" tabindex="0" role="button" onclick={() => (editing = col.id)}>
@@ -262,7 +265,8 @@
   .kb-end .icon:focus-visible { background: none; color: var(--fg-dim); }
   :global(html[data-input='keyboard']) :is(.kb-addcol, .kb-x).on { background: var(--accent-soft); color: var(--fg); }
   /* 4px side padding inside the scroller so a focus ring is not clipped at its edge */
-  .kb { display: flex; align-items: flex-start; gap: 14px; overflow-x: auto; padding: 6px 4px 14px; margin: 0.6em -4px; user-select: none; -webkit-user-select: none; scrollbar-width: thin; }
+  /* columns as tall as the board: a card dragged under a short column's last card drops in it */
+  .kb { display: flex; align-items: stretch; gap: 14px; overflow-x: auto; padding: 6px 4px 14px; margin: 0.6em -4px; user-select: none; -webkit-user-select: none; scrollbar-width: thin; }
   .kb-col { flex: none; width: 236px; display: flex; flex-direction: column; gap: 7px; min-height: 60px; }
   .kb-head, .kb-rename {
     display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 8px; border-radius: 6px; font-size: 13px; font-weight: 500;

@@ -121,6 +121,29 @@ const LANGUAGES: [value: string, label: string][] = [
   ['yaml', 'YAML'],
 ];
 
+/** what people type for a language, as the menu names it */
+const ALIASES: Record<string, string> = {
+  js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript', py: 'python', sh: 'bash', shell: 'bash', zsh: 'bash',
+  html: 'xml', yml: 'yaml', md: 'markdown', 'c++': 'cpp', 'c#': 'csharp', cs: 'csharp', toml: 'ini', kt: 'kotlin', rb: 'ruby',
+  rs: 'rust', golang: 'go', plain: '', text: '', txt: '',
+};
+/**
+ * The language a name typed in the field means: an alias (js), a name or label (python, C++), else the first whose
+ * name or label starts with it (ty → TypeScript), else one whose label has it in it. null: none of the menu's.
+ */
+export function matchLanguage(typed: string): [value: string, label: string] | null {
+  const q = typed.trim().toLowerCase();
+  if (!q) return null;
+  const by = (v: string) => LANGUAGES.find(([value]) => value === v) ?? null;
+  if (q in ALIASES) return by(ALIASES[q]);
+  return LANGUAGES.find(([v, l]) => v === q || l.toLowerCase() === q)
+    ?? LANGUAGES.find(([v, l]) => v.startsWith(q) || l.toLowerCase().startsWith(q))
+    ?? LANGUAGES.find(([, l]) => l.toLowerCase().includes(q))
+    ?? null;
+}
+/** set by ``` as it makes a block: the block's view opens its language field (it is made in the same update) */
+let askLanguage = false;
+
 const labelOf = (language: string | null) => LANGUAGES.find(([v]) => v === (language ?? ''))?.[1] ?? language ?? 'Plain text';
 
 /**
@@ -248,10 +271,18 @@ export const CodeBlock = CodeBlockBase.extend({
       },
     };
   },
-  // ```lang then a space or Enter: a language with capitals or signs too (```TypeScript, ```c++, ```C#); not in a
-  // table cell, whose code a table can't keep (it came back as plain text)
+  // ``` alone at the start of a line: a code block at once, the keyboard in its language field (↓, Tab, ↩ or a space
+  // go on into the code). ```lang then a space or Enter (and ~~~ likewise): a language with capitals or signs too
+  // (```TypeScript, ```c++, ```C#). Not in a table cell, whose code a table can't keep (it came back as plain text)
   addInputRules() {
-    return ['```', '~~~'].map((fence) => {
+    const now = textblockTypeInputRule({ find: /^```$/, type: this.type, getAttributes: () => ({ language: null }) });
+    const make = now.handler;
+    now.handler = (props) => {
+      if (inCell(props.state.selection.$from)) return null;
+      askLanguage = true;
+      return make(props);
+    };
+    return [now, ...['```', '~~~'].map((fence) => {
       const rule = textblockTypeInputRule({
         find: new RegExp(`^${fence}([\\w+#.-]+)?[\\s\\n]$`, 'i'),
         type: this.type,
@@ -260,7 +291,7 @@ export const CodeBlock = CodeBlockBase.extend({
       const run = rule.handler;
       rule.handler = (props) => (inCell(props.state.selection.$from) ? null : run(props));
       return rule;
-    });
+    })];
   },
   addStorage() {
     return {
@@ -398,7 +429,81 @@ export const CodeBlock = CodeBlockBase.extend({
           () => chip.classList.remove('open'));
       });
 
-      const owns = (target: EventTarget | Node | null) => target instanceof Node && (chip.contains(target) || host.contains(target));
+      // the language field, where ``` puts the keyboard: a name (or the start of one, an alias) and ↓, Tab, ↩ or a
+      // space go on into the code in that language; Esc goes on with none; ⌫ with nothing typed takes the ``` back
+      const ask = document.createElement('span');
+      ask.className = 'code-lang-ask';
+      ask.contentEditable = 'false';
+      const field = document.createElement('input');
+      field.placeholder = 'Language';
+      field.spellcheck = false;
+      field.setAttribute('aria-label', 'Code language');
+      field.setAttribute('autocapitalize', 'off');
+      const hint = document.createElement('span');
+      hint.className = 'code-lang-hint';
+      ask.append(field, hint);
+      dom.append(ask); // always there, shown by .asking: put in and taken out, ProseMirror read it as an edit
+      const showHint = () => {
+        const m = matchLanguage(field.value);
+        hint.textContent = field.value.trim() ? (m ? m[1] : field.value.trim().toLowerCase()) : '↓ to code';
+      };
+      field.addEventListener('input', showHint);
+      let asking = false;
+      const openField = () => {
+        asking = true;
+        dom.classList.add('asking');
+        field.value = '';
+        showHint();
+        field.focus({ preventScroll: true });
+      };
+      const closeField = () => { asking = false; dom.classList.remove('asking'); };
+      /** into the code, at its start, in the language typed (`keep`: none chosen, as Esc leaves it) */
+      const intoCode = (keep: boolean) => {
+        const typed = field.value.trim();
+        closeField();
+        const p = posNow();
+        const cur = p == null ? null : editor.state.doc.nodeAt(p);
+        if (p == null || !cur || editor.isDestroyed) return;
+        const value = keep && typed ? (matchLanguage(typed)?.[0] ?? typed.toLowerCase()) : null;
+        const tr = editor.state.tr;
+        if ((value || null) !== (cur.attrs.language ?? null)) tr.setNodeMarkup(p, undefined, { ...cur.attrs, language: value || null });
+        editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, p + 1)).scrollIntoView());
+        editor.view.focus();
+      };
+      field.addEventListener('keydown', (e) => {
+        e.stopPropagation(); // the app's own keys (Esc hides the window) and the note's are not this field's
+        if (e.isComposing) return;
+        if (e.key === 'ArrowDown' || e.key === 'Tab' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); intoCode(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); intoCode(false); }
+        else if (e.key === 'Backspace' && !field.value) {
+          // the ``` back as it was typed, less the last `, as ⌫ after it would have left it
+          e.preventDefault();
+          closeField();
+          editor.view.focus();
+          const p = posNow();
+          const cur = p == null ? null : editor.state.doc.nodeAt(p);
+          if (p == null || !cur) return;
+          // the block as the ``` line was (what it was made of stays after it), not the stock undo: the keyboard going to
+          // the field had already put a step between
+          const para = editor.schema.nodes.paragraph.create(null, [editor.schema.text('``'), ...(cur.content.size ? [editor.schema.text(cur.textContent)] : [])]);
+          const tr = editor.state.tr.replaceWith(p, p + cur.nodeSize, para);
+          editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, p + 3)).scrollIntoView());
+        }
+      });
+      // a click away: the language as typed so far, the keyboard where the click took it
+      field.addEventListener('blur', () => {
+        if (!asking) return;
+        const typed = field.value.trim();
+        closeField();
+        const p = posNow();
+        const cur = p == null ? null : editor.state.doc.nodeAt(p);
+        if (!typed || p == null || !cur || editor.isDestroyed) return;
+        const value = matchLanguage(typed)?.[0] ?? typed.toLowerCase();
+        if (value !== (cur.attrs.language ?? '')) editor.view.dispatch(editor.state.tr.setNodeMarkup(p, undefined, { ...cur.attrs, language: value || null }));
+      });
+      if (askLanguage) { askLanguage = false; queueMicrotask(() => { if (dom.isConnected) openField(); }); }
+
+      const owns = (target: EventTarget | Node | null) => target instanceof Node && (chip.contains(target) || host.contains(target) || ask.contains(target));
       return {
         dom,
         contentDOM: code,
@@ -414,7 +519,7 @@ export const CodeBlock = CodeBlockBase.extend({
         // anew, which drew again, failed again and set them again, without end
         ignoreMutation: (m) => owns(m.target) || (m.type === 'attributes' && m.target === dom),
         stopEvent: (e) => owns(e.target),
-        destroy: () => { block?.destroy(); },
+        destroy: () => { asking = false; block?.destroy(); },
       };
     };
   },

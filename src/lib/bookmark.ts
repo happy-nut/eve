@@ -152,7 +152,9 @@ export const Bookmark = Node.create({
             const { $from, empty } = view.state.selection;
             if (!URL_RE.test(text) || !empty || $from.parent.type.spec.code) return false;
             const link = view.state.schema.text(text, [view.state.schema.marks.link.create({ href: text })]);
-            view.dispatch(view.state.tr.replaceSelectionWith(link, false).scrollIntoView());
+            // what is typed next is not the address: the link mark reaches on at its end (autolink makes it inclusive),
+            // and " for details" became part of the link
+            view.dispatch(view.state.tr.replaceSelectionWith(link, false).setStoredMarks([]).scrollIntoView());
             return true;
           },
         },

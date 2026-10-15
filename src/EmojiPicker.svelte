@@ -17,22 +17,23 @@
   const x = $derived(Math.max(8, Math.min(req.x, window.innerWidth - W - 8)));
   const y = $derived(Math.max(TOP, req.y + H > window.innerHeight - 8 ? req.y - H - 40 : req.y));
 
-  const ko = {
-    categoriesLabel: '카테고리', emojiUnsupportedMessage: '이 브라우저는 컬러 이모지를 지원하지 않습니다.',
-    favoritesLabel: '최근 사용됨', loadingMessage: '불러오는 중…', networkErrorMessage: '이모지를 불러올 수 없습니다.',
-    regionLabel: '이모지 선택', searchDescription: '검색 결과에서 위/아래 키로 이동하고 Enter 로 선택합니다.',
-    searchLabel: '찾기', searchResultsLabel: '검색 결과', skinToneDescription: '열린 상태에서 위/아래 키로 이동하고 Enter 로 선택합니다.',
-    skinToneLabel: '피부색 선택 (현재 {skinTone})', skinTonesLabel: '피부색',
-    skinTones: ['기본', '밝은', '약간 밝은', '중간', '약간 어두운', '어두운'],
+  // in English, as the rest of Eve is (and the emoji's names the search finds them by): the picker was in Korean
+  const en = {
+    categoriesLabel: 'Categories', emojiUnsupportedMessage: 'Your browser does not support color emoji.',
+    favoritesLabel: 'Recently used', loadingMessage: 'Loading…', networkErrorMessage: 'Could not load emoji.',
+    regionLabel: 'Emoji picker', searchDescription: 'When search results are available, press up or down to select and enter to choose.',
+    searchLabel: 'Search', searchResultsLabel: 'Search results', skinToneDescription: 'When expanded, press up or down to select and enter to choose.',
+    skinToneLabel: 'Choose a skin tone (currently {skinTone})', skinTonesLabel: 'Skin tones',
+    skinTones: ['Default', 'Light', 'Medium-Light', 'Medium', 'Medium-Dark', 'Dark'],
     categories: {
-      custom: '기타', 'smileys-emotion': '표정 및 사람', 'people-body': '사람 및 신체', 'animals-nature': '동물 및 자연',
-      'food-drink': '음식 및 음료', 'travel-places': '여행 및 장소', activities: '활동', objects: '사물', symbols: '기호', flags: '깃발',
+      custom: 'Eve', 'smileys-emotion': 'Smileys and emoticons', 'people-body': 'People and body', 'animals-nature': 'Animals and nature',
+      'food-drink': 'Food and drink', 'travel-places': 'Travel and places', activities: 'Activities', objects: 'Objects', symbols: 'Symbols', flags: 'Flags',
     },
   };
   $effect(() => {
     if (!el) return;
-    el.i18n = ko;
-    (el as any).customEmoji = CUSTOM_ICONS.map((c) => ({ name: c.label, shortcodes: [c.name], url: customUrl(c), category: '기타' }));
+    el.i18n = en;
+    (el as any).customEmoji = CUSTOM_ICONS.map((c) => ({ name: c.label, shortcodes: [c.name], url: customUrl(c), category: 'Eve' }));
     // the element always lists custom icons first; move that tab to the far right and mark the
     // selected tab by background instead of the sliding indicator (which assumes source order)
     const root = el.shadowRoot;
@@ -59,6 +60,7 @@
       st.id = 'eve-nav';
       st.textContent = `.nav-button[data-group-id="-1"] { order: 99 } .indicator-wrapper { display: none }
         .nav-button[aria-selected="true"] { background: var(--button-active-background); border-radius: 6px }
+        .nav { overflow-x: auto; scrollbar-width: none } .nav::-webkit-scrollbar { display: none }
         .tabpanel .emoji:focus { background: var(--button-active-background); outline: 2px solid var(--outline-color); outline-offset: -2px }`;
       root.append(st);
     }
@@ -166,15 +168,15 @@
 <svelte:window onkeydown={onKey} />
 <div class="backdrop" transition:fade|global={scrimFade} onmousedown={() => ui.emojiDone(null)} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="panel" style="left: {x}px; top: {y}px; width: {W}px" transition:scale|global={popIn} role="dialog" aria-label="이모지 선택" onkeydowncapture={onGridKey}>
+<div class="panel" style="left: {x}px; top: {y}px; width: {W}px" transition:scale|global={popIn} role="dialog" aria-label="Choose an icon" onkeydowncapture={onGridKey}>
   <header>
     {#if isMobile}
       <!-- a phone's picker fills the screen: the way back is where the note's own back button is -->
-      <button class="act back" aria-label="닫기" onclick={() => ui.emojiDone(null)}>
+      <button class="act back" aria-label="Close" onclick={() => ui.emojiDone(null)}>
         <svg viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg>
       </button>
     {/if}
-    <span class="tab">이모지</span>
+    <span class="tab">Icon</span>
     <span class="acts">
       <!-- the same pool the "Add icon" button rolls from, so a page can be given a face without choosing one -->
       <button class="act" aria-label="Random icon" title="Random icon" onclick={() => ui.emojiDone(randomIcon(req.current))}>

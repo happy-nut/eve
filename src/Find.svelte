@@ -4,6 +4,7 @@
   import type { Editor } from '@tiptap/core';
   import { findState, setQuery, step, replaceOne, replaceAll, clearFind } from './lib/find';
   import { ui } from './lib/ui.svelte';
+  import { isMobile } from './lib/platform';
 
   /** ⌘F: a small bar over the note. Enter walks the matches, ⇧Enter walks back, Esc puts it away. */
   let { editor }: { editor: Editor | undefined } = $props();
@@ -53,8 +54,21 @@
     sync();
   }
 
+  /** A phone's bar lies across the whole note: the note makes room under it, or the first lines' matches sat under
+   *  the bar with no way to scroll them out (the Mac's bar keeps to the corner, beside the text). */
+  function makeRoom(bar: HTMLElement) {
+    const scroll = isMobile ? bar.parentElement?.querySelector<HTMLElement>(':scope > .scroll') : null;
+    if (!scroll) return;
+    const fit = () => { scroll.style.paddingTop = `${bar.offsetHeight + 8}px`; };
+    const ro = new ResizeObserver(fit);
+    ro.observe(bar);
+    fit();
+    return { destroy() { ro.disconnect(); scroll.style.paddingTop = ''; } };
+  }
+
   function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    // and nothing more: it fell through to Enter's work, replacing the match (or stepping on) as the bar closed
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
     // the Enter that ends a Korean or Japanese word being put together is the word's, not a step to the next match
     else if (e.key !== 'Enter' || e.isComposing) return;
     e.preventDefault();
@@ -68,7 +82,7 @@
 <!-- the keys come from the fields and buttons inside, which are focusable on their own; the bar only
      catches them once on the way up, so it needs no role of its own beyond the landmark -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="find" transition:fly|global={{ ...caretIn, y: -6 }} onkeydown={onKey} role="search">
+<div class="find" use:makeRoom transition:fly|global={{ ...caretIn, y: -6 }} onkeydown={onKey} role="search">
   <div class="line">
     <svg class="glass" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
     <input use:focus placeholder="Find" spellcheck="false" value={query} oninput={(e) => type(e.currentTarget.value)} />

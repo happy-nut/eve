@@ -199,12 +199,14 @@ export const ICONS = {
   gantt: '<path d="M2 2v12h12"/><rect x="4" y="3.5" width="5" height="2" rx="1"/><rect x="7" y="7" width="5" height="2" rx="1"/><rect x="9.5" y="10.5" width="4" height="2" rx="1"/>',
   math: '<path d="M2.5 8.5h1.6l1.7 4L9 3.5h4.5"/><path d="M9.8 8.3l3 3.4M12.8 8.3l-3 3.4"/>',
   mathInline: '<path d="M4.5 3.5c-1 0-1.5.6-1.5 1.5v1.5c0 .8-.5 1.5-1.2 1.5.7 0 1.2.7 1.2 1.5V11c0 .9.5 1.5 1.5 1.5M11.5 3.5c1 0 1.5.6 1.5 1.5v1.5c0 .8.5 1.5 1.2 1.5-.7 0-1.2.7-1.2 1.5V11c0 .9-.5 1.5-1.5 1.5"/><path d="M6.2 6.2l3.6 3.6M9.8 6.2l-3.6 3.6"/>',
+  code: '<path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/>',
+  divider: '<path d="M2 8h12"/><path d="M5 4.5h6M5 11.5h6" opacity=".45"/>',
   table: '<rect x="2.5" y="3.5" width="11" height="9" rx="1"/><path d="M2.5 6.6h11M6.5 6.6v5.9M10 6.6v5.9"/>',
   section: '<path d="M6.4 2.9 4.8 13.1M11.2 2.9 9.6 13.1M3.3 6.1h9.4M2.8 9.9h9.4"/>',
   emoji: '<circle cx="8" cy="8" r="6"/><path d="M5.8 9.4c.6.9 1.3 1.4 2.2 1.4s1.6-.5 2.2-1.4"/><path d="M6.3 6.4h.01M9.7 6.4h.01"/>',
 };
 
-/** The "/" block menu, Notion-style. ``` and --- still make a code block / divider as you type. */
+/** The "/" block menu, Notion-style. ``` and --- also make a code block / divider as you type. */
 /** a "/" item that a key also inserts: after it runs, say which key */
 const tip = (id: string, run: NonNullable<SuggestItem['run']>): SuggestItem['run'] => (e) => { run(e); hints.action(id); };
 
@@ -212,6 +214,9 @@ export const SLASH: SuggestItem[] = [
   { label: 'New page', hint: '📄 하위 페이지', icon: ICONS.page, run: newPage },
   { label: 'Callout', hint: '💡 highlighted box', icon: ICONS.callout, run: tip('callout', (e) => e.chain().focus().toggleWrap('callout').run()) },
   { label: 'Toggle', hint: '> folds its content', icon: ICONS.toggle, run: (e) => e.chain().focus().setDetails().updateAttributes('details', { open: true }).run() },
+  // as ``` and --- make them as you type
+  { label: 'Code block', hint: '``` code, highlighted', icon: ICONS.code, run: tip('codeBlock', (e) => { if (!e.isActive('tableCell') && !e.isActive('tableHeader')) e.chain().focus().toggleCodeBlock().run(); }) },
+  { label: 'Divider', hint: '--- a line across', icon: ICONS.divider, run: tip('divider', (e) => e.chain().focus().setHorizontalRule().run()) },
   { label: 'Kanban', hint: '칸반 board', icon: ICONS.kanban, run: insertKanban },
   { label: 'Flowchart', hint: 'Diagram: boxes and arrows', icon: ICONS.diagram, run: (e) => insertDiagram(e, 'flowchart') },
   { label: 'Swimlanes', hint: 'Diagram: who does each step, in lanes', icon: ICONS.lanes, run: (e) => insertDiagram(e, swimlaneStarter()) },

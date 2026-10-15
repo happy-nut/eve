@@ -241,7 +241,7 @@
   }
   .tabs button.on { background: var(--bg-input); color: var(--fg); }
   @media (hover: hover) { .tabs button:hover { background: var(--bg-hover); color: var(--fg); } }
-  .tabs .done { background: var(--accent); color: #fff; margin-left: 2px; }
+  .tabs .done { background: var(--accent); color: var(--on-accent); margin-left: 2px; }
   @media (hover: hover) { .tabs .done:hover { background: color-mix(in srgb, var(--accent) 88%, #000); color: #fff; } }
   .parts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
   .part {

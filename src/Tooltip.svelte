@@ -9,6 +9,14 @@
   let tip = $state<{ text: string; keys: string; x: number; y: number; up: boolean; right: boolean } | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
   let current: HTMLElement | null = null; // element the tooltip belongs to
+  let box = $state<HTMLDivElement | null>(null);
+  // kept inside the window: a tip centred under a control at its right edge (the calendar's ›) ran off it
+  $effect(() => {
+    if (!box || !tip) return;
+    const r = box.getBoundingClientRect(), over = r.right - (window.innerWidth - 8), under = 8 - r.left;
+    if (over > 0) tip.x -= over;
+    else if (under > 0) tip.x += under;
+  });
 
   function over(e: MouseEvent) {
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-tip]');
@@ -36,7 +44,7 @@
 
 {#if tip}
   <!-- CSS intro only: a Svelte outro can stall when the window is hidden mid-animation and leave a ghost tip -->
-  <div class="tip" class:up={tip.up} class:right={tip.right} style="left: {tip.x}px; top: {tip.y}px">
+  <div class="tip" bind:this={box} class:up={tip.up} class:right={tip.right} style="left: {tip.x}px; top: {tip.y}px">
     {tip.text}{#if tip.keys}<Keys keys={tip.keys} />{/if}
   </div>
 {/if}

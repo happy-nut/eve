@@ -20,7 +20,7 @@
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
 
   let recording = $state<string | null>(null);
-  let conflict = $state<{ id: string; keys: string; with: string } | null>(null);
+  let conflict = $state<{ id: string; keys: string; with: string; bare?: boolean } | null>(null);
   let tab = $state<'general' | 'appearance' | 'sync' | 'shortcuts'>('general');
   let notesPath = $state('');
   let launchAtLogin = $state(false);
@@ -103,6 +103,8 @@
       if (e.key === 'Escape') { recording = null; conflict = null; return; }
       const keys = eventToKeys(e);
       if (!keys) return; // modifier only, keep waiting
+      // a key with no ⌘ / ⌃ / ⌥ is one the note types (a letter, ⇧ and a letter, Space, ↩): bound, it could not be typed
+      if (!/(^|-)(Mod|Ctrl|Alt)-/.test(keys) && !/(^|-)F\d{1,2}$/.test(keys)) { conflict = { id: recording, keys, with: '', bare: true }; return; }
       const clash = shortcuts.set(recording, keys);
       if (clash) { conflict = { id: recording, keys, with: clash.label }; return; } // keep recording
       conflict = null;
@@ -110,6 +112,20 @@
       return;
     }
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); }
+    if (e.key === 'Tab' && !ui.menu) trapTab(e);
+  }
+  let panel: HTMLDivElement;
+  const takeFocus = (el: HTMLElement) => { if (!isMobile) el.focus({ preventScroll: true }); };
+  /** Tab goes round Settings' own controls, never out to the list or the note behind it */
+  function trapTab(e: KeyboardEvent) {
+    const els = [...panel.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])')]
+      .filter((el) => !(el as HTMLButtonElement).disabled && el.offsetParent !== null);
+    if (!els.length) return;
+    const i = els.indexOf(document.activeElement as HTMLElement);
+    if (i < 0 || (e.shiftKey ? i === 0 : i === els.length - 1)) {
+      e.preventDefault();
+      els[i < 0 ? (e.shiftKey ? els.length - 1 : 0) : (e.shiftKey ? els.length - 1 : 0)].focus();
+    }
   }
   /** Esc with the keyboard still behind Settings (the list's row, the note) closes Settings first: left to them,
    *  the list's own Esc took the keyboard to the note. Inside Settings, its popups keep their own Esc. */
@@ -128,11 +144,12 @@
 
 <!-- preventDefault: the press would otherwise take the keyboard away again after closing gave it back -->
 <div class="backdrop" transition:fade|global={scrimFade} onmousedown={(e) => { e.preventDefault(); onClose(); }} role="presentation"></div>
-<div class="panel" transition:scale|global={panelIn} role="dialog">
+<!-- the keyboard comes into Settings and stays there: typing went on into the note behind it -->
+<div class="panel" bind:this={panel} use:takeFocus transition:scale|global={panelIn} role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1">
   <header>
     <div class="seg" role="tablist">
       {#each tabs as [id, label]}
-        <button role="tab" aria-selected={tab === id} class:on={tab === id} onclick={() => (tab = id)}>{label}</button>
+        <button role="tab" aria-selected={tab === id} class:on={tab === id} onclick={() => { tab = id; recording = null; conflict = null; }}>{label}</button>
       {/each}
     </div>
     <button class="icon" onclick={onClose} title="Close (Esc)">✕</button>
@@ -153,7 +170,11 @@
               </button>
             </div>
             {#if conflict?.id === a.id}
-              <p class="alert"><Keys keys={conflict.keys} /> is already used by “{conflict.with}”. Try another combination, or Esc to cancel.</p>
+              {#if conflict.bare}
+                <p class="alert"><Keys keys={conflict.keys} /> alone would type in the note. Hold a modifier with it, or Esc to cancel.</p>
+              {:else}
+                <p class="alert"><Keys keys={conflict.keys} /> is already used by “{conflict.with}”. Try another combination, or Esc to cancel.</p>
+              {/if}
             {/if}
           {/each}
         </div>
@@ -441,6 +462,7 @@
   .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: 20; }
   /* a phone: settings is a page, and the strip above the status bar is part of it */
   :global(html.mobile) .backdrop { background: var(--bg); }
+  .panel:focus { outline: none; }
   .panel {
     position: fixed; z-index: 21; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: min(560px, 92vw); max-height: 82vh; display: flex; flex-direction: column; overflow: hidden;
@@ -493,7 +515,7 @@
   }
   .btn:hover { background: color-mix(in srgb, var(--bg-pop), var(--fg) 5%); } /* darker in light, lighter in dark */
   .btn:active { transform: scale(0.97); }
-  .btn.primary { background: var(--accent); color: light-dark(#fff, #0b0c10); box-shadow: var(--glow); }
+  .btn.primary { background: var(--accent); color: var(--on-accent); box-shadow: var(--glow); }
   .btn.primary:hover { filter: brightness(1.08); }
   .btn:disabled { opacity: 0.4; pointer-events: none; }
   .btn:has(.spin):disabled { opacity: 0.75; }

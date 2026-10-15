@@ -114,7 +114,9 @@
     <input class="name" bind:value={renaming} onblur={rename} spellcheck="false" aria-label="Name"
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); if (e.key === 'Escape') renaming = notes.calendar.name; else rename(); void moveTo(cursor); } }} />
   </div>
-  <div class="bar">
+  <!-- the month's buttons keep the grid's arrows: a click on › left the keyboard there, where ⌘→ (its tip) did nothing -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="bar" onkeydown={(e) => { if (e.key.startsWith('Arrow')) onKey(e); }}>
     <span class="month">{title}</span>
     <span class="gap"></span>
     <button class="tpl" onclick={ontemplate} data-tip="What a new day starts as">
@@ -197,7 +199,7 @@
     font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums;
   }
   .day.out { opacity: 0.35; }
-  .day.today .num { background: var(--accent); color: #fff; font-weight: 600; }
+  .day.today .num { background: var(--accent); color: var(--on-accent); font-weight: 600; }
   .line {
     font-size: 12px; line-height: 1.4; color: var(--fg-dim); overflow: hidden;
     display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; word-break: break-word;

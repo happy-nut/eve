@@ -36,8 +36,8 @@ function noteSlots(me: Note): NoteSlot[] {
  */
 export const openedFromList = { id: '' };
 
-/** ⌥↑ / ⌥↓ on a note: one slot up/down — past a page, into it, or on into the next group. */
-export function nudgeNote(id: string, dir: 1 | -1): boolean {
+/** ⌥↑ / ⌥↓ on a note: one slot up/down — past a page, into it, or on into the next group. `dry`: only whether it could. */
+export function nudgeNote(id: string, dir: 1 | -1, dry = false): boolean {
   const me = notes.all.find((n) => n.id === id);
   if (!me) return false;
   // the calendar's row is never a sub-page: it steps past pages (and between groups), never into them
@@ -47,23 +47,26 @@ export function nudgeNote(id: string, dir: 1 | -1): boolean {
   const at = list.findIndex((s) => s.group === me.group && s.parent === (me.parent ?? '') && s.before === (sibs[i + 1]?.id ?? null));
   const t = list[at + dir];
   if (at < 0 || !t) return false;
+  if (dry) return true;
   if (t.parent) groups.unfold(t.parent); // show where it landed
   notes.place(id, t.group, t.parent, t.before);
   return true;
 }
 
 /** ⌥→ tucks a note under `above` (the row over it) (a sub-page); ⌥← lifts it back out to its parent's level. */
-export function nestNote(id: string, dir: 'in' | 'out', above?: string): boolean {
+export function nestNote(id: string, dir: 'in' | 'out', above?: string, dry = false): boolean {
   const me = notes.all.find((n) => n.id === id);
   if (!me) return false;
   if (dir === 'out') {
     const parent = me.parent ? notes.all.find((n) => n.id === me.parent) : null;
     if (!parent) return false;
+    if (dry) return true;
     notes.setParent(id, parent.parent ?? null);
   } else {
     // only a page of the same group can take it in, and never one of its own sub-pages
     const host = above && notes.all.find((n) => n.id === above);
     if (!host || host.group !== me.group || host.id === me.parent || notes.isAncestor(id, host.id)) return false;
+    if (dry) return true;
     groups.unfold(host.id);
     notes.setParent(id, host.id);
   }
@@ -85,6 +88,12 @@ function slots(g: string, parent: string): Slot[] {
   }
   out.push({ parent, before: null });
   return out.filter((s) => groups.canPlace(g, s.parent));
+}
+/** Could ⌥↑ / ⌥↓ move the group at all (the row menu leaves out a move that would do nothing)? */
+export function canNudgeGroup(g: string, key: 'ArrowUp' | 'ArrowDown'): boolean {
+  const list = slots(g, '');
+  const i = list.findIndex((s) => s.parent === parentOf(g) && s.before === groups.nextSibling(g));
+  return i >= 0 && !!list[i + (key === 'ArrowDown' ? 1 : -1)];
 }
 /** The group's new path, or null when it could not move that way. */
 export function nudgeGroup(g: string, key: string): string | null {

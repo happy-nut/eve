@@ -403,7 +403,7 @@
   }
   :global(html.mobile) .tools .kind { display: none; } /* a phone's row has room for the buttons only */
   @media (hover: hover) { .tools button:hover { background: var(--bg-hover); color: var(--fg); } }
-  .tools .done, .foot .done { background: var(--accent); color: #fff; }
+  .tools .done, .foot .done { background: var(--accent); color: var(--on-accent); }
   /* white on the dark theme's light blue read poorly: a deeper blue under it */
   .tools .done, .foot .done { background: light-dark(var(--accent), color-mix(in srgb, var(--accent) 70%, #00264f)); }
   .foot { display: flex; justify-content: flex-end; padding: 6px 10px 0; }

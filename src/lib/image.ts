@@ -3,13 +3,14 @@ import { Extension } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
 import { Plugin, PluginKey, NodeSelection, TextSelection } from '@tiptap/pm/state';
-import { assetUrl } from './platform';
-import { MIN_WIDTH, escapeWidth, nameOf, sizeGrip, widthOf, withWidth } from './resize';
+import { assetUrl, copyImage } from './platform';
+import { MIN_WIDTH, alignOf, escapeWidth, nameOf, sizeGrip, widthOf, withAlign, withWidth } from './resize';
+import type { Editor } from '@tiptap/core';
 
 /** `![caption](src "title")`, the picture as a block of its own or inside a table's cell */
 export function imageMarkdown(state: any, node: PMNode): string {
   // the src is a URL, not text: escaping it would put backslashes into the file name
-  const alt = withWidth(escapeWidth(state.esc(node.attrs.alt ?? '')), node.attrs.width);
+  const alt = withAlign(withWidth(escapeWidth(state.esc(node.attrs.alt ?? '')), node.attrs.width), node.attrs.align);
   const src: string = node.attrs.src ?? '';
   // ...but one with a space, a "<" or ">", or a ")" with no "(" before it ends the link early (the rest was
   // read back as text): markdown's <…> holds those
@@ -46,7 +47,7 @@ const keptTags = new WeakSet<object>();
 /** the <img> tag the picture was read from, while it still says what the picture is (not resized, not renamed) */
 function asWritten(node: PMNode): string | null {
   const html: string | null = node.attrs.html;
-  if (!html || node.attrs.width) return null;
+  if (!html || node.attrs.width || node.attrs.align) return null;
   const box = document.createElement('template');
   box.innerHTML = html;
   const img = box.content.querySelector('img');
@@ -72,6 +73,12 @@ export const LocalImage = Image.extend({
         renderHTML: (attrs: any) => (attrs.width ? { style: `width:${attrs.width}px` } : {}),
       },
       alt: { default: null, parseHTML: (el: HTMLElement) => nameOf(el.getAttribute('alt')) || null },
+      // where it sits across the page (null: on the left, where a picture sits anyway), carried as "caption|center"
+      align: {
+        default: null,
+        parseHTML: (el: HTMLElement) => alignOf(el.getAttribute('alt')) ?? (/^(center|right)$/.exec(el.getAttribute('data-align') ?? el.getAttribute('align') ?? '')?.[1] || null),
+        renderHTML: (attrs: any) => (attrs.align ? { 'data-align': attrs.align } : {}),
+      },
       // an <img> whose width the note has no way to write (`width="50%"`): the tag as it was, written back so
       html: { default: null, parseHTML: (el: HTMLElement) => el.getAttribute('data-eve-img'), rendered: false },
     };
@@ -167,6 +174,7 @@ export const LocalImage = Image.extend({
       img.draggable = false;
       if (node.attrs.alt) img.alt = node.attrs.alt;
       if (node.attrs.width) img.style.width = `${node.attrs.width}px`;
+      if (node.attrs.align) figure.dataset.align = node.attrs.align;
 
       /** the dragged width goes onto the node, so it is saved with the note and undoable */
       const setWidth = (width: number | null) => {
@@ -232,8 +240,29 @@ export const LocalImage = Image.extend({
         editor.commands.focus();
       });
 
-      // a double-click (a double tap on a phone) shows the picture full size
-      img.addEventListener('dblclick', (e) => { e.preventDefault(); ui.viewImage(img.src, img.alt); });
+      // a click on the picture (a tap on a phone) opens its menu: copy it, set where it sits. A double-click (a
+      // double tap) shows it full size, with the same menu on it: the first click waits to see if a second follows
+      const pos = () => (typeof getPos === 'function' ? getPos() : null);
+      let pending: ReturnType<typeof setTimeout> | undefined;
+      img.addEventListener('click', (e) => {
+        if (e.detail !== 1 || !editor.isEditable) return;
+        const at = { clientX: e.clientX, clientY: e.clientY };
+        clearTimeout(pending);
+        pending = setTimeout(() => imageMenu(editor, pos, at, img.src), 260);
+      });
+      img.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        clearTimeout(pending);
+        ui.viewImage(img.src, img.alt, (at) => imageMenu(editor, pos, at, img.src));
+      });
+      // a right-click: the picture's menu, not the note's (Cut, Bold, … have nothing to do with a picture)
+      img.addEventListener('contextmenu', (e) => {
+        if (!editor.isEditable) return;
+        e.preventDefault();
+        e.stopPropagation();
+        clearTimeout(pending);
+        imageMenu(editor, pos, e, img.src);
+      });
 
       const grip = sizeGrip(img, setWidth);
       figure.append(img, grip, cap);
@@ -244,6 +273,7 @@ export const LocalImage = Image.extend({
           img.src = assetUrl(updated.attrs.src) ?? updated.attrs.src;
           img.alt = updated.attrs.alt ?? '';
           img.style.width = updated.attrs.width ? `${updated.attrs.width}px` : '';
+          if (updated.attrs.align) figure.dataset.align = updated.attrs.align; else delete figure.dataset.align;
           if (document.activeElement !== cap) cap.textContent = updated.attrs.alt ?? '';
           return true;
         },
@@ -253,7 +283,7 @@ export const LocalImage = Image.extend({
         // caption is the editor's business; every other change in here is this view's own.
         ignoreMutation: (m) => m.type !== 'selection' || owns(m.target),
         stopEvent: (e) => owns(e.target) || e.target === grip,
-        destroy: () => { clearTimeout(timer); editor.off('destroy', save); document.removeEventListener('mousedown', release, true); },
+        destroy: () => { clearTimeout(timer); clearTimeout(pending); editor.off('destroy', save); document.removeEventListener('mousedown', release, true); },
       };
     };
   },
@@ -273,9 +303,34 @@ export const ImageView = Extension.create({
         if (!(sel instanceof NodeSelection) || sel.node.type.name !== 'image') return false;
         const img = this.editor.view.nodeDOM(sel.from) as HTMLElement | null;
         const shown = img?.querySelector('img');
-        ui.viewImage(shown?.src || assetUrl(sel.node.attrs.src) || sel.node.attrs.src, sel.node.attrs.alt ?? '');
+        const src = shown?.src || assetUrl(sel.node.attrs.src) || sel.node.attrs.src;
+        const at = sel.from;
+        ui.viewImage(src, sel.node.attrs.alt ?? '', (p) => imageMenu(this.editor, () => at, p, src));
         return true;
       },
     };
   },
 });
+
+/**
+ * A picture's own menu (a click on it, a right-click, ⌥↩ with it selected, and the same on it shown full size):
+ * copy it as a picture, and where it sits across the page. Nothing else: the note's menu is for text.
+ */
+export function imageMenu(editor: Editor, getPos: () => number | null | undefined, at: { clientX: number; clientY: number }, src: string) {
+  const at0 = getPos();
+  const node = at0 == null ? null : editor.state.doc.nodeAt(at0);
+  if (at0 == null || node?.type.name !== 'image') return;
+  const align: string = node.attrs.align ?? 'left';
+  const place = (to: 'left' | 'center' | 'right') => {
+    const p = getPos();
+    const cur = p == null ? null : editor.state.doc.nodeAt(p);
+    if (p == null || cur?.type.name !== 'image') return;
+    editor.view.dispatch(editor.state.tr.setNodeMarkup(p, undefined, { ...cur.attrs, align: to === 'left' ? null : to }));
+  };
+  ui.openMenu(at, [
+    { label: 'Copy image', run: () => void copyImage(src).then((ok) => { if (!ok) void ui.tell('The picture could not be copied.'); }) },
+    { label: 'Align left', sep: true, checked: align === 'left', run: () => place('left') },
+    { label: 'Align center', checked: align === 'center', run: () => place('center') },
+    { label: 'Align right', checked: align === 'right', run: () => place('right') },
+  ]);
+}

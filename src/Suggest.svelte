@@ -22,7 +22,7 @@
       // a keystroke rebuilds the list, so nothing stays open across one: the page under row 3 is not
       // the page that was there before the letter was typed
       items = next; open = new Set(); sel = 0; pick = cb;
-      if (rect) { anchor = rect; place = placeAt(rect, 300, list?.offsetWidth ?? 340); }
+      if (rect) { anchor = rect; place = placeAt(rect, want(), list?.offsetWidth ?? 340); }
     },
     move: (d) => { sel = (sel + d + shown.length) % shown.length; },
     select: () => { if (!shown.length) return false; pick(shown[sel].item); return true; },
@@ -38,13 +38,15 @@
     },
     hide: () => { items = []; open = new Set(); },
     visible: () => items.length > 0,
-    place: (rect) => { anchor = rect; place = placeAt(rect, 300, list?.offsetWidth ?? 340); },
+    place: (rect) => { anchor = rect; place = placeAt(rect, want(), list?.offsetWidth ?? 340); },
   };
 
   let list = $state<HTMLUListElement | null>(null);
+  /** the room it needs: a short list fits under the caret where a full one (300) would not */
+  const want = () => Math.min(300, list?.scrollHeight || 300);
   // placed by its real width, once drawn: it was placed as if 200 px wide, and a menu of long titles (up to 340)
   // near the right edge of the window ran off it
-  $effect(() => { shown; if (list && anchor) place = placeAt(anchor, 300, list.offsetWidth); });
+  $effect(() => { shown; if (list && anchor) place = placeAt(anchor, want(), list.offsetWidth); });
   // keep the highlighted suggestion visible while arrowing through a long list
   $effect(() => { sel; list?.querySelector('li.sel')?.scrollIntoView({ block: 'nearest' }); });
 </script>
@@ -82,7 +84,7 @@
     padding: 4px;
     width: max-content; /* its own width, not what is left of the window right of the caret: placed by it */
     min-width: 200px;
-    max-width: 340px;
+    max-width: min(340px, calc(100vw - 16px)); /* a 320-wide phone: the hints were cut at the right edge */
     max-height: 300px;
     overflow-y: auto;
     background: var(--bg-pop);

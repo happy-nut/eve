@@ -10,6 +10,7 @@
   --bg-active: light-dark(rgba(17, 19, 24, 0.09), rgba(255, 255, 255, 0.1));
   --line: light-dark(rgba(17, 19, 24, 0.09), rgba(255, 255, 255, 0.09));
   --accent: light-dark(#1e9bff, #3fc1ff);
+  --on-accent: light-dark(#fff, #0b0c10); /* text on the accent: white is ~2:1 on the dark theme's light blue */
   --accent-soft: light-dark(rgba(30, 155, 255, 0.22), rgba(63, 193, 255, 0.28));
   /* selection: opaque (a translucent tint let code chips and wikilink pills show through as a second colour)
      and a step away from --accent-soft, so a selection inside a callout or a wikilink still reads as selected */
@@ -126,7 +127,7 @@ html.mobile li.row.lifted {
   transform: scale(1.03); transform-origin: center; opacity: 0.96;
 }
 html.mobile aside {
-  position: fixed; inset: var(--top) 0 var(--bottom); width: auto; z-index: 5;
+  position: fixed; inset: var(--top) 0 var(--bottom); width: auto; z-index: 5; border-right: 0; /* full width: no edge to draw */
   transition: transform 0.2s ease-out; -webkit-touch-callout: none;
 }
 
@@ -240,7 +241,7 @@ html.mobile .panel .btn {
   font-size: 14.5px; font-weight: 500; padding: 7px 14px; border-radius: 6px; background: none;
   box-shadow: inset 0 0 0 1px var(--line);
 }
-html.mobile .panel .btn.primary { background: var(--accent); color: #fff; box-shadow: none; }
+html.mobile .panel .btn.primary { background: var(--accent); color: var(--on-accent); box-shadow: none; }
 html.mobile .panel .sample { margin: 16px 20px 0; border-radius: 6px; }
 html.mobile .panel .foot { margin: 14px 20px 0; }
 html.mobile .panel .path { font-size: 13.5px; }
@@ -301,7 +302,7 @@ html.mobile .mhead {
 html.mobile .mhead .micon, html.mobile .mhead .micon.danger { color: var(--fg-dim); }
 html.mobile .mhead .micon.on { color: var(--fg); }
 html.mobile .mhead .micon.on svg { fill: currentColor; }
-html.mobile .page-head { height: 36px; }
+html.mobile .page-head { height: 46px; } /* room for "Add icon", shown on a phone (no hover to bring it up) */
 html.mobile .page-head.with-icon { height: 80px; }
 html.mobile .big-icon { font-size: 44px; }
 html.mobile .tiptap h1 { font-size: 1.65em; font-weight: 700; }
@@ -423,6 +424,22 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 .tiptap .code-lang { pointer-events: none; }
 .tiptap .code-block:hover .code-lang, .tiptap .code-lang:hover, .tiptap .code-lang.open { opacity: 1; pointer-events: auto; }
 .tiptap .code-lang:hover, .tiptap .code-lang.open { color: var(--fg); background: var(--bg-side); } /* opaque: a tint would let the edge it straddles show through */
+/* the language field ``` opens, where the chip sits: a name, and what it is taken for beside it */
+.tiptap .code-lang-ask { display: none; }
+.tiptap .code-block.asking .code-lang { display: none; }
+.tiptap .code-block.asking .code-lang-ask {
+  position: absolute; top: 0; left: 12px; transform: translateY(-50%); z-index: 1;
+  display: inline-flex; align-items: center; gap: 6px; padding: 1px 3px 1px 1px;
+  border: 1px solid var(--accent); border-radius: 6px; background: var(--bg-pop); box-shadow: var(--glow);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px; line-height: 1.5;
+}
+.tiptap .code-lang-ask input {
+  width: 11ch; border: 0; outline: none; background: none; color: var(--fg); font: inherit; padding: 0 5px;
+}
+.tiptap .code-lang-ask input::placeholder { color: var(--fg-dim); }
+.tiptap .code-lang-hint { color: var(--fg-dim); padding-right: 4px; white-space: nowrap; }
+html.mobile .tiptap .code-block.asking .code-lang-ask { font-size: 14px; }
+html.mobile .tiptap .code-lang-ask input { font-size: 16px; } /* under 16px a phone zooms the page in on focus */
 /* a mermaid block: its diagram; the code above it only while the caret is in it (or the diagram failed, to fix it) */
 .tiptap .code-block:not(.mermaid) .mermaid-view { display: none; }
 .tiptap .code-block.mermaid:not(.editing):not(.mermaid-error) pre { display: none; }
@@ -689,6 +706,11 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 .tiptap img.ProseMirror-selectednode { outline: 2px solid var(--accent); box-shadow: var(--glow); }
 /* an image and its caption: the caption is the alt text, shown under the picture */
 .tiptap .img-fig { margin: 0.6em 0; width: fit-content; max-width: 100%; } /* shrink to the picture, so the caption sits under it */
+/* where it sits across the page (its menu: a click on it) */
+.tiptap .img-fig[data-align='center'] { margin-left: auto; margin-right: auto; }
+.tiptap .img-fig[data-align='right'] { margin-left: auto; margin-right: 0; }
+.tiptap .img-fig[data-align='center'] .img-cap { text-align: center; }
+.tiptap .img-fig[data-align='right'] .img-cap { text-align: right; }
 .tiptap .img-fig img { margin: 0; }
 .tiptap .img-fig.ProseMirror-selectednode img { outline: 2px solid var(--accent); box-shadow: var(--glow); }
 .tiptap .img-cap {
