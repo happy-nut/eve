@@ -2,41 +2,45 @@
 
 # Eve
 
-Named after EVE from Pixar's *WALL·E* ([wiki](https://en.wikipedia.org/wiki/WALL-E)): a sleek white shell,
-a black visor, and glowing blue eyes. The theme borrows exactly those four colors — shell white, soft gray,
-visor black, eye blue — with the blue reserved for what matters: links, focus, and the cursor of attention.
+Markdown notes for macOS (and Android) that open in a keystroke, look like a page, and stay plain files you own.
 
-Fast, keyboard-first markdown notes for macOS. Summon it from anywhere with a global hotkey,
-type Notion-style markdown, link notes with `[[wiki links]]`, and sync through a private GitHub repo.
+### 1. Write it down before you forget it
 
-- **Instant** — Tauri 2 shell (native WKWebView, ~10 MB), Svelte 5 UI, TipTap editor. No Electron.
-- **Global hotkey** — `⌘⇧Space` (default) shows/hides Eve over any app; focus returns to where you were. Like Raycast, Eve stays out of the Dock and ⌘Tab (toggle in Settings → Sync & app). Eve launches at login (toggle in Settings); closing the window only hides it, so the hotkey keeps working. `⌘Q` quits.
-- **Live markdown** — `# `, `- `, `1. `, `[ ] `, `> `, ` ``` `, `**bold**`, `` `code` ``… render as you type.
-- **Code blocks at once** — ` ``` ` at the start of a line is a code block the moment the third backtick is typed, with the
-  keyboard in its language field: type a name or the start of one (`py`, `ty` → TypeScript, `js`, `c++`), then ↓, Tab, ↩
-  or a space to write the code. Esc goes on with no language; ⌫ in the empty field takes the backticks back.
-- **Lists that nest like a document** — an indented numbered list counts `1.` → `a.` → `i.` and on (nine levels, then round again), in the editor and on the phone's widget. Bullets, numbers and to-dos mix freely: Tab under a numbered item makes a bullet stay a bullet, `⌘⇧7/8/9` switch only the lines you picked, and ⌫ / ⇧Tab at the start of an indented item bring it out a level as what it was. Numbering carries on across a list split around it.
-- **Every shortcut is rebindable** live in Settings (`⌘,`): system hotkey, app actions, editor formatting.
-- **Notes link to notes** — type `[[` for a picker; click a link to jump (creates the note if missing). `[[Note|shown as]]` links under another name, as in Obsidian. `⌘[` / `⌘]` go back and forward through the notes you visited, restoring the cursor.
-- **Link cards** — type a URL on an empty line and press Enter (or `⌥↩` on a pasted link) and it becomes a compact preview card: favicon, title, description, thumbnail; click opens the browser. The file keeps just the bare URL.
-- **Find & replace in a note** — `⌘F` (or the note's right-click menu; on a phone, the note's ⋯) opens a bar over the note: ↩ / ⇧↩ walk the matches, the replace field replaces one at a time (↩) or all at once.
-- **Section outline** instead of a scrollbar — when a note is taller than the window, one tick per heading sits at the left edge, dark for the sections on screen; hover to see the titles, click to jump.
-- **Obsidian's syntax** — `[[Note|alias]]` links, `==highlights==` (`⌘⇧H`), and callouts by type: `> [!warning] Title` shows the type's icon and colour, the text on its line as the title; the fold mark (`-`/`+`) is kept. A vault's notes read and save back unchanged.
-- **`/` block menu** (a `/` typed at the start of a line or after a space; one already in the text never opens it) — callouts (`> [!💡]` in markdown), code blocks, dividers, images (copied into `notes/assets/`), note links, kanban boards, diagrams (swimlanes too), equations. Headings and lists come from markdown shortcuts (`# `, `- `, `1. `, `[ ] `, `> `).
-- **Kanban** — `/kanban` drops a Notion-style board into the note. Drag cards between columns, or drive it from the keyboard: ↑↓←→ move between cards, ⌥↑↓←→ move a card (⌥←→ a column), Enter opens the card as a floating page with its own markdown body, ⌫ deletes. ↓ from the line above (↑ from the line below) steps into the board; Esc steps back out. The + past the last column adds one; hovering the board shows a × under it that deletes the board (or press ⌫ at the start of the line after it). The file keeps a ```` ```kanban ```` fence holding JSON (`{ "columns": [{ "title", "cards": [{ "title", "body" }] }] }`); a fence that fails to parse is shown as a plain code block, so a bad edit never loses cards.
-- **Diagrams** — a ```` ```mermaid ```` block ([Mermaid](https://mermaid.js.org)) is drawn as its picture: white cards and quiet lines on a soft grey card, one strong blue, light or dark. Every kind mermaid 11 draws is drawn (flowchart, sequence, class, state, ER, user journey, Gantt, pie, quadrant, requirement, git graph, C4, mind map, timeline, sankey, XY chart, block, packet, kanban, architecture, radar, treemap); ZenUML, a separate mermaid plug-in, is not included. Pie charts, timelines and Gantt charts Eve draws itself — a donut with its parts listed beside it, a column of dates, a tidy schedule with each task's dates — since mermaid's own drawings of those stretch and crowd; the note still keeps mermaid's code, so other apps draw it their way. Diagrams are made and changed right in the note, with no mermaid to know: the `/` menu has **Flowchart, Sequence diagram, Pie chart, Mind map, Timeline and Gantt chart**, each putting a small example in the note, open for editing; click any of them later to edit it again (Done, or a click elsewhere, is done). A flowchart is drawn on its picture: click a box to pick it, and ✎ Text in its bar (or a second click) types in it, the drawing following the text — a phone's keyboard comes up only then; its **+** adds the next step, or, dragged onto another box, joins the two (or **Connect** in its bar, then a tap on the other box — the easy way on a phone); a bar over a box sets its shape or deletes it; click a line to make it dotted or bold, label it, turn it round or delete it; "+ Box" or a double-click on empty space adds one on its own; Tab adds the next step, ⌫ deletes, the arrow keys go from box to box; a line's bar can also put a new step in the middle of it, and deleting a step between two rejoins its lines. **Swimlanes** (the `/` menu's Swimlanes, or "+ Lane" on any flowchart) put each step in the lane of who does it: Eve draws the lanes itself as bands side by side (down the page, or across), each with its name in its own tint and the steps in the order they happen, since mermaid's own subgraphs land wherever its layout puts them; the note keeps them as mermaid subgraphs, so other apps still show the groups. Click a lane's name for its bar — rename (or a second click), move it up / down, add a step in it, delete it (its steps go to the lane beside it) — and a box's bar has its lane, to move it to another — or drag the box onto another lane (on a phone, pick it first, then drag it with a finger); a step added after a box stays in its lane. The other kinds show their parts as rows under the drawing (participants and messages, slices, branches, periods, tasks with dates). Every change is in the note at once, and ⌘Z undoes it. A wide diagram shrinks to the note's width only so far (80%, where its text stays readable) and then scrolls sideways; its ⤢ button opens it full screen, to zoom (wheel, pinch, + / −) and drag around. The note keeps plain mermaid code, readable anywhere; a diagram written by hand with more than these show (styles, notes, loops) opens in its code instead, so nothing is lost, and says which line the editor can't show; with the code showing, "Edit as drawing" (or ⌘↵) opens the drawing, and ↓ / ↑ from the line beside a diagram moves into its code; "Code" shows any diagram's code; a diagram that does not parse shows the error under its code. Mermaid loads only with the first diagram that needs it, and draws with `securityLevel: strict` (labels stay text). The phone widget shows such a block as "📊 Diagram".
-- **Equations** — formulas as Obsidian, GitHub and pandoc write them: `$E = mc^2$` in a line, `$$ … $$` on lines of their own. They are drawn as math in the note ([MathLive](https://mathlive.io), loaded with the first formula) and made and changed with no TeX to know: the `/` menu's **Equation** (a block) and **Inline equation** (in the line, also `⌘⌥E`; selected text becomes its TeX), or typing `$x^2$` or `$$` and a space. Click a formula and it becomes the box it is typed in, showing it exactly as the note does: `x^2` puts the 2 up, `/` makes a fraction, ⇥ moves through the empty slots and out of a part. Under it a row of the parts a formula is built from, put in by a click — **Basic** (fraction, power, subscript, roots, brackets, absolute value, bar, vector, text), **Symbols** (± × ÷ ≤ ≥ ≠ ≈ ∞ → ⇒ ∈ ⊂ ∪ ∩ ∀ ∃ …), **Calculus** (sum, product, integrals, limit, derivatives, log, trig), **Greek**, **Matrix** (2×2, 3×3, brackets, determinant, column vector, cases) — under a block, and in a small panel under a formula in a line. **TeX** shows the formula's TeX to edit as text. Enter, Esc, Done or a click elsewhere finish; ⌫ in an empty formula removes it. On a phone, MathLive's math keyboard comes up in place of the system one. Every change is in the note at once, ⌘Z undoes it, and a copy is the formula's markdown. Dollars that are money stay text: a `$` opens a formula only with no space after it and closes one only with no space before it and no digit after (pandoc's rule), so "$5 and $10" is never a formula; text that would read as one is saved with its dollars escaped (`\$`). The phone widget shows a block's TeX on one line, after "∑".
-- **Text size** — `⌘+` / `⌘-` step the note's text between 12 and 28 px, `⌘0` goes back to 15; a pill shows the size. Settings → Appearance has the same as a slider.
-- **Pictures** — click one (or right-click, or tap on a phone) for its menu: **Copy image** puts the picture itself on the
-  clipboard, to paste into any app, and **Align left / center / right** sets where it sits on the page. A double-click (↩
-  with it selected) shows it full size, where a click on it opens the same menu. Drag its right edge to resize it. Width and
-  alignment travel in the caption, as Obsidian writes a width: `![caption|540|center](assets/x.png)`.
-- **Import a folder** — drop Markdown files or whole folders (an Obsidian vault, a Notion export, a Google Keep Takeout) onto the sidebar, or onto a group to import into it. Folders become groups (three levels deep), a page's folder of the same name becomes its sub-pages, and pictures a note reaches by a relative path or an Obsidian `![[embed]]` come along; links between the files become `[[links]]`.
-- **Sidebar** with search (`⌘K`; ↓ walks into the matches, ↑ from the first comes back), emoji icons for notes and groups (picker above the title, like Notion), hold `⌘` to number the visible notes and `⌘1`…`⌘9` to jump, collapsible **groups** (folders, nested up to 3 levels). Drag notes or whole groups to reorder or move them; `⌘\` opens and focuses the list (press again from the list to close it and return to the editor) (↑↓ move, `i` sets an emoji icon, ⌥↑↓ move notes or groups one row at a time (groups walk out of and into other groups), ⌥← ⌥→ un-nest / nest a group, Space or ← → fold — ← on a note with sub-pages folds it and ← again goes to its parent, as in Finder; → on a note or an open group (or Esc) back to the editor, ⌫ deletes with confirmation). The list stays open while you write; Settings → Appearance → *Close sidebar when you start writing* folds it away at the first keystroke instead.
-- **Opens .md files** — Eve registers as a Markdown editor, so it shows up in Finder's *Open With*. Such files are edited in place and listed under *Open files* (not synced; ⌫ closes them).
-- **Plain files** — each note is a `.md` with a tiny frontmatter (id, updated, group) in `~/Library/Application Support/dev.happynut.eve/notes/`.
-- **Sync without a server** — a private GitHub repository is the backend: one commit per change, last-writer-wins, images included. Edit a note on github.com and it comes back to the app.
-- **Claude reads your notes** — Settings → Claude → Connect registers Eve's MCP server with Claude Desktop and Claude Code in one click; Claude can then list, search and read your notes, and open one in Eve for you, never change them (see [Claude (MCP)](#claude-mcp)). The same commands work in a terminal: `eve help` (see [Command line](#command-line)).
+`⌘⇧Space` from any app brings Eve up; `⌘N`, type, `Esc` and you are back where you were.
+Markdown turns into headings and to-dos as you type, and `⌘K` finds any note in a few letters.
+
+<p align="center"><img src="docs/eve-capture.gif" alt="A new note written and another found, all from the keyboard" width="800"></p>
+
+### 2. Rich pages, no syntax to learn
+
+Type `/` for flowcharts, equations, kanban boards, callouts, code and images.
+Each is drawn in the note and edited by clicking on it — no Mermaid or TeX needed.
+
+<p align="center"><img src="docs/eve-blocks.gif" alt="A flowchart and an equation added from the / menu and edited in place" width="800"></p>
+
+### 3. Your notes stay yours
+
+Every note is a plain `.md` file — readable by Obsidian, GitHub, or any editor — synced through a private
+GitHub repo with no server in between. Claude can read them too, with one click to connect.
+
+<p align="center"><img src="docs/eve-files.gif" alt="Edits in Eve showing up live in the note's Markdown file" width="800"></p>
+
+<details>
+<summary><b>Everything else</b></summary>
+
+- **Notes link to notes** — `[[` picks one; `[[Note|alias]]`, `==highlight==` and `> [!warning]` callouts as Obsidian writes them.
+- **Lists that nest like a document** — `1.` → `a.` → `i.`; bullets, numbers and to-dos mix freely.
+- **Sidebar** — groups (3 levels), emoji icons, drag to reorder, `⌘1`…`⌘9` to jump, `⌘\` to drive it from the keyboard.
+- **Link cards, pictures, find & replace** (`⌘F`), section outline, text size (`⌘+` `⌘-`).
+- **Import a folder** — drop an Obsidian vault, a Notion export or Google Keep Takeout on the sidebar.
+- **Opens any `.md`** from Finder's *Open With*, edited in place.
+- **Every shortcut is rebindable** in Settings (`⌘,`).
+- **Command line** — `eve search`, `eve read`, `eve open` from a terminal.
+- **Small and fast** — Tauri 2 (native WebKit, ~10 MB), Svelte 5, TipTap. No Electron.
+
+</details>
+
+Named after EVE from Pixar's *WALL·E*: shell white, soft gray, visor black — and eye blue for what matters.
 
 ## Install
 
