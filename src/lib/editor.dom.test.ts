@@ -89,6 +89,77 @@ describe('toggle', () => {
     expect(body.hasAttribute('hidden')).toBe(false); // CSS hides a closed body, not the stock timer
     expect(md(ed).startsWith('<details open>')).toBe(true);
   });
+
+  const toggle = (title: string, body: string[], open = true) =>
+    `<details${open ? ' open' : ''}>\n<summary>${title}</summary>\n\n${body.join('\n\n')}\n\n</details>`;
+  /** the note after `act` with the caret at `at` (a word, and an offset into it); undo gives the note back, and what is
+   *  left reads back as itself. `line` is the text of the caret's line, a | where the caret is. */
+  function keyed(note: string, at: [string, number], act: (ed: ReturnType<typeof editorWith>) => void) {
+    const ed = editorWith(note);
+    ed.commands.setTextSelection(posOf(ed, at[0]) + at[1]);
+    const before = md(ed);
+    act(ed);
+    const out = md(ed), { $head } = ed.state.selection;
+    const line = `${$head.parent.textContent.slice(0, $head.parentOffset)}|${$head.parent.textContent.slice($head.parentOffset)}`;
+    expect(md(editorWith(out))).toBe(out);
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+    return { out, line, where: $head.parent.type.name };
+  }
+
+  test('Enter in the middle of a title: the rest of it is the first line of the body, the toggle opened', () => {
+    expect(keyed(toggle('Title', ['body']), ['Title', 2], (ed) => press(ed, 'Enter')))
+      .toEqual({ out: toggle('Ti', ['tle', 'body']), line: '|tle', where: 'paragraph' });
+    expect(keyed(toggle('Title', ['body'], false), ['Title', 2], (ed) => press(ed, 'Enter')).out).toBe(toggle('Ti', ['tle', 'body']));
+  });
+
+  test('Enter at the start of a title: an empty line above the toggle; at its end, still into the body', () => {
+    expect(keyed(`a\n\n${toggle('Title', ['body'])}`, ['Title', 0], (ed) => press(ed, 'Enter')))
+      .toEqual({ out: `a\n\n\u00a0\n\n${toggle('Title', ['body'])}`, line: '|', where: 'paragraph' });
+    expect(keyed(toggle('Title', ['\u00a0']), ['Title', 5], (ed) => press(ed, 'Enter')).line).toBe('|');
+  });
+
+  test('⌫ at the start of the body\'s first line joins it onto the title, as plain text', () => {
+    expect(keyed(toggle('Title', ['one', 'two']), ['one', 0], (ed) => press(ed, 'Backspace')))
+      .toEqual({ out: toggle('Titleone', ['two']), line: 'Title|one', where: 'detailsSummary' });
+    // the only line: the body keeps an empty one
+    expect(keyed(toggle('Title', ['one']), ['one', 0], (ed) => press(ed, 'Backspace')).out).toBe(toggle('Titleone', ['\u00a0']));
+    // bold and a [[link]] come as their text; nothing of it is lost
+    expect(keyed(toggle('T', ['a **b** [[Note|c]]']), ['a', 0], (ed) => press(ed, 'Backspace')).out).toBe(toggle('Ta b c', ['\u00a0']));
+  });
+
+  test('⌫ on an empty first line of the body: the line goes, but never the body\'s only one; the caret ends the title', () => {
+    const empty = (body: string[]) => {
+      const ed = editorWith(toggle('Title', body));
+      ed.commands.setTextSelection(posOf(ed, 'Title', true) + 3);
+      const before = md(ed);
+      press(ed, 'Backspace');
+      const { $head } = ed.state.selection;
+      expect([$head.parent.type.name, $head.parentOffset]).toEqual(['detailsSummary', 5]);
+      const out = md(ed);
+      ed.commands.undo();
+      expect(md(ed)).toBe(before);
+      return out;
+    };
+    expect(empty(['\u00a0'])).toBe(toggle('Title', ['\u00a0']));
+    expect(empty(['\u00a0', 'two'])).toBe(toggle('Title', ['two']));
+  });
+
+  test('⌫ at the start of a heading opening the body: only the caret goes up, the heading stays', () => {
+    expect(keyed(toggle('Title', ['# Head']), ['Head', 0], (ed) => press(ed, 'Backspace')))
+      .toEqual({ out: toggle('Title', ['# Head']), line: 'Title|', where: 'detailsSummary' });
+  });
+
+  test('a title ending (or starting) in a space keeps it when read back', () => {
+    for (const title of ['- ', '$$ ', '  two  spaces ']) {
+      const ed = editorWith('x');
+      ed.commands.setTextSelection(posOf(ed, 'x', true));
+      press(ed, 'Enter');
+      type(ed, '> ');
+      type(ed, title);
+      expect(editorWith(md(ed)).state.doc.child(1).firstChild!.textContent).toBe(title);
+    }
+  });
 });
 
 describe('insert block (the phone bar\'s /)', () => {
@@ -626,5 +697,88 @@ describe('list keys that leave the rest of the list as it was', () => {
       press(ed, key);
       expect(md(ed).trimEnd()).toBe('1. a\n2. b\n\n\u00a0\n\n4. c');
     }
+  });
+});
+
+describe('list ends, whole-list toggles and empty lines that read back the same', () => {
+  /** the key at `word` (its end with `end`): the markdown after it, which reads back the same, and \u2318Z undoes it */
+  const after = (note: string, word: string, end: boolean, key: string, init: KeyboardEventInit = {}) => {
+    const ed = editorWith(note);
+    ed.commands.setTextSelection(posOf(ed, word, end));
+    const before = md(ed);
+    press(ed, key, init);
+    const out = md(ed);
+    expect(md(editorWith(out))).toBe(out);
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+    return out.trimEnd();
+  };
+
+  test('Delete at the end of a list\'s last line, only the note\'s end after it: nothing changes', () => {
+    for (const [note, word] of [['- a\n- b', 'b'], ['- [ ] a\n- [x] b', 'b'], ['1. a\n2. b', 'b'], ['- a\n  - b', 'b'], ['1. a\n   - [ ] b', 'b']]) {
+      const ed = editorWith(note);
+      ed.commands.setTextSelection(posOf(ed, word, true));
+      press(ed, 'Delete');
+      expect(md(ed).trimEnd()).toBe(note);
+    }
+  });
+
+  test('Delete at the end of a list\'s last line with a line after it: that line\'s text comes up onto it', () => {
+    expect(after('- a\n- b\n\npara', 'b', true, 'Delete')).toBe('- a\n- bpara');
+    expect(after('- [ ] a\n- [x] b\n\npara\n\nnext', 'b', true, 'Delete')).toBe('- [ ] a\n- [x] bpara\n\nnext');
+    expect(after('1. a\n   1. b\n\npara', 'b', true, 'Delete')).toBe('1. a\n   1. bpara');
+  });
+
+  test('\u2318\u21e78 / \u2318\u21e77 / \u2318\u21e79 over lines all of that kind, nested ones too: every line plain, one \u2318Z back', () => {
+    for (const [note, id] of [['- a\n  - b\n  - c\n- f', 'bulletList'], ['1. a\n   1. b\n   2. c\n2. f', 'orderedList'], ['- [ ] a\n  - [x] b\n  - [ ] c\n- [x] f', 'taskList']]) {
+      const ed = editorWith(note);
+      ed.commands.selectAll();
+      runEditorCommand(ed, id);
+      const out = md(ed);
+      expect(out.trimEnd()).toBe('a\n\nb\n\nc\n\nf');
+      expect(md(editorWith(out))).toBe(out);
+      ed.commands.undo();
+      expect(md(ed)).toBe(note);
+    }
+    // the lines picked only: the one above stays in its list
+    const ed = editorWith('- a\n  - b\n  - c\n- f');
+    ed.commands.setTextSelection({ from: posOf(ed, 'b'), to: posOf(ed, 'f', true) });
+    runEditorCommand(ed, 'bulletList');
+    expect(md(ed).trimEnd()).toBe('- a\n\nb\n\nc\n\nf');
+    expect(ed.state.doc.textBetween(ed.state.selection.from, ed.state.selection.to, '|')).toBe('b|c|f');
+    // a line of another kind among them: they are switched to that kind, where they are
+    const mixed = editorWith('- a\n  - [ ] b\n- f');
+    mixed.commands.selectAll();
+    runEditorCommand(mixed, 'bulletList');
+    expect(md(mixed).trimEnd()).toBe('- a\n  - b\n- f');
+  });
+
+  test('Enter on an empty bullet with a sub-item, under a to-do: it steps out as \u21e7Tab does and reads back the same', () => {
+    const note = '- [ ] a\n  - b\n  - y\n    - x\n- [ ] c';
+    const emptied = () => {
+      const ed = editorWith(note);
+      const p = posOf(ed, 'y');
+      ed.view.dispatch(ed.state.tr.delete(p, p + 1).setMeta('addToHistory', false));
+      ed.commands.setTextSelection(p);
+      return ed;
+    };
+    const ed = emptied(), tab = emptied();
+    const before = md(ed);
+    expect(md(editorWith(before))).toBe(before);
+    press(ed, 'Enter');
+    press(tab, 'Tab', { shiftKey: true });
+    const out = md(ed);
+    expect(out.trimEnd()).toBe('- [ ] a\n  - b\n\n- \u00a0\n  - x\n\n- [ ] c');
+    expect(md(tab)).toBe(out);
+    expect(md(editorWith(out))).toBe(out);
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+  });
+
+  test('\u232b at the start of a numbered list\'s first line: the numbers after it carry on', () => {
+    expect(after('1. a\n2. b\n3. c', 'a', false, 'Backspace')).toBe('a\n\n2. b\n3. c');
+    expect(after('3. a\n4. b', 'a', false, 'Backspace')).toBe('a\n\n4. b');
+    // inside an item, as it was: the line steps out a level, still a number, the one after it under it
+    expect(after('- z\n  1. a\n  2. b', 'a', false, 'Backspace')).toBe('- z\n\n1. a\n   1. b');
   });
 });

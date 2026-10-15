@@ -397,11 +397,23 @@ const mathSafeText = {
     // the text after a line break starts a line of the markdown: "# y", "- y", "1. y" there are escaped as at a
     // paragraph's start (they came back as a heading or a list, the line before it cut off)
     if (parent && index && parent.child(index - 1).type.name === 'hardBreak') state.atBlockStart = true;
-    let rest = node.text ?? '';
+    // spaces and tabs at the start of a line ("  indented", "⇥step"), or before a line break: markdown trims them there,
+    // and as `&#32;` / `&#9;` it keeps them. Between words they stay as typed, and read back so (keepSpaces in
+    // editor.ts). Not at a paragraph's end: ProseMirror trims a line's last spaces however they are written.
+    // (a table's cell is one line of its own, with spaces between its parts)
+    const edge = (i: number) => !state.inCell && !node.marks.some((m) => m.type.name === 'code') && (!parent || i < 0 || (i < parent.childCount && parent.child(i).type.name === 'hardBreak'));
+    const ent = (s: string) => s.replace(/ /g, '&#32;').replace(/\t/g, '&#9;');
+    let body = node.text ?? '';
+    const lead = index !== undefined && edge(index - 1) ? /^[ \t]*/.exec(body)![0] : '';
+    body = body.slice(lead.length);
+    const trail = index !== undefined && edge(index + 1) ? /[ \t]*$/.exec(body)![0] : '';
+    body = body.slice(0, body.length - trail.length);
+    if (lead) { state.text(ent(lead), false); state.atBlockStart = false; }
+    let rest = body + trail;
     if (parent && index !== undefined) {
       for (let i = index + 1; i < parent.childCount; i++) rest += parent.child(i).isText ? parent.child(i).text : '￼';
     }
-    const pieces = piecesOf(node.text ?? '', rest);
+    const pieces = piecesOf(body, rest);
     const dollars = readsAsMath(pieces.map(([s, out]) => out ?? plain(s)).join(''));
     for (const [s, out] of pieces) {
       if (out !== null) {
@@ -416,6 +428,7 @@ const mathSafeText = {
         if (part) state.text(part);
       });
     }
+    if (trail) state.text(ent(trail), false);
   },
   parse: {},
 };

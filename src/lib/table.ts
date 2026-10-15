@@ -1,7 +1,7 @@
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
-import { Plugin, Selection, TextSelection } from '@tiptap/pm/state';
+import { Plugin, Selection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { imageMarkdown } from './image';
 import { hidePipesInMath } from './math';
 import { CellSelection, cellAround, columnResizingPluginKey, fixTables, inSameTable, nextCell, tableEditingKey } from '@tiptap/pm/tables';
@@ -29,7 +29,7 @@ function cellText(state: any, cell: PMNode): string {
   state.inlines = [];
   // a line break as `<br>` (tiptap-markdown's own way in a table): its usual backslash and newline came back as
   // "\ ", and one more backslash every save
-  state.inTable = true;
+  state.inTable = state.inCell = true;
   // every line in it, however deep: a list, quote or toggle typed into a cell is not a cell's markdown, but its
   // text left out was gone from the note at the next save while still on screen
   cell.descendants((child) => {
@@ -42,7 +42,7 @@ function cellText(state: any, cell: PMNode): string {
     return false;
   });
   const text = state.out;
-  Object.assign(state, { out, delim, inlines, inTable: false });
+  Object.assign(state, { out, delim, inlines, inTable: false, inCell: false });
   return text.replace(/\n+/g, ' ').replace(/\|/g, '\\|').trim();
 }
 
@@ -203,10 +203,15 @@ function outOfTable(view: EditorView, dir: 1 | -1): boolean {
  * A selection from text above a table into a cell (or from a cell to text below) cleared: the text out of the table
  * goes, the cells it covers are emptied, every row and column stays. Deleted as one range, the cells taken out left
  * their rows short, and fixTables filled them from the rows below: rows were lost, cells moved up into the header.
- * The caret ends where the selection began; `text` is typed there.
+ * The caret ends where the selection began, `text` typed there; or, `out`, on the side out of the table.
  */
-function clearHalf(view: EditorView, text = '') {
-  const { state } = view, { from, to } = state.selection;
+function clearHalf(view: EditorView, text = '', out = false) {
+  view.dispatch(cleared(view.state, text, out).scrollIntoView());
+  return true;
+}
+
+function cleared(state: EditorState, text: string, out: boolean): Transaction {
+  const { from, to } = state.selection;
   const $cell = cellAround(state.selection.$to) ?? cellAround(state.selection.$from)!;
   const start = $cell.before(-1), end = $cell.after(-1);
   // the part out of the table, then the part of each cell in the selection; the last first, so the rest stay put
@@ -225,12 +230,33 @@ function clearHalf(view: EditorView, text = '') {
     if (/^table(Cell|Header)$/.test($a.parent.type.name) && b === $a.end()) tr.replaceWith(a, b, state.schema.nodes.paragraph.create());
     else tr.delete(a, b);
   }
-  const at = tr.mapping.map(from, -1);
-  tr.setSelection(TextSelection.create(tr.doc, at));
+  const below = out && start <= from ? Selection.findFrom(tr.doc.resolve(tr.mapping.map(end, -1)), 1, true) : null;
+  tr.setSelection(below ?? TextSelection.create(tr.doc, tr.mapping.map(from, -1)));
   if (text) tr.insertText(text);
-  view.dispatch(tr.scrollIntoView());
-  return true;
+  return tr;
 }
+
+/**
+ * A paste over a selection half in a table: cleared as ⌫ clears it, then what is pasted goes in out of the table
+ * (in a cell, lines and blocks have no place). Pasted over as one range, the table lost rows as with a delete.
+ */
+export function clearForPaste(view: EditorView) {
+  if (!halfInTable(view.state.selection)) return;
+  const tr = cleared(view.state, '', true);
+  view.dispatch(tr);
+  // one undo takes back both: the paste is history's next step after the clearing (unmarked, a paste below the table
+  // was a step of its own, not touching what was cleared). It is put in at once, in this same event.
+  pasting = tr;
+  queueMicrotask(() => { pasting = null; });
+}
+let pasting: Transaction | null = null;
+/** marks the paste after clearForPaste's clearing as part of it, for the history */
+const pasteAfterClear = new Plugin({
+  filterTransaction: (tr) => {
+    if (pasting && tr !== pasting && tr.docChanged && !tr.getMeta('appendedTransaction')) tr.setMeta('appendedTransaction', pasting);
+    return true;
+  },
+});
 
 /** a line put above a table that opens the note, the caret on it: with nothing above the table, no key could make one */
 function lineAbove(view: EditorView) {
@@ -268,6 +294,20 @@ function lessTableEditing(plugin: Plugin): Plugin {
     appendTransaction: (trs, old, state) => (halfInTable(state.selection) ? fixTables(state, old) : appendTransaction!(trs, old, state)),
     props: {
       ...props,
+      // a cut of such a selection: copied as any, then cleared as ⌫ clears it (the stock cut deleted it as one range)
+      handleDOMEvents: {
+        ...props?.handleDOMEvents,
+        cut: (view, e) => {
+          const data = e.clipboardData;
+          if (!halfInTable(view.state.selection) || !data) return false;
+          const { dom, text } = view.serializeForClipboard(view.state.selection.content());
+          e.preventDefault();
+          data.clearData();
+          data.setData('text/html', dom.innerHTML);
+          data.setData('text/plain', text);
+          return clearHalf(view);
+        },
+      },
       handleTextInput: (view, _from, _to, text) => halfInTable(view.state.selection) && clearHalf(view, text),
       handleKeyDown(view, e) {
         const sel = view.state.selection;
@@ -329,7 +369,7 @@ export const TableNodes = [
   Table.extend({
     addStorage: () => tableMarkdown,
     addProseMirrorPlugins() {
-      return [dragOutOfTable, ...(this.parent?.() ?? []).map((p) => (p.spec.key === tableEditingKey ? lessTableEditing(p) : p))];
+      return [dragOutOfTable, pasteAfterClear, ...(this.parent?.() ?? []).map((p) => (p.spec.key === tableEditingKey ? lessTableEditing(p) : p))];
     },
   }).configure({ resizable: true }),
   TableRow.extend({ addStorage: () => inner }),

@@ -83,3 +83,21 @@ test('"[[Bob]]" typed out by hand closes the picker: Enter after it is a new lin
     expect(ed.state.doc.child(1).textContent).toBe('Note: see [[Bob]]' + tail);
   }
 });
+
+test('"[[Page]]" typed out whole is a link when a page has that title; brackets that name no page stay text', async () => {
+  const { notes } = await import('./notes.svelte');
+  const saved = notes.all;
+  notes.all = [...saved, { id: 'zz-alpha', body: '# Alpha\n\nx', updatedAt: 1, deleted: false, order: 99, group: '' } as any];
+  try {
+    const { ed } = editor('# T\n\nNote:');
+    ed.commands.focus('end');
+    type(ed, ' see [[Alpha|the a]] and [[1, 2]]');
+    await settle();
+    let link: any = null;
+    ed.state.doc.descendants((n) => { if (n.type.name === 'wikiLink') link = n.attrs; });
+    expect(link).toMatchObject({ title: 'Alpha', alias: 'the a' });
+    expect(ed.state.doc.child(1).textContent).toContain('[[1, 2]]');
+  } finally {
+    notes.all = saved;
+  }
+});
