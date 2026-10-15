@@ -11,7 +11,7 @@ import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
-import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
+import { DOMParser, Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
 import { DateMention, dayChoices } from './date';
@@ -264,6 +264,49 @@ function allCode(state: EditorState, from: number, to: number) {
     if (n.isInline && !state.schema.marks.code.isInSet(n.marks)) all = false;
   });
   return all;
+}
+
+const LISTS = /^(bulletList|orderedList|taskList)$/;
+
+/**
+ * Markdown (as HTML) pasted where the caret is, fitted in as any paste is: the first line runs on in the caret's line,
+ * the last one takes the rest of it. Put in with insertContent it was a document of its own, every newline and space
+ * of it kept: a list pasted into a list came in as a loose sublist under an empty item, a to-do's text began with a
+ * space, and "# H" in the middle of a heading cut the heading in three. `lead` and `trail` are spaces kept at the ends.
+ */
+function pasteMarkdown(view: EditorView, html: string, lead = '', trail = ''): Transaction {
+  const { state } = view, { schema } = state, $from = state.selection.$from;
+  const el = document.createElement('div');
+  el.innerHTML = html;
+  // open into the lines, not into a table's cells: a table pasted is a table (as ProseMirror's own paste does)
+  let slice = Slice.maxOpen(DOMParser.fromSchema(schema).parseSlice(el, { preserveWhitespace: false, context: $from }).content, false);
+  const item = $from.depth > 1 && /^(listItem|taskItem)$/.test($from.node(-1).type.name) ? $from.node(-1) : null;
+  const fresh = item?.type.name === 'taskItem' ? { checked: false } : null;
+  // lines pasted into a list item are items of its list, as if typed with Enter between them, not lines of the one item
+  let paras = slice.content.childCount > 1;
+  slice.content.forEach((n) => { if (n.type.name !== 'paragraph') paras = false; });
+  if (item && paras) {
+    const items: PMNode[] = [];
+    slice.content.forEach((p) => items.push(item.type.create(fresh, p)));
+    slice = new Slice(Fragment.from(items), slice.openStart + 1, slice.openEnd + 1);
+  }
+  const tr = state.tr;
+  if (lead) tr.replaceSelectionWith(schema.text(lead), false);
+  // a list (a heading, a quote) pasted at the start or the end of a line goes before or after that line, a list in a
+  // list as items of it. Run into the line, "- a" pasted after "one" gave "onea", its sublist one level in.
+  const $at = tr.selection.$from, first = slice.content.firstChild;
+  const block = first && first.type.name !== 'paragraph' && first.type !== $at.parent.type && (item ? LISTS.test(first.type.name) : true);
+  if (block && tr.selection.empty && $at.parent.content.size && ($at.parentOffset === 0 || $at.pos === $at.end())) {
+    const end = $at.parentOffset > 0, depth = item ? 2 : 1, empty = item ? item.type.create(fresh, schema.nodes.paragraph.create()) : schema.nodes.paragraph.create();
+    if (end) tr.split($at.pos, depth, item ? [{ type: item.type, attrs: fresh }] : [{ type: schema.nodes.paragraph }]);
+    else tr.insert($at.before(1 + $at.depth - depth), empty);
+    tr.setSelection(TextSelection.create(tr.doc, end ? $at.pos + 2 * depth : $at.before(1 + $at.depth - depth) + depth));
+  }
+  tr.replaceSelection(slice);
+  // the space after it is plain, and so is what is typed next: inserted as text, it took the last mark of what was
+  // pasted (" `y` " then "z" gave "`y z`")
+  if (trail) tr.insert(tr.selection.from, schema.text(trail)).setStoredMarks([]);
+  return tr.scrollIntoView();
 }
 
 /** Several lines (paragraphs, list lines) made code at once: one block of them all, a line each, where they were.
@@ -633,6 +676,9 @@ export function createEditor(opts: {
   const editor: Editor = new Editor({
     element: opts.element,
     autofocus: false, // Editor.svelte decides (the sidebar may own focus, e.g. after deleting from the list)
+    // text pasted is read as markdown already; bold's and italic's own rules read it again, looser than markdown
+    // does, and "x * y * z" came out with "y" in italics
+    enablePasteRules: ['link', 'code', 'strike', 'highlight'],
     content: opts.content,
     editorProps: {
       attributes: { class: 'prose', spellcheck: 'true' },
@@ -650,6 +696,12 @@ export function createEditor(opts: {
         // words inside inline code: just them, no backticks (pasted in a terminal, those ran a command)
         if (inLine && allCode(view.state, $from.pos, $to.pos)) return view.state.doc.textBetween($from.pos, $to.pos);
         let content = inLine ? Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))) : slice.content;
+        // part of a nested list, from below an item's own line: the items it sits in, whose lines were not copied,
+        // are left out (they wrote "- - two")
+        for (let open = slice.openStart; !inLine && open >= 2 && content.childCount === 1 && LISTS.test(content.firstChild!.type.name)
+          && content.firstChild!.childCount === 1 && LISTS.test(content.firstChild!.firstChild!.firstChild?.type.name ?? ''); open -= 2) {
+          content = content.firstChild!.firstChild!.content;
+        }
         // a callout copied from below its title line: its first copied line is not its title
         if (!inLine) for (let d = $from.depth; d > 0; d--) {
           if ($from.node(d).type.name !== 'callout' || !$from.node(d).attrs.titled || $from.index(d) === 0) continue;
@@ -666,12 +718,27 @@ export function createEditor(opts: {
       },
       // lines copied from inside a toggle's body come with the toggle around them (no title): pasted elsewhere, a
       // new untitled toggle was made of them. They are just the lines; a whole toggle copied is still a toggle.
-      transformPasted: (slice) => {
+      transformPasted: (slice, view) => {
         let { content, openStart, openEnd } = slice;
+        // rows copied from a table come as rows, open: pasted outside a table, ProseMirror made a table around them
+        // and left the empty line above it. They are a table of their own. (Into a table, prosemirror-tables pastes
+        // the cells.)
+        if (content.firstChild?.type.name === 'tableRow' && !inCell(view.state.selection.$from)) {
+          return new Slice(Fragment.from(view.state.schema.nodes.table.create(null, content)), 0, 0);
+        }
         while (openStart >= 2 && content.childCount === 1 && content.firstChild!.type.name === 'details' && content.firstChild!.firstChild?.type.name === 'detailsContent') {
           content = content.firstChild!.firstChild!.content;
           openStart -= 2;
           openEnd = Math.max(0, openEnd - 2);
+        }
+        // words copied from inside one line come with its block around them (a to-do, a heading, a callout's title):
+        // pasted on an empty line, that block was made again. They are just the words, their marks kept.
+        let inner = content, depth = 0;
+        while (inner.childCount === 1 && !inner.firstChild!.isTextblock && depth < Math.min(openStart, openEnd)) inner = inner.firstChild!.content, depth++;
+        const line = inner.childCount === 1 ? inner.firstChild! : null;
+        // (several lines of code stay code: a line of text holds no newline)
+        if (line?.isTextblock && openStart === depth + 1 && openEnd === depth + 1 && !(line.type.spec.code && line.textContent.includes('\n'))) {
+          return new Slice(line.content, 0, 0);
         }
         return content === slice.content ? slice : new Slice(content, openStart, openEnd);
       },
@@ -691,6 +758,13 @@ export function createEditor(opts: {
         const raw = event.clipboardData?.getData('text/plain') ?? '';
         const text = raw.trim();
         if (URL_RE.test(text) && !view.state.selection.empty) return editor.chain().focus().setLink({ href: text }).run();
+        // a line that holds no line break (a toggle's title) takes lines pasted in it as one, a space between them:
+        // they cut the toggle in two, the rest of it under a new one
+        const $from = state.selection.$from;
+        if (/\n/.test(text) && $from.parent.isTextblock && !$from.parent.type.spec.code && !$from.parent.type.contentMatch.matchType(state.schema.nodes.hardBreak)) {
+          view.dispatch(state.tr.insertText(text.replace(/\s*\r?\n\s*/g, ' ')).scrollIntoView());
+          return true;
+        }
         // markdown copied from a chat or a terminal comes as plain text that happens to carry HTML of the
         // same characters; render it instead of pasting the ** and # in literally. Real formatting wins.
         const html = event.clipboardData?.getData('text/html') ?? '';
@@ -698,16 +772,15 @@ export function createEditor(opts: {
           const parsed = (editor.storage as any).markdown.parser.parse(raw);
           // a line pasted into a line keeps the spaces at its ends (read as markdown, " $x$ ok" lost its first)
           const lead = raw.includes('\n') ? '' : /^[ \t]+/.exec(raw)?.[0] ?? '', trail = raw.includes('\n') ? '' : /[ \t]+$/.exec(raw)?.[0] ?? '';
-          const c = editor.chain().focus();
-          if (lead) c.insertContent({ type: 'text', text: lead });
-          c.insertContent(parsed);
-          // the space after it is plain, and so is what is typed next: inserted as text, it took the last mark of
-          // what was pasted (" `y` " then "z" gave "`y z`")
-          if (trail) c.command(({ tr }) => {
-            tr.insert(tr.selection.from, editor.schema.text(trail)).setStoredMarks([]);
-            return true;
-          });
-          return c.run();
+          view.dispatch(pasteMarkdown(view, parsed, lead, trail));
+          return true;
+        }
+        // lines of plain text are lines, as if typed with Enter between them (in a list: items of it). Read as
+        // markdown they were one paragraph, a line break between each. A cell, a heading, a toggle's title and code
+        // keep them in the one line. Lines copied in the editor come with its own HTML, which says what they were.
+        if (text && /\n/.test(text) && !RICH_HTML.test(html) && !html.includes('data-pm-slice') && $from.parent.type.name === 'paragraph' && !inCell($from)) {
+          view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse(raw.replace(/\r?\n/g, '\n\n'))));
+          return true;
         }
         return false;
       },

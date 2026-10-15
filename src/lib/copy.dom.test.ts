@@ -1,6 +1,9 @@
-import { test, expect } from 'vitest';
+import { test, expect, describe } from 'vitest';
+import type { Editor } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
-import { editorWith, posOf } from './testEditor';
+import { closeHistory } from '@tiptap/pm/history';
+import { CellSelection } from '@tiptap/pm/tables';
+import { editorWith, md, paste, posOf, press } from './testEditor';
 
 /** what a copy of the selection puts on the clipboard as plain text */
 function copied(md: string, from: string, to: string, opts: { all?: boolean } = {}) {
@@ -119,4 +122,99 @@ test('a callout copied from below its title has no title', () => {
   expect(text).toContain('one');
   // from its title on, it keeps it
   expect(copied('> [!warning] Title here\n> body one', 'Title', 'one')).toMatch(/\[!warning\] Title here/);
+});
+
+test('part of a nested list, from below an item\'s line: just that part, as a list', () => {
+  expect(copied('- one\n  - two\n    - three\n- four', 'two', 'three').trim()).toBe('- two\n  - three');
+});
+
+describe('pasted', () => {
+  // jsdom has none; ProseMirror's pasteHTML makes one to hand the paste handlers
+  (globalThis as any).ClipboardEvent ??= class extends Event { clipboardData = null; };
+  const after = (word: string) => (ed: Editor) => { ed.commands.setTextSelection(posOf(ed, word, true)); };
+  const newLine = (word: string) => (ed: Editor) => { after(word)(ed); press(ed, 'Enter'); };
+  /** the note after `clip` is pasted as plain text where `at` puts the caret; an undo gives back the note before it */
+  function pasted(note: string, at: (ed: Editor) => void, clip: string) {
+    const ed = editorWith(note);
+    at(ed);
+    const before = md(ed);
+    ed.view.dispatch(closeHistory(ed.state.tr));
+    paste(ed, clip);
+    const out = md(ed);
+    expect(md(editorWith(out))).toBe(out); // read back the same
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+    return out;
+  }
+
+  test('a list into a list, on a new item: its items, in a tight list', () => {
+    expect(pasted('- one\n- three', newLine('one'), '- a\n- b')).toBe('- one\n- a\n- b\n- three');
+    expect(pasted('- [ ] one\n- [ ] three', newLine('one'), '- [ ] a\n- [x] b')).toBe('- [ ] one\n- [ ] a\n- [x] b\n- [ ] three');
+    expect(pasted('1. one\n2. three', newLine('one'), '1. a\n2. b')).toBe('1. one\n2. a\n3. b\n4. three');
+    expect(pasted('- one\n- two\n- three', (ed) => { ed.commands.setTextSelection({ from: posOf(ed, 'two'), to: posOf(ed, 'two', true) }); }, '- a\n- b'))
+      .toBe('- one\n- a\n- b\n- three');
+  });
+
+  test('a list at the end or the start of an item\'s text: items after it or before it, its sublist kept', () => {
+    expect(pasted('- one\n- three', after('one'), '- a\n  - b')).toBe('- one\n- a\n  - b\n- three');
+    expect(pasted('- one\n- two', (ed) => { ed.commands.setTextSelection(posOf(ed, 'two')); }, '- a\n- b')).toBe('- one\n- a\n- b\n- two');
+    expect(pasted('- [x] one\n- [x] two', after('one'), '- [ ] a')).toBe('- [x] one\n- [ ] a\n- [x] two');
+    expect(pasted('x', after('x'), '- a\n- b')).toBe('x\n\n- a\n- b');
+  });
+
+  test('a heading into a heading stays in it; after a line, it is a heading of its own', () => {
+    expect(pasted('# Title', (ed) => { ed.commands.setTextSelection(posOf(ed, 'Title') + 2); }, '# H')).toBe('# TiHtle');
+    expect(pasted('para', after('para'), '# H')).toBe('para\n\n# H');
+  });
+
+  test('to-dos come in without a space before their text', () => {
+    expect(pasted('x', newLine('x'), '- [ ] t\n- [x] u')).toBe('x\n\n- [ ] t\n- [x] u');
+  });
+
+  test('lines of plain text are lines: to-dos in a to-do list, paragraphs elsewhere', () => {
+    expect(pasted('- [ ] one', newLine('one'), 'milk\neggs\nbread')).toBe('- [ ] one\n- [ ] milk\n- [ ] eggs\n- [ ] bread');
+    expect(pasted('x', newLine('x'), 'milk\neggs\nbread')).toBe('x\n\nmilk\n\neggs\n\nbread');
+    expect(pasted('ab', (ed) => { ed.commands.setTextSelection(posOf(ed, 'ab') + 1); }, 'milk')).toBe('amilkb');
+  });
+
+  test('in code, a cell or a toggle\'s title they stay in the one line', () => {
+    expect(pasted('```\ncode\n```', after('code'), 'milk\neggs')).toBe('```\ncodemilk\neggs\n```');
+    expect(pasted('| a | b |\n| --- | --- |\n| 1 | 2 |', after('1'), 'milk')).toContain('| 1milk | 2 |');
+    const toggle = '<details open>\n<summary>Title</summary>\n\nbody\n\n</details>';
+    expect(pasted(toggle, after('Title'), 'milk\neggs')).toBe(toggle.replace('Title', 'Titlemilk eggs'));
+  });
+
+  test('stars with spaces around them are not italics', () => {
+    expect(pasted('x', newLine('x'), 'x * y * z')).toBe('x\n\nx \\* y \\* z');
+  });
+
+  /** copy from one note (the HTML ProseMirror puts on the clipboard), paste on an empty line of another */
+  function copyPaste(note: string, from: string, to: string) {
+    const src = editorWith(note);
+    src.commands.setTextSelection({ from: posOf(src, from), to: posOf(src, to, true) });
+    const { dom } = src.view.serializeForClipboard(src.state.selection.content());
+    const ed = editorWith('x');
+    newLine('x')(ed);
+    ed.view.pasteHTML(dom.innerHTML);
+    return md(ed);
+  }
+
+  test('words of one line, pasted on an empty line: just the words, not that line\'s block', () => {
+    expect(copyPaste('- [x] it is done', 'is', 'done')).toBe('x\n\nis done');
+    expect(copyPaste('# Head line', 'Head', 'Head')).toBe('x\n\nHead');
+    expect(copyPaste('> [!info] T\n> body **line**', 'body', 'line')).toBe('x\n\nbody **line**');
+    // across lines: the lines, blocks and all
+    expect(copyPaste('- [ ] open\n- [x] done', 'open', 'done')).toBe('x\n\n- [ ] open\n- [x] done');
+  });
+
+  test('a table row, pasted on an empty line: a table in its place, no empty line left above it', () => {
+    const src = editorWith('| a | b |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |');
+    const cell = (word: string) => { const $p = src.state.doc.resolve(posOf(src, word)); return $p.before($p.depth - 1); };
+    src.view.dispatch(src.state.tr.setSelection(CellSelection.create(src.state.doc, cell('1'), cell('2'))));
+    const { dom } = src.view.serializeForClipboard(src.state.selection.content());
+    const ed = editorWith('x');
+    newLine('x')(ed);
+    ed.view.pasteHTML(dom.innerHTML);
+    expect(md(ed).trim()).toBe('x\n\n| 1 | 2 |\n| --- | --- |');
+  });
 });
