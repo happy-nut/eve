@@ -628,3 +628,86 @@ describe('list keys that leave the rest of the list as it was', () => {
     }
   });
 });
+
+describe('list ends, whole-list toggles and empty lines that read back the same', () => {
+  /** the key at `word` (its end with `end`): the markdown after it, which reads back the same, and \u2318Z undoes it */
+  const after = (note: string, word: string, end: boolean, key: string, init: KeyboardEventInit = {}) => {
+    const ed = editorWith(note);
+    ed.commands.setTextSelection(posOf(ed, word, end));
+    const before = md(ed);
+    press(ed, key, init);
+    const out = md(ed);
+    expect(md(editorWith(out))).toBe(out);
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+    return out.trimEnd();
+  };
+
+  test('Delete at the end of a list\'s last line, only the note\'s end after it: nothing changes', () => {
+    for (const [note, word] of [['- a\n- b', 'b'], ['- [ ] a\n- [x] b', 'b'], ['1. a\n2. b', 'b'], ['- a\n  - b', 'b'], ['1. a\n   - [ ] b', 'b']]) {
+      const ed = editorWith(note);
+      ed.commands.setTextSelection(posOf(ed, word, true));
+      press(ed, 'Delete');
+      expect(md(ed).trimEnd()).toBe(note);
+    }
+  });
+
+  test('Delete at the end of a list\'s last line with a line after it: that line\'s text comes up onto it', () => {
+    expect(after('- a\n- b\n\npara', 'b', true, 'Delete')).toBe('- a\n- bpara');
+    expect(after('- [ ] a\n- [x] b\n\npara\n\nnext', 'b', true, 'Delete')).toBe('- [ ] a\n- [x] bpara\n\nnext');
+    expect(after('1. a\n   1. b\n\npara', 'b', true, 'Delete')).toBe('1. a\n   1. bpara');
+  });
+
+  test('\u2318\u21e78 / \u2318\u21e77 / \u2318\u21e79 over lines all of that kind, nested ones too: every line plain, one \u2318Z back', () => {
+    for (const [note, id] of [['- a\n  - b\n  - c\n- f', 'bulletList'], ['1. a\n   1. b\n   2. c\n2. f', 'orderedList'], ['- [ ] a\n  - [x] b\n  - [ ] c\n- [x] f', 'taskList']]) {
+      const ed = editorWith(note);
+      ed.commands.selectAll();
+      runEditorCommand(ed, id);
+      const out = md(ed);
+      expect(out.trimEnd()).toBe('a\n\nb\n\nc\n\nf');
+      expect(md(editorWith(out))).toBe(out);
+      ed.commands.undo();
+      expect(md(ed)).toBe(note);
+    }
+    // the lines picked only: the one above stays in its list
+    const ed = editorWith('- a\n  - b\n  - c\n- f');
+    ed.commands.setTextSelection({ from: posOf(ed, 'b'), to: posOf(ed, 'f', true) });
+    runEditorCommand(ed, 'bulletList');
+    expect(md(ed).trimEnd()).toBe('- a\n\nb\n\nc\n\nf');
+    expect(ed.state.doc.textBetween(ed.state.selection.from, ed.state.selection.to, '|')).toBe('b|c|f');
+    // a line of another kind among them: they are switched to that kind, where they are
+    const mixed = editorWith('- a\n  - [ ] b\n- f');
+    mixed.commands.selectAll();
+    runEditorCommand(mixed, 'bulletList');
+    expect(md(mixed).trimEnd()).toBe('- a\n  - b\n- f');
+  });
+
+  test('Enter on an empty bullet with a sub-item, under a to-do: it steps out as \u21e7Tab does and reads back the same', () => {
+    const note = '- [ ] a\n  - b\n  - y\n    - x\n- [ ] c';
+    const emptied = () => {
+      const ed = editorWith(note);
+      const p = posOf(ed, 'y');
+      ed.view.dispatch(ed.state.tr.delete(p, p + 1).setMeta('addToHistory', false));
+      ed.commands.setTextSelection(p);
+      return ed;
+    };
+    const ed = emptied(), tab = emptied();
+    const before = md(ed);
+    expect(md(editorWith(before))).toBe(before);
+    press(ed, 'Enter');
+    press(tab, 'Tab', { shiftKey: true });
+    const out = md(ed);
+    expect(out.trimEnd()).toBe('- [ ] a\n  - b\n\n- \u00a0\n  - x\n\n- [ ] c');
+    expect(md(tab)).toBe(out);
+    expect(md(editorWith(out))).toBe(out);
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+  });
+
+  test('\u232b at the start of a numbered list\'s first line: the numbers after it carry on', () => {
+    expect(after('1. a\n2. b\n3. c', 'a', false, 'Backspace')).toBe('a\n\n2. b\n3. c');
+    expect(after('3. a\n4. b', 'a', false, 'Backspace')).toBe('a\n\n4. b');
+    // inside an item, as it was: the line steps out a level, still a number, the one after it under it
+    expect(after('- z\n  1. a\n  2. b', 'a', false, 'Backspace')).toBe('- z\n\n1. a\n   1. b');
+  });
+});

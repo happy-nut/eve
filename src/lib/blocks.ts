@@ -1,6 +1,6 @@
 // Moving and indenting lines: plain ProseMirror, no editor or DOM, so it runs in Node (blocks.test.mjs).
 import { Fragment, type Node as PMNode, type NodeType, type ResolvedPos } from '@tiptap/pm/model';
-import { Selection, TextSelection } from '@tiptap/pm/state';
+import { EditorState, Selection, TextSelection } from '@tiptap/pm/state';
 import { liftListItem, sinkListItem } from '@tiptap/pm/schema-list';
 import { liftTarget } from '@tiptap/pm/transform';
 
@@ -401,8 +401,9 @@ export function switchItem(tr: any, from: number, to: number, listType: NodeType
 /**
  * ⌘⇧7 / ⌘⇧8 / ⌘⇧9 on list lines of another kind: each selected item becomes that kind where it is, as typing its
  * marker over it does (switchItem). The stock toggle lifted a nested item out of its parent to make it a list of
- * its own, its list split in two and the count after it starting over. False when no selected line is an item of
- * another kind (the stock toggle then does what it does: a plain line into a list, a list's lines plain again).
+ * its own, its list split in two and the count after it starting over. When every selected line is that kind
+ * already, they all become plain lines (plainLines). False when a plain line is among them (the stock toggle then
+ * makes them a list).
  */
 export function switchLines(list: string, item: string) {
   return ({ tr }: { tr: any }): boolean => {
@@ -414,7 +415,7 @@ export function switchLines(list: string, item: string) {
     const picked = lines.map((l, k) => ({ l, k })).filter(({ l }) => l.pos + 1 <= to && l.end - 1 >= from && (l.item || l.end - l.pos > 2));
     if (!picked.length || picked.some(({ l }) => !l.item)) return false; // a plain line among them: the stock toggle
     const change = picked.filter(({ l }) => l.first && l.list !== list);
-    if (!change.length) return false;
+    if (!change.length) return plainLines(tr, picked.map(({ k }) => k));
     const offset = from - picked[0].l.pos, span = to - from;
     for (const { k } of [...change].reverse()) {
       const now = lineDepths(tr.doc)[k];
@@ -426,6 +427,36 @@ export function switchLines(list: string, item: string) {
     tr.setSelection(TextSelection.between(tr.doc.resolve(a), tr.doc.resolve(Math.min(a + span, tr.doc.content.size))));
     return true;
   };
+}
+
+/**
+ * ⌘⇧7 / ⌘⇧8 / ⌘⇧9 on lines all of that kind already (`picked`, their indexes in lineDepths): every one becomes a
+ * plain line, in order, the nested ones too. The stock toggle lifted only the outermost level: the lines under it
+ * were left a list of their own, one level up.
+ */
+function plainLines(tr: any, picked: number[]): boolean {
+  const { from, to } = tr.selection;
+  const before = lineDepths(tr.doc), schema = tr.doc.type.schema;
+  for (const k of picked) {
+    // a line further down in an item comes out with the item's first line
+    if (!before[k].first) continue;
+    // one level at a time, top to bottom: the lines after it in its list hang under it until their own turn
+    for (let level = before[k].depth; level > 0; level--) {
+      const now = lineDepths(tr.doc)[k];
+      if (!now.item) break;
+      // a state of its own: the stock lift checks its positions against the whole transaction's mapping, which
+      // the lifts before it in this one would throw off
+      const state = EditorState.create({ doc: tr.doc, selection: TextSelection.create(tr.doc, now.pos + 1) });
+      let lifted: any = null;
+      if (!liftListItem(schema.nodes[now.item])(state, (t) => { lifted = t; }) || !lifted) break;
+      for (const step of lifted.steps) tr.step(step);
+    }
+  }
+  // the same lines selected as before
+  const after = lineDepths(tr.doc), first = picked[0], last = picked[picked.length - 1];
+  const at = (k: number, p: number) => Math.min(after[k].pos + Math.max(1, p - before[k].pos), after[k].end - 1);
+  tr.setSelection(TextSelection.create(tr.doc, at(first, from), at(last, to)));
+  return true;
 }
 
 /**
@@ -456,7 +487,8 @@ const levelOf = ($p: any) => { let n = 0; for (let d = $p.depth; d > 0; d--) if 
  * under a bullet, the next item one level out): that item's text comes up onto this line and its own line goes.
  * What hangs under it keeps its level, under the item this line is in at that level (with none, where it was).
  * The stock join pulled the whole item into this one: its marker gone, its text a loose line, its sub-items a
- * level off. False: not that case (the next item at the same level and of the same kind joins as it always did).
+ * level off. The line after a list's last line, outside it, comes up the same way. False: not that case (the next
+ * item at the same level and of the same kind joins as it always did).
  */
 export function joinNextItem({ tr }: { tr: any }): boolean {
   const { $from, empty } = tr.selection;
@@ -468,8 +500,21 @@ export function joinNextItem({ tr }: { tr: any }): boolean {
   const $n = next.$from, s = $from.sharedDepth($n.pos);
   // the very next line: nothing between the two but blocks closing and opening (no picture, no other line)
   if ($n.parentOffset !== 0 || $n.before() - after !== $from.depth - 1 - s + ($n.depth - 1 - s)) return false;
-  const text: PMNode = $n.parent, item: PMNode = $n.node(-1), list: PMNode = $n.node(-2);
-  if (text.type.spec.code || !/Item$/.test(item.type.name) || $n.index(-1) !== 0) return false;
+  const text: PMNode = $n.parent;
+  if (text.type.spec.code) return false;
+  // the line after the list, beside it: its text comes up onto this line, as in Docs or Notion. The empty line the
+  // editor keeps at the note's end is not one: the stock join made it an empty item, back as soon as it was gone
+  if (!levelOf($n)) {
+    if ($n.depth !== s + 1) return false;
+    if (isTrailer(tr.doc, $n.node(-1), $n.index(-1))) return true;
+    if (!line.type.validContent(line.content.append(text.content))) return false;
+    tr.delete($n.before(), $n.after());
+    tr.insert($from.pos, text.content);
+    tr.setSelection(TextSelection.create(tr.doc, $from.pos));
+    return true;
+  }
+  const item: PMNode = $n.node(-1), list: PMNode = $n.node(-2);
+  if (!/Item$/.test(item.type.name) || $n.index(-1) !== 0) return false;
   const level = levelOf($n);
   if (level === levelOf($from) && item.type === $from.node(-1).type && list.type === $from.node(-2).type) return false;
   if (!line.type.validContent(line.content.append(text.content))) return false;
@@ -504,8 +549,9 @@ export function itemAbove({ tr }: { tr: any }): boolean {
 }
 
 /**
- * ⌫ at the start of a numbered item in the middle of its list, or Enter on an empty one (`blank`): the line comes
- * out of the list as the stock lift takes it, and the items after it go on counting (3. stays 3., not 1.).
+ * ⌫ at the start of a numbered item with items after it, or Enter on an empty one (`blank`): the line comes out of
+ * the list as the stock lift takes it, and the items after it go on counting (3. stays 3., not 1.), the first one's
+ * too (2. stays 2.).
  * A numbered list inside an item counts from 1 anyway (joinLists), so only one that is not is taken here.
  */
 export function liftCounting(blank: boolean) {
@@ -514,7 +560,7 @@ export function liftCounting(blank: boolean) {
     if (!empty || $from.parentOffset !== 0 || !$from.parent.isTextblock || $from.depth < 3 || (blank && $from.parent.content.size)) return false;
     const item: PMNode = $from.node(-1), list: PMNode = $from.node(-2), i = $from.index(-2);
     if (!/Item$/.test(item.type.name) || $from.index(-1) !== 0 || list.type.name !== 'orderedList') return false;
-    if (i === 0 || i === list.childCount - 1 || /Item$/.test($from.node(-3).type.name)) return false;
+    if (i === list.childCount - 1 || /Item$/.test($from.node(-3).type.name)) return false;
     const steps = tr.steps.length;
     const state = { doc: tr.doc, selection: tr.selection, schema: tr.doc.type.schema, tr };
     if (!liftListItem(item.type)(state as any, () => {})) return false;

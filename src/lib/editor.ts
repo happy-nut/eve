@@ -105,7 +105,9 @@ const ListItemLead = ListItem.extend({
         },
         updateDOM(root: HTMLElement) {
           const leads = [...root.querySelectorAll('li:not(.task-list-item)')].filter((li) => {
-            const first = [...li.childNodes].find((n) => n.nodeType !== 3 || n.textContent!.trim());
+            // not trim(): the non-breaking space an empty line is written as is the item's text, not blank. Taken for
+            // blank, an empty bullet over its sub-item read back as a lead with that space a line of its own
+            const first = [...li.childNodes].find((n) => n.nodeType !== 3 || /[^ \t\r\n]/.test(n.textContent!));
             return first instanceof HTMLElement && first.matches(LEADS);
           });
           if (!leads.length) return;
