@@ -215,8 +215,8 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="kb-wrap">
-<div class="kb" bind:this={root} onkeydown={onKey} onfocusin={(e) => { last = e.target as HTMLElement; focused = last.dataset.kb ?? null; }} onfocusout={() => (focused = null)}>
+<div class="kb-wrap" bind:this={root} onkeydown={onKey} onfocusin={(e) => { last = e.target as HTMLElement; focused = last.dataset.kb ?? null; }} onfocusout={() => (focused = null)}>
+<div class="kb">
   {#each view as col (col.id)}
     <div class="kb-col" data-id={col.id} animate:flip={{ duration: 220 }} ondragover={(e) => dragOver(e, col)} ondrop={drop}>
       {#if editing === col.id}
@@ -241,25 +241,24 @@
       <button class="kb-add" data-kb="add" onclick={() => addCard(col)}>+ New</button>
     </div>
   {/each}
-  <!-- past the last column: + adds a column; below it a × (shown while hovering the board) deletes the board -->
+  <!-- past the last column: + adds a column -->
   <div class="kb-end">
     <button class="icon kb-addcol" class:on={focused === 'addcol'} data-kb="addcol" aria-label="Add column" data-tip="Add column" onclick={addColumn}>+</button>
+  </div>
+</div>
+  <!-- under the board, at its right edge (shown while hovering it): the card template and the × that deletes the board.
+       Past the last of many columns they sat off the side of the note, out of sight until the board was scrolled -->
+  <div class="kb-foot">
     <button class="icon kb-tpl" tabindex="-1" aria-label="Card template" data-tip="Card template" onclick={editTemplate}>
       <svg viewBox="0 0 16 16"><path d="M4 1.5h5L12.5 5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h3"/></svg>
     </button>
     <button class="icon kb-x" class:on={focused === 'x'} data-kb="x" tabindex="-1" aria-label="Delete board" data-tip="Delete board" onclick={remove}>×</button>
   </div>
 </div>
-</div>
 
 <style>
-  /* held at the board's right edge while the columns scroll under it: past the last of many columns, the board's ×
-     (and + and the template) sat off the side of the note, out of sight until scrolled to */
-  .kb-end {
-    flex: none; display: flex; flex-direction: column; gap: 4px; position: sticky; right: 0; z-index: 1;
-    align-self: flex-start; padding-left: 4px; background: var(--bg);
-  }
-  :global(.card-page) .kb-end { background: var(--bg-pop); }
+  .kb-end { flex: none; display: flex; flex-direction: column; gap: 4px; }
+  .kb-foot { display: flex; justify-content: flex-end; gap: 2px; margin: -0.5em 0 0.4em; }
   .kb-x { width: 28px; height: 28px; font-size: 16px; opacity: 0; transition: opacity 0.12s, background 0.12s; }
   .kb-wrap:hover .kb-x, .kb-x.on { opacity: 1; }
   /* the card template: shown while hovering the board, like the ×; always there on a phone */
