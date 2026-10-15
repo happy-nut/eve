@@ -115,7 +115,7 @@ test.each([
   ed.state.doc.descendants((n, p) => { if (n.type.name === 'image') pos = p; });
   ed.view.dispatch(ed.state.tr.setNodeMarkup(pos, undefined, { ...ed.state.doc.nodeAt(pos)!.attrs, ...attrs }));
   expect(md(ed)).toContain(written);
-  expect((ed.view.nodeDOM(pos) as HTMLElement).dataset.align).toBe(attrs.align);
+  expect((ed.view.nodeDOM(pos) as HTMLElement).dataset.align).toBe((attrs as { align?: string }).align);
 });
 
 test('a picture\'s menu: copy and where it sits, nothing else; picking a side moves it', async () => {

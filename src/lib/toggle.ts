@@ -1,5 +1,5 @@
 import { InputRule } from '@tiptap/core';
-import { TextSelection } from '@tiptap/pm/state';
+import { Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/state';
 import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -16,6 +16,19 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
  * `open` is kept in the note, so a toggle stays the way it was left. The title is plain text (a `<summary>`
  * line is HTML, where markdown does not apply).
  */
+/** where a caret hidden in a closed toggle's body should be instead: the end of that toggle's title (the outermost
+ *  closed one, if they nest); null when it is on screen */
+function outOfClosed(state: EditorState): number | null {
+  const { $head, empty } = state.selection;
+  if (!empty && !(state.selection instanceof TextSelection)) return null;
+  for (let d = 1; d < $head.depth; d++) {
+    const n = $head.node(d);
+    if (n.type.name !== 'details' || n.attrs.open || $head.index(d) === 0) continue; // index 0: in the title
+    return $head.start(d) + n.firstChild!.nodeSize - 1;
+  }
+  return null;
+}
+
 export const Toggle = [
   Details.extend({
     addInputRules() {
@@ -38,6 +51,18 @@ export const Toggle = [
           const pos = $from.before();
           const { tr } = state;
           tr.replaceWith(pos, pos + para.nodeSize, toggle).setSelection(TextSelection.create(tr.doc, pos + 2));
+        },
+      })];
+    },
+    // A closed toggle hides its body, but the caret could stay in it (closed by its arrow, the caret in the body;
+    // undo; a sync): the page then showed it nowhere, or somewhere else, while the keys went on writing out of
+    // sight. A caret inside a closed toggle's body goes to the end of its title, the line still on screen.
+    addProseMirrorPlugins() {
+      return [...(this.parent?.() ?? []), new Plugin({
+        key: new PluginKey('toggleCaretShown'),
+        appendTransaction: (_trs, _old, state) => {
+          const to = outOfClosed(state);
+          return to === null ? null : state.tr.setSelection(TextSelection.create(state.doc, to)).scrollIntoView();
         },
       })];
     },
