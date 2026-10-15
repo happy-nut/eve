@@ -2,7 +2,7 @@
 import { Fragment, type Node as PMNode, type NodeType, type ResolvedPos } from '@tiptap/pm/model';
 import { Selection, TextSelection } from '@tiptap/pm/state';
 import { liftListItem, sinkListItem } from '@tiptap/pm/schema-list';
-import { liftTarget } from '@tiptap/pm/transform';
+import { canJoin, liftTarget } from '@tiptap/pm/transform';
 
 /**
  * The block a ⌫ at the start of the line at `$pos` runs into (dir -1), or a Delete at its end (1): the line's
@@ -424,6 +424,41 @@ export function switchLines(list: string, item: string) {
     const first = lineDepths(tr.doc)[picked[0].k];
     const a = Math.min(first.pos + offset, first.end - 1);
     tr.setSelection(TextSelection.between(tr.doc.resolve(a), tr.doc.resolve(Math.min(a + span, tr.doc.content.size))));
+    return true;
+  };
+}
+
+/**
+ * ⌘⇧7 / ⌘⇧8 / ⌘⇧9 over lines with a toggle, a callout, a table or the like among them: each run of plain lines
+ * becomes a list of its own, and what lies between them stays as it was. The stock toggle wrapped the whole range,
+ * the toggle with it, which went in under the first new item. False when there is no such block in the range (the
+ * stock toggle then does what it does).
+ */
+export function wrapLines(list: string, item: string) {
+  return ({ tr }: { tr: any }): boolean => {
+    const { $from, $to } = tr.selection;
+    const range = $from.blockRange($to);
+    if (!range || /(List|Item)$/.test(range.parent.type.name)) return false;
+    const schema = tr.doc.type.schema, listType = schema.nodes[list], itemType = schema.nodes[item];
+    // each plain line, and how many came before it (numbers carry on past a toggle: 1. 2. under it are 3. 4.)
+    const lines: { at: number; n: number }[] = [];
+    let other = false, pos = range.start;
+    for (let i = range.startIndex; i < range.endIndex; i++) {
+      const n: PMNode = range.parent.child(i);
+      if (n.type.name === 'paragraph') lines.push({ at: pos, n: lines.length });
+      else if (!n.isTextblock && !/List$/.test(n.type.name)) other = true;
+      pos += n.nodeSize;
+    }
+    if (!other || !lines.length) return false;
+    // the last first, so the positions before it stay put; each line a list of one item, joined to the one after it
+    for (const { at, n } of lines.reverse()) {
+      tr.wrap(tr.doc.resolve(at + 1).blockRange(), [
+        { type: listType, attrs: list === 'orderedList' ? { start: n + 1 } : null },
+        { type: itemType, attrs: item === 'taskItem' ? { checked: false } : null },
+      ]);
+      const next = at + tr.doc.nodeAt(at).nodeSize;
+      if (tr.doc.nodeAt(next)?.type === listType && canJoin(tr.doc, next)) tr.join(next);
+    }
     return true;
   };
 }
