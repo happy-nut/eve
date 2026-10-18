@@ -21,8 +21,11 @@ function editor() {
   let shown: EmojiEntry[] = [], pick: ((e: EmojiEntry) => void) | null = null, sel = 0;
   const noop = () => {};
   const popup = { visible: () => false, show: noop, hide: noop, move: noop, select: () => false } as any;
+  let pointed = false;
   const emojiUI = {
-    show(items: EmojiEntry[], _r: DOMRect | null, cb: (e: EmojiEntry) => void) { shown = items; pick = cb; sel = 0; },
+    show(items: EmojiEntry[], _r: DOMRect | null, cb: (e: EmojiEntry) => void) { shown = items; pick = cb; sel = 0; pointed = false; },
+    chosen: () => pointed,
+    point: () => { pointed = true; },
     move(d: number) { sel = (sel + d + shown.length) % shown.length; },
     select() { if (!shown.length) return false; pick!(shown[sel]); return true; },
     hide() { shown = []; },
@@ -33,6 +36,7 @@ function editor() {
   const ed = createEditor({ element, content: '', onUpdate: noop, onOpenNote: noop, targets: () => [], suggestionUI: popup, calendarUI: popup, emojiUI });
   ed.commands.focus('end');
   made.push(ed);
+  (ed as any).__emojiUI = emojiUI;
   return { ed, row: () => shown.map((e) => e.emoji.replace(/️/g, '')) };
 }
 
@@ -47,12 +51,14 @@ test(':fir shows up to five in a row, → chooses, ↩ puts it in place of what 
   expect(ed.getText()).toBe('좋아요 🎆');
 });
 
-test('Tab picks too, and is not taken for indenting while the row is up', async () => {
+test('Tab picks too once one is chosen, and is not taken for indenting while the row is up', async () => {
   const { ed } = editor();
   ed.commands.setContent('- [ ] a\n- [ ] b');
   ed.commands.setTextSelection(posOf(ed, 'b', true));
   type(ed, ' :tada');
   await settle();
+  press(ed, 'ArrowRight');
+  press(ed, 'ArrowLeft');
   press(ed, 'Tab');
   expect(ed.getText()).toContain('b 🎉');
   expect(ed.state.doc.firstChild!.childCount).toBe(2); // b is still an item of its own, not under a
@@ -96,4 +102,30 @@ test('not while the [[ picker is open: "[[Meeting :sm" is still the title being 
   type(b.ed, 'see :sm');
   await settle();
   expect(b.row().length).toBeGreaterThan(0);
+});
+
+test('↩ or ⇥ right after a word (nothing chosen) is a new line or the editor\'s Tab, the word kept', async () => {
+  const { ed, row } = editor();
+  type(ed, 'items :ok');
+  await settle();
+  expect(row().length).toBeGreaterThan(0);
+  press(ed, 'Enter');
+  expect(ed.state.doc.childCount).toBe(2);
+  expect(ed.state.doc.firstChild!.textContent).toBe('items :ok');
+  expect(row()).toEqual([]);
+  const b = editor();
+  type(b.ed, 'see :fire');
+  await settle();
+  press(b.ed, 'Tab');
+  expect(b.ed.getText()).not.toContain('🔥');
+});
+
+test('the pointer over one chooses it for ↩ as the arrows do', async () => {
+  const { ed } = editor();
+  const ui = (ed as any).__emojiUI;
+  type(ed, 'hot :fire');
+  await settle();
+  ui.point();
+  press(ed, 'Enter');
+  expect(ed.getText()).toContain('🔥');
 });

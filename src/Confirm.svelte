@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { panelIn, scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
@@ -38,7 +39,9 @@
       els[(els.indexOf(document.activeElement as HTMLElement) + (e.shiftKey ? -1 : 1) + els.length) % els.length]?.focus();
     }
   }
-  const focus = (el: HTMLElement) => { el.focus(); if (el instanceof HTMLInputElement) el.select(); };
+  // selected once its text is in (it is set just after the box is drawn): the "https://" a link opens with was left
+  // unselected, and an address pasted went in after it
+  const focus = (el: HTMLElement) => { el.focus(); if (el instanceof HTMLInputElement) tick().then(() => el.select()); };
 </script>
 
 <svelte:window onkeydown={onKey} />

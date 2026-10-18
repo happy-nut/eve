@@ -18,6 +18,12 @@ const inList = ($from: any) => {
   return false;
 };
 
+/**
+ * The divider was just made by typing `---`: the caret is on the empty line under it already, and the ↩ that markdown
+ * habit presses next made a second, unasked-for one. That ↩ is let go; any other key or a click and it is a ↩ again.
+ */
+let justMade = false;
+
 type Dir = 1 | -1;
 type Probe = 'forward' | 'backward' | 'up' | 'down';
 
@@ -54,7 +60,12 @@ export const Divider = HorizontalRule.extend({
     ].map((rule) => {
       const run = rule.handler.bind(rule);
       // nor in a toggle's title, a line of text only
-      rule.handler = (props: any) => (inList(props.state.selection.$from) || props.state.selection.$from.parent.type.name === 'detailsSummary' ? null : run(props));
+      rule.handler = (props: any) => {
+        if (inList(props.state.selection.$from) || props.state.selection.$from.parent.type.name === 'detailsSummary') return null;
+        const made = run(props);
+        if (made !== null) justMade = true;
+        return made;
+      };
       return rule;
     });
   },
@@ -74,6 +85,15 @@ export const Divider = HorizontalRule.extend({
       new Plugin({
         key: new PluginKey('dividerClick'),
         props: {
+          handleKeyDown(view, event) {
+            if (!justMade) return false;
+            justMade = false;
+            if (event.key !== 'Enter' || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;
+            const { $from, empty } = view.state.selection;
+            const before = $from.depth > 0 ? view.state.doc.resolve($from.before()).nodeBefore : null;
+            return empty && $from.parent.type.name === 'paragraph' && !$from.parent.content.size && before?.type.name === 'horizontalRule';
+          },
+          handleDOMEvents: { mousedown: () => { justMade = false; return false; } },
           // clicking the line itself picks it up — the same selection the arrow keys leave behind
           handleClickOn(view, _pos, node, nodePos, event) {
             if (node.type.name !== 'horizontalRule') return false;

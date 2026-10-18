@@ -1,6 +1,6 @@
 import { test, expect, afterEach } from 'vitest';
-import { editorWith } from './testEditor';
-import { findState, replaceAll, replaceOne, setQuery } from './find';
+import { editorWith, md } from './testEditor';
+import { FIND, findState, replaceAll, replaceOne, setQuery } from './find';
 
 // jsdom draws nothing, so it has no scrollIntoView; showing a match scrolls to it
 Element.prototype.scrollIntoView ??= () => {};
@@ -30,4 +30,43 @@ test.each([
   setQuery(ed, query);
   replaceAll(ed, 'X');
   expect(ed.state.doc.textContent).toBe(out);
+});
+
+test('a phrase is found across bold and links, and replaced in the marks of its first letter', () => {
+  const ed = editorWith('The **quick** brown fox, the quick [brown](https://x.com) one');
+  setQuery(ed, 'quick brown');
+  expect(findState(ed).hits.length).toBe(2);
+  const { from, to } = findState(ed).hits[0];
+  expect(ed.state.doc.textBetween(from, to)).toBe('quick brown');
+  replaceAll(ed, 'slow red');
+  expect(ed.state.doc.textContent).toBe('The slow red fox, the slow red one');
+  expect(md(ed)).toBe('The **slow red** fox, the slow red one');
+});
+
+test('words in a [[link]] or a date are found and shown, but Replace leaves them alone', () => {
+  const ed = editorWith('see [[Project plan]] and the plan @2026-10-20');
+  setQuery(ed, 'plan');
+  const { hits } = findState(ed);
+  expect(hits.length).toBe(2);
+  expect(hits[0].atom).toBe(true);
+  expect(ed.state.doc.nodeAt(hits[0].from)?.type.name).toBe('wikiLink');
+  setQuery(ed, 'oct');
+  // the date reads as its day on screen ("Oct 20" or a word for it); whatever it shows is what is found
+  const label = ed.view.dom.querySelector('.datechip')?.textContent ?? '';
+  if (/oct/i.test(label)) expect(findState(ed).hits.length).toBe(1);
+  setQuery(ed, 'plan');
+  replaceOne(ed, 'idea');
+  expect(md(ed)).toBe('see [[Project plan]] and the idea @2026-10-20');
+  setQuery(ed, 'plan');
+  replaceAll(ed, 'X');
+  expect(md(ed)).toBe('see [[Project plan]] and the idea @2026-10-20');
+});
+
+test('a long note is searched quickly', () => {
+  const ed = editorWith(Array.from({ length: 3000 }, (_, i) => `line ${i} with **some** words and [[Link ${i}]]`).join('\n\n'));
+  // the search alone (jsdom takes its time drawing 3000 highlights, which a browser does not)
+  const t = performance.now();
+  const next = ed.state.apply(ed.state.tr.setMeta(FIND, { query: 'some words', index: 0 }));
+  expect(FIND.getState(next)!.hits.length).toBe(3000);
+  expect(performance.now() - t).toBeLessThan(300);
 });
