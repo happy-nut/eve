@@ -15,7 +15,7 @@ export type Theme = (typeof THEMES)[number][0];
 
 interface Appearance {
   theme: Theme; font: string; custom: string; size: number; lineHeight: number; width: number;
-  /** close the sidebar as soon as you start writing (typing or arrowing in the editor). Off unless asked
+  /** close the sidebar as soon as you start writing (typing in the editor; the arrows only read). Off unless asked
    *  for: it replaces `hideSidebarOnEdit`, which was on by default and saved with every other setting,
    *  so a new name is what lets every device start from off */
   closeSidebarOnWrite: boolean;

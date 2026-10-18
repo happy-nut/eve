@@ -584,6 +584,10 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 .tiptap .wikilink .wl-t { text-decoration: underline; text-decoration-color: var(--fg-dim); text-underline-offset: 2px; }
 .tiptap .wikilink:hover { color: var(--accent); }
 .tiptap .wikilink:hover .wl-t { text-decoration-color: var(--accent); }
+/* a link to a page not made yet: dimmed, its underline dashed (a click makes the page, then it reads as any link) */
+.tiptap .wikilink.missing { color: var(--fg-dim); }
+.tiptap .wikilink.missing .wl-t { text-decoration-style: dashed; }
+.tiptap .wikilink.missing:hover { color: var(--accent); }
 .tiptap .wl-ico { margin-right: 0.28em; font-size: 0.95em; line-height: 1; }
 .tiptap .wl-ico svg { width: 1em; height: 1em; vertical-align: -0.12em; }
 .tiptap .ProseMirror-selectednode.wikilink, .tiptap .wikilink.ProseMirror-selectednode { background: var(--sel); border-radius: 3px; }

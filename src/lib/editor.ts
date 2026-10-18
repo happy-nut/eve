@@ -1391,7 +1391,7 @@ export function createEditor(opts: {
         },
       }).configure({ nested: true }),
       // a phone's bar does the formatting; the markdown hint is for a keyboard
-      Placeholder.configure({ placeholder: isMobile ? 'Start writing…' : 'Start typing… `#` heading, `-` list, `[[` link' }),
+      Placeholder.configure({ placeholder: isMobile ? 'Start writing…' : 'Start typing… # heading, - list, [[ link' }),
       Markdown.configure({ html: true, transformPastedText: true, transformCopiedText: true, linkify: true, breaks: false }),
       // ahead of the picker's own plugin, which reads where the "[[" was typed in the same transaction
       Extension.create({ name: 'wikiTyped', priority: 1000, addProseMirrorPlugins: () => [wikiTyped] }),
@@ -1399,6 +1399,7 @@ export function createEditor(opts: {
         onOpen: opts.onOpenNote,
         iconOf,
         exists: (t) => { const find = (x: string) => notes.byTitle(x); return !!find(splitLink(t, (x) => !!find(x))[0]); },
+        watchTitles: (check) => notes.onTitles(check),
         suggestion: {
           char: '[[',
           allowSpaces: true,

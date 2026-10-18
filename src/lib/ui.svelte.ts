@@ -186,6 +186,28 @@ class Ui {
     return new Promise((res) => { this.pending = { message, input: initial, resolve: res }; });
   }
   done(v: string | null) { this.pending?.resolve(v); this.pending = null; }
+
+  /** A line at the bottom of the window that says what just happened (a note deleted), with one thing to do about it
+   *  (Undo). Toast.svelte draws it. A newer one takes its place; on its own it goes after a few seconds. */
+  toastMsg = $state<{ message: string; action?: { label: string; run: () => void }; id: number } | null>(null);
+  private toastTimer: ReturnType<typeof setTimeout> | undefined;
+  private toastSeq = 0;
+  toast(message: string, action?: { label: string; run: () => void }, ms = 6000) {
+    clearTimeout(this.toastTimer);
+    const id = ++this.toastSeq;
+    this.toastMsg = { message, action, id };
+    this.toastTimer = setTimeout(() => { if (this.toastMsg?.id === id) this.toastMsg = null; }, ms);
+  }
+  /** its button: what it offers is done once, and the toast goes with it */
+  toastAction() {
+    const run = this.toastMsg?.action?.run;
+    this.dismissToast();
+    run?.();
+  }
+  dismissToast() { clearTimeout(this.toastTimer); this.toastMsg = null; }
+
+  /** what is typed in the list's search box: the list shows only what it finds while there is any */
+  search = $state('');
 }
 
 export const ui = new Ui();

@@ -19,6 +19,8 @@ export interface WikiLinkOptions {
   iconOf: (title: string) => string;
   /** is there a page by this title (a link typed out whole becomes a link only then) */
   exists: (title: string) => boolean;
+  /** run `check` whenever the pages' titles change, until the returned function is called (notes.onTitles) */
+  watchTitles: (check: () => void) => () => void;
   suggestion: Omit<SuggestionOptions, 'editor'>;
 }
 
@@ -30,7 +32,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
   selectable: true,
 
   addOptions() {
-    return { onOpen: () => {}, iconOf: () => '', exists: () => false, suggestion: { char: '[[', pluginKey: new PluginKey('wikiLink') } };
+    return { onOpen: () => {}, iconOf: () => '', exists: () => false, watchTitles: (check) => { check(); return () => {}; }, suggestion: { char: '[[', pluginKey: new PluginKey('wikiLink') } };
   },
 
   addAttributes() {
@@ -74,7 +76,10 @@ export const WikiLink = Node.create<WikiLinkOptions>({
         e.preventDefault();
         this.options.onOpen(title);
       });
-      return { dom };
+      // a link to no page yet reads as one (a click still makes the page): it looked like every other link. It follows
+      // the pages as they come and go, a rename or a delete included, re-checked only when some title changes
+      const stop = this.options.watchTitles(() => dom.classList.toggle('missing', !this.options.exists(title)));
+      return { dom, destroy: stop };
     };
   },
 

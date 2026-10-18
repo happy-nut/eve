@@ -22,6 +22,7 @@
   import { updates } from './lib/updates.svelte';
   import Tooltip from './Tooltip.svelte';
   import Menu from './Menu.svelte';
+  import Toast from './Toast.svelte';
   import { ui, hooks } from './lib/ui.svelte';
   import { droppedFiles, isAsset } from './lib/drop';
   import { importTree } from './lib/importTree';
@@ -30,6 +31,7 @@
   import { parseTicket } from './lib/handoff';
   import { parseEveLink } from './lib/evelink';
   import { focusNote } from './lib/popup';
+  import { flushEdits } from './lib/pending';
 
   let sidebarOpen = $state(true);
   let settingsOpen = $state(false);
@@ -57,6 +59,7 @@
     const note = groups.visibleOrdered()[n - 1];
     if (!note) return;
     ui.focusOwner = 'editor';
+    ui.search = ''; // the numbers are the whole list's (they are not shown on matches): the search is left behind
     notes.currentId = note.id;
     queueMicrotask(focusNote);
   }
@@ -70,7 +73,7 @@
   // Android back: a popup or a dialog closes, a note goes back to the list, and only the list leaves the app
   const popupOpen = $derived(!!(ui.photo || ui.sheetsOpen || ui.emoji || ui.menu || ui.pending || ui.find || ui.pdf || ui.card || ui.diagramView !== null));
   $effect(() => {
-    if (!isMobile || !isTauri || (sidebarOpen && !settingsOpen && !popupOpen)) return;
+    if (!isMobile || !isTauri || (sidebarOpen && !settingsOpen && !popupOpen && !ui.search)) return; // a filtered list: back clears it
     let off: (() => void) | undefined, gone = false;
     onBack(phoneBack)
       .then((u) => (gone ? u() : (off = u)));
@@ -133,7 +136,7 @@
         // typed into a note no list shows. The list instead.
         if (id && !notes.all.some((n) => n.id === id && !n.deleted)) { sidebarOpen = true; return; }
         ui.focusOwner = 'editor';
-        if (id) notes.currentId = id; else notes.create();
+        if (id) notes.currentId = id; else newNote();
         sidebarOpen = false;
         widget.keyboard();
       });
@@ -177,7 +180,7 @@
   }
 
   /**
-   * Summoned back (⌘⇧Space, Dock, ⌘Tab): the note that had the caret gets it back, where it was; with
+   * Summoned back (⌘⇧E, Dock, ⌘Tab): the note that had the caret gets it back, where it was; with
    * nothing to go back to, the caret goes to the note. Anything already holding focus is left strictly
    * alone — this runs again on the window's own focus event, which can land a beat *after* the first
    * keystroke, and re-focusing an element mid-composition is what splits a syllable into jamo.
@@ -272,12 +275,17 @@
     sidebarOpen = true; // back to the list, not into whichever note came next
   }
 
+  /** A new note: a search still narrowing the list would leave its row out of it, so the search goes. */
+  function newNote() {
+    ui.search = '';
+    notes.create();
+  }
   /** A phone's +: a new note, open, keyboard up — or, with daily notes on, the choice of that or today's. */
   function newOnPhone() {
     const write = (open: () => void) => () => { ui.focusOwner = 'editor'; open(); sidebarOpen = false; widget.keyboard(); };
     // a group too: a phone has no row menu or "+" beside a group to make one with, so it could not make any
     ui.openMenu({ clientX: 0, clientY: 0 }, [
-      { label: 'New note', run: write(() => notes.create()) },
+      { label: 'New note', run: write(newNote) },
       { label: 'New group', run: () => groups.create('') },
       { label: "Today's daily note", run: writeToday, hide: !appearance.s.dailyNotes },
     ]);
@@ -348,11 +356,13 @@
     else if (ui.pdf) ui.closePdf();
     else if (ui.card) ui.closeCard();
     else if (settingsOpen) settingsOpen = false;
+    else if (sidebarOpen && ui.search) ui.search = ''; // the list cut down to a search: back shows all of it, before leaving
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
     else {
       // the native back key leaves the focus where it was: the note kept its caret behind the list, and with it the
       // "/" menu and a table's tools, drawn over the list. They go when the note lets go of the keyboard, as a swipe does
       (document.activeElement as HTMLElement | null)?.blur();
+      notes.letGo(); // a new note left unwritten (+, then back) is no row in the list to come back to
       sidebarOpen = true;
     }
   }
@@ -527,13 +537,14 @@
     // window hide once it is gone)
     if (a.id === 'hide' && (settingsOpen || document.activeElement === searchEl)) return; // handled locally
     e.preventDefault();
-    // the list behind a floating page is left as it is: opened, folded or focused from there, it changed unseen
-    if (ui.card && (a.id === 'search' || a.id === 'focusSidebar')) return;
+    // the list behind a floating page: the page is put away first (as ⌘⇧↓ puts it away, opening another note), so
+    // the list is not opened, folded or focused unseen behind it. Its last keys are handed over before it goes.
+    if (ui.card && (a.id === 'search' || a.id === 'focusSidebar')) { flushEdits(); ui.closeCard(); }
     switch (a.id) {
       case 'newNote':
         // from the sidebar, ask what to create (note or group) via the + menu
         if (document.activeElement?.closest('aside')) hooks.openPlus?.();
-        else { ui.focusOwner = 'editor'; notes.create(); }
+        else { ui.focusOwner = 'editor'; newNote(); }
         break;
       case 'search': sidebarOpen = true; queueMicrotask(() => searchEl?.focus()); break;
       case 'find': // pressing it again puts the bar away and hands the note back the caret
@@ -590,7 +601,7 @@
     <button class="icon" aria-label="Forward" data-tip="Forward" data-keys={shortcuts.keysFor('forward')} disabled={!notes.canForward} onclick={() => notes.forward()}>
       <svg viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
     </button>
-    <button class="icon" aria-label="New" data-tip="New" data-keys={shortcuts.keysFor('newNote')} onclick={(e) => { if (sidebarOpen && hooks.openPlus) hooks.openPlus(e.currentTarget); else { ui.focusOwner = 'editor'; notes.create(); } }}>
+    <button class="icon" aria-label="New" data-tip="New" data-keys={shortcuts.keysFor('newNote')} onclick={(e) => { if (sidebarOpen && hooks.openPlus) hooks.openPlus(e.currentTarget); else { ui.focusOwner = 'editor'; newNote(); } }}>
       <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
     </button>
   </div>
@@ -660,4 +671,5 @@
 {#if ui.menu}
   <Menu />
 {/if}
+<Toast />
 <Tooltip />

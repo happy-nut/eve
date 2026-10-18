@@ -88,6 +88,10 @@
     const go = (cell: HTMLElement) => { e.preventDefault(); e.stopPropagation(); cell.focus(); cell.scrollIntoView({ block: 'nearest' }); void showCell(cell); };
     if (at === input) {
       if (e.key === 'ArrowDown' && cells.length && !e.isComposing) go(cells[0]);
+      // ↩ after a search picks its first match, the one a glance at the results lands on (it did nothing)
+      else if (e.key === 'Enter' && !e.isComposing && input?.value.trim() && root.querySelector('#search-results') && cells.length) {
+        e.preventDefault(); e.stopPropagation(); cells[0].click();
+      }
       return;
     }
     if (i < 0 || !input) return;

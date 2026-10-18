@@ -220,7 +220,7 @@
       <h3>Window</h3>
       <div class="card">
         <label class="row">
-          <span class="label">Close sidebar when you start writing <span class="sub">typing or arrowing in the editor folds the list away</span></span>
+          <span class="label">Close sidebar when you start writing <span class="sub">typing in the editor folds the list away (moving the caret with the arrows leaves it open)</span></span>
           <input type="checkbox" class="switch" checked={appearance.s.closeSidebarOnWrite}
             onchange={(e) => appearance.set({ closeSidebarOnWrite: e.currentTarget.checked })} />
         </label>

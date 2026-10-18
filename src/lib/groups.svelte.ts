@@ -207,9 +207,14 @@ class Groups {
     return sib[sib.indexOf(p) - 1] ?? null;
   }
 
-  /** delete a group and its subgroups; all their notes go back to root */
-  remove(p: string) {
+  /** Delete a group and its subgroups; all their notes go back to root. Returns what puts it all back as it was
+   *  (the toast's Undo): the groups' order, folds and icons, and where each note stood. */
+  remove(p: string): () => void {
     const sub = this.subtree(p);
+    const was = { order: [...this.names], collapsed: [...this.saved.collapsed], icons: { ...this.saved.icons }, ids: new Map(this.ids) };
+    // every note, not only the group's: moving them out can renumber the top level's ranks, and a page's sub-pages
+    // follow it from wherever they were
+    const spots = new Map(notes.all.filter((n) => !n.deleted).map((n) => [n.id, { group: n.group, parent: n.parent, order: n.order }]));
     this.saved.order = this.names.filter((g) => !sub.includes(g));
     this.saved.collapsed = this.saved.collapsed.filter((g) => !sub.includes(g));
     for (const g of sub) { delete this.saved.icons[g]; this.ids.delete(g); }
@@ -219,6 +224,18 @@ class Groups {
     const moving = sub.flatMap((g) => this.pagesIn(g));
     const ids = new Set(moving.map((n) => n.id));
     for (const n of moving) if (!n.parent || !ids.has(n.parent)) notes.place(n.id, '', '', null);
+    return () => {
+      this.saved.order = was.order;
+      this.saved.collapsed = was.collapsed;
+      this.saved.icons = was.icons;
+      this.ids = was.ids; // the same rows come back, not new ones
+      this.persist();
+      for (const n of notes.all) {
+        const at = spots.get(n.id);
+        if (!at || n.deleted || (n.group === at.group && n.parent === at.parent && n.order === at.order)) continue;
+        notes.putBack(n.id, at);
+      }
+    };
   }
 
   /** ensure a group (and its ancestors) are remembered in order so they survive their notes moving out */

@@ -101,3 +101,24 @@ test('"[[Page]]" typed out whole is a link when a page has that title; brackets 
     notes.all = saved;
   }
 });
+
+test('a [[link]] to no page reads as missing, and stops as the page is made, comes back as it is renamed or deleted', async () => {
+  const { notes } = await import('./notes.svelte');
+  const { flushSync } = await import('svelte');
+  const { ed } = editor('# Hub\n\n[[Ghost page]] and [[Ghost page#Part]]');
+  const missing = () => [...ed.view.dom.querySelectorAll('.wikilink')].map((l) => l.classList.contains('missing'));
+  expect(missing()).toEqual([true, true]);
+  const page = notes.create('# Ghost page\n\nnow here');
+  notes.touched(page.id);
+  flushSync();
+  expect(missing()).toEqual([false, false]);
+  notes.update(page.id, '# Ghost house\n\nnow here');
+  flushSync();
+  expect(missing()).toEqual([true, true]);
+  notes.update(page.id, '# Ghost page\n\nnow here');
+  flushSync();
+  expect(missing()).toEqual([false, false]);
+  notes.remove(page.id);
+  flushSync();
+  expect(missing()).toEqual([true, true]);
+});

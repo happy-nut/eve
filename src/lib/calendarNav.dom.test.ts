@@ -8,6 +8,7 @@ test('back from the calendar opened by its row goes to the note before it', () =
   appearance.set({ dailyNotes: true });
   notes.ensureCalendar();
   const a = notes.create('# A\n');
+  notes.touched(a.id); // written in: one left as it was made would go as the calendar opens
   notes.currentId = CALENDAR_NOTE_ID; // ⌘1 on the calendar's row
   expect(notes.currentId).toBe(CALENDAR);
   notes.back();
