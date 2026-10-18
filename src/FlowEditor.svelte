@@ -3,6 +3,7 @@
   import { freshId, type Flowchart, type Line, type Shape } from './lib/diagram';
   import { ui } from './lib/ui.svelte';
   import { letGo } from './lib/focusWatch';
+  import { claimKeys, composing } from './lib/keys';
   import { isMobile } from './lib/platform';
 
   /**
@@ -107,9 +108,9 @@
     ro.observe(host);
     // a picture wider than the card scrolls in it: the layer's boxes follow it
     host.addEventListener('scroll', measure, { passive: true });
-    const key = (e: KeyboardEvent) => onKey(e);
-    window.addEventListener('keydown', key, true);
-    return () => { ro.disconnect(); host.removeEventListener('scroll', measure); window.removeEventListener('keydown', key, true); };
+    // ahead of the note's keymaps: a picked box's ⌫ and arrows are the drawing's, not the text's
+    const unclaim = claimKeys('global', { '*': onKey }, { capture: true });
+    return () => { ro.disconnect(); host.removeEventListener('scroll', measure); unclaim(); };
   });
 
   // ---- what the chart becomes ----
@@ -468,9 +469,10 @@
     const t = e.target as Element;
     if (t !== document.body && !layer.closest('.dblock')?.contains(t) && t !== layer.closest('.tiptap')) return;
     const typing = (e.target as HTMLElement).matches?.('input, textarea, [contenteditable="true"]');
-    // in a line's label: Esc or Enter is done with it (Esc closed the whole builder), the rest is typing
+    // in a line's label: Esc or Enter is done with it (Esc closed the whole builder), the rest is typing (a word still
+    // being put together there is the IME's, and its keys never get here: keys.ts)
     if (typing && layer.contains(e.target as Node)) {
-      if (!e.isComposing && (e.key === 'Escape' || e.key === 'Enter')) { e.preventDefault(); e.stopPropagation(); sel = null; }
+      if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); sel = null; }
       return;
     }
     if (typing) return;
@@ -589,7 +591,7 @@
              pressed, and the keys typed went to that button (Enter made another lane) -->
         <input class="lane-name" bind:value={laneText} aria-label="Lane name" placeholder="Lane" {@attach (el: HTMLInputElement) => { el.focus(); el.select(); }}
           style:left={`${clampX(hb.x + hb.w / 2, 140)}px`} style:top={`${hb.y + hb.h / 2 - 16}px`}
-          onkeydown={(e) => { if (e.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); commitLane(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); laneEditing = null; } }}
+          onkeydown={(e) => { if (composing(e)) return; if (e.key === 'Enter') { e.preventDefault(); commitLane(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); laneEditing = null; } }}
           onblur={commitLane} />
       {:else}
         <!-- over the lane's own name (picked, it is ringed): above or under it, the bar covered the next lane's name and
@@ -632,7 +634,7 @@
     {@const b = boxOf(editing) ?? { id: editing, x: pendingAt.x - 70, y: pendingAt.y - 16, w: 140, h: 32 }}
     <input class="rename" bind:value={editText} aria-label="Step name" oninput={typed}
       style:left={`${clampX(b.x + b.w / 2, Math.min(Math.max(b.w, 140), (layer?.clientWidth ?? 600) - 8))}px`} style:top={`${b.y + b.h / 2 - 16}px`} style:width={`${Math.min(Math.max(b.w, 140), (layer?.clientWidth ?? 600) - 8)}px`}
-      onkeydown={(e) => { if (e.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); commitEdit(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelEdit(); } else if (e.key === 'Tab') { e.preventDefault(); const from = editing; commitEdit(); if (from) addAfter(from); } }}
+      onkeydown={(e) => { if (composing(e)) return; if (e.key === 'Enter') { e.preventDefault(); commitEdit(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelEdit(); } else if (e.key === 'Tab') { e.preventDefault(); const from = editing; commitEdit(); if (from) addAfter(from); } }}
       onblur={commitEdit} />
   {/if}
 

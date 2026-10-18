@@ -1,4 +1,4 @@
-// The three popups typed into a note — `/` blocks, `[[` links, `@` dates — and the `/` menu's items.
+// The popups typed into a note — `/` blocks, `[[` links, `@` dates, `:` emoji — and the `/` menu's items.
 import type { Editor } from '@tiptap/core';
 import { insertKanban } from './kanban';
 import { insertDiagram } from './code';
@@ -12,6 +12,7 @@ import { pickImage, pickVideo } from './platform';
 import { hints } from './hints.svelte';
 import type { EmojiEntry } from './emoji';
 import { runEditorCommand } from './editor';
+import { composing } from './keys';
 
 export interface SuggestItem {
   label: string; value?: string; hint?: string; icon?: string; noteIcon?: string;
@@ -111,27 +112,139 @@ function scrollBox(el: Element): { top: number; bottom: number } {
   return { top: 0, bottom: window.innerHeight };
 }
 
-/** `:` wiring: the row runs sideways, so ←→ choose; ↑↓ are the editor's (the caret leaves, the row goes). */
-export function emojiRow(uiRef: EmojiUI) {
-  const follow = stayAtCaret(uiRef);
-  // whether ↩ / ⇥ pick: the row comes up after any colon and two letters, and "items :ok" then ↩ put 🆗 in place of
-  // the words and ate the new line. They pick once ←→ or the pointer chose one; a click always does
-  let sure = false;
-  const open = (p: any) => { sure = false; uiRef.show(p.items, p.clientRect?.() ?? null, (e: EmojiEntry) => p.command(e)); };
+/** How a popup at the caret takes its keys (suggestKeys). */
+export interface PickerKeys {
+  /**
+   * Which arrows walk it. 'vertical': ↑↓ a list, and ←→ open and fold a page's sections where it has them (with
+   * nothing to open the key falls through and moves the caret, as it always did). 'horizontal': ←→ a row, ↑↓ stay
+   * the editor's (the caret leaves, the row goes). 'grid': a month of days, ←→ a day, ↑↓ a week, PageUp/PageDown a
+   * month.
+   */
+  axis: 'vertical' | 'horizontal' | 'grid';
+  /**
+   * Whether ↩ and ⇥ pick the highlighted one as the popup stands: 'always'; 'afterNavigate', once the arrows or the
+   * pointer chose one; or asked of the popup as it is drawn (its query, its items, where it was typed), again at each
+   * letter. Until they do, they put the popup away and are the editor's keys again (a new line, an indent).
+   */
+  confirm: 'always' | 'afterNavigate' | ((p: any) => boolean);
+  /** ⇥ picks whatever is under the cursor all the same (only ↩ is a key the line wants for itself) */
+  tabPicks?: boolean;
+}
+/** what suggestKeys drives: SuggestionUI, CalendarUI, EmojiUI */
+interface Driven {
+  move(delta: number): void;
+  select(): boolean;
+  hide(): void;
+  visible(): boolean;
+  chosen?(): boolean;
+  expand?(): boolean;
+  collapse?(): boolean;
+  month?(delta: number): void;
+}
+
+/**
+ * The one way a popup at the caret takes its keys. There were three copies of this, one per popup, each with its own
+ * idea of when ↩ picks: a fix to one (↩ after "a /" in a sentence made a new page) was missing from the others for
+ * a while ("items :ok" ↩ put 🆗 in place of the words). `shown` is told each time the popup is drawn.
+ */
+export function suggestKeys(uiRef: Driven, k: PickerKeys) {
+  let sure = k.confirm === 'always';
+  const nav = (run: () => void) => (run(), (sure = true));
   return {
-    onStart: (p: any) => { follow.start(p); open(p); },
-    onUpdate: (p: any) => { follow.update(p); open(p); },
-    onKeyDown: ({ event }: { event: KeyboardEvent }) => {
-      if (!uiRef.visible()) return false;
-      if (event.key === 'ArrowLeft') return (uiRef.move(-1), (sure = true));
-      if (event.key === 'ArrowRight') return (uiRef.move(1), (sure = true));
-      if ((event.key === 'Enter' || event.key === 'Tab') && !sure && !uiRef.chosen?.()) return (uiRef.hide(), false);
-      if (event.key === 'Enter' || event.key === 'Tab') return uiRef.select();
-      if (event.key === 'Escape') return (uiRef.hide(), true);
+    shown(p: any) { sure = k.confirm === 'always' || (k.confirm !== 'afterNavigate' && k.confirm(p)); },
+    onKeyDown: ({ event: e }: { event: KeyboardEvent }): boolean => {
+      // (the Enter that ends a Korean word is the word's, not a pick)
+      if (!uiRef.visible() || composing(e)) return false;
+      const key = e.key;
+      if (k.axis === 'vertical') {
+        if (key === 'ArrowDown') return nav(() => uiRef.move(1));
+        if (key === 'ArrowUp') return nav(() => uiRef.move(-1));
+        if (key === 'ArrowRight') return uiRef.expand?.() ?? false;
+        if (key === 'ArrowLeft') return uiRef.collapse?.() ?? false;
+      } else {
+        if (key === 'ArrowLeft') return nav(() => uiRef.move(-1));
+        if (key === 'ArrowRight') return nav(() => uiRef.move(1));
+      }
+      if (k.axis === 'grid') {
+        if (key === 'ArrowUp') return nav(() => uiRef.move(-7));
+        if (key === 'ArrowDown') return nav(() => uiRef.move(7));
+        if (key === 'PageUp') return nav(() => uiRef.month?.(-1));
+        if (key === 'PageDown') return nav(() => uiRef.month?.(1));
+      }
+      if (key === 'Enter' || key === 'Tab') {
+        if (!sure && !uiRef.chosen?.() && !(key === 'Tab' && k.tabPicks)) return (uiRef.hide(), false);
+        return uiRef.select();
+      }
+      if (key === 'Escape') return (uiRef.hide(), true);
       return false;
     },
+  };
+}
+
+/**
+ * The popups each editor has up, for `suggestionVisible`: told by the popups themselves as they open, so a new one
+ * is never left out of it (the editor's keys that a popup wants for its own list asked a list of them, by hand).
+ */
+const popupsOf = new WeakMap<Editor, Set<{ visible(): boolean }>>();
+/** A popup at the caret is up in this editor: ↩, ⇥, ↑ and the app's shortcuts are its keys, not the note's. Per
+ *  editor: the note and an open card page each have their own, and the note asking the closed card's popups left
+ *  Esc hiding the window rather than closing the calendar. */
+export function suggestionVisible(editor: Editor): boolean {
+  for (const u of popupsOf.get(editor) ?? []) if (u.visible()) return true;
+  return false;
+}
+
+/** a popup's life at the caret: it follows the caret, takes its keys as `keys` says, and is drawn by `show` */
+function atCaret(uiRef: Driven & { place?(rect: DOMRect): void }, keys: PickerKeys, show: (p: any) => void) {
+  const follow = stayAtCaret(uiRef);
+  const k = suggestKeys(uiRef, keys);
+  const open = (p: any) => { k.shown(p); show(p); };
+  return {
+    onStart: (p: any) => {
+      const set = popupsOf.get(p.editor) ?? new Set();
+      popupsOf.set(p.editor, set.add(uiRef));
+      follow.start(p);
+      open(p);
+    },
+    onUpdate: (p: any) => { follow.update(p); open(p); },
+    onKeyDown: k.onKeyDown,
     onExit: () => { follow.stop(); uiRef.hide(); },
   };
+}
+
+/**
+ * Every popup typed into a note: what opens it, and how it takes its keys. A new one is added here, and to the
+ * table in pickerKeys.dom.test.ts, which fails until it is.
+ */
+export const PICKERS = {
+  // a "/" after words is mostly the sentence's own ("Root dir is /", "A / B"), and ↩ there made a new page and went to
+  // it. There ↩ and ⇥ pick once a letter typed after it found something (or the arrows or the pointer chose a row);
+  // a "/" opening its line is a block asked for, and ↩ takes the first.
+  slash: {
+    char: '/', axis: 'vertical',
+    confirm: ({ editor, range, query, items }: any) => {
+      const $at = editor.state.doc.resolve(range.from);
+      return !$at.parent.textBetween(0, $at.parentOffset, undefined, '￼').trim() || (/\p{L}/u.test(query) && items.length > 0);
+    },
+  },
+  // a title being typed: ↩ links the page it found, or a new one by that name
+  wiki: { char: '[[', axis: 'vertical', confirm: 'always' },
+  // the calendar comes up over the start of a name too ("ask @Tom" is "tomorrow" so far), and ↩ there put a date in
+  // place of the name and ate the new line. It picks after a bare @, a day named in full (@today, @2026-09-24), or
+  // once the arrows chose one; ⇥ picks whatever is under the cursor.
+  date: {
+    char: '@', axis: 'grid', tabPicks: true,
+    confirm: (p: any) => !p.query || (p.items as { exact?: boolean }[]).some((d) => d.exact),
+  },
+  // the row comes up after any colon and two letters, and "items :ok" then ↩ put 🆗 in place of the words and ate the
+  // new line. ↩ / ⇥ pick once ←→ or the pointer chose one; a click always does
+  emoji: { char: ':', axis: 'horizontal', confirm: 'afterNavigate' },
+} as const satisfies Record<string, PickerKeys & { char: string }>;
+export type PickerId = keyof typeof PICKERS;
+
+/** `:` wiring: the best few emoji in a row */
+export function emojiRow(uiRef: EmojiUI) {
+  return atCaret(uiRef, PICKERS.emoji, (p) => uiRef.show(p.items, p.clientRect?.() ?? null, (e: EmojiEntry) => p.command(e)));
 }
 
 /**
@@ -140,63 +253,12 @@ export function emojiRow(uiRef: EmojiUI) {
  */
 export function calendar(uiRef: CalendarUI) {
   const day = (p: any) => (p.items as { iso: string }[])[0]?.iso ?? null;
-  // whether ↩ picks: the calendar comes up over the start of a name too ("ask @Tom" is "tomorrow" so far), and ↩
-  // there put a date in place of the name and ate the new line. It picks after a bare @, a day named in full
-  // (@today, @2026-09-24), or once the arrows chose one; ⇥ picks whatever is under the cursor.
-  let sure = false;
-  const follow = stayAtCaret(uiRef);
-  const open = (p: any) => {
-    sure = !p.query || (p.items as { exact?: boolean }[]).some((d) => d.exact);
-    uiRef.show(day(p), p.clientRect?.() ?? null, (iso: string) => p.command({ value: iso }));
-  };
-  const move = (run: () => void) => (run(), (sure = true));
-  return {
-    onStart: (p: any) => { follow.start(p); open(p); },
-    onUpdate: (p: any) => { follow.update(p); open(p); },
-    onKeyDown: ({ event }: { event: KeyboardEvent }) => {
-      if (!uiRef.visible()) return false;
-      if (event.key === 'ArrowLeft') return move(() => uiRef.move(-1));
-      if (event.key === 'ArrowRight') return move(() => uiRef.move(1));
-      if (event.key === 'ArrowUp') return move(() => uiRef.move(-7));
-      if (event.key === 'ArrowDown') return move(() => uiRef.move(7));
-      if (event.key === 'PageUp') return move(() => uiRef.month(-1));
-      if (event.key === 'PageDown') return move(() => uiRef.month(1));
-      if (event.key === 'Enter' && !sure) return (uiRef.hide(), false);
-      if (event.key === 'Enter' || event.key === 'Tab') return uiRef.select();
-      if (event.key === 'Escape') return (uiRef.hide(), true);
-      return false;
-    },
-    onExit: () => { follow.stop(); uiRef.hide(); },
-  };
+  return atCaret(uiRef, PICKERS.date, (p) => uiRef.show(day(p), p.clientRect?.() ?? null, (iso: string) => p.command({ value: iso })));
 }
 
-/**
- * Shared suggestion popup wiring for [[ and / menus. `firm` says whether ↩ / ⇥ pick the highlighted row as the menu
- * stands (when it says no, they do once the arrows or the pointer chose one; until then they close the menu and are
- * the editor's keys again).
- */
-export function popup(uiRef: SuggestionUI, firm: (p: any) => boolean = () => true) {
-  const follow = stayAtCaret(uiRef);
-  let sure = true;
-  const open = (p: any) => { sure = firm(p); uiRef.show(p.items, p.clientRect?.() ?? null, (i: SuggestItem) => p.command(i)); };
-  return {
-    onStart: (p: any) => { follow.start(p); open(p); },
-    onUpdate: (p: any) => { follow.update(p); open(p); },
-    onKeyDown: ({ event }: { event: KeyboardEvent }) => {
-      if (!uiRef.visible()) return false;
-      if (event.key === 'ArrowDown') return (uiRef.move(1), (sure = true));
-      if (event.key === 'ArrowUp') return (uiRef.move(-1), (sure = true));
-      if ((event.key === 'Enter' || event.key === 'Tab') && !sure && !uiRef.chosen?.()) return (uiRef.hide(), false);
-      // → opens the highlighted page into its sections, ← folds it back; when there is nothing to
-      // open the key falls through and moves the caret, as it always did
-      if (event.key === 'ArrowRight') return uiRef.expand();
-      if (event.key === 'ArrowLeft') return uiRef.collapse();
-      if (event.key === 'Enter' || event.key === 'Tab') return uiRef.select();
-      if (event.key === 'Escape') return (uiRef.hide(), true);
-      return false;
-    },
-    onExit: () => { follow.stop(); uiRef.hide(); },
-  };
+/** The [[ and / menus' wiring: a list, its keys as `keys` says (PICKERS.wiki, PICKERS.slash). */
+export function popup(uiRef: SuggestionUI, keys: PickerKeys = PICKERS.wiki) {
+  return atCaret(uiRef, keys, (p) => uiRef.show(p.items, p.clientRect?.() ?? null, (i: SuggestItem) => p.command(i)));
 }
 
 /** 16x16 line icons for the menu, drawn in the sidebar's stroke style. */

@@ -12,6 +12,7 @@
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { ui, hooks, type MenuItem } from './lib/ui.svelte';
+  import { composing } from './lib/keys';
   import { importFromFinder, importFromFolder, exportNote, exportCurrent, type ExportAs } from './lib/transfer';
   import Icon from './Icon.svelte';
   import { appearance } from './lib/appearance.svelte';
@@ -479,9 +480,9 @@
     // the first match, opened as a click on it would: the keyboard goes into the note (a bare blur left it nowhere).
     // The search is done with then, and goes: the list stayed cut down to its matches, the open note's row with it.
     // (A click on a match keeps it: looking through them one by one is what a list of matches is for.)
-    if (e.key === 'Enter' && hits[0] && !e.isComposing) { e.preventDefault(); const n = hits[0]; ui.search = ''; void openNote(n); }
+    if (e.key === 'Enter' && hits[0] && !composing(e)) { e.preventDefault(); const n = hits[0]; ui.search = ''; void openNote(n); }
     // ↓ walks on into the matches below; ↑ from the first one comes back here (treeKey)
-    if (e.key === 'ArrowDown' && !e.isComposing) { rowsNow()[0]?.focus(); e.preventDefault(); }
+    if (e.key === 'ArrowDown' && !composing(e)) { rowsNow()[0]?.focus(); e.preventDefault(); }
   }
   /**
    * On a phone the list is a drawer: it slides in from the left and out again, and a swipe to the left

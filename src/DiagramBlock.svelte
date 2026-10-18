@@ -3,6 +3,7 @@
   import { isMobile } from './lib/platform';
   import { ui } from './lib/ui.svelte';
   import { letGo } from './lib/focusWatch';
+  import { claimKeys } from './lib/keys';
   import { renderMermaid, themeKey } from './lib/mermaid';
   import { KINDS, fromCode, isEmpty, toCode, whyCode, type Diagram } from './lib/diagram';
   import FlowEditor from './FlowEditor.svelte';
@@ -155,14 +156,15 @@
         e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y');
       }
     };
-    window.addEventListener('keydown', keys, true);
+    // (ahead of the note's own keymaps: its Esc and ⌘Z are the diagram's while it is open)
+    const unclaim = claimKeys('global', { '*': keys }, { capture: true });
     return () => {
       if (full) ui.closeDiagramView(); // gone while on the whole screen (an undo took it out): the app's keys come back
       clearTimeout(drawTimer);
       flush(); // a change still waiting is not lost (code.ts writes it only into this same block, if it is still there)
       scheme?.removeEventListener('change', again); watch.disconnect();
       document.removeEventListener('click', away, true);
-      window.removeEventListener('keydown', keys, true);
+      unclaim();
     };
   });
   $effect(() => { if (codeShown) active = false; });

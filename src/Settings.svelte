@@ -16,6 +16,7 @@
   import { renderSVG } from 'uqr';
   import { findUpdate } from './lib/update';
   import { askNotify } from './lib/reminder';
+  import { claimKeys, PRIORITY } from './lib/keys';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
 
@@ -97,7 +98,6 @@
     : 'Not synced yet');
 
   function onKey(e: KeyboardEvent) {
-    if (ui.pending) return;
     if (recording) {
       e.preventDefault(); e.stopPropagation();
       if (e.key === 'Escape') { recording = null; conflict = null; return; }
@@ -111,7 +111,7 @@
       recording = null;
       return;
     }
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); }
+    if (e.key === 'Escape') { e.stopPropagation(); onClose(); return true; }
     if (e.key === 'Tab' && !ui.menu) trapTab(e);
   }
   let panel: HTMLDivElement;
@@ -130,14 +130,25 @@
   /** Esc with the keyboard still behind Settings (the list's row, the note) closes Settings first: left to them,
    *  the list's own Esc took the keyboard to the note. Inside Settings, its popups keep their own Esc. */
   function escBehind(e: KeyboardEvent) {
-    // a shortcut being recorded is taken here, first: the app's own keys listen on the window too, ahead of
-    // Settings' bubbling handler, and ran what the keys were already bound to (⌘N made a note, ⌘⇧⌫ asked to
-    // delete the open one, ⌘, closed Settings) while they were being recorded
-    if (recording && !ui.pending) { onKey(e); e.stopPropagation(); return; }
-    if (e.key !== 'Escape' || recording || ui.pending || ui.menu) return;
+    if (e.key !== 'Escape' || recording || ui.menu) return;
     if ((e.target as HTMLElement | null)?.closest?.('.panel')) return;
-    e.preventDefault(); e.stopPropagation(); onClose();
+    e.stopPropagation(); onClose(); return true;
   }
+  // (while Settings is the one on top: a dialog over it has the keys, and a menu over it its own Esc)
+  $effect(() => {
+    const off = [
+      claimKeys('global', { '*': onKey }, { whileTop: 'settings' }),
+      claimKeys('global', { Escape: escBehind }, { capture: true, whileTop: 'settings' }),
+    ];
+    return () => off.forEach((f) => f());
+  });
+  // a shortcut being recorded is taken first, every key of it (an IME's too), before the note or anything else:
+  // the app's own keys ran what the keys were already bound to (⌘N made a note, ⌘⇧⌫ asked to delete the open one,
+  // ⌘, closed Settings) while they were being recorded
+  $effect(() => {
+    if (!recording) return;
+    return claimKeys('global', { '*': (e) => { onKey(e); e.stopPropagation(); return true; } }, { capture: true, whileTop: 'settings', priority: PRIORITY.record, composing: true });
+  });
 
   // five settings at once from one small link, right under the sample: an Undo puts them all back
   function resetLook() {
@@ -147,7 +158,6 @@
   }
 </script>
 
-<svelte:window onkeydown={onKey} onkeydowncapture={escBehind} />
 
 <!-- preventDefault: the press would otherwise take the keyboard away again after closing gave it back -->
 <div class="backdrop" transition:fade|global={scrimFade} onmousedown={(e) => { e.preventDefault(); onClose(); }} role="presentation"></div>

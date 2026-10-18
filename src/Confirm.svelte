@@ -4,6 +4,7 @@
   import { panelIn, scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
   import { sheet, held } from './lib/popup';
+  import { claimKeys } from './lib/keys';
 
   // the last one asked: closing, it fades out showing what it showed (ui.pending is already null by then)
   const p = $derived.by(held(() => ui.pending));
@@ -22,9 +23,9 @@
     e.stopPropagation();
     if (e.timeStamp < openedAt) return;
     if (e.key === 'Escape') { e.preventDefault(); done(null); }
-    // the Enter that ends a Korean or Japanese word being put together is the word's: it answered the dialog with
-    // the name half typed
-    if (e.key === 'Enter' && !e.isComposing) {
+    // (the Enter that ends a Korean or Japanese word being put together is the word's, and never gets here: it
+    // answered the dialog with the name half typed)
+    if (e.key === 'Enter') {
       e.preventDefault();
       // Enter presses the button that has the keyboard: Tab to Cancel, then Enter, deleted all the same
       const on = document.activeElement;
@@ -37,12 +38,13 @@
       els[(els.indexOf(document.activeElement as HTMLElement) + (e.shiftKey ? -1 : 1) + els.length) % els.length]?.focus();
     }
   }
+  // every key while it is the one on top (fading out under a menu, or already answered, it hears nothing)
+  $effect(() => claimKeys('global', { '*': onKey }, { whileTop: 'confirm' }));
   // selected once its text is in (it is set just after the box is drawn): the "https://" a link opens with was left
   // unselected, and an address pasted went in after it
   const focus = (el: HTMLElement) => { el.focus(); if (el instanceof HTMLInputElement) tick().then(() => el.select()); };
 </script>
 
-<svelte:window onkeydown={onKey} />
 
 <div class="backdrop" transition:fade|global={scrimFade} onmousedown={() => done(null)} role="presentation"></div>
 <div class="box" bind:this={box} transition:appear|global role="dialog" aria-modal="true">

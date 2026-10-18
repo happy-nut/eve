@@ -7,6 +7,7 @@
   import { isMobile } from './lib/platform';
   import { CUSTOM_ICONS, customUrl, randomIcon } from './lib/icons';
   import { held } from './lib/popup';
+  import { claimKeys, composing } from './lib/keys';
 
   // the last one asked: closing, it fades out showing what it showed (ui.emoji is already null by then)
   const req = $derived.by(held(() => ui.emoji));
@@ -87,9 +88,9 @@
     const i = cells.indexOf(at as HTMLButtonElement);
     const go = (cell: HTMLElement) => { e.preventDefault(); e.stopPropagation(); cell.focus(); cell.scrollIntoView({ block: 'nearest' }); void showCell(cell); };
     if (at === input) {
-      if (e.key === 'ArrowDown' && cells.length && !e.isComposing) go(cells[0]);
+      if (e.key === 'ArrowDown' && cells.length && !composing(e)) go(cells[0]);
       // ↩ after a search picks its first match, the one a glance at the results lands on (it did nothing)
-      else if (e.key === 'Enter' && !e.isComposing && input?.value.trim() && root.querySelector('#search-results') && cells.length) {
+      else if (e.key === 'Enter' && !composing(e) && input?.value.trim() && root.querySelector('#search-results') && cells.length) {
         e.preventDefault(); e.stopPropagation(); cells[0].click();
       }
       return;
@@ -116,7 +117,7 @@
       else { e.preventDefault(); e.stopPropagation(); void category(root, -1, cells[i]).then((moved) => moved || input.focus()); }
     }
     else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); cells[i].click(); }
-    else if (e.key === 'Backspace' || e.key.length === 1 || e.key === 'Process' || e.isComposing) {
+    else if (e.key === 'Backspace' || e.key.length === 1 || e.key === 'Process' || composing(e)) {
       // not prevented: the key itself goes on to the box, caret at the end of what was typed
       input.focus();
       input.setSelectionRange(input.value.length, input.value.length);
@@ -164,12 +165,10 @@
     const code = found?.shortcodes?.[0];
     if (code) preview = { face: found.unicode ?? '', code };
   }
-  function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); ui.emojiDone(null); }
-  }
+  // Esc puts it away, wherever the keyboard is, while it is the one on top
+  $effect(() => claimKeys('global', { Escape: (e) => { e.stopPropagation(); ui.emojiDone(null); return true; } }, { whileTop: 'emoji' }));
 </script>
 
-<svelte:window onkeydown={onKey} />
 <div class="backdrop" transition:fade|global={scrimFade} onmousedown={() => ui.emojiDone(null)} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="panel" style="left: {x}px; top: {y}px; width: {W}px" transition:scale|global={popIn} role="dialog" aria-label="Choose an icon" onkeydowncapture={onGridKey}>

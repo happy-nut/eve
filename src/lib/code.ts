@@ -4,6 +4,7 @@ import { NodeSelection, Plugin, PluginKey, TextSelection, type EditorState } fro
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import { ui } from './ui.svelte';
+import { composing } from './keys';
 import { isMobile } from './platform';
 import { starter, toCode, type Diagram, type Kind } from './diagram';
 import { mountDiagram } from './diagramBlock.svelte';
@@ -570,7 +571,7 @@ export const CodeBlock = CodeBlockBase.extend({
       };
       field.addEventListener('keydown', (e) => {
         e.stopPropagation(); // the app's own keys (Esc hides the window) and the note's are not this field's
-        if (e.isComposing) return;
+        if (composing(e)) return;
         if (e.key === 'ArrowDown' || e.key === 'Tab' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); intoCode(true); }
         else if (e.key === 'Escape') { e.preventDefault(); intoCode(false); }
         else if (e.key === 'Backspace' && !field.value) {

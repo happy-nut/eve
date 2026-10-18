@@ -5,6 +5,7 @@
    * tip-up (above), tip-right (right-aligned).
    */
   import Keys from './Keys.svelte';
+  import { claimKeys, PRIORITY } from './lib/keys';
 
   let tip = $state<{ text: string; keys: string; x: number; y: number; up: boolean; right: boolean } | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -35,10 +36,12 @@
     if (e && current && e.relatedTarget instanceof Node && current.contains(e.relatedTarget)) return;
     clearTimeout(timer); tip = null; current = null;
   }
+  // any key puts it away, whoever takes the key
+  $effect(() => claimKeys('global', { '*': () => out() }, { capture: true, priority: PRIORITY.watch, composing: true }));
 </script>
 
 <!-- controls can vanish under a still pointer (e.g. the group tools folding away): re-check hover on movement -->
-<svelte:document onmouseover={over} onmouseout={out} onmousedown={() => out()} onkeydown={() => out()}
+<svelte:document onmouseover={over} onmouseout={out} onmousedown={() => out()}
   onmousemove={() => current && !current.matches(':hover') && out()} onscrollcapture={() => out()} onvisibilitychange={() => out()} />
 <svelte:window onblur={() => out()} onmouseout={(e) => !e.relatedTarget && out()} />
 

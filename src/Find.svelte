@@ -4,6 +4,7 @@
   import type { Editor } from '@tiptap/core';
   import { findState, setQuery, step, replaceOne, replaceAll, clearFind } from './lib/find';
   import { ui } from './lib/ui.svelte';
+  import { composing } from './lib/keys';
   import { isMobile } from './lib/platform';
 
   /** ⌘F: a small bar over the note. Enter walks the matches, ⇧Enter walks back, Esc puts it away. */
@@ -70,7 +71,7 @@
     // and nothing more: it fell through to Enter's work, replacing the match (or stepping on) as the bar closed
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
     // the Enter that ends a Korean or Japanese word being put together is the word's, not a step to the next match
-    else if (e.key !== 'Enter' || e.isComposing) return;
+    else if (e.key !== 'Enter' || composing(e)) return;
     e.preventDefault();
     // with the replace field open, Enter works through the matches one replacement at a time;
     // ⇧Enter still just walks back, so a match can be stepped over

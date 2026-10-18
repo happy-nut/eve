@@ -2,6 +2,7 @@
   import { tick } from 'svelte';
   import { isMobile } from './lib/platform';
   import { ui } from './lib/ui.svelte';
+  import { composing } from './lib/keys';
   import { sliceColor, branchColor } from './lib/mermaid';
   import { starter, freshId, addDays, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt } from './lib/diagram';
   import Select from './Select.svelte';
@@ -50,7 +51,7 @@
 
   /** Enter in a row: on to the same field of the next row, or, in the last, a row more (it did nothing but in a mind map) */
   async function rowEnter(e: KeyboardEvent, sel: string, add: () => void) {
-    if (e.isComposing || e.key !== 'Enter' || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    if (composing(e) || e.key !== 'Enter' || e.metaKey || e.ctrlKey || e.shiftKey) return;
     e.preventDefault();
     const all = [...box.querySelectorAll<HTMLInputElement>(sel)];
     const i = all.indexOf(e.currentTarget as HTMLInputElement);
@@ -90,7 +91,7 @@
     it.depth += by;
   }
   function branchKey(e: KeyboardEvent, m: Mindmap, i: number) {
-    if (e.isComposing) return;
+    if (composing(e)) return;
     if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); addBranch(m, i); }
     else if (e.key === 'Tab') { e.preventDefault(); indent(m, i, e.shiftKey ? -1 : 1); void focusAt('.m-item input', i); }
     else if (e.key === 'Backspace' && !m.items[i].text && m.items.length > 1) { e.preventDefault(); dropBranch(m, i); void focusAt('.m-item input', Math.max(0, i - 1)); }
@@ -213,7 +214,7 @@
       <div class="head">When · what</div>
       {#each time.periods as p, i (i)}
         <div class="row t-period top" data-i={i}>
-          <input class="label when" bind:value={p.label} placeholder="2026" aria-label="When" onkeydown={(e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); void focusAt(`.t-period[data-i="${i}"] .events input`, 0); } }} />
+          <input class="label when" bind:value={p.label} placeholder="2026" aria-label="When" onkeydown={(e) => { if (e.key === 'Enter' && !composing(e)) { e.preventDefault(); void focusAt(`.t-period[data-i="${i}"] .events input`, 0); } }} />
           <div class="events grow">
             {#each p.events as _, j (j)}
               <div class="row">

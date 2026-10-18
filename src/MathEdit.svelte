@@ -2,6 +2,7 @@
   import { onMount, untrack } from 'svelte';
   import { isMobile } from './lib/platform';
   import { ui } from './lib/ui.svelte';
+  import { claimKeys } from './lib/keys';
   import { loadMath, mathMarkup } from './lib/mathRender';
   import { SHELVES, tidyTex, type MathPart } from './lib/mathParts';
   import type { MathDone } from './lib/mathEdit.svelte';
@@ -127,7 +128,8 @@
       if ((e.target as Element).matches?.('input, textarea')) return;
       e.preventDefault(); onHistory(e.shiftKey);
     };
-    window.addEventListener('keydown', keys, true);
+    // (ahead of MathLive's and the note's: inside the formula's row, ⌘Z is the note's undo)
+    const unclaim = claimKeys(root, { '*': keys }, { capture: true });
     window.addEventListener('scroll', place, true);
     window.addEventListener('resize', place);
     return () => {
@@ -135,7 +137,7 @@
       window.removeEventListener('resize', place);
       gone = true;
       document.removeEventListener('mousedown', away, true);
-      window.removeEventListener('keydown', keys, true);
+      unclaim();
       mf?.remove();
       off();
       (window as any).mathVirtualKeyboard?.hide?.();

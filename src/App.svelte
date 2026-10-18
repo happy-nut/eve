@@ -32,6 +32,7 @@
   import { parseEveLink } from './lib/evelink';
   import { focusNote } from './lib/popup';
   import { flushEdits } from './lib/pending';
+  import { claimKeys, handledBy, PRIORITY } from './lib/keys';
 
   let sidebarOpen = $state(true);
   let settingsOpen = $state(false);
@@ -485,7 +486,7 @@
     // closes on its own Esc; one that gets here had the focus outside it (on the day behind it, say), and must still
     // close the page rather than hide the window. Not an Esc the note took (closing its / menu), nor one a popup
     // inside the page took: that keeps the page open.
-    if (e.key === 'Escape' && (!e.defaultPrevented || (e as any).eveApp) && ui.layers.escape()) {
+    if (e.key === 'Escape' && handledBy(e) !== 'taken' && ui.layers.escape()) {
       e.preventDefault();
       return;
     }
@@ -494,7 +495,7 @@
       jumpTo(Number(e.code[5]));
       return;
     }
-    if (e.defaultPrevented && !(e as any).eveApp) return;
+    if (handledBy(e) === 'taken') return;
     // ⌘+ is ⌘⇧= on most keyboards (and the keypad's +): the same as ⌘= unless it is bound to something itself
     const a = shortcuts.match(e, ['app']) ?? (e.key === '+' && (e.metaKey || e.ctrlKey) && !e.altKey ? shortcuts.actions.find((x) => x.id === 'textBigger') : undefined);
     if (!a) return;
@@ -531,6 +532,18 @@
       case 'hide': win.hide(); break;
     }
   }
+  onMount(() => {
+    const off = [
+      // the app's shortcuts hear a key last, once whatever is open over the app has had it. Keys typed into an IME
+      // too: a Korean word's last syllable is still being put together when ⌘N or ⌘1 comes straight after it
+      claimKeys('global', { '*': onKeydown }, { priority: PRIORITY.app, composing: true }),
+      claimKeys('global', { Meta: () => cmdUp() }, { keyup: true, priority: PRIORITY.app, composing: true }),
+      // the last thing used was the keyboard (any key, before anything takes it): hover-only buttons wait for the mouse
+      claimKeys('global', { '*': () => { document.documentElement.dataset.input = 'keyboard'; delete document.documentElement.dataset.hover; } },
+        { capture: true, priority: PRIORITY.watch, composing: true }),
+    ];
+    return () => off.forEach((f) => f());
+  });
 </script>
 
 <!-- the webview's own menu is Reload / AutoFill / Speech — nothing a note can act on. The places worth
@@ -539,7 +552,7 @@
 <!-- data-hover: the mouse has moved since the last key or since the window came back. WebKit keeps :hover on
      whatever was under a still pointer (the window hidden and summoned again, the list walked with the arrows),
      so a row's hover-only buttons showed with no mouse near them; those wait for this instead. -->
-<svelte:window oncontextmenu={(e) => { if (!(e.target as HTMLElement).closest(isMobile ? 'input, textarea, .tiptap' : 'input, textarea')) e.preventDefault(); }} ondragover={onDragOver} ondrop={onDrop} onkeydown={onKeydown} onkeyup={(e) => e.key === 'Meta' && cmdUp()} onblur={() => { cmdUp(); leaveWindow(); delete document.documentElement.dataset.hover; }} onfocus={restoreFocus}
+<svelte:window oncontextmenu={(e) => { if (!(e.target as HTMLElement).closest(isMobile ? 'input, textarea, .tiptap' : 'input, textarea')) e.preventDefault(); }} ondragover={onDragOver} ondrop={onDrop} onblur={() => { cmdUp(); leaveWindow(); delete document.documentElement.dataset.hover; }} onfocus={restoreFocus}
   onmousedowncapture={() => (document.documentElement.dataset.input = 'mouse')}
   onclickcapture={(e) => {
     // a button clicked with the mouse that a key also does: say which key
@@ -547,7 +560,6 @@
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-keys]');
     if (b?.dataset.keys) hints.show('btn:' + (b.dataset.tip ?? b.dataset.keys), `${b.dataset.tip ?? 'This'} has a shortcut`, b.dataset.keys);
   }}
-  onkeydowncapture={() => { document.documentElement.dataset.input = 'keyboard'; delete document.documentElement.dataset.hover; }}
   onmousemove={() => { document.documentElement.dataset.hover ??= '1'; }}
   onfocusin={flashPane} />
 

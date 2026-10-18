@@ -40,7 +40,8 @@ import { hints } from './hints.svelte';
 import { fileMarkdown, isAsset } from './drop';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
-import { calendar, emojiRow, popup, ICONS, slashItems, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
+import { calendar, emojiRow, popup, suggestionVisible, PICKERS, ICONS, slashItems, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
+import { leaveToApp } from './keys';
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
 import { blockBeside, moveBlock, indentLines, switchItem, switchLines, wrapLines, joinNextItem, itemAbove, liftCounting, leaveTrailer } from './blocks';
@@ -216,9 +217,6 @@ const KeepSpaces = Extension.create({
 
 const KEYMAP = new PluginKey('eve-keymap');
 const APP_GUARD = new PluginKey('eve-app-guard');
-// per editor: the note and an open card page each have their own popups, and one shared variable
-// would leave the note asking the closed card's popups — then Esc hides the window, not the calendar
-const suggestionVisible = new WeakMap<Editor, () => boolean>();
 
 export const getMarkdown = (editor: Editor): string => (editor.storage as any).markdown.getMarkdown();
 /** a note this long (in ProseMirror positions, about characters) waits for a pause before it becomes markdown */
@@ -523,16 +521,16 @@ export function applyKeymap(editor: Editor) {
   editor.unregisterPlugin(KEYMAP);
   editor.unregisterPlugin(APP_GUARD);
   // App-scope combos (e.g. ⌘B rebound to "focus sidebar", Esc to hide the window) must not be eaten
-  // by the editor's built-in keymaps; mark the event and stop editor handling so the window listener
-  // runs it. A card page still closes on Esc instead: it stops the event before it reaches the window.
+  // by the editor's built-in keymaps; stop editor handling and say the key is the app's (keys.ts), so the app's
+  // shortcuts still run it. A card page still closes on Esc instead: it stops the event before it reaches the window.
   const guard = new Plugin({
     key: APP_GUARD,
     props: {
       handleKeyDown: (_view, e) => {
-        if (suggestionVisible.get(editor)?.()) return false;
+        if (suggestionVisible(editor)) return false;
         const a = shortcuts.match(e, ['app']);
         if (!a) return false;
-        (e as any).eveApp = true;
+        leaveToApp(e);
         return true;
       },
     },
@@ -1206,7 +1204,7 @@ export function createEditor(opts: {
         name: 'tableKeys',
         priority: 1000,
         addKeyboardShortcuts() {
-          const free = () => !suggestionVisible.get(this.editor)?.();
+          const free = () => !suggestionVisible(this.editor);
           return {
             Enter: () => free() && cellEnter(this.editor.view, () => this.editor.commands.setHardBreak()),
             ArrowUp: () => free() && upAboveTable(this.editor.view),
@@ -1227,7 +1225,7 @@ export function createEditor(opts: {
         name: 'lineIndent',
         priority: 101,
         addKeyboardShortcuts() {
-          const run = (dir: 1 | -1) => () => !suggestionVisible.get(this.editor)?.() && this.editor.commands.command(indentLines(dir));
+          const run = (dir: 1 | -1) => () => !suggestionVisible(this.editor) && this.editor.commands.command(indentLines(dir));
           // ⌫ / Enter step out as ⇧Tab does — but where the line cannot move, the key's own meaning still applies
           // (⇧Tab keeps the key even then; these would otherwise do nothing at all)
           const stepOut = () => {
@@ -1466,7 +1464,7 @@ export function createEditor(opts: {
         exists: (t) => { const find = (x: string) => notes.byTitle(x); return !!find(splitLink(t, (x) => !!find(x))[0]); },
         watchTitles: (check) => notes.onTitles(check),
         suggestion: {
-          char: '[[',
+          char: PICKERS.wiki.char,
           allowSpaces: true,
           startOfLine: false,
           allowedPrefixes: null, // `[[` means a link wherever it is typed, not only after a space
@@ -1506,14 +1504,14 @@ export function createEditor(opts: {
               .deleteRange(range)
               .insertContent([{ type: 'wikiLink', attrs: { title: (props as SuggestItem).value ?? (props as SuggestItem).label } }, { type: 'text', text: ' ' }])
               .run(),
-          render: () => popup(opts.suggestionUI),
+          render: () => popup(opts.suggestionUI, PICKERS.wiki),
         },
       }),
       // @ — a day, stored as the day and shown as it reads now. The trigger keeps the default
       // prefixes (line start or after a space), which is what keeps an address out of it.
       DateMention.configure({
         suggestion: {
-          char: '@',
+          char: PICKERS.date.char,
           allowSpaces: false,
           pluginKey: DATE_MENU,
           allow: ({ editor, state }) => !menuOpen(editor, state, WIKI_MENU, SLASH_MENU),
@@ -1561,7 +1559,7 @@ export function createEditor(opts: {
             slashTyped,
             Suggestion({
               editor: this.editor,
-              char: '/',
+              char: PICKERS.slash.char,
               pluginKey: SLASH_MENU,
               allowSpaces: false,
               // default prefixes (line start / after a space): a '/' already inside text like KRW/USD must not open the menu
@@ -1581,13 +1579,8 @@ export function createEditor(opts: {
                 editor.chain().focus().deleteRange(range).run();
                 (props as SuggestItem).run?.(editor);
               },
-              // a "/" after words is mostly the sentence's own ("Root dir is /", "A / B"), and ↩ there made a new page
-              // and went to it. There ↩ and ⇥ pick once a letter typed after it found something (or the arrows or
-              // the pointer chose a row); a "/" opening its line is a block asked for, and ↩ takes the first.
-              render: () => popup(opts.suggestionUI, ({ editor, range, query, items }) => {
-                const $at = editor.state.doc.resolve(range.from);
-                return !$at.parent.textBetween(0, $at.parentOffset, undefined, '\ufffc').trim() || (/\p{L}/u.test(query) && items.length > 0);
-              }),
+              // (when ↩ picks: PICKERS.slash)
+              render: () => popup(opts.suggestionUI, PICKERS.slash),
             }),
           ];
         },
@@ -1600,7 +1593,7 @@ export function createEditor(opts: {
           return [
             Suggestion({
               editor: this.editor,
-              char: ':',
+              char: PICKERS.emoji.char,
               pluginKey: new PluginKey('emojiSuggest'),
               allowSpaces: false,
               allow: ({ editor, state, range }) => !state.doc.resolve(range.from).parent.type.spec.code && !menuOpen(editor, state, WIKI_MENU, DATE_MENU, SLASH_MENU),
@@ -1621,7 +1614,6 @@ export function createEditor(opts: {
   editor.on('blur', flush); // leaving the note: the list, a dialog, another app
   // the note closed or switched (the document is still there to read)
   editor.on('destroy', () => { closing = true; flush(); });
-  suggestionVisible.set(editor, () => opts.suggestionUI.visible() || opts.calendarUI.visible() || opts.emojiUI.visible());
   if (opts.onNoteMove) noteMove.set(editor, opts.onNoteMove);
   applyKeymap(editor);
   if (isMobile) {

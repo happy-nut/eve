@@ -16,6 +16,7 @@
   import EmojiRow from './EmojiRow.svelte';
   import Outline from './Outline.svelte';
   import TableTools from './TableTools.svelte';
+  import { composing, handledBy } from './lib/keys';
 
   // a kanban card as a floating page (Notion "peek"): one markdown editor whose first line is the title,
   // like a note. One editing host, so a drag that starts in the title runs on into the body.
@@ -95,7 +96,7 @@
 
   /** ↵ at the end of the title: on into the body, its first empty line if it starts with one (a new line there, else) */
   function titleEnter(e: KeyboardEvent) {
-    if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || e.isComposing || req.markdown !== undefined || !editor) return;
+    if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || composing(e) || req.markdown !== undefined || !editor) return;
     const { state, view } = editor, { selection: sel, doc } = state, title = doc.firstChild;
     if (!sel.empty || title?.type.name !== 'heading' || sel.$from.parent !== title || sel.$from.parentOffset !== title.content.size) return;
     if (ui.menu || document.querySelector('.suggest')) return; // a popup at the caret wants it
@@ -109,7 +110,7 @@
 
   function onKey(e: KeyboardEvent) {
     // a popup's Esc has already been taken by the editor (and closed the popup) by the time it gets here
-    if (e.key === 'Escape' && (!e.defaultPrevented || (e as any).eveApp)) { e.preventDefault(); e.stopPropagation(); close(); }
+    if (e.key === 'Escape' && handledBy(e) !== 'taken') { e.preventDefault(); e.stopPropagation(); close(); }
     // Tab indents a list (the editor marks those handled); anywhere else it must not walk focus out of the page
     if (e.key === 'Tab' && !e.defaultPrevented) e.preventDefault();
   }
