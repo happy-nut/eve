@@ -650,9 +650,13 @@ class NotesStore {
   /** Apply notes coming from sync (last-writer-wins, or unconditionally with `force`). Returns true if anything changed. */
   mergeRemote(remote: Note[], force = false): boolean {
     let changed = false;
+    // the open note deleted on another device: the one next to it in the list comes up, as when it is deleted here.
+    // It stayed open, deleted, and back/forward led into it
+    let instead: Note | undefined, gone = false;
     for (const r of remote) {
       const local = this.all.find((n) => n.id === r.id);
       if (!force && local && local.updatedAt >= r.updatedAt) continue;
+      if (r.deleted && r.id === this.currentId && !local?.deleted) { instead = this.neighbourOf(r.id); gone = true; }
       if (local) Object.assign(local, { icon: undefined, parent: undefined }, r); // a removed icon/parent must come through too
       else this.all.push(r);
       this.untouched.delete(r.id); // what another device says it is: not this session's to take away
@@ -660,6 +664,7 @@ class NotesStore {
       void storage.write(r.id, serialize(r));
       changed = true;
     }
+    if (gone) { this.currentId = instead?.id ?? null; if (!this.currentId) this.create(); }
     return changed;
   }
 }
