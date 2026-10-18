@@ -61,7 +61,7 @@ async function newNote(page, mobile) {
   // a phone's + asks: a note or a group (or today's note)
   if (mobile) await page.getByRole('menuitem', { name: 'New note' }).first().click({ timeout: 2000 }).catch(() => {});
   await page.waitForTimeout(400);
-  if (!(await page.locator('.tiptap').count())) { await page.keyboard.press('Meta+n'); await page.waitForTimeout(400); }
+  if (!(await page.locator('.tiptap').count())) { await page.keyboard.press('ControlOrMeta+n'); await page.waitForTimeout(400); }
   await page.locator('.tiptap').click();
   await page.keyboard.type('Popups');
   await page.keyboard.press('Enter');
@@ -80,12 +80,12 @@ async function newNote(page, mobile) {
   const row = () => page.locator('aside [data-note]').last();
 
   await check(page, 'menu (right click)', '.menu', () => row().click({ button: 'right' }), esc);
-  await check(page, '"+" menu', '.menu, .plus-menu', async () => { await row().focus(); await page.keyboard.press('Meta+n'); }, esc);
+  await check(page, '"+" menu', '.menu, .plus-menu', async () => { await row().focus(); await page.keyboard.press('ControlOrMeta+n'); }, esc);
   await check(page, 'emoji picker', '.panel', () => row().locator('.ico-slot').click(), esc);
   await check(page, 'confirm', '.box', async () => { await row().focus(); await page.keyboard.press('Backspace'); }, esc);
   await page.locator('.tiptap').click();
   await page.keyboard.press('End');
-  await check(page, 'find', '.find', () => page.keyboard.press('Meta+f'), esc);
+  await check(page, 'find', '.find', () => page.keyboard.press('ControlOrMeta+f'), esc);
   await page.locator('.tiptap').click();
   await page.keyboard.press('Meta+ArrowDown');
   await page.keyboard.press('Enter');
