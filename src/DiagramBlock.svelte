@@ -2,6 +2,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import { isMobile } from './lib/platform';
   import { ui } from './lib/ui.svelte';
+  import { letGo } from './lib/focusWatch';
   import { renderMermaid, themeKey } from './lib/mermaid';
   import { KINDS, fromCode, isEmpty, toCode, whyCode, type Diagram } from './lib/diagram';
   import FlowEditor from './FlowEditor.svelte';
@@ -178,7 +179,7 @@
     if (codeShown) onCodeLeave(); // the drawing clicked under its code: the code goes, the drawing opens
     const g = (e.target as Element).closest?.('g.node');
     pick = g ? /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null : null;
-    (document.activeElement as HTMLElement | null)?.blur?.(); // the keys typed next are the diagram's, not the note's
+    letGo(); // the keys typed next are the diagram's, not the note's
     active = true;
   }
   function onKey(e: KeyboardEvent) {
@@ -189,7 +190,7 @@
     if (active || error) return false;
     if (!d) { onCodeEdit(); return true; }
     pick = null;
-    (document.activeElement as HTMLElement | null)?.blur?.();
+    letGo();
     active = true;
     return true;
   }
@@ -217,7 +218,7 @@
   function toDrawing() {
     onCodeLeave();
     pick = null;
-    (document.activeElement as HTMLElement | null)?.blur?.();
+    letGo();
     active = true;
   }
   /** why a hand-written diagram is edited as code (it opened as code and said nothing of why) */
@@ -239,7 +240,7 @@
     // (the ⤢ itself, focused by its click in some browsers, is gone on the whole screen: the note's text, then)
     const was = document.activeElement as HTMLElement | null;
     ui.viewDiagram(() => (full = false), was && was !== document.body && !root.contains(was) ? was : root.closest<HTMLElement>('.tiptap'));
-    (document.activeElement as HTMLElement | null)?.blur?.(); // keys are the diagram's now, not the note's text
+    letGo(); // keys are the diagram's now, not the note's text
     full = true;
     tick().then(fit);
   }

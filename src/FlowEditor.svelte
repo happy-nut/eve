@@ -2,6 +2,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import { freshId, type Flowchart, type Line, type Shape } from './lib/diagram';
   import { ui } from './lib/ui.svelte';
+  import { letGo } from './lib/focusWatch';
   import { isMobile } from './lib/platform';
 
   /**
@@ -49,7 +50,7 @@
 
   /** the keyboard off the note's text, onto nothing: the keys typed next (⌫, Enter, Tab) are the picture's. A line or a
    *  lane picked left it in the note, and ⌫ deleted the note's last letter instead of the line */
-  const releaseKeys = () => { const a = document.activeElement as HTMLElement | null; if (a && a !== document.body && !layer?.contains(a)) a.blur?.(); };
+  const releaseKeys = () => { const a = document.activeElement as HTMLElement | null; if (a && a !== document.body && !layer?.contains(a)) letGo(a); };
   $effect(() => { if (sel && !editing && !laneEditing) untrack(releaseKeys); });
 
   const nodeIdOf = (g: Element) => /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null;
@@ -293,7 +294,7 @@
       const id = head.dataset.lane;
       if (!id) return;
       if (editing) commitEdit();
-      if (sel && 'lane' in sel && sel.lane === id) startLaneEdit(id); else { sel = { lane: id }; (document.activeElement as HTMLElement | null)?.blur?.(); }
+      if (sel && 'lane' in sel && sel.lane === id) startLaneEdit(id); else { sel = { lane: id }; letGo(); }
       return;
     }
     if (linking) {
@@ -313,7 +314,7 @@
       else {
         sel = { node: id };
         // the keyboard off the note's text: its keys (⌫, Enter, Tab) are the box's now, and a phone's keyboard goes down
-        if (!editing) (document.activeElement as HTMLElement | null)?.blur?.();
+        if (!editing) letGo();
       }
       return;
     }

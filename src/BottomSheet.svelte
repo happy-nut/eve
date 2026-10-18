@@ -12,10 +12,14 @@
    * The transitions are |global: a sheet sits inside its owner's {#if isMobile}, created together with the {#if open}
    * around it, and a local transition only plays when its own block is made — which is why the sheets just appeared.
    */
-  let { onclose, children, role = 'dialog', label }: { onclose: () => void; children: Snippet; role?: string; label?: string } = $props();
+  let { onclose, children, role = 'dialog', label, layer = true }: {
+    onclose: () => void; children: Snippet; role?: string; label?: string;
+    /** false: what it shows is a layer of its own already (a menu), which back closes as such */
+    layer?: boolean;
+  } = $props();
 
-  // Android's back closes it, the newest sheet first (App's phoneBack)
-  onMount(() => ui.openedSheet(() => onclose()));
+  // Android's back closes it, the newest layer first (App's phoneBack)
+  onMount(() => (layer ? ui.openedSheet(() => onclose()) : undefined));
 
   // on <body>: a transformed ancestor (the settings panel) would otherwise become what position:fixed is measured from
   const portal = (node: HTMLElement) => { document.body.appendChild(node); return { destroy: () => node.remove() }; };

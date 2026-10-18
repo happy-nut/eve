@@ -45,7 +45,7 @@
   }
 
   function close() {
-    ui.find = false;
+    ui.closeFind();
     editor?.commands.focus();
   }
 
