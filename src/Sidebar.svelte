@@ -791,7 +791,7 @@
 
   .row.drop-before::before, .row.drop-after::after {
     content: ''; position: absolute; left: calc(var(--d) * 18px); right: 8px; top: -1px; height: 2px; border-radius: 1px;
-    background: var(--accent); box-shadow: var(--glow); pointer-events: none; z-index: 1;
+    background: var(--accent); box-shadow: var(--glow); pointer-events: none; z-index: var(--z-raised);
   }
   .row.drop-after::after { top: auto; bottom: -1px; }
   .note-row { display: flex; align-items: center; }

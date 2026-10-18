@@ -105,7 +105,7 @@
 
 <style>
   .mbar {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 33; /* over a sheet (31) too */ display: flex; align-items: center; gap: 2px;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-phone-bar); /* over a sheet (--z-sheet) too */ display: flex; align-items: center; gap: 2px;
     padding: 4px 6px; background: var(--bg-pop); border-top: 1px solid var(--line);
   }
   button {

@@ -36,6 +36,26 @@
   --scrim: light-dark(rgba(20, 22, 28, 0.18), rgba(0, 0, 0, 0.38)); /* under a dialog */
   color-scheme: light dark; /* follows the system; Settings -> Appearance -> Theme pins one */
 }
+/* What lies over what, bottom to top: every z-index in the app is one of these (a guard, zIndex.test.mjs, fails on a
+   number anywhere else). Inside a block or a row, in its own stacking: under (the selection's rectangles under the
+   note's text), flat, raised (a chip on a block's edge, a row slid over its swipe action, a card's tools), block-ui (a
+   flowchart's boxes and bars over its drawing; the list's + button), block-ui-over (a full-screen diagram's close and
+   zoom over those). Over the app: the toolbar's fade and the outline rail, chrome (the window's drag strip, a phone's
+   list over its note), the toolbar (a phone's note bar), Find, a pane's focus flash, a table's bar, Settings and its
+   scrim, a card's or a day's page and a confirm (sheet), a formula's row (block-pop: over Settings, as before), what
+   must show over a sheet (a table's bar in one, a PDF), a phone's formatting bar (over a sheet too), the caret's
+   popups, a diagram on the whole screen, a choice list or the emoji picker and their scrim (popover), a file dragged
+   in, a picture shown full size (photo), a menu and a phone's sheets (over the photo, which has a menu of its own),
+   a row lifted by a finger, toasts and hints (over everything — under the photo and the sheets they went unseen), and
+   the tooltip. */
+:root {
+  --z-under: -1; --z-flat: 0; --z-raised: 1; --z-block-ui: 2; --z-block-ui-over: 3;
+  --z-fade: 4; --z-rail: 4; --z-chrome: 5; --z-toolbar: 6; --z-find: 7; --z-flash: 8;
+  --z-block-bar: 12; --z-panel-scrim: 20; --z-panel: 21;
+  --z-sheet-scrim: 30; --z-block-pop: 30; --z-sheet: 31; --z-over-sheet: 32; --z-phone-bar: 33;
+  --z-caret-popup: 40; --z-fullscreen: 40; --z-popover-scrim: 40; --z-popover: 41; --z-drop: 45;
+  --z-photo: 50; --z-menu-scrim: 54; --z-menu: 55; --z-lifted: 60; --z-toast: 90; --z-tooltip: 100;
+}
 :root[data-theme='light'] { color-scheme: light; }
 :root[data-theme='dark'] { color-scheme: dark; }
 
@@ -75,8 +95,8 @@ button.icon:active { transform: scale(0.9); }
   animation: appear 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 @keyframes appear { from { opacity: 0; transform: scale(0.985); } }
-.dragbar { position: fixed; top: 0; left: 0; right: 0; height: 40px; z-index: 5; }
-.toolbar { position: fixed; top: 10px; left: 86px; display: flex; gap: 4px; z-index: 6; }
+.dragbar { position: fixed; top: 0; left: 0; right: 0; height: 40px; z-index: var(--z-chrome); }
+.toolbar { position: fixed; top: 10px; left: 86px; display: flex; gap: 4px; z-index: var(--z-toolbar); }
 .toolbar .icon { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
 .toolbar svg { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .toolbar .icon:disabled { opacity: 0.3; pointer-events: none; }
@@ -122,12 +142,12 @@ html.mobile aside .tools { display: none; } /* hover-only; a phone deletes with 
 /* a row lifted by a long press: its copy rides under the finger, the row stays faint where it was */
 html.mobile aside .row.dragging { opacity: 0.3; }
 html.mobile li.row.lifted {
-  position: fixed; z-index: 60; margin: 0; list-style: none; pointer-events: none; padding-left: 0;
+  position: fixed; z-index: var(--z-lifted); margin: 0; list-style: none; pointer-events: none; padding-left: 0;
   background: var(--bg-pop); border-radius: 10px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
   transform: scale(1.03); transform-origin: center; opacity: 0.96;
 }
 html.mobile aside {
-  position: fixed; inset: var(--top) 0 var(--bottom); width: auto; z-index: 5; border-right: 0; /* full width: no edge to draw */
+  position: fixed; inset: var(--top) 0 var(--bottom); width: auto; z-index: var(--z-chrome); border-right: 0; /* full width: no edge to draw */
   transition: transform 0.2s ease-out; -webkit-touch-callout: none;
 }
 
@@ -210,7 +230,7 @@ html.mobile aside .count { display: none; } /* Notion shows no counts; the chevr
 html.mobile aside .chev { width: 13px; height: 13px; opacity: 0.7; }
 html.mobile aside .emoji { font-size: 16px; }
 html.mobile aside .fab {
-  position: absolute; right: 20px; bottom: 24px; z-index: 2; border: 0; display: inline-flex;
+  position: absolute; right: 20px; bottom: 24px; z-index: var(--z-block-ui); border: 0; display: inline-flex;
   align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 50%;
   background: var(--fg); color: var(--bg);
   box-shadow: 0 2px 6px rgba(15, 15, 15, 0.1), 0 8px 20px rgba(15, 15, 15, 0.16);
@@ -284,19 +304,19 @@ html.mobile :is(aside, .lifted) .fold { width: 44px; height: 44px; }
    A note's row and a group's alike. */
 html.mobile :is(aside, .lifted) :is(.note-row, .ghead) { position: relative; touch-action: pan-y; --sx: 0px; }
 html.mobile :is(aside, .lifted) :is(.note-row, .ghead) > :not(.swipe-act) {
-  position: relative; z-index: 1; transform: translateX(var(--sx)); transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  position: relative; z-index: var(--z-raised); transform: translateX(var(--sx)); transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 html.mobile :is(aside, .lifted) :is(.note-row, .ghead).swiping > :not(.swipe-act) { transition: none; }
 html.mobile :is(aside, .lifted) :is(.note-row, .ghead).to-left > :not(.swipe-act) { background: var(--bg); }
 html.mobile :is(aside, .lifted) .swipe-act {
-  position: absolute; z-index: 0; inset: 1px 0; display: none; align-items: center; justify-content: flex-end; padding: 0 22px;
+  position: absolute; z-index: var(--z-flat); inset: 1px 0; display: none; align-items: center; justify-content: flex-end; padding: 0 22px;
   border-radius: 8px; background: #ff453a; font-size: 14.5px; font-weight: 600; color: #fff; opacity: 0.55; transition: opacity 0.12s;
 }
 html.mobile :is(aside, .lifted) :is(.note-row, .ghead).to-left .swipe-act { display: flex; }
 html.mobile :is(aside, .lifted) :is(.note-row, .ghead).armed .swipe-act { opacity: 1; }
 /* the note: a flat bar of grey icons, and a page head sized for a phone */
 html.mobile .mhead {
-  position: absolute; top: 0; left: 0; right: 0; height: 52px; z-index: 6; display: flex; align-items: center;
+  position: absolute; top: 0; left: 0; right: 0; height: 52px; z-index: var(--z-toolbar); display: flex; align-items: center;
   gap: 2px; padding: 0 6px; background: var(--bg); border-bottom: 0;
 }
 html.mobile .mhead .micon, html.mobile .mhead .micon.danger { color: var(--fg-dim); }
@@ -312,7 +332,7 @@ main { flex: 1; min-width: 0; position: relative; }
 /* the toolbar floats over the note (and with the sidebar closed it sits right on the text): a fade to
    the page colour keeps lines from running into the icons as they scroll past */
 main::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 72px; z-index: 4; pointer-events: none;
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 72px; z-index: var(--z-fade); pointer-events: none;
   background: linear-gradient(to bottom, var(--bg) 38%, rgba(0, 0, 0, 0) 100%);
 }
 /* where is the keyboard? a blue edge flashes on the pane that just took focus, then fades out —
@@ -321,7 +341,7 @@ main::before {
 /* drawn on a layer over the pane, not on the pane itself: an inset shadow lies under whatever covers the
    pane, so the toolbar's fade (main::before) hid it along the top and the search box and rows in the list */
 aside.focus-flash::after, main.focus-flash::after {
-  content: ''; position: absolute; inset: 0; z-index: 8; pointer-events: none; animation: focus-in 0.3s ease-out forwards;
+  content: ''; position: absolute; inset: 0; z-index: var(--z-flash); pointer-events: none; animation: focus-in 0.3s ease-out forwards;
 }
 @keyframes focus-in {
   0% { box-shadow: inset 0 0 0 1.5px var(--accent), inset 0 0 12px var(--accent-soft); }
@@ -414,7 +434,7 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 /* the chip sits on the wrapper, not the <pre>: inside a scrolling <pre> it would slide away with long lines */
 .tiptap .code-block { position: relative; }
 .tiptap .code-lang {
-  position: absolute; top: 0; left: 12px; transform: translateY(-50%); z-index: 1; /* straddles the block's top edge */
+  position: absolute; top: 0; left: 12px; transform: translateY(-50%); z-index: var(--z-raised); /* straddles the block's top edge */
   appearance: none; border: 1px solid var(--line); border-radius: 6px;
   background: var(--bg-pop); color: var(--fg-dim);
   font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px; line-height: 1.5;
@@ -428,7 +448,7 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 .tiptap .code-lang-ask { display: none; }
 .tiptap .code-block.asking .code-lang { display: none; }
 .tiptap .code-block.asking .code-lang-ask {
-  position: absolute; top: 0; left: 12px; transform: translateY(-50%); z-index: 1;
+  position: absolute; top: 0; left: 12px; transform: translateY(-50%); z-index: var(--z-raised);
   display: inline-flex; align-items: center; gap: 6px; padding: 1px 3px 1px 1px;
   border: 1px solid var(--accent); border-radius: 6px; background: var(--bg-pop); box-shadow: var(--glow);
   font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px; line-height: 1.5;
@@ -514,7 +534,7 @@ svg.lanes .edgeLabel text { fill: var(--d-dim); font-size: 12px; }
 .tl-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
 .tl-when { min-width: 52px; font-size: 13px; font-weight: 600; color: var(--c); text-align: right; padding-top: 9px; overflow-wrap: anywhere; word-break: keep-all; }
 .tl-dot { position: relative; }
-.tl-dot::before { content: ''; position: absolute; left: 5px; top: 12px; width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 4px var(--d-canvas); z-index: 1; }
+.tl-dot::before { content: ''; position: absolute; left: 5px; top: 12px; width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 4px var(--d-canvas); z-index: var(--z-raised); }
 .tl-row:not(:last-child) .tl-dot::after { content: ''; position: absolute; left: 10px; top: 18px; bottom: -18px; width: 2px; border-radius: 1px; background: var(--d-line); }
 .tl-row:not(:last-child) .tl-what { padding-bottom: 18px; }
 .tl-what { display: flex; flex-direction: column; gap: 6px; }
@@ -606,7 +626,7 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 .tiptap input::selection, .tiptap textarea::selection { background: var(--sel); }
 /* the selection layer (selectionLayer.ts): rectangles behind the selected text, so it reads as the browser's own
    selection did. Not over it with a blend: WebKit composited the rectangles on their own and they covered the
-   text. z-index -1 inside the editor's own stacking context puts them above the page, under the note's text. */
+   text. Under (z-index -1) inside the editor's own stacking context puts them above the page, under the note's text. */
 :has(> .sel-layer) { isolation: isolate; }
 /* …except while a diagram fills the screen from inside the note (DiagramBlock.svelte): kept in there, it went under
    the app's own bars. The note is hidden behind it meanwhile, its selection with it. */
@@ -614,7 +634,7 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 /* a card's or a day's page floating over the note is moved into place by a transform, which made the whole screen
    only the page's size: put in place without one while a diagram in it fills the screen */
 .card-page:has(.dblock.full) { transform: none !important; translate: none !important; }
-.sel-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: -1; }
+.sel-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: var(--z-under); }
 .sel-layer > div { position: absolute; background: var(--sel); }
 /* the note not focused (the list, a dialog): the selection stays, fainter, as the browser's own did */
 .ProseMirror:not(.ProseMirror-focused) ~ .sel-layer > div { opacity: 0.45; }
@@ -755,7 +775,7 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 
 /* ---- a file dragged in from Finder: where it would land ---- */
 .drop-hint {
-  position: fixed; inset: 0; z-index: 45; pointer-events: none;
+  position: fixed; inset: 0; z-index: var(--z-drop); pointer-events: none;
   display: flex; align-items: center; justify-content: center;
   border-radius: 10px; box-shadow: inset 0 0 0 2px var(--accent), inset 0 0 60px var(--accent-soft);
 }
@@ -765,7 +785,7 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 }
 /* ⌘+ / ⌘-: the text size, for a moment, at the bottom of the window */
 .size-pill {
-  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 46; pointer-events: none;
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: var(--z-toast); pointer-events: none;
   background: var(--tip-bg); color: var(--tip-fg); font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums;
   padding: 7px 14px; border-radius: 999px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
 }
@@ -867,7 +887,7 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
    selection's colour laid over it, so an opaque picture shows it too and the selection reads unbroken */
 .tiptap .in-sel { position: relative; }
 .tiptap .in-sel::after {
-  content: ''; position: absolute; inset: -3px; border-radius: 10px; pointer-events: none; z-index: 1;
+  content: ''; position: absolute; inset: -3px; border-radius: 10px; pointer-events: none; z-index: var(--z-raised);
   background: color-mix(in srgb, var(--sel) 55%, transparent);
 }
 

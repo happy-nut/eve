@@ -467,7 +467,7 @@
   /* the whole screen: the picture fills it and scrolls; the tools along the top; a chart's rows beside it (under it on
      a narrow screen) */
   .dblock.full {
-    position: fixed; inset: 0; z-index: 40; border-radius: 0; box-shadow: none; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    position: fixed; inset: 0; z-index: var(--z-fullscreen); border-radius: 0; box-shadow: none; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
     background: light-dark(#f9fafb, #17181d); display: grid; grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: auto auto minmax(0, 1fr) auto; outline: none;
   }
@@ -492,12 +492,12 @@
   .dblock.full:not(.active) :global(.diagram-canvas) { cursor: grab; }
   .dblock.full :global(.diagram-canvas.panning) { cursor: grabbing; }
   .full-close {
-    position: absolute; top: 10px; right: 12px; z-index: 3; width: 36px; height: 36px; border: 0; border-radius: 50%; color: var(--fg);
+    position: absolute; top: 10px; right: 12px; z-index: var(--z-block-ui-over); width: 36px; height: 36px; border: 0; border-radius: 50%; color: var(--fg);
     display: inline-flex; align-items: center; justify-content: center; background: var(--bg-pop); box-shadow: var(--pop-shadow);
   }
   .dblock.full.active .full-close, .dblock.full:has(> .codebar) .full-close { position: fixed; top: calc(6px + env(safe-area-inset-top)); }
   .zoombar {
-    position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 3; display: flex; gap: 2px; padding: 4px;
+    position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: var(--z-block-ui-over); display: flex; gap: 2px; padding: 4px;
     border-radius: 14px; background: var(--bg-pop); box-shadow: var(--pop-shadow);
   }
   .zoombar button {

@@ -40,7 +40,7 @@
 
 <style>
   .viewer {
-    position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    position: fixed; inset: 0; z-index: var(--z-photo); display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 12px; padding: calc(24px + var(--top, 0px)) 24px calc(24px + var(--bottom, 0px)); box-sizing: border-box;
     background: rgba(0, 0, 0, 0.86); outline: none; cursor: zoom-out;
   }

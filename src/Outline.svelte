@@ -141,7 +141,7 @@
 
 <style>
   .outline {
-    position: absolute; left: 12px; top: 50%; transform: translateY(-50%); z-index: 4;
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%); z-index: var(--z-rail);
     display: flex; flex-direction: column; gap: 2px; max-height: 72%;
   }
   .tick { position: relative; display: flex; align-items: center; height: 8px; width: 44px; padding: 0; border: 0; background: none; }
@@ -151,7 +151,7 @@
   .outline:not(.peeking) .tick.on i, .tick.hov i { background: var(--fg); }
   .tick.hov i { height: 3px; }
   /* takes no pointer: moving onto it counts as leaving the rail, so it closes right away */
-  .peek { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); z-index: 5; pointer-events: none; }
+  .peek { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); z-index: var(--z-raised); pointer-events: none; }
   .peek-in {
     display: flex; flex-direction: column; gap: 5px; width: min(230px, 34vw); padding: 10px 13px; border-radius: 10px;
     background: var(--bg-pop); box-shadow: 0 0 0 0.5px var(--line), 0 12px 36px rgba(0, 0, 0, 0.16);

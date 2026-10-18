@@ -41,7 +41,7 @@
 
 <style>
   .emoji-row {
-    position: fixed; z-index: 40; padding: 4px; max-height: none !important;
+    position: fixed; z-index: var(--z-caret-popup); padding: 4px; max-height: none !important;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }
   .cells { display: flex; gap: 2px; }

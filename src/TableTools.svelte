@@ -1,13 +1,14 @@
 <script lang="ts">
   import type { Editor } from '@tiptap/core';
+  import { floatAt, screenInsets } from './lib/popup';
 
   /**
    * Row/column controls for the table the caret is in. A small bar over the table's top-left corner,
    * the way the outline rail sits beside the page — no grips to hunt for, and nothing on screen while
    * you are writing anywhere else.
    */
-  /** `sheet`: the editor is a card's or a day's page (z-index 31), which drew over the bar and left a table there with
-   *  no way to add a row; the bar goes over that page then, still under the phone's formatting bar (33) */
+  /** `sheet`: the editor is a card's or a day's page (--z-sheet), which drew over the bar and left a table there with
+   *  no way to add a row; the bar goes over that page then, still under the phone's formatting bar (--z-phone-bar) */
   let { editor, sheet = false }: { editor: Editor | undefined; sheet?: boolean } = $props();
 
   /** `inside`: over the table's own top-right corner, smaller (no room above it or under it) */
@@ -29,22 +30,22 @@
     const h = bar?.offsetHeight ?? 32, w = bar?.offsetWidth ?? 0, was = !!at?.inside;
     // the room it needs is its full size's, also while it is the smaller one (judged by that, it went back and forth)
     if (bar && !was) fullH = h;
-    const need = (was ? fullH || h + 5 : h) + 3;
-    // kept on screen: a table scrolled sideways (or a phone's bar, wider than a narrow table) left the bar's end off it
-    const x = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+    const tall = was ? fullH || h + 5 : h;
     // Over the table where nothing is written above it, else under it where nothing is under it: over the table's top
     // it sat on the line above, which could not be read while the table was edited. With text close on both sides,
     // smaller, in the table's own top-right corner. (It never pushes the note apart: moving text under the caret.)
-    const above = gap(el, -1, r), under = gap(el, 1, r);
-    // as far off the table as the room lets it be, up to 8px
-    if (above >= need) {
-      // in a table taller than the window the top had scrolled away and the bar with it, out of sight above the note
-      // while the caret was in a row on screen. It stays at the top of the note's scroll area then, as long as some
-      // of the table is still under it.
-      const top = scrollTop(el) + 4 + h;
-      at = { x, y: Math.min(Math.max(r.top - Math.min(8, above - h - 1), top), r.bottom) };
-    } else if (under >= need && r.bottom + h + 8 < window.innerHeight) at = { x, y: r.bottom + Math.min(8, under - h - 1) + h };
-    else at = { x: Math.max(8, Math.min(r.right - w - 4, window.innerWidth - w - 8)), y: Math.max(r.top, scrollTop(el)) + 4 + h, inside: true };
+    // That is floatAt's room `within` the band from the line above to the line under; as far off the table as that
+    // room lets it be, up to 8px; kept on screen across (a table scrolled sideways, or a phone's bar wider than a narrow
+    // table, left the bar's end off it) and under the note's scroll area's top.
+    const above = gap(el, -1, r), under = gap(el, 1, r), ins = screenInsets(), top = scrollTop(el);
+    // in a table taller than the window the top had scrolled away and the bar with it, out of sight above the note
+    // while the caret was in a row on screen. It stays at the top of the note's scroll area then, as long as some
+    // of the table is still under it: what of the table is on screen is what it goes over.
+    const shown = above >= tall + 3 ? Math.min(Math.max(r.top, top + 4 + tall + 8), r.bottom) : r.top;
+    const f = floatAt({ left: r.left, right: r.right, top: shown, bottom: r.bottom }, { w, h: tall },
+      { prefer: 'above', gap: 8, avoid: { ...ins, top: Math.max(ins.top, top + 4) }, within: { left: -Infinity, right: Infinity, top: r.top - above, bottom: r.bottom + under } });
+    // (y is the bar's foot: it is drawn up from there)
+    at = { x: f.left, y: f.side === 'above' ? f.top + tall : f.top + h, inside: f.side === 'inside' };
     // smaller in the corner, larger out of it: placed again at its new size
     if (!!at.inside !== was) requestAnimationFrame(place);
   }
@@ -138,11 +139,11 @@
 
 <style>
   .tbl-tools {
-    position: fixed; z-index: 12; display: flex; align-items: center; gap: 1px;
+    position: fixed; z-index: var(--z-block-bar); display: flex; align-items: center; gap: 1px;
     transform: translateY(-100%); padding: 3px;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }
-  .tbl-tools.sheet { z-index: 32; }
+  .tbl-tools.sheet { z-index: var(--z-over-sheet); }
   /* in the table's corner, over its cells: smaller, and see-through until the pointer comes to it */
   .tbl-tools.inside { padding: 2px; opacity: 0.88; transition: opacity 0.12s; }
   .tbl-tools.inside:hover { opacity: 1; }

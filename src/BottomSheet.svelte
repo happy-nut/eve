@@ -43,9 +43,9 @@
 </div>
 
 <style>
-  .scrim { position: fixed; inset: 0; z-index: 54; background: rgba(0, 0, 0, 0.3); }
+  .scrim { position: fixed; inset: 0; z-index: var(--z-menu-scrim); background: rgba(0, 0, 0, 0.3); }
   .sheet {
-    position: fixed; z-index: 55; left: 0; right: 0; bottom: 0; margin: 0; padding: 8px 10px calc(12px + var(--bottom, 0px));
+    position: fixed; z-index: var(--z-menu); left: 0; right: 0; bottom: 0; margin: 0; padding: 8px 10px calc(12px + var(--bottom, 0px));
     background: var(--bg-pop); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
     max-height: 80vh; overflow-y: auto; overscroll-behavior: contain;
     transition: translate 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); /* let go short of closing: it settles back */

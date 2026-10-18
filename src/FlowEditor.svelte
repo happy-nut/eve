@@ -4,6 +4,7 @@
   import { ui } from './lib/ui.svelte';
   import { letGo } from './lib/focusWatch';
   import { isMobile } from './lib/platform';
+  import { floatAt } from './lib/popup';
 
   /**
    * A flowchart drawn by hand on its own picture (the builder's preview): boxes are made, joined, renamed and removed
@@ -532,19 +533,26 @@
   /** a bar over (or, near the top, under) what it is for, kept inside the picture */
   function barAt(x: number, top: number, bottom: number, width: number, own: string | null = null) {
     const W = layer?.clientWidth ?? 600, H = layer?.clientHeight ?? 400;
-    const left = Math.max(4, Math.min(W - width - 4, x - width / 2));
     const tall = isMobile ? 48 : 38;
+    // floatAt's room is the screen's: the layer's box on it, 4px in, and only what of it is on screen (a bar placed
+    // over a box scrolled near the top of the note went under the phone's bar there)
+    const o = layer?.getBoundingClientRect() ?? new DOMRect(0, 0, W, H);
+    const within = { left: o.left + 4, top: o.top + 4, right: o.left + W - 4, bottom: o.top + H - 4 };
+    const anchor = { left: o.left + x, right: o.left + x, top: o.top + top, bottom: o.top + bottom };
+    const at = (prefer: 'above' | 'below') => floatAt(anchor, { w: width, h: tall }, { prefer, within, gap: 8, align: 'center' });
+    const up = at('above'), down = at('below');
+    const left = (up.side === 'inside' ? Math.max(within.left, Math.min(within.right - width, anchor.left - width / 2)) : up.left) - o.left;
+    // room on neither side (a short picture, a box near its top): under it, and the picture grows at its foot to hold
+    // it (fitBars). Above, the picture's top cut it off; grown at the top, the picture moved under the finger
+    if (up.side === 'inside') return { left, top: bottom + 8 };
     // above or under, whichever covers less of the other boxes (it sat over the box one wanted to tap next)
-    const cost = (t: number) => (t < 4 || t + tall > H - 4 ? 1e7 : 0) + boxes.reduce((sum, b) => {
+    const cost = (t: number) => boxes.reduce((sum, b) => {
       if (b.id === own) return sum;
       const w = Math.min(left + width, b.x + b.w) - Math.max(left, b.x), h = Math.min(t + tall, b.y + b.h) - Math.max(t, b.y);
       return sum + (w > 0 && h > 0 ? w * h : 0);
     }, 0);
-    const above = top - (tall + 8), below = bottom + 8;
-    // room on neither side (a short picture, a box near its top): under it, and the picture grows at its foot to hold
-    // it (fitBars). Above, the picture's top cut it off; grown at the top, the picture moved under the finger
-    if (above < 4 && below + tall > H - 4) return { left, top: below };
-    return { left, top: cost(above) <= cost(below) ? above : below };
+    const a = up.top - o.top, b = down.top - o.top;
+    return { left, top: up.side === down.side || cost(a) <= cost(b) ? a : b };
   }
   /** how much the picture grew at its foot to hold a bar under a box (see barAt) */
   let grown = 0, basePad = 0;
@@ -694,7 +702,7 @@
 </div>
 
 <style>
-  .layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+  .layer { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-block-ui); }
   .layer > * { pointer-events: auto; }
   .ring { position: absolute; border-radius: 14px; box-shadow: 0 0 0 2px var(--accent); pointer-events: none; }
 .ring.target { box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--accent-soft); }

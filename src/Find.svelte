@@ -117,7 +117,7 @@
 
 <style>
   .find {
-    position: absolute; top: 10px; right: 16px; z-index: 7; width: min(360px, calc(100% - 32px));
+    position: absolute; top: 10px; right: 16px; z-index: var(--z-find); width: min(360px, calc(100% - 32px));
     display: flex; flex-direction: column; gap: 4px; padding: 6px;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }

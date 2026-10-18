@@ -17,7 +17,7 @@
 
 <style>
   .hint {
-    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 9px;
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: var(--z-toast); display: flex; align-items: center; gap: 9px;
     max-width: min(560px, calc(100vw - 32px)); padding: 8px 8px 8px 12px; border-radius: 12px;
     background: light-dark(#1d1f24, #2a2d33); color: #f2f3f5; font-size: 13px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);

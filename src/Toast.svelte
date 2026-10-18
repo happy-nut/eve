@@ -21,7 +21,7 @@
 
 <style>
   .toast {
-    position: fixed; left: 50%; bottom: 24px; translate: -50% 0; z-index: 45;
+    position: fixed; left: 50%; bottom: 24px; translate: -50% 0; z-index: var(--z-toast);
     display: flex; align-items: center; gap: 12px; max-width: min(440px, calc(100vw - 32px));
     padding: 6px 6px 6px 14px; font-size: 13px; color: var(--fg);
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);

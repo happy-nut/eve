@@ -72,9 +72,9 @@
 </div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: 30; }
+  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-sheet-scrim); }
   .box {
-    position: fixed; z-index: 31; top: 38%; left: 50%; transform: translate(-50%, -50%);
+    position: fixed; z-index: var(--z-sheet); top: 38%; left: 50%; transform: translate(-50%, -50%);
     width: min(380px, 90vw); padding: 18px 18px 14px; border-radius: var(--panel-radius);
     background: var(--bg-pop); box-shadow: var(--panel-shadow);
     font-size: 13px;
