@@ -151,6 +151,8 @@ export const Bookmark = Node.create({
             const text = event.clipboardData?.getData('text/plain').trim() ?? '';
             const { $from, empty } = view.state.selection;
             if (!URL_RE.test(text) || !empty || $from.parent.type.spec.code) return false;
+            // a card copied as a card comes back a card: its plain text is its address too, and it came back a link
+            if (event.clipboardData?.getData('text/html').includes('data-bookmark')) return false;
             const link = view.state.schema.text(text, [view.state.schema.marks.link.create({ href: text })]);
             // what is typed next is not the address: the link mark reaches on at its end (autolink makes it inclusive),
             // and " for details" became part of the link

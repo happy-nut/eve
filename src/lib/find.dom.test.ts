@@ -69,4 +69,4 @@ test('a long note is searched quickly', () => {
   const next = ed.state.apply(ed.state.tr.setMeta(FIND, { query: 'some words', index: 0 }));
   expect(FIND.getState(next)!.hits.length).toBe(3000);
   expect(performance.now() - t).toBeLessThan(300);
-});
+}, 30_000); // building a 3000-line note in jsdom is slow when the whole suite runs at once; the search is what's timed
