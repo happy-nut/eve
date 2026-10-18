@@ -3,7 +3,7 @@
   import { flip } from 'svelte/animate';
   import { crossfade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
-  import { moveCard, moveColumn, patchCard, uid, type Card, type Column, type CardTemplate } from './lib/board';
+  import { moveCard, moveColumn, patchCard, uid, type Card, type Column, type CardMore, type CardTemplate } from './lib/board';
   import { plain } from './lib/notes.svelte';
   import { ui } from './lib/ui.svelte';
   import { dayKey, fillTemplate } from './lib/daily';
@@ -13,9 +13,11 @@
    * (a ProseMirror transaction) and comes back through `set`, so undo/redo and sync just work.
    * Keys: ↑↓←→ move between headers / cards / "+ New"; ⌥↑↓←→ move the focused card, ⌥←→ the column;
    * Enter opens a card (renames a header), ⌫ deletes; Esc, ↑ on a header or ↓ on "+ New" go back to the text.
+   * A letter typed on a header or "+ New" starts a card in that column with it, as "+ New" then typing would.
    */
   let { columns: initial, commit, template, saveTemplate, exit, remove, undo, redo }: {
-    columns: Column[]; commit: (c: Column[]) => void;
+    /** `group`: a card just made and its title typed are one step to undo (the same group is merged into it) */
+    columns: Column[]; commit: (c: Column[], group?: string) => void;
     /** what a new card starts as (this board's own template), and saving an edit to it */
     template: () => CardTemplate | null; saveTemplate: (t: CardTemplate) => void;
     exit: (where: 'before' | 'after') => void; remove: () => void; undo: () => void; redo: () => void;
@@ -29,15 +31,27 @@
     // an update before the board is on the page (the note just opening) has no focus of its own to keep
     if (!a || !root?.contains(a)) return;
     await tick();
-    if (!root || (root.contains(document.activeElement) && document.activeElement !== document.body)) return;
+    const now = document.activeElement as HTMLElement | null;
     const id = a.dataset.id ?? '', colId = a.closest<HTMLElement>('.kb-col')?.dataset.id ?? '';
+    // still on the board, and not on a card on its way out (an undo took it: it lingers while it flies off, and the
+    // keyboard went with it to nothing)
+    const leaving = (el: HTMLElement) => el.dataset.kb === 'card' && !columns.some((c) => c.cards.some((k) => k.id === el.dataset.id));
+    if (!root || (now && now !== document.body && root.contains(now) && !leaving(now))) return;
     const col = a.dataset.kb === 'card' ? columns.find((x) => x.cards.some((k) => k.id === id)) : columns.find((x) => x.id === colId);
-    if (col && a.dataset.kb === 'card') focusCard(col.id, id);
+    const gone = !col && a.dataset.kb === 'card' ? columns.find((x) => x.id === colId) : null;
+    if (gone) { const i = [...(a.parentElement?.querySelectorAll<HTMLElement>('.kb-card') ?? [])].indexOf(a); gone.cards.length ? focusCard(gone.id, gone.cards[Math.min(Math.max(i, 0), gone.cards.length - 1)].id) : focusAdd(gone.id); }
+    else if (col && a.dataset.kb === 'card') focusCard(col.id, id);
     else if (col && a.dataset.kb === 'add') focusAdd(col.id);
     else if (col) focusHead(col.id);
     else enter();
   }
-  export function enter() { if (last?.isConnected) { last.focus({ preventScroll: true }); last.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } else q('.kb-head'); }
+  /** `fresh`: a board just made, the keyboard on its first column's first card's place, where typing starts a card (on
+   *  its header, typed letters went nowhere and a space scrolled the page) */
+  export function enter(fresh = false) {
+    if (last?.isConnected) { last.focus({ preventScroll: true }); last.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+    else if (fresh && columns[0]) columns[0].cards.length ? focusCard(columns[0].id, columns[0].cards[0].id) : focusAdd(columns[0].id);
+    else q('.kb-head');
+  }
 
   let root: HTMLDivElement;
   let last: HTMLElement | null = null;
@@ -88,20 +102,39 @@
   });
 
   // ---- edits ----
-  async function open(card: Card) {
+  /** `group`: the card was just made, and what is typed into it joins that step to undo; `caret`: typed into its title */
+  async function open(card: Card, group?: string, caret?: 'title') {
+    const colOf = () => columns.find((c) => c.cards.some((k) => k.id === card.id));
+    const from = colOf()?.id;
+    // Move to…: a phone can't drag a card to another column
+    const more: Card & CardMore = {
+      ...card, caret, column: from, columns: columns.map((c) => ({ id: c.id, title: c.title })),
+      move: (to) => { if (colOf()?.id !== to) commit(moveCard(columns, card.id, to, Infinity)); },
+    };
     // a phone has no ⌫ on a focused card: the card's page carries a delete of its own
-    await ui.openCard(card, (patch) => commit(patchCard(columns, card.id, patch)), () => {
-      const col = columns.find((c) => c.cards.some((k) => k.id === card.id));
+    await ui.openCard(more, (patch) => commit(patchCard(columns, card.id, patch), group), () => {
+      const col = colOf();
       if (col) removeCard(col, col.cards.findIndex((k) => k.id === card.id));
     });
+    // moved meanwhile: the keyboard back on it where it is now (the card it was opened from is gone from there)
+    const now = colOf();
+    if (now && now.id !== from) { await tick(); focusCard(now.id, card.id); }
   }
-  async function addCard(col: Column) {
+  /** a card being named as it was typed on the board: the letters typed while its page opens (a moment, in which they
+   *  fell on the card and were lost) are its title's too */
+  let naming: { id: string; title: string; group: string } | null = null;
+  /** `typed`: the letter typed on the board that made it, its title's first */
+  async function addCard(col: Column, typed = '') {
     const t = template(), today = dayKey(new Date());
-    const card = { id: uid(), title: t ? fillTemplate(t.title, today) : '', body: t ? fillTemplate(t.body, today) : '' };
-    commit(columns.map((c) => (c.id === col.id ? { ...c, cards: [...c.cards, card] } : c)));
+    const card = { id: uid(), title: (t ? fillTemplate(t.title, today) : '') + typed, body: t ? fillTemplate(t.body, today) : '' };
+    // the card and the title typed into it are one step to undo: two ⌘Z took it away, an empty "Untitled" between
+    const group = `card-${card.id}`;
+    commit(columns.map((c) => (c.id === col.id ? { ...c, cards: [...c.cards, card] } : c)), group);
+    if (typed) naming = { id: card.id, title: card.title, group };
     await tick();
     focusCard(col.id, card.id);
-    await open(card);
+    await open(card, group, typed ? 'title' : undefined);
+    if (naming?.id === card.id) naming = null;
   }
   /** The board's template, opened like a card: what every new card here starts as. */
   async function editTemplate() {
@@ -159,6 +192,13 @@
     const cardId = item.dataset.id ?? '';
     const i = col ? col.cards.findIndex((k) => k.id === cardId) : -1;
     const k = e.key;
+    if (naming && kind === 'card' && cardId === naming.id && k.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      naming.title += k;
+      if (ui.card) ui.card.title = naming.title; // the page, about to open, opens with them
+      commit(patchCard(columns, cardId, { title: naming.title }), naming.group);
+      return;
+    }
     if (k === 'Escape') { e.preventDefault(); exit('after'); return; }
     if (k === 'Enter' && kind === 'card') { e.preventDefault(); open(col.cards[i]); return; }
     if (k === 'Enter' && kind === 'head') { e.preventDefault(); editing = colId; return; }
@@ -167,6 +207,16 @@
     if (k === 'Enter' && kind === 'x') { e.preventDefault(); remove(); return; }
     if ((k === 'Backspace' || k === 'Delete') && kind === 'card') { e.preventDefault(); removeCard(col, i); return; }
     if ((k === 'Backspace' || k === 'Delete') && kind === 'head') { e.preventDefault(); removeColumn(col); return; }
+    // a space presses what has the keyboard (it scrolled the page); a letter on a header or "+ New" starts a card there
+    if (k === ' ' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      if (kind === 'card') open(col.cards[i]); else if (kind === 'head') editing = colId; else if (kind === 'add') addCard(col);
+      else if (kind === 'addcol') addColumn(); else if (kind === 'x') remove();
+      return;
+    }
+    if (k.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing && (kind === 'head' || kind === 'add') && col) {
+      e.preventDefault(); addCard(col, k); return;
+    }
     if (!k.startsWith('Arrow')) return;
     e.preventDefault();
     if (e.altKey) {
@@ -272,7 +322,9 @@
   /* 4px side padding inside the scroller so a focus ring is not clipped at its edge */
   /* columns as tall as the board: a card dragged under a short column's last card drops in it */
   .kb { display: flex; align-items: stretch; gap: 14px; overflow-x: auto; padding: 6px 4px 14px; margin: 0.6em -4px; user-select: none; -webkit-user-select: none; scrollbar-width: thin; }
-  .kb-col { flex: none; width: 236px; display: flex; flex-direction: column; gap: 7px; min-height: 60px; }
+  /* narrower columns before a sideways scroll: at 236px each a new board's three ran past the note's width, "Done"
+     cut and its + out of sight */
+  .kb-col { flex: 0 1 236px; min-width: 170px; display: flex; flex-direction: column; gap: 7px; min-height: 60px; }
   .kb-head, .kb-rename {
     display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 8px; border-radius: 6px; font-size: 13px; font-weight: 500;
     outline: none; border: 0; background: none; color: var(--fg); font-family: inherit; width: 100%;
@@ -308,4 +360,7 @@
   }
   .kb-add:hover { background: var(--bg-hover); color: var(--fg); }
   .kb-addcol { flex: none; width: 28px; height: 28px; font-size: 17px; }
+  /* a finger's size on a phone, and apart: 28px side by side, the template's tap deleted the board */
+  :global(html.mobile) :is(.kb-addcol, .kb-tpl, .kb-x) { width: 40px; height: 40px; }
+  :global(html.mobile) .kb-foot { gap: 12px; }
 </style>

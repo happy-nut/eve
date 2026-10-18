@@ -35,13 +35,18 @@ describe('code block: ⌫ makes it plain where it is', () => {
   });
 });
 
+/** `A --> B` alone does not draw: the diagram is shown as its code, which the caret goes into (one drawn is selected
+ *  instead: richBlocks.dom.test.ts). The drawing fails a moment after the note opens; here, at once */
+const failed = (ed: ReturnType<typeof editorWith>) => ed.view.dom.querySelectorAll('.code-block.mermaid').forEach((d) => d.classList.add('mermaid-error'));
+
 describe('⌫ at the start of the line under code: to the end of the code, nothing joined', () => {
   test.each([
-    ['a diagram', '# t\n\n```mermaid\nA --> B\n```\n\nbelow', 'B'],
+    ['a diagram shown as its code', '# t\n\n```mermaid\nA --> B\n```\n\nbelow', 'B'],
     ['code in a list item', '# t\n\n- x\n\n  ```js\n  A\n  ```\n\n  below', 'A'],
     ['code ending the list item above', '# t\n\n- x\n\n  ```js\n  A\n  ```\n\nbelow', 'A'],
   ])('under %s: the line stays, the caret at the end of the code', (_what, note, last) => {
     const ed = editorWith(note);
+    failed(ed);
     const before = md(ed);
     ed.commands.setTextSelection(posOf(ed, 'below'));
     press(ed, 'Backspace');
@@ -52,6 +57,7 @@ describe('⌫ at the start of the line under code: to the end of the code, nothi
 
   test('an empty line under it goes, the caret at the end of the code; ⌘Z puts it back', () => {
     const ed = editorWith('# t\n\n```mermaid\nA --> B\n```\n\nbelow');
+    failed(ed);
     const line = posOf(ed, 'below') - 1;
     ed.view.dispatch(ed.state.tr.insert(line, ed.schema.nodes.paragraph.create()).setMeta('addToHistory', false));
     const before = md(ed);

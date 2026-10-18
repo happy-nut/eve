@@ -14,6 +14,13 @@ export interface Card { id: string; title: string; body: string; extra?: Record<
 /** what a new card on this board starts as (the board's own; {{date}} is filled in when a card is made) */
 export interface CardTemplate { title: string; body: string }
 export interface Column { id: string; title: string; cards: Card[]; extra?: Record<string, unknown> }
+/** what a board's card page is given besides the card (carried along with it to CardPage.svelte) */
+export interface CardMore {
+  /** the caret at the end of the title, being typed (a card just made by typing on the board) */
+  caret?: 'title';
+  /** the board's columns and the card's own, for Move to… (a phone can't drag a card to another column) */
+  columns?: { id: string; title: string }[]; column?: string; move?: (colId: string) => void;
+}
 
 export const uid = () => Math.random().toString(36).slice(2, 9);
 
