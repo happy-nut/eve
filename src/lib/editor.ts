@@ -416,6 +416,7 @@ const linesToCode = ({ state, tr, dispatch }: { state: EditorState; tr: Transact
 
 function editorCommands(editor: Editor): Record<string, () => boolean> {
   const c = () => editor.chain().focus();
+  const inCode = () => editor.isActive('codeBlock');
   return {
     // the / menu opens where a word can start: right after a word (the phone's Insert block, the caret at the
     // end of a line) a bare "/" opened nothing and stayed in the text, so a space goes first
@@ -462,9 +463,11 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     // on list lines of another kind, only those lines change kind, where they are (a bullet under a number stays
     // under it); over a toggle or a callout, only the lines around it; otherwise the stock toggle (a line becomes a
     // list, a list's lines plain again), never over the empty line at the note's end
-    bulletList: () => editor.commands.command(switchLines('bulletList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('bulletList', 'listItem')).run() || c().command(leaveTrailer).toggleBulletList().run(),
-    orderedList: () => editor.commands.command(switchLines('orderedList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('orderedList', 'listItem')).run() || c().command(leaveTrailer).toggleOrderedList().run(),
-    taskList: () => editor.commands.command(switchLines('taskList', 'taskItem')) || c().command(leaveTrailer).command(wrapLines('taskList', 'taskItem')).run() || c().command(leaveTrailer).toggleTaskList().run(),
+    // a list made of code took its lines into one item's text, newlines and all: saved, they read back as one line,
+    // and in a callout or a toggle the list landed outside it. Code stays code; the keys do nothing there
+    bulletList: () => inCode() || editor.commands.command(switchLines('bulletList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('bulletList', 'listItem')).run() || c().command(leaveTrailer).toggleBulletList().run(),
+    orderedList: () => inCode() || editor.commands.command(switchLines('orderedList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('orderedList', 'listItem')).run() || c().command(leaveTrailer).toggleOrderedList().run(),
+    taskList: () => inCode() || editor.commands.command(switchLines('taskList', 'taskItem')) || c().command(leaveTrailer).command(wrapLines('taskList', 'taskItem')).run() || c().command(leaveTrailer).toggleTaskList().run(),
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
     toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck),
     blockquote: () => editor.commands.command(quoteList) || c().toggleBlockquote().run(),
