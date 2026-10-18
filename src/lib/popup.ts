@@ -17,6 +17,13 @@ export function placeAt(rect: DOMRect, want = 300, width = 220): string {
   // with little room either side (a phone on its side, the keyboard up) it may reach over a bar to show two rows,
   // but never past the window
   const floor = (room: number, edge: number) => Math.max(room, Math.min(72, edge));
+  // a phone on its side with the keyboard up has a strip of a screen: over or under the caret the menu got a row and a
+  // half, laid over the note's back button. There is room beside the caret instead: the whole strip's height
+  if (isMobile && Math.max(below, above) < 140) {
+    const h = window.innerHeight - 8;
+    if (window.innerWidth - rect.right - 12 >= width) return `left:${rect.right + 12}px; top:4px; max-height:${h}px`;
+    if (rect.left - 12 >= width) return `left:${rect.left - 12 - width}px; top:4px; max-height:${h}px`;
+  }
   if (below >= want || below >= above) return `left:${left}px; top:${rect.bottom + 4}px; max-height:${floor(below, window.innerHeight - rect.bottom - 8)}px`;
   return `left:${left}px; bottom:${window.innerHeight - rect.top + 4}px; max-height:${floor(above, rect.top - 8)}px`;
 }
