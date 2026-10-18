@@ -294,6 +294,7 @@
    *  put away before a note is brought to the front from outside (the reminder, the widget), or it sat over it. */
   function putAway() {
     if (ui.photo) ui.closeImage();
+    if (hooks.closeMath) hooks.closeMath(); // a formula being typed, and a phone's math keyboard with it
     if (ui.emoji) ui.emojiDone(null);
     if (ui.menu) ui.closeMenu();
     if (ui.pending) ui.done(null);
@@ -347,6 +348,8 @@
   function phoneBack() {
     // what is on top closes first: a picture shown full size, a popup, then a dialog, then a sheet (a card, a day)
     if (ui.photo) ui.closeImage();
+    // a formula being typed: back finishes it, and its keyboard goes with it (it stayed up over the list)
+    else if (hooks.closeMath) hooks.closeMath();
     else if (ui.closeSheet()) return; // a sheet (a menu, a setting's choices) over whatever opened it
     else if (ui.emoji) ui.emojiDone(null);
     else if (ui.menu) ui.closeMenu();

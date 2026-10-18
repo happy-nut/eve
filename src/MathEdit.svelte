@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { isMobile } from './lib/platform';
+  import { hooks } from './lib/ui.svelte';
   import { loadMath, mathMarkup } from './lib/mathRender';
   import { SHELVES, tidyTex, type MathPart } from './lib/mathParts';
   import type { MathDone } from './lib/mathEdit.svelte';
@@ -33,7 +34,9 @@
    *  its row was cut off by the table's own scroll box, and could not be used) */
   let popAt = $state<{ left: number; top: number } | null>(null);
 
-  const done = (how: MathDone) => { if (finished) return; finished = true; onDone(how); };
+  const done = (how: MathDone) => { if (finished) return; finished = true; if (hooks.closeMath === close) hooks.closeMath = undefined; onDone(how); };
+  const close = () => done('after');
+  hooks.closeMath = close;
   const clean = tidyTex;
 
   // what the note changed (an undo, a sync): shown, unless it is what was just typed
@@ -133,6 +136,7 @@
       document.removeEventListener('mousedown', away, true);
       window.removeEventListener('keydown', keys, true);
       mf?.remove();
+      if (hooks.closeMath === close) hooks.closeMath = undefined;
       (window as any).mathVirtualKeyboard?.hide?.();
     };
   });

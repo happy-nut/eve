@@ -219,6 +219,8 @@ export const hooks: {
   attach?: (markdown: string) => void;
   /** put the caret in the middle of the page (the window coming back, not an edit) */
   centerCaret?: () => void;
+  /** a formula being edited in place, finished as Esc finishes it (a phone's back, before anything else closes) */
+  closeMath?: () => void;
   /** run an editor action by id on the open note (the phone's formatting bar) */
   command?: (id: string) => void;
   /** the same on the sheet over it (a card, a day, a template), while one is open */

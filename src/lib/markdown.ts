@@ -109,10 +109,13 @@ export function previewOf(body: string, max = 160): string {
   let fence = '';
   for (const line of lines.slice(first + 1)) {
     const f = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence === '$$') { if (/\$\$\s*$/.test(line)) fence = ''; continue; }
     if (fence) { if (f && f[0] === fence[0] && f.length >= fence.length && !line.trim().slice(f.length).trim()) fence = ''; continue; }
     if (f) { fence = f; continue; }
+    // a formula block reads as nothing, like code: its TeX lost its backslashes on the way and said nothing anyway
+    if (line.trim().startsWith('$$')) { const t = line.trim(); if (!(t.length > 4 && t.endsWith('$$'))) fence = '$$'; continue; }
     if (!line.trim() || onlyHtml(line) || /^\s*([-*_]\s*){3,}$/.test(line) || /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(line)) continue;
-    const text = plain(line.replace(/^\s*([-*+]|\d+[.)])\s+\[[ xX]\]\s*/, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\|/g, ' ')).replace(/\s+/g, ' ');
+    const text = plain(line.replace(/^\s*([-*+]|\d+[.)])\s+\[[ xX]\]\s*/, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\[\[([^\]|]*)\|([^\]]*)\]\]/g, '$2').replace(/\[\[([^\]]*)\]\]/g, '$1').replace(/^(\s*>)+\s*\[![^\]]*\][-+]?\s*/, '').replace(/\|/g, ' ')).replace(/\s+/g, ' ');
     if (text) out.push(text);
     if (out.join(' ').length >= max) break;
   }

@@ -138,6 +138,13 @@
     if ((e.target as HTMLElement | null)?.closest?.('.panel')) return;
     e.preventDefault(); e.stopPropagation(); onClose();
   }
+
+  // five settings at once from one small link, right under the sample: an Undo puts them all back
+  function resetLook() {
+    const { theme, font, custom, size, lineHeight, width } = appearance.s;
+    appearance.reset();
+    ui.toast('Appearance reset to defaults', { label: 'Undo', run: () => appearance.set({ theme, font, custom, size, lineHeight, width }) });
+  }
 </script>
 
 <svelte:window onkeydown={onKey} onkeydowncapture={escBehind} />
@@ -313,7 +320,7 @@
       <p class="sample" style="font-family: {appearance.stack}; font-size: {appearance.s.size}px; line-height: {appearance.s.lineHeight}">
         The quick brown fox jumps over the lazy dog. 다람쥐 헌 쳇바퀴에 타고파. 0123456789
       </p>
-      <div class="foot"><button class="link" onclick={() => appearance.reset()}>Reset to defaults</button></div>
+      <div class="foot"><button class="link reset" onclick={resetLook}>Reset to defaults</button></div>
 
     {:else if tab === 'sync'}
       <h3>GitHub sync</h3>
@@ -533,6 +540,8 @@
   input:not([type]), input[type='password'] { flex: 1; }
   input:not([type]):focus, input[type='password']:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   .link.small { font-size: inherit; }
+  /* a thumb's target on a phone, not a 16px line of text */
+  :global(html.mobile) .link.reset { padding: 12px 8px; margin: -6px -8px; }
   .switch {
     appearance: none; width: 34px; height: 20px; border-radius: 10px; margin: 0; position: relative;
     background: var(--bg-active); transition: background 0.2s;
