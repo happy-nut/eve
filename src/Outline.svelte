@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
   import type { Editor as TipTap } from '@tiptap/core';
+  import { Selection } from '@tiptap/pm/state';
 
   /**
    * Section outline in place of a scrollbar: a tick per heading, dark while that stretch is on screen;
@@ -11,7 +12,7 @@
    */
   let { scrollEl, editor }: { scrollEl: HTMLElement | null | undefined; editor?: TipTap } = $props();
 
-  let marks = $state<{ top: number; text: string; preview: string; on: boolean }[]>([]);
+  let marks = $state<{ top: number; text: string; preview: string; on: boolean; el: HTMLElement }[]>([]);
   let overflow = $state(false);
   let hover = $state<number | null>(null); // the tick under the pointer: stretches at once
   let peek = $state<number | null>(null); // the one showing its lines: only after a pause
@@ -78,11 +79,28 @@
           text: textOf(cut.el),
           preview: preview.trim(),
           on: cut.top < bottom && (cuts[i + 1]?.top ?? sc.scrollHeight) > top,
+          el: cut.el,
         };
       }).filter((m) => m.text || m.preview); // the trailing empty line is not a place to scroll to
     });
   }
-  const go = (top: number) => scrollEl?.scrollTo({ top: Math.max(0, top - 44), behavior: 'smooth' });
+  /**
+   * To the section, and the caret with it, at the end of its heading: only the page moved, and the next key typed went
+   * where the caret had been and scrolled the note back there. Put there without a scroll of its own: the page's
+   * glide is the one movement.
+   */
+  function go(top: number, el: HTMLElement) {
+    if (editor && !editor.isDestroyed && el.isConnected) {
+      try {
+        const { doc } = editor.state, inside = doc.resolve(editor.view.posAtDOM(el, 0));
+        if (inside.depth > 0) {
+          editor.view.dispatch(editor.state.tr.setSelection(Selection.near(doc.resolve(inside.end(1)), -1)));
+          editor.view.focus();
+        }
+      } catch { /* a block drawn by a view of its own may have no place to read: the page still goes there */ }
+    }
+    scrollEl?.scrollTo({ top: Math.max(0, top - 44), behavior: 'smooth' });
+  }
 
   $effect(() => {
     const sc = scrollEl;
@@ -109,7 +127,7 @@
       <!-- tabindex -1: a mouse-only jump strip, Tab from the editor should not land in it; nor a click (the keys went
            to the tick, not the note) -->
       <button class="tick" tabindex="-1" class:on={h.on} class:hov={hover === i} style="--w: {tickWidth(i)}px" onmouseenter={() => enter(i)}
-        onmousedown={(e) => e.preventDefault()} onclick={() => go(h.top)}>
+        onmousedown={(e) => e.preventDefault()} onclick={() => go(h.top, h.el)}>
         <i></i>
         {#if peek === i}
           <span class="peek"><span class="peek-in" in:fade={{ duration: 180 }}>

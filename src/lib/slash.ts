@@ -10,9 +10,12 @@ import { isCustom } from './icons';
 import { pickImage, pickVideo } from './platform';
 import { hints } from './hints.svelte';
 import type { EmojiEntry } from './emoji';
+import { runEditorCommand } from './editor';
 
 export interface SuggestItem {
   label: string; value?: string; hint?: string; icon?: string; noteIcon?: string;
+  /** more words the / menu finds it by, not shown (하위 페이지 for New page: Korean is searched in as often) */
+  keywords?: string;
   /** the sections inside this one, for a page the picker can be opened into */
   sections?: SuggestItem[];
   run?: (editor: Editor) => void;
@@ -28,6 +31,8 @@ export interface SuggestionUI {
   visible(): boolean;
   /** put it at the caret again, as it is (the note scrolled under it) */
   place?(rect: DOMRect): void;
+  /** the pointer chose a row since it was last shown */
+  chosen?(): boolean;
 }
 
 /** The `@` calendar, driven the same way but by one day rather than a list of items. */
@@ -49,6 +54,8 @@ export interface EmojiUI {
   hide(): void;
   visible(): boolean;
   place?(rect: DOMRect): void;
+  /** the pointer chose one since it was last shown */
+  chosen?(): boolean;
 }
 
 /** the popups at the caret, as drawn (Suggest, DateMenu, EmojiRow) */
@@ -106,14 +113,18 @@ function scrollBox(el: Element): { top: number; bottom: number } {
 /** `:` wiring: the row runs sideways, so ←→ choose; ↑↓ are the editor's (the caret leaves, the row goes). */
 export function emojiRow(uiRef: EmojiUI) {
   const follow = stayAtCaret(uiRef);
-  const open = (p: any) => uiRef.show(p.items, p.clientRect?.() ?? null, (e: EmojiEntry) => p.command(e));
+  // whether ↩ / ⇥ pick: the row comes up after any colon and two letters, and "items :ok" then ↩ put 🆗 in place of
+  // the words and ate the new line. They pick once ←→ or the pointer chose one; a click always does
+  let sure = false;
+  const open = (p: any) => { sure = false; uiRef.show(p.items, p.clientRect?.() ?? null, (e: EmojiEntry) => p.command(e)); };
   return {
     onStart: (p: any) => { follow.start(p); open(p); },
     onUpdate: (p: any) => { follow.update(p); open(p); },
     onKeyDown: ({ event }: { event: KeyboardEvent }) => {
       if (!uiRef.visible()) return false;
-      if (event.key === 'ArrowLeft') return (uiRef.move(-1), true);
-      if (event.key === 'ArrowRight') return (uiRef.move(1), true);
+      if (event.key === 'ArrowLeft') return (uiRef.move(-1), (sure = true));
+      if (event.key === 'ArrowRight') return (uiRef.move(1), (sure = true));
+      if ((event.key === 'Enter' || event.key === 'Tab') && !sure && !uiRef.chosen?.()) return (uiRef.hide(), false);
       if (event.key === 'Enter' || event.key === 'Tab') return uiRef.select();
       if (event.key === 'Escape') return (uiRef.hide(), true);
       return false;
@@ -158,16 +169,23 @@ export function calendar(uiRef: CalendarUI) {
   };
 }
 
-/** Shared suggestion popup wiring for [[ and / menus. */
-export function popup(uiRef: SuggestionUI) {
+/**
+ * Shared suggestion popup wiring for [[ and / menus. `firm` says whether ↩ / ⇥ pick the highlighted row as the menu
+ * stands (when it says no, they do once the arrows or the pointer chose one; until then they close the menu and are
+ * the editor's keys again).
+ */
+export function popup(uiRef: SuggestionUI, firm: (p: any) => boolean = () => true) {
   const follow = stayAtCaret(uiRef);
+  let sure = true;
+  const open = (p: any) => { sure = firm(p); uiRef.show(p.items, p.clientRect?.() ?? null, (i: SuggestItem) => p.command(i)); };
   return {
-    onStart: (p: any) => { follow.start(p); uiRef.show(p.items, p.clientRect?.() ?? null, (i: SuggestItem) => p.command(i)); },
-    onUpdate: (p: any) => { follow.update(p); uiRef.show(p.items, p.clientRect?.() ?? null, (i: SuggestItem) => p.command(i)); },
+    onStart: (p: any) => { follow.start(p); open(p); },
+    onUpdate: (p: any) => { follow.update(p); open(p); },
     onKeyDown: ({ event }: { event: KeyboardEvent }) => {
       if (!uiRef.visible()) return false;
-      if (event.key === 'ArrowDown') return (uiRef.move(1), true);
-      if (event.key === 'ArrowUp') return (uiRef.move(-1), true);
+      if (event.key === 'ArrowDown') return (uiRef.move(1), (sure = true));
+      if (event.key === 'ArrowUp') return (uiRef.move(-1), (sure = true));
+      if ((event.key === 'Enter' || event.key === 'Tab') && !sure && !uiRef.chosen?.()) return (uiRef.hide(), false);
       // → opens the highlighted page into its sections, ← folds it back; when there is nothing to
       // open the key falls through and moves the caret, as it always did
       if (event.key === 'ArrowRight') return uiRef.expand();
@@ -203,21 +221,44 @@ export const ICONS = {
   divider: '<path d="M2 8h12"/><path d="M5 4.5h6M5 11.5h6" opacity=".45"/>',
   table: '<rect x="2.5" y="3.5" width="11" height="9" rx="1"/><path d="M2.5 6.6h11M6.5 6.6v5.9M10 6.6v5.9"/>',
   section: '<path d="M6.4 2.9 4.8 13.1M11.2 2.9 9.6 13.1M3.3 6.1h9.4M2.8 9.9h9.4"/>',
+  h1: '<path d="M2.5 3.5v9M7.5 3.5v9M2.5 8h5"/><path d="M10.5 6l2-1.5v8"/>',
+  h2: '<path d="M2.5 3.5v9M7.5 3.5v9M2.5 8h5"/><path d="M10 6.2c.3-1 1-1.6 2-1.6s1.8.7 1.8 1.7c0 1.6-3.8 3.6-3.8 6.2h3.9"/>',
+  h3: '<path d="M2.5 3.5v9M7.5 3.5v9M2.5 8h5"/><path d="M10.1 5.2c.4-.5 1-.7 1.7-.7 1 0 1.8.6 1.8 1.6s-.8 1.6-1.9 1.6c1.2 0 2.1.7 2.1 1.8s-.9 1.9-2 1.9c-.8 0-1.4-.3-1.8-.9"/>',
+  bullet: '<circle cx="3.5" cy="4.5" r=".9"/><circle cx="3.5" cy="8" r=".9"/><circle cx="3.5" cy="11.5" r=".9"/><path d="M6.5 4.5h7M6.5 8h7M6.5 11.5h7"/>',
+  numbered: '<path d="M2.6 3.4l1-.6v3.4M2.4 8.6c.2-.5.6-.8 1.1-.8.6 0 1 .4 1 .9 0 .8-2.1 1.6-2.1 2.7h2.2"/><path d="M7 4.5h6.5M7 8h6.5M7 11.5h6.5"/>',
+  todo: '<rect x="2" y="2.5" width="4.5" height="4.5" rx="1"/><path d="M3 9.8l1.1 1.1 2-2.2"/><path d="M8.5 4.75h5.5M8.5 10h5.5"/>',
+  quote: '<path d="M3 2.5v11"/><path d="M6 4.5h7.5M6 8h7.5M6 11.5h5"/>',
   emoji: '<circle cx="8" cy="8" r="6"/><path d="M5.8 9.4c.6.9 1.3 1.4 2.2 1.4s1.6-.5 2.2-1.4"/><path d="M6.3 6.4h.01M9.7 6.4h.01"/>',
 };
 
 /** The "/" block menu, Notion-style. ``` and --- also make a code block / divider as you type. */
 /** a "/" item that a key also inserts: after it runs, say which key */
 const tip = (id: string, run: NonNullable<SuggestItem['run']>): SuggestItem['run'] => (e) => { run(e); hints.action(id); };
+/** a "/" item that is the editor's own command `id` (a heading, a list), its key told after as with `tip` */
+const line = (id: string): SuggestItem['run'] => tip(id, (e) => runEditorCommand(e, id));
+
+/** what the / menu finds for `query`: by name, hint or keyword */
+export function slashItems(query: string): SuggestItem[] {
+  const q = query.toLowerCase();
+  return SLASH.filter((i) => [i.label, i.hint, i.keywords].some((w) => w?.toLowerCase().includes(q)));
+}
 
 export const SLASH: SuggestItem[] = [
-  { label: 'New page', hint: '📄 하위 페이지', icon: ICONS.page, run: newPage },
+  { label: 'New page', hint: 'a page under this one', keywords: '하위 페이지 subpage', icon: ICONS.page, run: newPage },
+  // the lines a key makes as well, the key as the hint: as their own shortcuts do them (a list's lines change kind)
+  { label: 'Heading 1', hint: '#', keywords: 'title h1 제목', icon: ICONS.h1, run: line('h1') },
+  { label: 'Heading 2', hint: '##', keywords: 'h2 제목', icon: ICONS.h2, run: line('h2') },
+  { label: 'Heading 3', hint: '###', keywords: 'h3 제목', icon: ICONS.h3, run: line('h3') },
+  { label: 'Bulleted list', hint: '-', keywords: 'bullet unordered ul 목록', icon: ICONS.bullet, run: line('bulletList') },
+  { label: 'Numbered list', hint: '1.', keywords: 'ordered ol number 번호', icon: ICONS.numbered, run: line('orderedList') },
+  { label: 'To-do list', hint: '[ ]', keywords: 'todo task checkbox check 할 일', icon: ICONS.todo, run: line('taskList') },
+  { label: 'Quote', hint: '|', keywords: 'blockquote 인용', icon: ICONS.quote, run: line('blockquote') },
   { label: 'Callout', hint: '💡 highlighted box', icon: ICONS.callout, run: tip('callout', (e) => e.chain().focus().toggleWrap('callout').run()) },
   { label: 'Toggle', hint: '> folds its content', icon: ICONS.toggle, run: (e) => e.chain().focus().setDetails().updateAttributes('details', { open: true }).run() },
   // as ``` and --- make them as you type
   { label: 'Code block', hint: '``` code, highlighted', icon: ICONS.code, run: tip('codeBlock', (e) => { if (!e.isActive('tableCell') && !e.isActive('tableHeader')) e.chain().focus().toggleCodeBlock().run(); }) },
   { label: 'Divider', hint: '--- a line across', icon: ICONS.divider, run: tip('divider', (e) => e.chain().focus().setHorizontalRule().run()) },
-  { label: 'Kanban', hint: '칸반 board', icon: ICONS.kanban, run: insertKanban },
+  { label: 'Kanban', hint: 'board', keywords: '칸반', icon: ICONS.kanban, run: insertKanban },
   { label: 'Flowchart', hint: 'Diagram: boxes and arrows', icon: ICONS.diagram, run: (e) => insertDiagram(e, 'flowchart') },
   { label: 'Swimlanes', hint: 'Diagram: who does each step, in lanes', icon: ICONS.lanes, run: (e) => insertDiagram(e, swimlaneStarter()) },
   { label: 'Sequence diagram', hint: 'Diagram: who says what, in order', icon: ICONS.sequence, run: (e) => insertDiagram(e, 'sequence') },

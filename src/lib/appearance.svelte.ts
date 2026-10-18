@@ -27,6 +27,8 @@ interface Appearance {
   dailyReminder: boolean; reminderAt: string;
   /** a phone's widget lists the daily notes too (off: only notes) */
   dailyInWidget: boolean;
+  /** ⌘+ / ⌘-: px on top of `size` for now, remembered apart from it, so ⌘0 goes back to what Settings says */
+  zoom: number;
   /** the size the window opens at; changing it resizes the window there and then, as a preview of itself */
   winW: number; winH: number;
 }
@@ -35,7 +37,7 @@ interface Appearance {
 // phone and a Mac each keep their own.
 /** the note's text size, px: the Size slider's range, and where ⌘+ / ⌘- stop */
 export const SIZE_MIN = 12, SIZE_MAX = 28;
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, closeSidebarOnWrite: false, autoIcon: true, dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
 
 function load(): Appearance {
   try {
@@ -50,16 +52,22 @@ class AppearanceStore {
   // at all, and the note came out in the webview's default serif.
   get stack() { return (this.s.font === 'custom' ? this.s.custom.trim() : FONTS.find((f) => f.id === this.s.font)?.stack) || FONTS[0].stack; }
   set(patch: Partial<Appearance>) { Object.assign(this.s, patch); localStorage.setItem(LS, JSON.stringify(this.s)); }
-  /** ⌘+ / ⌘- / ⌘0: the note's text a step larger or smaller (1px, within the Size slider's range), or back to the default */
+  /** the note's text size as shown: the Settings size and the ⌘+ / ⌘- steps on it */
+  get textPx() { return Math.min(SIZE_MAX, Math.max(SIZE_MIN, this.s.size + this.s.zoom)); }
+  /**
+   * ⌘+ / ⌘- / ⌘0: the note's text a step larger or smaller (1px, within the Size slider's range), or back to the size
+   * Settings has. A step is the keys' own, on top of that size: ⌘0 set Settings' size to the default, and the size
+   * chosen there was lost to a key pressed to read something small.
+   */
   textSize(step: 1 | -1 | 0): number {
-    const size = step ? Math.min(SIZE_MAX, Math.max(SIZE_MIN, this.s.size + step)) : DEFAULTS.size;
-    this.set({ size });
-    return size;
+    const px = step ? Math.min(SIZE_MAX, Math.max(SIZE_MIN, this.textPx + step)) : this.s.size;
+    this.set({ zoom: px - this.s.size });
+    return this.textPx;
   }
   /** Appearance's own Reset: how notes look (theme, type, text), not what the app does (daily notes, window…) */
   reset() {
-    const { theme, font, custom, size, lineHeight, width } = DEFAULTS;
-    this.set({ theme, font, custom, size, lineHeight, width });
+    const { theme, font, custom, size, lineHeight, width, zoom } = DEFAULTS;
+    this.set({ theme, font, custom, size, lineHeight, width, zoom });
   }
   /** call once; keeps <html> in sync */
   apply() {
@@ -67,7 +75,7 @@ class AppearanceStore {
       document.documentElement.dataset.theme = this.s.theme; // app.css pins color-scheme for light/dark
       const r = document.documentElement.style;
       r.setProperty('--font-editor', this.stack);
-      r.setProperty('--font-size', `${this.s.size}px`);
+      r.setProperty('--font-size', `${this.textPx}px`);
       r.setProperty('--line-height', String(this.s.lineHeight));
       r.setProperty('--editor-width', `${this.s.width}px`);
     });
