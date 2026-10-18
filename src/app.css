@@ -545,9 +545,13 @@ svg.lanes .edgeLabel text { fill: var(--d-dim); font-size: 12px; }
 }
 .tiptap .mermaid-expand svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 @media (hover: hover) { .tiptap .code-block.mermaid:hover .mermaid-expand { opacity: 1; } .tiptap .mermaid-expand:hover { color: var(--fg); } }
-html.mobile .tiptap .code-block.mermaid .mermaid-expand { opacity: 0.9; } /* no hover on a phone: always there */
-/* …and so the drawing leaves it a corner of its own: on top of a chart's last row it hid a value or a bar */
-html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { padding-bottom: 52px; }
+html.mobile .tiptap .code-block.mermaid .mermaid-expand { opacity: 0.9; width: 40px; height: 40px; border-radius: 11px; } /* no hover on a phone: always there, a finger's size */
+/* …and so the drawing leaves it a corner of its own: on top of a chart's last row it hid a value or a bar (a Gantt's
+   last bar, a timeline's last event: on the Mac too, under the pointer that came to press it) */
+.tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { padding-bottom: 52px; }
+html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { padding-bottom: 60px; }
+/* a diagram selected as a whole (⌫ under it, ↑ onto it, Done): outlined as a picture is (open, it has its own ring) */
+.tiptap .code-block.mermaid.ProseMirror-selectednode:not(.mermaid-error):not(:has(.dblock.active)) .mermaid-view { outline: 2px solid var(--accent); box-shadow: var(--glow); }
 .tiptap .code-block.mermaid.editing .mermaid-view { margin-top: -0.2em; cursor: default; }
 .tiptap .code-block.mermaid-error .mermaid-view, .diagram-canvas.error {
   justify-content: flex-start; align-items: flex-start; color: #ff453a; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;

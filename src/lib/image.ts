@@ -340,3 +340,21 @@ export function imageMenu(editor: Editor, getPos: () => number | null | undefine
     { label: 'Align right', checked: align === 'right', run: () => place('right') },
   ]);
 }
+
+/**
+ * A picture put in from the / menu, the caret on the line under it (that line made when there is none): left selected,
+ * the next key typed replaced the picture just picked.
+ */
+export function insertImage(editor: Editor, src: string) {
+  editor.chain().focus().setImage({ src }).run();
+  const sel = editor.state.selection;
+  if (!(sel instanceof NodeSelection)) return;
+  const tr = editor.state.tr, after = sel.to, $after = tr.doc.resolve(after), para = editor.schema.nodes.paragraph;
+  if ($after.parent.inlineContent) tr.setSelection(TextSelection.create(tr.doc, after)); // a picture in a line of text
+  else {
+    const next = $after.nodeAfter;
+    if (!(next?.type === para && !next.content.size)) tr.insert(after, para.create());
+    tr.setSelection(TextSelection.create(tr.doc, after + 1));
+  }
+  editor.view.dispatch(tr.scrollIntoView());
+}

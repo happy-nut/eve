@@ -4,6 +4,7 @@ import { insertKanban } from './kanban';
 import { insertDiagram } from './code';
 import { swimlaneStarter } from './diagram';
 import { insertMath } from './math';
+import { insertImage } from './image';
 import { ui } from './ui.svelte';
 import { notes, titleOf } from './notes.svelte';
 import { isCustom } from './icons';
@@ -228,7 +229,7 @@ export const SLASH: SuggestItem[] = [
   { label: 'Equation', hint: '∑ formula, its own line ($$)', icon: ICONS.math, run: (e) => insertMath(e, true) },
   { label: 'Inline equation', hint: 'x² formula, in the line ($)', icon: ICONS.mathInline, run: (e) => insertMath(e, false) },
   { label: 'Table', hint: '3×3, with a header row', icon: ICONS.table, run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-  { label: 'Image', hint: 'Pick a file', icon: ICONS.image, run: tip('image', (e) => { pickImage().then((src) => src && e.chain().focus().setImage({ src }).run()); }) },
+  { label: 'Image', hint: 'Pick a file', icon: ICONS.image, run: tip('image', (e) => { pickImage().then((src) => src && insertImage(e, src)); }) },
   { label: 'Video', hint: 'Pick a file', icon: ICONS.video, run: (e) => { pickVideo().then((src) => src && e.chain().focus().insertContent({ type: 'video', attrs: { src, name: src.split('/').pop() } }).run()); } },
   { label: 'Link to note', hint: '[[ another note', icon: ICONS.wikiLink, run: tip('wikiLink', (e) => e.chain().focus().insertContent('[[').run()) },
   {

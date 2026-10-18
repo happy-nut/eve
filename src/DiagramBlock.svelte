@@ -3,7 +3,7 @@
   import { isMobile } from './lib/platform';
   import { ui } from './lib/ui.svelte';
   import { renderMermaid, themeKey } from './lib/mermaid';
-  import { KINDS, fromCode, toCode, whyCode, type Diagram } from './lib/diagram';
+  import { KINDS, fromCode, isEmpty, toCode, whyCode, type Diagram } from './lib/diagram';
   import FlowEditor from './FlowEditor.svelte';
   import { scrollHint } from './lib/scrollHint';
   import DiagramForm from './DiagramForm.svelte';
@@ -15,7 +15,7 @@
    * an undo, a sync or the code typed by hand comes back as `code` and is read again. A diagram written with more
    * than these can show (styles, subgraphs, notes) is drawn, and edited as its code.
    */
-  let { code, start, codeShown, onCode, onCodeEdit, onCodeLeave, onError, onHistory }: {
+  let { code, start, codeShown, onCode, onCodeEdit, onCodeLeave, onError, onHistory, onLeave, onDelete }: {
     code: string;
     /** made just now from the / menu: open for editing at once */
     start: boolean;
@@ -28,6 +28,11 @@
     onError: (failed: boolean) => void;
     /** the note's undo (false) or redo (true): ⌘Z with the keyboard on the diagram */
     onHistory: (redo: boolean) => void;
+    /** done with it from the keyboard or Done: the note's keyboard back, the block selected (it was on nothing, and
+     *  the keys typed next, ⌘Z too, went nowhere) */
+    onLeave: () => void;
+    /** the block deleted (one ⌘Z brings it back); `focus`: the note's keyboard back at its place */
+    onDelete: (focus: boolean) => void;
   } = $props();
 
   let root: HTMLDivElement, canvas = $state<HTMLDivElement | null>(null);
@@ -106,7 +111,10 @@
     // below, another diagram) landed on whatever moved up into their place
     const away = (e: MouseEvent) => {
       const t = e.target as Element | null;
-      if (active && t && !root.contains(t) && !t.closest('[role="listbox"], [role="menu"], .backdrop, .scrim, .sheet, [role="dialog"]')) active = false;
+      if (active && t && !root.contains(t) && !t.closest('[role="listbox"], [role="menu"], .backdrop, .scrim, .sheet, [role="dialog"]')) {
+        active = false;
+        if (d && isEmpty(d)) { flush(); onDelete(false); } // its last box deleted: nothing is left to keep
+      }
     };
     document.addEventListener('click', away, true);
     // keys meant for it while it is open: the keyboard on it, on nothing, or still in the note's text (a click on the
@@ -141,7 +149,7 @@
       const ours = t === document.body || (root.contains(t) && !typing) || (!typing && t.closest?.('.tiptap') === root.closest('.tiptap'));
       if (!ours) return;
       // Esc lets go of what is picked in the picture first (a box, a line, a lane, Connect), then of the diagram
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (!flowEd?.escape()) active = false; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (!flowEd?.escape()) leave(); }
       else if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y')) && t === document.body) {
         e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y');
       }
@@ -174,7 +182,35 @@
     active = true;
   }
   function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape' && active && !e.defaultPrevented) { e.preventDefault(); e.stopPropagation(); active = false; }
+    if (e.key === 'Escape' && active && !e.defaultPrevented) { e.preventDefault(); e.stopPropagation(); leave(); }
+  }
+  /** opened from the keyboard (↵ on the block selected), as a click opens it: false when it is edited as its code */
+  export function edit(): boolean {
+    if (active || error) return false;
+    if (!d) { onCodeEdit(); return true; }
+    pick = null;
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    active = true;
+    return true;
+  }
+  /** Done, Esc: closed, the keyboard back in the note on the block; a chart with nothing left in it goes instead */
+  function leave() {
+    flush();
+    active = false;
+    // (on the whole screen the keyboard stays on it: the note is under it, and typed there the keys would go into it)
+    if (d && isEmpty(d)) onDelete(true); else if (!full) onLeave();
+  }
+  /** right-click: what the block itself offers (the note's own menu is for its text) */
+  function menu(e: MouseEvent) {
+    if (full || isMobile) return;
+    e.preventDefault();
+    e.stopPropagation();
+    ui.openMenu(e, [
+      { label: 'Edit', hide: active || !!error || !d, run: () => void edit() },
+      { label: 'Edit code', hide: codeShown, run: () => { active = false; onCodeEdit(); } },
+      { label: 'Full screen', hide: !!error || !svg, run: enterFull },
+      { label: 'Delete diagram', sep: true, danger: true, run: () => { flush(); active = false; onDelete(true); } },
+    ]);
   }
 
   /** the code shown: to its drawing (the caret out of the code, the drawing open) */
@@ -318,7 +354,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="dblock" class:active class:full bind:this={root} onkeydown={onKey} role={full ? 'dialog' : undefined} aria-modal={full ? 'true' : undefined} aria-label={full ? 'Diagram' : undefined}>
+<div class="dblock" class:active class:full bind:this={root} onkeydown={onKey} oncontextmenu={menu} role={full ? 'dialog' : undefined} aria-modal={full ? 'true' : undefined} aria-label={full ? 'Diagram' : undefined}>
   <div class="pic">
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="mermaid-view diagram-canvas" class:error={!!error} bind:this={canvas} onclick={open} onwheel={onWheel} onpointerdown={onPanDown} {@attach scrollHint} {@attach pinchZoom}>
@@ -377,14 +413,16 @@
       <button class="ghost icon" aria-label="Undo" title="Undo (⌘Z)" onclick={() => { flush(); onHistory(false); }}><svg viewBox="0 0 16 16"><path d="M5.5 4 2.5 7l3 3M2.5 7h7a4 4 0 0 1 0 8H8" /></svg></button>
       <button class="ghost icon" aria-label="Redo" title="Redo (⇧⌘Z)" onclick={() => { flush(); onHistory(true); }}><svg viewBox="0 0 16 16"><path d="M10.5 4l3 3-3 3M13.5 7h-7a4 4 0 0 0 0 8H8" /></svg></button>
       <button class="ghost" onclick={() => { active = false; onCodeEdit(); }}>Code</button>
-      <button class="done" onclick={() => (active = false)}>Done</button>
+      <!-- the diagram itself deleted (⌘Z brings it back): the keys could not reach it, and its code was the only way -->
+      <button class="ghost icon" aria-label="Delete diagram" title="Delete diagram" onclick={() => { flush(); active = false; onDelete(true); }}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
+      <button class="done" onclick={leave}>Done</button>
     </div>
     {#if flow}
       <p class="dtip">{isMobile ? 'Tap a box to pick it; ✎ Text in its bar (or a second tap) types in it · its + adds the next step · Connect, then another box, joins them' : 'Click a box to pick it; ✎ Text, a second click or Enter types in it · its + adds the next step; drag it onto another box, or Connect, to join them · Tab adds a step, ⌫ deletes'}</p>
     {:else}
       <DiagramForm {d} />
       <!-- a long form: Done at its foot too, not only out of sight at its top -->
-      <div class="foot"><button class="done" onclick={() => (active = false)}>Done</button></div>
+      <div class="foot"><button class="done" onclick={leave}>Done</button></div>
     {/if}
   {/if}
 </div>
@@ -416,6 +454,8 @@
   @media (hover: hover) { .tools .done:hover { background: color-mix(in srgb, var(--accent) 88%, #000); color: #fff; } }
   .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--bg-input); }
   .seg button { border-radius: 6px; padding: 3px 9px; }
+  :global(html.mobile) .seg button { min-width: 44px; } /* a finger's width: the arrows alone were 28px */
+  :global(html.mobile) .seg { gap: 4px; }
   .seg button.on { background: var(--bg-pop); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
   .codebar { padding: 8px 10px 6px; }
   .codebar .say { font-size: 12.5px; color: var(--fg-dim); flex: 1 1 220px; }

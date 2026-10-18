@@ -540,8 +540,24 @@
       return sum + (w > 0 && h > 0 ? w * h : 0);
     }, 0);
     const above = top - (tall + 8), below = bottom + 8;
+    // room on neither side (a short picture, a box near its top): under it, and the picture grows at its foot to hold
+    // it (fitBars). Above, the picture's top cut it off; grown at the top, the picture moved under the finger
+    if (above < 4 && below + tall > H - 4) return { left, top: below };
     return { left, top: cost(above) <= cost(below) ? above : below };
   }
+  /** how much the picture grew at its foot to hold a bar under a box (see barAt) */
+  let grown = 0, basePad = 0;
+  function fitBars() {
+    if (!layer) return;
+    const low = Math.max(0, ...[...layer.querySelectorAll<HTMLElement>(':scope > .bar')].map((b) => b.offsetTop + b.offsetHeight + 4));
+    const need = Math.max(0, Math.ceil(low - (layer.clientHeight - grown)));
+    if (need === grown) return;
+    if (!grown) basePad = parseFloat(getComputedStyle(host).paddingBottom) || 0;
+    grown = need;
+    host.style.paddingBottom = need ? `${basePad + need}px` : '';
+  }
+  $effect(() => { void sel; void editing; void version; void boxes; void shapesOpen; void linking; void drag; tick().then(fitBars); });
+  onMount(() => () => { if (grown) host.style.paddingBottom = ''; });
   // the picked line drawn in the accent colour: a picked line looked like every other one
   $effect(() => {
     void version;
@@ -693,9 +709,13 @@
   }
   .plus:hover { transform: scale(1.15); }
   /* a finger's size on a phone: a larger dot, and a larger place to press around it */
-  :global(html.mobile) .plus { width: 30px; height: 30px; margin: -4px 0 0 -4px; }
-  :global(html.mobile) .plus::before { content: ''; position: absolute; inset: -8px; border-radius: 50%; }
-  :global(html.mobile) .plus svg { width: 15px; height: 15px; }
+  /* (the button itself a finger's 40px, the dot drawn inside it 30px: its 30px box was the target a tap was judged by) */
+  :global(html.mobile) .plus { width: 40px; height: 40px; margin: -9px 0 0 -9px; background: none; box-shadow: none; }
+  :global(html.mobile) .plus::before {
+    content: ''; position: absolute; inset: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 2px 6px rgba(0, 40, 100, 0.25);
+  }
+  :global(html.mobile) .plus::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; }
+  :global(html.mobile) .plus svg { position: relative; width: 15px; height: 15px; }
   .plus svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
   .wire { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
   .wire line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; }

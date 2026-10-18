@@ -3,6 +3,7 @@ import { Selection, TextSelection } from '@tiptap/pm/state';
 import { ui } from './ui.svelte';
 import { mount, unmount } from 'svelte';
 import Board from '../Kanban.svelte';
+import { focusBack } from './code';
 import { defaultBoard, parseBoard, parseTemplate, serializeBoard, type CardTemplate, type Column } from './board';
 
 /**
@@ -24,6 +25,17 @@ export async function deleteBoard(editor: Editor, pos: number) {
   const n = (node.attrs.columns as Column[]).reduce((s, c) => s + c.cards.length, 0);
   if (n && !(await ui.ask(`Delete the board and its ${n} card${n > 1 ? 's' : ''}?`))) return;
   editor.chain().deleteRange({ from: pos, to: pos + node.nodeSize }).focus().run();
+}
+
+/**
+ * The board at `pos` given `columns`, one step to undo. `group`: a step of its own unless one of the same group came
+ * just before, which it joins (a card made and its title typed into it: two ⌘Z took it away, an empty "Untitled"
+ * card between). The history's own grouping of a composition does it: steps alike in theirs are one.
+ */
+export function commitBoard(editor: Editor, pos: number, columns: Column[], group?: string) {
+  const tr = editor.state.tr.setNodeMarkup(pos, undefined, { ...editor.state.doc.nodeAt(pos)!.attrs, columns });
+  if (group) tr.setMeta('composition', group);
+  editor.view.dispatch(tr);
 }
 
 /** Keyboard focus into the board at `pos` (Kanban.svelte decides where). */
@@ -59,7 +71,7 @@ export const Kanban = Node.create({
         props: {
           columns: node.attrs.columns,
           // every attribute is carried over: setNodeMarkup replaces them all
-          commit: (columns: Column[]) => editor.view.dispatch(editor.state.tr.setNodeMarkup(pos(), undefined, { ...editor.state.doc.nodeAt(pos())!.attrs, columns })),
+          commit: (columns: Column[], group?: string) => commitBoard(editor, pos(), columns, group),
           template: (): CardTemplate | null => editor.state.doc.nodeAt(pos())?.attrs.template ?? null,
           saveTemplate: (template: CardTemplate) => editor.view.dispatch(editor.state.tr.setNodeMarkup(pos(), undefined, { ...editor.state.doc.nodeAt(pos())!.attrs, template })),
           // leave to the text before / after the board (a paragraph is added after it when there is none)
@@ -76,7 +88,7 @@ export const Kanban = Node.create({
         },
       });
       (dom as any).__enter = app.enter;
-      if (enterNext) { enterNext = false; setTimeout(app.enter); }
+      if (enterNext) { enterNext = false; setTimeout(() => app.enter(true)); }
       return {
         dom,
         stopEvent: () => true, // the board owns every event inside it (keys, drag, clicks)
@@ -86,7 +98,8 @@ export const Kanban = Node.create({
           app.set(n.attrs.columns);
           return true;
         },
-        destroy: () => { void unmount(app); },
+        // the keyboard on the board as it goes (an undo took it out): back to the note, not left on nothing
+        destroy: () => { const had = dom.contains(document.activeElement); void unmount(app); if (had) focusBack(editor); },
       };
     };
   },

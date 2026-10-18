@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { KINDS, starter, toCode, fromCode, swimlaneStarter, whyCode } from './diagram.ts';
+import { KINDS, starter, toCode, fromCode, swimlaneStarter, whyCode, isEmpty } from './diagram.ts';
 import { laneSvg } from './lanes.ts';
 
 // every kind's starter: written, read back the same, written again the same
@@ -120,3 +120,10 @@ assert.deepEqual(whyCode('flowchart LR\n  A --> B\n  style A fill:#f9f'), { line
 assert.deepEqual(whyCode('sequenceDiagram\n  A->>B: hi\n  Note over A: thinking'), { line: 'Note over A: thinking' });
 assert.deepEqual(whyCode('classDiagram\n  A <|-- B'), { kind: 'classDiagram' });
 console.log('why code ok');
+
+// a chart with its last part deleted is empty (Done takes the block away); no starter is
+for (const { kind } of KINDS) assert.equal(isEmpty(starter(kind, '2026-10-08')), false, kind);
+assert.equal(isEmpty({ kind: 'flowchart', dir: 'LR', nodes: [], edges: [] }), true);
+assert.equal(isEmpty({ kind: 'gantt', title: '', sections: [{ name: 'A', tasks: [] }] }), true);
+assert.equal(isEmpty(fromCode('flowchart LR')), true);
+console.log('empty ok');

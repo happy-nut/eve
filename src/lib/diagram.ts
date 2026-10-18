@@ -396,6 +396,18 @@ export function whyCode(code: string): { kind: string } | { line: string } | { o
   return { other: true };
 }
 
+/** a chart with nothing left in it (its last box deleted): drawn, it was an empty grey card, and Done takes it away */
+export function isEmpty(d: Diagram): boolean {
+  switch (d.kind) {
+    case 'flowchart': return !d.nodes.length;
+    case 'sequence': return !d.people.length && !d.messages.length;
+    case 'pie': return !d.slices.length;
+    case 'mindmap': return !d.root.trim() && !d.items.length;
+    case 'timeline': return !d.periods.length;
+    case 'gantt': return d.sections.every((s) => !s.tasks.length);
+  }
+}
+
 /** a fresh id for a node or a person, not one the chart has */
 export function freshId(prefix: string, taken: { id: string }[]) {
   for (let i = taken.length + 1; ; i++) if (!taken.some((t) => t.id === `${prefix}${i}`)) return `${prefix}${i}`;
