@@ -57,7 +57,7 @@
 
 {#if isMobile}
   <!-- a phone: the same items as a sheet from the bottom, rows a thumb can hit -->
-  <BottomSheet onclose={() => ui.closeMenu()}>
+  <BottomSheet onclose={() => ui.closeMenu()} layer={false}>
     <ul class="items" role="menu">
       {#each req.items as it, i (i)}
         <li role="none" class:sep={it.sep}>

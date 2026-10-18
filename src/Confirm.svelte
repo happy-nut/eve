@@ -7,10 +7,8 @@
 
   // the last one asked: closing, it fades out showing what it showed (ui.pending is already null by then)
   const p = $derived.by(held(() => ui.pending));
-  // give focus back to where it was (sidebar row, editor) the moment the dialog closes —
-  // synchronously, before any list re-render, so a later focusRow() can still override it
-  const returnTo = document.activeElement as HTMLElement | null;
-  function done(v: string | null) { returnTo?.isConnected && returnTo.focus(); ui.done(v); }
+  // (ui.done gives the focus back to where it was, synchronously, before the answer is heard)
+  const done = (v: string | null) => ui.done(v);
   let value = $state('');
   $effect(() => { value = p.input ?? ''; });
 
