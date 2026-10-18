@@ -154,9 +154,9 @@
 <EmojiRow bind:this={emojiRow} />
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: 30; }
+  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-sheet-scrim); }
   .card-page {
-    position: fixed; z-index: 31; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    position: fixed; z-index: var(--z-sheet); top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: min(760px, 92vw); height: min(80vh, 760px); display: flex; flex-direction: column; overflow: hidden;
     background: var(--bg-pop); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
   }
@@ -170,7 +170,7 @@
   :global(html.mobile) .card-page.dragging { transition: none; }
   .grip { flex: none; width: 36px; height: 4px; border-radius: 2px; margin: 8px auto 2px; background: var(--bg-active); }
   /* the card's own buttons, at the page's top right (a sheet's: beside the handle); the title starts below them */
-  .ctools { position: absolute; top: 8px; right: 10px; z-index: 1; display: flex; align-items: center; gap: 2px; }
+  .ctools { position: absolute; top: 8px; right: 10px; z-index: var(--z-raised); display: flex; align-items: center; gap: 2px; }
   .ctools button {
     height: 30px; min-width: 30px; border: 0; border-radius: 8px; background: none; padding: 0 6px; font: inherit; font-size: 12.5px;
     color: var(--fg-dim); display: inline-flex; align-items: center; justify-content: center; gap: 5px;

@@ -66,7 +66,7 @@
 <style>
   .cal {
     position: fixed;
-    z-index: 40;
+    z-index: var(--z-caret-popup);
     overflow-y: auto; /* cut to the room over or under the caret (lib/popup.ts) */
     padding: 6px;
     background: var(--bg-pop);

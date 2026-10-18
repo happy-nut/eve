@@ -452,11 +452,15 @@ try {
   for (let i = 0; i < 5 && !(await inAbove()); i++) { await page.locator('.tiptap p', { hasText: 'Above' }).click(); await page.waitForTimeout(150); }
   assert.ok(await inAbove(), 'the caret in the line above the diagram');
   await page.keyboard.press('End');
-  await page.keyboard.press('ArrowDown'); // into its code, by the keyboard
+  await page.keyboard.press('ArrowDown'); // onto the drawing, by the keyboard: it is picked whole, as a picture is
+  await page.waitForFunction(() => window.__editor.state.selection.node?.type.name === 'codeBlock');
+  await page.keyboard.press('Enter'); // and ↵ opens it
+  await page.waitForSelector('.tiptap .dblock.active');
+  await page.locator('.tiptap .dblock .tools button', { hasText: 'Code' }).click();
   await page.waitForSelector('.tiptap .code-block.editing');
   await page.keyboard.press('Control+Enter');
   await page.waitForSelector('.tiptap .dblock.active');
-  console.log('ok   its code shown: "Edit as drawing" or ⌘↵ opens the drawing');
+  console.log('ok   its code shown: "Edit as drawing" or ⌘↵ opens the drawing; ↓ onto it picks it, ↵ opens it');
   await page.close();
 
   assert.deepEqual(errors, []);

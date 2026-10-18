@@ -20,7 +20,7 @@ export interface CardReq {
   resolve: () => void;
 }
 
-interface EmojiReq { x: number; y: number; current: string; resolve: (v: string | null) => void }
+interface EmojiReq { at: DOMRect; current: string; resolve: (v: string | null) => void }
 
 /**
  * Everything that opens over the app and goes away again: a picture shown full size, a formula being edited, a
@@ -143,7 +143,7 @@ class Ui {
     // from (the list's row, the note); should the focus still be nowhere after that, it goes back to where it was
     // when the picker opened, so it is never simply lost.
     this.emojiOff ??= this.layers.push({ id: 'emoji', close: () => this.emojiDone(null), keys: true, modal: true, own: '[aria-label="Choose an icon"]', yields: true, settle: 60 });
-    return new Promise((res) => { this.emoji = { x: r.left, y: r.bottom + 6, current, resolve: res }; });
+    return new Promise((res) => { this.emoji = { at: r, current, resolve: res }; });
   }
   emojiDone(v: string | null) {
     this.emoji?.resolve(v);

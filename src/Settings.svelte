@@ -476,12 +476,12 @@
 </div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: 20; }
+  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-panel-scrim); }
   /* a phone: settings is a page, and the strip above the status bar is part of it */
   :global(html.mobile) .backdrop { background: var(--bg); }
   .panel:focus { outline: none; }
   .panel {
-    position: fixed; z-index: 21; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    position: fixed; z-index: var(--z-panel); top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: min(560px, 92vw); max-height: 82vh; display: flex; flex-direction: column; overflow: hidden;
     background: var(--bg-pop); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
   }

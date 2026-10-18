@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { isMobile } from './lib/platform';
+  import { floatAt, screenInsets, viewSize } from './lib/popup';
   import { ui } from './lib/ui.svelte';
   import { claimKeys } from './lib/keys';
   import { loadMath, mathMarkup } from './lib/mathRender';
@@ -33,7 +34,7 @@
   let finished = false;
   /** an inline formula's row, where it floats: fixed to the window, under the formula and on the screen (inside a table
    *  its row was cut off by the table's own scroll box, and could not be used) */
-  let popAt = $state<{ left: number; top: number } | null>(null);
+  let popAt = $state<{ left: number; top?: number; bottom?: number } | null>(null);
 
   const done = (how: MathDone) => { if (finished) return; finished = true; onDone(how); off(); };
   // a layer while it is edited (a phone's back, Esc, a note brought up from outside finish it as Esc does); off once
@@ -132,9 +133,13 @@
     const unclaim = claimKeys(root, { '*': keys }, { capture: true });
     window.addEventListener('scroll', place, true);
     window.addEventListener('resize', place);
+    // MathLive's keyboard coming up (or going) changes the room the row has under the formula
+    const vk = (window as any).mathVirtualKeyboard as EventTarget | undefined;
+    vk?.addEventListener?.('geometrychange', clearKeyboard);
     return () => {
       window.removeEventListener('scroll', place, true);
       window.removeEventListener('resize', place);
+      vk?.removeEventListener?.('geometrychange', clearKeyboard);
       gone = true;
       document.removeEventListener('mousedown', away, true);
       unclaim();
@@ -147,16 +152,29 @@
   /** the inline row under its formula, on the screen */
   function place() {
     if (display || !root || !tools) return;
-    const r = root.getBoundingClientRect();
-    const w = tools.offsetWidth || 440;
-    popAt = { left: Math.max(12, Math.min(window.innerWidth - w - 12, r.left - 8)), top: r.bottom + 8 };
+    const r = root.getBoundingClientRect(), ins = { ...screenInsets() };
+    // MathLive's keyboard is the page's own, not the phone's: the room ends at its top too
+    const kb = (window as any).mathVirtualKeyboard?.boundingRect as DOMRect | undefined;
+    // (by its height: it docks at the window's foot, and its top is still sliding up while it comes)
+    if (kb?.height) ins.bottom = Math.max(ins.bottom, kb.height);
+    // its edge 8px left of the formula's, the way the box's own padding reads; 12px off the window's sides. Under
+    // the formula, or over it when there is no room under it (at the window's foot it was cut off after its tabs) —
+    // held by its bottom then, so another shelf's taller row grows away from the formula, not over it
+    const f = floatAt({ left: r.left - 8, right: r.right, top: r.top, bottom: r.bottom }, { w: tools.offsetWidth || 440, h: tools.offsetHeight || 90 },
+      { gap: 8, avoid: { ...ins, left: Math.max(ins.left, 12), right: Math.max(ins.right, 12) } });
+    popAt = f.side === 'above' ? { left: f.left, bottom: viewSize().h - r.top + 8 } : { left: f.left, top: f.top };
   }
   /** what MathLive's keyboard covers brought up above it */
   function clearKeyboard() {
+    // the row placed again with the keyboard's top as the room's foot (over the formula when it would be under the
+    // keyboard); then the formula and its row, whichever side of it the row is on
+    place();
     const kb = (window as any).mathVirtualKeyboard?.boundingRect as DOMRect | undefined;
     if (!kb || !kb.height || !root) return;
-    const r = (display ? root : tools ?? root).getBoundingClientRect();
-    const over = r.bottom - (kb.top - 12);
+    // (where place() just put it: the page is not drawn again yet; the keyboard where it docks, not where it is
+    // sliding up from)
+    const bottom = Math.max(root.getBoundingClientRect().bottom, !display && tools && popAt?.top !== undefined ? popAt.top + tools.offsetHeight : 0);
+    const over = bottom - (viewSize().h - kb.height - 12);
     if (over > 0) (root.closest('.scroll') as HTMLElement | null)?.scrollBy({ top: over, behavior: 'smooth' });
   }
 
@@ -186,7 +204,7 @@
 
 <svelte:element this={display ? 'div' : 'span'} class="math-edit" class:display bind:this={root}>
   <svelte:element this={display ? 'div' : 'span'} class="slot" class:hidden={tex} bind:this={slot}></svelte:element>
-  <svelte:element this={display ? 'div' : 'span'} class="tools" class:pop={!display} bind:this={tools} style:left={popAt ? `${popAt.left}px` : null} style:top={popAt ? `${popAt.top}px` : null}>
+  <svelte:element this={display ? 'div' : 'span'} class="tools" class:pop={!display} bind:this={tools} style:left={popAt ? `${popAt.left}px` : null} style:top={popAt?.top !== undefined ? `${popAt.top}px` : null} style:bottom={popAt?.bottom !== undefined ? `${popAt.bottom}px` : null}>
     <span class="tabs">
       <span class="shelves" role="tablist">
         {#each SHELVES as s (s.id)}
@@ -236,7 +254,7 @@
 
   .tools { display: block; margin-top: 8px; user-select: none; -webkit-user-select: none; font-size: 13px; line-height: 1.2; }
   .tools.pop {
-    position: fixed; z-index: 30; width: min(440px, calc(100vw - 24px)); margin: 0; padding: 8px;
+    position: fixed; z-index: var(--z-block-pop); width: min(440px, calc(100vw - 24px)); margin: 0; padding: 8px;
     border-radius: 12px; background: var(--bg-pop); box-shadow: var(--pop-shadow);
   }
   .tabs { display: flex; align-items: center; gap: 2px; }

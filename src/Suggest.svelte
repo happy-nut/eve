@@ -81,7 +81,7 @@
 <style>
   .suggest {
     position: fixed;
-    z-index: 40;
+    z-index: var(--z-caret-popup);
     list-style: none;
     margin: 0;
     padding: 4px;

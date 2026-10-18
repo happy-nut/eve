@@ -6,24 +6,24 @@
   import { prettyKeys } from './lib/shortcuts.svelte';
   import { hints } from './lib/hints.svelte';
   import { popIn } from './lib/motion';
-  import { held } from './lib/popup';
+  import { floatAt, held } from './lib/popup';
 
   // every menu in the app (a right click, the list's "+", a code block's language): App renders it, anyone opens
   // it through ui.openMenu. Keyboard-reachable — the mouse moves the highlight.
   // the last menu opened: closing, it slides away showing what it showed (ui.menu is already null by then)
   const req = $derived.by(held(() => ui.menu));
   let el = $state<HTMLUListElement | null>(null);
-  let x = $state(0), y = $state(0);
+  let x = $state(0), y = $state(0), maxH = $state<number | null>(null);
 
-  // placed at the pointer, then pulled back inside the window once its size is known
+  // placed at the pointer, then, once its size is known, pulled back inside the window across and over the pointer
+  // when there is no room under it (its own size: offsetWidth, not the rect, which is scaled while it pops in)
   $effect(() => {
     const m = ui.menu;
     if (!m) return;
-    x = m.x; y = m.y;
-    const r = el?.getBoundingClientRect();
-    if (!r) return;
-    if (m.x + r.width > window.innerWidth - 8) x = Math.max(8, window.innerWidth - r.width - 8);
-    if (m.y + r.height > window.innerHeight - 8) y = Math.max(8, m.y - r.height);
+    x = m.x; y = m.y; maxH = null;
+    if (!el) return;
+    const f = floatAt({ x: m.x, y: m.y }, { w: el.offsetWidth, h: el.offsetHeight }, { gap: 0 });
+    x = f.left; y = f.top; maxH = f.maxHeight;
   });
 
   function pick(it: MenuItem) {
@@ -70,7 +70,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="backdrop" onmousedown={() => ui.closeMenu()} oncontextmenu={(e) => { e.preventDefault(); ui.closeMenu(); }}></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<ul bind:this={el} class="menu" role="menu" tabindex="-1" use:autofocus style="left: {x}px; top: {y}px"
+<ul bind:this={el} class="menu" role="menu" tabindex="-1" use:autofocus style="left: {x}px; top: {y}px" style:max-height={maxH === null ? null : `min(${maxH}px, 360px, 70vh)`}
   transition:scale|global={popIn} onkeydown={onKey}>
   {#each req.items as it, i (i)}
     <li role="none" class:sep={it.sep}>
@@ -97,9 +97,9 @@
   .check { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .items .check { width: 20px; height: 20px; }
   .items li.sep { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
-  .backdrop { position: fixed; inset: 0; z-index: 54; } /* over a picture shown full size (50), which has a menu too */
+  .backdrop { position: fixed; inset: 0; z-index: var(--z-menu-scrim); } /* over a picture shown full size (--z-photo), which has a menu too */
   .menu {
-    position: fixed; z-index: 55; min-width: 184px; max-width: 280px; max-height: min(360px, 70vh); overflow-y: auto;
+    position: fixed; z-index: var(--z-menu); min-width: 184px; max-width: 280px; max-height: min(360px, 70vh); overflow-y: auto;
     list-style: none; margin: 0; padding: 4px; outline: none; transform-origin: top left;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }

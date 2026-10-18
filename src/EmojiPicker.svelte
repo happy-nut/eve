@@ -6,17 +6,19 @@
   import { ui } from './lib/ui.svelte';
   import { isMobile } from './lib/platform';
   import { CUSTOM_ICONS, customUrl, randomIcon } from './lib/icons';
-  import { held } from './lib/popup';
+  import { floatAt, held, screenInsets, viewSize } from './lib/popup';
   import { claimKeys, composing } from './lib/keys';
 
   // the last one asked: closing, it fades out showing what it showed (ui.emoji is already null by then)
   const req = $derived.by(held(() => ui.emoji));
   let el: HTMLElement & { i18n?: unknown };
-  // keep the panel inside the window
+  // under what it was opened from, over it when there is no room under it; inside the window and clear of the
+  // traffic lights / toolbar strip (screenInsets). A phone's picker fills the screen instead (app.css).
   const W = 352, H = 400;
-  const TOP = 44; // stay clear of the traffic lights / toolbar strip
-  const x = $derived(Math.max(8, Math.min(req.x, window.innerWidth - W - 8)));
-  const y = $derived(Math.max(TOP, req.y + H > window.innerHeight - 8 ? req.y - H - 40 : req.y));
+  const at = $derived(floatAt(req.at, { w: W, h: H }, { gap: 6 }));
+  // room for all of it on neither side (a short window): as low as it fits, over what it came from, rather than cut
+  // off at the window's foot — it is modal, and its search box is what is wanted
+  const x = $derived(at.left), y = $derived(at.maxHeight >= H ? at.top : Math.max(screenInsets().top, viewSize().h - screenInsets().bottom - H));
 
   // in English, as the rest of Eve is (and the emoji's names the search finds them by): the picker was in Korean
   const en = {
@@ -205,9 +207,9 @@
 </div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; z-index: 40; }
+  .backdrop { position: fixed; inset: 0; z-index: var(--z-popover-scrim); }
   .panel {
-    position: fixed; z-index: 41; overflow: hidden;
+    position: fixed; z-index: var(--z-popover); overflow: hidden;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
     transform-origin: top left;
   }

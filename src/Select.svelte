@@ -3,6 +3,7 @@
   import { popIn } from './lib/motion';
   import { isMobile } from './lib/platform';
   import BottomSheet from './BottomSheet.svelte';
+  import { floatAt } from './lib/popup';
 
   /**
    * A choice among a few, drawn by the app instead of the platform: a popover under the button on the
@@ -18,7 +19,7 @@
   let open = $state(false);
   let at = $state(0); // the highlighted row while open
   let btn = $state<HTMLButtonElement | null>(null);
-  let pos = $state({ left: 0, width: 0, edge: '' }); // edge: its top (under the button) or bottom (over it), and the room it has
+  let pos = $state({ left: 0, top: 0, maxHeight: 0, width: 0, up: false }); // up: over the button, no room under it
 
   // the list lives on <body>: a transformed ancestor (the settings panel) would otherwise become the
   // box its position:fixed is measured from
@@ -28,17 +29,18 @@
 
   function show() {
     at = Math.max(0, options.findIndex(([id]) => id === value));
-    if (btn && !isMobile) {
-      const r = btn.getBoundingClientRect();
-      const room = { below: window.innerHeight - r.bottom - 12, above: r.top - 12 };
-      const below = room.below > options.length * 34 + 8 || room.below >= room.above;
-      // over the button its bottom edge sits just above it: placed by its top at the button's top, the list covered
-      // the button and ran off the bottom of the window. Cut to the room it has either way, and scrolls.
-      const edge = below ? `top: ${r.bottom + 4}px; max-height: ${room.below}px` : `bottom: ${window.innerHeight - r.top + 4}px; max-height: ${room.above}px; transform-origin: bottom right`;
-      pos = { left: r.right, width: r.width, edge };
-    }
+    if (btn && !isMobile) place(Math.max(btn.offsetWidth, 160), options.length * 34 + 8);
     open = true;
   }
+  /** Under the button, its right edge on the button's; over it when there is no room under it — its bottom edge just
+   *  above the button (placed by its top at the button's top, the list covered the button and ran off the bottom of
+   *  the window). Cut to the room it has either way, and scrolls. Guessed at first, then by its own size once drawn. */
+  function place(w: number, h: number) {
+    if (!btn) return;
+    const f = floatAt(btn.getBoundingClientRect(), { w, h }, { align: 'end' });
+    pos = { left: f.left, top: f.top, maxHeight: f.maxHeight, width: btn.offsetWidth, up: f.side === 'above' };
+  }
+  const measured = (node: HTMLElement) => { place(node.offsetWidth, node.scrollHeight); };
   function pick(i: number) {
     open = false;
     const id = options[i]?.[0];
@@ -78,7 +80,7 @@
   {:else}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div class="scrim" use:portal role="presentation" onmousedown={(e) => { e.preventDefault(); open = false; }}></div>
-    <div class="pop" use:portal role="listbox" style="left: {pos.left}px; {pos.edge}; min-width: {Math.max(pos.width, 160)}px"
+    <div class="pop" class:up={pos.up} use:portal use:measured role="listbox" style="left: {pos.left}px; top: {pos.top}px; max-height: {pos.maxHeight}px; min-width: {Math.max(pos.width, 160) + 10}px"
       transition:scale|global={popIn}>
       {#each options as [id, text], i (id)}
         <button role="option" aria-selected={id === value} class:at={i === at} tabindex="-1"
@@ -104,12 +106,14 @@
   .select svg { color: var(--fg-dim); transition: transform 0.18s; }
   .select.open svg { transform: rotate(180deg); }
 
-  .scrim { position: fixed; inset: 0; z-index: 40; }
+  .scrim { position: fixed; inset: 0; z-index: var(--z-popover-scrim); }
 
   .pop {
-    position: fixed; z-index: 41; transform: translateX(-100%); transform-origin: top right; padding: 4px; overflow-y: auto;
+    position: fixed; z-index: var(--z-popover); transform-origin: top right; padding: 4px; overflow-y: auto;
+    box-sizing: border-box; /* its max-height is all the room it has, padding and border in it (+10 on its min-width) */
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }
+  .pop.up { transform-origin: bottom right; }
   .pop button {
     display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; border: 0;
     border-radius: 6px; padding: 7px 10px; background: none; color: var(--fg); font: inherit; font-size: 13px; text-align: left;

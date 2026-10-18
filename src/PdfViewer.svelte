@@ -7,6 +7,7 @@
   import { openAsset, qlPreview } from './lib/platform';
   import { hwpPages } from './lib/hwp';
   import { HWP_FILE, PDF_FILE } from './lib/drop';
+  import { viewSize } from './lib/popup';
 
   // A floating panel, not a dialog: no backdrop, nothing behind it blocked — a PDF can sit open beside
   // the text being written. Drag it by its bar, resize it by any edge or the corner.
@@ -69,9 +70,9 @@
   const EDGE = 7; // frame around the document: the grab handles live here, clear of the PDF view,
                   // which the webview draws itself and which swallows a press meant for the panel
 
-  let w = $state(Math.min(520, window.innerWidth - 24));
-  let h = $state(Math.min(780, Math.round(window.innerHeight * 0.74)));
-  let x = $state(Math.max(12, window.innerWidth - Math.min(520, window.innerWidth - 24) - 12));
+  let w = $state(Math.min(520, viewSize().w - 24));
+  let h = $state(Math.min(780, Math.round(viewSize().h * 0.74)));
+  let x = $state(Math.max(12, viewSize().w - Math.min(520, viewSize().w - 24) - 12));
   let y = $state(64);
   let busy = $state(false); // being moved or resized
 
@@ -102,8 +103,8 @@
     if ((e.target as HTMLElement).closest('button')) return;
     const left = x, top = y;
     gesture(e, (dx, dy) => {
-      x = Math.min(window.innerWidth - 120, Math.max(120 - w, left + dx)); // a sliver stays grabbable
-      y = Math.min(window.innerHeight - 40, Math.max(0, top + dy));
+      x = Math.min(viewSize().w - 120, Math.max(120 - w, left + dx)); // a sliver stays grabbable
+      y = Math.min(viewSize().h - 40, Math.max(0, top + dy));
     });
   }
 
@@ -113,8 +114,8 @@
   function resize(e: PointerEvent, sides: string) {
     const w0 = w, h0 = h, x0 = x, y0 = y;
     gesture(e, (dx, dy) => {
-      if (sides.includes('e')) w = Math.max(MIN_W, Math.min(window.innerWidth - x - 8, w0 + dx));
-      if (sides.includes('s')) h = Math.max(MIN_H, Math.min(window.innerHeight - y - 8, h0 + dy));
+      if (sides.includes('e')) w = Math.max(MIN_W, Math.min(viewSize().w - x - 8, w0 + dx));
+      if (sides.includes('s')) h = Math.max(MIN_H, Math.min(viewSize().h - y - 8, h0 + dy));
       // the far side stays put: the panel grows out of the edge being dragged
       if (sides.includes('w')) {
         const left = Math.min(x0 + w0 - MIN_W, Math.max(8, x0 + dx));
@@ -183,7 +184,7 @@
 
 <style>
   .pdf-panel {
-    position: fixed; z-index: 32; display: flex; flex-direction: column; overflow: hidden; outline: none;
+    position: fixed; z-index: var(--z-over-sheet); display: flex; flex-direction: column; overflow: hidden; outline: none;
     background: var(--bg-pop); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
   }
   .pdf-bar {
