@@ -16,6 +16,7 @@
   import { renderSVG } from 'uqr';
   import { findUpdate } from './lib/update';
   import { askNotify } from './lib/reminder';
+  import { claimKeys, PRIORITY } from './lib/keys';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
 
@@ -97,7 +98,6 @@
     : 'Not synced yet');
 
   function onKey(e: KeyboardEvent) {
-    if (ui.pending) return;
     if (recording) {
       e.preventDefault(); e.stopPropagation();
       if (e.key === 'Escape') { recording = null; conflict = null; return; }
@@ -111,7 +111,7 @@
       recording = null;
       return;
     }
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); }
+    if (e.key === 'Escape') { e.stopPropagation(); onClose(); return true; }
     if (e.key === 'Tab' && !ui.menu) trapTab(e);
   }
   let panel: HTMLDivElement;
@@ -130,17 +130,34 @@
   /** Esc with the keyboard still behind Settings (the list's row, the note) closes Settings first: left to them,
    *  the list's own Esc took the keyboard to the note. Inside Settings, its popups keep their own Esc. */
   function escBehind(e: KeyboardEvent) {
-    // a shortcut being recorded is taken here, first: the app's own keys listen on the window too, ahead of
-    // Settings' bubbling handler, and ran what the keys were already bound to (⌘N made a note, ⌘⇧⌫ asked to
-    // delete the open one, ⌘, closed Settings) while they were being recorded
-    if (recording && !ui.pending) { onKey(e); e.stopPropagation(); return; }
-    if (e.key !== 'Escape' || recording || ui.pending || ui.menu) return;
+    if (e.key !== 'Escape' || recording || ui.menu) return;
     if ((e.target as HTMLElement | null)?.closest?.('.panel')) return;
-    e.preventDefault(); e.stopPropagation(); onClose();
+    e.stopPropagation(); onClose(); return true;
+  }
+  // (while Settings is the one on top: a dialog over it has the keys, and a menu over it its own Esc)
+  $effect(() => {
+    const off = [
+      claimKeys('global', { '*': onKey }, { whileTop: 'settings' }),
+      claimKeys('global', { Escape: escBehind }, { capture: true, whileTop: 'settings' }),
+    ];
+    return () => off.forEach((f) => f());
+  });
+  // a shortcut being recorded is taken first, every key of it (an IME's too), before the note or anything else:
+  // the app's own keys ran what the keys were already bound to (⌘N made a note, ⌘⇧⌫ asked to delete the open one,
+  // ⌘, closed Settings) while they were being recorded
+  $effect(() => {
+    if (!recording) return;
+    return claimKeys('global', { '*': (e) => { onKey(e); e.stopPropagation(); return true; } }, { capture: true, whileTop: 'settings', priority: PRIORITY.record, composing: true });
+  });
+
+  // five settings at once from one small link, right under the sample: an Undo puts them all back
+  function resetLook() {
+    const { theme, font, custom, size, lineHeight, width } = appearance.s;
+    appearance.reset();
+    ui.toast('Appearance reset to defaults', { label: 'Undo', run: () => appearance.set({ theme, font, custom, size, lineHeight, width }) });
   }
 </script>
 
-<svelte:window onkeydown={onKey} onkeydowncapture={escBehind} />
 
 <!-- preventDefault: the press would otherwise take the keyboard away again after closing gave it back -->
 <div class="backdrop" transition:fade|global={scrimFade} onmousedown={(e) => { e.preventDefault(); onClose(); }} role="presentation"></div>
@@ -220,7 +237,7 @@
       <h3>Window</h3>
       <div class="card">
         <label class="row">
-          <span class="label">Close sidebar when you start writing <span class="sub">typing or arrowing in the editor folds the list away</span></span>
+          <span class="label">Close sidebar when you start writing <span class="sub">typing in the editor folds the list away (moving the caret with the arrows leaves it open)</span></span>
           <input type="checkbox" class="switch" checked={appearance.s.closeSidebarOnWrite}
             onchange={(e) => appearance.set({ closeSidebarOnWrite: e.currentTarget.checked })} />
         </label>
@@ -313,7 +330,7 @@
       <p class="sample" style="font-family: {appearance.stack}; font-size: {appearance.s.size}px; line-height: {appearance.s.lineHeight}">
         The quick brown fox jumps over the lazy dog. 다람쥐 헌 쳇바퀴에 타고파. 0123456789
       </p>
-      <div class="foot"><button class="link" onclick={() => appearance.reset()}>Reset to defaults</button></div>
+      <div class="foot"><button class="link reset" onclick={resetLook}>Reset to defaults</button></div>
 
     {:else if tab === 'sync'}
       <h3>GitHub sync</h3>
@@ -459,12 +476,12 @@
 </div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: 20; }
+  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-panel-scrim); }
   /* a phone: settings is a page, and the strip above the status bar is part of it */
   :global(html.mobile) .backdrop { background: var(--bg); }
   .panel:focus { outline: none; }
   .panel {
-    position: fixed; z-index: 21; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    position: fixed; z-index: var(--z-panel); top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: min(560px, 92vw); max-height: 82vh; display: flex; flex-direction: column; overflow: hidden;
     background: var(--bg-pop); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
   }
@@ -533,6 +550,8 @@
   input:not([type]), input[type='password'] { flex: 1; }
   input:not([type]):focus, input[type='password']:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   .link.small { font-size: inherit; }
+  /* a thumb's target on a phone, not a 16px line of text */
+  :global(html.mobile) .link.reset { padding: 12px 8px; margin: -6px -8px; }
   .switch {
     appearance: none; width: 34px; height: 20px; border-radius: 10px; margin: 0; position: relative;
     background: var(--bg-active); transition: background 0.2s;

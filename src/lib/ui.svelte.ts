@@ -1,5 +1,6 @@
 import { focusNote } from './popup';
 import { isMobile } from './platform';
+import { shifting, shiftingUntil } from './focusWatch';
 /** One line of a menu. `sep` starts a group above it; a `hide` item never makes the list; `checked` is the current choice. */
 export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean; checked?: boolean }
 
@@ -19,117 +20,223 @@ export interface CardReq {
   resolve: () => void;
 }
 
-interface EmojiReq { x: number; y: number; current: string; resolve: (v: string | null) => void }
+interface EmojiReq { at: DOMRect; current: string; resolve: (v: string | null) => void }
+
+/**
+ * Everything that opens over the app and goes away again: a picture shown full size, a formula being edited, a
+ * phone's sheet, the emoji picker, a menu, a dialog, a diagram on the whole screen, Find, a PDF, a card's page,
+ * Settings. Each was a field of its own once, and every place that closes "whatever is open" (a phone's back, Esc,
+ * a note brought up from outside, the window coming back) listed them again by hand: a layer added later was missed
+ * by some of them, and each put the focus back its own way. Now they are one stack, in the order they opened —
+ * which is the order back and Esc take them away, the newest first.
+ */
+export type LayerId = 'photo' | 'math' | 'sheet' | 'emoji' | 'menu' | 'confirm' | 'diagramView' | 'find' | 'pdf' | 'card' | 'settings';
+/** what closed it: a phone's back, Esc, or the app putting everything away (a note brought up from outside) */
+export type CloseReason = 'back' | 'esc' | 'putAway';
+export interface Layer {
+  id: LayerId;
+  /** close it, as its own ✕ does (it is off the stack already) */
+  close(reason: CloseReason): void;
+  /** the app's Esc closes it. Left out by the ones that take Esc themselves (a dialog, the picker, Settings) */
+  esc?: boolean;
+  /** it takes every key while it is up: the app's shortcuts wait (a menu, a dialog, the picker, a diagram) */
+  keys?: boolean;
+  /** it owns the keyboard: the window coming back puts nothing behind it in focus */
+  modal?: boolean;
+  /** what had the keyboard as it opened: it goes back there */
+  from: Element | null;
+  /** its own DOM: focus still in it as it fades out is no one's, and a `from` inside it is no place to go back to */
+  own?: string;
+  /** not modal, or closed by a click elsewhere: focus that has moved on somewhere else by itself stays there */
+  yields?: boolean;
+  /** a phone too. Most don't: a phone has no keyboard focus to lose, and focusing a note would raise its keyboard */
+  phone?: boolean;
+  /** put back this many ms later, and only if it is still nowhere: its callers put the keyboard where they want first */
+  settle?: number;
+}
+
+/** The keyboard back to `from`; with that gone (taken off the page, <body>, inside what is closing), to the note. */
+export function focusBack(from: Element | null, own?: string) {
+  const el = from as HTMLElement | null;
+  if (el?.isConnected && el !== document.body && !(own && el.closest(own)) && typeof el.focus === 'function') el.focus({ preventScroll: true });
+  else if (!isMobile) focusNote(); // (on a phone the note would raise its keyboard: nothing, there)
+}
+
+class Layers {
+  // the stack itself, and what the page reads of it (state): an effect that opens one (Settings) must not read what
+  // it writes, or it runs again for ever
+  private items: Layer[] = [];
+  private shown = $state.raw<readonly Layer[]>([]);
+  private set(list: Layer[]) { this.items = list; this.shown = list; }
+  /** open now, the oldest first */
+  get all(): readonly Layer[] { return this.shown; }
+  get top(): Layer | null { return this.shown.at(-1) ?? null; }
+  get count() { return this.shown.length; }
+  has(id: LayerId) { return this.shown.some((l) => l.id === id); }
+  get(id: LayerId) { return this.shown.findLast((l) => l.id === id) ?? null; }
+  /** one is up that takes every key (the app's shortcuts wait) */
+  get grabbing() { return this.shown.some((l) => l.keys); }
+  /** one is up that owns the keyboard */
+  get modal() { return this.shown.some((l) => l.modal); }
+
+  /** Opened: on top, the keyboard's place kept for it. The result takes it off again (closed, or unmounted). */
+  push(layer: Omit<Layer, 'from'> & { from?: Element | null }): () => void {
+    const l: Layer = { ...layer, from: layer.from !== undefined ? layer.from : document.activeElement };
+    this.set([...this.items, l]);
+    return () => this.remove(l);
+  }
+  /** Close the one on top; false when nothing is open. */
+  closeTop(reason: CloseReason): boolean {
+    const l = this.items.at(-1);
+    if (!l) return false;
+    this.shut(l, reason);
+    return true;
+  }
+  /** Close everything, the newest first. */
+  closeAll(reason: CloseReason) {
+    for (let l = this.items.at(-1); l; l = this.items.at(-1)) this.shut(l, reason);
+  }
+  /** an Esc nothing else took: the layer on top closes, if Esc closes it */
+  escape(): boolean {
+    return !!this.items.at(-1)?.esc && this.closeTop('esc');
+  }
+  /** off the stack before it is told to close: what it does as it goes (a sheet slides away before it unmounts)
+   *  must not leave it on top, taking the next back that was meant for what is under it */
+  private shut(l: Layer, reason: CloseReason) {
+    shifting(() => {
+      this.set(this.items.filter((x) => x !== l));
+      l.close(reason);
+      this.giveBack(l);
+    });
+  }
+  private remove(l: Layer) {
+    if (!this.items.includes(l)) return;
+    this.set(this.items.filter((x) => x !== l));
+    shifting(() => this.giveBack(l));
+  }
+  /** the one way the keyboard goes back as anything closes */
+  private giveBack(l: Layer) {
+    if (isMobile && !l.phone) return;
+    const go = () => {
+      const a = document.activeElement;
+      // (still in it as it fades out, or on <body>: no one has taken it)
+      if (l.yields && a && a !== document.body && a.isConnected && !(l.own && a.closest(l.own))) return;
+      focusBack(l.from, l.own);
+    };
+    if (!l.settle) return go();
+    const done = shiftingUntil();
+    setTimeout(() => { done(); shifting(go); }, l.settle);
+  }
+}
 
 class Ui {
+  /** what is open over the app, in the order it opened (see Layer) */
+  layers = new Layers();
+
   /** emoji picker request (EmojiPicker.svelte renders it) */
   emoji = $state<EmojiReq | null>(null);
+  private emojiOff: (() => void) | undefined;
   /** Pick an emoji near `anchor`. Resolves the emoji, '' to remove, or null when dismissed. */
   pickEmoji(anchor: HTMLElement | DOMRect, current = ''): Promise<string | null> {
     const r = anchor instanceof DOMRect ? anchor : anchor.getBoundingClientRect();
-    this.emojiFrom = document.activeElement as HTMLElement | null;
-    return new Promise((res) => { this.emoji = { x: r.left, y: r.bottom + 6, current, resolve: res }; });
+    // Closed however (picked, removed, dismissed), each caller puts the keyboard back where the picker was opened
+    // from (the list's row, the note); should the focus still be nowhere after that, it goes back to where it was
+    // when the picker opened, so it is never simply lost.
+    this.emojiOff ??= this.layers.push({ id: 'emoji', close: () => this.emojiDone(null), keys: true, modal: true, own: '[aria-label="Choose an icon"]', yields: true, settle: 60 });
+    return new Promise((res) => { this.emoji = { at: r, current, resolve: res }; });
   }
-  private emojiFrom: HTMLElement | null = null;
-  /** Closed however (picked, removed, dismissed). Each caller puts the keyboard back where the picker was
-   *  opened from (the list's row, the note); should the focus still be nowhere after that, it goes back to
-   *  where it was when the picker opened, so it is never simply lost. */
   emojiDone(v: string | null) {
     this.emoji?.resolve(v);
     this.emoji = null;
-    const from = this.emojiFrom;
-    this.emojiFrom = null;
-    if (isMobile) return; // a phone has no keyboard focus to lose, and focusing a note would raise its keyboard
-    setTimeout(() => {
-      const a = document.activeElement;
-      if (a && a !== document.body && a.isConnected) return;
-      if (from?.isConnected && from !== document.body) from.focus({ preventScroll: true }); else focusNote();
-    }, 60);
+    this.emojiOff?.();
+    this.emojiOff = undefined;
   }
   card = $state<CardReq | null>(null);
+  private cardOff: (() => void) | undefined;
+  /** Closed however (Esc, a click outside, a phone's back): the keyboard goes back where it was. Opened by a
+   *  click (the template buttons take no focus) it was nowhere, so it goes to the note, or the calendar's day. */
+  private cardLayer() {
+    this.cardOff ??= this.layers.push({ id: 'card', close: () => this.closeCard(), esc: true, own: '.card-page', phone: true });
+  }
   /** Open a card as a floating page; resolves when it closes. */
   openCard(c: { title: string; body: string; note?: string }, onChange: CardReq['onChange'], onDelete?: () => void): Promise<void> {
-    this.cardFrom = document.activeElement as HTMLElement | null;
+    this.cardLayer();
     return new Promise((res) => { this.card = { ...c, onChange, onDelete, resolve: res }; });
   }
   /** A note's markdown as a floating page (a day from the calendar, the daily template); resolves when it closes. */
   openPage(markdown: string, onMarkdown: (md: string) => void, note?: string): Promise<void> {
-    this.cardFrom = document.activeElement as HTMLElement | null;
+    this.cardLayer();
     return new Promise((res) => { this.card = { title: '', body: '', markdown, onMarkdown, note, onChange: () => {}, resolve: res }; });
   }
-  private cardFrom: HTMLElement | null = null;
-  /** Closed however (Esc, a click outside, a phone's back): the keyboard goes back where it was. Opened by a
-   *  click (the template buttons take no focus) it was nowhere, so it goes to the note, or the calendar's day. */
   closeCard() {
     if (!this.card) return;
     this.card.resolve();
     this.card = null;
-    const from = this.cardFrom;
-    this.cardFrom = null;
-    if (from?.isConnected && from !== document.body && !from.closest('.card-page')) from.focus({ preventScroll: true });
-    else focusNote();
+    this.cardOff?.();
+    this.cardOff = undefined;
   }
   /** a diagram block filling the screen, to zoom into and edit there (DiagramBlock.svelte): how to put it back */
   diagramView = $state<(() => void) | null>(null);
-  private diagramViewFrom: HTMLElement | null = null;
-  viewDiagram(close: () => void, from: HTMLElement | null = document.activeElement as HTMLElement | null) { this.diagramViewFrom = from; this.diagramView = close; }
+  private diagramOff: (() => void) | undefined;
+  viewDiagram(close: () => void, from: HTMLElement | null = document.activeElement as HTMLElement | null) {
+    this.diagramOff ??= this.layers.push({ id: 'diagramView', close: () => this.closeDiagramView(), keys: true, modal: true, from });
+    this.diagramView = close;
+  }
   closeDiagramView() {
     const close = this.diagramView;
     if (close === null) return;
     this.diagramView = null;
     close();
-    const from = this.diagramViewFrom;
-    this.diagramViewFrom = null;
-    if (!isMobile && from?.isConnected && from !== document.body) from.focus({ preventScroll: true });
+    this.diagramOff?.();
+    this.diagramOff = undefined;
   }
   /** a picture shown full size over everything (ImageViewer.svelte): a double-click on it, or ↩ with it selected */
   photo = $state<{ src: string; alt: string; menu?: (at: { clientX: number; clientY: number }) => void } | null>(null);
-  private photoFrom: HTMLElement | null = null;
-  /** `menu`: the picture's own menu, opened by a click (or right-click) on it as it is shown */
-  viewImage(src: string, alt = '', menu?: (at: { clientX: number; clientY: number }) => void) { this.photoFrom = document.activeElement as HTMLElement | null; this.photo = { src, alt, menu }; }
-  /** the keyboard goes back to where it was: the note (or the card) with the picture still selected */
+  private photoOff: (() => void) | undefined;
+  /** `menu`: the picture's own menu, opened by a click (or right-click) on it as it is shown. Closed, the keyboard
+   *  goes back to where it was: the note (or the card) with the picture still selected. */
+  viewImage(src: string, alt = '', menu?: (at: { clientX: number; clientY: number }) => void) {
+    this.photoOff ??= this.layers.push({ id: 'photo', close: () => this.closeImage(), esc: true, modal: true, own: '.viewer', phone: true });
+    this.photo = { src, alt, menu };
+  }
   closeImage() {
     if (!this.photo) return;
     this.photo = null;
-    const from = this.photoFrom;
-    this.photoFrom = null;
-    if (from?.isConnected && from !== document.body) from.focus({ preventScroll: true }); else focusNote();
+    this.photoOff?.();
+    this.photoOff = undefined;
   }
-  /** a PDF opened from a note, shown by PdfViewer.svelte as a floating panel (nothing modal about it) */
+  /** a PDF opened from a note, shown by PdfViewer.svelte as a floating panel (nothing modal about it). Closed, the
+   *  keyboard goes back to where it was when the panel opened (the note, the list), unless it has moved on
+   *  somewhere else since: a click in the note while it is open is the note's. */
   pdf = $state<{ src: string; name: string } | null>(null);
+  private pdfOff: (() => void) | undefined;
   openPdf(src: string, name: string) {
-    const a = document.activeElement as HTMLElement | null;
-    if (!a?.closest('.pdf-panel')) this.pdfFrom = a; // another PDF opened over the first keeps where the first came from
+    // another PDF opened over the first keeps where the first came from
+    this.pdfOff ??= this.layers.push({ id: 'pdf', close: () => this.closePdf(), esc: true, own: '.pdf-panel', yields: true });
     this.pdf = { src, name };
   }
-  private pdfFrom: HTMLElement | null = null;
-  /** The keyboard goes back to where it was when the panel opened (the note, the list), unless it has moved on
-   *  somewhere else since: it is not modal, a click in the note while it is open is the note's. */
   closePdf() {
     this.pdf = null;
-    const from = this.pdfFrom;
-    this.pdfFrom = null;
-    if (isMobile) return; // a phone has no keyboard focus to lose, and focusing a note would raise its keyboard
-    const a = document.activeElement;
-    if (a && a !== document.body && a.isConnected && !a.closest('.pdf-panel')) return;
-    if (from?.isConnected && from !== document.body) from.focus({ preventScroll: true }); else focusNote();
+    this.pdfOff?.();
+    this.pdfOff = undefined;
   }
   /** The document took the keyboard by itself as it loaded: back to where it was (the panel is not modal). */
   pdfGiveBack() {
     if (isMobile) return;
-    const from = this.pdfFrom;
-    if (from?.isConnected && from !== document.body) from.focus({ preventScroll: true }); else focusNote();
+    focusBack(this.layers.get('pdf')?.from ?? null, '.pdf-panel');
   }
 
   /** every menu (a right click, the list's "+", a code block's language) at a point; the app draws its own
    *  everywhere, the webview's is suppressed. Menu.svelte draws it: a popup on the Mac, a sheet on a phone. */
   menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
-  private menuFrom: HTMLElement | null = null;
+  private menuOff: (() => void) | undefined;
   private menuClosed: (() => void) | undefined;
   openMenu(at: { clientX: number; clientY: number }, items: MenuItem[], onclose?: () => void) {
     this.menuClosed?.();
     this.menuClosed = onclose;
-    this.menuFrom = document.activeElement as HTMLElement | null;
+    // dismissed or picked: whatever had the keyboard gets it back (a picked item may take it again). One opened over
+    // another keeps where the first came from: the keyboard is on the first one's items by then
+    this.menuOff ??= this.layers.push({ id: 'menu', close: () => this.closeMenu(), esc: true, keys: true, modal: true, own: '.menu', phone: true });
     // a hidden item that started a group hands its divider on to the next one shown, and a group whose items
     // all went away must not leave its divider at the top of the menu
     const shown: MenuItem[] = [];
@@ -142,50 +249,100 @@ class Ui {
     }
     this.menu = { x: at.clientX, y: at.clientY, items: shown };
   }
-  /** Dismissed or picked: whatever had the keyboard gets it back (a picked item may take it again). */
   closeMenu() {
     this.menu = null;
     this.menuClosed?.();
     this.menuClosed = undefined;
-    if (this.menuFrom?.isConnected) this.menuFrom.focus({ preventScroll: true });
-    this.menuFrom = null;
+    this.menuOff?.();
+    this.menuOff = undefined;
   }
 
-  /** A phone's sheets open now (BottomSheet: a menu, a setting's choices), newest last: Android's back closes the
-   *  top one first. A setting's choices keep their open state to themselves, so back closed all of Settings. */
-  private sheets: (() => void)[] = [];
-  sheetsOpen = $state(0);
+  /** A phone's sheet (BottomSheet: a setting's choices; a menu's sheet is the menu's layer). A setting's choices
+   *  keep their open state to themselves, so they must be layers too, or back closed all of Settings under them. */
   openedSheet(close: () => void) {
-    this.sheets.push(close);
-    this.sheetsOpen = this.sheets.length;
-    return () => { this.sheets = this.sheets.filter((c) => c !== close); this.sheetsOpen = this.sheets.length; };
+    return this.layers.push({ id: 'sheet', close, modal: true });
   }
   /** close the newest sheet; false when none is open */
   closeSheet(): boolean {
-    const close = this.sheets.at(-1);
-    close?.();
-    return !!close;
+    if (this.layers.top?.id !== 'sheet') return false;
+    return this.layers.closeTop('back');
+  }
+  /** a formula being edited in place (MathEdit.svelte), finished as Esc finishes it: a phone's back closes it before
+   *  what is under it, and its keyboard with it (it stayed up over the list). It puts the caret back itself. */
+  editingMath(close: () => void) {
+    return this.layers.push({ id: 'math', close, esc: true, own: '.math-edit', yields: true });
+  }
+  /** Settings (App's): it takes nothing from the keyboard's place. Closed however (Esc, ✕, a click beside it), the
+   *  keyboard is back where it was — the list's row, the note — unless something has taken it meanwhile. */
+  openedSettings(close: () => void) {
+    return this.layers.push({ id: 'settings', close, modal: true, own: '[aria-label="Settings"]', yields: true });
   }
 
-  /** the find bar over the open note (⌘F) */
-  find = $state(false);
+  /** the find bar over the open note (⌘F); closed however, the caret is back in the note */
+  #find = $state(false);
+  get find() { return this.#find; }
+  private findOff: (() => void) | undefined;
+  openFind() {
+    this.findOff ??= this.layers.push({ id: 'find', close: () => this.closeFind(), esc: true, own: '.find', phone: true, from: document.querySelector('main .tiptap') });
+    this.#find = true;
+  }
+  closeFind() {
+    this.#find = false;
+    this.findOff?.();
+    this.findOff = undefined;
+  }
   pending = $state<Pending | null>(null);
+  private pendingOff: (() => void) | undefined;
+  /** focus goes back to where it was (sidebar row, editor) the moment the dialog closes — synchronously, before its
+   *  answer is heard and any list re-renders, so a later focusRow() can still override it */
+  private asking(p: Pending) {
+    this.pendingOff ??= this.layers.push({ id: 'confirm', close: () => this.done(null), keys: true, modal: true, own: '.box[role="dialog"]', phone: true });
+    this.pending = p;
+  }
   /** which pane owns keyboard focus; dialogs don't change it, so focus can return there afterwards */
   focusOwner = $state<'editor' | 'sidebar'>('editor');
 
   /** Yes/no. `danger` is a deletion: a bin, a red "Delete". Anything else confirms with `yes` (default "OK"). */
   ask(message: string, danger = true, yes?: string): Promise<boolean> {
-    return new Promise((res) => { this.pending = { message, danger, yes, resolve: (v) => res(v !== null) }; });
+    return new Promise((res) => this.asking({ message, danger, yes, resolve: (v) => res(v !== null) }));
   }
   /** Something to know, not a choice: one OK, no Cancel. */
   tell(message: string): Promise<void> {
-    return new Promise((res) => { this.pending = { message, danger: false, alert: true, resolve: () => res() }; });
+    return new Promise((res) => this.asking({ message, danger: false, alert: true, resolve: () => res() }));
   }
   /** Text input; resolves null on cancel. */
   prompt(message: string, initial = ''): Promise<string | null> {
-    return new Promise((res) => { this.pending = { message, input: initial, resolve: res }; });
+    return new Promise((res) => this.asking({ message, input: initial, resolve: res }));
   }
-  done(v: string | null) { this.pending?.resolve(v); this.pending = null; }
+  done(v: string | null) {
+    const p = this.pending;
+    this.pending = null;
+    this.pendingOff?.();
+    this.pendingOff = undefined;
+    p?.resolve(v);
+  }
+
+  /** A line at the bottom of the window that says what just happened (a note deleted), with one thing to do about it
+   *  (Undo). Toast.svelte draws it. A newer one takes its place; on its own it goes after a few seconds. */
+  toastMsg = $state<{ message: string; action?: { label: string; run: () => void }; id: number } | null>(null);
+  private toastTimer: ReturnType<typeof setTimeout> | undefined;
+  private toastSeq = 0;
+  toast(message: string, action?: { label: string; run: () => void }, ms = 6000) {
+    clearTimeout(this.toastTimer);
+    const id = ++this.toastSeq;
+    this.toastMsg = { message, action, id };
+    this.toastTimer = setTimeout(() => { if (this.toastMsg?.id === id) this.toastMsg = null; }, ms);
+  }
+  /** its button: what it offers is done once, and the toast goes with it */
+  toastAction() {
+    const run = this.toastMsg?.action?.run;
+    this.dismissToast();
+    run?.();
+  }
+  dismissToast() { clearTimeout(this.toastTimer); this.toastMsg = null; }
+
+  /** what is typed in the list's search box: the list shows only what it finds while there is any */
+  search = $state('');
 }
 
 export const ui = new Ui();

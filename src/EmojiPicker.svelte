@@ -6,16 +6,19 @@
   import { ui } from './lib/ui.svelte';
   import { isMobile } from './lib/platform';
   import { CUSTOM_ICONS, customUrl, randomIcon } from './lib/icons';
-  import { held } from './lib/popup';
+  import { floatAt, held, screenInsets, viewSize } from './lib/popup';
+  import { claimKeys, composing } from './lib/keys';
 
   // the last one asked: closing, it fades out showing what it showed (ui.emoji is already null by then)
   const req = $derived.by(held(() => ui.emoji));
   let el: HTMLElement & { i18n?: unknown };
-  // keep the panel inside the window
+  // under what it was opened from, over it when there is no room under it; inside the window and clear of the
+  // traffic lights / toolbar strip (screenInsets). A phone's picker fills the screen instead (app.css).
   const W = 352, H = 400;
-  const TOP = 44; // stay clear of the traffic lights / toolbar strip
-  const x = $derived(Math.max(8, Math.min(req.x, window.innerWidth - W - 8)));
-  const y = $derived(Math.max(TOP, req.y + H > window.innerHeight - 8 ? req.y - H - 40 : req.y));
+  const at = $derived(floatAt(req.at, { w: W, h: H }, { gap: 6 }));
+  // room for all of it on neither side (a short window): as low as it fits, over what it came from, rather than cut
+  // off at the window's foot — it is modal, and its search box is what is wanted
+  const x = $derived(at.left), y = $derived(at.maxHeight >= H ? at.top : Math.max(screenInsets().top, viewSize().h - screenInsets().bottom - H));
 
   // in English, as the rest of Eve is (and the emoji's names the search finds them by): the picker was in Korean
   const en = {
@@ -87,7 +90,11 @@
     const i = cells.indexOf(at as HTMLButtonElement);
     const go = (cell: HTMLElement) => { e.preventDefault(); e.stopPropagation(); cell.focus(); cell.scrollIntoView({ block: 'nearest' }); void showCell(cell); };
     if (at === input) {
-      if (e.key === 'ArrowDown' && cells.length && !e.isComposing) go(cells[0]);
+      if (e.key === 'ArrowDown' && cells.length && !composing(e)) go(cells[0]);
+      // ↩ after a search picks its first match, the one a glance at the results lands on (it did nothing)
+      else if (e.key === 'Enter' && !composing(e) && input?.value.trim() && root.querySelector('#search-results') && cells.length) {
+        e.preventDefault(); e.stopPropagation(); cells[0].click();
+      }
       return;
     }
     if (i < 0 || !input) return;
@@ -112,7 +119,7 @@
       else { e.preventDefault(); e.stopPropagation(); void category(root, -1, cells[i]).then((moved) => moved || input.focus()); }
     }
     else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); cells[i].click(); }
-    else if (e.key === 'Backspace' || e.key.length === 1 || e.key === 'Process' || e.isComposing) {
+    else if (e.key === 'Backspace' || e.key.length === 1 || e.key === 'Process' || composing(e)) {
       // not prevented: the key itself goes on to the box, caret at the end of what was typed
       input.focus();
       input.setSelectionRange(input.value.length, input.value.length);
@@ -160,12 +167,10 @@
     const code = found?.shortcodes?.[0];
     if (code) preview = { face: found.unicode ?? '', code };
   }
-  function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); ui.emojiDone(null); }
-  }
+  // Esc puts it away, wherever the keyboard is, while it is the one on top
+  $effect(() => claimKeys('global', { Escape: (e) => { e.stopPropagation(); ui.emojiDone(null); return true; } }, { whileTop: 'emoji' }));
 </script>
 
-<svelte:window onkeydown={onKey} />
 <div class="backdrop" transition:fade|global={scrimFade} onmousedown={() => ui.emojiDone(null)} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="panel" style="left: {x}px; top: {y}px; width: {W}px" transition:scale|global={popIn} role="dialog" aria-label="Choose an icon" onkeydowncapture={onGridKey}>
@@ -202,9 +207,9 @@
 </div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; z-index: 40; }
+  .backdrop { position: fixed; inset: 0; z-index: var(--z-popover-scrim); }
   .panel {
-    position: fixed; z-index: 41; overflow: hidden;
+    position: fixed; z-index: var(--z-popover); overflow: hidden;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
     transform-origin: top left;
   }

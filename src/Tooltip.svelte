@@ -5,17 +5,23 @@
    * tip-up (above), tip-right (right-aligned).
    */
   import Keys from './Keys.svelte';
+  import { claimKeys, PRIORITY } from './lib/keys';
 
-  let tip = $state<{ text: string; keys: string; x: number; y: number; up: boolean; right: boolean } | null>(null);
+  import { floatAt } from './lib/popup';
+
+  let tip = $state<{ text: string; keys: string; at: DOMRect; up: boolean; right: boolean } | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
   let current: HTMLElement | null = null; // element the tooltip belongs to
   let box = $state<HTMLDivElement | null>(null);
-  // kept inside the window: a tip centred under a control at its right edge (the calendar's ›) ran off it
+  let pos = $state<{ left: number; top: number } | null>(null);
+  // placed once its size is known, kept inside the window: a tip centred under a control at its right edge (the
+  // calendar's ›) ran off it, and one under a control at the window's foot went under it — it goes over it then.
+  // Only the window's edge is kept clear: a tip in the title strip is the toolbar's own.
   $effect(() => {
-    if (!box || !tip) return;
-    const r = box.getBoundingClientRect(), over = r.right - (window.innerWidth - 8), under = 8 - r.left;
-    if (over > 0) tip.x -= over;
-    else if (under > 0) tip.x += under;
+    if (!box || !tip) { pos = null; return; }
+    const f = floatAt(tip.at, { w: box.offsetWidth, h: box.offsetHeight },
+      { prefer: tip.up ? 'above' : 'below', align: tip.right ? 'end' : 'center', gap: 7, avoid: { top: 8, right: 8, bottom: 8, left: 8 } });
+    pos = { left: f.left, top: f.top };
   });
 
   function over(e: MouseEvent) {
@@ -27,7 +33,7 @@
     timer = setTimeout(() => {
       const r = el.getBoundingClientRect();
       const up = el.classList.contains('tip-up'), right = el.classList.contains('tip-right');
-      tip = { text: el.dataset.tip ?? '', keys: el.dataset.keys ?? '', x: right ? r.right : r.left + r.width / 2, y: up ? r.top - 7 : r.bottom + 7, up, right };
+      tip = { text: el.dataset.tip ?? '', keys: el.dataset.keys ?? '', at: r, up, right };
     }, 400);
   }
   function out(e?: MouseEvent) {
@@ -35,30 +41,29 @@
     if (e && current && e.relatedTarget instanceof Node && current.contains(e.relatedTarget)) return;
     clearTimeout(timer); tip = null; current = null;
   }
+  // any key puts it away, whoever takes the key
+  $effect(() => claimKeys('global', { '*': () => out() }, { capture: true, priority: PRIORITY.watch, composing: true }));
 </script>
 
 <!-- controls can vanish under a still pointer (e.g. the group tools folding away): re-check hover on movement -->
-<svelte:document onmouseover={over} onmouseout={out} onmousedown={() => out()} onkeydown={() => out()}
+<svelte:document onmouseover={over} onmouseout={out} onmousedown={() => out()}
   onmousemove={() => current && !current.matches(':hover') && out()} onscrollcapture={() => out()} onvisibilitychange={() => out()} />
 <svelte:window onblur={() => out()} onmouseout={(e) => !e.relatedTarget && out()} />
 
 {#if tip}
   <!-- CSS intro only: a Svelte outro can stall when the window is hidden mid-animation and leave a ghost tip -->
-  <div class="tip" bind:this={box} class:up={tip.up} class:right={tip.right} style="left: {tip.x}px; top: {tip.y}px">
+  <div class="tip" bind:this={box} style="left: {pos?.left ?? 0}px; top: {pos?.top ?? 0}px" style:visibility={pos ? null : 'hidden'}>
     {tip.text}{#if tip.keys}<Keys keys={tip.keys} />{/if}
   </div>
 {/if}
 
 <style>
   .tip {
-    position: fixed; z-index: 100; pointer-events: none; display: inline-flex; align-items: center; gap: 7px;
-    transform: translateX(-50%); background: var(--tip-bg); color: var(--tip-fg);
+    position: fixed; z-index: var(--z-tooltip); pointer-events: none; display: inline-flex; align-items: center; gap: 7px;
+    background: var(--tip-bg); color: var(--tip-fg);
     font-size: 11.5px; font-weight: 500; line-height: 1; padding: 5px 8px; border-radius: 6px; white-space: nowrap;
     box-shadow: 0 0 0 0.5px var(--line), 0 6px 18px rgba(0, 0, 0, 0.14);
     animation: tip-in 0.12s ease-out;
   }
   @keyframes tip-in { from { opacity: 0; } }
-  .tip.up { transform: translate(-50%, -100%); }
-  .tip.right { transform: translateX(-100%); }
-  .tip.right.up { transform: translate(-100%, -100%); }
 </style>

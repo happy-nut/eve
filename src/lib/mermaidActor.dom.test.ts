@@ -17,6 +17,10 @@ test('the stick figure is drawn smaller, its head inside the boxes\' top edge an
   expect(label).toBeGreaterThan(feet); // the name stays under the figure
   expect(label).toBeLessThan(65); // and within the boxes' height
   expect(out).toContain('<rect class="actor" y="0" height="65">'); // the boxes untouched
+  // a head in proportion: mermaid's (r 15) was near half the figure; now it sits on the neck (y 25), half the size
+  const head = /<circle cx="75" cy="([\d.]+)" r="([\d.]+)"/.exec(out)!;
+  expect(+head[2]).toBeLessThan(10);
+  expect(+head[1] + +head[2]).toBeCloseTo(25);
 });
 
 test('a diagram with no actor is left as it was', () => {

@@ -1,15 +1,15 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { panelIn, scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
   import { sheet, held } from './lib/popup';
+  import { claimKeys } from './lib/keys';
 
   // the last one asked: closing, it fades out showing what it showed (ui.pending is already null by then)
   const p = $derived.by(held(() => ui.pending));
-  // give focus back to where it was (sidebar row, editor) the moment the dialog closes —
-  // synchronously, before any list re-render, so a later focusRow() can still override it
-  const returnTo = document.activeElement as HTMLElement | null;
-  function done(v: string | null) { returnTo?.isConnected && returnTo.focus(); ui.done(v); }
+  // (ui.done gives the focus back to where it was, synchronously, before the answer is heard)
+  const done = (v: string | null) => ui.done(v);
   let value = $state('');
   $effect(() => { value = p.input ?? ''; });
 
@@ -23,9 +23,9 @@
     e.stopPropagation();
     if (e.timeStamp < openedAt) return;
     if (e.key === 'Escape') { e.preventDefault(); done(null); }
-    // the Enter that ends a Korean or Japanese word being put together is the word's: it answered the dialog with
-    // the name half typed
-    if (e.key === 'Enter' && !e.isComposing) {
+    // (the Enter that ends a Korean or Japanese word being put together is the word's, and never gets here: it
+    // answered the dialog with the name half typed)
+    if (e.key === 'Enter') {
       e.preventDefault();
       // Enter presses the button that has the keyboard: Tab to Cancel, then Enter, deleted all the same
       const on = document.activeElement;
@@ -38,10 +38,13 @@
       els[(els.indexOf(document.activeElement as HTMLElement) + (e.shiftKey ? -1 : 1) + els.length) % els.length]?.focus();
     }
   }
-  const focus = (el: HTMLElement) => { el.focus(); if (el instanceof HTMLInputElement) el.select(); };
+  // every key while it is the one on top (fading out under a menu, or already answered, it hears nothing)
+  $effect(() => claimKeys('global', { '*': onKey }, { whileTop: 'confirm' }));
+  // selected once its text is in (it is set just after the box is drawn): the "https://" a link opens with was left
+  // unselected, and an address pasted went in after it
+  const focus = (el: HTMLElement) => { el.focus(); if (el instanceof HTMLInputElement) tick().then(() => el.select()); };
 </script>
 
-<svelte:window onkeydown={onKey} />
 
 <div class="backdrop" transition:fade|global={scrimFade} onmousedown={() => done(null)} role="presentation"></div>
 <div class="box" bind:this={box} transition:appear|global role="dialog" aria-modal="true">
@@ -71,9 +74,9 @@
 </div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: 30; }
+  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-sheet-scrim); }
   .box {
-    position: fixed; z-index: 31; top: 38%; left: 50%; transform: translate(-50%, -50%);
+    position: fixed; z-index: var(--z-sheet); top: 38%; left: 50%; transform: translate(-50%, -50%);
     width: min(380px, 90vw); padding: 18px 18px 14px; border-radius: var(--panel-radius);
     background: var(--bg-pop); box-shadow: var(--panel-shadow);
     font-size: 13px;

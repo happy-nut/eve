@@ -6,7 +6,7 @@ Markdown notes for macOS (and Android) that open in a keystroke, look like a pag
 
 ### 1. Write it down before you forget it
 
-`⌘⇧Space` from any app brings Eve up; `⌘N`, type, `Esc` and you are back where you were.
+`⌘⇧E` from any app brings Eve up; `⌘N`, type, `Esc` and you are back where you were.
 Markdown turns into headings and to-dos as you type, and `⌘K` finds any note in a few letters.
 
 <p align="center"><img src="docs/eve-capture.gif" alt="A new note written and another found, all from the keyboard" width="800"></p>
@@ -90,13 +90,14 @@ The phone has its own version (`src-tauri/tauri.android.conf.json`) and its own 
 builds only the signed APK (never marked Latest, so Homebrew keeps pointing at the Mac), a `v*` tag only the Mac
 app. Installed phones find newer APKs by themselves and update with one tap.
 
-Not on the phone: the global hotkey, Dock/login-item settings, PDF/image export, and Quick Look previews.
+Not on the phone: the global hotkey, Dock/login-item settings, and Quick Look previews. Export (Markdown, PDF,
+image) is there, from the note's ⋯ menu: the file goes to the share sheet.
 
 ## Default shortcuts
 
 | Scope  | Action                          | Keys              |
 | ------ | ------------------------------- | ----------------- |
-| system | Summon / dismiss Eve            | `⌘⇧Space`         |
+| system | Summon / dismiss Eve            | `⌘⇧E`             |
 | app    | New (note / group menu) / Search | `⌘N` `⌘K`        |
 | app    | Next / previous note / Back / Forward | `⌘⇧↓` `⌘⇧↑` `⌘[` `⌘]` |
 | app    | Sidebar: open + focus / close   | `⌘\`              |

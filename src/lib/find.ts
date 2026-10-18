@@ -1,30 +1,71 @@
 import { Extension } from '@tiptap/core';
-import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
+import { Plugin, PluginKey, TextSelection, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
+import { dateLabel } from './date';
 
 /**
  * Find (and replace) inside the open note. Matches are decorations, so nothing in the document is
  * touched until a replace actually runs.
  *
- * ponytail: plain case-insensitive text, matched inside one text node at a time — a word split by a
- * mark boundary ("**wo**rd") is not found. Regex and mark-spanning matches if it ever bites.
+ * ponytail: plain case-insensitive text. Regex if it ever bites.
  */
 export const FIND = new PluginKey<FindState>('eve-find');
 
-export interface Hit { from: number; to: number }
+/** `atom`: the match is in (or runs into) a [[link]] or a date, shown but not replaced, which would cut it up */
+export interface Hit { from: number; to: number; atom?: boolean }
 export interface FindState { query: string; index: number; hits: Hit[] }
 
+/** what an inline node that is not text reads as on screen, for the search: a [[link]] its words, a date its day */
+function shown(node: PMNode): string {
+  if (node.type.name === 'wikiLink') return node.attrs.alias || node.attrs.title || '';
+  if (node.type.name === 'dateMention') return dateLabel(node.attrs.date);
+  if (node.type.name === 'hardBreak') return '\n';
+  return '\ufffc'; // a picture, a formula: nothing to find in it
+}
+
+/**
+ * Each line is searched as it reads, the words of it whatever their marks: matched one text node at a time, a phrase
+ * running over bold ("The **quick** brown") or into a [[link]] was not found. A match is mapped back to where it
+ * is in the note, all of an atom it touches included.
+ */
 function search(doc: PMNode, query: string): Hit[] {
   const hits: Hit[] = [];
   if (!query) return hits;
   // the case is ignored by the match itself, on the text as it is: lower-casing the text first changed its length
   // ("İ" becomes two characters), and every match after it was off by one
   const q = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'giu');
-  doc.descendants((node, pos) => {
-    if (!node.isText || !node.text) return;
-    for (const m of node.text.matchAll(q)) hits.push({ from: pos + m.index, to: pos + m.index + m[0].length });
+  doc.descendants((block, start) => {
+    if (!block.isTextblock) return true;
+    let text = '';
+    block.forEach((n) => { text += n.isText ? n.text! : shown(n); });
+    q.lastIndex = 0;
+    if (!q.test(text)) return false; // the usual line: nothing in it, and nothing more to work out
+    q.lastIndex = 0; // (matchAll starts where the test left off)
+    // where each piece of the line starts in its text and in the note
+    const at: { off: number; pos: number; size: number; atom: boolean }[] = [];
+    let off = 0;
+    block.forEach((n, offset) => {
+      at.push({ off, pos: start + 1 + offset, size: n.nodeSize, atom: !n.isText });
+      off += n.isText ? n.text!.length : shown(n).length;
+    });
+    let k = 0;
+    for (const m of text.matchAll(q)) {
+      const a = m.index!, b = a + m[0].length;
+      while (k + 1 < at.length && at[k + 1].off <= a) k++;
+      let j = k;
+      while (j + 1 < at.length && at[j + 1].off < b) j++;
+      const first = at[k], last = at[j];
+      let atom = false;
+      for (let i = k; i <= j; i++) atom ||= at[i].atom;
+      hits.push({
+        from: first.atom ? first.pos : first.pos + (a - first.off),
+        to: last.atom ? last.pos + last.size : last.pos + (b - last.off),
+        ...(atom ? { atom } : {}),
+      });
+    }
+    return false;
   });
   return hits;
 }
@@ -121,9 +162,16 @@ function show(editor: Editor, index: number) {
  */
 export function replaceOne(editor: Editor, text: string) {
   const { hits, index } = findState(editor);
-  const hit = hits[index];
+  let hit = hits[index];
+  // one in a [[link]] or a date is shown, not replaced: the next that can be is
+  if (hit?.atom) {
+    const next = hits.findIndex((h, i) => !h.atom && i > index);
+    const any = next >= 0 ? next : hits.findIndex((h) => !h.atom);
+    if (any < 0) return;
+    hit = hits[any];
+  }
   if (!hit) return;
-  editor.view.dispatch(editor.state.tr.insertText(text, hit.from, hit.to));
+  editor.view.dispatch(put(editor, editor.state.tr, hit, text));
   const left = findState(editor).hits; // the plugin re-searched the changed doc
   if (!left.length) return;
   const next = left.findIndex((h) => h.from >= hit.from + text.length);
@@ -135,8 +183,15 @@ export function replaceAll(editor: Editor, text: string) {
   const { hits } = findState(editor);
   if (!hits.length) return;
   const tr = editor.state.tr;
-  for (const hit of [...hits].reverse()) tr.insertText(text, hit.from, hit.to);
+  for (const hit of [...hits].reverse()) if (!hit.atom) put(editor, tr, hit, text);
   editor.view.dispatch(tr);
+}
+
+/** `text` in place of the match, in the marks of its first character: a match over "**quick** brown" is all bold, as
+ *  typing over it would make it (ProseMirror's own choice dropped a mark the match ran out of) */
+function put(editor: Editor, tr: Transaction, hit: Hit, text: string) {
+  const marks = tr.doc.nodeAt(hit.from)?.marks ?? [];
+  return text ? tr.replaceWith(hit.from, hit.to, editor.schema.text(text, marks)) : tr.delete(hit.from, hit.to);
 }
 
 export const clearFind = (editor: Editor) => editor.view.dispatch(editor.state.tr.setMeta(FIND, { query: '', index: 0 }));

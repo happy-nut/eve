@@ -1,7 +1,8 @@
 import { test, expect } from 'vitest';
 import { notes } from './notes.svelte';
 
-const make = (body: string) => notes.create(body);
+// notes written in: one left just as it was made goes once another is opened (notes.untouched)
+const make = (body: string) => { const n = notes.create(body); notes.touched(n.id); return n; };
 const retitle = (id: string, body: string) => { notes.update(id, body); notes.flush(id); };
 const bodyOf = (id: string) => notes.all.find((n) => n.id === id)!.body;
 

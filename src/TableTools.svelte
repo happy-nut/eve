@@ -1,16 +1,18 @@
 <script lang="ts">
   import type { Editor } from '@tiptap/core';
+  import { floatAt, screenInsets } from './lib/popup';
 
   /**
    * Row/column controls for the table the caret is in. A small bar over the table's top-left corner,
    * the way the outline rail sits beside the page — no grips to hunt for, and nothing on screen while
    * you are writing anywhere else.
    */
-  /** `sheet`: the editor is a card's or a day's page (z-index 31), which drew over the bar and left a table there with
-   *  no way to add a row; the bar goes over that page then, still under the phone's formatting bar (33) */
+  /** `sheet`: the editor is a card's or a day's page (--z-sheet), which drew over the bar and left a table there with
+   *  no way to add a row; the bar goes over that page then, still under the phone's formatting bar (--z-phone-bar) */
   let { editor, sheet = false }: { editor: Editor | undefined; sheet?: boolean } = $props();
 
-  let at = $state<{ x: number; y: number } | null>(null);
+  /** `inside`: over the table's own top-right corner, smaller (no room above it or under it) */
+  let at = $state<{ x: number; y: number; inside?: boolean } | null>(null);
 
   function place() {
     const e = editor;
@@ -23,15 +25,47 @@
     const el = (dom instanceof HTMLElement ? dom : dom.parentElement)?.closest('table');
     if (!el) { at = null; return; }
     const r = el.getBoundingClientRect();
-    // over the table's top while that is in view; in a table taller than the window the top had scrolled away and
-    // the bar with it, out of sight above the note while the caret was in a row on screen. It stays at the top of
-    // the note's scroll area then, as long as some of the table is still under it.
-    const top = scrollTop(el) + 4 + (bar?.offsetHeight ?? 32);
-    // kept on screen: a table scrolled sideways (or a phone's bar, wider than a narrow table) left the bar's end off it
-    // (not drawn yet, its width is not known: placed again once it is)
+    // (not drawn yet, its size is not known: placed again once it is)
     if (!bar) requestAnimationFrame(() => { if (bar) place(); });
-    const w = bar?.offsetWidth ?? 0;
-    at = { x: Math.max(8, Math.min(r.left, window.innerWidth - w - 8)), y: Math.min(Math.max(r.top - 8, top), r.bottom) };
+    const h = bar?.offsetHeight ?? 32, w = bar?.offsetWidth ?? 0, was = !!at?.inside;
+    // the room it needs is its full size's, also while it is the smaller one (judged by that, it went back and forth)
+    if (bar && !was) fullH = h;
+    const tall = was ? fullH || h + 5 : h;
+    // Over the table where nothing is written above it, else under it where nothing is under it: over the table's top
+    // it sat on the line above, which could not be read while the table was edited. With text close on both sides,
+    // smaller, in the table's own top-right corner. (It never pushes the note apart: moving text under the caret.)
+    // That is floatAt's room `within` the band from the line above to the line under; as far off the table as that
+    // room lets it be, up to 8px; kept on screen across (a table scrolled sideways, or a phone's bar wider than a narrow
+    // table, left the bar's end off it) and under the note's scroll area's top.
+    const above = gap(el, -1, r), under = gap(el, 1, r), ins = screenInsets(), top = scrollTop(el);
+    // in a table taller than the window the top had scrolled away and the bar with it, out of sight above the note
+    // while the caret was in a row on screen. It stays at the top of the note's scroll area then, as long as some
+    // of the table is still under it: what of the table is on screen is what it goes over.
+    const shown = above >= tall + 3 ? Math.min(Math.max(r.top, top + 4 + tall + 8), r.bottom) : r.top;
+    const f = floatAt({ left: r.left, right: r.right, top: shown, bottom: r.bottom }, { w, h: tall },
+      { prefer: 'above', gap: 8, avoid: { ...ins, top: Math.max(ins.top, top + 4) }, within: { left: -Infinity, right: Infinity, top: r.top - above, bottom: r.bottom + under } });
+    // (y is the bar's foot: it is drawn up from there)
+    at = { x: f.left, y: f.side === 'above' ? f.top + tall : f.top + h, inside: f.side === 'inside' };
+    // smaller in the corner, larger out of it: placed again at its new size
+    if (!!at.inside !== was) requestAnimationFrame(place);
+  }
+
+  /** How far off the table the nearest thing written is on that side (-1 above, 1 under): the nearest block with
+   *  something in it, past empty lines; none, no end */
+  function gap(table: HTMLElement, dir: -1 | 1, r: DOMRect): number {
+    const root = editor?.view.dom;
+    let block: Element = table.closest('.tableWrapper') ?? table;
+    let next = dir < 0 ? block.previousElementSibling : block.nextElementSibling;
+    // the table first (last) in what holds it (a callout, a list item): what is beside that
+    while (!next && block.parentElement && block.parentElement !== root) {
+      block = block.parentElement;
+      next = dir < 0 ? block.previousElementSibling : block.nextElementSibling;
+    }
+    const blank = (el: Element) => !el.textContent?.trim() && !el.querySelector('img, video, svg, iframe, canvas, hr, table');
+    while (next && blank(next)) next = dir < 0 ? next.previousElementSibling : next.nextElementSibling;
+    if (!next) return Infinity;
+    const n = next.getBoundingClientRect();
+    return dir < 0 ? r.top - n.bottom : n.top - r.bottom;
   }
 
   /** where the area the table scrolls in begins on screen (the window's top when nothing in between scrolls) */
@@ -42,6 +76,7 @@
     return 0;
   }
   let bar = $state<HTMLDivElement | null>(null);
+  let fullH = 0;
 
   $effect(() => {
     const e = editor;
@@ -90,7 +125,7 @@
 </script>
 
 {#if at}
-  <div class="tbl-tools" class:sheet bind:this={bar} style:left="{at.x}px" style:top="{at.y}px" onmousedown={hold} role="toolbar" tabindex="-1" aria-label="Table">
+  <div class="tbl-tools" class:sheet class:inside={at.inside} bind:this={bar} style:left="{at.x}px" style:top="{at.y}px" onmousedown={hold} role="toolbar" tabindex="-1" aria-label="Table">
     {#each GROUPS as group, g}
       {#if g}<span class="tbl-sep"></span>{/if}
       {#each group as b}
@@ -104,11 +139,16 @@
 
 <style>
   .tbl-tools {
-    position: fixed; z-index: 12; display: flex; align-items: center; gap: 1px;
+    position: fixed; z-index: var(--z-block-bar); display: flex; align-items: center; gap: 1px;
     transform: translateY(-100%); padding: 3px;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }
-  .tbl-tools.sheet { z-index: 32; }
+  .tbl-tools.sheet { z-index: var(--z-over-sheet); }
+  /* in the table's corner, over its cells: smaller, and see-through until the pointer comes to it */
+  .tbl-tools.inside { padding: 2px; opacity: 0.88; transition: opacity 0.12s; }
+  .tbl-tools.inside:hover { opacity: 1; }
+  :global(html:not(.mobile)) .tbl-tools.inside .icon { width: 21px; height: 21px; }
+  :global(html:not(.mobile)) .tbl-tools.inside svg { width: 13px; height: 13px; }
   .tbl-tools .icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
   .tbl-tools svg { width: 15px; height: 15px; display: block; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   .tbl-sep { width: 1px; height: 15px; background: var(--line); margin: 0 3px; }

@@ -186,15 +186,19 @@ async function draw(code: string): Promise<{ svg: string } | { error: string }> 
 /**
  * A sequence diagram's `actor` drawn to the size of the other participants' boxes. Mermaid draws its stick figure at
  * a fixed size, its head poking out above the boxes and its name below them, so the one person in a diagram stood
- * a head taller than everything beside it: the figure is drawn at 60%, inside the boxes' height, its name under it.
+ * a head taller than everything beside it: the figure is drawn at 75% with its head halved (mermaid's is near half the figure), inside the boxes' height, its name under it.
  */
-const ACTOR_SCALE = 0.6;
+const ACTOR_SCALE = 0.75, HEAD_SCALE = 0.5;
 export function smallActors(svg: string): string {
   return svg.replace(/(<g class="actor-man[^"]*"[^>]*>)([\s\S]*?)(<text[^>]*?\sy=")([\d.-]+)("[\s\S]*?<\/g>)/g, (all, open: string, figure: string, textHead: string, y: string, rest: string) => {
     const head = /<circle[^>]*?cx="([\d.-]+)"[^>]*?cy="([\d.-]+)"[^>]*?r="([\d.]+)"/.exec(figure);
     if (!head) return all;
-    const [cx, cy, r] = [+head[1], +head[2], +head[3]];
-    const top = cy - r, feet = Math.max(...[...figure.matchAll(/y[12]="([\d.-]+)"/g)].map((m) => +m[1]));
+    const [cx, r0] = [+head[1], +head[3]];
+    const ys = [...figure.matchAll(/y[12]="([\d.-]+)"/g)].map((m) => +m[1]);
+    // mermaid's head (r 15 over a 20-long body) is near half the figure: a smaller one, sat on the neck
+    const neck = Math.min(...ys), r = r0 * HEAD_SCALE, cy = neck - r;
+    figure = figure.replace(head[0], head[0].replace(/cy="[\d.-]+"/, `cy="${cy}"`).replace(/r="[\d.]+"/, `r="${r}"`));
+    const top = cy - r, feet = Math.max(...ys);
     const to = top + r * 0.6; // the head's top a little inside the box's top edge, not above it
     const label = to + (feet - top) * ACTOR_SCALE + (+y - feet) + 4; // as far under its feet as before, and a little more
     return `${open}<g transform="translate(${cx} ${to}) scale(${ACTOR_SCALE}) translate(${-cx} ${-top})">${figure}</g>${textHead}${label.toFixed(1)}${rest}`;

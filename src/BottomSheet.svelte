@@ -12,10 +12,14 @@
    * The transitions are |global: a sheet sits inside its owner's {#if isMobile}, created together with the {#if open}
    * around it, and a local transition only plays when its own block is made — which is why the sheets just appeared.
    */
-  let { onclose, children, role = 'dialog', label }: { onclose: () => void; children: Snippet; role?: string; label?: string } = $props();
+  let { onclose, children, role = 'dialog', label, layer = true }: {
+    onclose: () => void; children: Snippet; role?: string; label?: string;
+    /** false: what it shows is a layer of its own already (a menu), which back closes as such */
+    layer?: boolean;
+  } = $props();
 
-  // Android's back closes it, the newest sheet first (App's phoneBack)
-  onMount(() => ui.openedSheet(() => onclose()));
+  // Android's back closes it, the newest layer first (App's phoneBack)
+  onMount(() => (layer ? ui.openedSheet(() => onclose()) : undefined));
 
   // on <body>: a transformed ancestor (the settings panel) would otherwise become what position:fixed is measured from
   const portal = (node: HTMLElement) => { document.body.appendChild(node); return { destroy: () => node.remove() }; };
@@ -39,9 +43,9 @@
 </div>
 
 <style>
-  .scrim { position: fixed; inset: 0; z-index: 54; background: rgba(0, 0, 0, 0.3); }
+  .scrim { position: fixed; inset: 0; z-index: var(--z-menu-scrim); background: rgba(0, 0, 0, 0.3); }
   .sheet {
-    position: fixed; z-index: 55; left: 0; right: 0; bottom: 0; margin: 0; padding: 8px 10px calc(12px + var(--bottom, 0px));
+    position: fixed; z-index: var(--z-menu); left: 0; right: 0; bottom: 0; margin: 0; padding: 8px 10px calc(12px + var(--bottom, 0px));
     background: var(--bg-pop); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
     max-height: 80vh; overflow-y: auto; overscroll-behavior: contain;
     transition: translate 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); /* let go short of closing: it settles back */

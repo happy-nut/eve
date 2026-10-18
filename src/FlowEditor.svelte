@@ -2,7 +2,10 @@
   import { onMount, tick, untrack } from 'svelte';
   import { freshId, type Flowchart, type Line, type Shape } from './lib/diagram';
   import { ui } from './lib/ui.svelte';
+  import { letGo } from './lib/focusWatch';
+  import { claimKeys, composing } from './lib/keys';
   import { isMobile } from './lib/platform';
+  import { floatAt } from './lib/popup';
 
   /**
    * A flowchart drawn by hand on its own picture (the builder's preview): boxes are made, joined, renamed and removed
@@ -49,7 +52,7 @@
 
   /** the keyboard off the note's text, onto nothing: the keys typed next (⌫, Enter, Tab) are the picture's. A line or a
    *  lane picked left it in the note, and ⌫ deleted the note's last letter instead of the line */
-  const releaseKeys = () => { const a = document.activeElement as HTMLElement | null; if (a && a !== document.body && !layer?.contains(a)) a.blur?.(); };
+  const releaseKeys = () => { const a = document.activeElement as HTMLElement | null; if (a && a !== document.body && !layer?.contains(a)) letGo(a); };
   $effect(() => { if (sel && !editing && !laneEditing) untrack(releaseKeys); });
 
   const nodeIdOf = (g: Element) => /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null;
@@ -106,9 +109,9 @@
     ro.observe(host);
     // a picture wider than the card scrolls in it: the layer's boxes follow it
     host.addEventListener('scroll', measure, { passive: true });
-    const key = (e: KeyboardEvent) => onKey(e);
-    window.addEventListener('keydown', key, true);
-    return () => { ro.disconnect(); host.removeEventListener('scroll', measure); window.removeEventListener('keydown', key, true); };
+    // ahead of the note's keymaps: a picked box's ⌫ and arrows are the drawing's, not the text's
+    const unclaim = claimKeys('global', { '*': onKey }, { capture: true });
+    return () => { ro.disconnect(); host.removeEventListener('scroll', measure); unclaim(); };
   });
 
   // ---- what the chart becomes ----
@@ -293,7 +296,7 @@
       const id = head.dataset.lane;
       if (!id) return;
       if (editing) commitEdit();
-      if (sel && 'lane' in sel && sel.lane === id) startLaneEdit(id); else { sel = { lane: id }; (document.activeElement as HTMLElement | null)?.blur?.(); }
+      if (sel && 'lane' in sel && sel.lane === id) startLaneEdit(id); else { sel = { lane: id }; letGo(); }
       return;
     }
     if (linking) {
@@ -313,7 +316,7 @@
       else {
         sel = { node: id };
         // the keyboard off the note's text: its keys (⌫, Enter, Tab) are the box's now, and a phone's keyboard goes down
-        if (!editing) (document.activeElement as HTMLElement | null)?.blur?.();
+        if (!editing) letGo();
       }
       return;
     }
@@ -467,9 +470,10 @@
     const t = e.target as Element;
     if (t !== document.body && !layer.closest('.dblock')?.contains(t) && t !== layer.closest('.tiptap')) return;
     const typing = (e.target as HTMLElement).matches?.('input, textarea, [contenteditable="true"]');
-    // in a line's label: Esc or Enter is done with it (Esc closed the whole builder), the rest is typing
+    // in a line's label: Esc or Enter is done with it (Esc closed the whole builder), the rest is typing (a word still
+    // being put together there is the IME's, and its keys never get here: keys.ts)
     if (typing && layer.contains(e.target as Node)) {
-      if (!e.isComposing && (e.key === 'Escape' || e.key === 'Enter')) { e.preventDefault(); e.stopPropagation(); sel = null; }
+      if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); sel = null; }
       return;
     }
     if (typing) return;
@@ -531,17 +535,40 @@
   /** a bar over (or, near the top, under) what it is for, kept inside the picture */
   function barAt(x: number, top: number, bottom: number, width: number, own: string | null = null) {
     const W = layer?.clientWidth ?? 600, H = layer?.clientHeight ?? 400;
-    const left = Math.max(4, Math.min(W - width - 4, x - width / 2));
     const tall = isMobile ? 48 : 38;
+    // floatAt's room is the screen's: the layer's box on it, 4px in, and only what of it is on screen (a bar placed
+    // over a box scrolled near the top of the note went under the phone's bar there)
+    const o = layer?.getBoundingClientRect() ?? new DOMRect(0, 0, W, H);
+    const within = { left: o.left + 4, top: o.top + 4, right: o.left + W - 4, bottom: o.top + H - 4 };
+    const anchor = { left: o.left + x, right: o.left + x, top: o.top + top, bottom: o.top + bottom };
+    const at = (prefer: 'above' | 'below') => floatAt(anchor, { w: width, h: tall }, { prefer, within, gap: 8, align: 'center' });
+    const up = at('above'), down = at('below');
+    const left = (up.side === 'inside' ? Math.max(within.left, Math.min(within.right - width, anchor.left - width / 2)) : up.left) - o.left;
+    // room on neither side (a short picture, a box near its top): under it, and the picture grows at its foot to hold
+    // it (fitBars). Above, the picture's top cut it off; grown at the top, the picture moved under the finger
+    if (up.side === 'inside') return { left, top: bottom + 8 };
     // above or under, whichever covers less of the other boxes (it sat over the box one wanted to tap next)
-    const cost = (t: number) => (t < 4 || t + tall > H - 4 ? 1e7 : 0) + boxes.reduce((sum, b) => {
+    const cost = (t: number) => boxes.reduce((sum, b) => {
       if (b.id === own) return sum;
       const w = Math.min(left + width, b.x + b.w) - Math.max(left, b.x), h = Math.min(t + tall, b.y + b.h) - Math.max(t, b.y);
       return sum + (w > 0 && h > 0 ? w * h : 0);
     }, 0);
-    const above = top - (tall + 8), below = bottom + 8;
-    return { left, top: cost(above) <= cost(below) ? above : below };
+    const a = up.top - o.top, b = down.top - o.top;
+    return { left, top: up.side === down.side || cost(a) <= cost(b) ? a : b };
   }
+  /** how much the picture grew at its foot to hold a bar under a box (see barAt) */
+  let grown = 0, basePad = 0;
+  function fitBars() {
+    if (!layer) return;
+    const low = Math.max(0, ...[...layer.querySelectorAll<HTMLElement>(':scope > .bar')].map((b) => b.offsetTop + b.offsetHeight + 4));
+    const need = Math.max(0, Math.ceil(low - (layer.clientHeight - grown)));
+    if (need === grown) return;
+    if (!grown) basePad = parseFloat(getComputedStyle(host).paddingBottom) || 0;
+    grown = need;
+    host.style.paddingBottom = need ? `${basePad + need}px` : '';
+  }
+  $effect(() => { void sel; void editing; void version; void boxes; void shapesOpen; void linking; void drag; tick().then(fitBars); });
+  onMount(() => () => { if (grown) host.style.paddingBottom = ''; });
   // the picked line drawn in the accent colour: a picked line looked like every other one
   $effect(() => {
     void version;
@@ -572,7 +599,7 @@
              pressed, and the keys typed went to that button (Enter made another lane) -->
         <input class="lane-name" bind:value={laneText} aria-label="Lane name" placeholder="Lane" {@attach (el: HTMLInputElement) => { el.focus(); el.select(); }}
           style:left={`${clampX(hb.x + hb.w / 2, 140)}px`} style:top={`${hb.y + hb.h / 2 - 16}px`}
-          onkeydown={(e) => { if (e.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); commitLane(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); laneEditing = null; } }}
+          onkeydown={(e) => { if (composing(e)) return; if (e.key === 'Enter') { e.preventDefault(); commitLane(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); laneEditing = null; } }}
           onblur={commitLane} />
       {:else}
         <!-- over the lane's own name (picked, it is ringed): above or under it, the bar covered the next lane's name and
@@ -615,7 +642,7 @@
     {@const b = boxOf(editing) ?? { id: editing, x: pendingAt.x - 70, y: pendingAt.y - 16, w: 140, h: 32 }}
     <input class="rename" bind:value={editText} aria-label="Step name" oninput={typed}
       style:left={`${clampX(b.x + b.w / 2, Math.min(Math.max(b.w, 140), (layer?.clientWidth ?? 600) - 8))}px`} style:top={`${b.y + b.h / 2 - 16}px`} style:width={`${Math.min(Math.max(b.w, 140), (layer?.clientWidth ?? 600) - 8)}px`}
-      onkeydown={(e) => { if (e.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); commitEdit(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelEdit(); } else if (e.key === 'Tab') { e.preventDefault(); const from = editing; commitEdit(); if (from) addAfter(from); } }}
+      onkeydown={(e) => { if (composing(e)) return; if (e.key === 'Enter') { e.preventDefault(); commitEdit(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelEdit(); } else if (e.key === 'Tab') { e.preventDefault(); const from = editing; commitEdit(); if (from) addAfter(from); } }}
       onblur={commitEdit} />
   {/if}
 
@@ -677,7 +704,7 @@
 </div>
 
 <style>
-  .layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+  .layer { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-block-ui); }
   .layer > * { pointer-events: auto; }
   .ring { position: absolute; border-radius: 14px; box-shadow: 0 0 0 2px var(--accent); pointer-events: none; }
 .ring.target { box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--accent-soft); }
@@ -693,9 +720,13 @@
   }
   .plus:hover { transform: scale(1.15); }
   /* a finger's size on a phone: a larger dot, and a larger place to press around it */
-  :global(html.mobile) .plus { width: 30px; height: 30px; margin: -4px 0 0 -4px; }
-  :global(html.mobile) .plus::before { content: ''; position: absolute; inset: -8px; border-radius: 50%; }
-  :global(html.mobile) .plus svg { width: 15px; height: 15px; }
+  /* (the button itself a finger's 40px, the dot drawn inside it 30px: its 30px box was the target a tap was judged by) */
+  :global(html.mobile) .plus { width: 40px; height: 40px; margin: -9px 0 0 -9px; background: none; box-shadow: none; }
+  :global(html.mobile) .plus::before {
+    content: ''; position: absolute; inset: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 2px 6px rgba(0, 40, 100, 0.25);
+  }
+  :global(html.mobile) .plus::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; }
+  :global(html.mobile) .plus svg { position: relative; width: 15px; height: 15px; }
   .plus svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
   .wire { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
   .wire line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; }

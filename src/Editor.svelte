@@ -118,6 +118,13 @@
     if (!isMobile) editor?.view.focus(); // back into the note, the caret where it was (a phone's keyboard stays down)
   }
 
+  /** A random icon (picked again with a click on it). The button goes as the icon takes its place, and the keyboard
+   *  went with it, to nothing: back into the note, the caret where it was (a phone's keyboard stays down). */
+  function addIcon() {
+    notes.setIcon(note.id, randomIcon());
+    if (!isMobile) editor?.view.focus();
+  }
+
   // asked to write at the end of this very note (the reminder's today, already open): no remount brings it there
   $effect(() => {
     if (editor && notes.caretEnd && notes.currentId === note.id) { notes.caretEnd = false; editor.commands.focus('end'); }
@@ -179,7 +186,7 @@
     {#if note.icon}
       <button class="big-icon" title="Change icon" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={isMobile ? 44 : 56} /></button>
     {:else}
-      <button class="add-icon" onclick={() => notes.setIcon(note.id, randomIcon())}>
+      <button class="add-icon" onclick={addIcon}>
         <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 9.5c.6.9 1.5 1.5 2.5 1.5s1.9-.6 2.5-1.5M6 6.5h.01M10 6.5h.01"/></svg>
         Add icon
       </button>

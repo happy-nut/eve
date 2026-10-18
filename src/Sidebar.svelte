@@ -6,12 +6,13 @@
   import { fade, slide } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { tick, untrack } from 'svelte';
-  import { notes, nested, titleOf, CALENDAR, type Note } from './lib/notes.svelte';
+  import { notes, nested, titleOf, rankByTitle, CALENDAR, type Note } from './lib/notes.svelte';
   import { isDailyId, DAILY_TEMPLATE_ID, CALENDAR_NOTE_ID } from './lib/daily';
   import { groups, parentOf, leafOf, depthOf, MAX_DEPTH } from './lib/groups.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { ui, hooks, type MenuItem } from './lib/ui.svelte';
+  import { composing } from './lib/keys';
   import { importFromFinder, importFromFolder, exportNote, exportCurrent, type ExportAs } from './lib/transfer';
   import Icon from './Icon.svelte';
   import { appearance } from './lib/appearance.svelte';
@@ -31,13 +32,15 @@
     return m;
   });
 
-  let query = $state('');
-  const q = $derived(query.trim().toLowerCase());
+  // in ui, not here: leaving the search another way (⌘1–9, a new note) puts it away too (App.svelte)
+  const q = $derived(ui.search.trim().toLowerCase());
   // daily notes stay out of the tree, but a search still finds them
   // …only while daily notes are on here: off on this device, they are nowhere on it (list, search, widget)
   // a query with a character markdown uses ("a*b", "~/projects", "List<String>") is looked for as written too: text
   // brought in from elsewhere keeps such characters unescaped, and reading it as markdown took them out
-  const hits = $derived([...notes.visible, ...(appearance.s.dailyNotes ? notes.daily : [])].filter((n) => shownText(n).includes(q) || (rawQuery(q) && n.body.toLowerCase().includes(q))));
+  const hits = $derived(rankByTitle([...notes.visible, ...(appearance.s.dailyNotes ? notes.daily : [])].filter((n) => shownText(n).includes(q) || (rawQuery(q) && n.body.toLowerCase().includes(q))), q));
+  /** the search box has the keyboard: the row ↩ would open is marked */
+  let searching = $state(false);
   // A search looks for what the note says, as it reads on screen: its raw markdown matched what nobody sees (a
   // link's address, "#" for every heading, "**") and missed what everyone does ("my_func" is saved my\_func).
   // Made once per version of a note, not at every key typed into the search.
@@ -116,8 +119,9 @@
   const importFolder = () => transfer(async () => opened(await importFromFolder()));
   const exportAs = (as: ExportAs) => () => exportCurrent(as);
 
-  /** a new note in group `g`, straight into the editor (deleting keeps focus in the list) */
-  const newNote = (g: string) => async () => { ui.focusOwner = 'editor'; notes.create('', g); await tick(); focusNote(); };
+  /** a new note in group `g`, straight into the editor (deleting keeps focus in the list); a search still narrowing
+   *  the list would hide it there, so it goes */
+  const newNote = (g: string) => async () => { ui.focusOwner = 'editor'; ui.search = ''; notes.create('', g); await tick(); focusNote(); };
 
   const plusItems = $derived.by(() => {
     const items: { label: string; run: () => void; sep?: boolean }[] = [
@@ -254,10 +258,12 @@
   };
 
   // ---- keyboard ----
-  /** The row after this one (the one before, at the end): where the keyboard goes once this one is deleted. */
-  function neighbourOf(sel: string): string {
+  /** The row after this one (the one before, at the end): where the keyboard goes once this one is deleted. Rows that
+   *  go with it (`goes`: a group's own subgroups) are not it: the keyboard went to one of those and was left on nothing. */
+  function neighbourOf(sel: string, goes: (r: HTMLElement) => boolean = () => false): string {
     const rows = rowsNow(), i = rows.findIndex((r) => r.matches(sel));
-    const nb = i < 0 ? undefined : rows[i + 1] ?? rows[i - 1];
+    const stays = (r: HTMLElement) => !goes(r);
+    const nb = i < 0 ? undefined : rows.slice(i + 1).find(stays) ?? rows.slice(0, i).findLast(stays);
     return nb?.dataset.note ? `[data-note="${nb.dataset.note}"]` : nb?.dataset.group ? groupSel(nb.dataset.group) : '[data-row]';
   }
   // However asked (⌫ on the row, its menu, its ×): deleted, the keyboard goes to the row next to it when it was
@@ -274,9 +280,12 @@
   async function removeGroup(g: string) {
     const n = groups.notesIn(g, true).length, sub = groups.subtree(g).length - 1;
     const extra = [sub ? `${sub} subgroup${sub > 1 ? 's' : ''}` : '', n ? `${n} note${n > 1 ? 's' : ''} (moved out of the group)` : ''].filter(Boolean).join(', ');
-    const next = neighbourOf(groupSel(g)), fromList = inList();
+    // its subgroups' rows go with it; its notes stay, moved to the top level
+    const inside = (r: HTMLElement) => r.dataset.group !== undefined && (r.dataset.group === g || r.dataset.group.startsWith(g + '/'));
+    const next = neighbourOf(groupSel(g), inside), fromList = inList();
     if (!(await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`))) return;
-    groups.remove(g);
+    const undo = groups.remove(g);
+    ui.toast(`Deleted group “${leafOf(g)}”`, { label: 'Undo', run: undo });
     void afterRemove(next, fromList);
   }
   async function removeNote(n: Note) {
@@ -363,6 +372,14 @@
   }
 
   // ---- icons (emoji) ----
+  /** A click on a row's icon changes it. Not a tap on a phone: there the icon is most of what a thumb aims at, and
+   *  opening a note (folding a group) became a full-screen picker. The tap goes on to the row; a note's icon is
+   *  changed from its page, a group's from beside its name while it is being renamed. */
+  function iconTap(e: MouseEvent, target: { note?: Note; group?: string }) {
+    if (isMobile) return;
+    e.stopPropagation();
+    pickIcon(target, e.currentTarget as HTMLElement);
+  }
   async function pickIcon(target: { note?: Note; group?: string }, anchor?: HTMLElement) {
     const current = target.note ? target.note.icon ?? '' : groups.icon(target.group!);
     const el = anchor ?? document.querySelector<HTMLElement>(target.note ? `aside [data-note="${target.note.id}"]` : `aside [data-group="${CSS.escape(target.group!)}"]`);
@@ -402,7 +419,7 @@
     if (n?.id === CALENDAR_NOTE_ID) return;
     const items: MenuItem[] = g
       ? [
-          { label: `New note in “${leafOf(g)}”`, run: () => { ui.focusOwner = 'editor'; notes.create('', g); } },
+          { label: `New note in “${leafOf(g)}”`, run: newNote(g) },
           { label: 'New group inside', run: () => groups.create(g), hide: depthOf(g) >= MAX_DEPTH },
           { label: 'Rename', sep: true, run: () => (groups.editing = g) },
           { label: 'Change icon…', run: () => pickIcon({ group: g }) },
@@ -459,11 +476,13 @@
 
   // ---- misc ----
   function onSearchKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') { query = ''; e.preventDefault(); focusNote(); } // back to the note, not to nowhere
-    // the first match, opened as a click on it would: the keyboard goes into the note (a bare blur left it nowhere)
-    if (e.key === 'Enter' && hits[0]) { e.preventDefault(); void openNote(hits[0]); }
+    if (e.key === 'Escape') { ui.search = ''; e.preventDefault(); focusNote(); } // back to the note, not to nowhere
+    // the first match, opened as a click on it would: the keyboard goes into the note (a bare blur left it nowhere).
+    // The search is done with then, and goes: the list stayed cut down to its matches, the open note's row with it.
+    // (A click on a match keeps it: looking through them one by one is what a list of matches is for.)
+    if (e.key === 'Enter' && hits[0] && !composing(e)) { e.preventDefault(); const n = hits[0]; ui.search = ''; void openNote(n); }
     // ↓ walks on into the matches below; ↑ from the first one comes back here (treeKey)
-    if (e.key === 'ArrowDown' && !e.isComposing) { rowsNow()[0]?.focus(); e.preventDefault(); }
+    if (e.key === 'ArrowDown' && !composing(e)) { rowsNow()[0]?.focus(); e.preventDefault(); }
   }
   /**
    * On a phone the list is a drawer: it slides in from the left and out again, and a swipe to the left
@@ -559,9 +578,19 @@
       </div>
     {/if}
     <div class="top" data-tauri-drag-region>
-      <input bind:this={searchEl} bind:value={query} onkeydown={onSearchKey}
-        onmousedown={() => { if (document.activeElement !== searchEl) hints.action('search', 'Search from anywhere'); }}
-        placeholder={isMobile ? 'Search' : `Search  ${prettyKeys(shortcuts.keysFor('search'))}`} spellcheck="false" />
+      <span class="search">
+        <input bind:this={searchEl} bind:value={ui.search} onkeydown={onSearchKey} onfocus={() => (searching = true)} onblur={() => (searching = false)}
+          onmousedown={() => { if (document.activeElement !== searchEl) hints.action('search', 'Search from anywhere'); }}
+          placeholder={isMobile ? 'Search' : `Search  ${prettyKeys(shortcuts.keysFor('search'))}`} spellcheck="false" />
+        <!-- what was typed, gone in one press (a phone has no Esc to clear it with); out of the Tab order: Esc does it there.
+             A phone keeps its keyboard as it was: up if the box had it, else the list stays as it is to read -->
+        {#if ui.search}
+          <button class="clear" tabindex="-1" aria-label="Clear search" onmousedown={(e) => e.preventDefault()}
+            onclick={() => { ui.search = ''; if (!isMobile) searchEl?.focus(); }}>
+            <svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>
+          </button>
+        {/if}
+      </span>
     </div>
 
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -581,10 +610,11 @@
             {@const swipe = n.id === CALENDAR_NOTE_ID ? {} : { left: () => removeNote(n), enabled: () => !drag }}
             <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!isMobile} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation" use:swipeRow={swipe}>
-              <button data-row data-note={n.id} class:active={n.id === CALENDAR_NOTE_ID ? onCalendar : n.id === notes.currentId} onclick={() => openNote(n)}>
+              <button data-row data-note={n.id} class:active={n.id === CALENDAR_NOTE_ID ? onCalendar : n.id === notes.currentId}
+                class:enter={searching && !!q && n.id === hits[0]?.id} onclick={() => openNote(n)}>
                 <span class="title">
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
-                  <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ note: n }, e.currentTarget); }}>
+                  <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => iconTap(e, { note: n })}>
                     {#if jumpNumbers.has(n.id)}<span class="num">{jumpNumbers.get(n.id)}</span>
                     {:else if n.icon}<Icon icon={n.icon} />{:else}
                     <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>{/if}
@@ -620,6 +650,14 @@
             {@const g = r.g}
             <div class="ghead" class:collapsed={groups.isCollapsed(g)} use:swipeRow={{ left: () => removeGroup(g), enabled: () => !drag }}>
               {#if groups.editing === g}
+                {#if isMobile}
+                  <!-- a phone's one way to a group's icon (a tap on it in the list folds the group): pressed, the box keeps
+                       the keyboard until the picker takes it, and the name typed so far is kept as the box closes -->
+                  <button class="ico-slot rename-ico" aria-label="Change icon" onmousedown={(e) => e.preventDefault()} onclick={(e) => pickIcon({ group: g }, e.currentTarget)}>
+                    {#if groups.icon(g)}<Icon icon={groups.icon(g)} />{:else}
+                    <svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H2.5a1 1 0 0 0-1 1z"/></svg>{/if}
+                  </button>
+                {/if}
                 <input class="rename" class:taken={nameTaken} aria-invalid={nameTaken} aria-describedby={nameTaken ? 'name-taken' : undefined}
                   value={leafOf(g)} use:focusInput onkeydown={(e) => renameKey(e, g)} oninput={() => (nameTaken = false)}
                   onblur={(e) => finishRename(g, e.currentTarget.value)} spellcheck="false" />
@@ -629,7 +667,7 @@
                   ondragstart={(e) => dragStartGroup(e, g)} ondragend={dragEnd} ondragover={(e) => overGroup(e, g)} ondrop={drop}
                   onclick={() => groups.toggle(g)}>
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
-                  <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => { e.stopPropagation(); pickIcon({ group: g }, e.currentTarget); }}>
+                  <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => iconTap(e, { group: g })}>
                     {#if groups.icon(g)}<Icon icon={groups.icon(g)} />{:else}
                     <svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H2.5a1 1 0 0 0-1 1z"/></svg>{/if}
                   </span>
@@ -683,11 +721,23 @@
     background: var(--bg-side); border-right: 1px solid var(--line); overflow: hidden;
   }
   .top { display: flex; gap: 4px; padding: 50px 16px 8px; } /* toolbar bottom (34) + 16 */
+  .search { flex: 1; min-width: 0; position: relative; display: flex; }
   .top input {
     flex: 1; min-width: 0; border: 0; border-radius: 6px; padding: 6px 8px;
     background: var(--bg-input); color: inherit; font: inherit; font-size: 13px; outline: none; transition: box-shadow 0.15s;
   }
   .top input:focus { box-shadow: 0 0 0 2px var(--accent-soft), var(--glow); }
+  .top input:has(+ .clear) { padding-right: 26px; }
+  .clear {
+    position: absolute; right: 2px; top: 50%; translate: 0 -50%; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px;
+    display: inline-flex; align-items: center; justify-content: center; background: none; color: var(--fg-dim);
+  }
+  .clear:hover { background: var(--bg-hover); color: var(--fg); }
+  .clear svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+  /* a thumb's size on a phone, over the box's right end */
+  :global(html.mobile) .clear { right: 0; width: 44px; height: 44px; }
+  :global(html.mobile) .clear svg { width: 15px; height: 15px; }
+  :global(html.mobile) .top input:has(+ .clear) { padding-right: 44px; }
 
   .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 10px 8px; margin: 0; list-style: none; }
   .row { position: relative; padding-left: calc(var(--d) * 18px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
@@ -732,14 +782,17 @@
     flex: 1; min-width: 0; font: inherit; font-size: 12.5px; padding: 3px 6px; border-radius: 4px;
     border: 1px solid var(--accent); background: var(--bg-input); color: var(--fg); outline: none; box-shadow: var(--glow);
   }
+  .rename-ico { border: 0; background: none; color: inherit; padding: 0; margin-right: 6px; width: 38px !important; height: 38px !important; }
   .rename.taken { border-color: #ff453a; box-shadow: none; }
+  /* a phone: a box a thumb can work in, and 16px text, below which Android zooms the page in on it */
+  :global(html.mobile) .rename { min-height: 38px; font-size: 16px; padding: 6px 10px; border-radius: 8px; }
   .taken-note { flex: none; margin: 0 6px; font-size: 11px; color: #ff453a; white-space: nowrap; }
 
   .empty { padding: 5px 10px; font-size: 11.5px; color: var(--fg-dim); opacity: 0.7; }
 
   .row.drop-before::before, .row.drop-after::after {
     content: ''; position: absolute; left: calc(var(--d) * 18px); right: 8px; top: -1px; height: 2px; border-radius: 1px;
-    background: var(--accent); box-shadow: var(--glow); pointer-events: none; z-index: 1;
+    background: var(--accent); box-shadow: var(--glow); pointer-events: none; z-index: var(--z-raised);
   }
   .row.drop-after::after { top: auto; bottom: -1px; }
   .note-row { display: flex; align-items: center; }
@@ -751,6 +804,9 @@
   :global(html[data-hover]) .note-row > button:first-child:hover { background: var(--bg-hover); }
   .note-row > button:first-child:active { transform: scale(0.985); }
   .note-row > button.active { background: var(--bg-active); }
+  /* the match ↩ in the search box opens: the keyboard's colour, lighter, as it is not on the row itself */
+  .note-row > button.enter { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .note-row > button.active.enter { background: color-mix(in srgb, var(--accent) 12%, var(--bg-active)); }
   /* Keyboard cursor: the row's own background, and it appears at once. The rows fade their background
      over 0.12s, which a held arrow key never gives them — focus moved on before the colour arrived, so
      the list looked unmarked while scrolling through it. A group row had no focus colour at all. */

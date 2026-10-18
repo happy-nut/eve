@@ -74,6 +74,7 @@ console.log('MARKDOWN_OK');
   assert.equal(previewOf('# T\n\n![](assets/a.png)\n[site](https://x.y) and ---\n\n---\n'), 'site and ---');
   assert.equal(previewOf('# T\n\n| a | b |\n|---|:-:|\n| 1 | 2 |\n'), 'a b 1 2');
   assert.equal(previewOf('# T\n'), '');
+  assert.equal(previewOf('# T\n\n$$\\frac{a}{b} + x^2$$\n\n$$\n\\sum x\n$$\nSee [[Other note|alias]] and [[Plain]]\n> [!warning] Careful\n> body\n'), 'See alias and Plain Careful body', 'formulas, links and callout markers read as on screen');
   assert.equal(previewOf('# T\n\n' + 'word '.repeat(60), 20), 'word word word word…');
 }
 

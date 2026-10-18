@@ -1,7 +1,9 @@
+import { untrack } from 'svelte';
 import { storage } from './platform';
 import { flushEdits } from './pending';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
+import { ui } from './ui.svelte';
 import { legacyPlain, onlyHtml, plain, splitLink } from './markdown';
 import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isDailyId, isWritten } from './daily';
 
@@ -75,6 +77,17 @@ export function titleOf(n: Pick<Note, 'body'>): string {
 /** the title as it was read before 0.7.35, which the [[links]] written then still say (see legacyPlain) */
 export const legacyTitleOf = (n: Pick<Note, 'body'>): string => legacyPlain(titleLine(n.body)) || 'Untitled';
 
+/** A search's matches, the note called what was typed first, then the ones whose title starts with it, then the ones
+ *  whose title has it anywhere, then the ones that only say it somewhere: ↩ opens the first, and it used to be whichever
+ *  came first in the list. Each tier keeps the list's order. `q` is lower case. */
+export function rankByTitle<T extends Pick<Note, 'body'>>(list: T[], q: string): T[] {
+  const tier = (n: T) => {
+    const t = titleOf(n).toLowerCase();
+    return t === q ? 0 : t.startsWith(q) ? 1 : t.includes(q) ? 2 : 3;
+  };
+  return list.map((n) => ({ n, t: tier(n) })).sort((a, b) => a.t - b.t).map((x) => x.n); // a stable sort
+}
+
 /** `list` depth-first: every page is followed by its sub-pages (`folded` hides a page's sub-pages,
  *  it still reports `kids`). A sub-page whose parent is not in `list` (deleted, or dragged into
  *  another group) shows up at the top level. */
@@ -121,8 +134,10 @@ class NotesStore {
   /** visited-note history for back/forward (⌘[ / ⌘]) */
   private history = $state<string[]>([]);
   private hIndex = $state(-1);
-  get canBack() { return this.hIndex > 0; }
-  get canForward() { return this.hIndex < this.history.length - 1; }
+  // only where back/forward would actually go: a deleted note in the history is stepped over (step), so a
+  // history of nothing else left the button lit and doing nothing
+  get canBack() { return this.landing(-1) >= 0; }
+  get canForward() { return this.landing(1) >= 0; }
   /** last cursor position per note, restored when navigating back */
   cursor = new Map<string, number>();
   /** set just before creating a page whose title is a placeholder: the editor selects it on open */
@@ -136,6 +151,7 @@ class NotesStore {
   set currentId(id: string | null) {
     if (id === CALENDAR_NOTE_ID) id = CALENDAR; // its row opens the calendar: history keeps the calendar, or Back opened it again
     if (id === this._cur) return;
+    const left = this._cur;
     // a long note's (or a board card's) last keys, handed over while what they were typed into is still on
     // screen: after the switch the board they belong to is gone, and they went nowhere
     flushEdits();
@@ -146,18 +162,60 @@ class NotesStore {
     }
     this._cur = id;
     remember(id);
+    this.leave(left);
   }
   back() { this.step(-1); }
   forward() { this.step(1); }
-  private step(d: number) {
-    let i = this.hIndex + d;
-    while (i >= 0 && i < this.history.length) {
+  /** the history entry back/forward lands on (deleted notes skipped), -1 for none */
+  private landing(d: number): number {
+    for (let i = this.hIndex + d; i >= 0 && i < this.history.length; i += d) {
       const id = this.history[i];
       const n = this.all.find((x) => x.id === id);
-      if ((n && !n.deleted) || (id === CALENDAR && appearance.s.dailyNotes)) { this.hIndex = i; this._cur = id; remember(id); return; }
-      i += d;
+      if ((n && !n.deleted) || (id === CALENDAR && appearance.s.dailyNotes)) return i;
     }
+    return -1;
   }
+  private step(d: number) {
+    const i = this.landing(d);
+    if (i < 0) return;
+    const left = this._cur;
+    this.hIndex = i;
+    this._cur = this.history[i];
+    remember(this._cur);
+    this.leave(left);
+  }
+
+  /**
+   * Notes made here this session (⌘N, the +, a [[link]] to a page not there yet) that nothing has been written in
+   * since: the body still as it was made. Left like that, one goes again — every ⌘N used to leave an "Untitled"
+   * behind for good. Not a day's note or the calendar's (they are not made by create), nor anything sync or an
+   * import brought: those were written somewhere. In memory only: after a restart a note is just a note.
+   */
+  private untouched = new Set<string>();
+  /** the open note moved on from `id`: gone quietly if it was never written in (nothing to undo: it was empty) */
+  private leave(id: string | null) {
+    if (!id || !this.untouched.has(id)) return;
+    this.untouched.delete(id);
+    const n = this.all.find((x) => x.id === id);
+    if (!n || n.deleted) return;
+    n.deleted = true;
+    n.updatedAt = Date.now();
+    this.flush(id);
+  }
+  /**
+   * The open note put away without another taking its place (a phone's back to the list): if it was never written
+   * in, it goes as it would have on the next note opened, and the note next to it in the list is the open one. Nothing
+   * is made in its place: the list is what is on screen.
+   */
+  letGo() {
+    const id = this._cur;
+    if (!id || !this.untouched.has(id)) return;
+    this.currentId = this.neighbourOf(id)?.id ?? null; // moving on from it takes it away (leave); none left: nothing open
+  }
+
+  /** something done to the note itself (written in, an icon picked, moved by hand), or a link to it written
+   *  elsewhere (a sub-page made with /page): it is kept */
+  touched(id: string) { this.untouched.delete(id); }
   loaded = $state(false);
   /** the app opened on the note last looked at */
   resumed = false;
@@ -307,6 +365,7 @@ class NotesStore {
     const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group, parent, order: first ? first.order - 1 : 0, icon: autoIcon() };
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
+    this.untouched.add(n.id);
     this.currentId = n.id;
     void storage.write(n.id, serialize(n));
     this.dirty++;
@@ -332,6 +391,7 @@ class NotesStore {
     const n = this.all.find((x) => x.id === id);
     // the editor writes no final newline where the file has one: the same note, not an edit
     if (!n || n.body === body || n.body.replace(/\n+$/, '') === body.replace(/\n+$/, '')) return;
+    this.touched(id);
     n.body = body;
     n.updatedAt = Date.now();
     clearTimeout(this.timers.get(id));
@@ -389,6 +449,7 @@ class NotesStore {
     if (id === CALENDAR_NOTE_ID || parent === CALENDAR_NOTE_ID) return; // the calendar's row takes no sub-pages, is none
     const n = this.all.find((x) => x.id === id);
     if (!n || (parent && (parent === id || this.isAncestor(id, parent)))) return;
+    this.touched(id);
     n.parent = parent ?? undefined;
     n.updatedAt = Date.now();
     this.flush(id);
@@ -407,8 +468,17 @@ class NotesStore {
   setIcon(id: string, icon: string) {
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
+    this.touched(id);
     n.icon = icon.trim() || undefined;
     n.updatedAt = Date.now();
+    this.flush(id);
+  }
+
+  /** A note back where it stood, exactly (a deleted group's Undo): no rank of its own worked out, no sub-pages moved. */
+  putBack(id: string, at: Pick<Note, 'group' | 'parent' | 'order'>) {
+    const n = this.all.find((x) => x.id === id);
+    if (!n) return;
+    Object.assign(n, { group: at.group, parent: at.parent, order: at.order, updatedAt: Date.now() });
     this.flush(id);
   }
 
@@ -446,6 +516,7 @@ class NotesStore {
       order = last ? last.order + 1 : 0;
     }
     if (n.group === group && n.order === order) return;
+    this.touched(id);
     const from = n.group;
     n.group = group;
     n.order = order;
@@ -478,6 +549,7 @@ class NotesStore {
     const n = this.all.find((x) => x.id === id);
     if (!n || id === before) return;
     if (parent && (parent === id || this.isAncestor(id, parent))) return; // never under its own sub-page
+    this.touched(id);
     const sibs = this.visible.filter((x) => x.group === group && (x.parent ?? '') === parent && x.id !== id);
     let order: number;
     if (before) {
@@ -506,22 +578,62 @@ class NotesStore {
     }
   }
 
-  /** Delete a note (tombstone). */
+  /** Delete a note (tombstone). A toast offers it back for a few seconds: the dialog before it is easy to say yes to. */
   remove(id: string) {
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
+    this.untouched.delete(id); // deleted by hand: it goes the way any note does, and can come back
     // the open note deleted: the one next to it in the list comes up. The list's first by rank was opened
     // before, often a note deep in a folded group, nowhere near where the user was.
     const next = this.currentId === id ? this.neighbourOf(id) : undefined;
     n.deleted = true;
     n.updatedAt = Date.now();
     this.flush(id);
+    // (a note made here because there was none left is untouched: Undo moving on from it takes it away again)
     if (this.currentId === id) this.currentId = next?.id ?? null;
     if (!this.currentId) this.create();
+    ui.toast(`Deleted “${titleOf(n)}”`, { label: 'Undo', run: () => this.restore(id) });
+  }
+  /** A deleted note back as it was, and open. Dated now: the tombstone has synced, and must not win over it. */
+  restore(id: string) {
+    const n = this.all.find((x) => x.id === id);
+    if (!n) return;
+    n.deleted = false;
+    n.updatedAt = Date.now();
+    this.flush(id);
+    this.currentId = id;
   }
 
   /** Open note by title, creating it if missing (used by [[wiki links]]). */
   /** Follow a `[[link]]`. `Title#Section` opens the page at that heading (Editor reads `section`). */
+  /**
+   * Every title a [[link]] can find a page by, in one string: it changes when a page is made, renamed or deleted, not
+   * at every key typed into one, so what watches it (a link drawn as missing, onTitles) is not run at every key either.
+   * Each note's titles are read once per version of it.
+   */
+  private titleKey = $derived(this.visible.map((n) => this.titlesOf(n)).join('\n'));
+  private titleCache = new Map<string, { body: string; key: string }>();
+  private titlesOf(n: Note): string {
+    const had = this.titleCache.get(n.id);
+    if (had?.body === n.body) return had.key;
+    const key = titleOf(n) + '\u0000' + legacyTitleOf(n);
+    this.titleCache.set(n.id, { body: n.body, key });
+    return key;
+  }
+  /** `run` now and whenever the pages' titles change (made, renamed, deleted); the returned function stops it */
+  onTitles(run: () => void): () => void {
+    run();
+    let seen = this.titleKey; // the effect's first run comes a moment later: only a change since then counts
+    return $effect.root(() => {
+      $effect(() => {
+        const key = this.titleKey;
+        if (key === seen) return;
+        seen = key;
+        untrack(run);
+      });
+    });
+  }
+
   /** the page a [[link]] names: by its title, else by the title it had when the link was written */
   byTitle(t: string): Note | undefined {
     const want = t.toLowerCase();
@@ -538,15 +650,21 @@ class NotesStore {
   /** Apply notes coming from sync (last-writer-wins, or unconditionally with `force`). Returns true if anything changed. */
   mergeRemote(remote: Note[], force = false): boolean {
     let changed = false;
+    // the open note deleted on another device: the one next to it in the list comes up, as when it is deleted here.
+    // It stayed open, deleted, and back/forward led into it
+    let instead: Note | undefined, gone = false;
     for (const r of remote) {
       const local = this.all.find((n) => n.id === r.id);
       if (!force && local && local.updatedAt >= r.updatedAt) continue;
+      if (r.deleted && r.id === this.currentId && !local?.deleted) { instead = this.neighbourOf(r.id); gone = true; }
       if (local) Object.assign(local, { icon: undefined, parent: undefined }, r); // a removed icon/parent must come through too
       else this.all.push(r);
+      this.untouched.delete(r.id); // what another device says it is: not this session's to take away
       this.titles.set(r.id, titleOf(r)); // a remote edit is not this note being renamed here
       void storage.write(r.id, serialize(r));
       changed = true;
     }
+    if (gone) { this.currentId = instead?.id ?? null; if (!this.currentId) this.create(); }
     return changed;
   }
 }

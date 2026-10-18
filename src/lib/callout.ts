@@ -49,13 +49,16 @@ export const Callout = Node.create({
 
   addAttributes() {
     return {
-      emoji: { default: '💡', parseHTML: (el) => el.getAttribute('data-callout') || '💡' },
-      fold: { default: '', parseHTML: (el) => el.getAttribute('data-fold') ?? '' },
-      titled: { default: false, parseHTML: (el) => el.hasAttribute('data-titled') },
+      // written as the data- attributes they are read from (renderHTML below): a copied folded callout came back unfolded
+      emoji: { default: '💡', parseHTML: (el) => el.getAttribute('data-callout') || '💡', renderHTML: () => ({}) },
+      fold: { default: '', parseHTML: (el) => el.getAttribute('data-fold') ?? '', renderHTML: (a) => (a.fold ? { 'data-fold': a.fold } : {}) },
+      titled: { default: false, parseHTML: (el) => el.hasAttribute('data-titled'), renderHTML: () => ({}) },
     };
   },
   parseHTML() {
-    return [{ tag: 'div[data-callout]' }];
+    // a callout copied in the editor comes back as it was drawn, its icon beside its body: read whole, the icon was read
+    // as a line of it ("✏️" became the title, the title its first line). Read from markdown, it is the body alone.
+    return [{ tag: 'div[data-callout]', contentElement: (el) => (el as HTMLElement).querySelector<HTMLElement>(':scope > .callout-body') ?? (el as HTMLElement) }];
   },
   renderHTML({ node, HTMLAttributes }) {
     return [

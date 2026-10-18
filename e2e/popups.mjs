@@ -6,6 +6,8 @@
 // For each: it must open, be given an animation (Element.animate with a duration, which is how Svelte runs a
 // transition) as it opens and again as it closes, and be gone after. Counted from the calls, not from how it looks
 // at some moment, so a slow machine (CI) that is late to look still sees them.
+// On the Mac the keyboard must be somewhere after each closes, never left on <body> (where the keys typed next go
+// nowhere); a phone leaves it there on purpose, its keyboard down.
 // Needs WebKit for Playwright: npx playwright-core install webkit. It starts its own dev server, or uses EVE_URL.
 // Run: npm run e2e:popups
 import { webkit } from 'playwright-core';
@@ -30,6 +32,9 @@ const mark = (page) => page.evaluate(() => window.__animated.length);
 /** was an element matching `sel` animated since `from`? */
 const animated = (page, sel, from) => page.evaluate(([sel, from]) => window.__animated.slice(from).some((el) => el.matches(sel)), [sel, from]);
 const present = (page, sel) => page.locator(sel).count().then((n) => n > 0);
+/** where the keyboard is: false when it is on <body> */
+const focused = (page) => page.evaluate(() => document.activeElement !== null && document.activeElement !== document.body);
+let keyboard = true; // the Mac's; a phone has no keyboard focus to keep
 
 /** opens it, checks it animated in, closes it, checks it animated out and went; `open` and `close` drive the page */
 async function check(page, name, sel, open, close) {
@@ -42,10 +47,13 @@ async function check(page, name, sel, open, close) {
   from = await mark(page);
   await close();
   await page.waitForFunction((sel) => !document.querySelector(sel), sel, { timeout: 10_000 }).catch(() => {});
-  Object.assign(r, { out: await animated(page, sel, from), closed: !(await present(page, sel)) });
+  await page.waitForTimeout(150); // (the emoji picker puts the keyboard back a moment after it closes)
+  Object.assign(r, { out: await animated(page, sel, from), closed: !(await present(page, sel)), focus: !keyboard || (await focused(page)) });
   results.push(r);
-  console.log(`${r.opened && r.in && r.out && r.closed ? 'pass' : 'FAIL'} ${name.padEnd(28)} opened ${r.opened ? 'yes' : 'no '}  in ${r.in ? 'yes' : 'no '}  out ${r.out ? 'yes' : 'no '}  closed ${r.closed ? 'yes' : 'no'}`);
+  console.log(`${ok(r) ? 'pass' : 'FAIL'} ${name.padEnd(28)} opened ${r.opened ? 'yes' : 'no '}  in ${r.in ? 'yes' : 'no '}  out ${r.out ? 'yes' : 'no '}  closed ${r.closed ? 'yes' : 'no '}  focus ${keyboard ? (r.focus ? 'kept' : 'LOST to <body>') : '-'}`);
 }
+
+const ok = (r) => r.opened && r.in && r.out && r.closed && r.focus;
 
 async function newNote(page, mobile) {
   await page.locator(mobile ? 'button[aria-label="New note"]:visible' : 'button[data-tip="New note"]:visible').first().click().catch(() => {});
@@ -53,7 +61,7 @@ async function newNote(page, mobile) {
   // a phone's + asks: a note or a group (or today's note)
   if (mobile) await page.getByRole('menuitem', { name: 'New note' }).first().click({ timeout: 2000 }).catch(() => {});
   await page.waitForTimeout(400);
-  if (!(await page.locator('.tiptap').count())) { await page.keyboard.press('Meta+n'); await page.waitForTimeout(400); }
+  if (!(await page.locator('.tiptap').count())) { await page.keyboard.press('ControlOrMeta+n'); await page.waitForTimeout(400); }
   await page.locator('.tiptap').click();
   await page.keyboard.type('Popups');
   await page.keyboard.press('Enter');
@@ -72,12 +80,12 @@ async function newNote(page, mobile) {
   const row = () => page.locator('aside [data-note]').last();
 
   await check(page, 'menu (right click)', '.menu', () => row().click({ button: 'right' }), esc);
-  await check(page, '"+" menu', '.menu, .plus-menu', async () => { await row().focus(); await page.keyboard.press('Meta+n'); }, esc);
+  await check(page, '"+" menu', '.menu, .plus-menu', async () => { await row().focus(); await page.keyboard.press('ControlOrMeta+n'); }, esc);
   await check(page, 'emoji picker', '.panel', () => row().locator('.ico-slot').click(), esc);
   await check(page, 'confirm', '.box', async () => { await row().focus(); await page.keyboard.press('Backspace'); }, esc);
   await page.locator('.tiptap').click();
   await page.keyboard.press('End');
-  await check(page, 'find', '.find', () => page.keyboard.press('Meta+f'), esc);
+  await check(page, 'find', '.find', () => page.keyboard.press('ControlOrMeta+f'), esc);
   await page.locator('.tiptap').click();
   await page.keyboard.press('Meta+ArrowDown');
   await page.keyboard.press('Enter');
@@ -102,6 +110,7 @@ async function newNote(page, mobile) {
 }
 
 // ---- a phone ----
+keyboard = false;
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true,
     userAgent: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Mobile' });
@@ -126,7 +135,7 @@ async function newNote(page, mobile) {
 
 await browser.close();
 await server?.close();
-const bad = results.filter((r) => !(r.opened && r.in && r.out && r.closed));
+const bad = results.filter((r) => !ok(r));
 for (const e of errors) console.log(`page error: ${e}`);
 console.log(`${results.length - bad.length}/${results.length} pass, ${errors.length} page errors`);
 process.exit(bad.length || errors.length ? 1 : 0);

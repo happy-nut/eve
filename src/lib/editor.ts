@@ -10,7 +10,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
-import { canJoin } from '@tiptap/pm/transform';
+import { canJoin, findWrapping, liftTarget } from '@tiptap/pm/transform';
 import { DOMParser, Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
@@ -40,7 +40,8 @@ import { hints } from './hints.svelte';
 import { fileMarkdown, isAsset } from './drop';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
-import { calendar, emojiRow, popup, ICONS, SLASH, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
+import { calendar, emojiRow, popup, suggestionVisible, PICKERS, ICONS, slashItems, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
+import { leaveToApp } from './keys';
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
 import { blockBeside, moveBlock, indentLines, switchItem, switchLines, wrapLines, joinNextItem, itemAbove, liftCounting, leaveTrailer } from './blocks';
@@ -216,9 +217,6 @@ const KeepSpaces = Extension.create({
 
 const KEYMAP = new PluginKey('eve-keymap');
 const APP_GUARD = new PluginKey('eve-app-guard');
-// per editor: the note and an open card page each have their own popups, and one shared variable
-// would leave the note asking the closed card's popups — then Esc hides the window, not the calendar
-const suggestionVisible = new WeakMap<Editor, () => boolean>();
 
 export const getMarkdown = (editor: Editor): string => (editor.storage as any).markdown.getMarkdown();
 /** a note this long (in ProseMirror positions, about characters) waits for a pause before it becomes markdown */
@@ -314,6 +312,14 @@ function allCode(state: EditorState, from: number, to: number) {
 
 const LISTS = /^(bulletList|orderedList|taskList)$/;
 
+/** the code block's language for VS Code's `mode` in what it puts on the clipboard (its own ids, mostly the same) */
+function vscodeLanguage(data: string): string | null {
+  let mode = '';
+  try { mode = String(JSON.parse(data)?.mode ?? ''); } catch { /* not what VS Code writes: no language */ }
+  const own: Record<string, string> = { shellscript: 'bash', plaintext: '', javascriptreact: 'javascript', typescriptreact: 'typescript', html: 'xml', jsonc: 'json', dockerfile: 'dockerfile' };
+  return (mode in own ? own[mode] : mode.toLowerCase()) || null;
+}
+
 /**
  * Markdown (as HTML) pasted where the caret is, fitted in as any paste is: the first line runs on in the caret's line,
  * the last one takes the rest of it. Put in with insertContent it was a document of its own, every newline and space
@@ -355,6 +361,32 @@ function pasteMarkdown(view: EditorView, html: string, lead = '', trail = ''): T
   return tr.scrollIntoView();
 }
 
+/**
+ * ⌘⇧. on a list's line: the whole list goes into a quote, or out of the one it is in. The stock toggle tried to quote
+ * the item's own line, which an item cannot hold, and did nothing.
+ */
+const quoteList = ({ state, tr, dispatch }: { state: EditorState; tr: Transaction; dispatch?: unknown }) => {
+  const { $from, $to } = state.selection, quote = state.schema.nodes.blockquote;
+  let list = -1, quoted = -1;
+  for (let d = $from.depth; d > 0; d--) {
+    if (LISTS.test($from.node(d).type.name)) list = d;
+    else if ($from.node(d).type === quote && list > d && quoted < 0) quoted = d;
+  }
+  if (list < 0) return false;
+  if (quoted >= 0) {
+    const range = $from.blockRange($to, (n) => n.type === quote);
+    const target = range && liftTarget(range);
+    if (!range || target == null) return false;
+    if (dispatch) tr.lift(range, target);
+    return true;
+  }
+  const range = $from.blockRange($to, (n) => !LISTS.test(n.type.name) && !/^(listItem|taskItem)$/.test(n.type.name));
+  const wrapping = range && findWrapping(range, quote);
+  if (!range || !wrapping) return false;
+  if (dispatch) tr.wrap(range, wrapping);
+  return true;
+};
+
 /** Several lines (paragraphs, list lines) made code at once: one block of them all, a line each, where they were.
  * The stock toggle made each a code block of its own. */
 const linesToCode = ({ state, tr, dispatch }: { state: EditorState; tr: Transaction; dispatch?: unknown }) => {
@@ -382,6 +414,7 @@ const linesToCode = ({ state, tr, dispatch }: { state: EditorState; tr: Transact
 
 function editorCommands(editor: Editor): Record<string, () => boolean> {
   const c = () => editor.chain().focus();
+  const inCode = () => editor.isActive('codeBlock');
   return {
     // the / menu opens where a word can start: right after a word (the phone's Insert block, the caret at the
     // end of a line) a bare "/" opened nothing and stayed in the text, so a space goes first
@@ -406,9 +439,14 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     code: () => c().toggleCode().run(),
     link: () => {
       const prev = editor.getAttributes('link').href as string | undefined;
-      ui.prompt('Link URL', prev ?? 'https://').then((url) => {
-        if (url === null) return;
-        if (!url) c().unsetLink().run();
+      ui.prompt('Link URL', prev ?? 'https://').then((typed) => {
+        if (typed === null) return;
+        // the https:// it opens with is selected, but an address pasted after it still came out "https://https://…"
+        const url = typed.trim().replace(/^(?:https?:\/\/)+(https?:\/\/)/i, '$1');
+        // nothing but the scheme left is no address: OK there linked the words to "https://"
+        if (!url || /^[a-z][\w+.-]*:\/*$/i.test(url)) c().extendMarkRange('link').unsetLink().run();
+        // no words chosen and none linked: the address goes in as its own words (it linked nothing, and said nothing)
+        else if (editor.state.selection.empty && !prev) c().insertContent({ type: 'text', text: url, marks: [{ type: 'link', attrs: { href: url } }] }).unsetMark('link').run();
         else c().extendMarkRange('link').setLink({ href: url }).run();
       });
       return true;
@@ -423,12 +461,14 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     // on list lines of another kind, only those lines change kind, where they are (a bullet under a number stays
     // under it); over a toggle or a callout, only the lines around it; otherwise the stock toggle (a line becomes a
     // list, a list's lines plain again), never over the empty line at the note's end
-    bulletList: () => editor.commands.command(switchLines('bulletList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('bulletList', 'listItem')).run() || c().command(leaveTrailer).toggleBulletList().run(),
-    orderedList: () => editor.commands.command(switchLines('orderedList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('orderedList', 'listItem')).run() || c().command(leaveTrailer).toggleOrderedList().run(),
-    taskList: () => editor.commands.command(switchLines('taskList', 'taskItem')) || c().command(leaveTrailer).command(wrapLines('taskList', 'taskItem')).run() || c().command(leaveTrailer).toggleTaskList().run(),
+    // a list made of code took its lines into one item's text, newlines and all: saved, they read back as one line,
+    // and in a callout or a toggle the list landed outside it. Code stays code; the keys do nothing there
+    bulletList: () => inCode() || editor.commands.command(switchLines('bulletList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('bulletList', 'listItem')).run() || c().command(leaveTrailer).toggleBulletList().run(),
+    orderedList: () => inCode() || editor.commands.command(switchLines('orderedList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('orderedList', 'listItem')).run() || c().command(leaveTrailer).toggleOrderedList().run(),
+    taskList: () => inCode() || editor.commands.command(switchLines('taskList', 'taskItem')) || c().command(leaveTrailer).command(wrapLines('taskList', 'taskItem')).run() || c().command(leaveTrailer).toggleTaskList().run(),
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
     toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck),
-    blockquote: () => c().toggleBlockquote().run(),
+    blockquote: () => editor.commands.command(quoteList) || c().toggleBlockquote().run(),
     codeBlock: () => !inCell(editor.state.selection.$from) && (editor.commands.command(linesToCode) || c().toggleCodeBlock().run()),
     // in a toggle's title, under the toggle: the title holds text only
     divider: () => {
@@ -481,16 +521,16 @@ export function applyKeymap(editor: Editor) {
   editor.unregisterPlugin(KEYMAP);
   editor.unregisterPlugin(APP_GUARD);
   // App-scope combos (e.g. ⌘B rebound to "focus sidebar", Esc to hide the window) must not be eaten
-  // by the editor's built-in keymaps; mark the event and stop editor handling so the window listener
-  // runs it. A card page still closes on Esc instead: it stops the event before it reaches the window.
+  // by the editor's built-in keymaps; stop editor handling and say the key is the app's (keys.ts), so the app's
+  // shortcuts still run it. A card page still closes on Esc instead: it stops the event before it reaches the window.
   const guard = new Plugin({
     key: APP_GUARD,
     props: {
       handleKeyDown: (_view, e) => {
-        if (suggestionVisible.get(editor)?.()) return false;
+        if (suggestionVisible(editor)) return false;
         const a = shortcuts.match(e, ['app']);
         if (!a) return false;
-        (e as any).eveApp = true;
+        leaveToApp(e);
         return true;
       },
     },
@@ -821,9 +861,27 @@ export function createEditor(opts: {
         const raw = event.clipboardData?.getData('text/plain') ?? '';
         const text = raw.trim();
         if (URL_RE.test(text) && !view.state.selection.empty) return editor.chain().focus().setLink({ href: text }).run();
+        const $from = state.selection.$from;
+        // code copied in VS Code says so (and in what language): on an empty line it is a code block of it, as it was;
+        // in a line of text it is its lines as written, none of its ** or ` read as markdown
+        const vscode = event.clipboardData?.getData('vscode-editor-data');
+        if (vscode && text && !editor.isActive('codeBlock') && !inCell($from)) {
+          const code = raw.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').trimEnd();
+          if ($from.parent.type.name === 'paragraph' && !$from.parent.content.size && empty) {
+            const block = state.schema.nodes.codeBlock.create({ language: vscodeLanguage(vscode) }, state.schema.text(code));
+            const tr = state.tr.replaceRangeWith($from.before(), $from.after(), block);
+            view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map($from.before()) + block.nodeSize - 1), -1)).scrollIntoView());
+            return true;
+          }
+          if ($from.parent.type.name === 'paragraph') {
+            const { paragraph, doc } = state.schema.nodes;
+            const asTyped = doc.create(null, code.split('\n').map((l) => paragraph.create(null, l ? state.schema.text(l) : null)));
+            view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse((editor.storage as any).markdown.serializer.serialize(asTyped))));
+            return true;
+          }
+        }
         // a line that holds no line break (a toggle's title) takes lines pasted in it as one, a space between them:
         // they cut the toggle in two, the rest of it under a new one
-        const $from = state.selection.$from;
         if (/\n/.test(text) && $from.parent.isTextblock && !$from.parent.type.spec.code && !$from.parent.type.contentMatch.matchType(state.schema.nodes.hardBreak)) {
           view.dispatch(state.tr.insertText(text.replace(/\s*\r?\n\s*/g, ' ')).scrollIntoView());
           return true;
@@ -841,8 +899,13 @@ export function createEditor(opts: {
         // lines of plain text are lines, as if typed with Enter between them (in a list: items of it). Read as
         // markdown they were one paragraph, a line break between each. A cell, a heading, a toggle's title and code
         // keep them in the one line. Lines copied in the editor come with its own HTML, which says what they were.
+        // A line's indent is its text (written as the note keeps it, &#32; / &#9;): read as markdown, four spaces or a
+        // tab made it code. A blank line is one empty line, as many as there were.
         if (text && /\n/.test(text) && !RICH_HTML.test(html) && !html.includes('data-pm-slice') && $from.parent.type.name === 'paragraph' && !inCell($from)) {
-          view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse(raw.replace(/\r?\n/g, '\n\n'))));
+          const lines = raw.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '').split('\n');
+          const indent = (ws: string) => ws.replace(/ /g, '&#32;').replace(/\t/g, '&#9;');
+          const md = lines.map((l) => (l.trim() ? l.replace(/^[ \t]+/, indent) : BLANK)).join('\n\n');
+          view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse(md)));
           return true;
         }
         return false;
@@ -1141,7 +1204,7 @@ export function createEditor(opts: {
         name: 'tableKeys',
         priority: 1000,
         addKeyboardShortcuts() {
-          const free = () => !suggestionVisible.get(this.editor)?.();
+          const free = () => !suggestionVisible(this.editor);
           return {
             Enter: () => free() && cellEnter(this.editor.view, () => this.editor.commands.setHardBreak()),
             ArrowUp: () => free() && upAboveTable(this.editor.view),
@@ -1162,7 +1225,7 @@ export function createEditor(opts: {
         name: 'lineIndent',
         priority: 101,
         addKeyboardShortcuts() {
-          const run = (dir: 1 | -1) => () => !suggestionVisible.get(this.editor)?.() && this.editor.commands.command(indentLines(dir));
+          const run = (dir: 1 | -1) => () => !suggestionVisible(this.editor) && this.editor.commands.command(indentLines(dir));
           // ⌫ / Enter step out as ⇧Tab does — but where the line cannot move, the key's own meaning still applies
           // (⇧Tab keeps the key even then; these would otherwise do nothing at all)
           const stepOut = () => {
@@ -1391,7 +1454,7 @@ export function createEditor(opts: {
         },
       }).configure({ nested: true }),
       // a phone's bar does the formatting; the markdown hint is for a keyboard
-      Placeholder.configure({ placeholder: isMobile ? 'Start writing…' : 'Start typing… `#` heading, `-` list, `[[` link' }),
+      Placeholder.configure({ placeholder: isMobile ? 'Start writing…' : 'Start typing… # heading, - list, [[ link' }),
       Markdown.configure({ html: true, transformPastedText: true, transformCopiedText: true, linkify: true, breaks: false }),
       // ahead of the picker's own plugin, which reads where the "[[" was typed in the same transaction
       Extension.create({ name: 'wikiTyped', priority: 1000, addProseMirrorPlugins: () => [wikiTyped] }),
@@ -1399,8 +1462,9 @@ export function createEditor(opts: {
         onOpen: opts.onOpenNote,
         iconOf,
         exists: (t) => { const find = (x: string) => notes.byTitle(x); return !!find(splitLink(t, (x) => !!find(x))[0]); },
+        watchTitles: (check) => notes.onTitles(check),
         suggestion: {
-          char: '[[',
+          char: PICKERS.wiki.char,
           allowSpaces: true,
           startOfLine: false,
           allowedPrefixes: null, // `[[` means a link wherever it is typed, not only after a space
@@ -1440,14 +1504,14 @@ export function createEditor(opts: {
               .deleteRange(range)
               .insertContent([{ type: 'wikiLink', attrs: { title: (props as SuggestItem).value ?? (props as SuggestItem).label } }, { type: 'text', text: ' ' }])
               .run(),
-          render: () => popup(opts.suggestionUI),
+          render: () => popup(opts.suggestionUI, PICKERS.wiki),
         },
       }),
       // @ — a day, stored as the day and shown as it reads now. The trigger keeps the default
       // prefixes (line start or after a space), which is what keeps an address out of it.
       DateMention.configure({
         suggestion: {
-          char: '@',
+          char: PICKERS.date.char,
           allowSpaces: false,
           pluginKey: DATE_MENU,
           allow: ({ editor, state }) => !menuOpen(editor, state, WIKI_MENU, SLASH_MENU),
@@ -1495,7 +1559,7 @@ export function createEditor(opts: {
             slashTyped,
             Suggestion({
               editor: this.editor,
-              char: '/',
+              char: PICKERS.slash.char,
               pluginKey: SLASH_MENU,
               allowSpaces: false,
               // default prefixes (line start / after a space): a '/' already inside text like KRW/USD must not open the menu
@@ -1510,15 +1574,13 @@ export function createEditor(opts: {
                 const before = $at.parent.textBetween(Math.max(0, $at.parentOffset - 1), $at.parentOffset, undefined, '\ufffc');
                 return !before || /\s/.test(before);
               },
-              items: ({ query }) => {
-                const q = query.toLowerCase();
-                return SLASH.filter((i) => i.label.toLowerCase().includes(q) || i.hint?.toLowerCase().includes(q));
-              },
+              items: ({ query }) => slashItems(query),
               command: ({ editor, range, props }) => {
                 editor.chain().focus().deleteRange(range).run();
                 (props as SuggestItem).run?.(editor);
               },
-              render: () => popup(opts.suggestionUI),
+              // (when ↩ picks: PICKERS.slash)
+              render: () => popup(opts.suggestionUI, PICKERS.slash),
             }),
           ];
         },
@@ -1531,7 +1593,7 @@ export function createEditor(opts: {
           return [
             Suggestion({
               editor: this.editor,
-              char: ':',
+              char: PICKERS.emoji.char,
               pluginKey: new PluginKey('emojiSuggest'),
               allowSpaces: false,
               allow: ({ editor, state, range }) => !state.doc.resolve(range.from).parent.type.spec.code && !menuOpen(editor, state, WIKI_MENU, DATE_MENU, SLASH_MENU),
@@ -1552,7 +1614,6 @@ export function createEditor(opts: {
   editor.on('blur', flush); // leaving the note: the list, a dialog, another app
   // the note closed or switched (the document is still there to read)
   editor.on('destroy', () => { closing = true; flush(); });
-  suggestionVisible.set(editor, () => opts.suggestionUI.visible() || opts.calendarUI.visible() || opts.emojiUI.visible());
   if (opts.onNoteMove) noteMove.set(editor, opts.onNoteMove);
   applyKeymap(editor);
   if (isMobile) {

@@ -4,6 +4,7 @@
   import type { Editor } from '@tiptap/core';
   import { findState, setQuery, step, replaceOne, replaceAll, clearFind } from './lib/find';
   import { ui } from './lib/ui.svelte';
+  import { composing } from './lib/keys';
   import { isMobile } from './lib/platform';
 
   /** ⌘F: a small bar over the note. Enter walks the matches, ⇧Enter walks back, Esc puts it away. */
@@ -45,7 +46,7 @@
   }
 
   function close() {
-    ui.find = false;
+    ui.closeFind();
     editor?.commands.focus();
   }
 
@@ -70,7 +71,7 @@
     // and nothing more: it fell through to Enter's work, replacing the match (or stepping on) as the bar closed
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
     // the Enter that ends a Korean or Japanese word being put together is the word's, not a step to the next match
-    else if (e.key !== 'Enter' || e.isComposing) return;
+    else if (e.key !== 'Enter' || composing(e)) return;
     e.preventDefault();
     // with the replace field open, Enter works through the matches one replacement at a time;
     // ⇧Enter still just walks back, so a match can be stepped over
@@ -117,7 +118,7 @@
 
 <style>
   .find {
-    position: absolute; top: 10px; right: 16px; z-index: 7; width: min(360px, calc(100% - 32px));
+    position: absolute; top: 10px; right: 16px; z-index: var(--z-find); width: min(360px, calc(100% - 32px));
     display: flex; flex-direction: column; gap: 4px; padding: 6px;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }

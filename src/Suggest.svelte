@@ -13,6 +13,7 @@
   let place = $state(''); // its left/top-or-bottom/max-height (lib/popup.ts)
   let anchor: DOMRect | null = null; // the caret it was placed at, to place it again once its width is known
   let pick: (t: SuggestItem) => void = () => {};
+  let pointed = false; // the pointer chose a row since the list was shown (↩ after "a /" picks only then: slash.ts)
 
   // what is actually on screen: the items, with the sections of an opened page folded in after it
   const shown = $derived(rows(items, open));
@@ -21,7 +22,7 @@
     show(next, rect, cb) {
       // a keystroke rebuilds the list, so nothing stays open across one: the page under row 3 is not
       // the page that was there before the letter was typed
-      items = next; open = new Set(); sel = 0; pick = cb;
+      items = next; open = new Set(); sel = 0; pick = cb; pointed = false;
       if (rect) { anchor = rect; place = placeAt(rect, want(), list?.offsetWidth ?? 340); }
     },
     move: (d) => { sel = (sel + d + shown.length) % shown.length; },
@@ -39,6 +40,7 @@
     hide: () => { items = []; open = new Set(); },
     visible: () => items.length > 0,
     place: (rect) => { anchor = rect; place = placeAt(rect, want(), list?.offsetWidth ?? 340); },
+    chosen: () => pointed,
   };
 
   let list = $state<HTMLUListElement | null>(null);
@@ -58,7 +60,8 @@
     {#each shown as row, i (i)}
       {@const t = row.item}
       <li class:sel={i === sel} class:child={row.child}>
-        <button onmousedown={(e) => { e.preventDefault(); pick(t); }}>
+        <!-- a move, not mouseenter: the list drawn under a pointer resting there has not been pointed at -->
+        <button onmousedown={(e) => { e.preventDefault(); pick(t); }} onmousemove={() => { if (sel !== i || !pointed) { sel = i; pointed = true; } }}>
           <!-- the twisty marks a page that has sections; → opens it, ← folds it away again -->
           {#if !row.child && t.sections?.length}
             <svg class="chev" class:down={open.has(row.top)} viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5"/></svg>
@@ -78,7 +81,7 @@
 <style>
   .suggest {
     position: fixed;
-    z-index: 40;
+    z-index: var(--z-caret-popup);
     list-style: none;
     margin: 0;
     padding: 4px;
