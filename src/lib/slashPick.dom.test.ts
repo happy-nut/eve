@@ -5,10 +5,11 @@ import { posOf, press, type } from './testEditor';
 import { slashItems, type SuggestItem } from './slash';
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
-// the menu comes up a moment after the "/" (the picker's own update): waited for, up to half a second, rather than
-// one turn of the loop — on a busy machine (CI) it came a turn later and ↓ ↩ went to the line instead
+// the menu comes up a moment after the "/" (the picker's own update): waited for, up to three seconds, rather than
+// one turn of the loop — on a busy machine (CI, the whole suite at once) it came later still than half a second, and
+// ↓ ↩ went to the line instead
 let menuUp = () => false; // the newest editor's
-const settle = async () => { await tick(); for (let i = 0; i < 50 && !menuUp(); i++) await new Promise((r) => setTimeout(r, 10)); };
+const settle = async () => { await tick(); for (let i = 0; i < 300 && !menuUp(); i++) await new Promise((r) => setTimeout(r, 10)); };
 const made: { destroy(): void }[] = [];
 afterEach(async () => { await tick(); for (const e of made.splice(0)) e.destroy(); document.body.innerHTML = ''; });
 
