@@ -18,6 +18,7 @@
   import { appearance } from './lib/appearance.svelte';
   import * as moves from './lib/moves';
   import { focusNote } from './lib/popup';
+  import { history } from './lib/history.svelte';
   import { touchReorder, type Reorder } from './lib/touchReorder';
   import { swipeRow } from './lib/swipeRow';
   import { previewOf, rawQuery, searchText } from './lib/markdown';
@@ -297,7 +298,8 @@
     const inside = (r: HTMLElement) => r.dataset.group !== undefined && (r.dataset.group === g || r.dataset.group.startsWith(g + '/'));
     const next = neighbourOf(groupSel(g), inside), fromList = inList();
     if (!(await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`))) return;
-    ui.undoable(`Deleted group “${leafOf(g)}”`, groups.remove(g));
+    const step = history.record(), undo = groups.remove(g);
+    ui.toast(`Deleted group “${leafOf(g)}”`, { label: 'Undo', run: () => { if (!history.undo(step)) undo(); } });
     void afterRemove(next, fromList);
   }
   async function removeNote(n: Note) {
@@ -306,7 +308,6 @@
     const next = neighbourOf(`[data-note="${n.id}"]`), fromList = inList();
     if (!(await ui.ask(`Delete “${titleOf(n)}”?`))) return;
     notes.remove(n.id);
-    ui.undoable(`Deleted “${titleOf(n)}”`, () => notes.restore(n.id));
     void afterRemove(next, fromList);
   }
   // a row sliding out (a search just narrowed the list) is inert: it can't take the focus, and is going

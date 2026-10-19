@@ -4,6 +4,7 @@
 import { test, expect } from 'vitest';
 import { notes, type Note } from './notes.svelte';
 import { groups } from './groups.svelte';
+import { history } from './history.svelte';
 
 /** a small seeded generator: the same seed, the same run */
 function rng(seed: number) {
@@ -40,7 +41,8 @@ function broken(): string[] {
 }
 
 for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-  test(`a random run of edits, moves, deletes, undos, history and sync (seed ${seed}) keeps the stores' rules`, () => {
+  test(`a random run of edits, moves, deletes, undos, history and sync (seed ${seed}) keeps the stores' rules`, async () => {
+    history.clear();
     for (const n of notes.all) n.deleted = true;
     const start = notes.create('# Start\n\nx');
     notes.touched(start.id);
@@ -68,10 +70,15 @@ for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
         ['unnest', () => { const a = pick(live()); if (a) notes.setParent(a.id, null); }],
         ['sync brings a change', () => { const n = pick(live()); if (n) notes.mergeRemote([{ ...n, body: n.body + ' z', updatedAt: Date.now() + 1000 }]); }],
         ['sync deletes one', () => { const n = pick(live()); if (n) notes.mergeRemote([{ ...n, deleted: true, updatedAt: Date.now() + 1000 }]); }],
+        ['set an icon', () => { const n = pick(live()); if (n) notes.setIcon(n.id, pick(['', '🐢', '📌'])!); }],
+        ['move a group', () => { const g = pick(groups.names); if (g) groups.move(g, pick(['', ...groups.names.filter((x) => x !== g)]) ?? '', null); }],
+        // ⌘Z outside the text: the newest thing done to the notes or the groups taken back (history.svelte.ts)
+        ['app undo', () => { history.undo(); }],
       ];
       const [name, run] = pick(ops)!;
       log.push(name);
       run();
+      await Promise.resolve(); // the step closes as an action's own code is done (history.svelte.ts)
       const bad = broken();
       if (bad.length) { expect.soft(bad, `seed ${seed}, step ${step}, after: ${log.slice(-8).join(' → ')}`).toEqual([]); return; }
     }

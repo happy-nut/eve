@@ -1,4 +1,5 @@
 import { notes, nested } from './notes.svelte';
+import { history, undoSource } from './history.svelte';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
 
@@ -128,6 +129,7 @@ class Groups {
 
   icon(g: string) { return this.saved.icons[g] ?? ''; }
   setIcon(g: string, icon: string) {
+    history.record();
     icon = icon.trim();
     if (icon) this.saved.icons[g] = icon; else delete this.saved.icons[g];
     this.persist();
@@ -149,6 +151,7 @@ class Groups {
 
   /** new empty group inside `parent` ('' = root); falls back to the parent's level when too deep */
   create(parent = ''): string {
+    history.record();
     while (depthOf(parent) >= MAX_DEPTH) parent = parentOf(parent);
     const siblings = this.children(parent).map(leafOf);
     let leaf = 'New group', i = 2;
@@ -175,6 +178,7 @@ class Groups {
    * null = last among siblings. Returns the group's new path, or null if refused.
    */
   move(p: string, parent: string, before: string | null, leaf = leafOf(p)): string | null {
+    history.record();
     leaf = leaf.trim().replace(/\//g, '-');
     if (!leaf || !this.canPlace(p, parent, leaf)) return null;
     const np = parent ? `${parent}/${leaf}` : leaf;
@@ -210,6 +214,7 @@ class Groups {
   /** Delete a group and its subgroups; all their notes go back to root. Returns what puts it all back as it was
    *  (the toast's Undo): the groups' order, folds and icons, and where each note stood. */
   remove(p: string): () => void {
+    history.record();
     const sub = this.subtree(p);
     const was = { order: [...this.names], collapsed: [...this.saved.collapsed], icons: { ...this.saved.icons }, ids: new Map(this.ids) };
     // every note, not only the group's: moving them out can renumber the top level's ranks, and a page's sub-pages
@@ -238,6 +243,12 @@ class Groups {
     };
   }
 
+  /** the groups as a picture of them had them (the app's undo) */
+  putBack(s: Pick<Saved, 'order' | 'collapsed' | 'icons'>) {
+    this.saved.order = [...s.order]; this.saved.collapsed = [...s.collapsed]; this.saved.icons = { ...s.icons };
+    this.persist();
+  }
+
   /** ensure a group (and its ancestors) are remembered in order so they survive their notes moving out */
   remember(p: string) {
     if (p && !this.saved.order.includes(p)) { this.saved.order = [...this.names]; this.persist(); }
@@ -245,5 +256,10 @@ class Groups {
 }
 
 export const groups = new Groups();
+// what the app's undo puts back of the groups: which there are, in what order, folded or not, and their icons
+undoSource<Pick<Saved, 'order' | 'collapsed' | 'icons'>>({
+  take: () => ({ order: [...groups.saved.order], collapsed: [...groups.saved.collapsed], icons: { ...groups.saved.icons } }),
+  put: (s) => groups.putBack(s),
+});
 // the notes open "the first one" or "the one next to it" as the list shows them, not by their bare rank
 notes.sidebar = { shown: () => groups.visibleOrdered(), all: () => groups.ordered() };
