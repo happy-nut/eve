@@ -31,6 +31,7 @@
   import { parseTicket } from './lib/handoff';
   import { parseEveLink } from './lib/evelink';
   import { focusNote } from './lib/popup';
+  import { cameBack } from './lib/comeBack';
   import { flushEdits } from './lib/pending';
   import { claimKeys, handledBy, PRIORITY } from './lib/keys';
 
@@ -133,7 +134,8 @@
     window.addEventListener('eve-summon', onSummon);
     // coming back by click, ⌘Tab or the Dock fires no DOM 'focus' when the webview never let go of it
     let unfocus: (() => void) | undefined;
-    onWindowFocus(restoreFocus).then((u) => (unfocus = u));
+    // (not over a click that brought it back: that click puts the caret, cameBack)
+    onWindowFocus(() => cameBack(restoreFocus)).then((u) => (unfocus = u));
     const stopSync = sync.start();
     const stopReminder = startReminder();
     updates.start();
