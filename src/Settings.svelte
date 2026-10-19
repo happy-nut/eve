@@ -7,7 +7,7 @@
   import { storage, autostart, dock, defaultApp, mcp, isTauri, isMobile, copyText, openUrl, type McpClient } from './lib/platform';
   import { normHost, webBase } from './lib/github';
   import { ui } from './lib/ui.svelte';
-  import { appearance, SIZE_MIN, SIZE_MAX, FONTS, THEMES, type Theme } from './lib/appearance.svelte';
+  import { appearance, PASTELS, SIZE_MIN, SIZE_MAX, FONTS, THEMES, type Theme } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
   import Select from './Select.svelte';
   import Slider from './Slider.svelte';
@@ -211,6 +211,16 @@
           <input type="checkbox" class="switch" checked={appearance.s.autoCorrect}
             onchange={(e) => appearance.set({ autoCorrect: e.currentTarget.checked })} />
         </label>
+        <div class="row">
+          <span class="label">Highlighter <span class="sub">the pens ⌘⇧H offers on chosen words; the first is the plain one (==text==)</span></span>
+          <span class="pens">
+            {#each appearance.s.highlights as c, i (i)}
+              <input type="color" value={c} aria-label={`Pen ${i + 1}`}
+                oninput={(e) => appearance.set({ highlights: appearance.s.highlights.map((x, j) => (j === i ? e.currentTarget.value : x)) })} />
+            {/each}
+            <button class="link" onclick={() => appearance.set({ highlights: [...PASTELS] })}>Reset</button>
+          </span>
+        </div>
         <label class="row">
           <span class="label">Daily notes <span class="sub">a note for each day, written from its calendar in the list</span></span>
           <input type="checkbox" class="switch" checked={appearance.s.dailyNotes}
@@ -481,6 +491,10 @@
 </div>
 
 <style>
+  .pens { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+  .pens input[type='color'] { width: 26px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 7px; background: none; cursor: pointer; }
+  .pens input[type='color']::-webkit-color-swatch-wrapper { padding: 2px; }
+  .pens input[type='color']::-webkit-color-swatch { border: 0; border-radius: 5px; }
   .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-panel-scrim); }
   /* a phone: settings is a page, and the strip above the status bar is part of it */
   :global(html.mobile) .backdrop { background: var(--bg); }

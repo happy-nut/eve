@@ -61,7 +61,7 @@
     <ul class="items" role="menu">
       {#each req.items as it, i (i)}
         <li role="none" class:sep={it.sep}>
-          <button role="menuitem" class:danger={it.danger} class:on={it.checked} disabled={it.disabled} onclick={() => pick(it)}>{it.label}{#if it.checked}{@render check()}{/if}</button>
+          <button role="menuitem" class:danger={it.danger} class:on={it.checked} disabled={it.disabled} onclick={() => pick(it)}>{#if it.swatch}<span class="swatch" style:background={it.swatch}></span>{/if}{it.label}{#if it.checked}{@render check()}{/if}</button>
         </li>
       {/each}
     </ul>
@@ -76,7 +76,7 @@
     <li role="none" class:sep={it.sep}>
       <button role="menuitem" class:danger={it.danger} class:on={it.checked} disabled={it.disabled}
         onmousedown={hold} onmouseenter={(e) => e.currentTarget.focus()} onclick={() => pick(it)}>
-        <span class="label">{it.label}</span>{#if it.keys}<kbd>{prettyKeys(it.keys)}</kbd>{:else if it.checked}{@render check()}{/if}
+        <span class="label">{#if it.swatch}<span class="swatch" style:background={it.swatch}></span>{/if}{it.label}</span>{#if it.keys}<kbd>{prettyKeys(it.keys)}</kbd>{:else if it.checked}{@render check()}{/if}
       </button>
     </li>
   {/each}
@@ -84,6 +84,7 @@
 {/if}
 
 <style>
+  .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: 8px; flex: none; vertical-align: -2px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
   .items { margin: 0; padding: 0; list-style: none; }
   .items button {
     width: 100%; min-height: 52px; border: 0; border-radius: 12px; background: none; color: var(--fg);

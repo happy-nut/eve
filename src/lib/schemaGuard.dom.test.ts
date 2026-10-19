@@ -12,6 +12,7 @@ afterEach(() => { for (const ed of made.splice(0)) ed.destroy(); document.body.i
 const SAMPLES: Record<string, string> = {
   'marks and inline nodes': '# T\n\nplain **bold** *it* ~~s~~ <u>u</u> `code` ==hi== [l](https://x.y) [[Page]] [[Page|alias]] @2026-10-18 $x^2$ a\\\nb',
   'inline html': 'x <span style="color: red">y</span> z <input type="checkbox"> w',
+  'coloured highlight': 'plain ==yellow== and <mark style="background-color: #c9f2d4">mint</mark> and **<mark style="background-color: #e5d8ff">lilac bold</mark>**',
   'code': '```js\nlet a = 1\n```',
   'lists': '- a\n- b\n\n1. one\n2. two\n\n- [ ] todo\n- [x] done',
   'quote': '> quote',

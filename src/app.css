@@ -682,7 +682,8 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 .tiptap .callout[data-color='red'] { background: light-dark(rgba(255, 69, 58, 0.1), rgba(255, 90, 80, 0.13)); }
 .tiptap .callout[data-color='purple'] { background: light-dark(rgba(140, 90, 230, 0.1), rgba(170, 130, 255, 0.13)); }
 /* ==highlight== */
-.tiptap mark { background: light-dark(rgba(255, 214, 10, 0.45), rgba(255, 214, 10, 0.3)); color: inherit; border-radius: 3px; padding: 0 1px; }
+.tiptap mark { background: var(--hl-plain, #fff1a8); color: #1f2328; border-radius: 3px; padding: 0 1px; }
+/* a pen's own colour is on the mark itself (highlight.ts); the text on any pastel stays dark, in the dark theme too */
 /* bookmark card: a URL on its own line */
 .tiptap .bookmark {
   display: flex; align-items: stretch; gap: 14px; margin: 0.6em 0; padding: 10px 12px; max-height: 88px; overflow: hidden;

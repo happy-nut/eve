@@ -12,10 +12,17 @@ test('words selected: the highlighter and the other marks, no export', () => {
   const ed = editorWith('see this here');
   ed.commands.setTextSelection({ from: posOf(ed, 'this'), to: posOf(ed, 'this', true) });
   noteMenu(ed, null);
-  expect(shown()).toContain('Highlight');
+  expect(shown()).toContain('Highlight…');
   expect(shown().filter((l) => l.startsWith('Export'))).toEqual([]);
-  ui.menu!.items.find((i) => i.label === 'Highlight')!.run!();
+  // the pens come up in its place: the first is the plain one (==), another is written with its colour
+  ui.menu!.items.find((i) => i.label === 'Highlight…')!.run!();
+  expect(shown()).toEqual(['Yellow', 'Green', 'Blue', 'Pink', 'Purple']); // the pastel pens, named by their hue
+  ui.menu!.items[0].run!();
   expect(md(ed)).toBe('see ==this== here');
+  noteMenu(ed, null); ui.menu!.items.find((i) => i.label === 'Highlight…')!.run!();
+  expect(shown()).toContain('Remove highlight');
+  ui.menu!.items[1].run!();
+  expect(md(ed)).toBe('see <mark style="background-color: #c9f2d4">this</mark> here');
 });
 
 test('nothing selected: the note\'s own things (paste, find, export), no marks', () => {
@@ -23,5 +30,5 @@ test('nothing selected: the note\'s own things (paste, find, export), no marks',
   ed.commands.setTextSelection(posOf(ed, 'this'));
   noteMenu(ed, null);
   expect(shown()).toContain('Export as PDF…');
-  expect(shown()).not.toContain('Highlight');
+  expect(shown()).not.toContain('Highlight…');
 });
