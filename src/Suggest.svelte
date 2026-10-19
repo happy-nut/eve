@@ -26,7 +26,12 @@
       if (rect) { anchor = rect; place = placeAt(rect, want(), list?.offsetWidth ?? 340); }
     },
     move: (d) => { sel = (sel + d + shown.length) % shown.length; },
-    select: () => { if (!shown.length) return false; pick(shown[sel].item); return true; },
+    select: () => {
+      if (!shown.length) return false;
+      if (shown[sel].item.folder) { toggle(sel); return true; } // opens (or folds) what is in it, picks nothing
+      pick(shown[sel].item);
+      return true;
+    },
     expand: () => {
       const next = expand(items, open, sel);
       if (next) ({ open, sel } = next);
@@ -42,6 +47,13 @@
     place: (rect) => { anchor = rect; place = placeAt(rect, want(), list?.offsetWidth ?? 340); },
     chosen: () => pointed,
   };
+
+  /** a folder row (the / menu's Heading, Diagram) opened or folded, the cursor staying on it */
+  function toggle(i: number) {
+    sel = i;
+    const next = expand(items, open, sel) ?? collapse(items, open, sel);
+    if (next) ({ open, sel } = next);
+  }
 
   let list = $state<HTMLUListElement | null>(null);
   /** the room it needs: a short list fits under the caret where a full one (300) would not */
@@ -61,7 +73,7 @@
       {@const t = row.item}
       <li class:sel={i === sel} class:child={row.child}>
         <!-- a move, not mouseenter: the list drawn under a pointer resting there has not been pointed at -->
-        <button onmousedown={(e) => { e.preventDefault(); pick(t); }} onmousemove={() => { if (sel !== i || !pointed) { sel = i; pointed = true; } }}>
+        <button onmousedown={(e) => { e.preventDefault(); if (t.folder) toggle(i); else pick(t); }} onmousemove={() => { if (sel !== i || !pointed) { sel = i; pointed = true; } }}>
           <!-- the twisty marks a page that has sections; → opens it, ← folds it away again -->
           {#if !row.child && t.sections?.length}
             <svg class="chev" class:down={open.has(row.top)} viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5"/></svg>
@@ -70,8 +82,8 @@
           {#if t.noteIcon}<span class="s-emoji"><Icon icon={t.noteIcon} size={14} /></span>
           {:else if t.icon}<svg class="s-ico" viewBox="0 0 16 16">{@html t.icon}</svg>{/if}
           <span class="s-label">{t.label}</span>
-          <!-- a section under its own page needs no reminder of which page that is -->
-          {#if t.hint && !row.child}<span class="hint">{t.hint}</span>{/if}
+          <!-- a section under its own page needs no reminder of which page that is (a kind in a / menu folder does) -->
+          {#if t.hint && (!row.child || items[row.top]?.folder)}<span class="hint">{t.hint}</span>{/if}
         </button>
       </li>
     {/each}

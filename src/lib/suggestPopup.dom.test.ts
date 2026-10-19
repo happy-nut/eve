@@ -26,3 +26,25 @@ test('a page with two headings of the same name opens into its sections without 
   expect(() => { ui.expand(); flushSync(); }).not.toThrow();
   expect(labels()).toEqual(['Dup', 'Plan', 'TODO', 'TODO', 'Zeta', 'Plan', 'TODO', 'TODO', 'Zeta']);
 });
+
+test('the / menu: Heading and Diagram are one row each, ↩ opens it below, ↩ again picks the kind; typing finds kinds', async () => {
+  const { slashItems } = await import('./slash');
+  const ui = popup();
+  const picked: string[] = [];
+  ui.show(slashItems(''), null, (i) => picked.push(i.label));
+  flushSync();
+  expect(labels()).toContain('Diagram');
+  expect(labels()).not.toContain('Flowchart');
+  expect(labels().filter((l) => l?.startsWith('Heading'))).toEqual(['Heading']);
+  ui.move(labels().indexOf('Diagram'));
+  ui.select(); flushSync(); // opens, picks nothing
+  expect(picked).toEqual([]);
+  const at = labels().indexOf('Diagram');
+  expect(labels().slice(at + 1, at + 3)).toEqual(['Flowchart', 'Swimlanes']);
+  ui.move(1); ui.select();
+  expect(picked).toEqual(['Flowchart']);
+  // typed: every match its own row, wherever it sits
+  expect(slashItems('flow').map((i) => i.label)).toEqual(['Flowchart']);
+  expect(slashItems('diagram').length).toBe(7);
+  expect(slashItems('heading').map((i) => i.label)).toEqual(['Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5']);
+});

@@ -46,6 +46,7 @@ import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
 import { blockBeside, moveBlock, indentLines, switchItem, switchLines, wrapLines, joinNextItem, itemAbove, liftCounting, leaveTrailer } from './blocks';
 import { holdEdit, dropEdit } from './pending';
+import { appearance } from './appearance.svelte';
 
 /** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
 const MD_SYNTAX = /(\$[^\s$]|\*\*|__|~~|^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|`|\[[^\]]*\]\(|^\|.*\|\s*$)/m;
@@ -565,6 +566,21 @@ function insertFiles(editor: Editor, files?: FileList | null, at?: number): bool
 }
 
 /**
+ * The system's spelling help on the note as Settings has it: misspellings underlined, words corrected, a sentence's
+ * first letter capitalised. A plugin's own attributes, read again on every update (Editor.svelte nudges it when the
+ * setting changes): the editor's own attributes can't be a function, tiptap spreads them into an object.
+ */
+const spellingHelp = Extension.create({
+  name: 'spellingHelp',
+  addProseMirrorPlugins() {
+    return [new Plugin({ props: { attributes: () => {
+      const on = appearance.s.autoCorrect;
+      return { spellcheck: String(on), autocorrect: on ? 'on' : 'off', autocapitalize: on ? 'sentences' : 'off' };
+    } } })];
+  },
+});
+
+/**
  * A click in the empty page under the note's last line puts the caret at the note's end, on its last line when that is
  * text, else on a new empty line under the picture, table or diagram that ends it. Left to WebKit, a click down there
  * found its own nearest line — in a long note sometimes one in the middle of the page. Only a plain click: a drag
@@ -798,7 +814,7 @@ export function createEditor(opts: {
     enablePasteRules: ['link', 'code', 'strike', 'highlight'],
     content: opts.content,
     editorProps: {
-      attributes: { class: 'prose', spellcheck: 'true' },
+      attributes: { class: 'prose' }, // (and the spelling help's, from spellingHelp below)
       // a phone's formatting bar (MobileBar, ~50px) sits over the bottom of the page: the caret is kept
       // clear of it, and scrolled to a little early, instead of typing (or deleting) out of sight
       ...(isMobile ? { scrollMargin: { top: 16, bottom: 90, left: 0, right: 0 }, scrollThreshold: { top: 16, bottom: 90, left: 0, right: 0 } } : {}),
@@ -973,6 +989,7 @@ export function createEditor(opts: {
       if (opts.cursor !== undefined) editor.commands.setTextSelection(Math.min(opts.cursor, editor.state.doc.content.size));
     },
     extensions: [
+      spellingHelp,
       StarterKit.configure({
         paragraph: false, // replaced below: an empty paragraph survives the markdown round trip
         orderedList: false, // replaced below: a new "1. " right after a numbered list continues it

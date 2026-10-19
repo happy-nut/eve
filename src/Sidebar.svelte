@@ -102,12 +102,16 @@
 
   // ---- "+" menu: new note / new group, relative to the focused row (the app's one menu, Menu.svelte) ----
   let ctxGroup = $state('');
+  /** the note the + was asked from (its row focused): a new page goes under it, as a page made from inside it does */
+  let ctxNote = $state<Note | null>(null);
   hooks.openPlus = (anchor?: HTMLElement) => {
     if (ui.menu) { ui.closeMenu(); return; }
     const el = document.activeElement as HTMLElement | null;
     const row = el?.closest<HTMLElement>('[data-row]');
     const r = (anchor ?? row ?? searchEl)?.getBoundingClientRect();
-    ctxGroup = row?.dataset.group ?? notes.all.find((n) => n.id === row?.dataset.note)?.group ?? '';
+    const n = notes.all.find((x) => x.id === row?.dataset.note);
+    ctxNote = n && n.id !== CALENDAR_NOTE_ID ? n : null;
+    ctxGroup = row?.dataset.group ?? n?.group ?? '';
     ui.openMenu(r ? { clientX: r.left + (row && !anchor ? 8 : 0), clientY: r.bottom + 4 } : { clientX: 12, clientY: 40 }, plusItems);
   };
   /** Import / export. A failed export says so instead of doing nothing at all. */
@@ -122,9 +126,18 @@
   /** a new note in group `g`, straight into the editor (deleting keeps focus in the list); a search still narrowing
    *  the list would hide it there, so it goes */
   const newNote = (g: string) => async () => { ui.focusOwner = 'editor'; ui.search = ''; notes.create('', g); await tick(); focusNote(); };
+  /** a new page under `n` (in its group), straight into the editor; `n` opens to show it */
+  const newPageIn = (n: Note) => async () => {
+    ui.focusOwner = 'editor'; ui.search = '';
+    groups.unfold(n.id);
+    notes.create('', n.group ?? '', n.id);
+    await tick(); focusNote();
+  };
 
   const plusItems = $derived.by(() => {
     const items: { label: string; run: () => void; sep?: boolean }[] = [
+      // from a note's row: a page under that note first (the group it sits in is the second choice)
+      ...(ctxNote ? [{ label: `New page in “${titleOf(ctxNote)}”`, run: newPageIn(ctxNote) }] : []),
       { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', run: newNote(ctxGroup) },
       // a group as deep as groups go takes no group inside: the new one goes beside it, and says so
       { label: !ctxGroup ? 'New group' : depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : `New group in “${leafOf(parentOf(ctxGroup))}”`, run: () => groups.create(ctxGroup) },
@@ -284,8 +297,7 @@
     const inside = (r: HTMLElement) => r.dataset.group !== undefined && (r.dataset.group === g || r.dataset.group.startsWith(g + '/'));
     const next = neighbourOf(groupSel(g), inside), fromList = inList();
     if (!(await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`))) return;
-    const undo = groups.remove(g);
-    ui.toast(`Deleted group “${leafOf(g)}”`, { label: 'Undo', run: undo });
+    ui.undoable(`Deleted group “${leafOf(g)}”`, groups.remove(g));
     void afterRemove(next, fromList);
   }
   async function removeNote(n: Note) {
@@ -294,6 +306,7 @@
     const next = neighbourOf(`[data-note="${n.id}"]`), fromList = inList();
     if (!(await ui.ask(`Delete “${titleOf(n)}”?`))) return;
     notes.remove(n.id);
+    ui.undoable(`Deleted “${titleOf(n)}”`, () => notes.restore(n.id));
     void afterRemove(next, fromList);
   }
   // a row sliding out (a search just narrowed the list) is inert: it can't take the focus, and is going
@@ -432,6 +445,7 @@
       : n
         ? [
             { label: 'Open', run: () => openNote(n) },
+            { label: 'New page inside', run: newPageIn(n), hide: n.id === CALENDAR_NOTE_ID },
             { label: 'Change icon…', run: () => pickIcon({ note: n }) },
             { label: 'Export as Markdown…', sep: true, keys: shortcuts.keysFor('exportMd'), run: () => exportRow(n, 'md') },
             { label: 'Export as PDF…', keys: shortcuts.keysFor('exportPdf'), run: () => exportRow(n, 'pdf') },
@@ -594,7 +608,10 @@
     </div>
 
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <!-- the list itself taking the focus (a click on its empty space, a row gone from under the keyboard) hands it to
+         the open note's row: the list is no place for the keyboard, and WebKit ringed the whole of it in blue -->
     <ul class="tree" role="tree" tabindex="-1" use:showOpen onkeydown={treeKey} use:touchReorder={reorder}
+      onfocus={(e) => { if (e.target === e.currentTarget) (e.currentTarget.querySelector<HTMLElement>('[data-row].active') ?? rowsNow()[0])?.focus({ preventScroll: true }); }}
       oncontextmenu={(e) => { if (isMobile) e.preventDefault(); else rowMenu(e); }}
       ondragover={(e) => overSection(e, '')} ondrop={drop}>
       {#each rows as r (r.key)}
@@ -739,6 +756,7 @@
   :global(html.mobile) .clear svg { width: 15px; height: 15px; }
   :global(html.mobile) .top input:has(+ .clear) { padding-right: 44px; }
 
+  .tree:focus { outline: none; }
   .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 10px 8px; margin: 0; list-style: none; }
   .row { position: relative; padding-left: calc(var(--d) * 18px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
   .row.dragging { opacity: 0.4; }

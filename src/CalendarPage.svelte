@@ -68,7 +68,7 @@
     const n = notes.daily.find((x) => x.id === dailyId(key));
     if (!n) return;
     const when = parse(key).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-    if (await ui.ask(`Delete the note for ${when}?`)) notes.remove(n.id);
+    if (await ui.ask(`Delete the note for ${when}?`)) { notes.remove(n.id); ui.undoable(`Deleted the note for ${when}`, () => notes.restore(n.id)); }
     void moveTo(cursor);
   }
   /** A day's own menu: only a day with a note has one. It leaves the cursor alone, so a day of the month

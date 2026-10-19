@@ -5,10 +5,12 @@
   import type { Node as PMNode } from '@tiptap/pm/model';
   import { createEditor, applyKeymap, getMarkdown, goToSection, runEditorCommand, clickBelow } from './lib/editor';
   import { isMobile } from './lib/platform';
-  import { notes, type Note } from './lib/notes.svelte';
+  import { notes, titleOf, type Note } from './lib/notes.svelte';
+  import { appearance } from './lib/appearance.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
   import { ui, hooks } from './lib/ui.svelte';
   import Icon from './Icon.svelte';
+  import { groups, leafOf } from './lib/groups.svelte';
   import Suggest from './Suggest.svelte';
   import DateMenu from './DateMenu.svelte';
   import EmojiRow from './EmojiRow.svelte';
@@ -130,6 +132,9 @@
     if (editor && notes.caretEnd && notes.currentId === note.id) { notes.caretEnd = false; editor.commands.focus('end'); }
   });
 
+  // the spelling help switched in Settings: the note's attributes are read again (editor.ts), without a remount
+  $effect(() => { void appearance.s.autoCorrect; if (editor) editor.view.setProps({}); });
+
   // rebind editor shortcuts live when the user changes them
   $effect(() => { shortcuts.actions; if (editor) applyKeymap(editor); });
 
@@ -179,6 +184,26 @@
     }
     editor.view.dispatch(tr.setMeta('addToHistory', false).setMeta('preventUpdate', true));
   });
+  /**
+   * Where the note sits, over its title: its groups, outermost first, then the pages it is under. A page opens on a
+   * click; a group is only said (the list is where groups are). Nothing for a note at the top level.
+   */
+  const crumbs = $derived.by(() => {
+    const out: { label: string; icon: string; id?: string }[] = [];
+    const parts = (note.group ?? '').split('/').filter(Boolean);
+    parts.forEach((_, i) => { const path = parts.slice(0, i + 1).join('/'); out.push({ label: leafOf(path), icon: groups.icon(path) }); });
+    const pages: { label: string; icon: string; id: string }[] = [];
+    const seen = new Set<string>([note.id]);
+    for (let id = note.parent; id && !seen.has(id); ) {
+      seen.add(id);
+      const p = notes.all.find((n) => n.id === id && !n.deleted);
+      if (!p) break;
+      pages.unshift({ label: titleOf(p), icon: p.icon ?? '', id: p.id });
+      id = p.parent;
+    }
+    return [...out, ...pages];
+  });
+
   /** the pane's width on it as --pane, for the blocks that reach past the text to its edges (app.css) */
   function paneWidth(node: HTMLElement) {
     const put = () => node.style.setProperty('--pane', `${node.clientWidth}px`);
@@ -191,7 +216,20 @@
 </script>
 
 <div class="scroll" bind:this={scrollEl}>
-  <div class="page-head" class:with-icon={!!note.icon}>
+  <div class="page-head" class:with-icon={!!note.icon} class:crumbed={crumbs.length > 0}>
+    {#if crumbs.length}
+      <!-- under the fade at the top of the pane (main::before), never in it: page-head starts below it when there are crumbs -->
+      <nav class="crumbs" aria-label="Where this note is">
+        {#each crumbs as c, i (i)}
+          {#if i}<span class="sep">›</span>{/if}
+          {#if c.id}
+            <button class="crumb" onclick={() => (notes.currentId = c.id!)}>{#if c.icon}<Icon icon={c.icon} size={13} />{/if}<span>{c.label}</span></button>
+          {:else}
+            <span class="crumb">{#if c.icon}<Icon icon={c.icon} size={13} />{/if}<span>{c.label}</span></span>
+          {/if}
+        {/each}
+      </nav>
+    {/if}
     {#if note.icon}
       <button class="big-icon" title="Change icon" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={isMobile ? 44 : 56} /></button>
     {:else}
@@ -230,6 +268,20 @@
     height: 72px; /* reserves the "add icon" row so the title doesn't jump */
   }
   .page-head.with-icon { height: 118px; }
+  /* the crumbs start where the pane's top fade (main::before, 72px) has ended, the head grown by what they take */
+  .page-head.crumbed { padding-top: 76px; height: 130px; }
+  .page-head.crumbed.with-icon { height: 176px; }
+  .crumbs {
+    display: flex; align-items: center; gap: 4px; height: 20px; margin-bottom: 6px; min-width: 0; overflow: hidden;
+    font-size: 12.5px; color: var(--fg-dim); white-space: nowrap;
+  }
+  .crumb { display: inline-flex; align-items: center; gap: 4px; min-width: 0; padding: 1px 4px; margin: 0 -2px; border-radius: 5px; border: 0; background: none; color: inherit; font: inherit; }
+  .crumb span { overflow: hidden; text-overflow: ellipsis; }
+  button.crumb:hover { background: var(--bg-hover); color: var(--fg); }
+  .sep { opacity: 0.5; flex: none; }
+  /* a phone has no fade over the page: the crumbs sit at its top */
+  :global(html.mobile) .page-head.crumbed { padding-top: 18px !important; height: 72px; }
+  :global(html.mobile) .page-head.crumbed.with-icon { height: 106px; }
   .add-icon {
     display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--fg-dim);
     font: inherit; font-size: 12.5px; padding: 3px 6px; margin-left: -6px; border-radius: 6px; opacity: 0;
@@ -258,5 +310,6 @@
     }
     .big-icon { display: block; width: 56px; height: 56px; padding: 0; margin: 0; }
     .add-icon { visibility: hidden; }
+    .crumbs { display: none; }
   }
 </style>
