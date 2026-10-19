@@ -102,12 +102,16 @@
 
   // ---- "+" menu: new note / new group, relative to the focused row (the app's one menu, Menu.svelte) ----
   let ctxGroup = $state('');
+  /** the note the + was asked from (its row focused): a new page goes under it, as a page made from inside it does */
+  let ctxNote = $state<Note | null>(null);
   hooks.openPlus = (anchor?: HTMLElement) => {
     if (ui.menu) { ui.closeMenu(); return; }
     const el = document.activeElement as HTMLElement | null;
     const row = el?.closest<HTMLElement>('[data-row]');
     const r = (anchor ?? row ?? searchEl)?.getBoundingClientRect();
-    ctxGroup = row?.dataset.group ?? notes.all.find((n) => n.id === row?.dataset.note)?.group ?? '';
+    const n = notes.all.find((x) => x.id === row?.dataset.note);
+    ctxNote = n && n.id !== CALENDAR_NOTE_ID ? n : null;
+    ctxGroup = row?.dataset.group ?? n?.group ?? '';
     ui.openMenu(r ? { clientX: r.left + (row && !anchor ? 8 : 0), clientY: r.bottom + 4 } : { clientX: 12, clientY: 40 }, plusItems);
   };
   /** Import / export. A failed export says so instead of doing nothing at all. */
@@ -122,9 +126,18 @@
   /** a new note in group `g`, straight into the editor (deleting keeps focus in the list); a search still narrowing
    *  the list would hide it there, so it goes */
   const newNote = (g: string) => async () => { ui.focusOwner = 'editor'; ui.search = ''; notes.create('', g); await tick(); focusNote(); };
+  /** a new page under `n` (in its group), straight into the editor; `n` opens to show it */
+  const newPageIn = (n: Note) => async () => {
+    ui.focusOwner = 'editor'; ui.search = '';
+    groups.unfold(n.id);
+    notes.create('', n.group ?? '', n.id);
+    await tick(); focusNote();
+  };
 
   const plusItems = $derived.by(() => {
     const items: { label: string; run: () => void; sep?: boolean }[] = [
+      // from a note's row: a page under that note first (the group it sits in is the second choice)
+      ...(ctxNote ? [{ label: `New page in “${titleOf(ctxNote)}”`, run: newPageIn(ctxNote) }] : []),
       { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', run: newNote(ctxGroup) },
       // a group as deep as groups go takes no group inside: the new one goes beside it, and says so
       { label: !ctxGroup ? 'New group' : depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : `New group in “${leafOf(parentOf(ctxGroup))}”`, run: () => groups.create(ctxGroup) },
@@ -432,6 +445,7 @@
       : n
         ? [
             { label: 'Open', run: () => openNote(n) },
+            { label: 'New page inside', run: newPageIn(n), hide: n.id === CALENDAR_NOTE_ID },
             { label: 'Change icon…', run: () => pickIcon({ note: n }) },
             { label: 'Export as Markdown…', sep: true, keys: shortcuts.keysFor('exportMd'), run: () => exportRow(n, 'md') },
             { label: 'Export as PDF…', keys: shortcuts.keysFor('exportPdf'), run: () => exportRow(n, 'pdf') },
