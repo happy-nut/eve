@@ -565,6 +565,26 @@ function insertFiles(editor: Editor, files?: FileList | null, at?: number): bool
 }
 
 /**
+ * A click in the empty page under the note's last line puts the caret at the note's end, on its last line when that is
+ * text, else on a new empty line under the picture, table or diagram that ends it. Left to WebKit, a click down there
+ * found its own nearest line — in a long note sometimes one in the middle of the page. Only a plain click: a drag
+ * that starts down there still selects upwards, and shift still extends.
+ */
+export function clickBelow(view: EditorView, event: MouseEvent): boolean {
+  if (event.button !== 0 || event.detail > 1 || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;
+  if (!view.state.selection.empty) return false; // a drag ended here: it selected something
+  const doc = view.state.doc, last = doc.lastChild;
+  const dom = last && (view.nodeDOM(doc.content.size - last.nodeSize) as HTMLElement | null);
+  if (!dom?.getBoundingClientRect || event.clientY <= dom.getBoundingClientRect().bottom) return false;
+  let tr = view.state.tr;
+  if (!last!.isTextblock) tr = tr.insert(doc.content.size, view.state.schema.nodes.paragraph.create());
+  tr.setSelection(TextSelection.atEnd(tr.doc)).scrollIntoView();
+  view.dispatch(tr);
+  view.focus();
+  return true;
+}
+
+/**
  * Where a dropped file belongs: between blocks, on the side of the line the pointer is nearer to.
  * The raw coordinate would land mid-word and split the heading it was dropped on.
  *
@@ -930,7 +950,9 @@ export function createEditor(opts: {
           if (isMobile) return false;
           event.preventDefault(); noteMenu(editor, event as MouseEvent); return true;
         },
-        click: (_view, event) => {
+        click: (view, event) => {
+          // a click in the empty page under the note: the caret at its end (clickBelow)
+          if (event.target === view.dom && clickBelow(view, event as MouseEvent)) return true;
           const a = (event.target as HTMLElement | null)?.closest?.('a[href]');
           if (!a || a.closest('.bookmark')) return false; // the bookmark card opens itself
           event.preventDefault();
