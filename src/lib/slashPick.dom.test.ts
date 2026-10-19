@@ -62,30 +62,41 @@ test('⇥ after a "/" in a sentence picks nothing either', async () => {
   expect(lines(ed)[1]).toBe('path /');
 });
 
-test('in a sentence, a letter that finds something, the arrows or the pointer make ↩ pick', async () => {
-  const a = editor('# T\n\nsee');
-  a.ed.commands.setTextSelection(posOf(a.ed, 'see', true));
-  type(a.ed, ' /head');
-  await settle();
-  press(a.ed, 'Enter');
-  expect(a.picked).toEqual(['Heading 1']);
-  expect(getMarkdown(a.ed)).toBe('# T\n\n# see '); // the space before the / stays
+// each its own test, in a note that has the keyboard as one typed into does: three notes in one test raced — the
+// first's pick focuses it a frame later, and ↓ in the second (its code-block check measures, focusing the note it
+// measures and giving the keyboard back) then blurred the second, which put its menu away, now and then on CI
+const inSentence = () => {
+  const e = editor('# T\n\nsee');
+  e.ed.view.focus();
+  e.ed.commands.setTextSelection(posOf(e.ed, 'see', true));
+  return e;
+};
 
-  const b = editor('# T\n\nsee');
-  b.ed.commands.setTextSelection(posOf(b.ed, 'see', true));
-  type(b.ed, ' /');
+test('in a sentence, a letter that finds something makes ↩ pick', async () => {
+  const { ed, picked } = inSentence();
+  type(ed, ' /head');
   await settle();
-  press(b.ed, 'ArrowDown');
-  press(b.ed, 'Enter');
-  expect(b.picked).toEqual([slashItems('')[1].label]);
+  press(ed, 'Enter');
+  expect(picked).toEqual(['Heading 1']);
+  expect(getMarkdown(ed)).toBe('# T\n\n# see '); // the space before the / stays
+});
 
-  const c = editor('# T\n\nsee');
-  c.ed.commands.setTextSelection(posOf(c.ed, 'see', true));
-  type(c.ed, ' /');
+test('in a sentence, the arrows make ↩ pick', async () => {
+  const { ed, picked } = inSentence();
+  type(ed, ' /');
   await settle();
-  c.point();
-  press(c.ed, 'Enter');
-  expect(c.picked).toEqual(['New page']);
+  press(ed, 'ArrowDown');
+  press(ed, 'Enter');
+  expect(picked).toEqual([slashItems('')[1].label]);
+});
+
+test('in a sentence, the pointer makes ↩ pick', async () => {
+  const { ed, picked, point } = inSentence();
+  type(ed, ' /');
+  await settle();
+  point();
+  press(ed, 'Enter');
+  expect(picked).toEqual(['New page']);
 });
 
 test('a "/" opening an empty line: ↩ picks the first, as before', async () => {

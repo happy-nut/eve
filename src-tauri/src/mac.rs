@@ -282,6 +282,31 @@ pub(crate) fn is_default_for_markdown(app: AppHandle) -> bool {
     }
 }
 
+/// .md handed back to TextEdit, once, when Eve has it without having been asked: Eve used to declare itself the
+/// .md files' Owner (Info.plist), and Launch Services gave it every .md on the Mac — the icon too — with "Open .md
+/// files" off. That setting claims .md and .txt together, so .md alone being Eve's was the rank's doing, not a choice.
+/// Once (a marker in the app's data folder): a Finder "Open With → Change All" made later is the user's to keep.
+pub(crate) fn release_unclaimed_markdown(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        let Ok(dir) = app.path().app_data_dir() else { return };
+        let marker = dir.join(".md-handed-back");
+        if marker.exists() {
+            return;
+        }
+        let me = app.config().identifier.to_lowercase();
+        let mine = |t: &str| default_app::handler(t).map(|h| h.to_lowercase() == me).unwrap_or(false);
+        let [md, txt] = default_app::TYPES;
+        if mine(md) && !mine(txt) {
+            let _ = default_app::set(md, "com.apple.TextEdit");
+        }
+        let _ = fs::create_dir_all(&dir);
+        let _ = fs::write(marker, b"");
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+}
+
 /// Claim (or hand back) .md and .txt. Handing back picks TextEdit, the system's own editor.
 #[tauri::command]
 pub(crate) fn set_default_for_markdown(app: AppHandle, on: bool) -> Result<(), String> {

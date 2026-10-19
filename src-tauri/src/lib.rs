@@ -44,6 +44,10 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Pending::default())
         .manage(PendingLink::default())
+        .setup(|app| {
+            mac::release_unclaimed_markdown(app.handle());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             files::list_notes,
             files::write_note,
