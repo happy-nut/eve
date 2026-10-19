@@ -67,6 +67,8 @@
   const buttons: { id: string; label: string; icon: string }[] = [
     { id: 'taskList', label: 'To-do', icon: '<rect x="3" y="3.5" width="9" height="9" rx="2"/><path d="M5.3 8l1.7 1.7L10 6.5"/>' },
     { id: 'bold', label: 'Bold', icon: '<path d="M4.5 3h4a2.5 2.5 0 010 5h-4zM4.5 8h4.8a2.5 2.5 0 010 5H4.5z"/>' },
+    // a marker pen, its tip on the stroke it leaves (the same ==mark== as ⌘⇧H and the note's menu)
+    { id: 'highlight', label: 'Highlight', icon: '<path d="M9.5 2.5l4 4-5.5 5.5H4v-4z"/><path d="M2.5 14h11"/>' },
     { id: 'outdent', label: 'Outdent', icon: '<path d="M13.5 4h-6M13.5 8h-6M13.5 12h-6M5 6L2.5 8 5 10"/>' },
     { id: 'indent', label: 'Indent', icon: '<path d="M13.5 4h-6M13.5 8h-6M13.5 12h-6M2.5 6L5 8l-2.5 2"/>' },
     { id: 'slash', label: 'Insert block', icon: '<path d="M10.5 2.5l-5 11"/>' },
