@@ -52,4 +52,16 @@ for (const p of all.filter((p) => p.endsWith('.svelte'))) {
 }
 const over = Object.entries(reads).filter(([f, n]) => n > (ALLOWED[f] ?? 0)).map(([f, n]) => `${f}: ${n} read(s) of window.innerWidth/innerHeight`);
 assert.deepEqual(over, [], 'placement goes through popup.ts (floatAt, screenInsets, viewSize), not window.innerWidth/innerHeight');
-console.log('z-index and window size: ok');
+
+// ---- no size containers ----
+// The note's pane was one (container-type, for 100cqw) and WebKit at times drew none of the note but its white page.
+// A width a block needs from around it is set as a variable instead (--pane, Editor.svelte).
+const contained = [];
+for (const p of all.filter((p) => /\.(svelte|css)$/.test(p))) {
+  readFileSync(p, 'utf8').split('\n').forEach((line, i) => {
+    const code = line.replace(/\/\*.*?(\*\/|$)/g, '');
+    if (/container-type\s*:\s*(?!normal)|container\s*:|\d(cqw|cqh|cqi|cqb|cqmin|cqmax)\b/.test(code)) contained.push(`${rel(p)}:${i + 1}: ${line.trim()}`);
+  });
+}
+assert.deepEqual(contained, [], 'no container-type / container query units: WebKit left the note blank');
+console.log('z-index, window size and containers: ok');

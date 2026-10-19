@@ -436,18 +436,15 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 /* Code and diagrams are as wide as they need, as far as the pane goes (24px short of each side), not held to the
    width the text reads at: a long line or a wide flowchart scrolled sideways inside a column with empty page on both
    sides of it. Still never narrower than the text, and centred on it. Only a block of the note's own: one in a list,
-   a quote or a toggle keeps to it. (The pane is the editor's width: a container, so 100cqw is it.) */
-.editor { container-type: inline-size; }
+   a quote or a toggle keeps to it. (--pane is the editor's width, kept on it by Editor.svelte. It was a size container
+   (container-type) once: WebKit then at times drew nothing of the note but its white page, a part of it or all.) */
 .editor .tiptap > .code-block {
-  width: max-content; min-width: 100%; max-width: calc(100cqw - 48px);
+  width: max-content; min-width: 100%; max-width: calc(var(--pane, 100%) - 48px);
   left: 50%; translate: -50% 0;
 }
 /* a diagram filling the screen from in here is placed against the window: a translate around it would make it this
    block's size instead */
 .editor .tiptap > .code-block:has(.dblock.full) { left: 0; translate: none; }
-/* nor may the pane, a size container, hold it: one that is (WebKit took it as one) made the whole screen the note's
-   size, scrolled away with it, and left the drawing nothing to scroll in */
-.editor:has(.dblock.full) { container-type: normal; }
 .tiptap .code-lang {
   position: absolute; top: 0; left: 12px; transform: translateY(-50%); z-index: var(--z-raised); /* straddles the block's top edge */
   appearance: none; border: 1px solid var(--line); border-radius: 6px;
@@ -756,8 +753,8 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
    code and diagrams are: held to the column, a wide screenshot came out too small to read. Where it sits says which
    way it grows — from the left edge rightwards, from the right edge leftwards, centred both ways. Only a picture of
    the note's own: one in a list or a quote keeps to its column. Never narrower than the column allowed before. */
-.editor .tiptap > .img-fig { width: max-content; max-width: max(100%, calc(50% + 50cqw - 24px)); }
-.editor .tiptap > .img-fig[data-align='center'] { max-width: max(100%, calc(100cqw - 48px)); margin-left: 0; margin-right: 0; left: 50%; translate: -50% 0; }
+.editor .tiptap > .img-fig { width: max-content; max-width: max(100%, calc(50% + var(--pane, 100%) / 2 - 24px)); }
+.editor .tiptap > .img-fig[data-align='center'] { max-width: max(100%, calc(var(--pane, 100%) - 48px)); margin-left: 0; margin-right: 0; left: 50%; translate: -50% 0; }
 .editor .tiptap > .img-fig[data-align='right'] { margin-left: 0; left: 100%; translate: -100% 0; }
 .tiptap .img-fig[data-align='center'] .img-cap { text-align: center; }
 .tiptap .img-fig[data-align='right'] .img-cap { text-align: right; }
