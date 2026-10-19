@@ -433,6 +433,18 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 .tiptap pre code { background: none; padding: 0; margin: 0; box-shadow: none; font-size: 0.85em; }
 /* the chip sits on the wrapper, not the <pre>: inside a scrolling <pre> it would slide away with long lines */
 .tiptap .code-block { position: relative; }
+/* Code and diagrams are as wide as they need, as far as the pane goes (24px short of each side), not held to the
+   width the text reads at: a long line or a wide flowchart scrolled sideways inside a column with empty page on both
+   sides of it. Still never narrower than the text, and centred on it. Only a block of the note's own: one in a list,
+   a quote or a toggle keeps to it. (The pane is the editor's width: a container, so 100cqw is it.) */
+.editor { container-type: inline-size; }
+.editor .tiptap > .code-block {
+  width: max-content; min-width: 100%; max-width: calc(100cqw - 48px);
+  left: 50%; translate: -50% 0;
+}
+/* a diagram filling the screen from in here is placed against the window: a translate around it would make it this
+   block's size instead */
+.editor .tiptap > .code-block:has(.dblock.full) { left: 0; translate: none; }
 .tiptap .code-lang {
   position: absolute; top: 0; left: 12px; transform: translateY(-50%); z-index: var(--z-raised); /* straddles the block's top edge */
   appearance: none; border: 1px solid var(--line); border-radius: 6px;
