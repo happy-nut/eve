@@ -29,6 +29,9 @@ interface Appearance {
    *  capitalised as you type. Off unless asked for: a note is code, lists and half-sentences as often as prose, and
    *  "git" became "Git" at the start of every line */
   autoCorrect: boolean;
+  /** the highlighter's pens, as #rrggbb (Settings → Highlighter): the first is the plain one, written ==text== and
+   *  drawn in it; a word marked with another is written with its colour in the note (highlight.ts) */
+  highlights: string[];
   /** a phone's widget lists the daily notes too (off: only notes) */
   dailyInWidget: boolean;
   /** ⌘+ / ⌘-: px on top of `size` for now, remembered apart from it, so ⌘0 goes back to what Settings says */
@@ -39,9 +42,11 @@ interface Appearance {
 // the window's own defaults match tauri.conf.json, so a fresh install never resizes on launch
 // A phone starts from bigger type. Appearance lives in this device's localStorage and never syncs, so a
 // phone and a Mac each keep their own.
+/** soft pastel pens: butter, mint, sky, blush, lilac */
+export const PASTELS = ['#fff1a8', '#c9f2d4', '#cfe3ff', '#ffd6e3', '#e5d8ff'];
 /** the note's text size, px: the Size slider's range, and where ⌘+ / ⌘- stop */
 export const SIZE_MIN = 12, SIZE_MAX = 28;
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
 
 function load(): Appearance {
   try {
@@ -82,6 +87,7 @@ class AppearanceStore {
       r.setProperty('--font-size', `${this.textPx}px`);
       r.setProperty('--line-height', String(this.s.lineHeight));
       r.setProperty('--editor-width', `${this.s.width}px`);
+      r.setProperty('--hl-plain', this.s.highlights[0] ?? PASTELS[0]); // the ==plain== pen (app.css, .tiptap mark)
     });
     // the remembered window size, on every launch and again whenever it is changed
     $effect(() => { void setWindowSize(this.s.winW, this.s.winH); });

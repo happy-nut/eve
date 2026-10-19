@@ -3,7 +3,9 @@ import { focusNote } from './popup';
 import { isMobile } from './platform';
 import { shifting, shiftingUntil } from './focusWatch';
 /** One line of a menu. `sep` starts a group above it; a `hide` item never makes the list; `checked` is the current choice. */
-export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean; checked?: boolean }
+export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean; checked?: boolean;
+  /** a colour drawn as a chip before the label (a highlighter's pen) */
+  swatch?: string }
 
 /** In-app confirm/prompt (WKWebView has no native JS dialogs). Rendered by Confirm.svelte. */
 interface Pending { message: string; input?: string; danger?: boolean; yes?: string; alert?: boolean; resolve: (v: string | null) => void }

@@ -14,15 +14,15 @@ test('words selected: the highlighter and the other marks, no export', () => {
   noteMenu(ed, null);
   expect(shown()).toContain('Highlight…');
   expect(shown().filter((l) => l.startsWith('Export'))).toEqual([]);
-  // the pens come up in its place: the first is the plain (yellow) one, another colour is written as <mark>
+  // the pens come up in its place: the first is the plain one (==), another is written with its colour
   ui.menu!.items.find((i) => i.label === 'Highlight…')!.run!();
-  expect(shown().map((l) => l.replace(/^\S+\s+/, ''))).toEqual(['Yellow', 'Green', 'Blue', 'Pink', 'Purple']);
+  expect(shown()).toEqual(['Yellow', 'Green', 'Blue', 'Pink', 'Purple']); // the pastel pens, named by their hue
   ui.menu!.items[0].run!();
   expect(md(ed)).toBe('see ==this== here');
   noteMenu(ed, null); ui.menu!.items.find((i) => i.label === 'Highlight…')!.run!();
   expect(shown()).toContain('Remove highlight');
   ui.menu!.items[1].run!();
-  expect(md(ed)).toBe('see <mark data-color="green">this</mark> here');
+  expect(md(ed)).toBe('see <mark style="background-color: #c9f2d4">this</mark> here');
 });
 
 test('nothing selected: the note\'s own things (paste, find, export), no marks', () => {
