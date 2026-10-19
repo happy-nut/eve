@@ -20,6 +20,8 @@ export interface SuggestItem {
   keywords?: string;
   /** the sections inside this one, for a page the picker can be opened into */
   sections?: SuggestItem[];
+  /** a row that only opens into its sections (the / menu's Heading, Diagram): ↩ or a click opens it, picks nothing */
+  folder?: boolean;
   run?: (editor: Editor) => void;
 }
 export interface SuggestionUI {
@@ -287,6 +289,8 @@ export const ICONS = {
   h1: '<path d="M2.5 3.5v9M7.5 3.5v9M2.5 8h5"/><path d="M10.5 6l2-1.5v8"/>',
   h2: '<path d="M2.5 3.5v9M7.5 3.5v9M2.5 8h5"/><path d="M10 6.2c.3-1 1-1.6 2-1.6s1.8.7 1.8 1.7c0 1.6-3.8 3.6-3.8 6.2h3.9"/>',
   h3: '<path d="M2.5 3.5v9M7.5 3.5v9M2.5 8h5"/><path d="M10.1 5.2c.4-.5 1-.7 1.7-.7 1 0 1.8.6 1.8 1.6s-.8 1.6-1.9 1.6c1.2 0 2.1.7 2.1 1.8s-.9 1.9-2 1.9c-.8 0-1.4-.3-1.8-.9"/>',
+  h4: '<path d="M2.5 3.5v9M7.5 3.5v9M2.5 8h5"/><path d="M12.8 12.5v-8l-3.3 5.6h4.6"/>',
+  h5: '<path d="M2.5 3.5v9M7.5 3.5v9M2.5 8h5"/><path d="M13.6 4.5h-3.2l-.4 3.4c.4-.4 1-.6 1.6-.6 1.1 0 2 .9 2 2.1s-.9 2.1-2.1 2.1c-.8 0-1.4-.3-1.8-.9"/>',
   bullet: '<circle cx="3.5" cy="4.5" r=".9"/><circle cx="3.5" cy="8" r=".9"/><circle cx="3.5" cy="11.5" r=".9"/><path d="M6.5 4.5h7M6.5 8h7M6.5 11.5h7"/>',
   numbered: '<path d="M2.6 3.4l1-.6v3.4M2.4 8.6c.2-.5.6-.8 1.1-.8.6 0 1 .4 1 .9 0 .8-2.1 1.6-2.1 2.7h2.2"/><path d="M7 4.5h6.5M7 8h6.5M7 11.5h6.5"/>',
   todo: '<rect x="2" y="2.5" width="4.5" height="4.5" rx="1"/><path d="M3 9.8l1.1 1.1 2-2.2"/><path d="M8.5 4.75h5.5M8.5 10h5.5"/>',
@@ -300,18 +304,28 @@ const tip = (id: string, run: NonNullable<SuggestItem['run']>): SuggestItem['run
 /** a "/" item that is the editor's own command `id` (a heading, a list), its key told after as with `tip` */
 const line = (id: string): SuggestItem['run'] => tip(id, (e) => runEditorCommand(e, id));
 
-/** what the / menu finds for `query`: by name, hint or keyword */
+/**
+ * What the / menu finds for `query`: by name, hint or keyword. With nothing typed, the menu as it is, its kinds of
+ * heading and of diagram each one row that opens into them (a dozen rows of them pushed the rest out of sight); with
+ * something typed, every match as a row of its own, wherever it sits ("/flow" finds Flowchart, not "Diagram").
+ */
 export function slashItems(query: string): SuggestItem[] {
+  if (!query) return SLASH;
   const q = query.toLowerCase();
-  return SLASH.filter((i) => [i.label, i.hint, i.keywords].some((w) => w?.toLowerCase().includes(q)));
+  const finds = (i: SuggestItem) => [i.label, i.hint, i.keywords].some((w) => w?.toLowerCase().includes(q));
+  // a kind found by its group's name is found too ("/diagram" lists every diagram); not by the group's hint, which
+  // names a few kinds ("/flow" is Flowchart alone)
+  const named = (i: SuggestItem) => [i.label, i.keywords].some((w) => w?.toLowerCase().includes(q));
+  return SLASH.flatMap((i) => (i.sections ? (named(i) ? i.sections : i.sections.filter(finds)) : finds(i) ? [i] : []));
 }
 
 export const SLASH: SuggestItem[] = [
   { label: 'New page', hint: 'a page under this one', keywords: '하위 페이지 subpage', icon: ICONS.page, run: newPage },
   // the lines a key makes as well, the key as the hint: as their own shortcuts do them (a list's lines change kind)
-  { label: 'Heading 1', hint: '#', keywords: 'title h1 제목', icon: ICONS.h1, run: line('h1') },
-  { label: 'Heading 2', hint: '##', keywords: 'h2 제목', icon: ICONS.h2, run: line('h2') },
-  { label: 'Heading 3', hint: '###', keywords: 'h3 제목', icon: ICONS.h3, run: line('h3') },
+  {
+    label: 'Heading', hint: '# to #####', keywords: 'title 제목', icon: ICONS.h1, folder: true,
+    sections: [1, 2, 3, 4, 5].map((n) => ({ label: `Heading ${n}`, hint: '#'.repeat(n), keywords: `${n === 1 ? 'title ' : ''}h${n} 제목`, icon: ICONS[`h${n}` as 'h1'], run: line(`h${n}`) })),
+  },
   { label: 'Bulleted list', hint: '-', keywords: 'bullet unordered ul 목록', icon: ICONS.bullet, run: line('bulletList') },
   { label: 'Numbered list', hint: '1.', keywords: 'ordered ol number 번호', icon: ICONS.numbered, run: line('orderedList') },
   { label: 'To-do list', hint: '[ ]', keywords: 'todo task checkbox check 할 일', icon: ICONS.todo, run: line('taskList') },
@@ -322,13 +336,18 @@ export const SLASH: SuggestItem[] = [
   { label: 'Code block', hint: '``` code, highlighted', icon: ICONS.code, run: tip('codeBlock', (e) => { if (!e.isActive('tableCell') && !e.isActive('tableHeader')) e.chain().focus().toggleCodeBlock().run(); }) },
   { label: 'Divider', hint: '--- a line across', icon: ICONS.divider, run: tip('divider', (e) => e.chain().focus().setHorizontalRule().run()) },
   { label: 'Kanban', hint: 'board', keywords: '칸반', icon: ICONS.kanban, run: insertKanban },
-  { label: 'Flowchart', hint: 'Diagram: boxes and arrows', icon: ICONS.diagram, run: (e) => insertDiagram(e, 'flowchart') },
-  { label: 'Swimlanes', hint: 'Diagram: who does each step, in lanes', icon: ICONS.lanes, run: (e) => insertDiagram(e, swimlaneStarter()) },
-  { label: 'Sequence diagram', hint: 'Diagram: who says what, in order', icon: ICONS.sequence, run: (e) => insertDiagram(e, 'sequence') },
-  { label: 'Pie chart', hint: 'Diagram: parts of a whole', icon: ICONS.pie, run: (e) => insertDiagram(e, 'pie') },
-  { label: 'Mind map', hint: 'Diagram: ideas branching out', icon: ICONS.mindmap, run: (e) => insertDiagram(e, 'mindmap') },
-  { label: 'Timeline', hint: 'Diagram: what happened when', icon: ICONS.timeline, run: (e) => insertDiagram(e, 'timeline') },
-  { label: 'Gantt chart', hint: 'Diagram: tasks on a calendar', icon: ICONS.gantt, run: (e) => insertDiagram(e, 'gantt') },
+  {
+    label: 'Diagram', hint: 'flowchart, sequence, pie…', keywords: 'mermaid chart 다이어그램 차트', icon: ICONS.diagram, folder: true,
+    sections: [
+      { label: 'Flowchart', hint: 'boxes and arrows', icon: ICONS.diagram, run: (e) => insertDiagram(e, 'flowchart') },
+      { label: 'Swimlanes', hint: 'who does each step, in lanes', icon: ICONS.lanes, run: (e) => insertDiagram(e, swimlaneStarter()) },
+      { label: 'Sequence diagram', hint: 'who says what, in order', icon: ICONS.sequence, run: (e) => insertDiagram(e, 'sequence') },
+      { label: 'Pie chart', hint: 'parts of a whole', icon: ICONS.pie, run: (e) => insertDiagram(e, 'pie') },
+      { label: 'Mind map', hint: 'ideas branching out', icon: ICONS.mindmap, run: (e) => insertDiagram(e, 'mindmap') },
+      { label: 'Timeline', hint: 'what happened when', icon: ICONS.timeline, run: (e) => insertDiagram(e, 'timeline') },
+      { label: 'Gantt chart', hint: 'tasks on a calendar', icon: ICONS.gantt, run: (e) => insertDiagram(e, 'gantt') },
+    ],
+  },
   { label: 'Equation', hint: '∑ formula, its own line ($$)', icon: ICONS.math, run: (e) => insertMath(e, true) },
   { label: 'Inline equation', hint: 'x² formula, in the line ($)', icon: ICONS.mathInline, run: (e) => insertMath(e, false) },
   { label: 'Table', hint: '3×3, with a header row', icon: ICONS.table, run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
