@@ -105,6 +105,39 @@ try {
   const withCode = await caretHeight();
   assert.ok(plain > 0 && Math.abs(withCode - plain) <= 1, `caret on a line with inline code ${withCode}px, on a plain line ${plain}px`);
   console.log(`ok   the caret on a line with inline code is as tall as on a plain one (${withCode}px / ${plain}px)`);
+  // A diagram on the whole screen (⤢) is the whole window, whatever the note around it is (a block that breaks out
+  // past the text, a pane that is a size container); zoomed in, it scrolls under the trackpad. Put back, the note is
+  // where it was and scrolls as before (it was left at the note's end, the caret's place).
+  const tall = Array.from({ length: 24 }, (_, i) => `  N${i}[Step ${i}] --> N${i + 1}[Step ${i + 1}]`).join('\n');
+  const lines = (w) => Array.from({ length: 30 }, (_, i) => `${w} ${i}`).join('\n\n');
+  await page.evaluate(([tall, a, b]) => { const ed = window.__editor; ed.commands.setContent(ed.storage.markdown.parser.parse(`# D\n\n${a}\n\n\`\`\`mermaid\nflowchart TD\n${tall}\n\`\`\`\n\n${b}\n`)); ed.commands.focus('end'); }, [tall, lines('before'), lines('after')]);
+  await page.waitForSelector('.dblock svg', { timeout: 15000 });
+  const pane = () => page.evaluate(() => { let e = document.querySelector('.tiptap'); while (e && !(e.scrollHeight > e.clientHeight && /auto|scroll/.test(getComputedStyle(e).overflowY))) e = e.parentElement; return e ? e.scrollTop : -1; });
+  await page.locator('.dblock').evaluate((d) => d.scrollIntoView({ block: 'center' }));
+  await page.locator('.dblock').hover();
+  await page.locator('.dblock button[aria-label="Full screen"]').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  const at = await pane();
+  await page.locator('.dblock button[aria-label="Full screen"]').click();
+  await page.waitForTimeout(600);
+  const box = await page.locator('.dblock.full').evaluate((d) => { const r = d.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round); });
+  assert.deepEqual(box, [0, 0, 1000, 700], 'the whole screen is the window');
+  for (let i = 0; i < 4; i++) await page.locator('.dblock.full button[aria-label="Zoom in"]').click();
+  await page.waitForTimeout(300);
+  const canvasTop = () => page.locator('.dblock.full .diagram-canvas').evaluate((c) => c.scrollTop);
+  const top0 = await canvasTop();
+  await page.mouse.move(500, 400);
+  await page.mouse.wheel(0, 300);
+  await page.waitForTimeout(400);
+  assert.ok((await canvasTop()) > top0, `zoomed in, the trackpad scrolls the diagram (${top0} → ${await canvasTop()})`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  assert.ok(Math.abs((await pane()) - at) <= 2, `put back, the note is where it was (${at} → ${await pane()})`);
+  await page.mouse.move(500, 400);
+  await page.mouse.wheel(0, -300);
+  await page.waitForTimeout(400);
+  assert.ok((await pane()) < at, 'and it scrolls');
+  console.log('ok   a diagram on the whole screen fills the window, scrolls zoomed in, and gives the note back where it was');
 } finally {
   await browser.close();
   await server?.close();

@@ -58,8 +58,16 @@ export interface Layer {
 /** The keyboard back to `from`; with that gone (taken off the page, <body>, inside what is closing), to the note. */
 export function focusBack(from: Element | null, own?: string) {
   const el = from as HTMLElement | null;
-  if (el?.isConnected && el !== document.body && !(own && el.closest(own)) && typeof el.focus === 'function') el.focus({ preventScroll: true });
-  else if (!isMobile) focusNote(); // (on a phone the note would raise its keyboard: nothing, there)
+  if (el?.isConnected && el !== document.body && !(own && el.closest(own)) && typeof el.focus === 'function') {
+    // what it is in stays where it was: the note, focused, has the webview bring its caret into sight all the same
+    // (preventScroll or not), and a diagram put back from the whole screen left the note at its end
+    const kept: [Element, number, number][] = [];
+    for (let s = el.parentElement; s; s = s.parentElement) if (s.scrollHeight > s.clientHeight || s.scrollWidth > s.clientWidth) kept.push([s, s.scrollTop, s.scrollLeft]);
+    el.focus({ preventScroll: true });
+    const put = () => { for (const [s, top, left] of kept) { s.scrollTop = top; s.scrollLeft = left; } };
+    put();
+    requestAnimationFrame(put);
+  } else if (!isMobile) focusNote(); // (on a phone the note would raise its keyboard: nothing, there)
 }
 
 class Layers {
