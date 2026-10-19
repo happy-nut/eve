@@ -5,6 +5,7 @@
   import { letGo } from './lib/focusWatch';
   import { claimKeys } from './lib/keys';
   import { renderMermaid, themeKey } from './lib/mermaid';
+  import { foldSeq, foldable, markFolds, type SeqBlock } from './lib/seqFold';
   import { KINDS, fromCode, isEmpty, toCode, whyCode, type Diagram } from './lib/diagram';
   import FlowEditor from './FlowEditor.svelte';
   import { scrollHint } from './lib/scrollHint';
@@ -89,18 +90,42 @@
   // ---- the drawing ----
   let svg = $state(''), error = $state(''), seq = 0, drawTimer: ReturnType<typeof setTimeout> | undefined;
   let theme = $state(themeKey());
+  // A sequence diagram's blocks folded while it is looked at (seqFold.ts): a copy of the code is drawn with their
+  // insides as one note, the note's own code untouched. Kept while the block is in the open note, on the whole screen
+  // too (the same block). `shown` and `drawnFolds` are the blocks and folds of the drawing as it is now.
+  let folds = $state<ReadonlySet<string>>(new Set());
+  let shown = $state<SeqBlock[]>([]), drawnFolds = $state<ReadonlySet<string>>(new Set());
   $effect(() => {
-    const c = drawn;
+    const c = drawn, f = folds;
     void theme;
     clearTimeout(drawTimer);
     const n = ++seq;
     drawTimer = setTimeout(async () => {
-      const out = await renderMermaid(c);
+      let view = foldSeq(c, f);
+      let out = await renderMermaid(view.code);
+      // folded, it could not be drawn (the hidden lines did more than the note across them keeps): drawn unfolded
+      if ('error' in out && view.code !== c) { view = foldSeq(c, new Set()); out = await renderMermaid(c); if (n === seq && 'svg' in out) folds = new Set(); }
       if (n !== seq) return;
-      if ('svg' in out) { svg = out.svg; error = ''; } else error = out.error;
+      if ('svg' in out) { svg = out.svg; error = ''; shown = view.shown; drawnFolds = f; } else error = out.error;
       onError(!!error);
     }, untrack(() => svg) ? 120 : 0); // read without depending on it: each drawing is a new string, and would draw again
   });
+  /** the drawing's block labels matched to their blocks, to fold by a click on them; false: a row of them under it */
+  let labelled = $state(true);
+  $effect(() => {
+    void svg;
+    const list = shown, f = drawnFolds;
+    tick().then(() => {
+      const el = canvas?.querySelector(':scope > svg');
+      labelled = !list.some(foldable) || (!!el && markFolds(el, list, f));
+    });
+  });
+  function toggleFold(key: string) {
+    const next = new Set(folds);
+    if (!next.delete(key)) next.add(key);
+    folds = next;
+  }
+  const chips = $derived(labelled || error ? [] : shown.filter(foldable));
   onMount(() => {
     // drawn again in the other theme (Settings, or the system's dark mode)
     const again = () => (theme = themeKey());
@@ -175,6 +200,9 @@
   /** the box the opening click landed on, picked as the editor comes up */
   let pick = $state<string | null>(null);
   function open(e: MouseEvent) {
+    // a sequence diagram's block label: folded or unfolded, not opened
+    const fold = (e.target as Element).closest?.('[data-fold]');
+    if (fold && !active && !error) { e.preventDefault(); toggleFold(fold.getAttribute('data-fold')!); return; }
     if (active || error) return;
     if (!d) { onCodeEdit(); return; } // written by hand: its code is how it is edited
     e.preventDefault();
@@ -212,6 +240,7 @@
       { label: 'Edit', hide: active || !!error || !d, run: () => void edit() },
       { label: 'Edit code', hide: codeShown, run: () => { active = false; onCodeEdit(); } },
       { label: 'Full screen', hide: !!error || !svg, run: enterFull },
+      { label: 'Unfold all', hide: !folds.size, run: () => (folds = new Set()) },
       { label: 'Delete diagram', sep: true, danger: true, run: () => { flush(); active = false; onDelete(true); } },
     ]);
   }
@@ -363,6 +392,16 @@
   <div class="mermaid-view diagram-canvas" class:error={!!error} bind:this={canvas} onclick={open} onwheel={onWheel} onpointerdown={onPanDown} {@attach scrollHint} {@attach pinchZoom}>
     {#if error}{error}{:else}{@html svg}{/if}
   </div>
+  {#if chips.length}
+    <!-- the drawing's labels could not be matched to its blocks: they fold from here instead -->
+    <div class="foldchips">
+      {#each chips as b (b.key)}
+        <button type="button" class:on={drawnFolds.has(b.key)} aria-pressed={drawnFolds.has(b.key)} onclick={() => toggleFold(b.key)}>
+          {drawnFolds.has(b.key) ? '▸' : '▾'} {b.kind}{b.text && b.kind !== 'rect' ? ` ${b.text}` : ''}
+        </button>
+      {/each}
+    </div>
+  {/if}
   {#if flow && canvas && svg && !error}<FlowEditor bind:this={flowEd} {flow} host={canvas} version={svg} k={1} {pick} />{/if}
   {#if full}
     <button class="full-close" type="button" aria-label="Back to the note" title="Back to the note (Esc)" onclick={leaveFull}>
@@ -435,6 +474,31 @@
   .pic { position: relative; }
   .dblock.active { box-shadow: 0 0 0 2px var(--accent-soft); padding-bottom: 10px; background: var(--bg); }
   .dblock.active :global(.mermaid-view) { cursor: default; }
+  /* a sequence diagram's block labels fold it (seqFold.ts): a ▾ beside each on a hover (always on a phone, which
+     has none), a ▸ beside a folded one always, so it is seen to be folded */
+  .pic :global(.mermaid-view [data-fold]) { cursor: pointer; }
+  .pic :global(.mermaid-view .eve-fold-mark) {
+    font-size: 11px; fill: var(--fg-dim); opacity: 0; transition: opacity 0.12s; user-select: none; -webkit-user-select: none;
+  }
+  /* (over mermaid's own note colours, which it scopes to the drawing's id) */
+  .pic :global(.mermaid-view .eve-folded-note rect) { fill: var(--bg-input) !important; stroke: var(--fg-dim) !important; stroke-opacity: 0.35; stroke-dasharray: 3 3; }
+  .pic :global(.mermaid-view .eve-folded-note :is(text, tspan)) { fill: var(--fg-dim) !important; }
+  @media (hover: hover) { .pic :global(.mermaid-view .eve-folded-note:hover rect) { stroke-opacity: 0.7; } }
+  .pic :global(.mermaid-view .eve-fold-mark.alone) { paint-order: stroke; stroke: light-dark(#f9fafb, #17181d); stroke-width: 3px; }
+  @media (hover: hover) {
+    .pic :global(.mermaid-view:hover .eve-fold-mark) { opacity: 1; }
+    .pic :global(.mermaid-view g.eve-fold:hover .labelBox) { fill: light-dark(#e8f3ff, #1c2c45); }
+  }
+  :global(html.mobile) .pic :global(.mermaid-view .eve-fold-mark), .pic :global(.mermaid-view .folded > .eve-fold-mark),
+  .pic :global(.mermaid-view .eve-fold-mark.folded) { opacity: 1; }
+  .foldchips { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px 2px; user-select: none; -webkit-user-select: none; }
+  .foldchips button {
+    border: 0; border-radius: 8px; padding: 3px 9px; font: inherit; font-size: 12px; color: var(--fg-dim); background: var(--bg-input);
+    max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .foldchips button.on { color: var(--fg); }
+  :global(html.mobile) .foldchips button { min-height: 36px; }
+  .dblock.full .foldchips { position: absolute; top: 10px; left: 12px; right: 60px; z-index: var(--z-block-ui-over); }
   .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 10px 4px; font-size: 13px; user-select: none; -webkit-user-select: none; }
   .kind { font-weight: 600; color: var(--fg-dim); font-size: 12px; margin-right: 4px; }
   .grow { flex: 1; }
