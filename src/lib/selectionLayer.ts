@@ -30,14 +30,37 @@ class Layer {
     window.addEventListener('resize', this.schedule);
     // any scroll (the note's own pane, a card page): the rectangles follow the text
     document.addEventListener('scroll', this.schedule, true);
+    // the text moved with nothing selected anew: a picture, a diagram or a link card above it loaded and grew, the list
+    // beside it opened, the font came in. The rectangles stayed where the text had been — in a long note, often
+    // half a line off it
+    this.resized?.observe(view.dom);
+    document.fonts?.addEventListener('loadingdone', this.schedule);
     this.schedule();
   }
+  private first: { range: Range; top: number; left: number } | null = null;
+  private timer: ReturnType<typeof setInterval> | 0 = 0;
+  /**
+   * The text moved under a selection with nothing telling the layer: something above it in a long note grew or shrank
+   * (a picture or a link card loaded, a diagram drew) and WebKit, unlike Chromium, does not scroll to keep the text
+   * where it was, so no scroll came either. The rectangles stayed where the text had been, half a line or more off
+   * it. While a selection shows, its first piece is looked at again now and then and all of it drawn anew if it moved.
+   */
+  private watch = () => {
+    const f = this.first;
+    if (!f) return;
+    const r = [...f.range.getClientRects()].find((b) => b.width > 0.5);
+    if (!r || Math.abs(r.top - f.top) > 0.5 || Math.abs(r.left - f.left) > 0.5) this.schedule();
+  };
+  private resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => this.schedule());
   update() { this.schedule(); }
   destroy() {
     cancelAnimationFrame(this.frame);
+    if (this.timer) clearInterval(this.timer);
     document.removeEventListener('selectionchange', this.schedule);
     window.removeEventListener('resize', this.schedule);
     document.removeEventListener('scroll', this.schedule, true);
+    this.resized?.disconnect();
+    document.fonts?.removeEventListener('loadingdone', this.schedule);
     this.el.remove();
   }
   private schedule = () => {
@@ -49,6 +72,7 @@ class Layer {
     const { view, el } = this;
     const sel = view.state.selection;
     const boxes: DOMRect[] = [];
+    let firstRange: Range | undefined;
     const clips = new Map<Element, DOMRect | null>();
     // a table's cell selection colours whole cells itself (.selectedCell); a node selection outlines its node
     const cells = '$anchorCell' in sel;
@@ -60,6 +84,7 @@ class Layer {
         const range = document.createRange();
         try { range.setStart(a.node, a.offset); range.setEnd(b.node, b.offset); } catch { return false; }
         const clip = clipOf(a.node, view.dom, clips);
+        firstRange ??= range;
         for (const r of range.getClientRects()) {
           const c = clip ? intersect(r, clip) : r;
           if (c && c.width > 0.5 && c.height > 0) boxes.push(c);
@@ -71,6 +96,12 @@ class Layer {
     const op = el.offsetParent as HTMLElement | null;
     const host = op?.getBoundingClientRect() ?? new DOMRect();
     const dx = (op?.scrollLeft ?? 0) - host.left - (op?.clientLeft ?? 0), dy = (op?.scrollTop ?? 0) - host.top - (op?.clientTop ?? 0);
+    // what the first rectangle was drawn from, checked again while it shows (watch)
+    // (its own box, not the drawn one: a code block scrolled sideways cuts that one down, and it never matched)
+    const at = firstRange && [...firstRange.getClientRects()].find((b) => b.width > 0.5);
+    this.first = boxes.length && at ? { range: firstRange!, top: at.top, left: at.left } : null;
+    if (this.first && !this.timer) this.timer = setInterval(this.watch, 300);
+    if (!this.first && this.timer) { clearInterval(this.timer); this.timer = 0; }
     el.replaceChildren(...boxes.map((r) => {
       const d = document.createElement('div');
       d.style.cssText = `left:${r.left + dx}px;top:${r.top + dy}px;width:${r.width}px;height:${r.height}px`;
