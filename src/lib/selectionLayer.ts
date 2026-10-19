@@ -56,7 +56,7 @@ class Layer {
       const { from, to } = sel;
       view.state.doc.nodesBetween(from, to, (node, pos) => {
         if (!node.isText) return true;
-        const a = view.domAtPos(Math.max(from, pos)), b = view.domAtPos(Math.min(to, pos + node.nodeSize));
+        const a = inText(view.domAtPos(Math.max(from, pos)), 1), b = inText(view.domAtPos(Math.min(to, pos + node.nodeSize)), -1);
         const range = document.createRange();
         try { range.setStart(a.node, a.offset); range.setEnd(b.node, b.offset); } catch { return false; }
         const clip = clipOf(a.node, view.dom, clips);
@@ -77,6 +77,22 @@ class Layer {
       return d;
     }));
   }
+}
+
+/**
+ * A point given between elements (the start of a line, an item's text right after its marker) moved into the text
+ * beside it. A range from such a point holds whole elements, and WebKit counts in the box of every element a range
+ * holds: a list item's lines came out lit half a line low and right across the page, not the words' own boxes.
+ */
+export function inText(at: { node: Node; offset: number }, side: 1 | -1): { node: Node; offset: number } {
+  let { node, offset } = at;
+  while (node.nodeType !== Node.TEXT_NODE) {
+    const next = side > 0 ? node.childNodes[offset] : node.childNodes[offset - 1];
+    if (!next) break;
+    node = next;
+    offset = side > 0 ? 0 : next.nodeType === Node.TEXT_NODE ? (next as Text).length : next.childNodes.length;
+  }
+  return { node, offset };
 }
 
 /**
