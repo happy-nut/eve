@@ -263,7 +263,6 @@
     const n = notes.current;
     if (!n || !(await ui.ask(`Delete “${titleOf(n)}”?`))) return;
     notes.remove(n.id);
-    ui.undoable(`Deleted “${titleOf(n)}”`, () => notes.restore(n.id));
     sidebarOpen = true; // back to the list, not into whichever note came next
   }
 
@@ -383,7 +382,6 @@
     if (!n) return;
     if (!(await ui.ask(`Delete “${titleOf(n)}”?`))) return;
     notes.remove(n.id);
-    ui.undoable(`Deleted “${titleOf(n)}”`, () => notes.restore(n.id));
   }
   // Arrows are not on this list: moving the caret is reading, not writing, and folding the list away
   // under an arrow key takes the highlighted row off the screen just when it is being used to navigate.
@@ -501,7 +499,7 @@
       return;
     }
     if (handledBy(e) === 'taken') return;
-    // ⌘Z outside the note's text (the list a note was just deleted from): the delete taken back
+    // ⌘Z outside the note's text (the list): the last thing done to the notes or the groups taken back
     if (ui.undoKey(e)) { e.preventDefault(); return; }
     // ⌘+ is ⌘⇧= on most keyboards (and the keypad's +): the same as ⌘= unless it is bound to something itself
     const a = shortcuts.match(e, ['app']) ?? (e.key === '+' && (e.metaKey || e.ctrlKey) && !e.altKey ? shortcuts.actions.find((x) => x.id === 'textBigger') : undefined);

@@ -18,6 +18,7 @@
   import { appearance } from './lib/appearance.svelte';
   import * as moves from './lib/moves';
   import { focusNote } from './lib/popup';
+  import { history } from './lib/history.svelte';
   import { touchReorder, type Reorder } from './lib/touchReorder';
   import { swipeRow } from './lib/swipeRow';
   import { previewOf, rawQuery, searchText } from './lib/markdown';
@@ -297,7 +298,8 @@
     const inside = (r: HTMLElement) => r.dataset.group !== undefined && (r.dataset.group === g || r.dataset.group.startsWith(g + '/'));
     const next = neighbourOf(groupSel(g), inside), fromList = inList();
     if (!(await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`))) return;
-    ui.undoable(`Deleted group “${leafOf(g)}”`, groups.remove(g));
+    const step = history.record(), undo = groups.remove(g);
+    ui.toast(`Deleted group “${leafOf(g)}”`, { label: 'Undo', run: () => { if (!history.undo(step)) undo(); } });
     void afterRemove(next, fromList);
   }
   async function removeNote(n: Note) {
@@ -306,7 +308,6 @@
     const next = neighbourOf(`[data-note="${n.id}"]`), fromList = inList();
     if (!(await ui.ask(`Delete “${titleOf(n)}”?`))) return;
     notes.remove(n.id);
-    ui.undoable(`Deleted “${titleOf(n)}”`, () => notes.restore(n.id));
     void afterRemove(next, fromList);
   }
   // a row sliding out (a search just narrowed the list) is inert: it can't take the focus, and is going
@@ -608,10 +609,10 @@
     </div>
 
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <!-- the list itself taking the focus (a click on its empty space, a row gone from under the keyboard) hands it to
-         the open note's row: the list is no place for the keyboard, and WebKit ringed the whole of it in blue -->
-    <ul class="tree" role="tree" tabindex="-1" use:showOpen onkeydown={treeKey} use:touchReorder={reorder}
-      onfocus={(e) => { if (e.target === e.currentTarget) (e.currentTarget.querySelector<HTMLElement>('[data-row].active') ?? rowsNow()[0])?.focus({ preventScroll: true }); }}
+    <!-- the list itself is never focused: a click on its empty space leaves the keyboard where it was (the note) rather
+         than taking it, and WebKit drew a blue ring around the whole list when it had it -->
+    <ul class="tree" role="tree" use:showOpen onkeydown={treeKey} use:touchReorder={reorder}
+      onmousedown={(e) => { if (!(e.target as Element).closest('button, input, a, [tabindex]')) e.preventDefault(); }}
       oncontextmenu={(e) => { if (isMobile) e.preventDefault(); else rowMenu(e); }}
       ondragover={(e) => overSection(e, '')} ondrop={drop}>
       {#each rows as r (r.key)}
@@ -756,7 +757,6 @@
   :global(html.mobile) .clear svg { width: 15px; height: 15px; }
   :global(html.mobile) .top input:has(+ .clear) { padding-right: 44px; }
 
-  .tree:focus { outline: none; }
   .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 10px 8px; margin: 0; list-style: none; }
   .row { position: relative; padding-left: calc(var(--d) * 18px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
   .row.dragging { opacity: 0.4; }

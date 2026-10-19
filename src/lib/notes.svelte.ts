@@ -4,6 +4,7 @@ import { flushEdits } from './pending';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
 import { ui } from './ui.svelte';
+import { history, undoSource } from './history.svelte';
 import { legacyPlain, onlyHtml, plain, splitLink } from './markdown';
 import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isDailyId, isWritten } from './daily';
 
@@ -356,11 +357,12 @@ class NotesStore {
     const last = lastSeen();
     this.resumed = !!last && (last === CALENDAR ? appearance.s.dailyNotes : this.all.some((n) => n.id === last && !n.deleted));
     this.currentId = this.resumed ? last : this.firstPage()?.id ?? null;
-    if (!this.currentId) this.create();
+    if (!this.currentId) history.quietly(() => this.create());
     this.loaded = true;
   }
 
   create(body = '', group = this.current?.group ?? '', parent?: string): Note {
+    history.record();
     const first = this.visible.find((x) => x.group === group);
     const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group, parent, order: first ? first.order - 1 : 0, icon: autoIcon() };
     this.all.push(n);
@@ -377,6 +379,7 @@ class NotesStore {
    * and leaves the open note alone — the file usually links itself into the page being written.
    */
   addImported(body: string, group = this.current?.group ?? '', updatedAt = Date.now(), parent?: string): Note {
+    history.record();
     const last = this.visible.filter((x) => x.group === group).at(-1);
     const n: Note = { id: newId(), body, updatedAt, deleted: false, group, ...(parent ? { parent } : {}), order: last ? last.order + 1 : 0, icon: autoIcon() };
     this.all.push(n);
@@ -446,6 +449,7 @@ class NotesStore {
 
   /** Make a note a sub-page of `parent` (null = a page of its own). Refuses a loop. */
   setParent(id: string, parent: string | null) {
+    history.record();
     if (id === CALENDAR_NOTE_ID || parent === CALENDAR_NOTE_ID) return; // the calendar's row takes no sub-pages, is none
     const n = this.all.find((x) => x.id === id);
     if (!n || (parent && (parent === id || this.isAncestor(id, parent)))) return;
@@ -466,6 +470,7 @@ class NotesStore {
   }
 
   setIcon(id: string, icon: string) {
+    history.record();
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
     this.touched(id);
@@ -476,6 +481,7 @@ class NotesStore {
 
   /** A note back where it stood, exactly (a deleted group's Undo): no rank of its own worked out, no sub-pages moved. */
   putBack(id: string, at: Pick<Note, 'group' | 'parent' | 'order'>) {
+    history.record();
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
     Object.assign(n, { group: at.group, parent: at.parent, order: at.order, updatedAt: Date.now() });
@@ -502,6 +508,7 @@ class NotesStore {
    * ponytail: ranks can get arbitrarily close after thousands of moves; renormalize then.
    */
   move(id: string, group: string, beforeId: string | null) {
+    history.record();
     const n = this.all.find((x) => x.id === id);
     if (!n || id === beforeId) return;
     const list = this.visible.filter((x) => x.group === group && x.id !== id);
@@ -544,6 +551,7 @@ class NotesStore {
   }
 
   place(id: string, group: string, parent: string, before: string | null) {
+    history.record();
     if (id === CALENDAR_NOTE_ID && parent) return; // the calendar's row is never a sub-page
     if (parent === CALENDAR_NOTE_ID) return;
     const n = this.all.find((x) => x.id === id);
@@ -582,6 +590,7 @@ class NotesStore {
   remove(id: string) {
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
+    const step = history.record();
     this.untouched.delete(id); // deleted by hand: it goes the way any note does, and can come back
     // the open note deleted: the one next to it in the list comes up. The list's first by rank was opened
     // before, often a note deep in a folded group, nowhere near where the user was.
@@ -592,10 +601,13 @@ class NotesStore {
     // (a note made here because there was none left is untouched: Undo moving on from it takes it away again)
     if (this.currentId === id) this.currentId = next?.id ?? null;
     if (!this.currentId) this.create();
-    ui.toast(`Deleted “${titleOf(n)}”`, { label: 'Undo', run: () => this.restore(id) });
+    // its Undo is this step taken back (the next note it opened, the one made because none was left, all of it);
+    // with something done since, the note alone
+    ui.toast(`Deleted “${titleOf(n)}”`, { label: 'Undo', run: () => { if (!history.undo(step)) this.restore(id); } });
   }
   /** A deleted note back as it was, and open. Dated now: the tombstone has synced, and must not win over it. */
   restore(id: string) {
+    history.record();
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
     n.deleted = false;
@@ -648,7 +660,9 @@ class NotesStore {
   }
 
   /** Apply notes coming from sync (last-writer-wins, or unconditionally with `force`). Returns true if anything changed. */
-  mergeRemote(remote: Note[], force = false): boolean {
+  /** another device's notes: no one's step to undo here */
+  mergeRemote(remote: Note[], force = false): boolean { return history.quietly(() => this.mergeRemoteNow(remote, force)); }
+  private mergeRemoteNow(remote: Note[], force: boolean): boolean {
     let changed = false;
     // the open note deleted on another device: the one next to it in the list comes up, as when it is deleted here.
     // It stayed open, deleted, and back/forward led into it
@@ -670,3 +684,23 @@ class NotesStore {
 }
 
 export const notes = new NotesStore();
+
+// What the app's undo puts back of the notes: where each sits, whether it is there, its icon, and which is open. A note
+// made since goes again; a note's text is the note's own undo, not this.
+type Spot = [id: string, deleted: boolean, group: string, parent: string, order: number, icon: string];
+undoSource<{ open: string | null; spots: Spot[] }>({
+  take: () => ({ open: notes.currentId, spots: notes.all.map((n) => [n.id, n.deleted, n.group ?? '', n.parent ?? '', n.order, n.icon ?? ''] as Spot) }),
+  put: ({ open, spots }) => {
+    const was = new Map(spots.map((s) => [s[0], s]));
+    for (const n of notes.all) {
+      const s = was.get(n.id);
+      const [deleted, group, parent, order, icon] = s ? [s[1], s[2], s[3] || undefined, s[4], s[5] || undefined] : [true, n.group, n.parent, n.order, n.icon];
+      if (n.deleted === deleted && (n.group ?? '') === (group ?? '') && n.parent === parent && n.order === order && n.icon === icon) continue;
+      Object.assign(n, { deleted, group, parent, order, icon, updatedAt: Date.now() });
+      notes.flush(n.id);
+    }
+    const back = open && notes.all.find((n) => n.id === open && !n.deleted);
+    if (back) notes.currentId = back.id;
+    else if (notes.current?.deleted) notes.currentId = notes.firstPage()?.id ?? null;
+  },
+});
