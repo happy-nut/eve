@@ -23,16 +23,17 @@
   .toast {
     position: fixed; left: 50%; bottom: 24px; translate: -50% 0; z-index: var(--z-toast);
     display: flex; align-items: center; gap: 12px; max-width: min(440px, calc(100vw - 32px));
-    padding: 6px 6px 6px 14px; font-size: 13px; color: var(--fg);
-    background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
+    /* dark, as the hints that come up in the same place are (it was a white card there, a stranger to them) */
+    padding: 6px 6px 6px 14px; font-size: 13px; color: #f2f3f5;
+    background: light-dark(#1d1f24, #2a2d33); border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
   }
   /* a phone's formatting bar (and the list's + button) sit along the bottom: clear of them */
   .toast.mobile { bottom: calc(84px + env(safe-area-inset-bottom)); }
   .msg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   button {
     flex: none; border: 0; border-radius: 6px; padding: 4px 9px; background: none;
-    font: inherit; font-size: 13px; font-weight: 600; color: var(--accent); transition: background 0.12s;
+    font: inherit; font-size: 13px; font-weight: 600; color: light-dark(#7cb4ff, #8ab8ff); transition: background 0.12s;
   }
-  button:hover { background: var(--accent-soft); }
+  button:hover { background: rgba(255, 255, 255, 0.1); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 </style>
