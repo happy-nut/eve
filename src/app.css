@@ -749,6 +749,13 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 /* where it sits across the page (its menu: a click on it) */
 .tiptap .img-fig[data-align='center'] { margin-left: auto; margin-right: auto; }
 .tiptap .img-fig[data-align='right'] { margin-left: auto; margin-right: 0; }
+/* A picture is shown as large as it is (or as it was sized), out past the text to the pane's edges (24px short), as
+   code and diagrams are: held to the column, a wide screenshot came out too small to read. Where it sits says which
+   way it grows — from the left edge rightwards, from the right edge leftwards, centred both ways. Only a picture of
+   the note's own: one in a list or a quote keeps to its column. Never narrower than the column allowed before. */
+.editor .tiptap > .img-fig { width: max-content; max-width: max(100%, calc(50% + 50cqw - 24px)); }
+.editor .tiptap > .img-fig[data-align='center'] { max-width: max(100%, calc(100cqw - 48px)); margin-left: 0; margin-right: 0; left: 50%; translate: -50% 0; }
+.editor .tiptap > .img-fig[data-align='right'] { margin-left: 0; left: 100%; translate: -100% 0; }
 .tiptap .img-fig[data-align='center'] .img-cap { text-align: center; }
 .tiptap .img-fig[data-align='right'] .img-cap { text-align: right; }
 .tiptap .img-fig img { margin: 0; }
