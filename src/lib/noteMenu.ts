@@ -11,7 +11,7 @@ import { imageMenu } from './image';
 /**
  * Right-click inside a note. The webview's own menu is Look Up / Translate / Speech / AutoFill — a wall
  * of things a note cannot use — so the app draws this one instead: the clipboard, the marks that have
- * keyboard shortcuts nobody remembers, and nothing else.
+ * keyboard shortcuts nobody remembers (with words chosen), the note's own things (with none), and nothing else.
  */
 export function noteMenu(editor: Editor, event: MouseEvent | null) {
   if (event) {
@@ -57,15 +57,18 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
     { label: 'Paste', keys: 'Mod-v', run: () => void clipboardText().then((t) => t && editor.view.pasteText(t)) },
     { label: 'Bold', sep: true, keys: keys('bold'), hide: empty, run: () => editor.chain().focus().toggleBold().run() },
     { label: 'Italic', keys: keys('italic'), hide: empty, run: () => editor.chain().focus().toggleItalic().run() },
+    { label: 'Strikethrough', keys: keys('strike'), hide: empty, run: () => editor.chain().focus().toggleStrike().run() },
+    { label: 'Highlight', keys: keys('highlight'), hide: empty, run: () => editor.chain().focus().toggleMark('highlight').run() },
     { label: 'Code', keys: keys('code'), hide: empty, run: () => editor.chain().focus().toggleCode().run() },
     linked
       ? { label: 'Remove link', run: () => editor.chain().focus().unsetLink().run() }
       : { label: 'Link…', keys: keys('link'), hide: empty, run: () => void linkSelection(editor) },
-    { label: 'Select all', sep: true, keys: 'Mod-a', run: () => editor.chain().focus().selectAll().run() },
-    { label: 'Find & replace…', keys: keys('find'), run: () => ui.openFind() },
-    { label: 'Export as Markdown…', sep: true, keys: keys('exportMd'), run: () => void exportCurrent('md') },
-    { label: 'Export as PDF…', keys: keys('exportPdf'), run: () => void exportCurrent('pdf') },
-    { label: 'Export as image…', keys: keys('exportPng'), run: () => void exportCurrent('png') },
+    // words chosen: the menu is about them; the whole note's things wait for nothing to be chosen
+    { label: 'Select all', sep: true, keys: 'Mod-a', hide: !empty, run: () => editor.chain().focus().selectAll().run() },
+    { label: 'Find & replace…', keys: keys('find'), hide: !empty, run: () => ui.openFind() },
+    { label: 'Export as Markdown…', sep: true, keys: keys('exportMd'), hide: !empty, run: () => void exportCurrent('md') },
+    { label: 'Export as PDF…', keys: keys('exportPdf'), hide: !empty, run: () => void exportCurrent('pdf') },
+    { label: 'Export as image…', keys: keys('exportPng'), hide: !empty, run: () => void exportCurrent('png') },
   ];
   // from the keyboard (⌥↩) there is no pointer: the menu opens under the caret instead
   ui.openMenu(at, items);
