@@ -179,6 +179,15 @@
     }
     editor.view.dispatch(tr.setMeta('addToHistory', false).setMeta('preventUpdate', true));
   });
+  /** the pane's width on it as --pane, for the blocks that reach past the text to its edges (app.css) */
+  function paneWidth(node: HTMLElement) {
+    const put = () => node.style.setProperty('--pane', `${node.clientWidth}px`);
+    put();
+    if (typeof ResizeObserver === 'undefined') return;
+    const watch = new ResizeObserver(put);
+    watch.observe(node);
+    return () => watch.disconnect();
+  }
 </script>
 
 <div class="scroll" bind:this={scrollEl}>
@@ -194,7 +203,7 @@
   </div>
   <!-- Tab indents a list (the editor marks those handled); anywhere else it must not walk focus out of the editor -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="editor has-head" bind:this={el}
+  <div class="editor has-head" bind:this={el} {@attach paneWidth}
     onkeydown={(e) => {
       // …but a row of a diagram's form keeps Tab: to the next row, as anywhere a form is filled in
       if (e.key === 'Tab' && !e.defaultPrevented && !(e.target as HTMLElement).closest?.('.dblock .form')) e.preventDefault();
