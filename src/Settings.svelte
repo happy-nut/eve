@@ -207,6 +207,11 @@
             onchange={(e) => appearance.set({ autoIcon: e.currentTarget.checked })} />
         </label>
         <label class="row">
+          <span class="label">Spelling help <span class="sub">misspellings underlined, words corrected and a sentence's first letter capitalised as you type</span></span>
+          <input type="checkbox" class="switch" checked={appearance.s.autoCorrect}
+            onchange={(e) => appearance.set({ autoCorrect: e.currentTarget.checked })} />
+        </label>
+        <label class="row">
           <span class="label">Daily notes <span class="sub">a note for each day, written from its calendar in the list</span></span>
           <input type="checkbox" class="switch" checked={appearance.s.dailyNotes}
             onchange={(e) => appearance.set({ dailyNotes: e.currentTarget.checked })} />

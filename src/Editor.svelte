@@ -6,6 +6,7 @@
   import { createEditor, applyKeymap, getMarkdown, goToSection, runEditorCommand, clickBelow } from './lib/editor';
   import { isMobile } from './lib/platform';
   import { notes, type Note } from './lib/notes.svelte';
+  import { appearance } from './lib/appearance.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
   import { ui, hooks } from './lib/ui.svelte';
   import Icon from './Icon.svelte';
@@ -129,6 +130,9 @@
   $effect(() => {
     if (editor && notes.caretEnd && notes.currentId === note.id) { notes.caretEnd = false; editor.commands.focus('end'); }
   });
+
+  // the spelling help switched in Settings: the note's attributes are read again (editor.ts), without a remount
+  $effect(() => { void appearance.s.autoCorrect; if (editor) editor.view.setProps({}); });
 
   // rebind editor shortcuts live when the user changes them
   $effect(() => { shortcuts.actions; if (editor) applyKeymap(editor); });

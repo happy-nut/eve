@@ -349,6 +349,30 @@ class Ui {
   }
   dismissToast() { clearTimeout(this.toastTimer); this.toastMsg = null; }
 
+  /**
+   * Something the app did to the notes that can be taken back: said in a toast with its Undo, and kept for ⌘Z
+   * pressed outside any text (the list a note was just deleted from). ⌘Z in a note is the note's own undo.
+   */
+  private undos: (() => void)[] = [];
+  undoable(message: string, undo: () => void) {
+    let done = false;
+    const run = () => { if (done) return; done = true; this.undos = this.undos.filter((u) => u !== run); undo(); };
+    this.undos = [...this.undos.slice(-19), run];
+    this.toast(message, { label: 'Undo', run });
+  }
+  /** ⌘Z (not ⇧⌘Z) with the keyboard outside a note, a field or a popup's input: the newest thing undoable, taken
+   *  back. True when it took something back, and the key is spent. */
+  undoKey(e: KeyboardEvent): boolean {
+    if (e.key.toLowerCase() !== 'z' || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return false;
+    const t = e.target as Element | null;
+    if (t?.closest?.('input, textarea, select, [contenteditable="true"], .tiptap')) return false;
+    const last = this.undos.at(-1);
+    if (!last) return false;
+    this.dismissToast();
+    last();
+    return true;
+  }
+
   /** what is typed in the list's search box: the list shows only what it finds while there is any */
   search = $state('');
 }

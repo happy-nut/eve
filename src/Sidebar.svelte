@@ -284,8 +284,7 @@
     const inside = (r: HTMLElement) => r.dataset.group !== undefined && (r.dataset.group === g || r.dataset.group.startsWith(g + '/'));
     const next = neighbourOf(groupSel(g), inside), fromList = inList();
     if (!(await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`))) return;
-    const undo = groups.remove(g);
-    ui.toast(`Deleted group “${leafOf(g)}”`, { label: 'Undo', run: undo });
+    ui.undoable(`Deleted group “${leafOf(g)}”`, groups.remove(g));
     void afterRemove(next, fromList);
   }
   async function removeNote(n: Note) {
@@ -294,6 +293,7 @@
     const next = neighbourOf(`[data-note="${n.id}"]`), fromList = inList();
     if (!(await ui.ask(`Delete “${titleOf(n)}”?`))) return;
     notes.remove(n.id);
+    ui.undoable(`Deleted “${titleOf(n)}”`, () => notes.restore(n.id));
     void afterRemove(next, fromList);
   }
   // a row sliding out (a search just narrowed the list) is inert: it can't take the focus, and is going

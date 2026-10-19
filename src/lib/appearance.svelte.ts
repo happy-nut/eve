@@ -25,6 +25,10 @@ interface Appearance {
   dailyNotes: boolean;
   /** a nudge at `reminderAt` (HH:MM, local) when today's daily note is still unwritten */
   dailyReminder: boolean; reminderAt: string;
+  /** the system's spelling help in the note: misspellings underlined, words corrected and a sentence's first letter
+   *  capitalised as you type. Off unless asked for: a note is code, lists and half-sentences as often as prose, and
+   *  "git" became "Git" at the start of every line */
+  autoCorrect: boolean;
   /** a phone's widget lists the daily notes too (off: only notes) */
   dailyInWidget: boolean;
   /** ⌘+ / ⌘-: px on top of `size` for now, remembered apart from it, so ⌘0 goes back to what Settings says */
@@ -37,7 +41,7 @@ interface Appearance {
 // phone and a Mac each keep their own.
 /** the note's text size, px: the Size slider's range, and where ⌘+ / ⌘- stop */
 export const SIZE_MIN = 12, SIZE_MAX = 28;
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
 
 function load(): Appearance {
   try {
