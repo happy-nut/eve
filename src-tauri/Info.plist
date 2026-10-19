@@ -7,6 +7,10 @@
     declare public.plain-text, but a .md file's own type is net.daringfireball.markdown: without that
     line Finder hands the icon (and the double-click) to whichever app does declare it, however often
     "Open .md files" is switched on.
+    Eve can open them (Alternate), it does not claim them: as the Owner, with the app's icon for the
+    file's, every .md on the Mac took Eve's icon the moment Eve was installed, "Open .md files" off.
+    Switched on, that setting makes Eve the default itself (mac.rs, LSSetDefaultRoleHandlerForContentType);
+    the files then show the system's document icon with Eve's on it, not the app's icon whole.
   -->
   <key>CFBundleDocumentTypes</key>
   <array>
@@ -16,9 +20,7 @@
       <key>CFBundleTypeRole</key>
       <string>Editor</string>
       <key>LSHandlerRank</key>
-      <string>Owner</string>
-      <key>CFBundleTypeIconFile</key>
-      <string>icon.icns</string>
+      <string>Alternate</string>
       <key>CFBundleTypeExtensions</key>
       <array>
         <string>md</string>
@@ -37,8 +39,6 @@
       <string>Editor</string>
       <key>LSHandlerRank</key>
       <string>Alternate</string>
-      <key>CFBundleTypeIconFile</key>
-      <string>icon.icns</string>
       <key>CFBundleTypeExtensions</key>
       <array>
         <string>txt</string>
