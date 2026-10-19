@@ -3,7 +3,7 @@
   import { createDocument, type Editor as TipTap } from '@tiptap/core';
   import { TextSelection } from '@tiptap/pm/state';
   import type { Node as PMNode } from '@tiptap/pm/model';
-  import { createEditor, applyKeymap, getMarkdown, goToSection, runEditorCommand } from './lib/editor';
+  import { createEditor, applyKeymap, getMarkdown, goToSection, runEditorCommand, clickBelow } from './lib/editor';
   import { isMobile } from './lib/platform';
   import { notes, type Note } from './lib/notes.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
@@ -201,7 +201,8 @@
       // any other key (or a click, below) means the note is being written in: ⌥↑ / ⌥↓ move lines again
       if (!(e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown'))) openedFromList.id = '';
     }}
-    onmousedown={() => (openedFromList.id = '')}></div>
+    onmousedown={() => (openedFromList.id = '')}
+    onclick={(e) => { if (e.target === el && editor) clickBelow(editor.view, e); }}></div>
 </div>
 <Outline {scrollEl} {editor} />
 <TableTools {editor} />

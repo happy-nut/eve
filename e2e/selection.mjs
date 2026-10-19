@@ -237,6 +237,20 @@ for (const dark of [false, true]) {
     r.wrong = check && !check(r.sel);
     results.push(r);
   }
+  // something above the selection grows after it is drawn (a picture loading), with no scroll to say so — WebKit does
+  // not scroll to keep the text in place: the rectangles must follow the text, not stay where it was
+  if (!dark) {
+    await base();
+    await drag('cccc', 'dddd');
+    await page.evaluate(() => { const d = document.createElement('div'); d.style.height = '37px'; const t = document.querySelector('.tiptap'); t.parentElement.insertBefore(d, t); });
+    await page.waitForTimeout(800);
+    const off = await page.evaluate(() => {
+      const box = document.querySelector('.sel-layer > div')?.getBoundingClientRect();
+      const r = getSelection().getRangeAt(0).getClientRects()[0];
+      return box && r ? Math.abs(box.top - r.top) : 999;
+    });
+    results.push({ name: 'shift-above-selection', inside: off <= 2 ? 1000 : 0, outside: 0, ink: 100, pm: `off by ${Math.round(off)}px`, sel: {} });
+  }
   await page.close();
 }
 await browser.close();

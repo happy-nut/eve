@@ -4,9 +4,13 @@ import { createEditor, getMarkdown } from './editor';
 import { posOf, press, type } from './testEditor';
 import { slashItems, type SuggestItem } from './slash';
 
-const settle = () => new Promise((r) => setTimeout(r, 0));
+const tick = () => new Promise((r) => setTimeout(r, 0));
+// the menu comes up a moment after the "/" (the picker's own update): waited for, up to half a second, rather than
+// one turn of the loop — on a busy machine (CI) it came a turn later and ↓ ↩ went to the line instead
+let menuUp = () => false; // the newest editor's
+const settle = async () => { await tick(); for (let i = 0; i < 50 && !menuUp(); i++) await new Promise((r) => setTimeout(r, 10)); };
 const made: { destroy(): void }[] = [];
-afterEach(async () => { await settle(); for (const e of made.splice(0)) e.destroy(); document.body.innerHTML = ''; });
+afterEach(async () => { await tick(); for (const e of made.splice(0)) e.destroy(); document.body.innerHTML = ''; });
 
 function editor(content: string) {
   let shown: SuggestItem[] = [], sel = 0, pick: (i: SuggestItem) => void = () => {}, pointed = false;
@@ -27,6 +31,7 @@ function editor(content: string) {
   document.body.append(element);
   const ed = createEditor({ element, content, onUpdate: noop, onOpenNote: noop, targets: () => [], suggestionUI, calendarUI: off, emojiUI: off });
   made.push(ed);
+  menuUp = suggestionUI.visible;
   return { ed, picked, point: () => { pointed = true; } };
 }
 /** a note with the caret on an empty line under its title */
