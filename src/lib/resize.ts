@@ -34,6 +34,22 @@ export const escapeWidth = (name: string) => name.replace(/\|(\d{2,4})$/, '\\|$1
 export const withWidth = (name: string, width: number | null | undefined) => (width ? `${name}|${width}` : name);
 
 /**
+ * How wide a picture may be drawn: a picture of the note's own goes past the text to the pane's edge, 24px short
+ * (app.css, .tiptap > .img-fig) — rightwards from the left, leftwards from the right, both ways centred; anything else
+ * keeps to the column it is in.
+ */
+function roomFor(media: HTMLElement): number {
+  const tip = media.closest<HTMLElement>('.tiptap'), frame = media.closest<HTMLElement>('.img-fig');
+  if (!tip) return Infinity;
+  const pad = getComputedStyle(tip);
+  const column = tip.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
+  const pane = tip.closest<HTMLElement>('.editor')?.clientWidth;
+  if (!frame || frame.parentElement !== tip || !pane) return column;
+  const side = (pane - column) / 2 - 24;
+  return Math.max(column, frame.dataset.align === 'center' ? column + 2 * side : column + side);
+}
+
+/**
  * A grip on the media's right edge. Dragging resizes it live; letting go reports the final width, and
  * a double-click hands it back to its natural size (`null`).
  */
@@ -48,7 +64,7 @@ export function sizeGrip(media: HTMLElement, commit: (width: number | null) => v
     grip.setPointerCapture(e.pointerId); // the drag survives the pointer crossing the media
     const x0 = e.clientX;
     const w0 = media.getBoundingClientRect().width;
-    const column = media.closest('.tiptap')?.getBoundingClientRect().width ?? Infinity;
+    const column = roomFor(media);
     let moved = false;
     const move = (m: PointerEvent) => {
       if (m.clientX === x0) return;

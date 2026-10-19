@@ -270,7 +270,12 @@
     // Esc went nowhere too
     // (the ⤢ itself, focused by its click in some browsers, is gone on the whole screen: the note's text, then)
     const was = document.activeElement as HTMLElement | null;
-    ui.viewDiagram(() => (full = false), was && was !== document.body && !root.contains(was) ? was : root.closest<HTMLElement>('.tiptap'));
+    // the note under it is put back where it was: the block, out of the note meanwhile, left a hole that the page
+    // closed up (and moved the text in it), and the note scrolled to its end as it took the keyboard back
+    const kept: [Element, number][] = [];
+    for (let s = root.parentElement; s; s = s.parentElement) if (s.scrollHeight > s.clientHeight) kept.push([s, s.scrollTop]);
+    const back = () => { for (const [s, top] of kept) s.scrollTop = top; };
+    ui.viewDiagram(() => { full = false; tick().then(() => { back(); requestAnimationFrame(back); }); }, was && was !== document.body && !root.contains(was) ? was : root.closest<HTMLElement>('.tiptap'));
     letGo(); // keys are the diagram's now, not the note's text
     full = true;
     tick().then(fit);
