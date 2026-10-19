@@ -7,6 +7,7 @@ import { openUrl, clipboardText, copyText } from './platform';
 import { exportCurrent } from './transfer';
 import { shortcuts } from './shortcuts.svelte';
 import { imageMenu } from './image';
+import { highlightMenu } from './highlight';
 
 /**
  * Right-click inside a note. The webview's own menu is Look Up / Translate / Speech / AutoFill — a wall
@@ -58,7 +59,7 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
     { label: 'Bold', sep: true, keys: keys('bold'), hide: empty, run: () => editor.chain().focus().toggleBold().run() },
     { label: 'Italic', keys: keys('italic'), hide: empty, run: () => editor.chain().focus().toggleItalic().run() },
     { label: 'Strikethrough', keys: keys('strike'), hide: empty, run: () => editor.chain().focus().toggleStrike().run() },
-    { label: 'Highlight', keys: keys('highlight'), hide: empty, run: () => editor.chain().focus().toggleMark('highlight').run() },
+    { label: 'Highlight…', keys: keys('highlight'), hide: empty, run: () => highlightMenu(editor) },
     { label: 'Code', keys: keys('code'), hide: empty, run: () => editor.chain().focus().toggleCode().run() },
     linked
       ? { label: 'Remove link', run: () => editor.chain().focus().unsetLink().run() }

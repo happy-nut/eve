@@ -16,7 +16,7 @@ import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
 import { DateMention, dayChoices } from './date';
 import { Callout, CalloutEdges } from './callout';
-import { Highlight } from './highlight';
+import { Highlight, highlightMenu } from './highlight';
 import { Html } from './html';
 import { Toggle } from './toggle';
 import Blockquote from '@tiptap/extension-blockquote';
@@ -436,7 +436,7 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     italic: () => c().toggleItalic().run(),
     underline: () => c().toggleUnderline().run(),
     strike: () => c().toggleStrike().run(),
-    highlight: () => c().toggleMark('highlight').run(),
+    highlight: () => (highlightMenu(editor), true),
     code: () => c().toggleCode().run(),
     link: () => {
       const prev = editor.getAttributes('link').href as string | undefined;

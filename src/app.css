@@ -683,6 +683,11 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 .tiptap .callout[data-color='purple'] { background: light-dark(rgba(140, 90, 230, 0.1), rgba(170, 130, 255, 0.13)); }
 /* ==highlight== */
 .tiptap mark { background: light-dark(rgba(255, 214, 10, 0.45), rgba(255, 214, 10, 0.3)); color: inherit; border-radius: 3px; padding: 0 1px; }
+/* the other pens (highlight.ts, HIGHLIGHTS) */
+.tiptap mark[data-color='green'] { background: light-dark(rgba(52, 199, 89, 0.35), rgba(52, 199, 89, 0.3)); }
+.tiptap mark[data-color='blue'] { background: light-dark(rgba(10, 132, 255, 0.25), rgba(10, 132, 255, 0.35)); }
+.tiptap mark[data-color='pink'] { background: light-dark(rgba(255, 55, 95, 0.25), rgba(255, 55, 95, 0.32)); }
+.tiptap mark[data-color='purple'] { background: light-dark(rgba(175, 82, 222, 0.25), rgba(175, 82, 222, 0.35)); }
 /* bookmark card: a URL on its own line */
 .tiptap .bookmark {
   display: flex; align-items: stretch; gap: 14px; margin: 0.6em 0; padding: 10px 12px; max-height: 88px; overflow: hidden;
