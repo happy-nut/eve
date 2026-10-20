@@ -172,6 +172,35 @@ try {
   const text = await copyFrom(0, 'Copy markdown');
   assert.deepEqual(text, { type: 'text', text: '```mermaid\nflowchart TD\n  A[Write the plan] --> B[Ship it]\n```' });
   console.log('ok   a diagram copies from its menu as a picture, labels and all, and as its markdown');
+  // "// 주석" typed into code with a Korean input method: every key, even a "/", comes through the input method, and
+  // the line went uncoloured as it became a comment; in WebKit the block's colours stayed wrong even once the comment
+  // was deleted. Drawn again as each word goes in, the comment is coloured, and deleted, the code is as it was.
+  const imePage = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+  await imePage.addInitScript(() => { localStorage.clear(); localStorage.setItem('eve.notes.i', '---\nid: i\nupdated: 1\ndeleted: false\norder: 0\n---\n# Code\n\n```typescript\nconst a: number = 1;\n```\n'); });
+  await imePage.goto(URL_);
+  await imePage.waitForSelector('.tiptap pre .hljs-keyword');
+  const colours = () => imePage.evaluate(() => [...document.querySelectorAll('.tiptap pre [class^=hljs]')].map((e) => `${e.className}:${e.textContent}`).join(' | '));
+  const plainColours = await colours();
+  await imePage.locator('.tiptap pre .hljs-keyword', { hasText: 'const' }).click();
+  await imePage.keyboard.press('Home');
+  await imePage.evaluate(async () => {
+    const el = document.querySelector('.tiptap');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    for (const ch of ['/', '/', ' ', '주']) {
+      el.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
+      el.dispatchEvent(new CompositionEvent('compositionupdate', { data: ch }));
+      document.execCommand('insertText', false, ch);
+      await wait(30);
+      el.dispatchEvent(new CompositionEvent('compositionend', { data: ch }));
+      await wait(60);
+    }
+  });
+  await imePage.waitForTimeout(300);
+  assert.equal(await colours(), 'hljs-comment:// 주const a: number = 1;', 'the line typed into a comment is coloured as one');
+  for (let i = 0; i < 4; i++) await imePage.keyboard.press('Backspace');
+  await imePage.waitForTimeout(300);
+  assert.equal(await colours(), plainColours, 'the comment deleted, the code is coloured as it was');
+  console.log('ok   a comment typed through an input method is coloured, and deleted, the code is again');
 } finally {
   await browser.close();
   await server?.close();

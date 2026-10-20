@@ -63,17 +63,23 @@ function spansOf(node: PMNode) {
   return got;
 }
 
-/** every code block in the note highlighted, as inline decorations */
-function highlight(doc: PMNode): DecorationSet {
+/** every code block in the note highlighted, as inline decorations; `round` tells one drawing from the next */
+function highlight(doc: PMNode, round = 0): DecorationSet {
   if (!lowlight) return DecorationSet.empty;
   const out: Decoration[] = [];
+  const attrs = (cls: string) => (round ? { class: cls, 'data-round': String(round) } : { class: cls });
   doc.descendants((node, pos) => {
     if (node.type.name !== 'codeBlock') return true;
-    for (const [from, to, cls] of spansOf(node)) out.push(Decoration.inline(pos + 1 + from, pos + 1 + to, { class: cls }));
+    for (const [from, to, cls] of spansOf(node)) out.push(Decoration.inline(pos + 1 + from, pos + 1 + to, attrs(cls)));
     return false;
   });
   return DecorationSet.create(doc, out);
 }
+/** A word typed through an input method (Korean, Japanese…) is left alone on screen while it is being put together,
+ *  and the highlighting it changed was never drawn after: "// 주석" stayed uncoloured, and in WebKit the block's
+ *  colours stayed wrong even after the comment was deleted again. Once it is in, the highlighting is drawn again,
+ *  told apart from the last drawing (`round`) so that the editor does draw it. */
+let round = 0;
 /** what the highlighting depends on: each block's language and text */
 function codeOf(doc: PMNode) {
   let s = '';
@@ -88,9 +94,20 @@ const highlighter = new Plugin<DecorationSet>({
   state: {
     init: (_, { doc }) => highlight(doc),
     apply: (tr, set, old, now) =>
-      tr.getMeta(HIGHLIGHT) || (tr.docChanged && codeOf(old.doc) !== codeOf(now.doc)) ? highlight(now.doc) : set.map(tr.mapping, tr.doc),
+      tr.getMeta(HIGHLIGHT) === 'redraw' ? highlight(now.doc, ++round)
+        : tr.getMeta(HIGHLIGHT) || (tr.docChanged && codeOf(old.doc) !== codeOf(now.doc)) ? highlight(now.doc) : set.map(tr.mapping, tr.doc),
   },
-  props: { decorations: (state) => HIGHLIGHT.getState(state) },
+  props: {
+    decorations: (state) => HIGHLIGHT.getState(state),
+    handleDOMEvents: {
+      compositionend: (view) => {
+        if (!lowlight || !view.state.selection.$from.parent.type.spec.code) return false;
+        // after the editor has read the word in (it does so on this same event, a moment later)
+        setTimeout(() => { if (!view.isDestroyed && !view.composing) view.dispatch(view.state.tr.setMeta(HIGHLIGHT, 'redraw')); }, 0);
+        return false;
+      },
+    },
+  },
 });
 
 /** Languages offered by the chip, in menu order. Anything lowlight knows still highlights. */
