@@ -22,3 +22,15 @@ test.each(NOTES)('every piece of text is measured inside its own text node', (no
   expect(bad).toEqual([]);
   ed.destroy();
 });
+
+// an empty line a drag runs through holds nothing, and nothing is drawn on it: a sliver marked there read as a space
+// selected on each empty line (the `&nbsp;` the note's file keeps it with is not in the line)
+test('an empty line inside the selection is left unmarked', () => {
+  const ed = editorWith('above\n\n&nbsp;\n\n&nbsp;\n\nbelow');
+  expect(ed.state.doc.childCount).toBe(4);
+  ed.commands.setTextSelection({ from: 2, to: ed.state.doc.content.size - 2 });
+  const empties = [...ed.view.dom.querySelectorAll('p')].filter((p) => !p.textContent);
+  expect(empties.length).toBe(2);
+  expect(empties.map((p) => p.className)).toEqual(['', '']);
+  ed.destroy();
+});

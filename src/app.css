@@ -655,8 +655,6 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 .tiptap .pm-sel { background: var(--sel); }
 /* an empty line inside the selection: a narrow mark where its text would be, as an editor shows a newline. Laid
    over the line, not in it: an inline mark made the empty line taller and the note below it jumped. */
-.tiptap .pm-sel-empty { position: relative; }
-.tiptap .pm-sel-empty::after { content: ''; position: absolute; left: 0; top: 0.2em; bottom: 0.2em; width: 0.45em; background: var(--sel); }
 /* Only the callout icon opts out of selection. The checkbox must not: user-select: none on the label made
    WebKit put the insertion point *outside* the item whenever the last task item was empty, so typing there
    deleted the item and prepended the text to the block below. The ::selection rules above already keep the
