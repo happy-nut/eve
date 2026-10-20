@@ -147,3 +147,43 @@ describe('a table opening the note: a line can be made above it', () => {
     expect(md(ed)).toBe('above\n\n| h1 | h2 |\n| --- | --- |\n| a1 | a2 |\n');
   });
 });
+
+// a column dragged wider or narrower kept its width only until the note was opened again: markdown's table has no
+// place for it, so it goes in a comment under the table (which other apps do not show) and comes back from there
+describe('column widths', () => {
+  const widths = (ed: ReturnType<typeof editorWith>) => {
+    const out: (number | null)[] = [];
+    ed.state.doc.descendants((n) => { if (n.type.name === 'tableRow' && !out.length) n.forEach((c) => out.push(c.attrs.colwidth?.[0] ?? null)); });
+    return out;
+  };
+
+  test('a column resized is saved, and read back at that width', () => {
+    const ed = editorWith('| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |');
+    // what a drag on a column's edge leaves: every cell of the column given its width
+    const tr = ed.state.tr;
+    ed.state.doc.descendants((n, p) => {
+      if (n.type.name !== 'tableRow') return;
+      let at = p + 1;
+      n.forEach((c, _o, i) => { if (i !== 1) tr.setNodeMarkup(at, undefined, { ...c.attrs, colwidth: [i === 0 ? 120 : 240] }); at += c.nodeSize; });
+    });
+    ed.view.dispatch(tr);
+    const saved = md(ed).trimEnd();
+    expect(saved).toBe('| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n\n<!-- eve:widths 120 - 240 -->');
+    const again = editorWith(saved);
+    expect(widths(again)).toEqual([120, null, 240]);
+    // the comment is the table's, not a block of its own under it
+    expect(again.state.doc.childCount).toBe(1);
+    expect(md(again).trimEnd()).toBe(saved);
+  });
+
+  test('a table nobody resized is written as before, with no comment', () => {
+    const ed = editorWith('| a | b |\n| --- | --- |\n| 1 | 2 |');
+    expect(md(ed).trimEnd()).toBe('| a | b |\n| --- | --- |\n| 1 | 2 |');
+  });
+
+  test('inside a quote, the widths come back too', () => {
+    const ed = editorWith('> | a | b |\n> | --- | --- |\n> | 1 | 2 |\n>\n> <!-- eve:widths 90 150 -->');
+    expect(widths(ed)).toEqual([90, 150]);
+    expect(md(editorWith(md(ed)))).toBe(md(ed));
+  });
+});

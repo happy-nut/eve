@@ -129,9 +129,37 @@ function wideTables(md: any) {
   }, { alt: md.block.ruler.__rules__[at].alt });
 }
 
+const WIDTHS = 'eve:widths';
+const WIDTHS_RE = new RegExp(`^<!--\\s*${WIDTHS}((?:\\s+(?:\\d+|-))+)\\s*-->\\s*$`);
+
+/** a table's column widths, from the comment under it (written by the table's serializer), onto its cells */
+function tableWidths(md: any) {
+  if (sized.has(md)) return;
+  sized.add(md);
+  md.core.ruler.after('block', 'eve-table-widths', (state: any) => {
+    const t: any[] = state.tokens;
+    for (let i = 1; i < t.length; i++) {
+      const m = t[i].type === 'html_block' && t[i - 1].type === 'table_close' && t[i - 1].level === t[i].level ? WIDTHS_RE.exec(t[i].content) : null;
+      if (!m) continue;
+      const widths = m[1].trim().split(/\s+/).map((w) => (w === '-' ? null : +w));
+      let open = i - 1;
+      while (open > 0 && !(t[open].type === 'table_open' && t[open].level === t[i].level)) open--;
+      let col = 0;
+      for (let k = open; k < i; k++) {
+        if (t[k].type === 'tr_open') col = 0;
+        if (t[k].type !== 'th_open' && t[k].type !== 'td_open') continue;
+        const w = widths[col++];
+        if (w) t[k].attrSet('colwidth', String(w));
+      }
+      t.splice(i, 1);
+    }
+  });
+}
+const sized = new WeakSet<object>();
+
 const tableMarkdown = {
   markdown: {
-    parse: { setup: wideTables },
+    parse: { setup: (md: any) => { wideTables(md); tableWidths(md); } },
     serialize(state: any, node: PMNode) {
       // the blank line that closes the block before this one, before any cell borrows the output buffer
       state.flushClose();
@@ -158,6 +186,14 @@ const tableMarkdown = {
         state.ensureNewLine();
       }
       state.closeBlock(node);
+      // the widths its columns were dragged to: markdown's table has no place for them, so a comment under it (which
+      // other apps do not show) holds them, "-" for a column left to size itself
+      const widths: (number | null)[] = Array(width).fill(null);
+      node.forEach((row) => row.forEach((cell, _o, i) => { widths[i] ??= cell.attrs.colwidth?.[0] ?? null; }));
+      if (widths.some((w) => w)) {
+        state.write(`<!-- ${WIDTHS} ${widths.map((w) => w || '-').join(' ')} -->`);
+        state.closeBlock(node);
+      }
     },
   },
 };
