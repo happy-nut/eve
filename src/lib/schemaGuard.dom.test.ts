@@ -21,6 +21,8 @@ const SAMPLES: Record<string, string> = {
   'untitled callout': '> [!tip]\n> body',
   'formula': '$$\nx+1\n$$',
   'table': '| a | b |\n| --- | --- |\n| 1 | 2 |\n',
+  // columns dragged wider or narrower: their widths in a comment under the table, which other apps do not show
+  'sized table': '| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n\n<!-- eve:widths 120 - 240 -->',
   'divider': 'a\n\n---\n\nb',
   'picture': '![cap](assets/a.png)',
   'pdf': '[notes.pdf](assets/notes.pdf)',
@@ -78,7 +80,7 @@ const INSIDE: Record<string, (body: string) => string> = {
   'a toggle': (b) => `<details open>\n<summary>T</summary>\n\n${b}\n\n</details>`,
   'a list item': (b) => '- item\n\n' + b.split('\n').map((l) => (l ? `  ${l}` : '')).join('\n'),
 };
-const BLOCKS = ['code', 'lists', 'quote', 'toggle', 'callout', 'formula', 'table', 'divider', 'picture', 'board'];
+const BLOCKS = ['code', 'lists', 'quote', 'toggle', 'callout', 'formula', 'table', 'sized table', 'divider', 'picture', 'board'];
 
 for (const [where, wrap] of Object.entries(INSIDE)) {
   test.each(BLOCKS)(`%s inside ${where}: saved as it was read, and copied unchanged`, (k) => {
