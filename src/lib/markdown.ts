@@ -141,3 +141,13 @@ export function searchText(body: string): string {
 /** a query with a character markdown uses ("a*b", "~/projects", "x<y") is also looked for as written: text brought
  *  in from elsewhere keeps such characters unescaped, and reading it as markdown took them out */
 export const rawQuery = (q: string) => /[*_~`<>[\]\\]/.test(q);
+
+/** A code block's fence: one backtick longer than any run of backticks in its code (a ``` line in the code closed a
+ *  ``` block there, and the note came back split into code, text and an open fence). */
+export function fenceFor(code: string): string {
+  const longest = Math.max(0, ...(code.match(/`+/g) ?? []).map((r) => r.length));
+  return '`'.repeat(Math.max(3, longest + 1));
+}
+
+/** A code block written out as markdown, as a note saves it. */
+export const fenced = (code: string, language = '') => { const f = fenceFor(code); return `${f}${language}\n${code}\n${f}`; };
