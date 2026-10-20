@@ -9,6 +9,7 @@ import { isMobile } from './platform';
 import { starter, toCode, type Diagram, type Kind } from './diagram';
 import { mountDiagram } from './diagramBlock.svelte';
 import { blockBeside } from './blocks';
+import { fenceFor } from './markdown';
 
 /**
  * Syntax highlighting, loaded with the first code block shown: lowlight, highlight.js and the grammars
@@ -379,11 +380,9 @@ export const CodeBlock = CodeBlockBase.extend({
     return {
       ...this.parent?.(),
       markdown: {
-        // the fence one backtick longer than any run of backticks in the code: always ``` before, so a ``` line
-        // in the code closed the block there, and the note came back split into code, text and an open fence
+        // the fence one backtick longer than any run of backticks in the code (fenceFor)
         serialize(state: any, node: any) {
-          const longest = Math.max(0, ...(node.textContent.match(/`+/g) ?? []).map((r: string) => r.length));
-          const fence = '`'.repeat(Math.max(3, longest + 1));
+          const fence = fenceFor(node.textContent);
           state.write(fence + (node.attrs.language || '') + (node.attrs.info ? ` ${node.attrs.info}` : '') + '\n');
           state.text(node.textContent, false);
           // code ending in an empty line: that line break is the code's, and the fence's own comes after it (taken

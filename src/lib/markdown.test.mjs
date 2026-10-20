@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { headingsOf, splitLink, plain, splitAlias } from './markdown.ts';
+import { headingsOf, splitLink, plain, splitAlias, fenced } from './markdown.ts';
 import { calloutKind } from './calloutKind.ts';
 
 // the first line is the note's title, not one of its sections
@@ -61,6 +61,11 @@ assert.deepEqual(calloutKind('TIP'), { icon: '🔥', color: 'cyan' });
 assert.equal(calloutKind('faq')?.color, 'orange');
 assert.equal(calloutKind('💡'), null);
 assert.equal(calloutKind('nonsense'), null);
+
+// a diagram copied as markdown (its menu's Copy markdown): fenced as the note saves it, the fence longer than any
+// run of backticks in it
+assert.equal(fenced('flowchart TD\n  A --> B', 'mermaid'), '```mermaid\nflowchart TD\n  A --> B\n```');
+assert.equal(fenced('a ``` b', 'js'), '````js\na ``` b\n````');
 
 console.log('MARKDOWN_OK');
 

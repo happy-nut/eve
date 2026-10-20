@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
-  import { isMobile } from './lib/platform';
+  import { isMobile, copyPng, copyText } from './lib/platform';
+  import { pictureOf } from './lib/snapshot';
+  import { fenced } from './lib/markdown';
   import { ui } from './lib/ui.svelte';
   import { letGo } from './lib/focusWatch';
   import { claimKeys } from './lib/keys';
@@ -240,9 +242,18 @@
       { label: 'Edit', hide: active || !!error || !d, run: () => void edit() },
       { label: 'Edit code', hide: codeShown, run: () => { active = false; onCodeEdit(); } },
       { label: 'Full screen', hide: !!error || !svg, run: enterFull },
+      { label: 'Copy image', sep: true, hide: !!error || !svg, run: () => void copyPicture() },
+      { label: 'Copy markdown', run: () => void copyText(fenced(code, 'mermaid')) },
       { label: 'Unfold all', hide: !folds.size, run: () => (folds = new Set()) },
       { label: 'Delete diagram', sep: true, danger: true, run: () => { flush(); active = false; onDelete(true); } },
     ]);
+  }
+
+  /** the drawing onto the clipboard as a picture, on its card's own background */
+  async function copyPicture() {
+    const drawn = canvas?.firstElementChild;
+    const ok = !!drawn && !!canvas && (await pictureOf(drawn, getComputedStyle(canvas).backgroundColor).then(copyPng, () => false));
+    if (!ok) void ui.tell('The diagram could not be copied.');
   }
 
   /** the code shown: to its drawing (the caret out of the code, the drawing open) */

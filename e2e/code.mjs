@@ -138,6 +138,40 @@ try {
   await page.waitForTimeout(400);
   assert.ok((await pane()) < at, 'and it scrolls');
   console.log('ok   a diagram on the whole screen fills the window, scrolls zoomed in, and gives the note back where it was');
+  // a diagram's right-click menu copies it as a picture (in the note's colours, its labels drawn, at twice its size)
+  // and as the markdown the note keeps; a chart Eve draws as HTML (a pie) comes out as a picture too
+  const clipPage = await browser.newPage({ viewport: { width: 1000, height: 800 } });
+  await clipPage.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('eve.notes.c', '---\nid: c\nupdated: 1\ndeleted: false\norder: 0\n---\n# Copy\n\n```mermaid\nflowchart TD\n  A[Write the plan] --> B[Ship it]\n```\n\n```mermaid\npie title Time\n  "Work" : 60\n  "Rest" : 40\n```\n');
+    window.__clip = [];
+    navigator.clipboard.write = async (items) => { for (const it of items) window.__clip.push({ type: 'image', bytes: [...new Uint8Array(await (await it.getType('image/png')).arrayBuffer())] }); };
+    navigator.clipboard.writeText = async (text) => void window.__clip.push({ type: 'text', text });
+  });
+  await clipPage.goto(URL_);
+  await clipPage.waitForSelector('.tiptap .mermaid-view svg g.node');
+  await clipPage.waitForSelector('.tiptap .mermaid-view .chart');
+  const copyFrom = async (i, label) => {
+    await clipPage.evaluate(() => (window.__clip = []));
+    await clipPage.locator('.tiptap .mermaid-view').nth(i).click({ button: 'right' });
+    await clipPage.locator('[role=menuitem]', { hasText: label }).click();
+    await clipPage.waitForFunction(() => window.__clip.length > 0, null, { timeout: 10000 });
+    return clipPage.evaluate(() => window.__clip[0]);
+  };
+  for (const [i, what, w] of [[0, 'flowchart', 'svg'], [1, 'pie', '.chart']]) {
+    const got = await copyFrom(i, 'Copy image');
+    assert.equal(got.type, 'image', `${what}: a picture on the clipboard`);
+    const png = PNG.sync.read(Buffer.from(got.bytes));
+    const drawn = await clipPage.locator('.tiptap .mermaid-view').nth(i).locator(w).first().evaluate((el) => el instanceof SVGSVGElement && el.viewBox.baseVal.width ? el.viewBox.baseVal.width : el.scrollWidth);
+    assert.ok(Math.abs(png.width - 2 * (drawn + 32)) <= 4, `${what}: at twice its size, in a margin (${png.width} for ${drawn})`);
+    // its words are there: the text's dark ink, not only the boxes' and the lines' light greys
+    let ink = 0;
+    for (let p = 0; p < png.data.length; p += 4) if (png.data[p] + png.data[p + 1] + png.data[p + 2] < 300 && png.data[p + 3] > 200) ink++;
+    assert.ok(ink > 200, `${what}: its labels are drawn in the picture (${ink} dark pixels)`);
+  }
+  const text = await copyFrom(0, 'Copy markdown');
+  assert.deepEqual(text, { type: 'text', text: '```mermaid\nflowchart TD\n  A[Write the plan] --> B[Ship it]\n```' });
+  console.log('ok   a diagram copies from its menu as a picture, labels and all, and as its markdown');
 } finally {
   await browser.close();
   await server?.close();

@@ -228,7 +228,14 @@ export const copyText = (text: string): Promise<void> =>
 export async function copyImage(src: string): Promise<boolean> {
   try {
     const blob = await (await fetch(src)).blob(); // the asset protocol lets the page read its pictures (CORS)
-    const png = blob.type === 'image/png' ? blob : await asPng(blob);
+    return await copyPng(blob.type === 'image/png' ? blob : await asPng(blob));
+  } catch {
+    return false;
+  }
+}
+/** A PNG onto the clipboard, as copyImage puts a picture there (a diagram drawn into one, say). */
+export async function copyPng(png: Blob): Promise<boolean> {
+  try {
     if (isTauri && !isMobile) await invoke<void>('plugin:clipboard-manager|write_image', { image: [...new Uint8Array(await png.arrayBuffer())] });
     else await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
     return true;
