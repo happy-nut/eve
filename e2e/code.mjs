@@ -181,20 +181,30 @@ try {
   await imePage.waitForSelector('.tiptap pre .hljs-keyword');
   const colours = () => imePage.evaluate(() => [...document.querySelectorAll('.tiptap pre [class^=hljs]')].map((e) => `${e.className}:${e.textContent}`).join(' | '));
   const plainColours = await colours();
-  await imePage.locator('.tiptap pre .hljs-keyword', { hasText: 'const' }).click();
-  await imePage.keyboard.press('Home');
-  await imePage.evaluate(async () => {
+  // each key a composition of its own, as a Korean input method sends even a "/"; the line's text after each, to
+  // tell a letter lost by the input method's way in from one lost by the colours drawn again
+  const composeKeys = () => imePage.evaluate(async () => {
     const el = document.querySelector('.tiptap');
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const steps = [];
     for (const ch of ['/', '/', ' ', '주']) {
       el.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
       el.dispatchEvent(new CompositionEvent('compositionupdate', { data: ch }));
       document.execCommand('insertText', false, ch);
       await wait(30);
       el.dispatchEvent(new CompositionEvent('compositionend', { data: ch }));
-      await wait(60);
+      await wait(120);
+      steps.push(window.__editor.state.selection.$from.parent.textContent);
     }
+    return steps;
   });
+  // the same keys into a line of text first, where nothing is coloured
+  await imePage.evaluate(() => { const ed = window.__editor; ed.commands.focus(); ed.commands.setTextSelection(1); });
+  await imePage.keyboard.press('Home');
+  console.log('     (a line of text:', JSON.stringify(await composeKeys()) + ')');
+  await imePage.locator('.tiptap pre .hljs-keyword', { hasText: 'const' }).click();
+  await imePage.keyboard.press('Home');
+  console.log('     (the code:', JSON.stringify(await composeKeys()) + ')');
   await imePage.waitForTimeout(300);
   assert.equal(await colours(), 'hljs-comment:// 주const a: number = 1;', 'the line typed into a comment is coloured as one');
   for (let i = 0; i < 4; i++) await imePage.keyboard.press('Backspace');
