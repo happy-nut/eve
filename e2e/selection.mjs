@@ -1,6 +1,6 @@
 // The selection, checked in WebKit (the Mac app's engine): real mouse drags, ⇧ + arrows and ⌘A over a note with
 // every kind of block, light and dark. For each: a screenshot before and after, compared pixel by pixel —
-//   inside   pixels that changed where the selected text (or a picture, card, empty line it covers) is: > 300
+//   inside   pixels that changed where the selected text (or a picture, card it covers) is: > 300
 //   outside  pixels that changed anywhere else (a line end lit past the text, a gap between blocks): ≤ 12
 //   ink      the text's dark pixels still there under the selection, in % of before: ≥ 80 (it stays readable)
 //   and the selection must still be the same after the screenshot (it used to collapse after some drags).
@@ -96,7 +96,7 @@ const at = (token) => page.evaluate((t) => {
   throw new Error(`no ${t}`);
 }, token);
 
-/** where the selected things are: every selected piece of text, every picture or card taken whole, every empty line */
+/** where the selected things are: every selected piece of text, every picture or card taken whole */
 const expected = () => page.evaluate(() => {
   const root = document.querySelector('#seltest .tiptap');
   const sel = getSelection(); if (!sel.rangeCount) return { rects: [], text: '' };
@@ -110,7 +110,7 @@ const expected = () => page.evaluate(() => {
     for (const b of r.getClientRects()) if (b.width > 0) rects.push([b.left, b.top, b.right, b.bottom]);
   }
   const atoms = [];
-  for (const e of root.querySelectorAll('.in-sel, .pm-sel-empty, .pm-sel, .selectedCell')) { const b = e.getBoundingClientRect(); const r = [b.left - 4, b.top - 4, b.right + 4, b.bottom + 4]; rects.push(r); if (!e.matches('.pm-sel-empty')) atoms.push(r); }
+  for (const e of root.querySelectorAll('.in-sel, .pm-sel, .selectedCell')) { const b = e.getBoundingClientRect(); const r = [b.left - 4, b.top - 4, b.right + 4, b.bottom + 4]; rects.push(r); atoms.push(r); }
   const painted = [...root.querySelectorAll('.pm-sel')].map((e) => { const b = e.getBoundingClientRect(); const top = document.elementFromPoint(b.left + 3, b.top + b.height / 2); return e.textContent.slice(0, 12) + '@' + Math.round(b.left) + ',' + Math.round(b.top) + ' ' + Math.round(b.width) + 'x' + Math.round(b.height) + ' top=' + top?.tagName + '.' + (top?.className || '') + ' vis=' + getComputedStyle(e).visibility + ' op=' + getComputedStyle(e).opacity; });
   // an inline code chip taken whole: its grey box takes the blend too, a little beyond the letters
   for (const c of root.querySelectorAll('code')) { if (c.closest('pre') || !range.intersectsNode(c)) continue; if (range.comparePoint(c, 0) >= 0 && range.comparePoint(c, c.childNodes.length) <= 0) { const b = c.getBoundingClientRect(); rects.push([b.left - 2, b.top - 2, b.right + 2, b.bottom + 2]); } }

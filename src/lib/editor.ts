@@ -1188,10 +1188,9 @@ export function createEditor(opts: {
                   if (whole) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: node.isBlock ? 'in-sel' : 'pm-sel' }));
                   return false;
                 }
-                // an empty line the selection runs through (not the one it merely starts or ends on)
-                if (node.isTextblock && !node.content.size && pos > from && pos + node.nodeSize < to) {
-                  marks.push(Decoration.node(pos, pos + node.nodeSize, { class: 'pm-sel-empty' }));
-                }
+                // an empty line the selection runs through is left unmarked: a sliver drawn on it read as a space
+                // selected there, one on each empty line of a drag (the line holds nothing: its `&nbsp;` is only how
+                // the note's file keeps it)
                 return true;
               });
               return marks.length ? DecorationSet.create(state.doc, marks) : null;

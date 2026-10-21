@@ -11,8 +11,8 @@ import type { EditorView } from '@tiptap/pm/view';
  * selected text in spans instead (inline decorations) split the text while the mouse was still dragging, and in
  * some notes WebKit lost the selection's start on mouseup and the selection collapsed. Here the text is left
  * alone: each selected piece of text gets a rectangle exactly its size on the layer, blended over the page so the
- * text stays readable on any background. Pictures, cards and empty lines are marked by paintSelection (editor.ts),
- * which only sets a class.
+ * text stays readable on any background. Pictures and cards are marked by paintSelection (editor.ts), which only
+ * sets a class; an empty line is left as it is (it holds nothing to select).
  */
 export const SelectionLayer = Extension.create({
   name: 'selectionLayer',
