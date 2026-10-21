@@ -103,8 +103,7 @@ const highlighter = new Plugin<DecorationSet>({
       compositionend: (view) => {
         if (!lowlight || !view.state.selection.$from.parent.type.spec.code) return false;
         // only once the editor has read the word in: it does so 20ms after this event (prosemirror-view's
-        // endComposition), and drawn before that, the screen was drawn from a note without the word and the word read
-        // in after it against that, in WebKit two letters of the line went ("// 주const" became "// 주nst")
+        // endComposition); drawn before that, the screen would be drawn from a note without the word in it
         setTimeout(() => {
           if (view.isDestroyed || view.composing) return; // the next word's own end draws it
           (view as any).domObserver?.forceFlush?.(); // anything typed still unread, read first
