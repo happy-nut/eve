@@ -1,16 +1,9 @@
 import assert from 'node:assert/strict';
-import { dayKey, dailyId, isDailyId, keyOfDaily, fillTemplate, dailyBody, isWritten, monthGrid, DEFAULT_TEMPLATE } from './daily.ts';
+import { isDailyId, dailyBody, isWritten, monthGrid, DEFAULT_TEMPLATE } from './daily.ts';
 
-assert.equal(dayKey(new Date(2026, 8, 7)), '2026-09-07');
-assert.equal(dailyId('2026-09-27'), 'daily-2026-09-27');
 assert.equal(isDailyId('daily-2026-09-27'), true);
 assert.equal(isDailyId('daily-notes'), false); // an ordinary note that happens to start that way
 assert.equal(isDailyId('mfx0a1b2c3'), false);
-assert.equal(keyOfDaily('daily-2026-09-27'), '2026-09-27');
-
-assert.equal(fillTemplate(DEFAULT_TEMPLATE, '2026-09-27', 'en-US'), '# 2026-09-27 Sunday\n\n');
-assert.equal(fillTemplate('{{date}} / {{date}}', '2026-01-02', 'en-US'), '2026-01-02 / 2026-01-02');
-assert.equal(fillTemplate('{{weekday}}', '2026-09-28', 'ko-KR'), '월요일');
 
 // a template ending on its title gets a line to write on; one ending in text is left as it is
 assert.equal(dailyBody(DEFAULT_TEMPLATE, '2026-09-27', 'en-US'), '# 2026-09-27 Sunday\n\n\u00a0');

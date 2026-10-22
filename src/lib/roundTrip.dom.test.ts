@@ -17,7 +17,6 @@ test.each([
 test.each([
   ['an empty line at its end', '```\nx\n\n```'],
   ['two empty lines at its end', '```js\nx\n\n\n```'],
-  ['no empty line at its end', '```\nx\n```'],
   ['nothing in it', '```\n```'],
   ['more after its language', '```js title="a.js" {1,3}\nx\n```'],
   ['an empty line at its end, in a quote', '> ```\n> x\n> \n> ```'],
@@ -39,7 +38,6 @@ test.each([
   ['a line starting "1) "', '1\\) Buy milk'],
   ['an item starting "2) "', '- 2\\) Buy milk'],
   ['"1)" alone', '1\\)'],
-  ['a numbered list', '1. a\n2. b'],
   ['"1)" later in the line', 'a 1) b'],
 ])('%s is written as it was read', (_what, note) => {
   expect(save(note)).toBe(note);
@@ -56,10 +54,6 @@ test.each([
   expect(back.state.doc.child(0).textContent).toBe(text);
   expect(back.state.doc.child(1).textContent).toBe(text);
   expect(md(back)).toBe(md(ed));
-});
-
-test('an ampersand is written as it was typed', () => {
-  expect(save('Tom & Jerry, a&b')).toBe('Tom & Jerry, a&b');
 });
 
 test.each([

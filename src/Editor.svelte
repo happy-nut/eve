@@ -215,21 +215,9 @@
   }
 </script>
 
-<div class="scroll" bind:this={scrollEl}>
-  <div class="page-head" class:with-icon={!!note.icon} class:crumbed={crumbs.length > 0}>
-    {#if crumbs.length}
-      <!-- under the fade at the top of the pane (main::before), never in it: page-head starts below it when there are crumbs -->
-      <nav class="crumbs" aria-label="Where this note is">
-        {#each crumbs as c, i (i)}
-          {#if i}<span class="sep">›</span>{/if}
-          {#if c.id}
-            <button class="crumb" onclick={() => (notes.currentId = c.id!)}>{#if c.icon}<Icon icon={c.icon} size={13} />{/if}<span>{c.label}</span></button>
-          {:else}
-            <span class="crumb">{#if c.icon}<Icon icon={c.icon} size={13} />{/if}<span>{c.label}</span></span>
-          {/if}
-        {/each}
-      </nav>
-    {/if}
+<!-- a wide note takes the whole pane: nothing holds its text to the reading width -->
+<div class="scroll" bind:this={scrollEl} style:--editor-width={note.wide ? 'none' : null}>
+  <div class="page-head" class:with-icon={!!note.icon}>
     {#if note.icon}
       <button class="big-icon" title="Change icon" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={isMobile ? 44 : 56} /></button>
     {:else}
@@ -251,6 +239,21 @@
     onmousedown={() => (openedFromList.id = '')}
     onclick={(e) => { if (e.target === el && editor) clickBelow(editor.view, e); }}></div>
 </div>
+{#if crumbs.length}
+  <!-- in the window's top row, as a title bar would have it: it stays put while the note scrolls under it -->
+  <nav class="crumbs" aria-label="Where this note is">
+    {#each crumbs as c, i (i)}
+      <span class="sep">/</span>
+      {#if c.id}
+        <button class="crumb" onclick={() => (notes.currentId = c.id!)}>{#if c.icon}<Icon icon={c.icon} size={14} />{/if}<span>{c.label}</span></button>
+      {:else}
+        <span class="crumb">{#if c.icon}<Icon icon={c.icon} size={14} />{/if}<span>{c.label}</span></span>
+      {/if}
+    {/each}
+    <span class="sep">/</span>
+    <span class="crumb here">{#if note.icon}<Icon icon={note.icon} size={14} />{/if}<span>{titleOf(note)}</span></span>
+  </nav>
+{/if}
 <Outline {scrollEl} {editor} />
 <TableTools {editor} />
 {#if ui.find}<Find {editor} />{/if}
@@ -268,20 +271,29 @@
     height: 72px; /* reserves the "add icon" row so the title doesn't jump */
   }
   .page-head.with-icon { height: 118px; }
-  /* the crumbs start where the pane's top fade (main::before, 72px) has ended, the head grown by what they take */
-  .page-head.crumbed { padding-top: 76px; height: 130px; }
-  .page-head.crumbed.with-icon { height: 176px; }
-  .crumbs {
-    display: flex; align-items: center; gap: 4px; height: 20px; margin-bottom: 6px; min-width: 0; overflow: hidden;
-    font-size: 12.5px; color: var(--fg-dim); white-space: nowrap;
+  /* on a Mac the breadcrumbs sit in the window's top row: the note starts a little further down, clear of them */
+  @media screen {
+    :global(html:not(.mobile)) .page-head { padding-top: 68px; height: 96px; }
+    :global(html:not(.mobile)) .page-head.with-icon { height: 142px; }
   }
-  .crumb { display: inline-flex; align-items: center; gap: 4px; min-width: 0; padding: 1px 4px; margin: 0 -2px; border-radius: 5px; border: 0; background: none; color: inherit; font: inherit; }
+  /* level with the window's toolbar, past it when the sidebar is closed and it sits over the note; only the crumbs
+     take clicks, the rest of the row still drags the window */
+  .crumbs {
+    position: absolute; top: 10px; left: 14px; right: 52px; height: 24px; z-index: var(--z-toolbar); pointer-events: none;
+    display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; font-size: 13px; color: var(--fg-dim); white-space: nowrap;
+  }
+  :global(.shell:not(:has(aside))) .crumbs { left: 214px; }
+  .sep { opacity: 0.45; flex: none; padding: 0 1px; }
+  .sep:first-child { display: none; }
+  .crumb {
+    display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 220px; height: 24px; padding: 0 6px;
+    border-radius: 6px; border: 0; background: none; color: inherit; font: inherit; pointer-events: auto;
+  }
   .crumb span { overflow: hidden; text-overflow: ellipsis; }
+  .crumb.here { color: var(--fg); flex-shrink: 0.2; }
   button.crumb:hover { background: var(--bg-hover); color: var(--fg); }
-  .sep { opacity: 0.5; flex: none; }
-  /* a phone has no fade over the page: the crumbs sit at its top */
-  :global(html.mobile) .page-head.crumbed { padding-top: 18px !important; height: 72px; }
-  :global(html.mobile) .page-head.crumbed.with-icon { height: 106px; }
+  /* a phone: in its own bar, between the back button and the note's icons */
+  :global(html.mobile) .crumbs { top: -52px; left: 50px; right: 138px; height: 52px; font-size: 14px; }
   .add-icon {
     display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--fg-dim);
     font: inherit; font-size: 12.5px; padding: 3px 6px; margin-left: -6px; border-radius: 6px; opacity: 0;

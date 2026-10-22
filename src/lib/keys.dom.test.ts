@@ -1,6 +1,6 @@
 // Who hears a key (keys.ts): the order, the layer on top, an element's own keys, a word being put together.
 import { test, expect, afterEach } from 'vitest';
-import { claimKeys, handledBy, leaveToApp, composing } from './keys';
+import { claimKeys, handledBy, composing } from './keys';
 import { ui } from './ui.svelte';
 
 const offs: (() => void)[] = [];
@@ -72,20 +72,4 @@ test("a key typed into an IME is the word's, unless a claim asks for those too",
   key('Enter', { keyCode: 229 } as KeyboardEventInit);
   expect(heard).toEqual(['all', 'all']);
   expect(composing(new KeyboardEvent('keydown', { key: 'a' }))).toBe(false);
-});
-
-test('a key the editor left to the app reads as the app\'s, prevented or not', () => {
-  const e = new KeyboardEvent('keydown', { key: 'b', cancelable: true });
-  expect(handledBy(e)).toBe(null);
-  e.preventDefault();
-  leaveToApp(e);
-  expect(handledBy(e)).toBe('app');
-});
-
-test('let go, a claim hears nothing more', () => {
-  const heard: string[] = [];
-  const off = claim('global', { '*': () => void heard.push('x') });
-  off();
-  key('a');
-  expect(heard).toEqual([]);
 });

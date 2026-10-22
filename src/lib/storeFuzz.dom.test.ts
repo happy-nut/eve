@@ -71,6 +71,7 @@ for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
         ['sync brings a change', () => { const n = pick(live()); if (n) notes.mergeRemote([{ ...n, body: n.body + ' z', updatedAt: Date.now() + 1000 }]); }],
         ['sync deletes one', () => { const n = pick(live()); if (n) notes.mergeRemote([{ ...n, deleted: true, updatedAt: Date.now() + 1000 }]); }],
         ['set an icon', () => { const n = pick(live()); if (n) notes.setIcon(n.id, pick(['', '🐢', '📌'])!); }],
+        ['make it wide or not', () => { const n = pick(live()); if (n) notes.setWide(n.id, pick([true, false])!); }],
         ['move a group', () => { const g = pick(groups.names); if (g) groups.move(g, pick(['', ...groups.names.filter((x) => x !== g)]) ?? '', null); }],
         // ⌘Z outside the text: the newest thing done to the notes or the groups taken back (history.svelte.ts)
         ['app undo', () => { history.undo(); }],

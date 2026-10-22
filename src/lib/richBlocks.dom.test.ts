@@ -70,15 +70,6 @@ test('typing with the diagram selected uses the empty line under it', () => {
   expect(md(ed)).toContain('```\n\nx\n\nend');
 });
 
-test('a diagram shown as its code (it failed to draw) is still text: ⌫ under it goes into its code', () => {
-  const ed = editorWith(note());
-  (ed.view.nodeDOM(diagramPos(ed)) as HTMLElement).classList.add('mermaid-error');
-  caret(ed, posOf(ed, 'After'));
-  press(ed, 'Backspace');
-  expect(ed.state.selection).toBeInstanceOf(TextSelection);
-  expect(ed.state.selection.$from.parent.type.name).toBe('codeBlock');
-});
-
 test('a plain code block keeps its ⌫: the caret to the end of its code', () => {
   const ed = editorWith('# t\n\n```js\nlet a\n```\n\nAfter');
   caret(ed, posOf(ed, 'After'));

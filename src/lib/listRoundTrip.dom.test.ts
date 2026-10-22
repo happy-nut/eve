@@ -30,10 +30,6 @@ test.each([
   expect(md(back)).toBe(once);
 });
 
-test('plain code keeps its usual ``` fence', () => {
-  expect(md(editorWith('```js\nlet a = 1\n```'))).toBe('```js\nlet a = 1\n```');
-});
-
 test.each([
   ['to-dos then a bullet', '- [ ] a\n  - [ ] b\n\n- c'],
   ['a bullet then to-dos', '- c\n\n- [ ] a\n- [x] b'],

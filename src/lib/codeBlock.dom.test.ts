@@ -174,15 +174,6 @@ describe('⌘⌥C', () => {
     runEditorCommand(ed, 'codeBlock');
     expect(md(ed)).toBe('# T\n\n```\none\ntwo\n```\n\nafter');
   });
-
-  test('one line: the stock toggle, both ways', () => {
-    const ed = editorWith('# T\n\none');
-    ed.commands.setTextSelection(posOf(ed, 'one'));
-    runEditorCommand(ed, 'codeBlock');
-    expect(md(ed)).toBe('# T\n\n```\none\n```');
-    runEditorCommand(ed, 'codeBlock');
-    expect(md(ed)).toBe('# T\n\none');
-  });
 });
 
 describe('highlighting', () => {

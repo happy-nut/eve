@@ -103,15 +103,16 @@
 
   // ---- "+" menu: new note / new group, relative to the focused row (the app's one menu, Menu.svelte) ----
   let ctxGroup = $state('');
-  /** the note the + was asked from (its row focused): a new page goes under it, as a page made from inside it does */
+  /** the note the + was asked from (its row focused, or else the note open): a new page goes under it, as a page made
+   *  from inside it does. Only a focused row counted, and + from the note being read never offered a page inside it */
   let ctxNote = $state<Note | null>(null);
   hooks.openPlus = (anchor?: HTMLElement) => {
     if (ui.menu) { ui.closeMenu(); return; }
     const el = document.activeElement as HTMLElement | null;
     const row = el?.closest<HTMLElement>('[data-row]');
     const r = (anchor ?? row ?? searchEl)?.getBoundingClientRect();
-    const n = notes.all.find((x) => x.id === row?.dataset.note);
-    ctxNote = n && n.id !== CALENDAR_NOTE_ID ? n : null;
+    const n = row ? notes.all.find((x) => x.id === row.dataset.note) : notes.current;
+    ctxNote = n && n.id !== CALENDAR_NOTE_ID && !n.deleted ? n : null;
     ctxGroup = row?.dataset.group ?? n?.group ?? '';
     ui.openMenu(r ? { clientX: r.left + (row && !anchor ? 8 : 0), clientY: r.bottom + 4 } : { clientX: 12, clientY: 40 }, plusItems);
   };

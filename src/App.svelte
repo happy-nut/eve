@@ -238,7 +238,8 @@
   function moreMenu(from: HTMLElement) {
     const r = from.getBoundingClientRect();
     ui.openMenu({ clientX: r.right, clientY: r.bottom }, [
-      { label: 'Find & replace', run: () => ui.openFind() },
+      { label: 'Full width', checked: !!notes.current?.wide, hide: isMobile, run: () => { const n = notes.current; if (n) notes.setWide(n.id, !n.wide); } },
+      { label: 'Find & replace', sep: !isMobile, run: () => ui.openFind() },
       { label: 'Select all', run: () => hooks.command?.('selectAll') },
       { label: 'Export as Markdown (.md)', sep: true, run: () => void exportCurrent('md') },
       { label: 'Export as PDF', run: () => void exportCurrent('pdf') },
@@ -582,7 +583,7 @@
     <button class="icon" aria-label="Forward" data-tip="Forward" data-keys={shortcuts.keysFor('forward')} disabled={!notes.canForward} onclick={() => notes.forward()}>
       <svg viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
     </button>
-    <button class="icon" aria-label="New" data-tip="New" data-keys={shortcuts.keysFor('newNote')} onclick={(e) => { if (sidebarOpen && hooks.openPlus) hooks.openPlus(e.currentTarget); else { ui.focusOwner = 'editor'; newNote(); } }}>
+    <button class="icon" aria-label="New" data-tip="New" data-keys={shortcuts.keysFor('newNote')} onclick={(e) => { if (hooks.openPlus) hooks.openPlus(e.currentTarget); else { ui.focusOwner = 'editor'; newNote(); } }}>
       <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
     </button>
   </div>
@@ -614,6 +615,12 @@
           <Editor note={notes.current} />
         </div>
       {/key}
+      {#if !isMobile}
+        <!-- the note's own menu, at the right end of the window's top row (a phone has it in its bar) -->
+        <button class="icon note-more" aria-label="More" data-tip="More" onclick={(e) => moreMenu(e.currentTarget)}>
+          <svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".9"/><circle cx="8" cy="8" r=".9"/><circle cx="12.5" cy="8" r=".9"/></svg>
+        </button>
+      {/if}
     {:else if notes.loaded && notes.currentId === CALENDAR}
       <div class="page" in:fade={{ duration: 160 }}><CalendarPage onpick={openDay} ontemplate={openTemplate} /></div>
     {/if}

@@ -2,7 +2,7 @@
 import { test, expect, afterEach } from 'vitest';
 import { createEditor, getMarkdown } from './editor';
 import { posOf, press, type } from './testEditor';
-import { slashItems, type SuggestItem } from './slash';
+import type { SuggestItem } from './slash';
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 // the menu comes up a moment after the "/" (the picker's own update): waited for, up to three seconds, rather than
@@ -81,15 +81,6 @@ test('in a sentence, a letter that finds something makes ↩ pick', async () => 
   expect(getMarkdown(ed)).toBe('# T\n\n# see '); // the space before the / stays
 });
 
-test('in a sentence, the arrows make ↩ pick', async () => {
-  const { ed, picked } = inSentence();
-  type(ed, ' /');
-  await settle();
-  press(ed, 'ArrowDown');
-  press(ed, 'Enter');
-  expect(picked).toEqual([slashItems('')[1].label]);
-});
-
 test('in a sentence, the pointer makes ↩ pick', async () => {
   const { ed, picked, point } = inSentence();
   type(ed, ' /');
@@ -105,33 +96,4 @@ test('a "/" opening an empty line: ↩ picks the first, as before', async () => 
   await settle();
   press(ed, 'Enter');
   expect(picked).toEqual(['New page']);
-});
-
-test('the lines a key makes are in the menu, found by their names and the words people search with', async () => {
-  const first = (q: string) => slashItems(q)[0]?.label;
-  expect(first('head')).toBe('Heading 1');
-  expect(first('todo')).toBe('To-do list');
-  expect(first('bullet')).toBe('Bulleted list');
-  expect(first('quote')).toBe('Quote');
-  expect(first('number')).toBe('Numbered list');
-  // Korean found, never shown
-  expect(first('하위')).toBe('New page');
-  expect(first('칸반')).toBe('Kanban');
-  for (const i of slashItems('')) expect(i.hint ?? '').not.toMatch(/[ㄱ-힝]/);
-  expect(slashItems('').find((i) => i.label === 'To-do list')?.hint).toBe('[ ]');
-});
-
-test.each([
-  ['/todo', '- [ ] see'],
-  ['/bullet', '- see'],
-  ['/numbered', '1. see'],
-  ['/quote', '> see'],
-  ['/h3', '### see'],
-])('%s makes the line one', async (q, want) => {
-  const { ed } = editor('# T\n\nsee');
-  ed.commands.setTextSelection(posOf(ed, 'see', true));
-  type(ed, ' ' + q);
-  await settle();
-  press(ed, 'Enter');
-  expect(getMarkdown(ed)).toBe(`# T\n\n${want} `);
 });

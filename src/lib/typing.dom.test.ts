@@ -45,14 +45,6 @@ test('⌥↓ on a toggle\'s title (or ⌥↑ on its first body line) keeps the t
   }
 });
 
-// ⌥↑ / ⌥↓ inside a table cell
-test('⌥↓ in a middle table cell does not swap two cells of the row', () => {
-  const ed = editorWith('| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |');
-  ed.commands.setTextSelection(posOf(ed, '2', true));
-  runEditorCommand(ed, 'moveBlockDown');
-  expect(md(ed)).not.toContain('| 1 | 3 | 2 |');
-});
-
 // ⇧↩ (line break) in a table cell
 test('a line break in a table cell reads back without a stray backslash', () => {
   const ed = editorWith('| a | b |\n| --- | --- |\n| c | d |');

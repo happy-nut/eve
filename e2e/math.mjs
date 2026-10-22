@@ -1,6 +1,7 @@
 // Formulas (math.ts, MathEdit.svelte): made from the / menu, by typing $x$ or $$, edited in place by clicks on the
 // row of parts or by typing as the formula looks; Done, Esc or a click elsewhere finish; an emptied one goes; the
-// note keeps $…$ and $$…$$; ⌘Z undoes into it; its TeX can be edited too; dollars that are money stay text.
+// note keeps $…$ and $$…$$; ⌘Z undoes into it; its TeX can be edited too; dollars that are money stay text. A fraction
+// keeps its size however deep; * is ×; an arrow at the formula's edge leaves only when pressed there again.
 // Chromium: CHROMIUM_PATH=/path/to/chromium, else Playwright's own. It starts its own dev server, or uses EVE_URL.
 // Run: npm run e2e:math
 import { chromium } from 'playwright-core';
@@ -47,18 +48,18 @@ try {
   await settle(page);
   await page.locator('.tiptap .math-edit .done').click();
   await page.waitForFunction(() => !document.querySelector('.tiptap math-field'));
-  assert.match(await md(page), /\$\$\n\\frac\{1\}\{2\}\+\\pi\n\$\$/, 'the block, as TeX in the note');
+  assert.match(await md(page), /\$\$\n\\dfrac\{1\}\{2\}\+\\pi\n\$\$/, 'the block, as TeX in the note');
   assert.equal(await page.locator('.tiptap .math-block .ML__latex').count(), 1, 'drawn');
   console.log('ok   / menu: a block made by clicks, in the note as $$…$$');
 
   // ⌘Z from the note undoes into it
   await page.locator('.tiptap h1').click();
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await settle(page);
   assert.doesNotMatch(await md(page), /\\pi/, 'undo reaches the formula');
-  await page.keyboard.press('Control+Shift+z');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
   await settle(page);
-  assert.match(await md(page), /\\frac\{1\}\{2\}\+\\pi/, 'and redo brings it back');
+  assert.match(await md(page), /\\dfrac\{1\}\{2\}\+\\pi/, 'and redo brings it back');
   console.log('ok   undo and redo: into the formula');
 
   // its TeX, edited
@@ -90,6 +91,30 @@ try {
   let text = await md(page);
   assert.match(text, /It costs \$5 and \$10\. Area \$\\pi r\^\{?2\}?\$ done/, 'the formula in the line, the caret after it, money untouched');
   console.log('ok   inline: typed as it looks; Esc puts the caret after it');
+
+  // ---- typed: / a fraction that keeps its size inside another, * times; → at the end stays until pressed again ----
+  await page.locator('.tiptap .math-inline').last().click();
+  await field(page);
+  await page.keyboard.press('End');
+  await page.keyboard.type('*1/');
+  await page.keyboard.type('2/3');
+  await settle(page);
+  assert.match(await md(page), /\\pi r\^\{?2\}?\\times\\dfrac\{1\}\{\\dfrac\{2\}\{3\}\}\$/, 'typed as × and fractions in full size: ' + await md(page));
+  assert.match(await page.locator('.tiptap .math-edit button[role="tab"]', { hasText: 'Symbols' }).evaluate((b) => (b.click(), new Promise((r) => setTimeout(r, 50)))).then(() => page.locator('.tiptap .math-edit .part[aria-label="Times"]').getAttribute('title')), /\*/, 'Times says it is typed with *');
+  await page.locator('.tiptap .math-edit button[role="tab"]', { hasText: 'Basic' }).click();
+  await page.keyboard.press('Tab'); // out of the inner fraction
+  await page.keyboard.press('Tab'); // out of the outer one: at the formula's end
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator('.tiptap math-field').count(), 1, 'one → at the end keeps the formula open');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => !document.querySelector('.tiptap math-field'));
+  await page.keyboard.type('!');
+  await settle(page);
+  assert.match(await md(page), /\}\$! done/, 'pressed again: out, the caret right after it');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('End'); // back where the next part types, at the line's end
+  console.log('ok   typed: / a fraction kept full size, * as ×; an arrow at the edge leaves on the second press');
 
   // ---- typed with dollars ----
   await page.keyboard.type(' and $a+b$ too');
@@ -137,7 +162,7 @@ try {
   await page.keyboard.press('Tab');
   await page.keyboard.type('2');
   await settle(page);
-  assert.match(await md(page), /\| \$x\+a\\frac\{1\}\{2\}\$ \| 2 \|/, 'kept in the note: an empty part, the term before it left alone');
+  assert.match(await md(page), /\| \$x\+a\\dfrac\{1\}\{2\}\$ \| 2 \|/, 'kept in the note: an empty part, the term before it left alone');
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('.tiptap math-field'));
   console.log('ok   a note read anew (a sync): changes kept; in a table its row shows; a part does not take the term before it');
@@ -152,9 +177,8 @@ try {
   await page.waitForFunction(() => ((window.__editor.storage.markdown.getMarkdown().match(/\$\$\n([\s\S]*?)\n\$\$/)?.[1] ?? '').match(/\\\\/g) ?? []).length >= 2, null, { timeout: 5000 }).catch(() => {});
   const rows = (await md(page)).match(/\$\$\n([\s\S]*?)\n\$\$/)?.[1] ?? '';
   assert.equal((rows.match(/\\\\/g) ?? []).length >= 2, true, 'a row added: ' + rows);
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('ArrowDown');
+  // down the rows, then twice at the last one (the first only says it is the edge): out, without an error
+  for (let i = 0; i < 6 && (await page.locator('.tiptap math-field').count()); i++) { await page.keyboard.press('ArrowDown'); await page.waitForTimeout(120); }
   await page.waitForFunction(() => !document.querySelector('.tiptap math-field'));
   console.log('ok   matrix: a row added from the row of parts; ↓ leaves the formula');
   await page.close();

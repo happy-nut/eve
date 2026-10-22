@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Eve",
-  "version": "0.7.49",
+  "version": "0.7.50",
   "identifier": "dev.happynut.eve",
   "build": {
     "frontendDist": "../dist",
@@ -24,7 +24,6 @@
         "alwaysOnTop": false,
         "dragDropEnabled": false,
         "acceptFirstMouse": true,
-        "transparent": true,
         "shadow": true,
         "trafficLightPosition": {
           "x": 16,
@@ -41,8 +40,7 @@
           "$APPCACHE/previews/**"
         ]
       }
-    },
-    "macOSPrivateApi": true
+    }
   },
   "bundle": {
     "active": true,

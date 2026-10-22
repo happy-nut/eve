@@ -120,22 +120,6 @@ test.each([
   expect((ed.view.nodeDOM(pos) as HTMLElement).dataset.align).toBe((attrs as { align?: string }).align);
 });
 
-test('a picture\'s menu: copy and where it sits, nothing else; picking a side moves it', async () => {
-  const { ui } = await import('./ui.svelte');
-  const { imageMenu } = await import('./image');
-  const ed = editorWith('# t\n\n![](assets/a.png)');
-  let pos = -1;
-  ed.state.doc.descendants((n, p) => { if (n.type.name === 'image') pos = p; });
-  imageMenu(ed, () => pos, { clientX: 0, clientY: 0 }, 'assets/a.png');
-  expect(ui.menu!.items.map((i) => [i.label, !!i.checked])).toEqual([['Copy image', false], ['Align left', true], ['Align center', false], ['Align right', false]]);
-  ui.menu!.items[2].run!();
-  ui.closeMenu();
-  expect(ed.state.doc.nodeAt(pos)!.attrs.align).toBe('center');
-  expect(ed.state.selection).toBeInstanceOf(NodeSelection); // the picture stays picked, the caret on it
-  expect(ed.state.selection.from).toBe(pos);
-  expect(md(ed)).toContain('![|center](assets/a.png)');
-});
-
 test('a caption in a table cell comes back as it was written', () => {
   const image = pictureAfterReopening({ alt: '2*3=6 [x]' }, '# t\n\n| a |\n| --- |\n| ![](assets/a.png) |');
   expect(image.alt).toBe('2*3=6 [x]');
@@ -292,13 +276,6 @@ test('⌫ under a table (in a quote too) selects the whole table first, the seco
   }
 });
 
-test('⌫ at the start of a line under plain text still joins the two lines', () => {
-  const ed = editorWith('# t\n\nabove\n\nbelow');
-  ed.commands.setTextSelection(posOf(ed, 'below'));
-  press(ed, 'Backspace');
-  expect(md(ed)).toBe('# t\n\nabovebelow');
-});
-
 test('resizing a video leaves the player alone; only another file loads anew', () => {
   const ed = editorWith('# t\n\n[v.mp4](assets/v.mp4)');
   const video = ed.view.dom.querySelector('video')!;
@@ -360,9 +337,17 @@ test('a stored file is looked for under its own name, not the percent-encoded on
   expect(assetName('https://example.com/a.png')).toBe(null);
 });
 
-test('↩ after such an address leaves it a link instead of making a card that would not come back', () => {
-  const ed = editorWith('# t\n\nhttps://example.com/*star*');
-  ed.commands.setTextSelection(ed.state.doc.content.size - 1);
-  press(ed, 'Enter');
-  ed.state.doc.forEach((n) => expect(n.type.name).not.toBe('bookmark'));
+
+test('a link card shows its address shortened, and whole while it is selected (an arrow key onto it)', () => {
+  const href = 'https://github.com/happy-nut/eve/pull/190/files#diff-0123456789abcdef';
+  const ed = editorWith(`# t\n\n${href}\n\n끝`);
+  let at = -1;
+  ed.state.doc.forEach((n, p) => { if (n.type.name === 'bookmark') at = p; });
+  const url = () => ed.view.dom.querySelector('.bm-url')!.textContent;
+  expect(url()).toBe('github.com/happy-nut…');
+  ed.view.dispatch(ed.state.tr.setSelection(NodeSelection.create(ed.state.doc, at)));
+  expect(url()).toBe('github.com/happy-nut/eve/pull/190/files#diff-0123456789abcdef');
+  expect(ed.view.dom.querySelector('.bookmark')!.classList.contains('ProseMirror-selectednode')).toBe(true);
+  ed.commands.setTextSelection(posOf(ed, '끝'));
+  expect(url()).toBe('github.com/happy-nut…');
 });

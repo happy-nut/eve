@@ -5,7 +5,7 @@
   import { ui } from './lib/ui.svelte';
   import { claimKeys } from './lib/keys';
   import { loadMath, mathMarkup } from './lib/mathRender';
-  import { SHELVES, tidyTex, type MathPart } from './lib/mathParts';
+  import { SHELVES, tidyTex, fullSize, type MathPart } from './lib/mathParts';
   import type { MathDone } from './lib/mathEdit.svelte';
 
   /**
@@ -36,6 +36,11 @@
    *  its row was cut off by the table's own scroll box, and could not be used) */
   let popAt = $state<{ left: number; top?: number; bottom?: number } | null>(null);
 
+  /** the arrow that last reached the formula's edge (MathLive's move-out direction), and the key that sends it */
+  let edge = '', lastKey = '';
+  const EDGE_KEY: Record<string, string> = { forward: 'ArrowRight', backward: 'ArrowLeft', upward: 'ArrowUp', downward: 'ArrowDown' };
+  let bumped = $state(false), bumpTimer: ReturnType<typeof setTimeout> | undefined;
+  function bump() { bumped = false; requestAnimationFrame(() => { bumped = true; clearTimeout(bumpTimer); bumpTimer = setTimeout(() => (bumped = false), 400); }); }
   const done = (how: MathDone) => { if (finished) return; finished = true; onDone(how); off(); };
   // a layer while it is edited (a phone's back, Esc, a note brought up from outside finish it as Esc does); off once
   // the caret is back in the note, so the keyboard is not put back over where onDone put it
@@ -46,7 +51,7 @@
   $effect(() => {
     const l = latex;
     untrack(() => {
-      if (mf && clean(mf.value) !== l) mf.value = l;
+      if (mf && clean(mf.value) !== fullSize(l)) mf.value = fullSize(l);
       if (clean(texValue) !== l) texValue = l;
     });
   });
@@ -69,7 +74,15 @@
         el.popoverPolicy = 'off';
         el.menuItems = [];
         el.placeholder = '\\text{Formula}';
-        f.value = latex;
+        // / makes a fraction that stays the size of the text inside another (\frac shrank each level); * is × as on
+        // a calculator (it was ·, and × took a click on its button), ** the dot
+        el.keybindings = [
+          ...el.keybindings.filter((k) => k.key !== '/' && k.key !== '[NumpadDivide]'),
+          ...['/', '[NumpadDivide]'].map((key) => ({ key, ifMode: 'math' as const, command: ['insert', '\\dfrac{#@}{#?}'] as ['insert', string] })),
+        ];
+        el.inlineShortcuts = { ...el.inlineShortcuts, '*': '\\times', '**': '\\cdot' };
+        // drawn as the note draws it: a \frac written before is edited at full size, and kept as \dfrac once edited
+        f.value = fullSize(latex);
       } catch { return; }
       mf = f;
       f.addEventListener('input', () => { texValue = clean(f.value); onInput(clean(f.value)); });
@@ -78,6 +91,10 @@
       f.addEventListener('move-out', (e: Event) => {
         e.preventDefault();
         const dir = (e as CustomEvent<{ direction: string }>).detail.direction;
+        // an arrow at the edge leaves only when pressed there again: one → too many, in the middle of writing, used to
+        // drop the formula. The first one flashes the box, to say the next goes out
+        // (an arrow's only: ⇥ past the last slot still goes straight out)
+        if (lastKey === EDGE_KEY[dir] && edge !== dir) { edge = dir; bump(); return; }
         // after the key has been dealt with: done at once, the note took the same ↓ and moved the caret a line further,
         // and MathLive, its box gone under it, threw
         setTimeout(() => done(dir === 'backward' || dir === 'upward' ? 'before' : 'after'));
@@ -90,6 +107,8 @@
         prev = f.value;
       });
       f.addEventListener('keydown', (e: KeyboardEvent) => {
+        lastKey = e.key;
+        if (edge && e.key !== EDGE_KEY[edge]) edge = ''; // anything else between: the edge is to be reached again
         if (f.mode === 'latex') return; // typing a \command: Esc and Enter are MathLive's
         if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey)) {
           e.preventDefault(); e.stopPropagation(); done('after');
@@ -191,7 +210,7 @@
   }
   function typedTex(v: string) {
     texValue = v;
-    if (mf) mf.value = v;
+    if (mf) mf.value = fullSize(v);
     onInput(v);
   }
   const keep = (e: Event) => e.preventDefault(); // a press on the row leaves the keyboard in the box
@@ -202,7 +221,7 @@
   }
 </script>
 
-<svelte:element this={display ? 'div' : 'span'} class="math-edit" class:display bind:this={root}>
+<svelte:element this={display ? 'div' : 'span'} class="math-edit" class:display class:bumped bind:this={root}>
   <svelte:element this={display ? 'div' : 'span'} class="slot" class:hidden={tex} bind:this={slot}></svelte:element>
   <svelte:element this={display ? 'div' : 'span'} class="tools" class:pop={!display} bind:this={tools} style:left={popAt ? `${popAt.left}px` : null} style:top={popAt?.top !== undefined ? `${popAt.top}px` : null} style:bottom={popAt?.bottom !== undefined ? `${popAt.bottom}px` : null}>
     <span class="tabs">
@@ -221,7 +240,7 @@
     {:else}
       <span class="parts" role="tabpanel">
         {#each SHELVES.find((s) => s.id === shelf)!.parts as p (p.tex)}
-          <button type="button" class="part" title={p.name} aria-label={p.name} onmousedown={keep} onclick={() => put(p)}>
+          <button type="button" class="part" title={p.keys ? `${p.name} — type ${p.keys}` : p.name} aria-label={p.name} onmousedown={keep} onclick={() => put(p)}>
             {#if faces[p.tex]}{@html faces[p.tex]}{:else}{p.show ?? p.tex}{/if}
           </button>
         {/each}
@@ -243,6 +262,9 @@
     --caret-color: var(--accent); --selection-background-color: var(--accent-soft); --contains-highlight-background-color: transparent;
     --placeholder-color: var(--fg-dim); --smart-fence-color: var(--fg-dim);
   }
+  /* an arrow reached the edge: the next one goes out */
+  .bumped .slot :global(math-field) { animation: edge-bump 0.4s ease-out; }
+  @keyframes edge-bump { 0% { box-shadow: 0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent); } 100% { box-shadow: 0 0 0 2px transparent; } }
   .display .slot :global(math-field) { display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 10px 12px; font-size: 1.15em; border-radius: 12px; }
   .display .slot :global(math-field::part(content)) { justify-content: center; }
   /* in a line, no taller than the formula drawn there: the line does not jump as it opens */

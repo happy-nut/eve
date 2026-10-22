@@ -61,9 +61,9 @@
 
 * { box-sizing: border-box; }
 html, body, #app { height: 100%; margin: 0; }
-/* the native window is transparent: the page paints its own rounded surface */
-html, body { background: transparent; }
-#app { background: var(--bg); border-radius: 10px; overflow: hidden; }
+/* an ordinary window: macOS rounds its corners. A see-through one with the page clipping its own (#app to a radius)
+   came back from another app with only the white page drawn (zIndex.test.mjs) */
+html, body, #app { background: var(--bg); }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif;
   font-size: 14px;
@@ -99,12 +99,14 @@ button.icon:active { transform: scale(0.9); }
 .toolbar { position: fixed; top: 10px; left: 86px; display: flex; gap: 4px; z-index: var(--z-toolbar); }
 .toolbar .icon { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
 .toolbar svg { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.note-more { position: absolute; top: 10px; right: 14px; z-index: var(--z-toolbar); width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
+.note-more svg { width: 18px; height: 18px; fill: currentColor; stroke: currentColor; stroke-width: 1.4; }
 .toolbar .icon:disabled { opacity: 0.3; pointer-events: none; }
 /* a phone: no traffic lights to clear, no window to keep on top, and the list takes the whole screen */
 /* the page runs under Android's status and navigation bars (edge-to-edge); the insets keep it clear of both */
 html.mobile { --top: env(safe-area-inset-top, 0px); --bottom: env(safe-area-inset-bottom, 0px); }
 html.mobile, html.mobile body { background: var(--bg-side); }
-html.mobile #app { box-sizing: border-box; padding: var(--top) 0 var(--bottom); border-radius: 0; }
+html.mobile #app { box-sizing: border-box; padding: var(--top) 0 var(--bottom); }
 
 /* ---- a phone: touch-sized, no hover, no shortcuts --------------------------------------------- */
 /* the desktop toolbar (sidebar / back / forward / new) gives way to a bar of the phone's own */
@@ -695,6 +697,9 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 .tiptap .bm-desc { color: var(--fg-dim); font-size: 0.88em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tiptap .bm-site { display: flex; align-items: center; gap: 6px; color: var(--fg-dim); font-size: 0.82em; margin-top: auto; }
 .tiptap .bm-url { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* selected, the whole address (bookmark.ts): on as many lines as it takes, the card grown to hold them */
+.tiptap .bookmark.ProseMirror-selectednode { max-height: none; }
+.tiptap .bookmark.ProseMirror-selectednode .bm-url { white-space: normal; overflow-wrap: anywhere; }
 .tiptap .bookmark img { margin: 0; }
 .tiptap .bm-ico { width: 14px; height: 14px; border-radius: 3px; }
 .tiptap .bm-thumb { flex: none; width: 104px; height: 68px; object-fit: cover; border-radius: 6px; }

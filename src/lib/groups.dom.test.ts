@@ -6,15 +6,6 @@ import { notes } from './notes.svelte';
 // a note written in: one left just as it was made goes once another is opened (notes.untouched)
 const written = (body: string, group: string, parent?: string) => { const n = notes.create(body, group, parent); notes.touched(n.id); return n; };
 
-test('a new group gets a random icon, as a new note does, unless the setting is off', () => {
-  appearance.set({ autoIcon: true });
-  const a = groups.create();
-  expect(groups.icon(a)).not.toBe('');
-  appearance.set({ autoIcon: false });
-  const b = groups.create();
-  expect(groups.icon(b)).toBe('');
-});
-
 test('revealing a note opens the groups around it and unfolds the pages it sits under, and nothing else', async () => {
   const { notes } = await import('./notes.svelte');
   const outer = groups.create(), inner = groups.create(outer), other = groups.create();

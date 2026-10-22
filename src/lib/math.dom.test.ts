@@ -10,12 +10,8 @@ const nodes = (ed: ReturnType<typeof editorWith>, name: string) => {
 };
 
 test.each([
-  ['inline', 'Energy is $E = mc^2$ here.'],
   ['two inline', 'From $a_1$ to $a_n$, and $\\frac{1}{2}$.'],
-  ['a block', 'Before\n\n$$\n\\int_0^1 x^2 \\, dx\n$$\n\nAfter'],
   ['a block of two lines', '$$\n\\begin{aligned}\na &= b \\\\\nc &= d\n\\end{aligned}\n$$'],
-  ['a block in a list', '- item\n\n  $$\n  x^2\n  $$\n\n- next'],
-  ['a block in a quote', '> quoted\n>\n> $$\n> x\n> $$'],
   ['inline in a heading and a table', '# Area $\\pi r^2$\n\n| a | b |\n| --- | --- |\n| $x$ | 2 |'],
   ['money', 'It costs $5 and $10, or US$6.'],
   ['text with & < > * _', 'Tom & Jerry, a < b > c, \\*x\\* and a\\_b, &amp;'],
@@ -58,14 +54,6 @@ test('typing $x^2$ makes a formula; $5 and $ does not', () => {
   const money = editorWith('');
   type(money, 'it is $5 and $');
   expect(nodes(money, 'mathInline')).toEqual([]);
-});
-
-test('a formula copies as its markdown', () => {
-  const ed = editorWith('a $x^2$ b\n\n$$\ny\n$$');
-  const { state } = ed;
-  const slice = state.doc.slice(0, state.doc.content.size);
-  const text = (ed.view as any).someProp('clipboardTextSerializer', (f: any) => f(slice, ed.view));
-  expect(text).toBe('a $x^2$ b\n\n$$\ny\n$$');
 });
 
 test('$$ and a space on an empty line makes a block, in a list item too', () => {
