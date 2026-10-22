@@ -9,7 +9,8 @@ import { fetchUrl, openUrl } from './platform';
 /**
  * Bookmark card: a URL on a line of its own renders as a compact preview (favicon, title, description,
  * thumbnail) and opens in the browser on click. Markdown form is just the bare URL, so files stay plain.
- * Made by pasting a URL into an empty line, or by typing one and pressing Enter.
+ * Made from a link with ⌥↩ (Show as card). A pasted or typed address stays a link, ↩ after it too: it turned into a card
+ * there, which no one asked for.
  */
 export const URL_RE = /^https?:\/\/[^\s<>"']+$/;
 const LS = 'eve.links';
@@ -20,9 +21,11 @@ const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./,
 
 /** How long a link may be before the card shortens it. */
 const LINK_MAX = 20;
+/** The address as a card spells it out: without the scheme, or a slash at its end. */
+const bareUrl = (u: string) => u.replace(/^https?:\/\//, '').replace(/\/$/, '');
 /** The link as the card shows it: the address itself, minus the scheme, cut only when it runs long. */
 export const shortUrl = (u: string) => {
-  const bare = u.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const bare = bareUrl(u);
   return bare.length > LINK_MAX ? `${bare.slice(0, LINK_MAX)}…` : bare;
 };
 
@@ -104,7 +107,8 @@ export const Bookmark = Node.create({
       const site = el('span', 'bm-site');
       const ico = el('img', 'bm-ico') as HTMLImageElement;
       ico.alt = '';
-      site.append(ico, el('span', 'bm-url', shortUrl(href))); // the address, not just the site name
+      const url = el('span', 'bm-url', shortUrl(href));
+      site.append(ico, url); // the address, not just the site name
       body.append(title, site);
       dom.append(body);
       dom.addEventListener('click', (e) => { e.preventDefault(); void openUrl(href); });
@@ -120,24 +124,13 @@ export const Bookmark = Node.create({
           dom.append(im);
         }
       });
-      return { dom };
-    };
-  },
-
-  addKeyboardShortcuts() {
-    // a line that is only a URL turns into a card on Enter
-    return {
-      Enter: ({ editor }) => {
-        const { $from, empty } = editor.state.selection;
-        const p = $from.parent;
-        if (!empty || p.type.name !== 'paragraph' || $from.parentOffset !== p.content.size || $from.depth !== 1) return false;
-        const text = p.textContent.trim();
-        if (!URL_RE.test(text) || !cardable(editor, text)) return false;
-        return editor.chain()
-          .insertContentAt({ from: $from.before(), to: $from.after() }, [{ type: 'bookmark', attrs: { href: text } }, { type: 'paragraph' }])
-          .focus()
-          .run();
-      },
+      // selected (an arrow key onto it), the card spells its address out whole: cut short, there was no way to read it
+      // short of opening it
+      return {
+        dom,
+        selectNode: () => { dom.classList.add('ProseMirror-selectednode'); url.textContent = bareUrl(href); },
+        deselectNode: () => { dom.classList.remove('ProseMirror-selectednode'); url.textContent = shortUrl(href); },
+      };
     };
   },
 
