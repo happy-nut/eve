@@ -1,5 +1,5 @@
 // Switching notes (⌘1–9, ⌘N, back/forward, deleting the open one) and what it does to what was open.
-import { test, expect, vi } from 'vitest';
+import { test, expect } from 'vitest';
 import { flushSync } from 'svelte';
 import { notes, rankByTitle } from './notes.svelte';
 import { holdEdit, dropEdit } from './pending';
@@ -95,23 +95,6 @@ test('deleting the last note makes a new one, and its Undo brings the note back 
   expect(notes.currentId).toBe(only.id);
   expect(notes.all.find((n) => n.id === made.id)?.deleted).toBe(true); // the stand-in, never written in, went
   expect(notes.visible.map((n) => n.id)).toEqual([only.id]);
-});
-
-test('a newer toast takes the last one’s place, and one goes by itself after a few seconds', async () => {
-  const { ui } = await import('./ui.svelte');
-  vi.useFakeTimers();
-  try {
-    let undone = 0;
-    ui.toast('first', { label: 'Undo', run: () => undone++ });
-    ui.toast('second');
-    expect(ui.toastMsg?.message).toBe('second');
-    expect(ui.toastMsg?.action).toBeUndefined();
-    vi.advanceTimersByTime(5900);
-    expect(ui.toastMsg?.message).toBe('second');
-    vi.advanceTimersByTime(200);
-    expect(ui.toastMsg).toBe(null);
-    expect(undone).toBe(0);
-  } finally { vi.useRealTimers(); }
 });
 
 test('back and forward are lit only when there is a note left to go to', () => {

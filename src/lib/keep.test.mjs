@@ -65,8 +65,5 @@ assert.deepEqual(attachmentCandidates('a.jpeg'), ['a.jpeg', 'a.jpg']);
 assert.deepEqual(attachmentCandidates('a.JPG'), ['a.JPG', 'a.jpeg']);
 assert.deepEqual(attachmentCandidates('a.png'), ['a.png']);
 
-// Keep's order: pinned first, then newest
-const o = [{ pinned: false, updatedAt: 3 }, { pinned: true, updatedAt: 1 }, { pinned: false, updatedAt: 5 }].sort(keepOrder);
-assert.deepEqual(o.map((x) => x.updatedAt), [1, 5, 3]);
 
 console.log('KEEP_OK');

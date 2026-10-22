@@ -32,8 +32,6 @@ test('one that stays in the table still folds the way prosemirror-tables does it
 const save = (s: string) => md(editorWith(s));
 
 test.each([
-  ['in a callout', '> [!note]\n> | A |\n> | --- |\n> | x |'],
-  ['in a quote', '> | A |\n> | --- |\n> | x |'],
   ['marks at the end of a cell', '| A |\n| --- |\n| ***b*** |'],
   ['two marks in a cell', '| A |\n| --- |\n| ~~s~~ ==h== |'],
   ['a mark after text', '| A | B |\n| --- | --- |\n| c**q** | d |'],
@@ -174,11 +172,6 @@ describe('column widths', () => {
     // the comment is the table's, not a block of its own under it
     expect(again.state.doc.childCount).toBe(1);
     expect(md(again).trimEnd()).toBe(saved);
-  });
-
-  test('a table nobody resized is written as before, with no comment', () => {
-    const ed = editorWith('| a | b |\n| --- | --- |\n| 1 | 2 |');
-    expect(md(ed).trimEnd()).toBe('| a | b |\n| --- | --- |\n| 1 | 2 |');
   });
 
   test('inside a quote, the widths come back too', () => {

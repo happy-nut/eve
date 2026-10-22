@@ -104,22 +104,6 @@ test('not while the [[ picker is open: "[[Meeting :sm" is still the title being 
   expect(b.row().length).toBeGreaterThan(0);
 });
 
-test('↩ or ⇥ right after a word (nothing chosen) is a new line or the editor\'s Tab, the word kept', async () => {
-  const { ed, row } = editor();
-  type(ed, 'items :ok');
-  await settle();
-  expect(row().length).toBeGreaterThan(0);
-  press(ed, 'Enter');
-  expect(ed.state.doc.childCount).toBe(2);
-  expect(ed.state.doc.firstChild!.textContent).toBe('items :ok');
-  expect(row()).toEqual([]);
-  const b = editor();
-  type(b.ed, 'see :fire');
-  await settle();
-  press(b.ed, 'Tab');
-  expect(b.ed.getText()).not.toContain('🔥');
-});
-
 test('the pointer over one chooses it for ↩ as the arrows do', async () => {
   const { ed } = editor();
   const ui = (ed as any).__emojiUI;

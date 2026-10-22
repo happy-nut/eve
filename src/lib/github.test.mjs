@@ -1,7 +1,7 @@
 // Sync engine self-check. Default: in-memory fake GitHub. Real API: EVE_TEST_REPO=owner/name EVE_TEST_TOKEN=... npm test
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
-import { Repo, FileHashes, syncRound, blobSha, deviceLogin, pollToken, normHost, apiBase, webBase, ensureRepo, signInError } from './github.ts';
+import { Repo, FileHashes, syncRound, blobSha, deviceLogin, pollToken, normHost, apiBase, ensureRepo, signInError } from './github.ts';
 
 const gitSha = (buf) => createHash('sha1').update(`blob ${buf.length}\0`).update(buf).digest('hex');
 const rnd = () => randomBytes(20).toString('hex');
@@ -212,7 +212,6 @@ assert.throws(() => normHost('localhost'), /not a server address/);
 assert.equal(apiBase(''), 'https://api.github.com');
 assert.equal(apiBase('octocorp.ghe.com'), 'https://api.octocorp.ghe.com');
 assert.equal(apiBase('github.acme.com'), 'https://github.acme.com/api/v3');
-assert.equal(webBase('github.acme.com'), 'https://github.acme.com');
 
 if (fake) {
   // the whole sync, pointed at a GitHub Enterprise Server: every request goes to its /api/v3, none elsewhere

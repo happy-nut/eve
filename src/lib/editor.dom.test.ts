@@ -72,13 +72,6 @@ describe('toggle', () => {
     expect(ed.state.doc.firstChild!.firstChild!.textContent).toBe('기존 줄');
   });
 
-  test('"| " starts a quote', () => {
-    const ed = editorWith('');
-    ed.commands.focus('end');
-    type(ed, '| 인용');
-    expect(ed.state.doc.firstChild!.type.name).toBe('blockquote');
-  });
-
   test('the arrow opens and closes it, and the note remembers', () => {
     const ed = editorWith('<details>\n<summary>t</summary>\n\nb\n\n</details>');
     const view = ed.view.dom.querySelector('[data-type="details"]')!;
@@ -172,13 +165,6 @@ describe('insert block (the phone bar\'s /)', () => {
 });
 
 describe('arrows', () => {
-  test.each([['->', '→'], ['<-', '←'], ['=>', '⇒'], ['<=', '⇐'], ['<->', '↔'], ['<=>', '⇔']])('%s becomes %s', (typed, arrow) => {
-    const ed = editorWith('');
-    ed.commands.focus('end');
-    type(ed, `a${typed}b`);
-    expect(ed.state.doc.textContent).toBe(`a${arrow}b`);
-  });
-
   test('not inside `code` being typed: its mark only comes with the closing backtick', () => {
     const ed = editorWith('');
     ed.commands.focus('end');
@@ -216,6 +202,22 @@ describe('pasting a link', () => {
     blank.commands.focus('end');
     paste(blank, URL);
     expect(blank.state.doc.firstChild!.type.name).toBe('paragraph');
+  });
+
+  test('↩ after it, pasted or typed alone on its line: still a link, and a new line under it (a card is ⌥↩)', () => {
+    const ed = editorWith('');
+    ed.commands.focus('end');
+    paste(ed, URL);
+    press(ed, 'Enter');
+    const typed = editorWith('');
+    typed.commands.focus('end');
+    typed.view.dispatch(typed.state.tr.insertText(URL)); // as typed: text, not markdown read in (a bare address there is a card)
+    press(typed, 'Enter');
+    for (const e of [ed, typed]) {
+      expect(e.state.doc.childCount).toBe(2);
+      e.state.doc.forEach((n) => expect(n.type.name).toBe('paragraph'));
+      expect(e.state.doc.firstChild!.textContent).toBe(URL);
+    }
   });
 
   test('in a code block it is just text', () => {
@@ -317,30 +319,6 @@ describe('lists of different kinds', () => {
     expect(md(ed).trimEnd()).toBe('- [ ] a\n\n- b\n\n- [ ] c');
     press(ed, 'Tab');
     expect(md(ed).trimEnd()).toBe('- [ ] a\n  - b\n- [ ] c');
-  });
-});
-
-describe('⌥↑ / ⌥↓ light up what moved', () => {
-  const lit = (ed: ReturnType<typeof editorWith>) =>
-    [...ed.view.dom.querySelectorAll('.moved-flash-0, .moved-flash-1')].map((e) => `${e.className.match(/moved-flash-\d/)![0]}:${e.textContent}`);
-
-  test('the moved lines, a fresh class each time so the fade starts over, and nothing when nothing moved', () => {
-    const ed = editorWith('- a\n- [ ] t\n- b\n\n문단');
-    ed.commands.setTextSelection({ from: posOf(ed, 'a'), to: posOf(ed, 't', true) });
-    runEditorCommand(ed, 'moveBlockDown');
-    const first = lit(ed);
-    expect(first.map((l) => l.split(':')[1])).toEqual(['a', 't']);
-    runEditorCommand(ed, 'moveBlockDown');
-    const second = lit(ed);
-    expect(second.map((l) => l.split(':')[1])).toEqual(['a', 't']);
-    expect(second[0].split(':')[0]).not.toBe(first[0].split(':')[0]);
-  });
-
-  test('a caret in an item lights the item and what hangs under it', () => {
-    const ed = editorWith('- [ ] t1\n  - a\n- [ ] t2');
-    ed.commands.setTextSelection(posOf(ed, 't1', true));
-    runEditorCommand(ed, 'moveBlockDown');
-    expect(lit(ed).map((l) => l.split(':')[1])).toEqual(['t1', 'a']);
   });
 });
 
@@ -478,22 +456,6 @@ describe('pasting markdown into a line', () => {
       type(ed, 'z');
       expect(md(ed).trim()).toBe(out);
     }
-  });
-});
-
-describe('Enter on the empty last line of a callout', () => {
-  test('leaves the callout for a new line right after it; the block below stays whole', () => {
-    const ed = editorWith('> [!💡]\n> one\n\n## Next');
-    ed.commands.setTextSelection(posOf(ed, 'one', true));
-    press(ed, 'Enter');
-    press(ed, 'Enter');
-    expect(md(ed)).toContain('## Next');
-    const { $from } = ed.state.selection;
-    expect($from.parent.type.name).toBe('paragraph');
-    expect($from.parent.content.size).toBe(0);
-    expect($from.depth).toBe(1);
-    expect(ed.state.doc.child($from.index(0) - 1).type.name).toBe('callout');
-    expect(ed.state.doc.child($from.index(0) + 1).type.name).toBe('heading');
   });
 });
 

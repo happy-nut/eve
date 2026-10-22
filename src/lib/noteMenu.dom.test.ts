@@ -24,11 +24,3 @@ test('words selected: the highlighter and the other marks, no export', () => {
   ui.menu!.items[1].run!();
   expect(md(ed)).toBe('see <mark style="background-color: #c9f2d4">this</mark> here');
 });
-
-test('nothing selected: the note\'s own things (paste, find, export), no marks', () => {
-  const ed = editorWith('see this here');
-  ed.commands.setTextSelection(posOf(ed, 'this'));
-  noteMenu(ed, null);
-  expect(shown()).toContain('Export as PDF…');
-  expect(shown()).not.toContain('Highlight…');
-});

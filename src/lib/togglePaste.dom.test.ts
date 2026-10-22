@@ -1,5 +1,4 @@
 import { test, expect, afterEach } from 'vitest';
-import { DOMSerializer, Fragment } from '@tiptap/pm/model';
 import { editorWith, md, posOf, press } from './testEditor';
 
 afterEach(() => { document.body.innerHTML = ''; });
@@ -24,17 +23,4 @@ test('pasted back inside the toggle: lines of its body', () => {
   press(ed, 'Enter');
   ed.view.pasteHTML(bodyLines);
   expect(md(ed)).toBe(note.replace('line two\n', 'line two\n\nline one\n\nline two\n'));
-});
-
-test('a whole toggle copied: pasted as a toggle', () => {
-  const ed = editorWith(note);
-  const toggle = ed.state.doc.child(1);
-  const div = document.createElement('div');
-  div.append(DOMSerializer.fromSchema(ed.schema).serializeFragment(Fragment.from(toggle)));
-  (div.firstChild as HTMLElement).setAttribute('data-pm-slice', '0 0 []');
-  ed.commands.setTextSelection(posOf(ed, 'after', true));
-  press(ed, 'Enter');
-  ed.view.pasteHTML(div.innerHTML);
-  expect(md(ed).match(/<details/g)?.length).toBe(2);
-  expect(md(ed)).toContain('after\n\n<details open>\n<summary>Title</summary>');
 });

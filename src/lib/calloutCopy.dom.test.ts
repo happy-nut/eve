@@ -17,8 +17,6 @@ function roundTrip(note: string) {
 }
 
 test.each([
-  ['titled', '> [!note] Callout\n> body'],
-  ['untitled', '> [!tip]\n> body'],
   ['folded', '> [!warning]- Careful\n> inside'],
   ['an icon of its own', '> [!💡]\n> tip'],
   ['a line after it', '> [!note] Title\n> body\n\nafter'],

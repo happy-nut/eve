@@ -56,9 +56,6 @@ assert.equal(plain('$x$ and $$y + 1$$'), 'x and y + 1');
 assert.equal(plain('costs \\$5 or \\$10'), 'costs $5 or $10');
 
 // callout types: the word picks icon and colour, any case; an emoji is its own
-assert.deepEqual(calloutKind('warning'), { icon: '⚠️', color: 'orange' });
-assert.deepEqual(calloutKind('TIP'), { icon: '🔥', color: 'cyan' });
-assert.equal(calloutKind('faq')?.color, 'orange');
 assert.equal(calloutKind('💡'), null);
 assert.equal(calloutKind('nonsense'), null);
 

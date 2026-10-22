@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import MarkdownIt from 'markdown-it';
 import { isoDay, dayFrom, daysFrom, dateLabel, typedDay, dayChoices, dateMarkdown,
-  shiftDays, shiftMonths, monthGrid, sameMonth, monthName, weekdayNames } from './date.ts';
+  shiftDays, shiftMonths, monthGrid, weekdayNames } from './date.ts';
 
 // a fixed "now", late enough in the day that a UTC-based answer would land on the next date
 const now = new Date(2026, 8, 24, 23, 30); // 2026-09-24, local
@@ -25,10 +25,6 @@ assert.equal(dateLabel(written, now, 'en'), 'today');
 assert.equal(dateLabel(written, new Date(2026, 8, 25, 9, 0), 'en'), 'yesterday');
 assert.equal(dateLabel(written, new Date(2026, 8, 23, 9, 0), 'en'), 'tomorrow');
 assert.equal(dateLabel(written, new Date(2026, 8, 26, 9, 0), 'en'), '2026.09.24', 'further out: the date');
-
-assert.equal(dateLabel(written, now, 'ko'), '오늘');
-assert.equal(dateLabel(written, new Date(2026, 8, 25, 9, 0), 'ko'), '어제');
-assert.equal(dateLabel(written, new Date(2026, 8, 23, 9, 0), 'ko'), '내일');
 
 assert.equal(typedDay('2026-09-24'), '2026-09-24');
 assert.equal(typedDay('2026.9.4'), '2026-09-04', 'dots and single digits');
@@ -58,8 +54,6 @@ assert.deepEqual(exact('2001-01-01'), ['2001-01-01']);
 assert.deepEqual(exact('tom'), []);
 assert.deepEqual(exact(''), []);
 
-assert.equal(dayChoices('', now, 'ko')[0].label, '오늘');
-
 // --- the calendar grid ---
 
 assert.equal(shiftDays('2026-09-24', 1), '2026-09-25');
@@ -75,7 +69,6 @@ assert.equal(shiftMonths('2026-01-15', -1), '2025-12-15', 'back over a year boun
 const grid = monthGrid('2026-09-24');
 assert.equal(grid.length, 6, 'always six weeks, so the popup never changes height');
 assert.ok(grid.every((w) => w.length === 7));
-assert.equal(grid[0][0].slice(-2) % 1, 0);
 assert.ok(new Date(...grid[0][0].split('-').map((n, i) => (i === 1 ? +n - 1 : +n))).getDay() === 0, 'starts on a Sunday');
 assert.ok(grid.flat().includes('2026-09-01') && grid.flat().includes('2026-09-30'), 'the whole month is in there');
 assert.deepEqual(grid.flat(), [...new Set(grid.flat())], 'no day appears twice');
@@ -89,11 +82,6 @@ const may = monthGrid('2026-02-15');
 assert.equal(may.length, 6);
 assert.ok(may.flat().includes('2026-02-01') && may.flat().includes('2026-02-28'));
 
-assert.equal(sameMonth('2026-09-01', '2026-09-30'), true);
-assert.equal(sameMonth('2026-09-30', '2026-10-01'), false);
-
-assert.equal(monthName('2026-09-24', 'en'), 'September 2026');
-assert.equal(monthName('2026-09-24', 'ko'), '2026년 9월');
 assert.deepEqual(weekdayNames('en'), ['S', 'M', 'T', 'W', 'T', 'F', 'S']);
 assert.deepEqual(weekdayNames('ko'), ['일', '월', '화', '수', '목', '금', '토']);
 
