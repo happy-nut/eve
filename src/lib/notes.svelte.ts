@@ -19,6 +19,7 @@ export interface Note {
   order: number; // manual sort rank within its group (ascending)
   parent?: string; // id of the page this one was created inside (sub-page; sits under it in the sidebar)
   icon?: string; // emoji shown in the sidebar (Notion-style)
+  wide?: boolean; // laid out across the whole pane instead of the reading width
 }
 
 /** An icon for a note that was just made, unless the setting is off. */
@@ -29,7 +30,7 @@ export const newId = () =>
 
 // ---- (de)serialization: markdown with a tiny frontmatter -------------------
 export function serialize(n: Note): string {
-  return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\norder: ${n.order}${n.group ? `\ngroup: ${n.group}` : ''}${n.parent ? `\nparent: ${n.parent}` : ''}${n.icon ? `\nicon: ${n.icon}` : ''}\n---\n${n.body}`;
+  return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\norder: ${n.order}${n.group ? `\ngroup: ${n.group}` : ''}${n.parent ? `\nparent: ${n.parent}` : ''}${n.icon ? `\nicon: ${n.icon}` : ''}${n.wide ? '\nwide: true' : ''}\n---\n${n.body}`;
 }
 
 /**
@@ -60,6 +61,7 @@ export function parse(text: string): Note | null {
     group: meta.group ?? '',
     parent: meta.parent || undefined,
     icon: meta.icon || undefined,
+    wide: meta.wide === 'true' || undefined,
     // legacy notes without order: newest first
     order: meta.order !== undefined && !Number.isNaN(Number(meta.order)) ? Number(meta.order) : -(Number(meta.updated) || 0),
   };
@@ -479,6 +481,16 @@ class NotesStore {
     this.flush(id);
   }
 
+  setWide(id: string, wide: boolean) {
+    history.record();
+    const n = this.all.find((x) => x.id === id);
+    if (!n) return;
+    this.touched(id);
+    n.wide = wide || undefined;
+    n.updatedAt = Date.now();
+    this.flush(id);
+  }
+
   /** A note back where it stood, exactly (a deleted group's Undo): no rank of its own worked out, no sub-pages moved. */
   putBack(id: string, at: Pick<Note, 'group' | 'parent' | 'order'>) {
     history.record();
@@ -687,16 +699,16 @@ export const notes = new NotesStore();
 
 // What the app's undo puts back of the notes: where each sits, whether it is there, its icon, and which is open. A note
 // made since goes again; a note's text is the note's own undo, not this.
-type Spot = [id: string, deleted: boolean, group: string, parent: string, order: number, icon: string];
+type Spot = [id: string, deleted: boolean, group: string, parent: string, order: number, icon: string, wide: boolean];
 undoSource<{ open: string | null; spots: Spot[] }>({
-  take: () => ({ open: notes.currentId, spots: notes.all.map((n) => [n.id, n.deleted, n.group ?? '', n.parent ?? '', n.order, n.icon ?? ''] as Spot) }),
+  take: () => ({ open: notes.currentId, spots: notes.all.map((n) => [n.id, n.deleted, n.group ?? '', n.parent ?? '', n.order, n.icon ?? '', !!n.wide] as Spot) }),
   put: ({ open, spots }) => {
     const was = new Map(spots.map((s) => [s[0], s]));
     for (const n of notes.all) {
       const s = was.get(n.id);
-      const [deleted, group, parent, order, icon] = s ? [s[1], s[2], s[3] || undefined, s[4], s[5] || undefined] : [true, n.group, n.parent, n.order, n.icon];
-      if (n.deleted === deleted && (n.group ?? '') === (group ?? '') && n.parent === parent && n.order === order && n.icon === icon) continue;
-      Object.assign(n, { deleted, group, parent, order, icon, updatedAt: Date.now() });
+      const [deleted, group, parent, order, icon, wide] = s ? [s[1], s[2], s[3] || undefined, s[4], s[5] || undefined, s[6] || undefined] : [true, n.group, n.parent, n.order, n.icon, n.wide];
+      if (n.deleted === deleted && (n.group ?? '') === (group ?? '') && n.parent === parent && n.order === order && n.icon === icon && n.wide === wide) continue;
+      Object.assign(n, { deleted, group, parent, order, icon, wide, updatedAt: Date.now() });
       notes.flush(n.id);
     }
     const back = open && notes.all.find((n) => n.id === open && !n.deleted);

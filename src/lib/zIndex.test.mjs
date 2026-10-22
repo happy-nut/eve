@@ -64,4 +64,14 @@ for (const p of all.filter((p) => /\.(svelte|css)$/.test(p))) {
   });
 }
 assert.deepEqual(contained, [], 'no container-type / container query units: WebKit left the note blank');
-console.log('z-index, window size and containers: ok');
+
+// ---- an opaque window ----
+// The window was see-through so the page could fade itself in and out and draw its own rounded corners (#app clipped
+// to a radius). The fade is long gone; what stayed was WebKit coming back from another app with only the white page
+// drawn, the note missing in part or whole. The window is an ordinary one (macOS rounds its corners), and the page
+// clips nothing to a radius at its root.
+const conf = JSON.parse(readFileSync(join(SRC, '../src-tauri/tauri.conf.json'), 'utf8'));
+assert.ok(!conf.app.windows.some((w) => w.transparent), 'the window is not transparent: WebKit left the page white');
+const root = readFileSync(join(SRC, 'app.css'), 'utf8').match(/^#app\s*\{[^}]*\}/m)?.[0] ?? '';
+assert.ok(!/border-radius|overflow\s*:\s*hidden/.test(root), '#app clips nothing to rounded corners: ' + root);
+console.log('z-index, window size, containers and an opaque window: ok');

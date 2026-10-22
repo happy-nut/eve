@@ -12,6 +12,13 @@ test('a note saved with Windows line endings (or a byte-order mark) reads like a
   expect(n!.body).toBe('# Title\n\nline one\nline two\n');
 });
 
+test('a note laid out at full width reads back that way; one at the reading width writes nothing for it', () => {
+  const wide = { id: 'mgfull', body: '# Full\n', updatedAt: 1, deleted: false, group: '', order: 0, wide: true };
+  expect(parse(serialize(wide))!.wide).toBe(true);
+  expect(serialize({ ...wide, wide: undefined })).not.toContain('wide:');
+  expect(parse(serialize({ ...wide, wide: undefined }))!.wide).toBeUndefined();
+});
+
 test("today's note made here and not written in yet gives way to the one written on another device", () => {
   const day = notes.dayNote('2026-10-06');
   const written = { ...day, body: '# 2026-10-06 Tuesday\n\nwritten on the Mac at 8am\n', updatedAt: Date.now() - 3_600_000 };

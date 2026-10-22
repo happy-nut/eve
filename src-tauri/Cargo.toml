@@ -19,7 +19,7 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 # `eve mcp` speaks JSON-RPC, and Settings edits Claude Desktop's JSON config (already in the tree via tauri)
 serde_json = "1"
-tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "image-png"] }
+tauri = { version = "2", features = ["protocol-asset", "image-png"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 # the note's own Paste: WebKit blocks execCommand("paste") and the async clipboard API is not dependable here
