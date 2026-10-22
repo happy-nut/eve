@@ -2,18 +2,23 @@
  * The parts a formula is built from, put in by a click in its box (MathEdit.svelte): each is MathLive's template, `#@`
  * where what was selected goes, `#?` an empty slot the caret moves through with Tab. `show` is how its button reads.
  */
-export interface MathPart { tex: string; show?: string; name: string; /** a MathLive command run in place of putting TeX in */ cmd?: string }
+export interface MathPart {
+  tex: string; show?: string; name: string; /** a MathLive command run in place of putting TeX in */ cmd?: string;
+  /** what typed in the box puts it in too (MathLive's shortcuts, and MathEdit's own): said on its button */
+  keys?: string;
+}
 export interface MathShelf { id: string; label: string; /** its tab on a phone, where five words ran past the screen */ short: string; parts: MathPart[] }
 
-const sym = (tex: string, name: string): MathPart => ({ tex, name });
+const sym = (tex: string, name: string, keys?: string): MathPart => ({ tex, name, keys });
 
 export const SHELVES: MathShelf[] = [
   {
     id: 'basic', label: 'Basic', short: 'x²', parts: [
-      { tex: '\\frac{#@}{#?}', show: '\\frac{a}{b}', name: 'Fraction' },
-      { tex: '#@^{#?}', show: 'x^{2}', name: 'Power' },
-      { tex: '#@_{#?}', show: 'x_{i}', name: 'Subscript' },
-      { tex: '\\sqrt{#@}', show: '\\sqrt{x}', name: 'Square root' },
+      // \dfrac: as large inside another fraction as outside it (\frac shrank each level, two deep it was hard to read)
+      { tex: '\\dfrac{#@}{#?}', show: '\\frac{a}{b}', name: 'Fraction', keys: '/' },
+      { tex: '#@^{#?}', show: 'x^{2}', name: 'Power', keys: '^' },
+      { tex: '#@_{#?}', show: 'x_{i}', name: 'Subscript', keys: '_' },
+      { tex: '\\sqrt{#@}', show: '\\sqrt{x}', name: 'Square root', keys: 'sqrt' },
       { tex: '\\sqrt[#?]{#@}', show: '\\sqrt[n]{x}', name: 'Root' },
       { tex: '\\left(#@\\right)', show: '(x)', name: 'Parentheses' },
       { tex: '\\left|#@\\right|', show: '|x|', name: 'Absolute value' },
@@ -25,14 +30,14 @@ export const SHELVES: MathShelf[] = [
   },
   {
     id: 'symbols', label: 'Symbols', short: '±≤', parts: [
-      sym('\\pm', 'Plus or minus'), sym('\\times', 'Times'), sym('\\div', 'Divided by'), sym('\\cdot', 'Dot'),
-      sym('\\le', 'Less or equal'), sym('\\ge', 'Greater or equal'), sym('\\ne', 'Not equal'), sym('\\approx', 'Approximately'),
-      sym('\\equiv', 'Equivalent'), sym('\\propto', 'Proportional'), sym('\\infty', 'Infinity'), sym('^{\\circ}', 'Degrees'),
-      sym('\\to', 'Arrow'), sym('\\Rightarrow', 'Implies'), sym('\\Leftrightarrow', 'If and only if'),
-      sym('\\in', 'In'), sym('\\notin', 'Not in'), sym('\\subset', 'Subset'), sym('\\cup', 'Union'), sym('\\cap', 'Intersection'),
-      sym('\\emptyset', 'Empty set'), sym('\\forall', 'For all'), sym('\\exists', 'Exists'), sym('\\neg', 'Not'),
-      sym('\\land', 'And'), sym('\\lor', 'Or'), sym('\\angle', 'Angle'), sym('\\perp', 'Perpendicular'), sym('\\parallel', 'Parallel'),
-      sym('\\therefore', 'Therefore'), sym('\\ldots', 'Dots'),
+      sym('\\pm', 'Plus or minus', '+-'), sym('\\times', 'Times', '*'), sym('\\div', 'Divided by', '-:'), sym('\\cdot', 'Dot', '**'),
+      sym('\\le', 'Less or equal', '<='), sym('\\ge', 'Greater or equal', '>='), sym('\\ne', 'Not equal', '!='), sym('\\approx', 'Approximately', '~~'),
+      sym('\\equiv', 'Equivalent', '-='), sym('\\propto', 'Proportional', 'prop'), sym('\\infty', 'Infinity', 'oo'), sym('^{\\circ}', 'Degrees'),
+      sym('\\to', 'Arrow', '->'), sym('\\Rightarrow', 'Implies', '=>'), sym('\\Leftrightarrow', 'If and only if'),
+      sym('\\in', 'In', 'in'), sym('\\notin', 'Not in', '!in'), sym('\\subset', 'Subset', 'sub'), sym('\\cup', 'Union', 'uu'), sym('\\cap', 'Intersection', 'nn'),
+      sym('\\emptyset', 'Empty set'), sym('\\forall', 'For all', 'AA'), sym('\\exists', 'Exists', 'EE'), sym('\\neg', 'Not', 'not'),
+      sym('\\land', 'And', '&&'), sym('\\lor', 'Or', 'or'), sym('\\angle', 'Angle'), sym('\\perp', 'Perpendicular'), sym('\\parallel', 'Parallel'),
+      sym('\\therefore', 'Therefore'), sym('\\ldots', 'Dots', '...'),
     ],
   },
   {
@@ -45,9 +50,9 @@ export const SHELVES: MathShelf[] = [
       { tex: '\\lim_{#?\\to#?}', show: '\\lim_{x\\to 0}', name: 'Limit' },
       { tex: '\\frac{d}{d#?}', show: '\\frac{d}{dx}', name: 'Derivative' },
       { tex: '\\frac{\\partial}{\\partial #?}', show: '\\frac{\\partial}{\\partial x}', name: 'Partial derivative' },
-      sym('\\partial', 'Partial'), sym('\\nabla', 'Nabla'),
+      sym('\\partial', 'Partial', 'del'), sym('\\nabla', 'Nabla', 'nabla'),
       { tex: '\\log_{#?}', show: '\\log_{a}', name: 'Logarithm' },
-      sym('\\ln', 'Natural log'), sym('\\sin', 'Sine'), sym('\\cos', 'Cosine'), sym('\\tan', 'Tangent'),
+      sym('\\ln', 'Natural log', 'ln'), sym('\\sin', 'Sine', 'sin'), sym('\\cos', 'Cosine', 'cos'), sym('\\tan', 'Tangent', 'tan'),
       { tex: 'e^{#?}', show: 'e^{x}', name: 'Exponential' },
     ],
   },
@@ -55,7 +60,7 @@ export const SHELVES: MathShelf[] = [
     id: 'greek', label: 'Greek', short: 'αβ', parts: [
       'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'lambda', 'mu', 'nu', 'xi', 'pi', 'rho', 'sigma', 'tau', 'phi', 'chi', 'psi', 'omega',
       'Gamma', 'Delta', 'Theta', 'Lambda', 'Pi', 'Sigma', 'Phi', 'Psi', 'Omega',
-    ].map((g) => sym(`\\${g}`, g)),
+    ].map((g) => sym(`\\${g}`, g, g)),
   },
   {
     id: 'matrix', label: 'Matrix', short: '[ ]', parts: [
@@ -71,6 +76,12 @@ export const SHELVES: MathShelf[] = [
     ],
   },
 ];
+
+/**
+ * A formula as it is drawn and edited: every fraction as large as the text around it. \frac shrinks what is in it at
+ * each level, and two deep a fraction was hard to read; notes written before keep their \frac, drawn this way.
+ */
+export const fullSize = (tex: string): string => tex.replace(/\\frac(?![a-zA-Z])/g, '\\dfrac');
 
 /**
  * TeX as the note keeps it: MathLive's empty slots left out (`\\frac{1}{}` draws anywhere, `\\placeholder` only in

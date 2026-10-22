@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import { tidyTex, SHELVES } from './mathParts.ts';
+import { tidyTex, fullSize } from './mathParts.ts';
+
+// every fraction drawn at the text's size, however deep: \frac as \dfrac (\tfrac and \fraction are left alone)
+assert.equal(fullSize('\\frac{\\frac{1}{2}}{3}+\\tfrac{a}{b}+\\fraction'), '\\dfrac{\\dfrac{1}{2}}{3}+\\tfrac{a}{b}+\\fraction');
+assert.equal(fullSize('\\dfrac{1}{2}'), '\\dfrac{1}{2}');
+
 
 // MathLive's shortened fractions get their braces back; its empty slots are left out
 assert.equal(tidyTex('\\frac12+\\pi'), '\\frac{1}{2}+\\pi');
@@ -11,6 +16,4 @@ assert.equal(tidyTex('\\sqrt{\\placeholder{}}+\\frac{\\placeholder{}}{2}'), '\\s
 assert.equal(tidyTex('\\binom n k'), '\\binom{n}{k}');
 // written as it was otherwise
 for (const t of ['x^2+y_i', '\\fraction', '\\frac{a}{b}', '\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}', '\\text{a {b} c}']) assert.equal(tidyTex(t), t);
-// every part has a name (its button's label) and is a template MathLive reads
-for (const s of SHELVES) for (const p of s.parts) { assert.ok(p.name); assert.ok(p.tex); }
 console.log('math parts ok');

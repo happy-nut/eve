@@ -3,6 +3,7 @@ import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type MarkdownIt from 'markdown-it';
 import { loadMath, mathMarkup, mathNow } from './mathRender';
+import { fullSize } from './mathParts';
 import { mountMath, type MathEditing } from './mathEdit.svelte';
 import { scrollHint } from './scrollHint';
 import { HTML_TAGS } from './html';
@@ -137,7 +138,7 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     dom.classList.toggle('empty', !latex.trim());
     if (!latex.trim()) { shown.textContent = display ? 'New equation' : 'Equation'; return; }
     const m = mathNow();
-    if (m) { shown.innerHTML = mathMarkup(m, latex, display); return; }
+    if (m) { shown.innerHTML = mathMarkup(m, fullSize(latex), display); return; }
     shown.textContent = latex; // a moment, the first time: MathLive on its way
     loadMath().then(() => { if (!editing) draw(); }, () => {});
   };
