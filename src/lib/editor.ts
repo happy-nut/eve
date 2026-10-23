@@ -163,9 +163,6 @@ const BlankLine = Paragraph.extend({
             // "**Alice**and Bob", the words run together. A space ahead of it keeps them apart.
             md.renderer.rules.softbreak = () => ' \n';
           },
-          updateDOM(element: HTMLElement) {
-            for (const p of element.querySelectorAll('p')) if (p.textContent === BLANK) p.replaceChildren();
-          },
         },
       },
     };
@@ -210,10 +207,16 @@ function keepSpaces(root: HTMLElement) {
     if (parts.length) t.replaceWith(...parts, text.slice(last));
   }
 }
+/** A blank line (BlankLine) read back empty, as it was. Here, the last thing to see the page, and not as the line is read
+ *  in: a callout or a quote is built after that, and the blank lines in it kept their space — invisible, one more ⌫ to
+ *  clear, and a note read back after a sync no longer the one open (the caret moved). */
+function emptyBlankLines(el: HTMLElement) {
+  for (const p of el.querySelectorAll('p')) if (p.textContent === BLANK) p.replaceChildren();
+}
 const KeepSpaces = Extension.create({
   name: 'keepSpaces',
   priority: 1, // the last to see the page
-  addStorage: () => ({ markdown: { parse: { updateDOM: keepSpaces } } }),
+  addStorage: () => ({ markdown: { parse: { updateDOM: (el: HTMLElement) => { emptyBlankLines(el); keepSpaces(el); } } } }),
 });
 
 const KEYMAP = new PluginKey('eve-keymap');

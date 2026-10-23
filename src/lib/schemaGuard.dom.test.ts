@@ -3,36 +3,13 @@
 // its file and clipboard round trip being checked (a callout's copy once lost its title to its icon this way).
 import { test, expect, afterEach } from 'vitest';
 import { editorWith as make, md } from './testEditor';
+import { SAMPLES, INSIDE, BLOCKS } from './schemaSamples';
 
 // hundreds of editors: each one destroyed after its test (left alive, they made the file run for minutes)
 const made: { destroy(): void }[] = [];
 const editorWith = (s: string) => { const ed = make(s); made.push(ed); return ed; };
 afterEach(() => { for (const ed of made.splice(0)) ed.destroy(); document.body.innerHTML = ''; });
 
-const SAMPLES: Record<string, string> = {
-  'marks and inline nodes': '# T\n\nplain **bold** *it* ~~s~~ <u>u</u> `code` ==hi== [l](https://x.y) [[Page]] [[Page|alias]] @2026-10-18 $x^2$ a\\\nb',
-  'inline html': 'x <span style="color: red">y</span> z <input type="checkbox"> w',
-  'coloured highlight': 'plain ==yellow== and <mark style="background-color: #c9f2d4">mint</mark> and **<mark style="background-color: #e5d8ff">lilac bold</mark>**',
-  'code': '```js\nlet a = 1\n```',
-  'lists': '- a\n- b\n\n1. one\n2. two\n\n- [ ] todo\n- [x] done',
-  'quote': '> quote',
-  'toggle': '<details open>\n<summary>T</summary>\n\nbody\n\n</details>',
-  'callout': '> [!note] Title\n> body',
-  'untitled callout': '> [!tip]\n> body',
-  'formula': '$$\nx+1\n$$',
-  'table': '| a | b |\n| --- | --- |\n| 1 | 2 |\n',
-  // columns dragged wider or narrower: their widths in a comment under the table, which other apps do not show
-  'sized table': '| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n\n<!-- eve:widths 120 - 240 -->',
-  'divider': 'a\n\n---\n\nb',
-  'picture': '![cap](assets/a.png)',
-  'pdf': '[notes.pdf](assets/notes.pdf)',
-  'video': '[clip.mp4](assets/clip.mp4)',
-  'link card': 'https://example.com/',
-  'board': '```kanban\n{\n  "columns": [\n    {\n      "title": "To do",\n      "cards": [\n        {\n          "title": "A",\n          "body": ""\n        }\n      ]\n    }\n  ]\n}\n```',
-  'html around markdown': '<div align="center">\n\n**inside**\n\n</div>',
-  'comments': '<!-- a comment -->\n\ntext <!-- c --> more',
-  'raw html': '<iframe src="https://x.com"></iframe>',
-};
 
 const known = new Map<string, Set<string>>();
 const kinds = (s: string) => {
@@ -73,14 +50,6 @@ test.each(Object.entries(SAMPLES))('%s: copied and pasted into another note, unc
   expect(copyPaste(note)).toBe(note);
 });
 
-// Each block inside each container a note can nest it in, written as the app writes the container.
-const INSIDE: Record<string, (body: string) => string> = {
-  'a quote': (b) => b.split('\n').map((l) => (l ? `> ${l}` : '>')).join('\n'),
-  'a callout': (b) => '> [!note] Box\n' + b.split('\n').map((l) => (l ? `> ${l}` : '>')).join('\n'),
-  'a toggle': (b) => `<details open>\n<summary>T</summary>\n\n${b}\n\n</details>`,
-  'a list item': (b) => '- item\n\n' + b.split('\n').map((l) => (l ? `  ${l}` : '')).join('\n'),
-};
-const BLOCKS = ['code', 'lists', 'quote', 'toggle', 'callout', 'formula', 'table', 'sized table', 'divider', 'picture', 'board'];
 
 for (const [where, wrap] of Object.entries(INSIDE)) {
   test.each(BLOCKS)(`%s inside ${where}: saved as it was read, and copied unchanged`, (k) => {
@@ -127,4 +96,18 @@ test.each(BLOCKS)('%s, copied from between two lines, pasted alone', (k) => {
   // an empty line left around it (the slice's open ends, the line kept after a block) is no part of it
   const got = md(to).split('\n\n').filter((b) => b.trim() && b.trim() !== '&nbsp;').join('\n\n');
   expect(kinds(got)).toEqual(kinds(SAMPLES[k]));
+});
+
+// Read back, the same document, not only the same file: what sync puts into an open note is the note read back, and
+// any difference there (a blank line read back holding a non-breaking space, as one inside a callout was) is taken for
+// an edit from the other device — the stretch put back grew, and the caret was moved with it.
+const READS: [string, string][] = [
+  ...Object.entries(SAMPLES),
+  ...Object.entries(INSIDE).flatMap(([where, wrap]) => BLOCKS.map((k) => [`${k} inside ${where}`, wrap(SAMPLES[k])] as [string, string])),
+];
+// (a board's column and card ids are the editor's, made new each time it is read; takeBody matches boards by their text)
+const noIds = (json: unknown): unknown => JSON.parse(JSON.stringify(json, (k, v) => (k === 'id' ? undefined : v)));
+test.each(READS)('%s: read back, the same document as the one open', (_k, note) => {
+  const open = editorWith(note);
+  expect(noIds(editorWith(md(open)).state.doc.toJSON())).toEqual(noIds(open.state.doc.toJSON()));
 });
