@@ -123,3 +123,23 @@ test('the caret stays in its own line when the phone changes a line above it, in
   type(ed, '!');
   expect(md(ed)).toBe('# S\n\nfirst, from the phone\n\n- a!\n- b');
 });
+
+test('in a table, the caret stays in its own cell when another cell of it changes', async () => {
+  // the whole table is one block of the note: put back as far into it as it was, the caret went into another cell
+  // as soon as a cell before it got longer or shorter (a click in the table landed somewhere else)
+  const table = (first: string) => `# T\n\n| key | text |\n| --- | --- |\n| r1 | ${first} |\n| r4 | delta here |\n| r5 | plain words |\n`;
+  const { id } = notes.create(table('a short cell'));
+  const n = notes.all.find((x) => x.id === id)!;
+  const ed = open(n);
+  ed.view.dom.setAttribute('tabindex', '0');
+  ed.view.focus();
+  ed.commands.setTextSelection(posOf(ed, 'delta', true));
+  for (const first of ['a much much longer cell than it was before', 'x']) {
+    notes.mergeRemote([{ ...n, body: table(first), updatedAt: Date.now() + 1000 }], true);
+    flushSync();
+    await tick();
+    const { $from } = ed.state.selection;
+    expect($from.parent.textContent).toBe('delta here');
+    expect($from.parentOffset).toBe('delta'.length);
+  }
+});
