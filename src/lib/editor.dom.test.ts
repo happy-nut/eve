@@ -744,3 +744,14 @@ describe('list ends, whole-list toggles and empty lines that read back the same'
     expect(after('- z\n  1. a\n  2. b', 'a', false, 'Backspace')).toBe('- z\n\n1. a\n   1. b');
   });
 });
+
+test("the first line is the page's title: an empty one says Untitled, the line under a title says what can be typed", () => {
+  const ed = editorWith('');
+  ed.commands.focus('end');
+  const hint = (i: number) => ed.view.dom.children[i]?.getAttribute('data-placeholder');
+  expect(hint(0)).toBe('Untitled');
+  type(ed, 'Plans');
+  press(ed, 'Enter');
+  expect(hint(0)).toBeFalsy();
+  expect(hint(1)).toMatch(/^Start (typing|writing)/);
+});

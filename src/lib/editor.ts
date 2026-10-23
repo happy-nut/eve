@@ -1492,7 +1492,8 @@ export function createEditor(opts: {
         },
       }).configure({ nested: true }),
       // a phone's bar does the formatting; the markdown hint is for a keyboard
-      Placeholder.configure({ placeholder: isMobile ? 'Start writing…' : 'Start typing… # heading, - list, [[ link' }),
+      // the first line is the page's title (drawn as one, app.css): empty, it says so; the line under it, what can be typed
+      Placeholder.configure({ placeholder: ({ pos }) => (pos === 0 ? 'Untitled' : isMobile ? 'Start writing…' : 'Start typing… # heading, - list, [[ link') }),
       Markdown.configure({ html: true, transformPastedText: true, transformCopiedText: true, linkify: true, breaks: false }),
       // ahead of the picker's own plugin, which reads where the "[[" was typed in the same transaction
       Extension.create({ name: 'wikiTyped', priority: 1000, addProseMirrorPlugins: () => [wikiTyped] }),
