@@ -1,11 +1,14 @@
 <script lang="ts">
   import type { Editor } from '@tiptap/core';
   import { floatAt, screenInsets } from './lib/popup';
+  import { isMobile } from './lib/platform';
 
   /**
    * Row/column controls for the table the caret is in. A small bar over the table's top-left corner,
    * the way the outline rail sits beside the page — no grips to hunt for, and nothing on screen while
-   * you are writing anywhere else.
+   * you are writing anywhere else. On a Mac only while the pointer is over that table (or the bar): there with every
+   * caret in the table, it sat over the top-right cells and covered what was being typed in them. A phone has no
+   * pointer to bring it up, and keeps it while the caret is in the table.
    */
   /** `sheet`: the editor is a card's or a day's page (--z-sheet), which drew over the bar and left a table there with
    *  no way to add a row; the bar goes over that page then, still under the phone's formatting bar (--z-phone-bar) */
@@ -25,6 +28,7 @@
     const el = (dom instanceof HTMLElement ? dom : dom.parentElement)?.closest('table');
     if (!el) { at = null; return; }
     const r = el.getBoundingClientRect();
+    if (!isMobile && !pointerOver(r)) { at = null; return; }
     // (not drawn yet, its size is not known: placed again once it is)
     if (!bar) requestAnimationFrame(() => { if (bar) place(); });
     const h = bar?.offsetHeight ?? 32, w = bar?.offsetWidth ?? 0, was = !!at?.inside;
@@ -78,6 +82,17 @@
   let bar = $state<HTMLDivElement | null>(null);
   let fullH = 0;
 
+  /** where the pointer last was, and whether it is over the table, the bar, or the gap between them (crossed on the
+   *  way from one to the other: the bar must not go before it is reached) */
+  let pointer: { x: number; y: number } | null = null;
+  function pointerOver(r: DOMRect): boolean {
+    if (!pointer) return false;
+    const b = bar?.getBoundingClientRect();
+    const left = Math.min(r.left, b?.left ?? r.left), right = Math.max(r.right, b?.right ?? r.right);
+    const top = Math.min(r.top, b?.top ?? r.top) - 4, bottom = Math.max(r.bottom, b?.bottom ?? r.bottom) + 4;
+    return pointer.x >= left && pointer.x <= right && pointer.y >= top && pointer.y <= bottom;
+  }
+
   $effect(() => {
     const e = editor;
     if (!e) return;
@@ -90,6 +105,10 @@
     e.on('blur', update);
     window.addEventListener('scroll', update, true); // the note scrolls under it
     window.addEventListener('resize', update);
+    // the pointer coming over the table or leaving it (a Mac: the bar shows only then)
+    const moved = (ev: PointerEvent) => { const was = pointer; pointer = { x: ev.clientX, y: ev.clientY }; if (!was || at || e.isActive('table')) update(); };
+    const left = () => { pointer = null; update(); };
+    if (!isMobile) { window.addEventListener('pointermove', moved, { passive: true }); document.documentElement.addEventListener('pointerleave', left); }
     update();
     return () => {
       e.off('selectionUpdate', update);
@@ -98,6 +117,8 @@
       e.off('blur', update);
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
+      window.removeEventListener('pointermove', moved);
+      document.documentElement.removeEventListener('pointerleave', left);
     };
   });
 
