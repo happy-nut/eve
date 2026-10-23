@@ -1,5 +1,6 @@
 import { findUpdate, type Update } from './update';
 import { isMobile, isTauri, widget } from './platform';
+import { ui } from './ui.svelte';
 
 /**
  * Eve's own updates, on the phone and the Mac: looked for at launch and when the app comes back (at most
@@ -11,6 +12,8 @@ const EVERY = 3 * 60 * 60 * 1000;
 /** how old an answer may be when the window comes back, or Settings opens: a release made an hour ago shows */
 export const FRESH = 10 * 60 * 1000;
 const target = isMobile ? 'android' : 'mac';
+/** what installs Eve by hand when it cannot replace itself (the same the README gives) */
+export const BY_HAND = 'brew reinstall --cask happy-nut/tap/eve';
 
 class Updates {
   available = $state<Update | null>(null);
@@ -60,6 +63,8 @@ class Updates {
     } catch (err) {
       this.state = 'error';
       this.message = String(err);
+      // a line in a tooltip was all it said, and the command to run was in it to retype: a dialog, the command copied with a click
+      void ui.tell(`Eve ${u.version} could not be installed.\n${this.message}\n\nIn Terminal, this installs it instead:`, BY_HAND);
     }
   }
   /** what an update under way is doing, for the list and Settings ('' when none is) */

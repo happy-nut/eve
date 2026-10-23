@@ -5,6 +5,7 @@
   import { ui } from './lib/ui.svelte';
   import { sheet, held } from './lib/popup';
   import { claimKeys } from './lib/keys';
+  import { copyText } from './lib/platform';
 
   // the last one asked: closing, it fades out showing what it showed (ui.pending is already null by then)
   const p = $derived.by(held(() => ui.pending));
@@ -12,6 +13,9 @@
   const done = (v: string | null) => ui.done(v);
   let value = $state('');
   $effect(() => { value = p.input ?? ''; });
+
+  let copied = $state(false);
+  const copy = async () => { await copyText(p.command ?? ''); copied = true; setTimeout(() => (copied = false), 1500); };
 
   let box: HTMLDivElement;
   /** up from the bottom on a phone (a sheet); the Mac's dialog grows in place */
@@ -60,6 +64,9 @@
     </span>
     <p>{p.message}</p>
   </div>
+  {#if p.command}
+    <div class="cmd"><code>{p.command}</code><button onclick={copy}>{copied ? 'Copied' : 'Copy'}</button></div>
+  {/if}
   {#if p.input !== undefined}
     <input bind:value use:focus spellcheck="false" />
   {/if}
@@ -89,7 +96,11 @@
   }
   .mark.danger { background: light-dark(rgba(255, 69, 58, 0.12), rgba(255, 69, 58, 0.18)); color: #ff453a; }
   .mark svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
-  p { margin: 4px 0 0; line-height: 1.45; word-break: break-word; }
+  p { margin: 4px 0 0; line-height: 1.45; word-break: break-word; white-space: pre-line; }
+  /* a Terminal command: selectable as it is, or copied whole */
+  .cmd { display: flex; align-items: center; gap: 6px; margin: 12px 0 0 39px; padding: 4px 4px 4px 9px; border-radius: 8px; background: var(--bg-input); }
+  .cmd code { flex: 1; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; user-select: text; -webkit-user-select: text; overflow-wrap: anywhere; }
+  .cmd button { padding: 4px 10px; background: var(--bg-pop); }
   input {
     width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 7px 9px; border-radius: 8px; margin: 12px 0 0;
     border: 0; background: var(--bg-input); color: var(--fg); outline: none;

@@ -94,7 +94,7 @@ fn install(app: &AppHandle, url: &str, sha256: &str, version: &str) -> Result<()
     let work = dir.join(format!(".eve-update-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir(&work).map_err(|e| {
-        format!("Eve cannot write to {} ({e}). Update with `brew reinstall --cask eve` instead.", dir.display())
+        format!("Eve cannot write to {} ({e}). Homebrew can install it instead.", dir.display())
     })?;
     let result = (|| {
         let zip = work.join("Eve.zip");
@@ -120,7 +120,7 @@ fn install(app: &AppHandle, url: &str, sha256: &str, version: &str) -> Result<()
         let old = work.join("Eve-old.app");
         // macOS's App Management protection may refuse this; then nothing has changed yet
         std::fs::rename(&bundle, &old).map_err(|e| {
-            format!("macOS did not let Eve replace itself ({e}). Allow Eve in System Settings → Privacy & Security → App Management, or update with `brew reinstall --cask eve`.")
+            format!("macOS did not let Eve replace itself ({e}). Allow Eve in System Settings → Privacy & Security → App Management, or install it with Homebrew.")
         })?;
         if let Err(e) = std::fs::rename(&new, &bundle) {
             let _ = std::fs::rename(&old, &bundle);
