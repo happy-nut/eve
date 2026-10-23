@@ -8,7 +8,9 @@ export interface MenuItem { label: string; run?: () => void; keys?: string; sep?
   swatch?: string }
 
 /** In-app confirm/prompt (WKWebView has no native JS dialogs). Rendered by Confirm.svelte. */
-interface Pending { message: string; input?: string; danger?: boolean; yes?: string; alert?: boolean; resolve: (v: string | null) => void }
+interface Pending { message: string; input?: string; danger?: boolean; yes?: string; alert?: boolean;
+  /** a command to run in Terminal, shown under the message with a Copy button */
+  command?: string; resolve: (v: string | null) => void }
 
 /** a kanban card opened as a floating page; edits stream back through onChange */
 export interface CardReq {
@@ -317,9 +319,9 @@ class Ui {
   ask(message: string, danger = true, yes?: string): Promise<boolean> {
     return new Promise((res) => this.asking({ message, danger, yes, resolve: (v) => res(v !== null) }));
   }
-  /** Something to know, not a choice: one OK, no Cancel. */
-  tell(message: string): Promise<void> {
-    return new Promise((res) => this.asking({ message, danger: false, alert: true, resolve: () => res() }));
+  /** Something to know, not a choice: one OK, no Cancel (and a command to copy, when that is what to do next). */
+  tell(message: string, command?: string): Promise<void> {
+    return new Promise((res) => this.asking({ message, command, danger: false, alert: true, resolve: () => res() }));
   }
   /** Text input; resolves null on cancel. */
   prompt(message: string, initial = ''): Promise<string | null> {

@@ -22,3 +22,14 @@ test('not "up to date" before it has asked; asked again once the answer is ten m
   expect(asked).toHaveBeenCalledTimes(2);
   vi.useRealTimers();
 });
+
+test('an update that fails says so in a dialog, with the Homebrew command to copy', async () => {
+  vi.doMock('@tauri-apps/api/core', () => ({ invoke: async () => { throw 'macOS did not let Eve replace itself (Operation not permitted).'; } }));
+  const { ui } = await import('./ui.svelte');
+  const { BY_HAND } = await import('./updates.svelte');
+  await updates.install();
+  expect(updates.state).toBe('error');
+  expect(ui.pending?.message).toContain('Operation not permitted');
+  expect(ui.pending?.command).toBe(BY_HAND);
+  ui.done(null);
+});
