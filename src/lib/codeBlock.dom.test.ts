@@ -1,6 +1,7 @@
 import { describe, test, expect, afterEach } from 'vitest';
 import { editorWith, md, posOf, type, press, paste } from './testEditor';
 import { runEditorCommand } from './editor';
+import { matchLanguage } from './code';
 
 afterEach(() => { document.body.innerHTML = ''; });
 
@@ -198,11 +199,22 @@ describe('highlighting', () => {
     expect(keywords(ed, 1)).toEqual(['var', 'const']);
   });
 
-  test('a long block with no language: drawn plain, its language not guessed', async () => {
-    const ed = editorWith('# T\n\n```js\nlet a\n```\n\n```\n' + 'let x = 1;\n'.repeat(300) + '```');
+  test('plain text, or a language it has no grammar for: drawn plain, no language guessed for it', async () => {
+    // the chip said Plain text and the block came out in some guessed language's colours, often the wrong one
+    const ed = editorWith('# T\n\n```js\nlet a\n```\n\n```\nlet x = 1; if (x) return\n```\n\n```vbscript-ish\nlet y = 2\n```');
     await grammars(ed);
     expect(keywords(ed, 0)).toEqual(['let']);
     expect(ed.view.dom.querySelectorAll('pre')[1].querySelector('[class*="hljs-"]')).toBeNull();
+    expect(ed.view.dom.querySelectorAll('pre')[2].querySelector('[class*="hljs-"]')).toBeNull();
+  });
+
+  test('a Dockerfile (and the other languages past the common ones) is highlighted, and offered by name', async () => {
+    const ed = editorWith('# T\n\n```dockerfile\nFROM node:22\nRUN npm ci\n```\n\n```powershell\nGet-ChildItem\n```');
+    await grammars(ed);
+    expect(keywords(ed, 0)).toEqual(['FROM', 'RUN']);
+    expect(ed.view.dom.querySelectorAll('pre')[1].querySelector('[class*="hljs-"]')).not.toBeNull();
+    expect(matchLanguage('docker')).toEqual(['dockerfile', 'Dockerfile']);
+    expect(matchLanguage('ps1')?.[0]).toBe('powershell');
   });
 });
 
