@@ -176,10 +176,11 @@
     const toA = Math.min(...edges.filter((p) => p >= endA)), toB = toA + endB - endA;
     const { selection } = editor.state;
     const tr = editor.state.tr.replace(from, toA, next.slice(from, toB));
-    // the caret stays by the text it was in: before the change and after it, where it was; in the blocks replaced, as
-    // far into them as it was, or at their end
+    // the caret stays by the text it was in, judged by the stretch that really differs (start…endA), not by the whole
+    // blocks replaced: before it and after it, by the same text; in it, as far in as it was, or at its end. (By the
+    // blocks, a caret in a table — one block, however big — went into another cell as soon as a cell before it grew.)
     if (selection instanceof TextSelection) {
-      const map = (p: number) => (p <= from ? p : p >= toA ? p + toB - toA : Math.min(p, toB));
+      const map = (p: number) => (p <= start ? p : p >= endA ? p + endB - endA : Math.min(p, endB));
       tr.setSelection(TextSelection.between(tr.doc.resolve(map(selection.anchor)), tr.doc.resolve(map(selection.head))));
     }
     editor.view.dispatch(tr.setMeta('addToHistory', false).setMeta('preventUpdate', true));
