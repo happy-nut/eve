@@ -37,10 +37,12 @@ test.each(NOTES)('%s: the caret stays by its text when a line before it changes'
   for (let e = 0; e < lines.length; e++) {
     for (const change of ['longer', 'shorter'] as const) {
       // the same note as another device saved it: one line before the caret written longer or shorter
-      const other = editorWith(body);
+      // (made and let go at once: hundreds of them kept to the end made a long list's case run past its time on CI)
+      const other = make(body);
       const at = parts(other.state.doc).lines[e].pos;
       other.view.dispatch(change === 'longer' ? other.state.tr.insertText('zz ', at) : other.state.tr.delete(at, at + 1));
       const changed = md(other);
+      other.destroy();
       for (const line of lines.slice(e + 1)) {
         for (const [into, back] of [[changed, body], [body, changed]] as const) {
           // (the caret where it would be in the note as it now stands)
@@ -67,4 +69,4 @@ test.each(NOTES)('%s: the caret stays by its text when a line before it changes'
     }
   }
   expect([...new Set(wrong)]).toEqual([]);
-});
+}, 60_000); // a note of many lines tries every pair of them: seconds on a slow CI machine
