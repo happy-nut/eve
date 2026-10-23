@@ -46,6 +46,7 @@ pub fn run() {
         .manage(PendingLink::default())
         .setup(|app| {
             mac::release_unclaimed_markdown(app.handle());
+            mac::keep_page_awake(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
