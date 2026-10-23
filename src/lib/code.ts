@@ -17,7 +17,7 @@ import { fenceFor } from './markdown';
  * then every waiting editor repaints once.
  */
 type Hast = { type: string; value?: string; properties?: { className?: string[] }; children?: Hast[] };
-type Lowlight = { highlight(lang: string, code: string): Hast; highlightAuto(code: string): Hast; registered(lang: string): boolean };
+type Lowlight = { highlight(lang: string, code: string): Hast; registered(lang: string): boolean };
 let lowlight: Lowlight | null = null;
 let loading: Promise<void> | null = null;
 const waiting = new Set<Editor>();
@@ -33,10 +33,6 @@ function withGrammars(editor: Editor) {
   }, () => { loading = null; }); // offline or failed: the next code block tries again
 }
 
-/** Language guessed only for code up to this long: the guess runs every grammar over it, and a long block without a
- * language took a second and more each key */
-const AUTO_MAX = 2000;
-
 /** Each block's highlighting (spans from its start, with their hljs-* classes), kept while the block is unchanged:
  * a key typed in one block highlighted every block in the note again */
 const spans = new WeakMap<PMNode, [from: number, to: number, cls: string][]>();
@@ -46,7 +42,9 @@ function spansOf(node: PMNode) {
   let got = spans.get(node);
   if (got) return got;
   const ll = lowlight!, text = node.textContent, lang: string | null = node.attrs.language;
-  const tree = lang && ll.registered(lang) ? ll.highlight(lang, text) : text.length <= AUTO_MAX ? ll.highlightAuto(text) : null;
+  // only in the language the block says: one guessed for plain text (or a language with no grammar here) came out in
+  // some other language's colours, often the wrong one, under a chip that said Plain text
+  const tree = lang && ll.registered(lang) ? ll.highlight(lang, text) : null;
   got = [];
   let at = 0;
   const walk = (nodes: Hast[] = [], classes: string[]) => {
@@ -120,24 +118,35 @@ const LANGUAGES: [value: string, label: string][] = [
   ['', 'Plain text'],
   ['bash', 'Bash'],
   ['c', 'C'],
+  ['cmake', 'CMake'],
   ['cpp', 'C++'],
   ['csharp', 'C#'],
   ['css', 'CSS'],
+  ['dart', 'Dart'],
   ['diff', 'Diff'],
+  ['dockerfile', 'Dockerfile'],
+  ['elixir', 'Elixir'],
   ['go', 'Go'],
   ['graphql', 'GraphQL'],
+  ['groovy', 'Groovy / Gradle'],
+  ['haskell', 'Haskell'],
   ['ini', 'INI / TOML'],
   ['java', 'Java'],
   ['javascript', 'JavaScript'],
   ['json', 'JSON'],
   ['kotlin', 'Kotlin'],
   ['lua', 'Lua'],
+  ['makefile', 'Makefile'],
   ['markdown', 'Markdown'],
   ['mermaid', 'Mermaid diagram'],
+  ['nginx', 'Nginx'],
   ['php', 'PHP'],
+  ['powershell', 'PowerShell'],
+  ['protobuf', 'Protocol Buffers'],
   ['python', 'Python'],
   ['ruby', 'Ruby'],
   ['rust', 'Rust'],
+  ['scala', 'Scala'],
   ['scss', 'SCSS'],
   ['sql', 'SQL'],
   ['swift', 'Swift'],
@@ -151,6 +160,8 @@ const ALIASES: Record<string, string> = {
   js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript', py: 'python', sh: 'bash', shell: 'bash', zsh: 'bash',
   html: 'xml', yml: 'yaml', md: 'markdown', 'c++': 'cpp', 'c#': 'csharp', cs: 'csharp', toml: 'ini', kt: 'kotlin', rb: 'ruby',
   rs: 'rust', golang: 'go', plain: '', text: '', txt: '',
+  docker: 'dockerfile', ps1: 'powershell', pwsh: 'powershell', proto: 'protobuf', hs: 'haskell', ex: 'elixir', exs: 'elixir',
+  gradle: 'groovy', make: 'makefile', mk: 'makefile',
 };
 /**
  * The language a name typed in the field means: an alias (js), a name or label (python, C++), else the first whose

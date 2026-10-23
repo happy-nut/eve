@@ -374,11 +374,17 @@ aside.focus-flash::after, main.focus-flash::after {
 .tiptap p { margin: 0; }
 /* 700, not 600: the Korean face only steps up at Bold, and 600 reads the same as the text around it */
 .tiptap strong { font-weight: 700; }
-.tiptap p.is-editor-empty:first-child::before {
+.tiptap > :first-child.is-empty::before, .tiptap > p.is-empty:nth-child(2):last-child::before {
   content: attr(data-placeholder);
   color: var(--fg-dim);
   float: left; height: 0; pointer-events: none;
 }
+/* the page's title is its first line (titleOf), whatever it was written as: a plain line or any heading. It is drawn
+   as the title, larger than a heading in the note, in a note's own pane only (a floating card has a title of its own) */
+.editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5):first-child {
+  font-size: 2.3em; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; margin-top: 0; color: var(--fg); text-transform: none;
+}
+html.mobile .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5):first-child { font-size: 2em; }
 .tiptap ul, .tiptap ol { padding-left: 1.4em; margin: 0; list-style: none; }
 .tiptap li > p { margin: 0; }
 .tiptap li { margin: 0.15em 0; position: relative; }
@@ -435,13 +441,17 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 .tiptap pre code { background: none; padding: 0; margin: 0; box-shadow: none; font-size: 0.85em; }
 /* the chip sits on the wrapper, not the <pre>: inside a scrolling <pre> it would slide away with long lines */
 .tiptap .code-block { position: relative; }
-/* Code and diagrams are as wide as they need, as far as the pane goes (24px short of each side), not held to the
+/* How wide a block of the note's own may grow past the text: as far as the pane goes (24px short of each side), but no
+   further than 1280px, however wide the window. Code, diagrams, pictures and tables all keep to it, so on a big screen
+   they line up with one another instead of each running to the window's edge. */
+.editor .tiptap { --wide: min(calc(var(--pane, 100%) - 48px), 1280px); }
+/* Code and diagrams are as wide as they need, as far as --wide goes, not held to the
    width the text reads at: a long line or a wide flowchart scrolled sideways inside a column with empty page on both
    sides of it. Still never narrower than the text, and centred on it. Only a block of the note's own: one in a list,
    a quote or a toggle keeps to it. (--pane is the editor's width, kept on it by Editor.svelte. It was a size container
    (container-type) once: WebKit then at times drew nothing of the note but its white page, a part of it or all.) */
 .editor .tiptap > .code-block {
-  width: max-content; min-width: 100%; max-width: calc(var(--pane, 100%) - 48px);
+  width: max-content; min-width: 100%; max-width: max(100%, var(--wide));
   left: 50%; translate: -50% 0;
 }
 /* a diagram filling the screen from in here is placed against the window: a translate around it would make it this
@@ -733,6 +743,11 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
    room for a word or two and the table runs as wide as that needs, scrolling sideways in its wrapper; one that fits
    still fills the width */
 html.mobile .tiptap table { table-layout: auto; }
+/* A table of the note's own is as wide as its cells need, up to --wide, centred on the text as code is: held to the
+   column, a table of a few wide columns folded every cell into a few words a line. Past --wide its cells fold their
+   lines; one with columns sized by hand keeps those widths (scrolling sideways when they are wider still). */
+.editor .tiptap > .tableWrapper { position: relative; width: max-content; min-width: 100%; max-width: max(100%, var(--wide)); left: 50%; translate: -50% 0; }
+.editor .tiptap > .tableWrapper table { table-layout: auto; }
 html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 .tiptap .selectedCell::after {
   content: ''; position: absolute; inset: 0; background: var(--accent-soft); pointer-events: none;
@@ -757,8 +772,8 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
    code and diagrams are: held to the column, a wide screenshot came out too small to read. Where it sits says which
    way it grows — from the left edge rightwards, from the right edge leftwards, centred both ways. Only a picture of
    the note's own: one in a list or a quote keeps to its column. Never narrower than the column allowed before. */
-.editor .tiptap > .img-fig { width: max-content; max-width: max(100%, calc(50% + var(--pane, 100%) / 2 - 24px)); }
-.editor .tiptap > .img-fig[data-align='center'] { max-width: max(100%, calc(var(--pane, 100%) - 48px)); margin-left: 0; margin-right: 0; left: 50%; translate: -50% 0; }
+.editor .tiptap > .img-fig { width: max-content; max-width: max(100%, calc(50% + var(--wide) / 2)); }
+.editor .tiptap > .img-fig[data-align='center'] { max-width: max(100%, var(--wide)); margin-left: 0; margin-right: 0; left: 50%; translate: -50% 0; }
 .editor .tiptap > .img-fig[data-align='right'] { margin-left: 0; left: 100%; translate: -100% 0; }
 .tiptap .img-fig[data-align='center'] .img-cap { text-align: center; }
 .tiptap .img-fig[data-align='right'] .img-cap { text-align: right; }

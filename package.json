@@ -57,6 +57,7 @@
     "@tiptap/suggestion": "^3.31.3",
     "emoji-picker-element": "^1.29.1",
     "emoji-picker-element-data": "^1.8.0",
+    "highlight.js": "~11.11.0",
     "lowlight": "^3.3.0",
     "mathlive": "^0.111.0",
     "mermaid": "^11.17.2",

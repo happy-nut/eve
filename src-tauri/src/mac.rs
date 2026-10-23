@@ -4,6 +4,27 @@ use tauri::{AppHandle, Manager};
 
 use crate::files::{assets_dir, safe_name};
 
+/// The note's page is never put to sleep while Eve is out of sight. WebKit suspends the page of a window that is
+/// hidden (⌘⇧E puts the whole app away) and freezes what it last drew; summoned, the page is woken first, and until
+/// it had drawn again the window came up as a white page, now and then for good. Eve is summoned to be typed into at
+/// once, so its page stays awake (macOS 14 and later; an older macOS has no such setting and keeps its own way).
+pub(crate) fn keep_page_awake(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.with_webview(|platform| unsafe {
+            use objc2::{runtime::NSObjectProtocol, sel};
+            use objc2_web_kit::{WKInactiveSchedulingPolicy, WKWebView};
+            let webview: &WKWebView = &*(platform.inner() as *mut WKWebView);
+            let prefs = webview.configuration().preferences();
+            if prefs.respondsToSelector(sel!(setInactiveSchedulingPolicy:)) {
+                prefs.setInactiveSchedulingPolicy(WKInactiveSchedulingPolicy::None);
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+}
+
 /// First page of a stored PDF as a PNG, for the card in a note. Rendered by Quick Look (the same
 /// picture Finder shows) and cached, so a note full of PDFs costs one render each, once.
 /// ponytail: runs qlmanage on the async runtime; if a huge PDF ever makes that felt, move it to
