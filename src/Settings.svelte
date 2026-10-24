@@ -529,7 +529,7 @@
   .alert { margin: 0; padding: 8px 0 10px; font-size: 12px; color: #ff453a; line-height: 1.4; }
   .alert.dim { color: var(--fg-dim); }
   .foot { margin: 10px 8px 0; }
-  .link { border: 0; background: none; color: var(--accent); font: inherit; font-size: 12.5px; padding: 0; }
+  .link { border: 0; background: none; color: var(--accent-text); font: inherit; font-size: 12.5px; padding: 0; }
 
   /* key chips */
   .chip {

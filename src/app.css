@@ -1,7 +1,7 @@
 :root {
   /* EVE palette: shell white, soft grays, visor black, eye blue — light-dark(light, dark) pairs */
   --fg: light-dark(#33363d, #d3d6dc); /* softer than pure black, like Notion's ink */
-  --fg-dim: light-dark(#7c8089, #8b909a);
+  --fg-dim: light-dark(#636770, #8b909a); /* 4.5:1 on the page and the list's grey, hovered too (contrast.test.mjs) */
   --bg: light-dark(#ffffff, #0b0c10);
   --bg-side: light-dark(#f2f3f5, #111318);
   --bg-pop: light-dark(#ffffff, #16181d);
@@ -9,9 +9,10 @@
   --bg-hover: light-dark(rgba(17, 19, 24, 0.05), rgba(255, 255, 255, 0.06));
   --bg-active: light-dark(rgba(17, 19, 24, 0.09), rgba(255, 255, 255, 0.1));
   --line: light-dark(rgba(17, 19, 24, 0.09), rgba(255, 255, 255, 0.09));
-  --accent: light-dark(#1e9bff, #3fc1ff);
+  --accent: light-dark(#1b93f2, #3fc1ff); /* a fill: a button, a toggle, a ring (a white label on it reads at 3.2:1) */
+  --accent-text: light-dark(#0a63bd, #3fc1ff); /* the accent as words or an icon: a link, a check mark (4.8:1) */
   --on-accent: light-dark(#fff, #0b0c10); /* text on the accent: white is ~2:1 on the dark theme's light blue */
-  --accent-soft: light-dark(rgba(30, 155, 255, 0.22), rgba(63, 193, 255, 0.28));
+  --accent-soft: light-dark(rgba(27, 147, 242, 0.22), rgba(63, 193, 255, 0.28));
   /* selection: opaque (a translucent tint let code chips and wikilink pills show through as a second colour)
      and a step away from --accent-soft, so a selection inside a callout or a wikilink still reads as selected */
   --sel: light-dark(#b3d7ff, #2c5c7d);
@@ -82,7 +83,7 @@ button.icon {
    looked held down after its press (the list's group arrow) */
 @media (hover: hover) { button.icon:hover { background: var(--bg-hover); color: var(--fg); } }
 html.mobile button.icon:active { background: var(--bg-active); }
-button.icon.on { color: var(--accent); background: var(--accent-soft); } /* a toggle that is on */
+button.icon.on { color: var(--accent-text); background: var(--accent-soft); } /* a toggle that is on */
 /* icon buttons show keyboard focus as a tinted pill, like hover, not a ring that gets clipped by their containers */
 button.icon:focus-visible { outline: none; background: var(--accent-soft); color: var(--fg); }
 button.icon:active { transform: scale(0.9); }
@@ -114,7 +115,7 @@ html.mobile .toolbar, html.mobile main::before, html.mobile .outline, html.mobil
 html.mobile .shell { position: relative; } /* the bars below place themselves inside the safe area */
 
 html.mobile .mhead button {
-  height: 44px; min-width: 44px; border: 0; background: none; color: var(--accent); font: inherit; font-size: 16px;
+  height: 44px; min-width: 44px; border: 0; background: none; color: var(--accent-text); font: inherit; font-size: 16px;
   display: inline-flex; align-items: center; gap: 2px; padding: 0 8px; border-radius: 10px;
 }
 html.mobile .mhead button:active { background: var(--bg-active); }
@@ -219,7 +220,7 @@ html.mobile aside .mtop .gear {
   justify-content: center; color: var(--fg-dim);
 }
 html.mobile aside .mtop .gear-i { width: 21px; height: 21px; stroke-width: 1.5; }
-html.mobile aside .mtop .upd { color: var(--accent); } /* the update keeps the Mac's accent next to the grey gear */
+html.mobile aside .mtop .upd { color: var(--accent-text); } /* the update keeps the Mac's accent next to the grey gear */
 html.mobile aside .mtop .upd.failed { color: #ff453a; }
 html.mobile aside .top { padding: 6px 16px 8px; }
 html.mobile aside .top input { font-size: 15.5px; padding: 9px 12px; border-radius: 8px; background: var(--bg-input); }
@@ -624,18 +625,18 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
   border-top-color: var(--accent); box-shadow: var(--glow);
   outline: 6px solid var(--accent-soft); outline-offset: -1px; border-radius: 1px;
 }
-.tiptap a { color: var(--accent); text-decoration: none; cursor: pointer; }
+.tiptap a { color: var(--accent-text); text-decoration: none; cursor: pointer; }
 .tiptap a:hover { text-decoration: underline; }
 /* a link to another note reads as text with the note's icon and an underline — no pill, so nothing
    sticks out of the line box to be clipped, and the selected state is the plain selection colour */
 .tiptap .wikilink { cursor: pointer; }
 .tiptap .wikilink .wl-t { text-decoration: underline; text-decoration-color: var(--fg-dim); text-underline-offset: 2px; }
-.tiptap .wikilink:hover { color: var(--accent); }
+.tiptap .wikilink:hover { color: var(--accent-text); }
 .tiptap .wikilink:hover .wl-t { text-decoration-color: var(--accent); }
 /* a link to a page not made yet: dimmed, its underline dashed (a click makes the page, then it reads as any link) */
 .tiptap .wikilink.missing { color: var(--fg-dim); }
 .tiptap .wikilink.missing .wl-t { text-decoration-style: dashed; }
-.tiptap .wikilink.missing:hover { color: var(--accent); }
+.tiptap .wikilink.missing:hover { color: var(--accent-text); }
 .tiptap .wl-ico { margin-right: 0.28em; font-size: 0.95em; line-height: 1; }
 .tiptap .wl-ico svg { width: 1em; height: 1em; vertical-align: -0.12em; }
 .tiptap .ProseMirror-selectednode.wikilink, .tiptap .wikilink.ProseMirror-selectednode { background: var(--sel); border-radius: 3px; }
