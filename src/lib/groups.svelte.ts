@@ -1,4 +1,4 @@
-import { notes, nested } from './notes.svelte';
+import { notes, nested, type Note } from './notes.svelte';
 import { history, undoSource } from './history.svelte';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
@@ -53,7 +53,13 @@ class Groups {
   subtree(p: string) { return this.names.filter((g) => within(g, p)); }
   /** height of a group's subtree (itself = 1) */
   height(p: string) { return Math.max(...this.subtree(p).map(depthOf)) - depthOf(p) + 1; }
-  notesIn(p: string, deep = false) { return notes.visible.filter((n) => (deep ? within(n.group, p) : n.group === p)); }
+  notesIn(p: string, deep = false): readonly Note[] { return deep ? notes.visible.filter((n) => within(n.group, p)) : (this.#byGroup.get(p) ?? []); }
+  /** each group's own notes in list order, kept: the sidebar asks for every group's at every change */
+  #byGroup = $derived.by(() => {
+    const by = new Map<string, Note[]>();
+    for (const n of notes.visible) (by.get(n.group) ?? by.set(n.group, []).get(n.group)!).push(n);
+    return by;
+  });
 
   /** notes of a group as the sidebar stacks them: each page followed by its sub-pages */
   pagesIn(p: string, hideFolded = false) {

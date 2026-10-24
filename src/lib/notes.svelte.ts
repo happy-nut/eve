@@ -94,7 +94,7 @@ export function rankByTitle<T extends Pick<Note, 'body'>>(list: T[], q: string):
 /** `list` depth-first: every page is followed by its sub-pages (`folded` hides a page's sub-pages,
  *  it still reports `kids`). A sub-page whose parent is not in `list` (deleted, or dragged into
  *  another group) shows up at the top level. */
-export function nested(list: Note[], folded?: (id: string) => boolean): { n: Note; depth: number; kids: boolean }[] {
+export function nested(list: readonly Note[], folded?: (id: string) => boolean): { n: Note; depth: number; kids: boolean }[] {
   const ids = new Set(list.map((n) => n.id));
   const kids = new Map<string, Note[]>();
   for (const n of list) {
@@ -227,15 +227,18 @@ class NotesStore {
 
   /** the list's notes: everything but deleted ones and daily notes (those live in the calendar) */
   /** the list's notes that are notes: the calendar's row is in `visible` (it moves like one) but opens the calendar */
-  get pages() { return this.visible.filter((n) => n.id !== CALENDAR_NOTE_ID); }
-  get visible() {
-    return this.all.filter((n) => !n.deleted && !isDailyId(n.id) && n.id !== DAILY_TEMPLATE_ID && (n.id !== CALENDAR_NOTE_ID || appearance.s.dailyNotes)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt);
-  }
+  // Kept, not worked out at every read: the list, a link drawn, a row of the sidebar each read them, and with 800
+  // notes filtering and sorting them at each read made opening a note take a third of a second. They are shared:
+  // nothing may sort or splice them in place.
+  get pages(): readonly Note[] { return this.#pages; }
+  get visible(): readonly Note[] { return this.#visible; }
+  #visible = $derived(this.all.filter((n) => !n.deleted && !isDailyId(n.id) && n.id !== DAILY_TEMPLATE_ID && (n.id !== CALENDAR_NOTE_ID || appearance.s.dailyNotes)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt));
+  #pages = $derived(this.#visible.filter((n) => n.id !== CALENDAR_NOTE_ID));
   /**
    * The list as the sidebar stacks it: `shown` without what folded groups and pages hide, `all` with it.
    * groups.svelte.ts fills this in (it reads the notes, so they cannot import it back); until then, rank order.
    */
-  sidebar: { shown: () => Note[]; all: () => Note[] } = { shown: () => this.visible, all: () => this.visible };
+  sidebar: { shown: () => readonly Note[]; all: () => readonly Note[] } = { shown: () => this.visible, all: () => this.visible };
   /** the list's first note, as the sidebar shows it (not one tucked away in a folded group, when there is another) */
   firstPage(): Note | undefined {
     const page = (n: Note) => n.id !== CALENDAR_NOTE_ID;
@@ -253,9 +256,8 @@ class NotesStore {
   }
 
   /** daily notes, newest day first */
-  get daily() {
-    return this.all.filter((n) => !n.deleted && isDailyId(n.id)).sort((a, b) => (a.id < b.id ? 1 : -1));
-  }
+  get daily(): readonly Note[] { return this.#daily; }
+  #daily = $derived(this.all.filter((n) => !n.deleted && isDailyId(n.id)).sort((a, b) => (a.id < b.id ? 1 : -1)));
 
   /** the calendar's name and icon (its own little note, made on the first rename or icon change) */
   get calendar() {
@@ -661,8 +663,18 @@ class NotesStore {
   /** the page a [[link]] names: by its title, else by the title it had when the link was written */
   byTitle(t: string): Note | undefined {
     const want = t.toLowerCase();
-    return this.visible.find((n) => titleOf(n).toLowerCase() === want) ?? this.visible.find((n) => legacyTitleOf(n).toLowerCase() === want);
+    return this.#byTitle.now.get(want) ?? this.#byTitle.was.get(want);
   }
+  /** every page by its title and by its old one, lower case, the first in the list winning (each link drawn asks) */
+  #byTitle = $derived.by(() => {
+    const now = new Map<string, Note>(), was = new Map<string, Note>();
+    for (const n of this.visible) {
+      const [t, legacy] = this.titlesOf(n).toLowerCase().split('\u0000');
+      if (!now.has(t)) now.set(t, n);
+      if (!was.has(legacy)) was.set(legacy, n);
+    }
+    return { now, was };
+  });
   openByTitle(link: string) {
     const find = (t: string) => this.byTitle(t);
     const [title, section] = splitLink(link, (t) => !!find(t));
