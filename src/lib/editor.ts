@@ -778,7 +778,7 @@ export function createEditor(opts: {
   onUpdate: (markdown: string) => void;
   onOpenNote: (title: string) => void;
   /** the notes a `[[link]]` may point at: their titles, and the sections inside them */
-  targets: () => Note[];
+  targets: () => readonly Note[];
   suggestionUI: SuggestionUI;
   calendarUI: CalendarUI;
   emojiUI: EmojiUI;
@@ -1651,6 +1651,10 @@ export function createEditor(opts: {
     ],
     onUpdate: ({ editor }) => handOver(editor),
   });
+  // TipTap takes its stylesheet out of the page as its last editor goes and puts it back with the next one: the whole
+  // page's style was worked out afresh both times, the list's included, and with 800 notes that was most of opening a
+  // note (~150 ms in WebKit). Let go of it here and it stays.
+  (editor as unknown as { css: HTMLStyleElement | null }).css = null;
   markStartsAfterPrefix(editor);
   looseLists(editor);
   editor.on('blur', flush); // leaving the note: the list, a dialog, another app
