@@ -119,7 +119,7 @@
     border-radius: 6px; padding: 7px 10px; background: none; color: var(--fg); font: inherit; font-size: 13px; text-align: left;
   }
   .pop button.at { background: var(--accent-soft); }
-  .pop svg, .opt svg { color: var(--accent); }
+  .pop svg, .opt svg { color: var(--accent-text); }
 
   .title { margin: 0 8px 6px; font-size: 13px; font-weight: 600; color: var(--fg-dim); }
   .opt {

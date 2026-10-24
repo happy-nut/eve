@@ -119,5 +119,5 @@
   .sep { flex: none; width: 1px; height: 22px; margin: 0 2px; background: var(--line); }
   .tools { flex: 1; min-width: 0; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
   .tools::-webkit-scrollbar { display: none; }
-  .done { color: var(--accent); }
+  .done { color: var(--accent-text); }
 </style>

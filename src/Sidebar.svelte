@@ -768,7 +768,7 @@
   .emoji { font-size: 13px; line-height: 1; }
   .num {
     width: 16px; height: 16px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;
-    font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent);
+    font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent-text);
     background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
     animation: num-in 0.25s ease-out;
   }
@@ -841,7 +841,7 @@
   .gear { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
   .gear svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
   /* the update: an icon by Settings, in the accent colour so it is noticed (the Mac's footer, a phone's top bar) */
-  .upd { margin-left: auto; color: var(--accent); }
+  .upd { margin-left: auto; color: var(--accent-text); }
   .upd.failed { color: #ff453a; }
   :global(.gear-i) { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   footer {
