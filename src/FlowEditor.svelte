@@ -729,8 +729,8 @@
   :global(html.mobile) .plus svg { position: relative; width: 15px; height: 15px; }
   .plus svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
   .wire { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-  .wire line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; }
-  .wire circle { fill: var(--accent); }
+  .wire line { stroke: var(--accent-text); stroke-width: 2; stroke-dasharray: 5 4; }
+  .wire circle { fill: var(--accent-text); }
   .lane-name {
     position: absolute; width: 140px; height: 32px; box-sizing: border-box; padding: 0 10px; border: 0; border-radius: 10px; text-align: center;
     font: inherit; font-size: 13px; font-weight: 600; color: var(--fg); background: var(--bg-pop); box-shadow: 0 0 0 2px var(--accent), 0 4px 14px rgba(0, 0, 0, 0.15); outline: none;
@@ -751,10 +751,10 @@
     display: inline-flex; align-items: center; justify-content: center;
   }
   @media (hover: hover) { .bar button:hover { background: var(--bg-hover); color: var(--fg); } }
-  .bar button.on { background: var(--accent-soft); color: var(--accent); }
+  .bar button.on { background: var(--accent-soft); color: var(--accent-text); }
   .bar button .lbl { margin-left: 4px; font-size: 12.5px; font-weight: 500; }
   .bar button:has(.lbl) { width: auto; padding: 0 9px 0 7px; }
-  .bar button.text { width: auto; gap: 4px; padding: 0 9px 0 7px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent); }
+  .bar button.text { width: auto; gap: 4px; padding: 0 9px 0 7px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent-text); }
   .bar button.danger:hover { color: #ff453a; }
   .bar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
   .sep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; }
@@ -766,7 +766,7 @@
   :global(.diagram-canvas path.hit) { stroke: transparent !important; stroke-width: 14px !important; fill: none !important; pointer-events: stroke; cursor: pointer; }
   /* a finger's width along a line: 14 was a hair to hit */
   :global(html.mobile .diagram-canvas path.hit) { stroke-width: 30px !important; }
-  :global(.diagram-canvas path.flowchart-link.picked) { stroke: var(--accent) !important; stroke-width: 2.5px !important; }
+  :global(.diagram-canvas path.flowchart-link.picked) { stroke: var(--accent-text) !important; stroke-width: 2.5px !important; }
   /* a phone's finger: every button in a bar a finger's size */
   :global(html.mobile) .bar button { width: 40px; height: 40px; }
   :global(html.mobile) .bar button.text, :global(html.mobile) .bar button:has(.lbl) { width: auto; }

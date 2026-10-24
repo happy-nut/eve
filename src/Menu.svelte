@@ -95,7 +95,7 @@
   .items button.danger { color: #ff453a; }
   .items button { display: flex; align-items: center; justify-content: space-between; }
   .items button.on { font-weight: 600; }
-  .check { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .check { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--accent-text); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .items .check { width: 20px; height: 20px; }
   .items li.sep { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
   .backdrop { position: fixed; inset: 0; z-index: var(--z-menu-scrim); } /* over a picture shown full size (--z-photo), which has a menu too */

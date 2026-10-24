@@ -300,7 +300,7 @@
   .x:disabled { opacity: 0.3; }
   .add {
     display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 7px; padding: 5px 9px 5px 6px; margin: 2px 0 4px;
-    background: none; color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 500;
+    background: none; color: var(--accent-text); font: inherit; font-size: 12.5px; font-weight: 500;
   }
   .add.small { padding: 3px 7px 3px 4px; font-size: 12px; margin-top: 0; }
   @media (hover: hover) { .add:hover { background: var(--accent-soft); } }
