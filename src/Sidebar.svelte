@@ -14,7 +14,7 @@
   import { sync } from './lib/sync.svelte';
   import { ui, hooks, type MenuItem } from './lib/ui.svelte';
   import { composing } from './lib/keys';
-  import { importFromFinder, importFromFolder, exportNote, exportCurrent, type ExportAs } from './lib/transfer';
+  import { importFromFinder, importFromFolder, exportCurrent, type ExportAs } from './lib/transfer';
   import Icon from './Icon.svelte';
   import { appearance } from './lib/appearance.svelte';
   import * as moves from './lib/moves';
@@ -406,19 +406,6 @@
   }
 
   /**
-   * A row's own export. Markdown is written straight from the note, but a PDF prints the window and a
-   * picture is drawn from the note on screen — so those two open the row's note first and let it render.
-   */
-  async function exportRow(n: Note, as: ExportAs) {
-    if (as === 'md') return transfer(() => exportNote(n, as));
-    if (notes.currentId !== n.id) {
-      await openNote(n);
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); // painted, not just mounted
-    }
-    await exportCurrent(as);
-  }
-
-  /**
    * Right-click on a row: what the row can do, in one place. Everything here is a command the keyboard
    * already has (⌥↑↓ moves, ⌥←→ nests, ⌫ deletes, `i` picks an icon) — the menu just makes them findable.
    */
@@ -450,9 +437,6 @@
             { label: 'Open', run: () => openNote(n) },
             { label: 'New page inside', run: newPageIn(n), hide: n.id === CALENDAR_NOTE_ID },
             { label: 'Change icon…', run: () => pickIcon({ note: n }) },
-            { label: 'Export as Markdown…', sep: true, keys: shortcuts.keysFor('exportMd'), run: () => exportRow(n, 'md') },
-            { label: 'Export as PDF…', keys: shortcuts.keysFor('exportPdf'), run: () => exportRow(n, 'pdf') },
-            { label: 'Export as image…', keys: shortcuts.keysFor('exportPng'), run: () => exportRow(n, 'png') },
             // a move that would do nothing (the first row up, no page above to nest under) is left out
             { label: 'Move up', sep: true, run: () => nudgeNote(n.id, -1), hide: !moves.nudgeNote(n.id, -1, true) },
             { label: 'Move down', run: () => nudgeNote(n.id, 1), hide: !moves.nudgeNote(n.id, 1, true) },
