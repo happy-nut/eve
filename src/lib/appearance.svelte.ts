@@ -46,11 +46,14 @@ interface Appearance {
 export const PASTELS = ['#fff1a8', '#c9f2d4', '#cfe3ff', '#ffd6e3', '#e5d8ff'];
 /** the note's text size, px: the Size slider's range, and where ⌘+ / ⌘- stop */
 export const SIZE_MIN = 12, SIZE_MAX = 28;
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 820, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
 
 function load(): Appearance {
   try {
     const { hideSidebarOnEdit: _, ...saved } = JSON.parse(localStorage.getItem(LS) ?? '{}'); // the old name, dropped
+    // every setting is saved whenever one is, so 820 is mostly the old default carried along, not a width anyone chose:
+    // it gives way to the new one (900, Notion's 708px of text)
+    if (saved.width === 820) delete saved.width;
     return { ...DEFAULTS, ...saved };
   } catch { return { ...DEFAULTS }; }
 }

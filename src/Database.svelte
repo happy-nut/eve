@@ -5,7 +5,7 @@
   import { isoDay, monthGrid, monthName, sameMonth, shiftMonths, weekdayNames } from './lib/date';
   import { evaluate, type Val } from './lib/formula';
   import {
-    NAME, ROLLUPS, TYPES, VIEWS, asLink, asList, byDay, columnsOf, computed, linksIn, parseDb, rollup, shown, viewRows, withChoice,
+    NAME, ROLLUPS, TYPES, VIEWS, asLink, asList, byDay, columnsOf, computed, linksIn, parseDb, rollup, shown, tagColor, viewRows, withChoice,
     type DbSchema, type PropDef, type PropType, type ViewKind,
   } from './lib/database';
 
@@ -291,7 +291,7 @@
       <input type="date" value={typeof v === 'string' ? v : ''} aria-label={p.name} onchange={(e) => setCell(n, p, e.currentTarget.value || null)} />
     {:else if p.type === 'select' || p.type === 'multi'}
       <button class="chips" aria-label={p.name} onclick={(e) => choiceMenu(e, n, p)}>
-        {#each asList(v) as c}<span class="chip">{c}</span>{:else}<span class="empty">&nbsp;</span>{/each}
+        {#each asList(v) as c}<span class="chip" style:background="var(--tag-{tagColor(c)})">{c}</span>{:else}<span class="empty">&nbsp;</span>{/each}
       </button>
     {:else if p.type === 'relation'}
       <button class="chips" aria-label={p.name} onclick={(e) => void relationMenu(e, n, p)}>
@@ -349,7 +349,7 @@
       <!-- the rows with no value, only while there are some (Notion's "No Status" too) -->
       {#each columns.filter((c) => c.value || c.rows.length || !groupProp) as col (col.value)}
         <div class="col" role="group" aria-label={col.value || 'No value'} ondragover={(e) => e.preventDefault()} ondrop={(e) => { e.preventDefault(); dropOn(groupProp, col.value); }}>
-          <div class="col-head">{col.value || `No ${groupProp?.name ?? 'value'}`} <span class="count">{col.rows.length}</span></div>
+          <div class="col-head">{#if col.value}<span class="chip" style:background="var(--tag-{tagColor(col.value)})">{col.value}</span>{:else}No {groupProp?.name ?? 'value'}{/if} <span class="count">{col.rows.length}</span></div>
           {#each col.rows as n (n.id)}{@render card(n, groupProp)}{/each}
           <button class="new" onclick={() => addRow(groupProp && col.value ? { [groupProp.name]: col.value } : {})}>+ New</button>
         </div>

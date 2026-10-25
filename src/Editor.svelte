@@ -3,7 +3,8 @@
   import type { Editor as TipTap } from '@tiptap/core';
   import { takeBody } from './lib/takeBody';
   import { createEditor, applyKeymap, goToSection, runEditorCommand, clickBelow } from './lib/editor';
-  import { isMobile } from './lib/platform';
+  import { isMobile, pickImage } from './lib/platform';
+  import { GRADIENTS, coverCss, gradientCover, randomCover } from './lib/cover';
   import { notes, titleOf, type Note } from './lib/notes.svelte';
   import { appearance } from './lib/appearance.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
@@ -126,6 +127,25 @@
     if (!isMobile) editor?.view.focus();
   }
 
+  /** A cover's choices (Notion's): one of the gradients, a picture of one's own, or none */
+  function coverMenu(at: HTMLElement) {
+    const r = at.getBoundingClientRect();
+    ui.openMenu({ clientX: Math.round(r.left), clientY: Math.round(r.bottom + 4) }, [
+      ...Object.entries(GRADIENTS).map(([k, g]) => ({
+        label: g.label, swatch: g.css, checked: note.cover === gradientCover(k), run: () => notes.setLook(note.id, { cover: gradientCover(k) }),
+      })),
+      { label: 'Image…', sep: true, run: () => void pickImage().then((src) => src && notes.setLook(note.id, { cover: src })) },
+      { label: 'Remove cover', danger: true, run: () => notes.setLook(note.id, { cover: undefined }) },
+    ]);
+  }
+
+  // Under a cover the toolbar's fade (main::before) would wash its top out to the page's colour: it waits until the
+  // cover has scrolled up past the toolbar, when text starts to run under the icons again
+  let coverTop = $state(true);
+  const COVER_H = isMobile ? 160 : 220;
+  const onScroll = () => { coverTop = !!note.cover && (scrollEl?.scrollTop ?? 0) < COVER_H - 72; };
+  $effect(() => { void note.cover; onScroll(); });
+
   // asked to write at the end of this very note (the reminder's today, already open): no remount brings it there
   $effect(() => {
     if (editor && notes.caretEnd && notes.currentId === note.id) { notes.caretEnd = false; editor.commands.focus('end'); }
@@ -192,15 +212,27 @@
   }
 </script>
 
-<!-- a wide note takes the whole pane: nothing holds its text to the reading width -->
-<div class="scroll" bind:this={scrollEl} style:--editor-width={note.wide ? 'none' : null}>
-  <div class="page-head" class:with-icon={!!note.icon}>
+<!-- a wide note takes the whole pane: nothing holds its text to the reading width; a small one is a step smaller -->
+<div class="scroll" bind:this={scrollEl} onscroll={onScroll} class:cover-top={coverTop && !!note.cover}
+  style:--editor-width={note.wide ? 'none' : null} style:--font-size={note.small ? `${Math.round(appearance.textPx * 0.875)}px` : null}>
+  {#if note.cover}
+    <div class="cover" style:background={coverCss(note.cover)} style:height="{COVER_H}px">
+      <button class="cover-change" onclick={(e) => coverMenu(e.currentTarget)}>Change cover</button>
+    </div>
+  {/if}
+  <div class="page-head" class:with-icon={!!note.icon} class:with-cover={!!note.cover}>
     {#if note.icon}
       <button class="big-icon" title="Change icon" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={isMobile ? 44 : 56} /></button>
     {:else}
       <button class="add-icon" onclick={addIcon}>
         <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 9.5c.6.9 1.5 1.5 2.5 1.5s1.9-.6 2.5-1.5M6 6.5h.01M10 6.5h.01"/></svg>
         Add icon
+      </button>
+    {/if}
+    {#if !note.cover}
+      <button class="add-icon add-cover" onclick={() => notes.setLook(note.id, { cover: randomCover() })}>
+        <svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="m2.5 11 3.5-3.5 3 3 1.5-1.5 3 3"/></svg>
+        Add cover
       </button>
     {/if}
     {#if backlinks.length}
@@ -250,7 +282,7 @@
   .scroll::-webkit-scrollbar { display: none; }
   .editor { min-height: 100%; }
   .page-head {
-    max-width: var(--editor-width, 820px); margin: 0 auto; padding: 44px clamp(24px, 8vw, 96px) 0; box-sizing: border-box;
+    max-width: var(--editor-width, 900px); margin: 0 auto; padding: 44px clamp(24px, 8vw, 96px) 0; box-sizing: border-box;
     height: 72px; /* reserves the "add icon" row so the title doesn't jump */
   }
   .page-head.with-icon { height: 118px; }
@@ -303,6 +335,21 @@
   .big-icon:hover { background: var(--bg-hover); }
   .big-icon:active { transform: scale(0.95); }
   .editor.has-head :global(.tiptap) { padding-top: 0; min-height: calc(100% - 72px); }
+  /* the cover: across the whole pane, the page's icon half over its lower edge, as Notion has it */
+  .cover { position: relative; width: 100%; }
+  .cover-change {
+    position: absolute; right: clamp(24px, 8vw, 96px); bottom: 12px; border: 0; border-radius: 6px; padding: 4px 9px;
+    font: inherit; font-size: 12.5px; color: var(--fg-dim); background: var(--bg-pop); box-shadow: var(--pop-shadow);
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .cover:hover .cover-change, .cover-change:focus-visible { opacity: 1; }
+  :global(html.mobile) .cover-change { opacity: 1; }
+  .cover-change:hover { color: var(--fg); }
+  .page-head.with-cover, :global(html:not(.mobile)) .page-head.with-cover { padding-top: 14px; height: 52px; }
+  .page-head.with-cover.with-icon, :global(html:not(.mobile)) .page-head.with-cover.with-icon { padding-top: 0; height: 76px; }
+  .page-head.with-cover .big-icon { margin-top: -38px; }
+  /* the head's buttons in a row (Add icon, Add cover), the links count at the far end */
+  .add-cover { margin-left: 2px; }
 
   /* On paper the head is a fixed block that holds the icon below the band at the top of the printed
      flow — WebKit lays that band out but never paints it, and the note's title used to vanish into it.
@@ -314,6 +361,7 @@
     }
     .big-icon { display: block; width: 56px; height: 56px; padding: 0; margin: 0; }
     .add-icon, .backlinks { visibility: hidden; }
+    .cover { display: none; }
     .crumbs { display: none; }
   }
 </style>

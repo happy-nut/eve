@@ -20,13 +20,16 @@ export interface Note {
   parent?: string; // id of the page this one was created inside (sub-page; sits under it in the sidebar)
   icon?: string; // emoji shown in the sidebar (Notion-style)
   wide?: boolean; // laid out across the whole pane instead of the reading width
+  small?: boolean; // its text a step smaller than Settings' size (Notion's "Small text")
+  /** the picture across the top of the page: a preset (`gradient:sea`, cover.ts) or an image's address */
+  cover?: string;
   /** a database row's properties (Status, Due, Tags…): frontmatter lines of their own, as Obsidian writes them */
   props?: Record<string, PropValue>;
 }
 export type PropValue = string | string[];
 
 /** the frontmatter keys that are Eve's own: a property may not take one of these names */
-export const OWN_KEYS = new Set(['id', 'updated', 'deleted', 'order', 'group', 'parent', 'icon', 'wide']);
+export const OWN_KEYS = new Set(['id', 'updated', 'deleted', 'order', 'group', 'parent', 'icon', 'wide', 'small', 'cover']);
 /** a property's name as a frontmatter key can hold it: one line, no colon, not one of Eve's own */
 export const propName = (name: string) => name.replace(/[:\n\r]/g, ' ').trim();
 /** a value as one frontmatter line: a list (and a word that would read as one) as JSON, anything else as it is */
@@ -50,7 +53,7 @@ export const newId = () =>
 
 // ---- (de)serialization: markdown with a tiny frontmatter -------------------
 export function serialize(n: Note): string {
-  return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\norder: ${n.order}${n.group ? `\ngroup: ${n.group}` : ''}${n.parent ? `\nparent: ${n.parent}` : ''}${n.icon ? `\nicon: ${n.icon}` : ''}${n.wide ? '\nwide: true' : ''}${Object.entries(n.props ?? {}).map(([k, v]) => `\n${k}: ${propLine(v)}`).join('')}\n---\n${n.body}`;
+  return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\norder: ${n.order}${n.group ? `\ngroup: ${n.group}` : ''}${n.parent ? `\nparent: ${n.parent}` : ''}${n.icon ? `\nicon: ${n.icon}` : ''}${n.wide ? '\nwide: true' : ''}${n.small ? '\nsmall: true' : ''}${n.cover ? `\ncover: ${n.cover}` : ''}${Object.entries(n.props ?? {}).map(([k, v]) => `\n${k}: ${propLine(v)}`).join('')}\n---\n${n.body}`;
 }
 
 /**
@@ -86,6 +89,8 @@ export function parse(text: string): Note | null {
     parent: meta.parent || undefined,
     icon: meta.icon || undefined,
     wide: meta.wide === 'true' || undefined,
+    small: meta.small === 'true' || undefined,
+    cover: meta.cover || undefined,
     ...(Object.keys(props).length ? { props } : {}),
     // legacy notes without order: newest first
     order: meta.order !== undefined && !Number.isNaN(Number(meta.order)) ? Number(meta.order) : -(Number(meta.updated) || 0),
@@ -508,12 +513,15 @@ class NotesStore {
     this.flush(id);
   }
 
-  setWide(id: string, wide: boolean) {
+  setWide(id: string, wide: boolean) { this.setLook(id, { wide: wide || undefined }); }
+
+  /** how the page looks, kept in its frontmatter: full width, small text, its cover */
+  setLook(id: string, look: Partial<Pick<Note, 'wide' | 'small' | 'cover'>>) {
     history.record();
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
     this.touched(id);
-    n.wide = wide || undefined;
+    Object.assign(n, look);
     n.updatedAt = Date.now();
     this.flush(id);
   }
@@ -846,7 +854,7 @@ class NotesStore {
       const local = this.all.find((n) => n.id === r.id);
       if (!force && local && local.updatedAt >= r.updatedAt) continue;
       if (r.deleted && r.id === this.currentId && !local?.deleted) { instead = this.neighbourOf(r.id); gone = true; }
-      if (local) Object.assign(local, { icon: undefined, parent: undefined }, r); // a removed icon/parent must come through too
+      if (local) Object.assign(local, { icon: undefined, parent: undefined, wide: undefined, small: undefined, cover: undefined }, r); // a removed icon/parent/look must come through too
       else this.all.push(r);
       this.untouched.delete(r.id); // what another device says it is: not this session's to take away
       renamed.push(local ?? r);
@@ -865,18 +873,18 @@ class NotesStore {
 
 export const notes = new NotesStore();
 
-// What the app's undo puts back of the notes: where each sits, whether it is there, its icon, and which is open. A note
+// What the app's undo puts back of the notes: where each sits, whether it is there, its icon and look, and which is open. A note
 // made since goes again; a note's text is the note's own undo, not this.
-type Spot = [id: string, deleted: boolean, group: string, parent: string, order: number, icon: string, wide: boolean];
+type Spot = [id: string, deleted: boolean, group: string, parent: string, order: number, icon: string, wide: boolean, small: boolean, cover: string];
 undoSource<{ open: string | null; spots: Spot[] }>({
-  take: () => ({ open: notes.currentId, spots: notes.all.map((n) => [n.id, n.deleted, n.group ?? '', n.parent ?? '', n.order, n.icon ?? '', !!n.wide] as Spot) }),
+  take: () => ({ open: notes.currentId, spots: notes.all.map((n) => [n.id, n.deleted, n.group ?? '', n.parent ?? '', n.order, n.icon ?? '', !!n.wide, !!n.small, n.cover ?? ''] as Spot) }),
   put: ({ open, spots }) => {
     const was = new Map(spots.map((s) => [s[0], s]));
     for (const n of notes.all) {
       const s = was.get(n.id);
-      const [deleted, group, parent, order, icon, wide] = s ? [s[1], s[2], s[3] || undefined, s[4], s[5] || undefined, s[6] || undefined] : [true, n.group, n.parent, n.order, n.icon, n.wide];
-      if (n.deleted === deleted && (n.group ?? '') === (group ?? '') && n.parent === parent && n.order === order && n.icon === icon && n.wide === wide) continue;
-      Object.assign(n, { deleted, group, parent, order, icon, wide, updatedAt: Date.now() });
+      const [deleted, group, parent, order, icon, wide, small, cover] = s ? [s[1], s[2], s[3] || undefined, s[4], s[5] || undefined, s[6] || undefined, s[7] || undefined, s[8] || undefined] : [true, n.group, n.parent, n.order, n.icon, n.wide, n.small, n.cover];
+      if (n.deleted === deleted && (n.group ?? '') === (group ?? '') && n.parent === parent && n.order === order && n.icon === icon && n.wide === wide && n.small === small && n.cover === cover) continue;
+      Object.assign(n, { deleted, group, parent, order, icon, wide, small, cover, updatedAt: Date.now() });
       notes.flush(n.id);
     }
     const back = open && notes.all.find((n) => n.id === open && !n.deleted);
