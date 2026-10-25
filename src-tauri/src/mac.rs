@@ -4,6 +4,29 @@ use tauri::{AppHandle, Manager};
 
 use crate::files::{assets_dir, safe_name};
 
+/// The menu bar as Tauri makes it on a Mac, without Window → Close Window: its ⌘W is the page's, which closes a tab
+/// (Notion's, a browser's) and with one tab left puts Eve away, as closing the window does. The menu could take the
+/// key before the page saw it. The window's red button still closes it (hidden, see lib.rs).
+pub(crate) fn menu_without_close(app: &AppHandle) -> tauri::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri::menu::{Menu, MenuItemKind, WINDOW_SUBMENU_ID};
+        let menu = Menu::default(app)?;
+        if let Some(MenuItemKind::Submenu(window)) = menu.get(WINDOW_SUBMENU_ID) {
+            // the last two: the separator and Close Window
+            let n = window.items()?.len();
+            if n >= 2 {
+                window.remove_at(n - 1)?;
+                window.remove_at(n - 2)?;
+            }
+        }
+        app.set_menu(menu)?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+    Ok(())
+}
+
 /// The note's page is never put to sleep while Eve is out of sight. WebKit suspends the page of a window that is
 /// hidden (⌘⇧E puts the whole app away) and freezes what it last drew; summoned, the page is woken first, and until
 /// it had drawn again the window came up as a white page, now and then for good. Eve is summoned to be typed into at
