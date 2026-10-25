@@ -24,6 +24,7 @@
   import { swipeRow } from './lib/swipeRow';
   import { previewOf, rawQuery, searchText } from './lib/markdown';
   import { editedLabel } from './lib/date';
+  import { tabs } from './lib/tabs.svelte';
 
   let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings, onNew }:
     { open: boolean; searchEl: HTMLInputElement | null; cmdHeld?: boolean; onSettings: () => void; onNew?: () => void } = $props();
@@ -431,6 +432,7 @@
       : n
         ? [
             { label: 'Open', run: () => openNote(n) },
+            { label: 'Open in new tab', run: () => tabs.open(n.id), hide: isMobile || n.id === CALENDAR_NOTE_ID },
             { label: 'New page inside', run: newPageIn(n), hide: n.id === CALENDAR_NOTE_ID },
             { label: 'Change icon…', run: () => pickIcon({ note: n }) },
             // a move that would do nothing (the first row up, no page above to nest under) is left out
@@ -611,7 +613,7 @@
             <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!isMobile} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation" use:swipeRow={swipe}>
               <button data-row data-note={n.id} class:active={n.id === CALENDAR_NOTE_ID ? onCalendar : n.id === notes.currentId}
-                class:enter={searching && !!q && n.id === hits[0]?.id} onclick={() => openNote(n)}>
+                class:enter={searching && !!q && n.id === hits[0]?.id} onclick={(e) => (e.metaKey && !isMobile && n.id !== CALENDAR_NOTE_ID ? tabs.open(n.id) : openNote(n))}>
                 <span class="title">
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => iconTap(e, { note: n })}>
@@ -706,6 +708,9 @@
         {syncLabel}
       </span>
       {#if updates.available}{@render updateButton()}{/if}
+      <button class="icon tip-up trash" aria-label="Trash" data-tip="Trash" onclick={() => ui.openTrash()}>
+        <svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9M6.6 6.8v4.4M9.4 6.8v4.4"/></svg>
+      </button>
       <button class="icon tip-up gear" aria-label="Settings" data-tip="Settings" data-keys={shortcuts.keysFor('settings')} onclick={onSettings}>
         {@html GEAR}
       </button>
@@ -819,7 +824,9 @@
   .title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-  .gear { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
+  .gear, .trash { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
+  .trash { margin-left: auto; } /* with the gear at the footer's end */
+  .trash svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   .gear svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
   /* the update: an icon by Settings, in the accent colour so it is noticed (the Mac's footer, a phone's top bar) */
   .upd { margin-left: auto; color: var(--accent-text); }

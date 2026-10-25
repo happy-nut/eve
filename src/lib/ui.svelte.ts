@@ -35,7 +35,7 @@ interface EmojiReq { at: DOMRect; current: string; resolve: (v: string | null) =
  * by some of them, and each put the focus back its own way. Now they are one stack, in the order they opened —
  * which is the order back and Esc take them away, the newest first.
  */
-export type LayerId = 'photo' | 'math' | 'sheet' | 'emoji' | 'menu' | 'confirm' | 'diagramView' | 'find' | 'pdf' | 'card' | 'settings';
+export type LayerId = 'photo' | 'math' | 'sheet' | 'emoji' | 'menu' | 'confirm' | 'diagramView' | 'find' | 'pdf' | 'card' | 'settings' | 'trash' | 'history';
 /** what closed it: a phone's back, Esc, or the app putting everything away (a note brought up from outside) */
 export type CloseReason = 'back' | 'esc' | 'putAway';
 export interface Layer {
@@ -304,6 +304,31 @@ class Ui {
     this.findOff?.();
     this.findOff = undefined;
   }
+  /** the trash, open (TrashPanel.svelte) */
+  trash = $state(false);
+  private trashOff: (() => void) | undefined;
+  openTrash() {
+    this.trashOff ??= this.layers.push({ id: 'trash', close: () => this.closeTrash(), esc: true, keys: true, modal: true, own: '.rpanel[data-panel="trash"]', phone: true });
+    this.trash = true;
+  }
+  closeTrash() {
+    this.trash = false;
+    this.trashOff?.();
+    this.trashOff = undefined;
+  }
+  /** the note whose versions are shown (HistoryPanel.svelte), or null */
+  historyOf = $state<string | null>(null);
+  private historyOff: (() => void) | undefined;
+  openHistory(id: string) {
+    this.historyOff ??= this.layers.push({ id: 'history', close: () => this.closeHistory(), esc: true, keys: true, modal: true, own: '.rpanel[data-panel="history"]', phone: true });
+    this.historyOf = id;
+  }
+  closeHistory() {
+    this.historyOf = null;
+    this.historyOff?.();
+    this.historyOff = undefined;
+  }
+
   pending = $state<Pending | null>(null);
   private pendingOff: (() => void) | undefined;
   /** focus goes back to where it was (sidebar row, editor) the moment the dialog closes — synchronously, before its

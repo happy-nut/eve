@@ -12,7 +12,9 @@ export function fakeGitHub() {
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const putBlob = (buf) => { const sha = gitSha(buf); blobs.set(sha, buf); return sha; };
   const putTree = (entries) => { const sha = rnd(); trees.set(sha, entries); return sha; };
-  const putCommit = (tree, parents) => { const sha = rnd(); commits.set(sha, { tree, parents }); return sha; };
+  let clock = Date.parse('2026-10-25T09:00:00Z');
+  const putCommit = (tree, parents) => { const sha = rnd(); commits.set(sha, { tree, parents, at: (clock += 60_000) }); return sha; };
+  const shaIn = (commit, path) => trees.get(commits.get(commit).tree).find((e) => e.path === path)?.sha;
   const fetch = async (url, init = {}) => {
     calls++;
     const m = init.method ?? 'GET';
@@ -20,6 +22,21 @@ export function fakeGitHub() {
     const body = init.body ? JSON.parse(init.body) : {};
     if (init.headers?.authorization !== 'Bearer tok') return json(401, { message: 'Bad credentials' });
     if (m === 'GET' && p === '/branches/main') return ref ? json(200, { commit: { sha: ref, commit: { tree: { sha: commits.get(ref).tree } } } }) : json(404, { message: 'Branch not found' });
+    // a file's history: the commits on main that changed it, newest first
+    if (m === 'GET' && p === '/commits') {
+      const q = new URL(url).searchParams, path = q.get('path'), out = [];
+      for (let c = ref; c && out.length < Number(q.get('per_page') || 30); c = commits.get(c).parents[0]) {
+        const parent = commits.get(c).parents[0];
+        const now = shaIn(c, path);
+        if (now !== (parent ? shaIn(parent, path) : undefined)) out.push({ sha: c, commit: { committer: { date: new Date(commits.get(c).at).toISOString() } } });
+      }
+      return json(200, out);
+    }
+    if (m === 'GET' && p.startsWith('/contents/')) {
+      const ref2 = new URL(url).searchParams.get('ref');
+      const sha = commits.has(ref2) ? shaIn(ref2, decodeURIComponent(p.slice('/contents/'.length))) : undefined;
+      return sha ? json(200, { sha, content: blobs.get(sha).toString('base64'), encoding: 'base64' }) : json(404, { message: 'Not Found' });
+    }
     if (m === 'GET' && p.startsWith('/git/trees/')) {
       const t = p.slice('/git/trees/'.length);
       return json(200, { sha: t, tree: trees.get(t).map((e) => ({ ...e, type: 'blob', mode: '100644' })) });

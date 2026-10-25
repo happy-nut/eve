@@ -26,6 +26,12 @@ export const DEFAULTS: Action[] = [
   { id: 'parentPage', label: 'The page this one is under', scope: 'app', keys: 'Mod-Shift-u' },
   { id: 'copyLink', label: 'Copy a link to this note (eve://)', scope: 'app', keys: 'Mod-l' },
   { id: 'theme', label: 'Dark / light theme', scope: 'app', keys: 'Mod-Shift-l' },
+  // tabs, as Notion's desktop and a browser have them
+  { id: 'newTab', label: 'New note in a new tab', scope: 'app', keys: 'Mod-t' },
+  { id: 'closeTab', label: 'Close tab', scope: 'app', keys: 'Mod-w' },
+  { id: 'reopenTab', label: 'Reopen closed tab', scope: 'app', keys: 'Mod-Shift-t' },
+  { id: 'nextTab', label: 'Next tab', scope: 'app', keys: 'Ctrl-Tab' },
+  { id: 'prevTab', label: 'Previous tab', scope: 'app', keys: 'Ctrl-Shift-Tab' },
   { id: 'deleteNote', label: 'Delete current note', scope: 'app', keys: 'Mod-Shift-Backspace' },
   // not Mod-Shift-s: the editor's own strikethrough takes that one before the app ever sees it
   { id: 'exportMd', label: 'Export note as Markdown…', scope: 'app', keys: 'Mod-Shift-m' },
