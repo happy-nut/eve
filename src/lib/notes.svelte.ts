@@ -683,6 +683,19 @@ class NotesStore {
     this.currentId = hit ? hit.id : this.create(`# ${title}\n\n`).id;
   }
 
+  /**
+   * A note's version that sync could not put together with this device's (both changed the same lines): kept as a
+   * note of its own beside it, its title saying so, and said in a toast. No one's step to undo.
+   */
+  keepConflictCopy(n: Note) {
+    const [first, ...rest] = n.body.split('\n');
+    const body = [`${first.trim() ? first : '# ' + titleOf(n)} (conflict copy)`, ...rest].join('\n');
+    const copy = history.quietly(() => this.addImported(body, n.group, Date.now(), n.parent));
+    if (n.icon) { copy.icon = n.icon; void storage.write(copy.id, serialize(copy)); } // recognisable as the same note
+    ui.toast(`“${titleOf(n)}” was changed on two devices at once: the other version is kept as “${titleOf(copy)}”`);
+    return copy;
+  }
+
   /** Apply notes coming from sync (last-writer-wins, or unconditionally with `force`). Returns true if anything changed. */
   /** another device's notes: no one's step to undo here */
   mergeRemote(remote: Note[], force = false): boolean { return history.quietly(() => this.mergeRemoteNow(remote, force)); }
@@ -691,6 +704,7 @@ class NotesStore {
     // the open note deleted on another device: the one next to it in the list comes up, as when it is deleted here.
     // It stayed open, deleted, and back/forward led into it
     let instead: Note | undefined, gone = false;
+    const renamed: Note[] = [];
     for (const r of remote) {
       const local = this.all.find((n) => n.id === r.id);
       if (!force && local && local.updatedAt >= r.updatedAt) continue;
@@ -698,10 +712,15 @@ class NotesStore {
       if (local) Object.assign(local, { icon: undefined, parent: undefined }, r); // a removed icon/parent must come through too
       else this.all.push(r);
       this.untouched.delete(r.id); // what another device says it is: not this session's to take away
-      this.titles.set(r.id, titleOf(r)); // a remote edit is not this note being renamed here
+      renamed.push(local ?? r);
       void storage.write(r.id, serialize(r));
       changed = true;
     }
+    // A page renamed on another device took its [[links]] along there, but only in the notes that device had: one
+    // written here meanwhile kept the old name, and its link led to a new empty page. Followed here too, once every
+    // note of this pull is in (followed earlier, a link put right here was dated now, and the other device's own
+    // newer edit to that note, later in the same pull, lost to it).
+    for (const n of renamed) if (!n.deleted) this.followRename(n);
     if (gone) { this.currentId = instead?.id ?? null; if (!this.currentId) this.create(); }
     return changed;
   }

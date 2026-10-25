@@ -4,6 +4,7 @@ import { flushEdits } from './pending';
 import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText } from './platform';
 import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, signInError, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
+import { merge3 } from './merge3';
 
 /**
  * Sync through a private GitHub repository (see github.ts). Layout mirrors the local notes dir:
@@ -173,7 +174,7 @@ class Sync {
         for (const name of await assets.list()) if (!(ASSETS + name in repo.s.known)) out.push({ path: ASSETS + name, data: await assets.read(name) });
         return out;
       }, async (files: RemoteFile[]) => {
-        const lww: Note[] = [], force: Note[] = [];
+        const lww: Note[] = [], force: Note[] = [], copies: Note[] = [];
         for (const f of files) {
           if (f.path.startsWith(ASSETS)) {
             // one this device cannot keep (a name with a space or a leading dot, put there on github.com) is
@@ -190,10 +191,19 @@ class Sync {
           flushEdits();
           const local = notes.all.find((n) => n.id === r.id);
           const untouched = local && f.prev && (await this.hashes.file(f.path, serialize(local))).sha === f.prev;
+          // written on both devices since they last agreed: the newer one used to replace the other, whose words
+          // were gone. Both changes are put together; where they cannot be, the one that would be lost is kept beside
+          if (local && !untouched && f.prev && !r.deleted && !local.deleted && local.body !== r.body) {
+            const base = await repo.blob(f.prev).then((d) => parse(dec.decode(d)), () => null);
+            const both = base ? merge3(base.body, local.body, r.body) : null;
+            if (both !== null) { force.push({ ...(r.updatedAt > local.updatedAt ? r : local), body: both, updatedAt: Date.now() }); continue; }
+            copies.push({ ...(r.updatedAt > local.updatedAt ? local : r) });
+          }
           (untouched ? force : lww).push(r);
         }
         notes.mergeRemote(lww);
         notes.mergeRemote(force, true);
+        for (const c of copies) notes.keepConflictCopy(c);
       });
       this.save({ lastSynced: Date.now() });
       this.status = 'ok';

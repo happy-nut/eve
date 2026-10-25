@@ -132,13 +132,18 @@ export class Repo {
     }
     const out = await chunked(entries, async (e) => ({
       path: e.path,
-      data: unb64((await this.json('GET', `/git/blobs/${e.sha}`)).content),
+      data: await this.blob(e.sha),
       prev: this.s.known[e.path],
     }));
     this.s.head = head;
     this.s.tree = t.sha;
     this.s.known = known;
     return out;
+  }
+
+  /** A file as it was when its blob was `sha`: what two devices last agreed on, for putting their changes together. */
+  async blob(sha: string): Promise<Uint8Array> {
+    return unb64((await this.json('GET', `/git/blobs/${sha}`)).content);
   }
 
   /** The git data API refuses an empty repository (409); the contents API creates the first commit + branch. */
