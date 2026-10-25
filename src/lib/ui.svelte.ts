@@ -401,8 +401,8 @@ export const hooks: {
   openPlus?: (anchor?: HTMLElement) => void;
   /** append markdown to the open note (a dropped attachment; registered by the editor) */
   attach?: (markdown: string) => void;
-  /** put the caret in the middle of the page (the window coming back, not an edit) */
-  centerCaret?: () => void;
+  /** the caret in sight, the page moved only if it was not (the window coming back, not an edit) */
+  caretIntoView?: () => void;
   /** run an editor action by id on the open note (the phone's formatting bar) */
   command?: (id: string) => void;
   /** the same on the sheet over it (a card, a day, a template), while one is open */
