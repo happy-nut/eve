@@ -10,6 +10,7 @@
   import { isDailyId, DAILY_TEMPLATE_ID, CALENDAR_NOTE_ID } from './lib/daily';
   import { groups, parentOf, leafOf, depthOf, MAX_DEPTH } from './lib/groups.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
+  import { typedIn } from './lib/hangul';
   import { sync } from './lib/sync.svelte';
   import { ui, hooks, type MenuItem } from './lib/ui.svelte';
   import { composing } from './lib/keys';
@@ -39,7 +40,7 @@
   // …only while daily notes are on here: off on this device, they are nowhere on it (list, search, widget)
   // a query with a character markdown uses ("a*b", "~/projects", "List<String>") is looked for as written too: text
   // brought in from elsewhere keeps such characters unescaped, and reading it as markdown took them out
-  const hits = $derived(rankByTitle([...notes.visible, ...(appearance.s.dailyNotes ? notes.daily : [])].filter((n) => shownText(n).includes(q) || (rawQuery(q) && n.body.toLowerCase().includes(q))), q));
+  const hits = $derived(rankByTitle([...notes.visible, ...(appearance.s.dailyNotes ? notes.daily : [])].filter((n) => typedIn(shownText(n), q) || (rawQuery(q) && n.body.toLowerCase().includes(q))), q));
   /** the search box has the keyboard: the row ↩ would open is marked */
   let searching = $state(false);
   // A search looks for what the note says, as it reads on screen: its raw markdown matched what nobody sees (a

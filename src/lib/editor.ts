@@ -3,6 +3,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { BulletList, ListItem, OrderedList } from '@tiptap/extension-list';
 import Paragraph from '@tiptap/extension-paragraph';
 import Code from '@tiptap/extension-code';
+import { typedIn } from './hangul';
 import Heading from '@tiptap/extension-heading';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -1527,10 +1528,10 @@ export function createEditor(opts: {
               const inside = headingsOf(n.body).map((h) => ({ label: h, value: `${title}#${h}`, hint: title, icon: ICONS.section }));
               // the same sections twice over, reached two ways: typed after a `#`, or by opening the
               // page in the list with → when the headings are not what you remember
-              if (title !== self && title.toLowerCase().includes(q)) {
+              if (title !== self && typedIn(title.toLowerCase(), q)) {
                 pages.push({ label: title, sections: inside, ...(n.icon ? { noteIcon: n.icon } : { icon: ICONS.note }) });
               }
-              for (const h of inside) if (h.value.toLowerCase().includes(q)) sections.push(h);
+              for (const h of inside) if (typedIn(h.value.toLowerCase(), q)) sections.push(h);
             }
             const items = [...pages, ...sections].slice(0, 8); // pages first: the sections fill what is left
             // a title nothing answers to yet: picking it links a page that gets created on the first visit

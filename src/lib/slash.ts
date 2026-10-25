@@ -13,6 +13,7 @@ import { hints } from './hints.svelte';
 import type { EmojiEntry } from './emoji';
 import { runEditorCommand } from './editor';
 import { composing } from './keys';
+import { typedIn } from './hangul';
 
 export interface SuggestItem {
   label: string; value?: string; hint?: string; icon?: string; noteIcon?: string;
@@ -312,10 +313,10 @@ const line = (id: string): SuggestItem['run'] => tip(id, (e) => runEditorCommand
 export function slashItems(query: string): SuggestItem[] {
   if (!query) return SLASH;
   const q = query.toLowerCase();
-  const finds = (i: SuggestItem) => [i.label, i.hint, i.keywords].some((w) => w?.toLowerCase().includes(q));
+  const finds = (i: SuggestItem) => [i.label, i.hint, i.keywords].some((w) => w && typedIn(w.toLowerCase(), q));
   // a kind found by its group's name is found too ("/diagram" lists every diagram); not by the group's hint, which
   // names a few kinds ("/flow" is Flowchart alone)
-  const named = (i: SuggestItem) => [i.label, i.keywords].some((w) => w?.toLowerCase().includes(q));
+  const named = (i: SuggestItem) => [i.label, i.keywords].some((w) => w && typedIn(w.toLowerCase(), q));
   return SLASH.flatMap((i) => (i.sections ? (named(i) ? i.sections : i.sections.filter(finds)) : finds(i) ? [i] : []));
 }
 

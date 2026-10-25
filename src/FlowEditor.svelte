@@ -206,7 +206,7 @@
   /** Esc from the note: what is picked let go first; true when there was something (else the whole diagram closes) */
   export function escape(): boolean {
     if (editing) { cancelEdit(); return true; }
-    if (laneEditing) { laneEditing = null; return true; }
+    if (laneEditing) { doneTyping(); laneEditing = null; return true; }
     if (linking || sel) { linking = null; sel = null; return true; }
     return false;
   }
@@ -214,13 +214,18 @@
     const n = flow.nodes.find((x) => x.id === editing);
     if (n && editText.trim()) n.label = editText.trim();
   }
+  /** a name typed in a box or a lane is done: the diagram takes its own keys again, so its field lets go of the
+   *  keyboard on purpose before it goes (left to vanish with it, the keyboard was on <body> as if lost) */
+  const doneTyping = () => { const a = document.activeElement; if (a instanceof HTMLInputElement && layer?.contains(a)) letGo(a); };
   function commitEdit() {
     typed();
+    doneTyping();
     editing = null;
   }
   function cancelEdit() {
     const n = flow.nodes.find((x) => x.id === editing);
     if (n) n.label = before;
+    doneTyping();
     editing = null;
   }
   /** a box on its own (the note's "+ Box"), typed in at once */
@@ -249,6 +254,7 @@
   function commitLane() {
     const l = flow.lanes?.find((x) => x.id === laneEditing);
     if (l && laneText.trim()) l.label = laneText.trim();
+    doneTyping();
     laneEditing = null;
   }
   function moveLane(id: string, by: -1 | 1) {
@@ -599,7 +605,7 @@
              pressed, and the keys typed went to that button (Enter made another lane) -->
         <input class="lane-name" bind:value={laneText} aria-label="Lane name" placeholder="Lane" {@attach (el: HTMLInputElement) => { el.focus(); el.select(); }}
           style:left={`${clampX(hb.x + hb.w / 2, 140)}px`} style:top={`${hb.y + hb.h / 2 - 16}px`}
-          onkeydown={(e) => { if (composing(e)) return; if (e.key === 'Enter') { e.preventDefault(); commitLane(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); laneEditing = null; } }}
+          onkeydown={(e) => { if (composing(e)) return; if (e.key === 'Enter') { e.preventDefault(); commitLane(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); doneTyping(); laneEditing = null; } }}
           onblur={commitLane} />
       {:else}
         <!-- over the lane's own name (picked, it is ringed): above or under it, the bar covered the next lane's name and

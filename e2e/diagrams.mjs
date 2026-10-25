@@ -51,6 +51,8 @@ try {
   await settle(page);
   assert.equal(await page.locator('.tiptap .mermaid-view g.node', { hasText: 'Draft' }).count(), 1, 'the box shows the text as it is typed');
   await page.keyboard.press('Enter');
+  // the diagram takes its own keys once the box is named: the keyboard is let go of on purpose, not lost with the field
+  assert.deepEqual(await page.evaluate(() => window.__focusLosses.splice(0)), [], 'naming a box loses no focus');
   await page.locator('.layer .plus').first().click();
   await page.waitForSelector('.tiptap input.rename');
   await page.keyboard.type('Write');
@@ -84,10 +86,10 @@ try {
   console.log('ok   flowchart: typed in its boxes, + and drag, the bars; the note keeps the code');
 
   await page.locator('.tiptap p').first().click();
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await settle(page);
   assert.ok((await md(page)) !== text, 'undo reaches the diagram');
-  await page.keyboard.press('Control+Shift+z');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
   await settle(page);
   console.log('ok   undo: into the drawing');
 
@@ -109,7 +111,7 @@ try {
   await page.locator('.layer .bar button[aria-label="Edit the text"]').click();
   await page.waitForSelector('.tiptap input.rename');
   await page.keyboard.press('Meta+a');
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.type('Big edit');
   await page.keyboard.press('Enter');
   await settle(page);
@@ -128,10 +130,10 @@ try {
   assert.ok(off >= 0 && off < 3, `the picked box's ring stays on it after a zoom (off by ${off})`);
   // ⌘Z on the whole screen is the note's undo
   const beforeUndo = await md(page);
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await settle(page);
   assert.notEqual(await md(page), beforeUndo, '⌘Z undoes on the whole screen');
-  await page.keyboard.press('Control+Shift+z');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
   await settle(page);
   assert.ok((await md(page)).includes('Big edit'), '⇧⌘Z redoes it');
   await page.keyboard.press('Escape'); // lets go of the box
@@ -182,7 +184,7 @@ try {
   await page.keyboard.press('Backspace');
   await settle(page);
   assert.ok(!(await md(page)).includes('One'), 'the box deleted');
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await settle(page);
   assert.ok((await md(page)).includes('"One"'), 'undo brings it back');
   // with it open, a click on the task under it toggles the task (the tools folding away moved it from under the press)
@@ -219,7 +221,7 @@ try {
   await settle(page);
   text = await md(page);
   assert.ok(!text.includes('n1 --> n2') && text.includes('Text after.') && text.includes('# Line'), 'the line gone, the note untouched: ' + text);
-  await page.keyboard.press('Control+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await settle(page);
   assert.ok((await md(page)).includes('n1 --> n2'), 'undo brings the line back');
   m = await mid();
@@ -458,7 +460,7 @@ try {
   await page.waitForSelector('.tiptap .dblock.active');
   await page.locator('.tiptap .dblock .tools button', { hasText: 'Code' }).click();
   await page.waitForSelector('.tiptap .code-block.editing');
-  await page.keyboard.press('Control+Enter');
+  await page.keyboard.press('ControlOrMeta+Enter');
   await page.waitForSelector('.tiptap .dblock.active');
   console.log('ok   its code shown: "Edit as drawing" or ⌘↵ opens the drawing; ↓ onto it picks it, ↵ opens it');
   await page.close();
