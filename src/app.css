@@ -29,11 +29,13 @@
   --ink-yellow: light-dark(#8f6516, #d6a84f); --ink-green: light-dark(#2f7a52, #5fb586); --ink-blue: light-dark(#1f6fa8, #6aa6e0);
   --ink-purple: light-dark(#7b4fa8, #b48be0); --ink-pink: light-dark(#b03a78, #e07aae); --ink-red: light-dark(#c4302b, #ef6b66);
   /* the same nine as grounds (Notion's palette, its 50 step): a callout's box. One palette for words, boxes and tags,
-     so a red callout and a red word are the same red. Cyan is Obsidian's ([!tip], [!abstract]), not Notion's. */
-  --tint-gray: light-dark(#f1f1ef, rgba(255, 255, 255, 0.06)); --tint-brown: light-dark(#f4eeee, rgba(184, 101, 72, 0.12)); --tint-orange: light-dark(#fbecdd, rgba(233, 126, 40, 0.12));
-  --tint-yellow: light-dark(#fbf3db, rgba(162, 105, 50, 0.16)); --tint-green: light-dark(#edf3ec, rgba(45, 153, 100, 0.12)); --tint-blue: light-dark(#e7f3f8, rgba(51, 126, 169, 0.16));
-  --tint-purple: light-dark(#f8f3fc, rgba(155, 97, 211, 0.12)); --tint-pink: light-dark(#fcf1f6, rgba(220, 76, 145, 0.1)); --tint-red: light-dark(#fdebec, rgba(222, 85, 88, 0.12));
-  --tint-cyan: light-dark(#e6f4f3, rgba(44, 167, 160, 0.13));
+     so a red callout and a red word are the same red. Cyan is Obsidian's ([!tip], [!abstract]), not Notion's.
+     See-through, each the colour Notion's opaque one makes over white: the selection is drawn under the text
+     (selectionLayer.ts), and an opaque box hid it there — a drag inside a callout showed nothing selected. */
+  --tint-gray: light-dark(rgba(132, 132, 115, 0.114), rgba(255, 255, 255, 0.06)); --tint-brown: light-dark(rgba(164, 115, 115, 0.121), rgba(184, 101, 72, 0.12)); --tint-orange: light-dark(rgba(239, 177, 115, 0.242), rgba(233, 126, 40, 0.12));
+  --tint-yellow: light-dark(rgba(239, 208, 115, 0.257), rgba(162, 105, 50, 0.16)); --tint-green: light-dark(rgba(122, 166, 115, 0.135), rgba(45, 153, 100, 0.12)); --tint-blue: light-dark(rgba(115, 185, 214, 0.171), rgba(51, 126, 169, 0.16));
+  --tint-purple: light-dark(rgba(173, 115, 220, 0.086), rgba(155, 97, 211, 0.12)); --tint-pink: light-dark(rgba(225, 115, 165, 0.1), rgba(220, 76, 145, 0.1)); --tint-red: light-dark(rgba(241, 115, 122, 0.143), rgba(222, 85, 88, 0.12));
+  --tint-cyan: light-dark(rgba(115, 193, 188, 0.178), rgba(44, 167, 160, 0.13));
   /* …and a step stronger, a tag in a database (its 100 step): a chip on a white row must show as one */
   --tag-gray: light-dark(rgba(84, 72, 49, 0.15), rgba(255, 255, 255, 0.11)); --tag-brown: light-dark(rgba(210, 162, 141, 0.35), #3a2d26); --tag-orange: light-dark(rgba(224, 124, 57, 0.27), #45301f);
   --tag-yellow: light-dark(rgba(236, 191, 66, 0.39), #43361f); --tag-green: light-dark(rgba(123, 183, 129, 0.27), #233328); --tag-blue: light-dark(rgba(93, 165, 206, 0.27), #1f3140);
