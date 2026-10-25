@@ -70,3 +70,32 @@ test.each(NOTES)('%s: the caret stays by its text when a line before it changes'
   }
   expect([...new Set(wrong)]).toEqual([]);
 }, 60_000); // a note of many lines tries every pair of them: seconds on a slow CI machine
+
+// Sync now puts two devices' changes to one line together word by word: the line the caret is in can come in changed
+// itself, before the caret or after it. The caret stays between the same two characters it was between.
+test.each(NOTES)('%s: the caret stays by its text when its own line changes before or after it', (_k, note) => {
+  const ed = editorWith(note);
+  const body = md(ed);
+  const { lines } = parts(ed.state.doc);
+  const wrong: string[] = [];
+  for (let e = 0; e < lines.length; e++) {
+    for (const where of ['before', 'after'] as const) {
+      const off = Math.floor(lines[e].text.length / 2);
+      const other = make(body);
+      const start = parts(other.state.doc).lines[e].pos;
+      const at = where === 'before' ? start : other.state.doc.resolve(start).end(); // (an inline node counts as one place)
+      other.view.dispatch(other.state.tr.insertText(where === 'before' ? 'zz ' : ' zz', at));
+      const changed = md(other);
+      other.destroy();
+      const now = parts(ed.state.doc).lines[e];
+      ed.view.dispatch(ed.state.tr.setSelection(TextSelection.create(ed.state.doc, now.pos + off)));
+      const left = now.text.slice(0, off), right = now.text.slice(off);
+      takeBody(ed, changed);
+      const { $from } = ed.state.selection;
+      const t = $from.parent.textContent, o = $from.parentOffset;
+      if (!t.slice(0, o).endsWith(left) || !t.slice(o).startsWith(right)) wrong.push(`line ${e + 1}, changed ${where}: caret between "${left}|${right}" went to "${t.slice(0, o)}|${t.slice(o)}"`);
+      takeBody(ed, body);
+    }
+  }
+  expect([...new Set(wrong)]).toEqual([]);
+}, 60_000);

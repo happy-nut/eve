@@ -82,3 +82,14 @@ test('a page renamed on the other device: links to it here, in notes that device
   expect(bodyOf(menu)).toBe('# Menu\n\nsee [[Cooking]] and [[Cooking#Pasta|the pasta]]');
   expect((await remote(menu)).body).toBe(bodyOf(menu));
 });
+
+test('a link renamed on the other device in the line being written here: the words typed here and the new name both', async () => {
+  made('# Target\n\nx');
+  const id = made('# Notes\n\nbeta line with [[Target]] in it');
+  expect(await sync.now()).toBe(true);
+  await otherWrites(id, '# Notes\n\nbeta line with [[Renamed]] in it');
+  notes.update(id, '# Notes\n\nbeta ONE line with [[Target]] in it');
+  expect(await sync.now()).toBe(true);
+  expect(bodyOf(id)).toBe('# Notes\n\nbeta ONE line with [[Renamed]] in it');
+  expect(notes.all.some((n) => !n.deleted && n.body.startsWith('# Notes (conflict copy)'))).toBe(false);
+});
