@@ -102,9 +102,13 @@ one to link), `[[` a link, `@` a date, `@remind` a reminder, `:` an emoji, `/` a
 `/color` colours it).
 
 **Databases** — `/database` makes a table of the pages under this one (Notion's): properties of their own kinds
-(text, number, select, tags, date, checkbox), sorted or filtered from a column's menu, and a Board view grouped by a
-select, a card dragged to another column taking its value. Each row is a page, its properties lines of its frontmatter
-(`Status: Doing`, `Tags: ["home"]`), as Obsidian writes them; the table itself is a ```` ```database ```` block of JSON.
+(text, number, select, tags, date, checkbox, relation, rollup, formula), sorted or filtered from a column's menu, and
+Table, Board (grouped by a select; drag a card to another column), Calendar (by a date; drag a row to another day) and
+Gallery views. A relation links pages of another database (or any page), a rollup reads through it (count, sum,
+average, min, max, the values, percent checked), a formula is Notion's (`prop("Hours") * prop("Rate")`, `if(…)`,
+`dateBetween(…)`). ⌘Z / ⌘⇧Z on the table take back and redo what was done there. Each row is a page, its properties
+lines of its frontmatter (`Status: Doing`, `Tags: ["home"]`, `Projects: ["[[Eve]]"]`), as Obsidian writes them;
+rollups and formulas are worked out, never written; the table itself is a ```` ```database ```` block of JSON.
 
 **Colours and footnotes** — `/color` (or the chosen words' menu → *Text color…*) colours words in Notion's nine,
 written `<span style="color: …">`, each readable in both themes. `/footnote` puts `[^1]` at the caret and its line at

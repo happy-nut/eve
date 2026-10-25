@@ -715,6 +715,15 @@ class NotesStore {
       this.flush(id);
     }
   }
+  /** A database row taken away or brought back by the table's own ⌘Z: no toast, and the open note stays open. */
+  setGone(id: string, gone: boolean) {
+    const n = this.all.find((x) => x.id === id);
+    if (!n || n.deleted === gone) return;
+    n.deleted = gone;
+    n.updatedAt = Date.now();
+    this.flush(id);
+    if (gone && this.currentId === id) this.currentId = n.parent ?? this.firstPage()?.id ?? null;
+  }
   /** A new row of the database on page `parent`: a page under it, titled, with these properties. Not opened. */
   addRow(parent: string, title: string, props: Record<string, PropValue> = {}): Note {
     const up = this.all.find((x) => x.id === parent);

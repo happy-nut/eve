@@ -4,6 +4,7 @@
 export const SAMPLES: Record<string, string> = {
   'marks and inline nodes': '# T\n\nplain **bold** *it* ~~s~~ <u>u</u> `code` ==hi== [l](https://x.y) [[Page]] [[Page|alias]] @2026-10-18 $x^2$ a\\\nb',
   'reminder': 'call @2026-10-26 09:00 ⏰ back, and a day @2026-10-27 alone',
+  'database of every kind': "```database\n{\n  \"title\": \"People\",\n  \"props\": [\n    {\n      \"name\": \"Team\",\n      \"type\": \"relation\",\n      \"target\": \"abc\"\n    },\n    {\n      \"name\": \"Hours\",\n      \"type\": \"rollup\",\n      \"relation\": \"Team\",\n      \"of\": \"Hours\",\n      \"fn\": \"sum\"\n    },\n    {\n      \"name\": \"Pay\",\n      \"type\": \"formula\",\n      \"expr\": \"prop(\\\"Hours\\\") * 2\"\n    },\n    {\n      \"name\": \"Done\",\n      \"type\": \"checkbox\"\n    },\n    {\n      \"name\": \"When\",\n      \"type\": \"date\"\n    }\n  ],\n  \"view\": \"calendar\",\n  \"dateBy\": \"When\"\n}\n```",
   'text colour': 'a <span style="color: #c4302b">red</span> word',
   'footnote': 'Claim[^1] and another[^note].\n\n[^1]: The source.\n\n[^note]: More.',
   'inline html': 'x <span style="color: red">y</span> z <input type="checkbox"> w',

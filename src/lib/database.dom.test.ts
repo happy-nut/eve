@@ -56,3 +56,42 @@ test('rows are made under the page, not opened; a property set, renamed, taken o
   expect(r.props).toBeUndefined();
   expect(serialize(r)).not.toMatch(/State|Due/);
 });
+
+import { evaluate } from './formula';
+import { rollup, byDay, linksIn } from './database';
+
+test("formulas: Notion's operators and functions over a row's values; nothing is run as code; errors say where", () => {
+  const row: Record<string, number | string | boolean | null> = { Price: 12, Qty: 3, Done: true, Due: '2026-11-10', Name: 'Pen', Note: null };
+  const f = (src: string) => evaluate(src, (n) => row[n] ?? null);
+  expect(f('prop("Price") * prop("Qty")').value).toBe('36');
+  expect(f('prop("Price") / 0').value).toBe('');
+  expect(f('if(prop("Done"), "✓ " + prop("Name"), "todo")').value).toBe('✓ Pen');
+  expect(f('round(10 / 3, 2)').value).toBe('3.33');
+  expect(f('-prop("Qty") + 1').value).toBe('-2');
+  expect(f('prop("Qty") >= 3 && not(empty(prop("Name")))').value).toBe('✓');
+  expect(f('concat(prop("Name"), " x", format(prop("Qty")))').value).toBe('Pen x3');
+  expect(f('dateBetween(prop("Due"), "2026-11-01", "days")').value).toBe('9');
+  expect(f('empty(prop("Note"))').value).toBe('✓');
+  expect(f('length("한글")').value).toBe('2');
+  expect(f('prop("Price" * 2').error).toBeTruthy();
+  expect(f('alert(1)').error).toContain('no function');
+  expect(f('constructor.constructor("x")()').error).toBeTruthy();
+  expect(f('').value).toBe('');
+});
+
+test('rollups, a relation\'s links, and the calendar\'s days', () => {
+  expect(rollup(['3', '4.5', ''], 'sum')).toBe('7.5');
+  expect(rollup(['3', '4'], 'average')).toBe('3.5');
+  expect(rollup(['a', 'b'], 'count')).toBe('2');
+  expect(rollup(['true', 'false', 'true', 'true'], 'checked')).toBe('75%');
+  expect(rollup(['x', 'y'], 'sum')).toBe('');
+  expect(rollup(['2026-11-02', '2026-10-01'], 'min')).toBe('2026-10-01');
+  expect(linksIn(['[[Eve]]', '[[Plan|the plan]]', 'Bare'])).toEqual(['Eve', 'Plan', 'Bare']);
+  const rows = [note({ Due: '2026-11-01' }, 0), note({ Due: '2026-11-01 09:00' }, 1), note({ Due: 'soon' }, 2), note({}, 3)];
+  const days = byDay(rows, 'Due');
+  expect([...days.keys()]).toEqual(['2026-11-01']);
+  expect(days.get('2026-11-01')!.length).toBe(2);
+  const d = parseDb(serializeDb({ title: 'T', view: 'calendar', dateBy: 'Due', props: [{ name: 'P', type: 'relation', target: 'x' }, { name: 'R', type: 'rollup', relation: 'P', of: 'Name', fn: 'count' }, { name: 'F', type: 'formula', expr: '1+1' }] }));
+  expect(d!.props.map((p) => p.type)).toEqual(['relation', 'rollup', 'formula']);
+  expect(d!.view).toBe('calendar');
+});
