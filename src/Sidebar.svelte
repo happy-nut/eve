@@ -14,7 +14,7 @@
   import { sync } from './lib/sync.svelte';
   import { ui, hooks, type MenuItem } from './lib/ui.svelte';
   import { composing } from './lib/keys';
-  import { importFromFinder, importFromFolder, exportCurrent, type ExportAs } from './lib/transfer';
+  import { importFromFinder, importFromFolder } from './lib/transfer';
   import Icon from './Icon.svelte';
   import { appearance } from './lib/appearance.svelte';
   import * as moves from './lib/moves';
@@ -124,7 +124,6 @@
   const opened = (first: Note | null) => { if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; } };
   const importFiles = () => transfer(async () => opened(await importFromFinder()));
   const importFolder = () => transfer(async () => opened(await importFromFolder()));
-  const exportAs = (as: ExportAs) => () => exportCurrent(as);
 
   /** a new note in group `g`, straight into the editor (deleting keeps focus in the list); a search still narrowing
    *  the list would hide it there, so it goes */
@@ -150,9 +149,6 @@
     items.push(
       { label: 'Import files…', run: importFiles, sep: true },
       { label: 'Import folder…', run: importFolder },
-      { label: 'Export as Markdown…', run: exportAs('md') },
-      { label: 'Export as PDF…', run: exportAs('pdf') },
-      { label: 'Export as image…', run: exportAs('png') },
     );
     return items;
   });
