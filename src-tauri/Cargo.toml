@@ -1,6 +1,6 @@
 [package]
 name = "eve"
-version = "0.7.56"
+version = "0.7.57"
 description = "Fast, keyboard-first markdown notes"
 authors = ["happynut"]
 license = "MIT"
