@@ -89,11 +89,13 @@ test.each(NOTES)('%s: the caret stays by its text when its own line changes befo
       other.destroy();
       const now = parts(ed.state.doc).lines[e];
       ed.view.dispatch(ed.state.tr.setSelection(TextSelection.create(ed.state.doc, now.pos + off)));
-      const left = now.text.slice(0, off), right = now.text.slice(off);
+      // the words either side of the caret, an inline mark read as its text (a footnote's `[^1]`): a mark that came
+      // in as typed words on the other device and reads back a mark is the same words, one place in the line
+      const sides = () => { const { $from } = ed.state.selection, p = $from.parent; return [p.textBetween(0, $from.parentOffset), p.textBetween($from.parentOffset, p.content.size)]; };
+      const [left, right] = sides();
       takeBody(ed, changed);
-      const { $from } = ed.state.selection;
-      const t = $from.parent.textContent, o = $from.parentOffset;
-      if (!t.slice(0, o).endsWith(left) || !t.slice(o).startsWith(right)) wrong.push(`line ${e + 1}, changed ${where}: caret between "${left}|${right}" went to "${t.slice(0, o)}|${t.slice(o)}"`);
+      const [l2, r2] = sides();
+      if (!l2.endsWith(left) || !r2.startsWith(right)) wrong.push(`line ${e + 1}, changed ${where}: caret between "${left}|${right}" went to "${l2}|${r2}"`);
       takeBody(ed, body);
     }
   }

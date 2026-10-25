@@ -124,7 +124,7 @@ test('"/turn" offers what the line can become, plain text too; "/color" colours 
   ed.commands.setTextSelection(posOf(ed, 'paint', true));
   const pens = slashItems('color');
   expect(pens.at(-1)!.label).toBe('Default');
-  pens[0].run!(ed);
+  pens.find((i) => i.label.endsWith('background'))!.run!(ed); // the first pen: the plain one
   expect(md(ed).trimEnd()).toBe('# T\n\n==paint me==');
   pens.at(-1)!.run!(ed);
   expect(md(ed).trimEnd()).toBe('# T\n\npaint me');

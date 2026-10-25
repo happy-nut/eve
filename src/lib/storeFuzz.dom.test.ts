@@ -28,6 +28,8 @@ function broken(): string[] {
     if (n.group && !groups.names.includes(n.group)) out.push(`${n.id} sits in a group that isn't there: ${n.group}`);
   }
   if (new Set(groups.names).size !== groups.names.length) out.push('a group is listed twice');
+  // a property is never one of Eve's own keys, and none is empty (it would be a line saying nothing)
+  for (const n of notes.all) for (const [k, v] of Object.entries(n.props ?? {})) if (['id', 'updated', 'deleted', 'order', 'group', 'parent', 'icon', 'wide'].includes(k) || v === '' || (Array.isArray(v) && !v.length)) out.push(`${n.id} has the property ${k}: ${JSON.stringify(v)}`);
   // the trash holds what is deleted and not deleted for good; the list and the trash share no note
   if (notes.trash.some((n) => !n.deleted || n.body === '')) out.push('the trash holds a live note, or one deleted for good');
   if (notes.trash.some((n) => vis.includes(n.id))) out.push('a note is in the list and the trash at once');
@@ -76,6 +78,8 @@ for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
         ['unnest', () => { const a = pick(live()); if (a) notes.setParent(a.id, null); }],
         ['sync brings a change', () => { const n = pick(live()); if (n) notes.mergeRemote([{ ...n, body: n.body + ' z', updatedAt: Date.now() + 1000 }]); }],
         ['sync deletes one', () => { const n = pick(live()); if (n) notes.mergeRemote([{ ...n, deleted: true, updatedAt: Date.now() + 1000 }]); }],
+        ['add a database row', () => { const n = pick(live()); if (n) notes.addRow(n.id, `Row ${step}`, { Status: pick(['a', 'b'])! }); }],
+        ['set a property', () => { const n = pick(live()); if (n) notes.setProp(n.id, pick(['Status', 'Due', 'id', 'parent'])!, pick(['x', null, ['t']])!); }],
         ['set an icon', () => { const n = pick(live()); if (n) notes.setIcon(n.id, pick(['', '🐢', '📌'])!); }],
         ['make it wide or not', () => { const n = pick(live()); if (n) notes.setWide(n.id, pick([true, false])!); }],
         ['move a group', () => { const g = pick(groups.names); if (g) groups.move(g, pick(['', ...groups.names.filter((x) => x !== g)]) ?? '', null); }],

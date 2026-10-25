@@ -8,6 +8,7 @@ import { exportCurrent } from './transfer';
 import { shortcuts } from './shortcuts.svelte';
 import { imageMenu } from './image';
 import { highlightMenu } from './highlight';
+import { COLORS, colorAt, colorText } from './textColor';
 
 /**
  * Right-click inside a note. The webview's own menu is Look Up / Translate / Speech / AutoFill — a wall
@@ -60,6 +61,7 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
     { label: 'Italic', keys: keys('italic'), hide: empty, run: () => editor.chain().focus().toggleItalic().run() },
     { label: 'Strikethrough', keys: keys('strike'), hide: empty, run: () => editor.chain().focus().toggleStrike().run() },
     { label: 'Highlight…', keys: keys('highlight'), hide: empty, run: () => highlightMenu(editor) },
+    { label: 'Text color…', hide: empty, run: () => textColorMenu(editor, at) },
     { label: 'Code', keys: keys('code'), hide: empty, run: () => editor.chain().focus().toggleCode().run() },
     linked
       ? { label: 'Remove link', run: () => editor.chain().focus().unsetLink().run() }
@@ -73,6 +75,16 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
   ];
   // from the keyboard (⌥↩) there is no pointer: the menu opens under the caret instead
   ui.openMenu(at, items);
+}
+
+/** the chosen words in one of Notion's text colours, or back to the note's own */
+function textColorMenu(editor: Editor, at: { clientX: number; clientY: number }) {
+  const { from, to } = editor.state.selection;
+  const now = colorAt(editor);
+  ui.openMenu(at, [
+    ...COLORS.map((c) => ({ label: c.label, swatch: c.hex, checked: now === c.name, run: () => colorText(editor, from, to, c.name) })),
+    { label: 'Default', sep: true, hide: !now, run: () => colorText(editor, from, to, null) },
+  ]);
 }
 
 /** What a link offers, wherever it is asked: open (or write to) it, take the link off, copy it. */

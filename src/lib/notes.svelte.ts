@@ -20,6 +20,26 @@ export interface Note {
   parent?: string; // id of the page this one was created inside (sub-page; sits under it in the sidebar)
   icon?: string; // emoji shown in the sidebar (Notion-style)
   wide?: boolean; // laid out across the whole pane instead of the reading width
+  /** a database row's properties (Status, Due, Tags…): frontmatter lines of their own, as Obsidian writes them */
+  props?: Record<string, PropValue>;
+}
+export type PropValue = string | string[];
+
+/** the frontmatter keys that are Eve's own: a property may not take one of these names */
+export const OWN_KEYS = new Set(['id', 'updated', 'deleted', 'order', 'group', 'parent', 'icon', 'wide']);
+/** a property's name as a frontmatter key can hold it: one line, no colon, not one of Eve's own */
+export const propName = (name: string) => name.replace(/[:\n\r]/g, ' ').trim();
+/** a value as one frontmatter line: a list (and a word that would read as one) as JSON, anything else as it is */
+const propLine = (v: PropValue) => (Array.isArray(v) || /^[["]/.test(v) || v !== v.trim() ? JSON.stringify(v) : v.replace(/[\n\r]+/g, ' '));
+function readProp(v: string): PropValue {
+  if (/^[["]/.test(v)) {
+    try {
+      const x = JSON.parse(v);
+      if (typeof x === 'string') return x;
+      if (Array.isArray(x)) return x.map(String);
+    } catch { /* written by hand: the words as they are */ }
+  }
+  return v;
 }
 
 /** An icon for a note that was just made, unless the setting is off. */
@@ -30,7 +50,7 @@ export const newId = () =>
 
 // ---- (de)serialization: markdown with a tiny frontmatter -------------------
 export function serialize(n: Note): string {
-  return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\norder: ${n.order}${n.group ? `\ngroup: ${n.group}` : ''}${n.parent ? `\nparent: ${n.parent}` : ''}${n.icon ? `\nicon: ${n.icon}` : ''}${n.wide ? '\nwide: true' : ''}\n---\n${n.body}`;
+  return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\norder: ${n.order}${n.group ? `\ngroup: ${n.group}` : ''}${n.parent ? `\nparent: ${n.parent}` : ''}${n.icon ? `\nicon: ${n.icon}` : ''}${n.wide ? '\nwide: true' : ''}${Object.entries(n.props ?? {}).map(([k, v]) => `\n${k}: ${propLine(v)}`).join('')}\n---\n${n.body}`;
 }
 
 /**
@@ -48,9 +68,13 @@ export function parse(text: string): Note | null {
   const m = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text);
   if (!m) return null;
   const meta: Record<string, string> = {};
+  const props: Record<string, PropValue> = {};
   for (const line of m[1].split('\n')) {
     const i = line.indexOf(':');
-    if (i > 0) meta[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+    if (i <= 0) continue;
+    const k = line.slice(0, i).trim(), v = line.slice(i + 1).trim();
+    meta[k] = v;
+    if (!OWN_KEYS.has(k) && k) props[k] = readProp(v);
   }
   if (!meta.id) return null;
   return {
@@ -62,6 +86,7 @@ export function parse(text: string): Note | null {
     parent: meta.parent || undefined,
     icon: meta.icon || undefined,
     wide: meta.wide === 'true' || undefined,
+    ...(Object.keys(props).length ? { props } : {}),
     // legacy notes without order: newest first
     order: meta.order !== undefined && !Number.isNaN(Number(meta.order)) ? Number(meta.order) : -(Number(meta.updated) || 0),
   };
@@ -660,6 +685,54 @@ class NotesStore {
     const put = (text: string) => { n.body = text; n.updatedAt = Date.now(); this.flush(id); };
     put(body);
     ui.toast(`Restored the version from ${when}`, { label: 'Undo', run: () => put(was) });
+  }
+
+  /**
+   * A database row's property set (or taken off, with null or nothing in it). Dated now, so sync carries it; a
+   * property no one has left is no line of the file.
+   */
+  setProp(id: string, name: string, value: PropValue | null) {
+    const n = this.all.find((x) => x.id === id);
+    const key = propName(name);
+    if (!n || !key || OWN_KEYS.has(key)) return;
+    const empty = value === null || value === '' || (Array.isArray(value) && !value.length);
+    const props = { ...(n.props ?? {}) };
+    if (empty) delete props[key]; else props[key] = value;
+    if (JSON.stringify(props) === JSON.stringify(n.props ?? {})) return;
+    n.props = Object.keys(props).length ? props : undefined;
+    n.updatedAt = Date.now();
+    this.flush(id);
+  }
+  /** A property renamed on the rows that have it (the database's column renamed), its order among the others kept */
+  renameProp(ids: readonly string[], from: string, to: string) {
+    const key = propName(to);
+    if (!key || OWN_KEYS.has(key) || key === from) return;
+    for (const id of ids) {
+      const n = this.all.find((x) => x.id === id);
+      if (!n?.props || !(from in n.props)) continue;
+      n.props = Object.fromEntries(Object.entries(n.props).map(([k, v]) => [k === from ? key : k, v]));
+      n.updatedAt = Date.now();
+      this.flush(id);
+    }
+  }
+  /** A database row taken away or brought back by the table's own ⌘Z: no toast, and the open note stays open. */
+  setGone(id: string, gone: boolean) {
+    const n = this.all.find((x) => x.id === id);
+    if (!n || n.deleted === gone) return;
+    n.deleted = gone;
+    n.updatedAt = Date.now();
+    this.flush(id);
+    if (gone && this.currentId === id) this.currentId = n.parent ?? this.firstPage()?.id ?? null;
+  }
+  /** A new row of the database on page `parent`: a page under it, titled, with these properties. Not opened. */
+  addRow(parent: string, title: string, props: Record<string, PropValue> = {}): Note {
+    const up = this.all.find((x) => x.id === parent);
+    // as an import is made: at the end of its group, the open note left alone (the table stays in front)
+    const made = this.addImported(`# ${title}\n\n`, up?.group ?? '', Date.now(), parent);
+    const n = this.all.find((x) => x.id === made.id)!; // the store's own (the one made is a copy it was taken from)
+    const clean = Object.fromEntries(Object.entries(props).filter(([k, v]) => propName(k) && !OWN_KEYS.has(propName(k)) && v !== '' && !(Array.isArray(v) && !v.length)));
+    if (Object.keys(clean).length) { n.props = clean; this.flush(n.id); }
+    return n;
   }
 
   /** Open note by title, creating it if missing (used by [[wiki links]]). */

@@ -101,6 +101,19 @@ bullets, `1. ` `a. ` `i. ` numbers, `# ` … `##### ` headings, `> ` a toggle, `
 one to link), `[[` a link, `@` a date, `@remind` a reminder, `:` an emoji, `/` a block (`/turn…` changes the line,
 `/color` colours it).
 
+**Databases** — `/database` makes a table of the pages under this one (Notion's): properties of their own kinds
+(text, number, select, tags, date, checkbox, relation, rollup, formula), sorted or filtered from a column's menu, and
+Table, Board (grouped by a select; drag a card to another column), Calendar (by a date; drag a row to another day) and
+Gallery views. A relation links pages of another database (or any page), a rollup reads through it (count, sum,
+average, min, max, the values, percent checked), a formula is Notion's (`prop("Hours") * prop("Rate")`, `if(…)`,
+`dateBetween(…)`). ⌘Z / ⌘⇧Z on the table take back and redo what was done there. Each row is a page, its properties
+lines of its frontmatter (`Status: Doing`, `Tags: ["home"]`, `Projects: ["[[Eve]]"]`), as Obsidian writes them;
+rollups and formulas are worked out, never written; the table itself is a ```` ```database ```` block of JSON.
+
+**Colours and footnotes** — `/color` (or the chosen words' menu → *Text color…*) colours words in Notion's nine,
+written `<span style="color: …">`, each readable in both themes. `/footnote` puts `[^1]` at the caret and its line at
+the end, as GitHub and Obsidian write footnotes; a click on the number goes to its line.
+
 **Reminders** — `@remind` and a day (09:00, or the next hour today) is written `@2026-10-26 09:00 ⏰`, which any
 other app reads as it is; click the chip to change the time or stop it. It rings on the Mac (Eve keeps running in
 the background) and on the phone with Eve closed, once the note has synced there; the notification opens the note.

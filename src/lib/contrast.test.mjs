@@ -53,6 +53,8 @@ const PAIRS = [
   ['--tip-fg', ['--tip-bg'], TEXT],
   ['--accent-text', ['--bg', '--bg-side', '--bg-pop', '--bg-hover', '--bg-hover@--bg-side'], TEXT],
   ...['--hl-key', '--hl-str', '--hl-num', '--hl-fn', '--hl-var'].map((h) => [h, ['--code-bg'], TEXT]),
+  // a word coloured in a note, on the page, a card and a code-less line's hover
+  ...['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'].map((c) => [`--ink-${c}`, ['--bg', '--bg-pop', '--bg-hover'], TEXT]),
   // a button's label on the accent: short, bold words, read as a label (Turtle and Toss keep white on their blue too)
   ['--on-accent', ['--accent'], ICON],
 ];
