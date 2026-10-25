@@ -5,7 +5,7 @@ import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
 import { ui } from './ui.svelte';
 import { history, undoSource } from './history.svelte';
-import { legacyPlain, onlyHtml, plain, splitLink } from './markdown';
+import { legacyPlain, onlyHtml, plain, splitAlias, splitLink } from './markdown';
 import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isDailyId, isWritten } from './daily';
 
 export { plain };
@@ -675,6 +675,38 @@ class NotesStore {
     }
     return { now, was };
   });
+  /**
+   * The notes whose [[links]] lead to `id` (Notion's backlinks): the page, a section of it, under an alias or a title it
+   * had, from any note or day but itself; each with the first line that links there, as words. A link in code is code.
+   */
+  linksTo(id: string): { note: Note; line: string }[] {
+    const out: { note: Note; line: string }[] = [];
+    const find = (t: string) => this.byTitle(t);
+    for (const n of this.all) {
+      if (n.deleted || n.id === id || n.id === DAILY_TEMPLATE_ID || n.id === CALENDAR_NOTE_ID || !n.body.includes('[[')) continue;
+      const hit = this.linksOf(n).find((l) => find(splitLink(l.link, (t) => !!find(t))[0])?.id === id);
+      if (hit) out.push({ note: n, line: hit.line });
+    }
+    return out;
+  }
+  /** a note's [[links]] with the line each is on, read once per version of the note (every page asks of every note) */
+  private linkCache = new Map<string, { body: string; links: { link: string; line: string }[] }>();
+  private linksOf(n: Note) {
+    const had = this.linkCache.get(n.id);
+    if (had?.body === n.body) return had.links;
+    const links: { link: string; line: string }[] = [];
+    let fenced = false;
+    for (const raw of n.body.split('\n')) {
+      if (/^\s*(```|~~~)/.test(raw)) { fenced = !fenced; continue; }
+      if (fenced || !raw.includes('[[')) continue;
+      // a to-do's box is no part of what the line says (plain takes the list's mark, not the box after it)
+      const line = plain(raw.replace(/^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]\s+/, ''));
+      for (const m of raw.matchAll(/\[\[([^\]\n]+?)\]\]/g)) links.push({ link: splitAlias(m[1])[0], line });
+    }
+    this.linkCache.set(n.id, { body: n.body, links });
+    return links;
+  }
+
   openByTitle(link: string) {
     const find = (t: string) => this.byTitle(t);
     const [title, section] = splitLink(link, (t) => !!find(t));
