@@ -24,6 +24,10 @@
   --hl-num: light-dark(#6d4bd3, #b39dff); /* numbers, literals, symbols */
   --hl-fn: light-dark(#1b44b8, #9fb9ff); /* function and class names */
   --hl-var: light-dark(#a84b1f, #e5a06b); /* attributes, properties, variables */
+  /* text colours (Notion's nine), as words on the page in either theme (textColor.ts; the file keeps the light one) */
+  --ink-gray: light-dark(#6f6e69, #a3a29e); --ink-brown: light-dark(#8a5a44, #c4917a); --ink-orange: light-dark(#b0500a, #e08a52);
+  --ink-yellow: light-dark(#8f6516, #d6a84f); --ink-green: light-dark(#2f7a52, #5fb586); --ink-blue: light-dark(#1f6fa8, #6aa6e0);
+  --ink-purple: light-dark(#7b4fa8, #b48be0); --ink-pink: light-dark(#b03a78, #e07aae); --ink-red: light-dark(#c4302b, #ef6b66);
   /* tooltips sit on the same grey as a callout or a code block (opaque, so they read over anything) */
   --tip-bg: light-dark(#f3f3f4, #1c1d21);
   --tip-fg: var(--fg);
@@ -965,3 +969,18 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
 .more-l { mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent); }
 .more-l.more-r { mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
 .tiptap .math-block.editing { mask-image: none; }
+
+/* a coloured word (textColor.ts): the theme's own shade of it, over the one written in the file (the light theme's) */
+.tiptap span[style*='#6f6e69' i] { color: var(--ink-gray) !important; }
+.tiptap span[style*='#8a5a44' i] { color: var(--ink-brown) !important; }
+.tiptap span[style*='#b0500a' i] { color: var(--ink-orange) !important; }
+.tiptap span[style*='#8f6516' i] { color: var(--ink-yellow) !important; }
+.tiptap span[style*='#2f7a52' i] { color: var(--ink-green) !important; }
+.tiptap span[style*='#1f6fa8' i] { color: var(--ink-blue) !important; }
+.tiptap span[style*='#7b4fa8' i] { color: var(--ink-purple) !important; }
+.tiptap span[style*='#b03a78' i] { color: var(--ink-pink) !important; }
+.tiptap span[style*='#c4302b' i] { color: var(--ink-red) !important; }
+
+/* footnotes (footnote.ts): the reference raised, a footnote's own line smaller and dim */
+.tiptap sup.fnref { color: var(--accent-text); font-size: 0.72em; padding: 0 1px; cursor: pointer; }
+.tiptap p.fndef { font-size: 0.86em; color: var(--fg-dim); margin: 0.2em 0; }

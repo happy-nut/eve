@@ -1,6 +1,8 @@
 // The popups typed into a note — `/` blocks, `[[` links, `@` dates, `:` emoji — and the `/` menu's items.
 import type { Editor } from '@tiptap/core';
 import { insertKanban } from './kanban';
+import { insertDatabase } from './databaseNode';
+import { insertFootnote } from './footnote';
 import { insertDiagram } from './code';
 import { swimlaneStarter } from './diagram';
 import { insertMath } from './math';
@@ -16,6 +18,7 @@ import { composing } from './keys';
 import { typedIn } from './hangul';
 import { appearance } from './appearance.svelte';
 import { isPen, penName } from './highlight';
+import { COLORS, colorText } from './textColor';
 
 export interface SuggestItem {
   label: string; value?: string; hint?: string; icon?: string; noteIcon?: string;
@@ -365,14 +368,22 @@ function colorLine(editor: Editor, pen: string | null, plain: boolean) {
   (pen === null ? c.unsetMark('highlight') : c.setMark('highlight', { color: plain ? null : pen })).setTextSelection(to).run();
 }
 
-/** Notion's "/color", "/red", "/default": the pens Settings → Highlighter has, each colouring the line */
+/** the line's words in a text colour, or none (null), as Notion's "/red" colours the block */
+function inkLine(editor: Editor, name: string | null) {
+  const { $from } = editor.state.selection;
+  colorText(editor, $from.start(), $from.end(), name);
+  editor.commands.focus();
+}
+
+/** Notion's "/color", "/red", "/default": text colours, then the pens Settings → Highlighter has, each for the line */
 function colors(): SuggestItem {
   const pens = appearance.s.highlights.filter(isPen);
   return {
-    label: 'Color', hint: 'the line, with a highlighter', keywords: 'colour background highlight 색 형광펜', icon: ICONS.color, folder: true,
+    label: 'Color', hint: 'the line: its words, or a highlighter', keywords: 'colour text background highlight 색 글자색 형광펜', icon: ICONS.color, folder: true,
     sections: [
-      ...pens.map((c, i) => ({ label: penName(c), hint: 'color the line', keywords: 'color colour background 색', icon: ICONS.color, run: (e: Editor) => colorLine(e, c, !i) })),
-      { label: 'Default', hint: 'no color on the line', keywords: 'color colour none 색 없음', icon: ICONS.color, run: (e: Editor) => colorLine(e, null, false) },
+      ...COLORS.map((c) => ({ label: c.label, hint: 'text color', keywords: `color colour text ${c.name} 글자색`, icon: ICONS.color, run: (e: Editor) => inkLine(e, c.name) })),
+      ...pens.map((c, i) => ({ label: `${penName(c)} background`, hint: 'highlight the line', keywords: 'color colour background highlight 배경 형광펜', icon: ICONS.color, run: (e: Editor) => colorLine(e, c, !i) })),
+      { label: 'Default', hint: 'no color on the line', keywords: 'color colour none 색 없음', icon: ICONS.color, run: (e: Editor) => { colorLine(e, null, false); inkLine(e, null); } },
     ],
   };
 }
@@ -397,6 +408,7 @@ export const SLASH: SuggestItem[] = [
   { label: 'Code block', hint: '``` code, highlighted', icon: ICONS.code, run: tip('codeBlock', (e) => { if (!e.isActive('tableCell') && !e.isActive('tableHeader')) e.chain().focus().toggleCodeBlock().run(); }) },
   { label: 'Divider', hint: '--- a line across', icon: ICONS.divider, run: tip('divider', (e) => e.chain().focus().setHorizontalRule().run()) },
   { label: 'Kanban', hint: 'board', keywords: '칸반', icon: ICONS.kanban, run: insertKanban },
+  { label: 'Database', hint: 'a table of pages under this one', keywords: 'table view board 데이터베이스 표 db', icon: ICONS.table, run: insertDatabase },
   {
     label: 'Diagram', hint: 'flowchart, sequence, pie…', keywords: 'mermaid chart 다이어그램 차트', icon: ICONS.diagram, folder: true,
     sections: [
@@ -414,6 +426,7 @@ export const SLASH: SuggestItem[] = [
   { label: 'Table', hint: '3×3, with a header row', icon: ICONS.table, run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   { label: 'Image', hint: 'Pick a file', icon: ICONS.image, run: tip('image', (e) => { pickImage().then((src) => src && insertImage(e, src)); }) },
   { label: 'Video', hint: 'Pick a file', icon: ICONS.video, run: (e) => { pickVideo().then((src) => src && e.chain().focus().insertContent({ type: 'video', attrs: { src, name: src.split('/').pop() } }).run()); } },
+  { label: 'Footnote', hint: '[^1] a note at the end', keywords: 'reference cite 각주 주석', icon: ICONS.text, run: insertFootnote },
   { label: 'Link to note', hint: '[[ another note', icon: ICONS.wikiLink, run: tip('wikiLink', (e) => e.chain().focus().insertContent('[[').run()) },
   {
     label: 'Emoji', hint: '😀 pick one', icon: ICONS.emoji,

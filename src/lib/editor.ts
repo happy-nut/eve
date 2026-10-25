@@ -25,6 +25,8 @@ import Blockquote from '@tiptap/extension-blockquote';
 import { ImageView, LocalImage } from './image';
 import { Bookmark, URL_RE, openLinkHere } from './bookmark';
 import { Kanban, deleteBoard } from './kanban';
+import { DatabaseBlock } from './databaseNode';
+import { FootnoteRef, FootnoteText } from './footnote';
 import { CodeBlock, inCell } from './code';
 import { Pdf } from './pdf';
 import { Video } from './video';
@@ -1708,6 +1710,9 @@ export function createEditor(opts: {
       }),
       Bookmark,
       Kanban,
+      DatabaseBlock,
+      FootnoteRef,
+      FootnoteText,
       Extension.create({
         name: 'slashMenu',
         addProseMirrorPlugins() {

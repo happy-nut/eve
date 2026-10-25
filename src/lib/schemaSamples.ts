@@ -4,6 +4,8 @@
 export const SAMPLES: Record<string, string> = {
   'marks and inline nodes': '# T\n\nplain **bold** *it* ~~s~~ <u>u</u> `code` ==hi== [l](https://x.y) [[Page]] [[Page|alias]] @2026-10-18 $x^2$ a\\\nb',
   'reminder': 'call @2026-10-26 09:00 ⏰ back, and a day @2026-10-27 alone',
+  'text colour': 'a <span style="color: #c4302b">red</span> word',
+  'footnote': 'Claim[^1] and another[^note].\n\n[^1]: The source.\n\n[^note]: More.',
   'inline html': 'x <span style="color: red">y</span> z <input type="checkbox"> w',
   'coloured highlight': 'plain ==yellow== and <mark style="background-color: #c9f2d4">mint</mark> and **<mark style="background-color: #e5d8ff">lilac bold</mark>**',
   'code': '```js\nlet a = 1\n```',
@@ -16,6 +18,7 @@ export const SAMPLES: Record<string, string> = {
   'table': '| a | b |\n| --- | --- |\n| 1 | 2 |\n',
   // columns dragged wider or narrower: their widths in a comment under the table, which other apps do not show
   'sized table': '| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n\n<!-- eve:widths 120 - 240 -->',
+  'database': '```database\n{\n  "title": "Tasks",\n  "props": [\n    {\n      "name": "Status",\n      "type": "select",\n      "options": [\n        "Todo",\n        "Done"\n      ]\n    }\n  ],\n  "view": "table"\n}\n```',
   'divider': 'a\n\n---\n\nb',
   'picture': '![cap](assets/a.png)',
   'pdf': '[notes.pdf](assets/notes.pdf)',
