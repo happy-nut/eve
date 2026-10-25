@@ -170,6 +170,17 @@
     return [...out, ...pages];
   });
 
+  // the notes that link here (Notion's backlinks): a count over the title, a menu of them on a click
+  const backlinks = $derived(notes.linksTo(note.id));
+  function showBacklinks(at: HTMLElement) {
+    const r = at.getBoundingClientRect();
+    const short = (t: string) => (t.length > 60 ? t.slice(0, 59) + '…' : t);
+    ui.openMenu({ clientX: Math.round(r.left), clientY: Math.round(r.bottom + 4) }, backlinks.map(({ note: n, line }) => ({
+      label: line && line !== titleOf(n) ? `${short(titleOf(n))} — ${short(line)}` : short(titleOf(n)),
+      run: () => { notes.flush(note.id); notes.currentId = n.id; },
+    })));
+  }
+
   /** the pane's width on it as --pane, for the blocks that reach past the text to its edges (app.css) */
   function paneWidth(node: HTMLElement) {
     const put = () => node.style.setProperty('--pane', `${node.clientWidth}px`);
@@ -190,6 +201,12 @@
       <button class="add-icon" onclick={addIcon}>
         <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 9.5c.6.9 1.5 1.5 2.5 1.5s1.9-.6 2.5-1.5M6 6.5h.01M10 6.5h.01"/></svg>
         Add icon
+      </button>
+    {/if}
+    {#if backlinks.length}
+      <button class="backlinks" title="Notes that link here" onclick={(e) => showBacklinks(e.currentTarget)}>
+        <svg viewBox="0 0 16 16"><path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1"/></svg>
+        {backlinks.length} {backlinks.length === 1 ? 'link' : 'links'} here
       </button>
     {/if}
   </div>
@@ -237,6 +254,13 @@
     height: 72px; /* reserves the "add icon" row so the title doesn't jump */
   }
   .page-head.with-icon { height: 118px; }
+  .page-head { display: flex; align-items: flex-start; }
+  .backlinks {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--fg-dim);
+    font: inherit; font-size: 12.5px; padding: 3px 6px; margin-right: -6px; border-radius: 6px; white-space: nowrap;
+  }
+  .backlinks svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; }
+  .backlinks:hover { background: var(--bg-hover); color: var(--fg); }
   /* on a Mac the breadcrumbs sit in the window's top row: the note starts a little further down, clear of them */
   @media screen {
     :global(html:not(.mobile)) .page-head { padding-top: 68px; height: 96px; }
@@ -289,7 +313,7 @@
       height: 150px; padding: 84px 0 0; box-sizing: border-box; max-width: none; margin: 0; break-after: avoid;
     }
     .big-icon { display: block; width: 56px; height: 56px; padding: 0; margin: 0; }
-    .add-icon { visibility: hidden; }
+    .add-icon, .backlinks { visibility: hidden; }
     .crumbs { display: none; }
   }
 </style>
