@@ -123,6 +123,19 @@ try {
   }
   console.log('ok   back to the list leaves nothing of the note over it');
 
+  // ---- a note printed (Export as PDF, as an image): its icon above its title, as on a Mac, not over it ----
+  {
+    const page = await phone({ a: '# Groceries\n\nmilk\n', b: '# Other' });
+    await page.evaluate(() => { window.__notes.setIcon(window.__notes.currentId, '🧬'); });
+    await page.waitForSelector('.big-icon');
+    await page.emulateMedia({ media: 'print' });
+    await page.waitForTimeout(200);
+    const at = await page.evaluate(() => ({ icon: document.querySelector('.big-icon').getBoundingClientRect().bottom, title: document.querySelector('.tiptap > :first-child').getBoundingClientRect().top }));
+    assert.ok(at.icon <= at.title, `printed, the icon ends above the title (icon ${Math.round(at.icon)}, title ${Math.round(at.title)})`);
+    await page.close();
+  }
+  console.log('ok   printed on a phone, the icon sits above the title');
+
   // ---- a swipe to the right brings the list in, but not while scrolling something wide back, nor over Find or a
   // diagram on the whole screen ----
   {
