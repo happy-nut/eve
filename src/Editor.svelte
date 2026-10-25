@@ -260,6 +260,8 @@
   button.crumb:hover { background: var(--bg-hover); color: var(--fg); }
   /* a phone: in its own bar, between the back button and the note's icons */
   :global(html.mobile) .crumbs { top: -52px; left: 50px; right: 138px; height: 52px; font-size: 14px; }
+  /* …and only while that bar is there: back in the list it is gone, and the crumbs were left over the list's title */
+  :global(html.mobile .shell:not(:has(> .mhead))) .crumbs { display: none; }
   .add-icon {
     display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--fg-dim);
     font: inherit; font-size: 12.5px; padding: 3px 6px; margin-left: -6px; border-radius: 6px; opacity: 0;
