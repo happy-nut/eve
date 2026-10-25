@@ -7,7 +7,7 @@ Markdown notes for macOS (and Android) that open in a keystroke, look like a pag
 ### 1. Write it down before you forget it
 
 `⌘⇧E` from any app brings Eve up; `⌘N`, type, `Esc` and you are back where you were.
-Markdown turns into headings and to-dos as you type, and `⌘K` finds any note in a few letters.
+Markdown turns into headings and to-dos as you type, and `⌘P` (or `⌘K`) finds any note in a few letters.
 
 <p align="center"><img src="docs/eve-capture.gif" alt="A new note written and another found, all from the keyboard" width="800"></p>
 
@@ -95,22 +95,40 @@ image) is there, from the note's ⋯ menu: the file goes to the share sheet.
 
 ## Default shortcuts
 
+Notion's, wherever Notion has a key for the same thing, and Notion's typing rules: `[] ` a to-do, `- ` `* ` `+ `
+bullets, `1. ` `a. ` `i. ` numbers, `# ` … `##### ` headings, `> ` a toggle, `" ` (or `| `) a quote, ```` ``` ```` code,
+`---` a divider, `**bold**`, `*italic*`, `` `code` ``, `~strike~`, `==highlight==`; `+` a new page under this one (or
+one to link), `[[` a link, `@` a date, `@remind` a reminder, `:` an emoji, `/` a block (`/turn…` changes the line,
+`/color` colours it).
+
+**Reminders** — `@remind` and a day (09:00, or the next hour today) is written `@2026-10-26 09:00 ⏰`, which any
+other app reads as it is; click the chip to change the time or stop it. It rings on the Mac (Eve keeps running in
+the background) and on the phone with Eve closed, once the note has synced there; the notification opens the note.
+A done to-do's reminder does not ring.
+
 | Scope  | Action                          | Keys              |
 | ------ | ------------------------------- | ----------------- |
 | system | Summon / dismiss Eve            | `⌘⇧E`             |
-| app    | New (note / group menu) / Search | `⌘N` `⌘K`        |
-| app    | Next / previous note / Back / Forward | `⌘⇧↓` `⌘⇧↑` `⌘[` `⌘]` |
+| app    | New (note / group menu) / Search | `⌘N` `⌘P` (`⌘K` with no words chosen) |
+| app    | Back / Forward / Next / previous note | `⌘[` `⌘]` `⌃⇧J` `⌃⇧K` |
+| app    | The page above / Copy its eve:// link / Dark–light | `⌘⇧U` `⌘L` `⌘⇧L` |
 | app    | Sidebar: open + focus / close   | `⌘\`              |
 | app    | Delete note / Settings / Hide   | `⌘⇧⌫` `⌘,` `Esc`  |
+| app    | Export Markdown / PDF / image   | `⌘⇧M` `⌘⇧P` `⌘⌥P` |
 | app    | Larger / smaller / default text | `⌘+` `⌘-` `⌘0`    |
 | editor | Bold / Italic / Underline       | `⌘B` `⌘I` `⌘U`    |
-| editor | Strike / Code / Link / `[[`     | `⌘⇧X` `⌘E` `⌘⇧K` `⌘⇧L` |
+| editor | Strike / Code / Link            | `⌘⇧S` `⌘E` `⌘K`   |
 | editor | Highlight (`==`)                | `⌘⇧H`             |
 | editor | `/` menu / Callout / Image       | `⌘/` `⌘⇧C` `⌘⇧I` |
 | editor | Equation in the line (`$`)      | `⌘⌥E`             |
-| editor | Text / H1 … H5                  | `⌘⌥0` `⌘⌥1` … `⌘⌥5` |
-| editor | Bullets / Numbers / To-dos      | `⌘⇧8` `⌘⇧7` `⌘⇧9` |
-| editor | Quote / Code block / Divider    | `⌘⇧.` `⌘⌥C` `⌘⇧-` |
+| editor | Text / H1 / H2 / H3             | `⌘⌥0` `⌘⌥1` `⌘⌥2` `⌘⌥3` |
+| editor | To-do / Bullets / Numbers / Toggle / Code / New page | `⌘⌥4` `⌘⌥5` `⌘⌥6` `⌘⌥7` `⌘⌥8` `⌘⌥9` |
+| editor | Move the line / Duplicate it / Choose it (then all) | `⌘⇧↑` `⌘⇧↓` `⌘D` `⌘A` |
+| editor | Check a to-do / Open or close every toggle | `⌘↩` `⌘⌥T` |
+| editor | Quote / Divider                 | `⌘⇧.` `⌘⇧-`       |
+
+The keys Eve had before (`⌘⇧8` `⌘⇧7` `⌘⇧9`, `⌘⌥C`, `⌘⇧X`, `⌥↑↓`) still do what they did. Unlike Notion, `Esc`
+puts Eve away (there is no block selection to go to), and H4 and H5 have no key until one is given.
 
 Settings → Appearance sets the theme (system, or pinned light / dark) and the editor typeface (system, serif, rounded, mono or any CSS font family), size, line height and text width.
 

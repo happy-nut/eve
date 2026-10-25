@@ -1,4 +1,4 @@
-import { Editor, Extension, InputRule, textblockTypeInputRule, wrappingInputRule } from '@tiptap/core';
+import { Editor, Extension, InputRule, markInputRule, textblockTypeInputRule, wrappingInputRule } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { BulletList, ListItem, OrderedList } from '@tiptap/extension-list';
 import Paragraph from '@tiptap/extension-paragraph';
@@ -15,11 +15,12 @@ import { canJoin, findWrapping, liftTarget } from '@tiptap/pm/transform';
 import { DOMParser, Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
-import { DateMention, dayChoices } from './date';
+import { DateMention, dayChoices, remindChoices, remindTime, isTime } from './date';
+import { askNotify } from './reminder';
 import { Callout, CalloutEdges } from './callout';
 import { Highlight, highlightMenu } from './highlight';
 import { Html } from './html';
-import { Toggle } from './toggle';
+import { Toggle, DUPLICATE } from './toggle';
 import Blockquote from '@tiptap/extension-blockquote';
 import { ImageView, LocalImage } from './image';
 import { Bookmark, URL_RE, openLinkHere } from './bookmark';
@@ -41,7 +42,7 @@ import { hints } from './hints.svelte';
 import { fileMarkdown, isAsset } from './drop';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
-import { calendar, emojiRow, popup, suggestionVisible, PICKERS, ICONS, slashItems, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
+import { calendar, emojiRow, popup, suggestionVisible, PICKERS, ICONS, slashItems, pageItems, newPage, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
 import { leaveToApp } from './keys';
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
@@ -301,6 +302,60 @@ const arrow = (find: RegExp, replace: string) => new InputRule({
   },
 });
 
+/**
+ * ⌘D: the lines the selection is on, once more right after them, as Notion duplicates blocks. A list's lines are
+ * copied as items (a second paragraph in the same item would read back as one line), a toggle's title as the whole
+ * toggle. Not the note's title, which is the page's name, nor in a table, whose cell holds one line.
+ */
+const duplicateLines: Command = (state, dispatch) => {
+  const { $from, $to } = state.selection;
+  if (inCell($from)) return true;
+  // not lines inside an item (the items instead), nor a toggle's title (the toggle); a toggle's body is lines as any
+  const range = $from.blockRange($to, (n) => !/^(listItem|taskItem|details)$/.test(n.type.name));
+  if (!range) return false;
+  if (range.depth === 0 && range.startIndex === 0 && range.parent.firstChild?.type.name === 'heading') return true;
+  if (dispatch) {
+    const copy = state.doc.slice(range.start, range.end).content;
+    const tr = state.tr.insert(range.end, copy).setMeta(DUPLICATE, true);
+    const by = copy.size;
+    tr.setSelection(TextSelection.create(tr.doc, state.selection.from + by, state.selection.to + by));
+    dispatch(tr.scrollIntoView());
+  }
+  return true;
+};
+
+/**
+ * ⌘⌥T: every toggle in the note opened, or all closed if they were all open already. A caret inside a toggle that
+ * closes goes to its title, as it would be hidden otherwise.
+ */
+const toggleAll: Command = (state, dispatch) => {
+  const all: { pos: number; node: PMNode }[] = [];
+  state.doc.descendants((node, pos) => { if (node.type.name === 'details') all.push({ pos, node }); });
+  if (!all.length) return false;
+  const open = all.some((d) => !d.node.attrs.open);
+  if (dispatch) {
+    const tr = state.tr;
+    let hidden: number | null = null;
+    for (const { pos, node } of all) {
+      tr.setNodeMarkup(pos, undefined, { ...node.attrs, open });
+      const body = pos + 1 + (node.firstChild?.nodeSize ?? 0);
+      if (!open && hidden === null && state.selection.from > body && state.selection.from < pos + node.nodeSize) hidden = pos + node.firstChild!.nodeSize;
+    }
+    if (hidden !== null) tr.setSelection(TextSelection.create(tr.doc, hidden));
+    dispatch(tr);
+  }
+  return true;
+};
+
+/** ⌘A as Notion takes it: the line first (a code block's code whole), the note on the second press */
+const selectLine: Command = (state, dispatch) => {
+  const { $from, $to } = state.selection;
+  if ($from.parent !== $to.parent || !$from.parent.isTextblock || !$from.parent.content.size) return false;
+  if ($from.pos === $from.start() && $to.pos === $to.end()) return false; // the line is chosen already: the whole note
+  if (dispatch) dispatch(state.tr.setSelection(TextSelection.create(state.doc, $from.start(), $from.end())));
+  return true;
+};
+
 /** Run one editor action by id (the phone's formatting bar uses these; a keyboard uses applyKeymap). */
 export const runEditorCommand = (editor: Editor, id: string): boolean => editorCommands(editor)[id]?.() ?? false;
 
@@ -316,6 +371,8 @@ function allCode(state: EditorState, from: number, to: number) {
 }
 
 const LISTS = /^(bulletList|orderedList|taskList)$/;
+/** "1. ", "a. " or "i. " opening a line: a numbered list */
+const NUMBERED = /^(\d+|a|i)\.[^\S\n]$/;
 
 /** the code block's language for VS Code's `mode` in what it puts on the clipboard (its own ids, mostly the same) */
 function vscodeLanguage(data: string): string | null {
@@ -481,6 +538,11 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
       if ($from.parent.type.name === 'detailsSummary') return c().insertContentAt($from.after(-1), { type: 'horizontalRule' }).run();
       return c().setHorizontalRule().run();
     },
+    toggle: () => c().setDetails().updateAttributes('details', { open: true }).run(),
+    newPage: () => (newPage(editor), true),
+    duplicate: () => duplicateLines(editor.state, editor.view.dispatch),
+    toggleAll: () => toggleAll(editor.state, editor.view.dispatch),
+    selectBlock: () => selectLine(editor.state, editor.view.dispatch),
     selectAll: () => c().selectAll().run(),
     undo: () => c().undo().run(),
     redo: () => c().redo().run(),
@@ -511,6 +573,33 @@ function shiftPastBlocks(view: EditorView, e: KeyboardEvent): boolean {
   return true;
 }
 
+/**
+ * A date chip clicked: a reminder's time changed or the reminder taken off, or a plain day made one (Notion's
+ * "Remind" on a date). The time is asked as HH:MM; anything else leaves the chip as it was.
+ */
+function chipMenu(editor: Editor, pos: number, dom: HTMLElement) {
+  const node = editor.state.doc.nodeAt(pos);
+  if (node?.type.name !== 'dateMention') return;
+  const set = (attrs: Record<string, unknown>) => editor.chain().focus().command(({ tr }) => (tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attrs }), true)).run();
+  const askTime = async (initial: string) => {
+    const typed = (await ui.prompt('Remind at (HH:MM)', initial))?.trim().replace(/^(\d):/, '0$1:');
+    if (typed && isTime(typed)) { set({ remind: true, time: typed }); void askNotify(); } else editor.commands.focus();
+  };
+  const r = dom.getBoundingClientRect();
+  ui.openMenu({ clientX: Math.round(r.left), clientY: Math.round(r.bottom + 4) }, node.attrs.remind
+    ? [
+      { label: `Remind at ${node.attrs.time}…`, run: () => void askTime(node.attrs.time) },
+      { label: 'Stop reminding', run: () => set({ remind: false, time: '' }) },
+    ]
+    : [{ label: 'Remind me…', run: () => void askTime(remindTime(node.attrs.date)) }]);
+}
+
+/** Eve's own keys from before it took Notion's (0.7.55 and older) */
+const FORMER: Record<string, string> = {
+  'Mod-Shift-7': 'orderedList', 'Mod-Shift-8': 'bulletList', 'Mod-Shift-9': 'taskList', 'Mod-Alt-c': 'codeBlock',
+  'Mod-Shift-x': 'strike', 'Alt-ArrowUp': 'moveBlockUp', 'Alt-ArrowDown': 'moveBlockDown',
+};
+
 /** (Re)install the user keymap in front of every other plugin, so rebinding wins. */
 export function applyKeymap(editor: Editor) {
   const cmds = editorCommands(editor);
@@ -520,7 +609,8 @@ export function applyKeymap(editor: Editor) {
     // ProseMirror knows the minus key as "-" ("Minus" is the list's own name for it), and with Shift held the
     // key reads "_": that is found by the key's code (Mod-Shift--), or as "_" without its Shift (Mod-_)
     const keys = a.keys.replace(/Minus$/, '-');
-    bindings[keys] = () => cmds[a.id]();
+    // ⌘K with no words chosen and no link under the caret is search, as in Notion: the key goes on to the app
+    bindings[keys] = a.id === 'link' ? () => (!editor.state.selection.empty || editor.isActive('link')) && cmds.link() : () => cmds[a.id]();
     if (keys !== a.keys && keys.includes('Shift-')) bindings[keys.replace('Shift-', '').replace(/-$/, '_')] = bindings[keys];
   }
   editor.unregisterPlugin(KEYMAP);
@@ -543,6 +633,10 @@ export function applyKeymap(editor: Editor) {
   editor.registerPlugin(guard, (p, all) => [p, ...all]);
   // ⌥↩ opens the note's own menu, the one the right button opens (the sidebar answers to it too)
   bindings['Alt-Enter'] = () => (noteMenu(editor, null), true);
+  // the keys these did before Eve took Notion's, still doing them unless something else has them now: the stock ones
+  // underneath (⌘⇧8, ⌘⌥C) would otherwise answer, without this editor's care for code, tables and toggles
+  const taken = new Set(shortcuts.actions.map((a) => a.keys));
+  for (const [keys, id] of Object.entries(FORMER)) if (!taken.has(keys) && !bindings[keys] && cmds[id]) bindings[keys] = () => cmds[id]();
   const plugin = new Plugin({ key: KEYMAP, props: { handleKeyDown: keydownHandler(bindings) } });
   editor.registerPlugin(plugin, (p, all) => [p, ...all]);
 }
@@ -692,6 +786,9 @@ const slashTyped = typedTrigger(SLASH_AT, '/', true);
 // came back after it, and Enter there turned the rest of the line into a link
 const WIKI_AT = new PluginKey<number | null>('wikiAt');
 const wikiTyped = typedTrigger(WIKI_AT, '[[', false, ']]');
+// "+" as for "[[": a page's name takes spaces, so only the caret leaving it (or a space right after it) ends it
+const PAGE_AT = new PluginKey<number | null>('pageAt');
+const pageTyped = typedTrigger(PAGE_AT, '+', false);
 
 /**
  * Bold, italic, strike and highlight at the start of a line in a quote or a callout lost the line's "> ": tiptap-markdown
@@ -789,7 +886,7 @@ export function createEditor(opts: {
 }) {
   // the menus at the caret, so one can stay shut while another is open: in "[[Meeting :sm" both the link picker and
   // the emoji row came up, one over the other, and Enter picked from whichever answered first
-  const WIKI_MENU = new PluginKey('wikiLinkSuggest'), DATE_MENU = new PluginKey('dateMention'), SLASH_MENU = new PluginKey('slashMenu');
+  const WIKI_MENU = new PluginKey('wikiLinkSuggest'), DATE_MENU = new PluginKey('dateMention'), SLASH_MENU = new PluginKey('slashMenu'), PAGE_MENU = new PluginKey('pageMenu');
   // the state being made has a menu's say only once that menu's plugin has run on it, and tiptap runs them in no
   // order to count on; until then, the say it had before this keystroke
   const menuOpen = (ed: Editor, state: EditorState, ...menus: PluginKey[]) =>
@@ -1108,7 +1205,8 @@ export function createEditor(opts: {
       MathBlock,
       Blockquote.extend({
         addInputRules() {
-          return [wrappingInputRule({ find: /^\s*\|[^\S\n]$/, type: this.type })];
+          // "| " as before, and '" ' as Notion makes one (a Mac may have curled it already)
+          return [wrappingInputRule({ find: /^\s*[|"“][^\S\n]$/, type: this.type })];
         },
       }),
       ...Toggle,
@@ -1147,7 +1245,9 @@ export function createEditor(opts: {
           },
         }),
         addInputRules() {
-          return [wrappingInputRule({ find: /^(\d+)\.[^\S\n]$/, type: this.type, getAttributes: (m) => ({ start: +m[1] }), joinPredicate: (_m, node) => !node.attrs.type || node.attrs.type === '1' })];
+          // "a. " and "i. " too, as Notion takes them: a numbered list all the same, its marks drawn by depth (1. a. i.),
+          // which is all markdown can keep
+          return [wrappingInputRule({ find: NUMBERED, type: this.type, getAttributes: (m) => ({ start: +m[1] || 1 }), joinPredicate: (_m, node) => !node.attrs.type || node.attrs.type === '1' })];
         },
       }),
       // Two lists that end up touching (a blank line between them deleted, a paragraph between them
@@ -1166,7 +1266,7 @@ export function createEditor(opts: {
             rule(/^\s*[-+*][^\S\n]$/, 'bulletList', 'listItem'),
             // "[x] " makes a to-do already done, as it does on a plain line
             rule(/^\s*\[( |x)?\][^\S\n]$/, 'taskList', 'taskItem', undefined, (m) => ({ checked: m[1] === 'x' })),
-            rule(/^(\d+)\.[^\S\n]$/, 'orderedList', 'listItem', (m) => ({ start: +m[1] })),
+            rule(NUMBERED, 'orderedList', 'listItem', (m) => ({ start: +m[1] || 1 })),
           ];
         },
       }),
@@ -1553,20 +1653,25 @@ export function createEditor(opts: {
       // @ — a day, stored as the day and shown as it reads now. The trigger keeps the default
       // prefixes (line start or after a space), which is what keeps an address out of it.
       DateMention.configure({
+        onChip: chipMenu,
         suggestion: {
           char: PICKERS.date.char,
           allowSpaces: false,
           pluginKey: DATE_MENU,
-          allow: ({ editor, state }) => !menuOpen(editor, state, WIKI_MENU, SLASH_MENU),
-          // the days a query could mean; the calendar opens on the first and closes when there is none
-          items: ({ query }) => dayChoices(query),
-          command: ({ editor, range, props }) =>
+          allow: ({ editor, state }) => !menuOpen(editor, state, WIKI_MENU, SLASH_MENU, PAGE_MENU),
+          // the days a query could mean; the calendar opens on the first and closes when there is none. "@remind"
+          // offers them as reminders (Notion's), at 09:00 or the next hour today
+          items: ({ query }) => remindChoices(query) ?? dayChoices(query),
+          command: ({ editor, range, props }) => {
+            const { value, remind } = props as { value: string; remind?: boolean };
             editor
               .chain()
               .focus()
               .deleteRange(range)
-              .insertContent([{ type: 'dateMention', attrs: { date: (props as { value: string }).value } }, { type: 'text', text: ' ' }])
-              .run(),
+              .insertContent([{ type: 'dateMention', attrs: { date: value, ...(remind ? { remind: true, time: remindTime(value) } : {}) } }, { type: 'text', text: ' ' }])
+              .run();
+            if (remind) void askNotify();
+          },
           render: () => calendar(opts.calendarUI),
         },
       }),
@@ -1574,6 +1679,14 @@ export function createEditor(opts: {
       CalloutEdges,
       Highlight,
       ...Html,
+      // ~words~ struck through, as Notion types it (~~words~~ still is too, and is how it is saved). After a space or at
+      // the line's start only, and never across another ~: "10~20", "안녕~" and ~~words~~ being typed stay as they are
+      Extension.create({
+        name: 'singleTilde',
+        addInputRules() {
+          return [markInputRule({ find: /(?:^|\s)(~(?![\s~])([^~]+?)(?<![\s~])~)$/, type: this.editor.schema.marks.strike })];
+        },
+      }),
       Extension.create({
         name: 'arrows',
         addInputRules: () => [
@@ -1628,6 +1741,38 @@ export function createEditor(opts: {
           ];
         },
       }),
+      // Notion's "+": a new page under this one, or a page to link. After a space or at a line's start (the trigger's
+      // default prefixes), so "C++" and "1+1" stay text; not in code, nor in a toggle's title (text only)
+      Extension.create({
+        name: 'pageMenu',
+        addProseMirrorPlugins() {
+          return [
+            pageTyped,
+            Suggestion({
+              editor: this.editor,
+              char: PICKERS.page.char,
+              pluginKey: PAGE_MENU,
+              allowSpaces: true,
+              allow: ({ editor, state, range }) => {
+                if (PAGE_AT.getState(state) !== range.from) return false;
+                const $at = state.doc.resolve(range.from);
+                if ($at.parent.type.spec.code || $at.parent.type.name === 'detailsSummary') return false;
+                // "+ " is a sum or a list's mark, not a page asked for
+                if (/^\s/.test(state.doc.textBetween(range.from + 1, Math.max(range.from + 1, range.to)))) return false;
+                return !menuOpen(editor, state, WIKI_MENU, DATE_MENU, SLASH_MENU);
+              },
+              items: ({ query }) => pageItems(query, opts.targets(), editor.state.doc.firstChild?.textContent.trim() ?? ''),
+              command: ({ editor, range, props }) => {
+                const item = props as SuggestItem;
+                editor.chain().focus().deleteRange(range).run();
+                if (item.run) item.run(editor);
+                else editor.chain().focus().insertContent([{ type: 'wikiLink', attrs: { title: item.label } }, { type: 'text', text: ' ' }]).run();
+              },
+              render: () => popup(opts.suggestionUI, PICKERS.page),
+            }),
+          ];
+        },
+      }),
       // Slack's `:smile`: a colon (at a line's start or after a space) and two letters bring up the best
       // few emoji in a row; the pick replaces what was typed. Not in code, where `:x` is just text.
       Extension.create({
@@ -1639,7 +1784,7 @@ export function createEditor(opts: {
               char: PICKERS.emoji.char,
               pluginKey: new PluginKey('emojiSuggest'),
               allowSpaces: false,
-              allow: ({ editor, state, range }) => !state.doc.resolve(range.from).parent.type.spec.code && !menuOpen(editor, state, WIKI_MENU, DATE_MENU, SLASH_MENU),
+              allow: ({ editor, state, range }) => !state.doc.resolve(range.from).parent.type.spec.code && !menuOpen(editor, state, WIKI_MENU, DATE_MENU, SLASH_MENU, PAGE_MENU),
               items: async ({ query }) => searchEmoji(await loadEmoji().catch(() => []), query, 5, newestEmoji()),
               command: ({ editor, range, props }) => {
                 editor.chain().focus().insertContentAt(range, (props as EmojiEntry).emoji).run();

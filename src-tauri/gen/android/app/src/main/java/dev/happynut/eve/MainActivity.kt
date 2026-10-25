@@ -154,8 +154,20 @@ class MainActivity : TauriActivity() {
     @JavascriptInterface
     fun account(repo: String, token: String, host: String) = PullJob.account(applicationContext, repo, token, host)
 
-    /** a note was written: the widget reads the folder again */
+    /** a note was written: the widget reads the folder again, and the reminders in notes are read again */
     @JavascriptInterface
-    fun notesChanged() = NotesWidget.refreshSoon(applicationContext)
+    fun notesChanged() {
+      NotesWidget.refreshSoon(applicationContext)
+      LineReminders.scheduleSoon(applicationContext)
+    }
+
+    /** a reminder set in a note (`@remind`): the permission to notify, asked then and there */
+    @JavascriptInterface
+    fun askNotify() {
+      if (android.os.Build.VERSION.SDK_INT >= 33 &&
+        checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        runOnUiThread { requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 12) }
+      }
+    }
   }
 }

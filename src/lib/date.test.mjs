@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import MarkdownIt from 'markdown-it';
 import { isoDay, dayFrom, daysFrom, dateLabel, typedDay, dayChoices, dateMarkdown,
-  shiftDays, shiftMonths, monthGrid, weekdayNames } from './date.ts';
+  shiftDays, shiftMonths, monthGrid, weekdayNames, remindersIn, remindChoices, remindTime, chipLabel } from './date.ts';
 
 // a fixed "now", late enough in the day that a UTC-based answer would land on the next date
 const now = new Date(2026, 8, 24, 23, 30); // 2026-09-24, local
@@ -113,4 +113,28 @@ console.log('DATE_OK');
   assert.equal(editedLabel(at(new Date(2026, 8, 23, 23, 50)), now, 'en'), 'yesterday');
   assert.equal(editedLabel(at(new Date(2026, 2, 3)), now, 'en'), 'Mar 3');
   assert.equal(editedLabel(at(new Date(2025, 2, 3)), now, 'en'), 'Mar 3, 2025');
+}
+
+// @remind: a reminder written as `@day HH:MM ⏰`, read back as one; the rings a note holds
+{
+  const md = new MarkdownIt();
+  md.use(dateMarkdown);
+  assert.match(md.renderInline('call @2026-09-25 09:00 ⏰ back'), /data-date="2026-09-25" data-time="09:00" data-remind=""/);
+  // a time with no clock is a day and words, as before
+  assert.match(md.renderInline('at @2026-09-25 09:00 sharp'), /<span data-date="2026-09-25">[^<]*<\/span> 09:00 sharp/);
+  assert.match(md.renderInline('@2026-09-25 25:00 ⏰'), /<span data-date="2026-09-25">[^<]*<\/span> 25:00 ⏰/);
+
+  const rs = remindersIn('# T\n\n- [ ] call Bo @2026-09-25 09:30 ⏰\n- [x] done @2026-09-25 10:00 ⏰\n```\n@2026-09-25 11:00 ⏰\n```\n> ## 회의 @2026-09-26 14:00 ⏰ 준비');
+  assert.deepEqual(rs.map((r) => [r.day, r.time, r.line]), [['2026-09-25', '09:30', 'call Bo'], ['2026-09-26', '14:00', '회의 준비']]);
+  assert.equal(rs[0].at, new Date(2026, 8, 25, 9, 30).getTime(), 'rung at the local time');
+
+  assert.equal(remindTime('2026-09-25', now), '09:00');
+  assert.equal(remindTime('2026-09-24', new Date(2026, 8, 24, 14, 10)), '15:00', 'today: the next whole hour');
+  assert.equal(remindTime('2026-09-24', now), '23:59', 'late tonight: still today');
+  assert.equal(remindChoices('tom', now), null, 'only after "remind"');
+  const c = remindChoices('remind', now);
+  assert.equal(c[0].exact, true, 'a bare @remind: ↩ takes the first');
+  assert.ok(c.every((d) => d.remind));
+  assert.deepEqual(remindChoices('remind2026-10-01', now).map((d) => [d.iso, d.time]), [['2026-10-01', '09:00']]);
+  assert.equal(chipLabel({ date: '2026-09-25', time: '09:00', remind: true }, now, 'en'), '⏰ tomorrow 09:00');
 }

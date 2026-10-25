@@ -13,17 +13,23 @@ export const DEFAULTS: Action[] = [
   { id: 'toggleWindow', label: 'Summon / dismiss Eve (system-wide)', scope: 'global', keys: 'Mod-Shift-e' },
 
   { id: 'newNote', label: 'New note', scope: 'app', keys: 'Mod-n' },
-  { id: 'search', label: 'Search notes', scope: 'app', keys: 'Mod-k' },
+  // Notion's keys (notion.com/help/keyboard-shortcuts) wherever Notion has one for the same thing.
+  // ⌘P searches, and so does ⌘K with no words chosen (with words chosen it links them: the editor's `link`)
+  { id: 'search', label: 'Search notes', scope: 'app', keys: 'Mod-p' },
   { id: 'find', label: 'Find & replace in this note', scope: 'app', keys: 'Mod-f' },
   { id: 'focusSidebar', label: 'Sidebar: focus / close (↑↓ move, ←→ or Space fold / unfold, ⌥↑↓ reorder, ⌫ delete, Esc back)', scope: 'app', keys: 'Mod-\\' },
   { id: 'back', label: 'Back (previous note)', scope: 'app', keys: 'Mod-[' },
   { id: 'forward', label: 'Forward', scope: 'app', keys: 'Mod-]' },
-  { id: 'nextNote', label: 'Next note', scope: 'app', keys: 'Mod-Shift-ArrowDown' },
-  { id: 'prevNote', label: 'Previous note', scope: 'app', keys: 'Mod-Shift-ArrowUp' },
+  // ⌃⇧J / ⌃⇧K as Notion steps through a database's pages: ⌘⇧↑↓ moves the line, as there
+  { id: 'nextNote', label: 'Next note', scope: 'app', keys: 'Ctrl-Shift-j' },
+  { id: 'prevNote', label: 'Previous note', scope: 'app', keys: 'Ctrl-Shift-k' },
+  { id: 'parentPage', label: 'The page this one is under', scope: 'app', keys: 'Mod-Shift-u' },
+  { id: 'copyLink', label: 'Copy a link to this note (eve://)', scope: 'app', keys: 'Mod-l' },
+  { id: 'theme', label: 'Dark / light theme', scope: 'app', keys: 'Mod-Shift-l' },
   { id: 'deleteNote', label: 'Delete current note', scope: 'app', keys: 'Mod-Shift-Backspace' },
   // not Mod-Shift-s: the editor's own strikethrough takes that one before the app ever sees it
   { id: 'exportMd', label: 'Export note as Markdown…', scope: 'app', keys: 'Mod-Shift-m' },
-  { id: 'exportPdf', label: 'Export note as PDF…', scope: 'app', keys: 'Mod-p' },
+  { id: 'exportPdf', label: 'Export note as PDF…', scope: 'app', keys: 'Mod-Shift-p' },
   { id: 'exportPng', label: 'Export note as an image…', scope: 'app', keys: 'Mod-Alt-p' },
   { id: 'settings', label: 'Settings', scope: 'app', keys: 'Mod-,' },
   // the note's text only: the list, menus and bars keep their size, so nothing around the note moves
@@ -35,11 +41,11 @@ export const DEFAULTS: Action[] = [
   { id: 'bold', label: 'Bold', scope: 'editor', keys: 'Mod-b' },
   { id: 'italic', label: 'Italic', scope: 'editor', keys: 'Mod-i' },
   { id: 'underline', label: 'Underline', scope: 'editor', keys: 'Mod-u' },
-  { id: 'strike', label: 'Strikethrough', scope: 'editor', keys: 'Mod-Shift-x' },
+  { id: 'strike', label: 'Strikethrough', scope: 'editor', keys: 'Mod-Shift-s' },
   { id: 'highlight', label: 'Highlight (==)', scope: 'editor', keys: 'Mod-Shift-h' },
   { id: 'code', label: 'Inline code', scope: 'editor', keys: 'Mod-e' },
-  { id: 'link', label: 'Link', scope: 'editor', keys: 'Mod-Shift-k' },
-  { id: 'wikiLink', label: 'Link to note ([[)', scope: 'editor', keys: 'Mod-Shift-l' },
+  { id: 'link', label: 'Link (with no words chosen: search notes)', scope: 'editor', keys: 'Mod-k' },
+  { id: 'wikiLink', label: 'Link to note ([[)', scope: 'editor', keys: '' },
   { id: 'slash', label: 'Insert block menu (/)', scope: 'editor', keys: 'Mod-/' },
   { id: 'callout', label: 'Callout', scope: 'editor', keys: 'Mod-Shift-c' },
   { id: 'image', label: 'Insert image', scope: 'editor', keys: 'Mod-Shift-i' },
@@ -48,16 +54,22 @@ export const DEFAULTS: Action[] = [
   { id: 'h1', label: 'Heading 1', scope: 'editor', keys: 'Mod-Alt-1' },
   { id: 'h2', label: 'Heading 2', scope: 'editor', keys: 'Mod-Alt-2' },
   { id: 'h3', label: 'Heading 3', scope: 'editor', keys: 'Mod-Alt-3' },
-  { id: 'h4', label: 'Heading 4', scope: 'editor', keys: 'Mod-Alt-4' },
-  { id: 'h5', label: 'Heading 5', scope: 'editor', keys: 'Mod-Alt-5' },
-  { id: 'moveBlockUp', label: 'Move line / selection up', scope: 'editor', keys: 'Alt-ArrowUp' },
-  { id: 'moveBlockDown', label: 'Move line / selection down', scope: 'editor', keys: 'Alt-ArrowDown' },
-  { id: 'bulletList', label: 'Bulleted list', scope: 'editor', keys: 'Mod-Shift-8' },
-  { id: 'orderedList', label: 'Numbered list', scope: 'editor', keys: 'Mod-Shift-7' },
-  { id: 'taskList', label: 'To-do list', scope: 'editor', keys: 'Mod-Shift-9' },
+  // Notion has keys for three headings; #### and ##### (or the / menu) make the others, and a key can be given here
+  { id: 'h4', label: 'Heading 4', scope: 'editor', keys: '' },
+  { id: 'h5', label: 'Heading 5', scope: 'editor', keys: '' },
+  { id: 'moveBlockUp', label: 'Move line / selection up', scope: 'editor', keys: 'Mod-Shift-ArrowUp' },
+  { id: 'moveBlockDown', label: 'Move line / selection down', scope: 'editor', keys: 'Mod-Shift-ArrowDown' },
+  { id: 'taskList', label: 'To-do list', scope: 'editor', keys: 'Mod-Alt-4' },
+  { id: 'bulletList', label: 'Bulleted list', scope: 'editor', keys: 'Mod-Alt-5' },
+  { id: 'orderedList', label: 'Numbered list', scope: 'editor', keys: 'Mod-Alt-6' },
+  { id: 'toggle', label: 'Toggle', scope: 'editor', keys: 'Mod-Alt-7' },
   { id: 'toggleCheck', label: 'Check / uncheck a to-do, or open the link under the caret', scope: 'editor', keys: 'Mod-Enter' },
   { id: 'blockquote', label: 'Quote', scope: 'editor', keys: 'Mod-Shift-.' },
-  { id: 'codeBlock', label: 'Code block', scope: 'editor', keys: 'Mod-Alt-c' },
+  { id: 'codeBlock', label: 'Code block', scope: 'editor', keys: 'Mod-Alt-8' },
+  { id: 'newPage', label: 'New page under this one, linked here', scope: 'editor', keys: 'Mod-Alt-9' },
+  { id: 'duplicate', label: 'Duplicate the line / selected lines', scope: 'editor', keys: 'Mod-d' },
+  { id: 'toggleAll', label: 'Open / close every toggle', scope: 'editor', keys: 'Mod-Alt-t' },
+  { id: 'selectBlock', label: 'Select the line, then the whole note', scope: 'editor', keys: 'Mod-a' },
   { id: 'divider', label: 'Divider', scope: 'editor', keys: 'Mod-Shift-Minus' },
 ];
 
@@ -86,6 +98,7 @@ class Shortcuts {
   /** Find the action (of the given scopes) bound to a key event. */
   match(e: KeyboardEvent, scopes: Scope[]): Action | undefined {
     const k = eventToKeys(e);
+    if (!k) return undefined; // a modifier alone, and an action left without a key, are not a match
     return this.actions.find((a) => a.keys === k && scopes.includes(a.scope));
   }
 }

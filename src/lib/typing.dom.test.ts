@@ -22,7 +22,7 @@ test('Enter on a callout\'s empty last line does not touch the block after it', 
 
 // a list / quote / toggle marker typed at the start of a table cell
 test('"- " typed at the start of a table cell keeps the cell\'s text in the note', () => {
-  for (const marker of ['- ', '1. ', '[] ', '| ', '> ']) {
+  for (const marker of ['- ', '1. ', 'a. ', '[] ', '| ', '" ', '> ']) {
     const ed = editorWith('| a | b |\n| --- | --- |\n| cell | d |');
     ed.commands.setTextSelection(posOf(ed, 'cell'));
     type(ed, marker);

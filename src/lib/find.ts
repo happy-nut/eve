@@ -3,7 +3,7 @@ import { Plugin, PluginKey, TextSelection, type Transaction } from '@tiptap/pm/s
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { dateLabel } from './date';
+import { chipLabel } from './date';
 
 /**
  * Find (and replace) inside the open note. Matches are decorations, so nothing in the document is
@@ -20,7 +20,7 @@ export interface FindState { query: string; index: number; hits: Hit[] }
 /** what an inline node that is not text reads as on screen, for the search: a [[link]] its words, a date its day */
 function shown(node: PMNode): string {
   if (node.type.name === 'wikiLink') return node.attrs.alias || node.attrs.title || '';
-  if (node.type.name === 'dateMention') return dateLabel(node.attrs.date);
+  if (node.type.name === 'dateMention') return chipLabel(node.attrs);
   if (node.type.name === 'hardBreak') return '\n';
   return '\ufffc'; // a picture, a formula: nothing to find in it
 }
