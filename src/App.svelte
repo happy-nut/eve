@@ -191,10 +191,10 @@
     if (view) view.focus(); else el?.focus();
   }
 
-  /** The window called up by the hotkey: the caret belongs in the middle of the page, ready to write. */
+  /** The window called up by the hotkey: the caret back, and in sight, ready to write. */
   function onSummon() {
     restoreFocus();
-    hooks.centerCaret?.();
+    hooks.caretIntoView?.();
   }
 
   function step(delta: number) {

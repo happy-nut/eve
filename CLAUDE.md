@@ -8,7 +8,7 @@ this file says how to change it without bringing back bugs it has already had.
 ```bash
 npm test                                       # node tests + guards + vitest (jsdom), the same as CI
 npx svelte-check --tsconfig ./tsconfig.app.json
-npm run e2e:selection && npm run e2e:popups && npm run e2e:code   # WebKit, as CI runs them
+npm run e2e:selection && npm run e2e:popups && npm run e2e:code && npm run e2e:summon   # WebKit, as CI runs them
 CHROMIUM_PATH=/path/to/chrome node e2e/diagrams.mjs               # diagrams, math, phone take CHROMIUM_PATH
 ```
 

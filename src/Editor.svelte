@@ -68,17 +68,19 @@
       const chain = e.chain().focus('end');
       (last && last.content.size ? chain.splitBlock() : chain).insertContent(content).run();
     };
-    // summoned back: the caret in the middle of the page, where it is comfortable to write from —
-    // not pinned to whichever edge the last scroll into view left it against
     hooks.command = (id) => {
       if (!editor) return;
       runEditorCommand(editor, id);
     };
     hooks.section = (heading) => editor && goToSection(editor, heading);
-    hooks.centerCaret = () => {
+    // summoned back: the page stays as it was left, the caret where the eyes left it. Only a caret out of sight (or
+    // under the toolbar's fade) is brought to the middle of the page. Centred every time, the line being written at
+    // the bottom of the window jumped up to the middle on each ⌘⇧E.
+    hooks.caretIntoView = () => {
       if (!editor || !scrollEl) return;
       const caret = editor.view.coordsAtPos(editor.state.selection.head);
       const box = scrollEl.getBoundingClientRect();
+      if (caret.top >= box.top + 72 && caret.bottom <= box.bottom) return;
       scrollEl.scrollBy({ top: caret.top - (box.top + box.height / 2) });
     };
     // the empty line StarterKit keeps at the end of a note is only put there by the first transaction: before it, the
@@ -102,7 +104,7 @@
     // (a phone opens a note to read it: the keyboard comes up when the text is tapped, not before)
     return () => {
       hooks.attach = undefined;
-      hooks.centerCaret = undefined;
+      hooks.caretIntoView = undefined;
       hooks.section = undefined;
       hooks.command = undefined;
       if (editor) notes.cursor.set(id, editor.state.selection.from);
