@@ -347,6 +347,8 @@
   .cover-change:hover { color: var(--fg); }
   .page-head.with-cover, :global(html:not(.mobile)) .page-head.with-cover { padding-top: 14px; height: 52px; }
   .page-head.with-cover.with-icon, :global(html:not(.mobile)) .page-head.with-cover.with-icon { padding-top: 0; height: 76px; }
+  /* positioned, as the cover is, so the icon is drawn over the cover's edge, not under it */
+  .page-head.with-cover { position: relative; }
   .page-head.with-cover .big-icon { margin-top: -38px; }
   /* the head's buttons in a row (Add icon, Add cover), the links count at the far end */
   .add-cover { margin-left: 2px; }
