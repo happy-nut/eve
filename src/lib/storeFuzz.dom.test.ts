@@ -28,6 +28,9 @@ function broken(): string[] {
     if (n.group && !groups.names.includes(n.group)) out.push(`${n.id} sits in a group that isn't there: ${n.group}`);
   }
   if (new Set(groups.names).size !== groups.names.length) out.push('a group is listed twice');
+  // the trash holds what is deleted and not deleted for good; the list and the trash share no note
+  if (notes.trash.some((n) => !n.deleted || n.body === '')) out.push('the trash holds a live note, or one deleted for good');
+  if (notes.trash.some((n) => vis.includes(n.id))) out.push('a note is in the list and the trash at once');
   // back/forward lit only where they lead somewhere, and there to a note that is there
   for (const [can, go, undo] of [[notes.canBack, () => notes.back(), () => notes.forward()], [notes.canForward, () => notes.forward(), () => notes.back()]] as const) {
     const before = notes.currentId;
@@ -60,6 +63,9 @@ for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
         ['edit', () => { const n = pick(live()); if (n) { notes.update(n.id, n.body + ' y'); notes.touched(n.id); } }],
         ['delete', () => { const n = pick(live()); if (n) { notes.remove(n.id); removed.push(n.id); } }],
         ['undo delete', () => { const id = removed.pop(); if (id) notes.restore(id); }],
+        ['restore from the trash', () => { const n = pick([...notes.trash]); if (n) notes.restore(n.id); }],
+        ['delete for good', () => { const n = pick([...notes.trash]); if (n) notes.erase([n.id]); }],
+        ['restore a version', () => { const n = pick(live()); if (n) notes.restoreVersion(n.id, `# Old ${step}\n\nthen`, 'then'); }],
         ['back', () => notes.back()],
         ['forward', () => notes.forward()],
         ['new group', () => { groups.create(pick(['', ...groups.names]) ?? ''); }],
