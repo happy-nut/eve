@@ -47,6 +47,7 @@ pub fn run() {
         .setup(|app| {
             mac::release_unclaimed_markdown(app.handle());
             mac::keep_page_awake(app.handle());
+            mac::menu_without_close(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
