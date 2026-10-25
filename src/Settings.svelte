@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { panelIn, scrimFade } from './lib/motion';
-  import { shortcuts, eventToKeys, type Scope } from './lib/shortcuts.svelte';
+  import { shortcuts, eventToKeys, prettyKeys, type Scope } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { storage, autostart, dock, defaultApp, mcp, isTauri, isMobile, copyText, openUrl, type McpClient } from './lib/platform';
   import { normHost, webBase } from './lib/github';
@@ -212,7 +212,7 @@
             onchange={(e) => appearance.set({ autoCorrect: e.currentTarget.checked })} />
         </label>
         <div class="row">
-          <span class="label">Highlighter <span class="sub">the pens ⌘⇧H offers on chosen words; the first is the plain one (==text==)</span></span>
+          <span class="label">Highlighter <span class="sub">the pens {isMobile ? 'the formatting bar' : prettyKeys(shortcuts.keysFor('highlight')) || 'Highlight…'} offers on chosen words; the first is the plain one (==text==)</span></span>
           <span class="pens">
             {#each appearance.s.highlights as c, i (i)}
               <input type="color" value={c} aria-label={`Pen ${i + 1}`}

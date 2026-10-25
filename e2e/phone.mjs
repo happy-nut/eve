@@ -11,9 +11,9 @@ const URL_ = process.env.EVE_URL ?? server.resolvedUrls.local[0];
 const browser = await chromium.launch({ ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}), args: ['--disable-features=OverscrollHistoryNavigation'] });
 const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36';
 const errors = [];
-const note = (id, body, order = 0) => `---\nid: ${id}\nupdated: 1\ndeleted: false\norder: ${order}\n---\n${body}`;
+const note = (id, body, order = 0, group = '') => `---\nid: ${id}\nupdated: 1\ndeleted: false\norder: ${order}${group ? `\ngroup: ${group}` : ''}\n---\n${body}`;
 
-// notes by id, the first one open; w × h the page, kbd() shrinks it as the keyboard does (MainActivity)
+// notes by id (a body, or { body, group }), the first one open; w × h the page, kbd() shrinks it as the keyboard does (MainActivity)
 async function phone(notes, { w = 390, h = 844 } = {}) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: true, isMobile: true, userAgent: UA });
   const page = await ctx.newPage();
@@ -24,7 +24,7 @@ async function phone(notes, { w = 390, h = 844 } = {}) {
     localStorage.clear();
     for (const [id, t] of Object.entries(notes)) localStorage.setItem('eve.notes.' + id, t);
     localStorage.setItem('eve.lastNote', Object.keys(notes)[0]);
-  }, Object.fromEntries(Object.entries(notes).map(([id, body], i) => [id, note(id, body, i)])));
+  }, Object.fromEntries(Object.entries(notes).map(([id, n], i) => [id, typeof n === 'string' ? note(id, n, i) : note(id, n.body, i, n.group)])));
   await page.goto(URL_);
   await page.waitForSelector('.tiptap');
   await page.waitForTimeout(500);
@@ -109,6 +109,16 @@ try {
     await page.evaluate(() => document.querySelector('.mback').click());
     await page.waitForTimeout(400);
     assert.equal(await page.locator('.tbl-tools').count(), 0, 'the table\'s tools are gone with the note');
+    await page.close();
+  }
+  {
+    // a note in a group says where it is in the note's bar; that bar goes with the note, and so must it
+    const page = await phone({ a: { body: '# Groceries\n\nmilk\n', group: 'Home' }, b: '# Other' });
+    await page.waitForSelector('.crumbs');
+    await page.evaluate(() => document.querySelector('.mback').click());
+    await page.waitForTimeout(400);
+    const over = await page.evaluate(() => [...document.querySelectorAll('.crumbs')].some((c) => c.checkVisibility()));
+    assert.equal(over, false, 'the note\'s place (Home / Groceries) is gone with its bar, not left over the list');
     await page.close();
   }
   console.log('ok   back to the list leaves nothing of the note over it');
