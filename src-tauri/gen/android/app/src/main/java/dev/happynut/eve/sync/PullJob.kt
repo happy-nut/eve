@@ -136,7 +136,7 @@ class PullJob : JobService() {
         if (take) { write(file, remote); changed = true }
       }
       prefs.edit().putString("head", head).putString("known", next.toString()).apply()
-      if (changed) NotesWidget.refresh(context)
+      if (changed) { NotesWidget.refresh(context); dev.happynut.eve.LineReminders.schedule(context) } // a reminder written elsewhere
       return changed
     }
 

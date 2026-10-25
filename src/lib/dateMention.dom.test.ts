@@ -73,3 +73,55 @@ test('after a link typed out by hand ("see [[Bob]] due @to") the calendar comes 
   await settle();
   expect(open()).toBe(true);
 });
+
+// Notion's @remind: the day picked rings, and the chip's menu changes its time or stops it
+test('"@remind" ↩ puts a reminder for today at the next hour; its chip changes time, or stops reminding', async () => {
+  const { ui } = await import('./ui.svelte');
+  const { md } = await import('./testEditor');
+  const { remindTime } = await import('./date');
+  const { ed, open } = editor();
+  type(ed, 'call @remind');
+  await settle();
+  expect(open()).toBe(true);
+  press(ed, 'Enter');
+  await settle();
+  const today = isoDay(new Date());
+  expect(md(ed).trim()).toBe(`call @${today} ${remindTime(today)} ⏰`);
+
+  const chip = ed.view.dom.querySelector('.datechip') as HTMLElement;
+  expect(chip.textContent).toContain('⏰');
+  chip.click();
+  expect(ui.menu!.items.map((i) => i.label)).toEqual([`Remind at ${remindTime(today)}…`, 'Stop reminding']);
+  ui.menu!.items[0].run!();
+  await settle();
+  ui.done('7:05'); // a single-digit hour is read as 07
+  await settle();
+  expect(md(ed).trim()).toBe(`call @${today} 07:05 ⏰`);
+  ui.closeMenu();
+  (ed.view.dom.querySelector('.datechip') as HTMLElement).click();
+  ui.menu!.items[1].run!();
+  ui.closeMenu();
+  expect(md(ed).trim()).toBe(`call @${today}`);
+  // and a plain day made a reminder from its menu; a time that is no time leaves it as it was
+  (ed.view.dom.querySelector('.datechip') as HTMLElement).click();
+  expect(ui.menu!.items.map((i) => i.label)).toEqual(['Remind me…']);
+  ui.menu!.items[0].run!();
+  await settle();
+  ui.done('25:00');
+  await settle();
+  ui.closeMenu();
+  expect(md(ed).trim()).toBe(`call @${today}`);
+});
+
+test('the reminders due since the last look ring once; a day back at most, a deleted note never', async () => {
+  const { dueReminders } = await import('./reminder');
+  const at = (h: number, m = 0) => new Date(2026, 9, 26, h, m).getTime();
+  const notes = [
+    { id: 'a', body: '# Plan\n\n- [ ] call Bo @2026-10-26 09:00 ⏰\n- send @2026-10-26 10:00 ⏰', deleted: false },
+    { id: 'b', body: '# Gone\n\nx @2026-10-26 09:00 ⏰', deleted: true },
+    { id: 'c', body: '# Old\n\nx @2026-10-24 09:00 ⏰', deleted: false },
+  ];
+  expect(dueReminders(notes, at(8), at(9, 0)).map((r) => [r.id, r.title, r.line])).toEqual([['a', 'Plan', 'call Bo']]);
+  expect(dueReminders(notes, at(9, 0), at(9, 30))).toEqual([]); // rung already
+  expect(dueReminders(notes, at(0) - 3 * 86_400_000, at(10)).map((r) => r.line)).toEqual(['call Bo', 'send']); // asleep for days: the last day only
+});

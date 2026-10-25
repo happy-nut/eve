@@ -14,6 +14,8 @@ import type { EmojiEntry } from './emoji';
 import { runEditorCommand } from './editor';
 import { composing } from './keys';
 import { typedIn } from './hangul';
+import { appearance } from './appearance.svelte';
+import { isPen, penName } from './highlight';
 
 export interface SuggestItem {
   label: string; value?: string; hint?: string; icon?: string; noteIcon?: string;
@@ -42,7 +44,8 @@ export interface SuggestionUI {
 
 /** The `@` calendar, driven the same way but by one day rather than a list of items. */
 export interface CalendarUI {
-  show(day: string | null, rect: DOMRect | null, pick: (iso: string) => void): void;
+  /** `remind`: the time a reminder picked here rings at ("09:00"), said under the month; '' for a plain day */
+  show(day: string | null, rect: DOMRect | null, pick: (iso: string) => void, remind?: string): void;
   move(days: number): void;
   month(delta: number): void;
   select(): boolean;
@@ -232,6 +235,9 @@ export const PICKERS = {
   },
   // a title being typed: ↩ links the page it found, or a new one by that name
   wiki: { char: '[[', axis: 'vertical', confirm: 'always' },
+  // Notion's "+": a new page under this one first, then pages to link. "+" is also a sum's or a list's ("1 + 2", "+1"):
+  // ↩ picks once a letter is typed after it, or the arrows chose a row; "+ " (a space after it) never opens it
+  page: { char: '+', axis: 'vertical', confirm: (p: any) => /\p{L}/u.test(p.query) && p.items.length > 0 },
   // the calendar comes up over the start of a name too ("ask @Tom" is "tomorrow" so far), and ↩ there put a date in
   // place of the name and ate the new line. It picks after a bare @, a day named in full (@today, @2026-09-24), or
   // once the arrows chose one; ⇥ picks whatever is under the cursor.
@@ -255,8 +261,28 @@ export function emojiRow(uiRef: EmojiUI) {
  * matches no day at all (`@sarah`) closes it, which is how typing past a date gets out of the way.
  */
 export function calendar(uiRef: CalendarUI) {
-  const day = (p: any) => (p.items as { iso: string }[])[0]?.iso ?? null;
-  return atCaret(uiRef, PICKERS.date, (p) => uiRef.show(day(p), p.clientRect?.() ?? null, (iso: string) => p.command({ value: iso })));
+  const first = (p: any) => (p.items as { iso: string; time?: string }[])[0];
+  // `@remind`: the day picked is a reminder, at the time its first choice says (the calendar's day may be moved to
+  // another, which rings at that one's time: 09:00, or the next hour today)
+  return atCaret(uiRef, PICKERS.date, (p) => uiRef.show(first(p)?.iso ?? null, p.clientRect?.() ?? null,
+    (iso: string) => p.command({ value: iso, remind: !!first(p)?.time }), first(p)?.time ?? ''));
+}
+
+/**
+ * What "+" offers for `query`: a new page under this one by that name first, as Notion does, then the pages it
+ * finds to link (not the page being written: a link to itself goes nowhere).
+ */
+export function pageItems(query: string, pages: readonly { body: string; icon?: string }[], self: string): SuggestItem[] {
+  const q = query.trim().toLowerCase();
+  const make: SuggestItem = { label: 'New page', hint: q ? `“${query.trim()}”, under this one` : 'under this one', icon: ICONS.page, run: (e) => newPage(e, query) };
+  const found: SuggestItem[] = [];
+  for (const n of pages) {
+    const title = titleOf(n);
+    if (title === self || !typedIn(title.toLowerCase(), q)) continue;
+    found.push({ label: title, hint: 'link', ...(n.icon ? { noteIcon: n.icon } : { icon: ICONS.note }) });
+    if (found.length === 7) break;
+  }
+  return [make, ...found];
 }
 
 /** The [[ and / menus' wiring: a list, its keys as `keys` says (PICKERS.wiki, PICKERS.slash). */
@@ -296,6 +322,8 @@ export const ICONS = {
   numbered: '<path d="M2.6 3.4l1-.6v3.4M2.4 8.6c.2-.5.6-.8 1.1-.8.6 0 1 .4 1 .9 0 .8-2.1 1.6-2.1 2.7h2.2"/><path d="M7 4.5h6.5M7 8h6.5M7 11.5h6.5"/>',
   todo: '<rect x="2" y="2.5" width="4.5" height="4.5" rx="1"/><path d="M3 9.8l1.1 1.1 2-2.2"/><path d="M8.5 4.75h5.5M8.5 10h5.5"/>',
   quote: '<path d="M3 2.5v11"/><path d="M6 4.5h7.5M6 8h7.5M6 11.5h5"/>',
+  color: '<path d="M9.5 2.5l4 4-5.5 5.5H4v-4z"/><path d="M2.5 14h11"/>',
+  text: '<path d="M3 3.5h10M8 3.5v9"/>',
   emoji: '<circle cx="8" cy="8" r="6"/><path d="M5.8 9.4c.6.9 1.3 1.4 2.2 1.4s1.6-.5 2.2-1.4"/><path d="M6.3 6.4h.01M9.7 6.4h.01"/>',
 };
 
@@ -311,14 +339,46 @@ const line = (id: string): SuggestItem['run'] => tip(id, (e) => runEditorCommand
  * something typed, every match as a row of its own, wherever it sits ("/flow" finds Flowchart, not "Diagram").
  */
 export function slashItems(query: string): SuggestItem[] {
-  if (!query) return SLASH;
-  const q = query.toLowerCase();
+  const all = [...SLASH, colors()];
+  if (!query) return all;
+  let q = query.toLowerCase();
+  // Notion's "/turn": what the line can be turned into ("/turnh2", "/turnbullet"), plain text among them
+  const turn = /^turn(?:into)?/.exec(q);
+  if (turn) q = q.slice(turn[0].length);
+  const from = turn ? [TEXT, ...SLASH.filter((i) => TURNS.has(i.label))] : all;
   const finds = (i: SuggestItem) => [i.label, i.hint, i.keywords].some((w) => w && typedIn(w.toLowerCase(), q));
   // a kind found by its group's name is found too ("/diagram" lists every diagram); not by the group's hint, which
   // names a few kinds ("/flow" is Flowchart alone)
   const named = (i: SuggestItem) => [i.label, i.keywords].some((w) => w && typedIn(w.toLowerCase(), q));
-  return SLASH.flatMap((i) => (i.sections ? (named(i) ? i.sections : i.sections.filter(finds)) : finds(i) ? [i] : []));
+  return from.flatMap((i) => (i.sections ? (named(i) ? i.sections : i.sections.filter(finds)) : finds(i) ? [i] : []));
 }
+
+/** the kinds of line "/turn" offers, by label */
+const TURNS = new Set(['Heading', 'Bulleted list', 'Numbered list', 'To-do list', 'Quote', 'Callout', 'Toggle', 'Code block']);
+
+/** the whole line coloured with a highlighter pen, as Notion's "/color" colours a block; `null` takes it off */
+function colorLine(editor: Editor, pen: string | null, plain: boolean) {
+  const { $from } = editor.state.selection;
+  const from = $from.start(), to = $from.end();
+  if (from === to) return;
+  const c = editor.chain().focus().setTextSelection({ from, to });
+  (pen === null ? c.unsetMark('highlight') : c.setMark('highlight', { color: plain ? null : pen })).setTextSelection(to).run();
+}
+
+/** Notion's "/color", "/red", "/default": the pens Settings → Highlighter has, each colouring the line */
+function colors(): SuggestItem {
+  const pens = appearance.s.highlights.filter(isPen);
+  return {
+    label: 'Color', hint: 'the line, with a highlighter', keywords: 'colour background highlight 색 형광펜', icon: ICONS.color, folder: true,
+    sections: [
+      ...pens.map((c, i) => ({ label: penName(c), hint: 'color the line', keywords: 'color colour background 색', icon: ICONS.color, run: (e: Editor) => colorLine(e, c, !i) })),
+      { label: 'Default', hint: 'no color on the line', keywords: 'color colour none 색 없음', icon: ICONS.color, run: (e: Editor) => colorLine(e, null, false) },
+    ],
+  };
+}
+
+/** "/turn"'s plain line: a heading or a list's line back to text */
+const TEXT: SuggestItem = { label: 'Text', hint: 'a plain line', keywords: 'paragraph plain 텍스트', icon: ICONS.text, run: line('paragraph') };
 
 export const SLASH: SuggestItem[] = [
   { label: 'New page', hint: 'a page under this one', keywords: '하위 페이지 subpage', icon: ICONS.page, run: newPage },
@@ -368,23 +428,24 @@ export const SLASH: SuggestItem[] = [
 
 /** 'Untitled', 'Untitled 2', … — a fresh page needs a title no other page answers to, because
  *  [[links]] resolve by title. Renaming the page carries its links along (see followRename). */
-function untitled(): string {
+function untitled(base = 'Untitled'): string {
   const taken = new Set(notes.visible.map((n) => titleOf(n)));
-  let title = 'Untitled';
-  for (let i = 2; taken.has(title); i++) title = `Untitled ${i}`;
+  let title = base;
+  for (let i = 2; taken.has(title); i++) title = `${base} ${i}`;
   return title;
 }
 
 /**
  * Notion-style sub-page: a [[link]] lands at the cursor and the new page opens straight away,
- * nested under this one in the sidebar, with its title selected so the first keystroke names it.
+ * nested under this one in the sidebar, with its title selected so the first keystroke names it
+ * (or named already: the title typed after "+").
  */
-function newPage(editor: Editor) {
+export function newPage(editor: Editor, named = '') {
   const parent = notes.current;
-  const title = untitled();
+  const title = untitled(named.trim() || 'Untitled');
   editor.chain().focus().insertContent([{ type: 'wikiLink', attrs: { title } }, { type: 'text', text: ' ' }]).run();
   if (parent) notes.flush(parent.id); // creating the page navigates away from this editor
-  notes.selectTitle = true;
+  notes.selectTitle = !named.trim();
   const page = notes.create(`# ${title}\n\n`, parent?.group ?? '', parent?.id);
   // the link to it is written into the page above: left as it was made, it is still that page's, not a stray ⌘N
   notes.touched(page.id);

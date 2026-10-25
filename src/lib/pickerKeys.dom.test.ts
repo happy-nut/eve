@@ -92,9 +92,19 @@ const TABLE: Record<string, Trigger> = {
     picker: 'wiki', note: '# T\n\nsee', opens: ' [[', letters: 'Me', arrow: 'ArrowDown',
     expect: { 'letters, ↩': 'picked', 'letters, ⇥': 'picked', 'arrows, ↩': 'picked', 'Esc, ↩': 'new line' },
   },
+  // Notion's "+": a page asked for once a letter follows it (a bare "+" is a sum's or a list's), or the arrows chose
+  '"+"': {
+    picker: 'page', note: '# T\n\nsee', opens: ' +', letters: 'Me', arrow: 'ArrowDown',
+    expect: { 'letters, ↩': 'picked', 'letters, ⇥': 'picked', 'arrows, ↩': 'picked', 'Esc, ↩': 'new line' },
+  },
   // the start of a name ("@to", tomorrow so far) is not a day asked for: ↩ is a new line, ⇥ or the arrows pick
   '"@"': {
     picker: 'date', note: '# T\n\ndue', opens: ' @', letters: 'to', arrow: 'ArrowLeft',
+    expect: { 'letters, ↩': 'new line', 'letters, ⇥': 'picked', 'arrows, ↩': 'picked', 'Esc, ↩': 'new line' },
+  },
+  // Notion's @remind: the same calendar, ↩ taking the first day as a reminder with nothing typed after it
+  '"@remind"': {
+    picker: 'date', note: '# T\n\ncall', opens: ' @remind', letters: 'to', arrow: 'ArrowLeft',
     expect: { 'letters, ↩': 'new line', 'letters, ⇥': 'picked', 'arrows, ↩': 'picked', 'Esc, ↩': 'new line' },
   },
   // the row comes up after any colon and two letters: it picks once ←→ chose one
@@ -128,4 +138,32 @@ test.each(cases)('%s, %s: %s', async (name, action, want) => {
   await settle();
   const got: Outcome = picked.length ? 'picked' : ed.state.doc.childCount > lines ? 'new line' : 'nothing';
   expect(got).toBe(want);
+});
+
+// "+" is a sum's, a language's and a list's too: it asks for a page only at a word's start with a word after it
+test('"+" in "1 + 2", "C++" or "a+b" brings nothing up, and "+Me" offers a new page first, then the page to link', async () => {
+  for (const text of [' 1 + 2', ' C++', ' a+b', ' + ']) {
+    const { ed, open } = editor('# T\n\nsee');
+    ed.commands.focus();
+    ed.commands.setTextSelection(posOf(ed, 'see', true));
+    type(ed, text);
+    await settle();
+    expect(open(), text).toBe(false);
+  }
+  const { pageItems } = await import('./slash');
+  const items = pageItems('Me', [{ body: '# Meeting notes\n' }, { body: '# T\n' }, { body: '# Other\n' }], 'T');
+  expect(items.map((i) => i.label)).toEqual(['New page', 'Meeting notes']);
+  const { ed, picked, open } = editor('# T\n\nsee');
+  ed.commands.focus();
+  ed.commands.setTextSelection(posOf(ed, 'see', true));
+  // as the table's rows do: the popup up on "+", then the letters, each given its turn
+  type(ed, ' +');
+  await settle();
+  type(ed, 'Me');
+  await settle();
+  expect(open(), 'the popup is up').toBe(true);
+  press(ed, 'ArrowDown');
+  press(ed, 'Enter');
+  expect(picked).toEqual(['Meeting notes']);
+  expect((ed.storage as any).markdown.getMarkdown()).toContain('see [[Meeting notes]]');
 });

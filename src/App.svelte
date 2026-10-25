@@ -6,7 +6,7 @@
   import { isDailyId, DAILY_TEMPLATE_ID } from './lib/daily';
   import { startReminder, syncPhoneReminder } from './lib/reminder';
   import CalendarPage from './CalendarPage.svelte';
-  import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
+  import { shortcuts, prettyKeys, eventToKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { groups, leafOf, parentOf } from './lib/groups.svelte';
   import { appearance } from './lib/appearance.svelte';
@@ -503,7 +503,9 @@
     // ⌘Z outside the note's text (the list): the last thing done to the notes or the groups taken back
     if (ui.undoKey(e)) { e.preventDefault(); return; }
     // ⌘+ is ⌘⇧= on most keyboards (and the keypad's +): the same as ⌘= unless it is bound to something itself
-    const a = shortcuts.match(e, ['app']) ?? (e.key === '+' && (e.metaKey || e.ctrlKey) && !e.altKey ? shortcuts.actions.find((x) => x.id === 'textBigger') : undefined);
+    // and ⌘K that linked nothing (no words chosen, or the list has the keys) is search, as in Notion
+    const a = shortcuts.match(e, ['app']) ?? (e.key === '+' && (e.metaKey || e.ctrlKey) && !e.altKey ? shortcuts.actions.find((x) => x.id === 'textBigger') : undefined)
+      ?? (shortcuts.keysFor('link') && eventToKeys(e) === shortcuts.keysFor('link') ? shortcuts.actions.find((x) => x.id === 'search') : undefined);
     if (!a) return;
     // Escape belongs to whatever is open on top of the note (the PDF panel closes on it, and lets the
     // window hide once it is gone)
@@ -525,6 +527,21 @@
       case 'focusSidebar': focusSidebar(); break;
       case 'back': notes.back(); break;
       case 'forward': notes.forward(); break;
+      case 'parentPage': { // the page this one is under, as Notion's ⌘⇧U goes up one level
+        const up = notes.current?.parent;
+        if (up && notes.all.some((n) => n.id === up && !n.deleted)) notes.currentId = up;
+        break;
+      }
+      case 'copyLink': { // a link that shows this note in Eve, from any app (eve open's, and the MCP server's)
+        const n = notes.current;
+        if (n) void navigator.clipboard?.writeText(`eve://open?id=${encodeURIComponent(n.id)}`).then(() => ui.toast(`Link to “${titleOf(n)}” copied`));
+        break;
+      }
+      case 'theme': { // the other of what is shown now: a system theme becomes the one it is not
+        const dark = appearance.s.theme === 'dark' || (appearance.s.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        appearance.set({ theme: dark ? 'light' : 'dark' });
+        break;
+      }
       case 'nextNote': step(1); break;
       case 'prevNote': step(-1); break;
       case 'deleteNote': deleteCurrent(); break;

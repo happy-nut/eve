@@ -3,7 +3,7 @@
   import { fly } from 'svelte/transition';
   import { caretIn } from './lib/motion';
   import type { CalendarUI } from './lib/slash';
-  import { dateLabel, isoDay, monthGrid, monthName, sameMonth, shiftDays, shiftMonths, weekdayNames } from './lib/date';
+  import { chipLabel, dateLabel, isoDay, remindTime, monthGrid, monthName, sameMonth, shiftDays, shiftMonths, weekdayNames } from './lib/date';
 
   // the calendar behind `@`: one month, a cursor on a day. The editor drives it through `ui`
   // (bind:this to reach it), the same way the [[ and / popup is driven.
@@ -11,13 +11,15 @@
   let today = $state('');
   let place = $state(''); // its left/top-or-bottom/max-height (lib/popup.ts)
   let pick: (iso: string) => void = () => {};
+  let remind = $state(false); // `@remind`: the foot says when the reminder will ring
 
   const names = weekdayNames();
   const weeks = $derived(day ? monthGrid(day) : []);
 
   export const ui: CalendarUI = {
-    show(iso, rect, cb) {
+    show(iso, rect, cb, at) {
       day = iso ?? '';
+      remind = !!at;
       today = isoDay(new Date()); // read on every open, so an app left running overnight still knows
       pick = cb;
       if (rect) place = placeAt(rect, 290, 250);
@@ -59,7 +61,7 @@
       {/each}
     </div>
     <!-- what picking would write, in the same words the chip will use -->
-    <div class="cal-foot">{dateLabel(day)}</div>
+    <div class="cal-foot">{remind ? chipLabel({ date: day, time: remindTime(day), remind: true }) : dateLabel(day)}</div>
   </div>
 {/if}
 

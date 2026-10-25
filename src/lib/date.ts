@@ -1,4 +1,4 @@
-import { Node, mergeAttributes } from '@tiptap/core';
+import { Node, mergeAttributes, type Editor } from '@tiptap/core';
 import Suggestion, { type SuggestionOptions } from '@tiptap/suggestion';
 import { PluginKey } from '@tiptap/pm/state';
 import type MarkdownIt from 'markdown-it';
@@ -122,6 +122,65 @@ export function weekdayNames(locale?: string): string[] {
 }
 
 /**
+ * `@2026-09-24 09:00 ⏰`: a day with a reminder (Notion's `@remind`), written so any other app still reads it as the
+ * day, the time and an alarm clock. A time is kept only with the clock: "@2026-09-24 09:00" alone is a day and words.
+ */
+export const REMIND = '⏰';
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+export const isTime = (t: string): boolean => TIME.test(t);
+
+/** A chip's words: the day as it reads now, and for a reminder the clock and its time */
+export function chipLabel(a: { readonly [attr: string]: any }, now: Date = new Date(), locale?: string): string { // a node's attrs
+  const day = dateLabel(a.date, now, locale);
+  return a.remind && a.time ? `${REMIND} ${day} ${a.time}` : day;
+}
+
+/**
+ * The time a new reminder for `iso` rings: 09:00, as Notion's does, or on today the next whole hour (still today:
+ * 23:59 late in the evening).
+ */
+export function remindTime(iso: string, now: Date = new Date()): string {
+  if (daysFrom(iso, now) !== 0) return '09:00';
+  const h = now.getHours() + 1;
+  return h > 23 ? '23:59' : `${pad(h)}:00`;
+}
+
+/** `@remind…` typed: the days it offers as reminders (with nothing after it, today's is the one ↩ takes) */
+export function remindChoices(query: string, now: Date = new Date(), locale?: string) {
+  const m = /^(?:remind|알림)/i.exec(query.trim());
+  if (!m) return null;
+  const rest = query.trim().slice(m[0].length);
+  const days = dayChoices(rest, now, locale);
+  return days.map((d, i) => ({ ...d, exact: d.exact || (!rest && i === 0), remind: true, time: remindTime(d.iso, now) }));
+}
+
+/** One reminder in a note's markdown: when it rings (ms), and the line it is on as words */
+export interface LineReminder { at: number; day: string; time: string; line: string }
+
+const IN_LINE = /(?<![\w@])@(\d{4}-\d{2}-\d{2}) ((?:[01]\d|2[0-3]):[0-5]\d) ⏰/g;
+
+/**
+ * The reminders a note's markdown holds, in order. A done to-do's ring no more; one in code is code, not a reminder.
+ * The line comes as words, its marks (list, quote, heading) and the reminder itself left out. Reminder.kt reads
+ * the files the same way on the phone.
+ */
+export function remindersIn(body: string): LineReminder[] {
+  const out: LineReminder[] = [];
+  let fence = false;
+  for (const raw of body.split('\n')) {
+    if (/^\s*(```|~~~)/.test(raw)) { fence = !fence; continue; }
+    if (fence || /^\s*(?:[-*+]|\d+[.)])\s+\[[xX]\]/.test(raw)) continue;
+    for (const m of raw.matchAll(IN_LINE)) {
+      if (daysFrom(m[1]) === null) continue;
+      const [y, mo, d] = m[1].split('-').map(Number), [h, mi] = m[2].split(':').map(Number);
+      const line = raw.replace(IN_LINE, '').replace(/^\s*(?:>\s*)*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)?/, '').replace(/\s+/g, ' ').trim();
+      out.push({ at: new Date(y, mo - 1, d, h, mi).getTime(), day: m[1], time: m[2], line });
+    }
+  }
+  return out;
+}
+
+/**
  * `@2026-09-24` in a file becomes a chip when the note is read back. Exported on its own so the one
  * part with a sharp edge — telling a date from the `@` in an address — can be tested against a real
  * markdown-it without an editor.
@@ -131,20 +190,28 @@ export function dateMarkdown(md: MarkdownIt): void {
     if (state.src.charCodeAt(state.pos) !== 0x40) return false; // '@'
     // an address is not a date: only an `@` that starts a word is one
     if (state.pos > 0 && /[^\s([{]/.test(state.src[state.pos - 1])) return false;
-    const m = /^@(\d{4}-\d{2}-\d{2})(?![\d-])/.exec(state.src.slice(state.pos));
+    const m = /^@(\d{4}-\d{2}-\d{2})(?: ((?:[01]\d|2[0-3]):[0-5]\d) ⏰)?(?![\d-])/.exec(state.src.slice(state.pos));
     if (!m || daysFrom(m[1]) === null) return false;
-    if (!silent) state.push('datemention', '', 0).content = m[1];
+    if (!silent) {
+      const t = state.push('datemention', '', 0);
+      t.content = m[1];
+      t.meta = { time: m[2] ?? '' };
+    }
     state.pos += m[0].length;
     return true;
   });
   md.renderer.rules.datemention = (tokens, i) => {
-    const d = tokens[i].content;
-    return `<span data-date="${d}">${dateLabel(d)}</span>`;
+    const d = tokens[i].content, time: string = tokens[i].meta?.time ?? '';
+    return time
+      ? `<span data-date="${d}" data-time="${time}" data-remind="">${chipLabel({ date: d, time, remind: true })}</span>`
+      : `<span data-date="${d}">${dateLabel(d)}</span>`;
   };
 }
 
 export interface DateMentionOptions {
   suggestion: Omit<SuggestionOptions, 'editor'>;
+  /** a chip clicked: its menu (change the reminder's time, turn it on or off), the editor's to show */
+  onChip: (editor: Editor, pos: number, dom: HTMLElement) => void;
 }
 
 export const DateMention = Node.create<DateMentionOptions>({
@@ -155,11 +222,16 @@ export const DateMention = Node.create<DateMentionOptions>({
   selectable: true,
 
   addOptions() {
-    return { suggestion: { char: '@', pluginKey: new PluginKey('dateMention') } };
+    return { suggestion: { char: '@', pluginKey: new PluginKey('dateMention') }, onChip: () => {} };
   },
 
   addAttributes() {
-    return { date: { default: '', parseHTML: (el) => el.getAttribute('data-date') } };
+    return {
+      date: { default: '', parseHTML: (el) => el.getAttribute('data-date') },
+      // a reminder's time (HH:MM), and whether it rings; a time without the clock is not kept (it is not written)
+      time: { default: '', parseHTML: (el) => (isTime(el.getAttribute('data-time') ?? '') ? el.getAttribute('data-time') : ''), renderHTML: (a) => (a.time ? { 'data-time': a.time } : {}) },
+      remind: { default: false, parseHTML: (el) => el.hasAttribute('data-remind') && isTime(el.getAttribute('data-time') ?? ''), renderHTML: (a) => (a.remind ? { 'data-remind': '' } : {}) },
+    };
   },
 
   parseHTML() {
@@ -170,18 +242,21 @@ export const DateMention = Node.create<DateMentionOptions>({
     return [
       'span',
       mergeAttributes(HTMLAttributes, { 'data-date': node.attrs.date, class: 'datechip' }),
-      dateLabel(node.attrs.date),
+      chipLabel(node.attrs),
     ];
   },
 
   addNodeView() {
-    return ({ node }) => {
+    const onChip = this.options.onChip;
+    return ({ node, editor, getPos }) => {
       const date: string = node.attrs.date;
       const dom = document.createElement('span');
-      dom.className = 'datechip';
+      dom.className = node.attrs.remind ? 'datechip remind' : 'datechip';
       dom.dataset.date = date;
-      dom.textContent = dateLabel(date);
-      dom.title = date; // the day itself, for when the chip says "yesterday" and you want the date
+      dom.textContent = chipLabel(node.attrs);
+      dom.title = node.attrs.remind ? `${date} ${node.attrs.time}` : date; // the day itself, for when the chip says "yesterday"
+      // a click opens its menu (a reminder's time, or one set); the chip is chosen by the click as before
+      dom.addEventListener('click', () => { const pos = typeof getPos === 'function' ? getPos() : undefined; if (typeof pos === 'number' && editor.isEditable) onChip(editor, pos, dom); });
       // ponytail: the wording is worked out when the chip is drawn. An app left open across midnight
       // keeps yesterday's reading until the note is opened again; re-read the day on a timer if that
       // ever matters.
@@ -197,7 +272,7 @@ export const DateMention = Node.create<DateMentionOptions>({
     return {
       markdown: {
         serialize(state: any, node: any) {
-          state.write(`@${node.attrs.date}`);
+          state.write(node.attrs.remind && isTime(node.attrs.time) ? `@${node.attrs.date} ${node.attrs.time} ${REMIND}` : `@${node.attrs.date}`);
         },
         parse: { setup: dateMarkdown },
       },

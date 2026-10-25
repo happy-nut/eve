@@ -32,6 +32,12 @@ const KEYS: [string, KeyboardEventInit][] = [
   ['7', { ctrlKey: true, shiftKey: true }], ['8', { ctrlKey: true, shiftKey: true }], ['9', { ctrlKey: true, shiftKey: true }],
   ['1', { ctrlKey: true, altKey: true }], ['0', { ctrlKey: true, altKey: true }], ['.', { ctrlKey: true, shiftKey: true }],
   ['c', { ctrlKey: true, altKey: true }], ['Enter', { shiftKey: true }], ['Enter', { ctrlKey: true }],
+  // Notion's: to-do, bullets, numbers, toggle, code; move the line; duplicate; every toggle; strike; the line chosen
+  // (⌘⌥9 goes to a new page, and is left out as the / menu's New page is)
+  ['4', { ctrlKey: true, altKey: true }], ['5', { ctrlKey: true, altKey: true }], ['6', { ctrlKey: true, altKey: true }],
+  ['7', { ctrlKey: true, altKey: true }], ['8', { ctrlKey: true, altKey: true }],
+  ['ArrowUp', { ctrlKey: true, shiftKey: true }], ['ArrowDown', { ctrlKey: true, shiftKey: true }],
+  ['d', { ctrlKey: true }], ['t', { ctrlKey: true, altKey: true }], ['s', { ctrlKey: true, shiftKey: true }], ['a', { ctrlKey: true }],
 ];
 const name = (k: string, o: KeyboardEventInit) => (o.ctrlKey ? '⌘' : '') + (o.altKey ? '⌥' : '') + (o.shiftKey ? '⇧' : '') + k;
 

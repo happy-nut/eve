@@ -31,13 +31,16 @@ function outOfClosed(state: EditorState): number | null {
 }
 
 /** an inline node as it reads, in a title's plain text: a [[link]] or @date too (textContent left them out) */
-const shown = (n: PMNode) => n.type.name === 'wikiLink' ? n.attrs.alias || n.attrs.title : n.type.name === 'dateMention' ? `@${n.attrs.date}` : n.type.name === 'hardBreak' ? ' ' : n.textContent ?? '';
+const shown = (n: PMNode) => n.type.name === 'wikiLink' ? n.attrs.alias || n.attrs.title : n.type.name === 'dateMention' ? (n.attrs.remind ? `@${n.attrs.date} ${n.attrs.time} ⏰` : `@${n.attrs.date}`) : n.type.name === 'hardBreak' ? ' ' : n.textContent ?? '';
 
 const toggles = (doc: PMNode) => {
   let n = 0;
   doc.descendants((x) => { if (x.type.name === 'details') n++; });
   return n;
 };
+
+/** a transaction's meta saying it copies whole blocks (⌘D), toggles among them */
+export const DUPLICATE = 'duplicate';
 
 export const Toggle = [
   Details.extend({
@@ -71,9 +74,10 @@ export const Toggle = [
         key: new PluginKey('toggleCaretShown'),
         // A toggle's title holds a line of text and nothing else: a block put there (a divider, a formula, anything
         // the / menu makes) cut the toggle in two or three around it, its body left in a title-less one. Whatever
-        // would make more toggles out of one, from a caret in a title, does not happen.
+        // would make more toggles out of one, from a caret in a title, does not happen — but ⌘D's copy of the whole
+        // toggle, which says so (DUPLICATE)
         filterTransaction: (tr, state) => {
-          if (!tr.docChanged || state.selection.$from.parent.type.name !== 'detailsSummary') return true;
+          if (!tr.docChanged || tr.getMeta(DUPLICATE) || state.selection.$from.parent.type.name !== 'detailsSummary') return true;
           return toggles(tr.doc) <= toggles(state.doc);
         },
         appendTransaction: (_trs, _old, state) => {

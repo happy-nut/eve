@@ -113,6 +113,104 @@ object Reminder {
   }
 }
 
+/**
+ * The reminders written in notes (`@remind`: `@2026-10-26 09:00 ⏰` in the file), rung with Eve closed. The note
+ * files are read here, as the widget reads them, so one written on the Mac rings once the background pull has
+ * brought it. One alarm at a time, for the next one due; when it comes, every reminder due since the last ring is
+ * shown and the next is set. Read again whenever the notes change (the page, the pull) and after a reboot.
+ * The same reading as date.ts remindersIn: a done to-do and code do not ring.
+ */
+object LineReminders {
+  private const val PREFS = "lines"
+  private const val THROUGH = "through" // rung up to this moment (ms)
+  private const val CHANNEL = "lines"
+  const val ACTION = "dev.happynut.eve.LINE_REMINDER"
+  private val IN_LINE = Regex("(?<![\\w@])@(\\d{4}-\\d{2}-\\d{2}) ((?:[01]\\d|2[0-3]):[0-5]\\d) ⏰")
+  private val DONE = Regex("^\\s*(?:[-*+]|\\d+[.)])\\s+\\[[xX]\\]")
+  private val MARKS = Regex("^\\s*(?:>\\s*)*(?:#{1,6}\\s+|[-*+]\\s+(?:\\[[ xX]\\]\\s+)?|\\d+[.)]\\s+)?")
+
+  data class Due(val at: Long, val id: String, val title: String, val line: String)
+
+  /** every reminder in every note, a note's own deleted ones left out */
+  fun all(context: Context): List<Due> {
+    val out = mutableListOf<Due>()
+    val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).apply { isLenient = false }
+    for (file in NotesWidget.notesDir(context).listFiles { f -> f.isFile && f.name.endsWith(".md") } ?: emptyArray()) {
+      val text = runCatching { file.readText() }.getOrNull() ?: continue
+      if (!text.contains('⏰')) continue
+      val front = dev.happynut.eve.widget.frontmatter(text)
+      if (front?.get("deleted") == "true") continue
+      val body = if (front != null) text.substring(text.indexOf("\n---", 4) + 4).trimStart('\n') else text
+      var title = ""
+      var fence = false
+      for (raw in body.split("\n")) {
+        if (title.isEmpty() && raw.isNotBlank()) title = raw.replace(Regex("^#+\\s*"), "").trim()
+        if (Regex("^\\s*(```|~~~)").containsMatchIn(raw)) { fence = !fence; continue }
+        if (fence || DONE.containsMatchIn(raw)) continue
+        for (m in IN_LINE.findAll(raw)) {
+          val at = runCatching { fmt.parse("${m.groupValues[1]} ${m.groupValues[2]}")?.time }.getOrNull() ?: continue
+          val line = MARKS.replace(raw.replace(IN_LINE, ""), "").replace(Regex("\\s+"), " ").trim()
+          out += Due(at, file.name.removeSuffix(".md"), title.ifEmpty { "Untitled" }, line.ifEmpty { "${m.groupValues[1]} ${m.groupValues[2]}" })
+        }
+      }
+    }
+    return out
+  }
+
+  private fun alarm(context: Context) = PendingIntent.getBroadcast(context, 9,
+    Intent(context, ReminderReceiver::class.java).setAction(ACTION), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
+  /** The alarm for the next reminder not rung yet (one already past, missed while the phone was off: now).
+   *  Inexact by a minute: no exact-alarm permission to ask for. Reads files: not on the main thread. */
+  fun schedule(context: Context) {
+    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    val now = System.currentTimeMillis()
+    // the first reading ever rings nothing old
+    if (!prefs.contains(THROUGH)) prefs.edit().putLong(THROUGH, now).apply()
+    val through = prefs.getLong(THROUGH, now)
+    val am = context.getSystemService(AlarmManager::class.java)
+    am.cancel(alarm(context))
+    val next = all(context).map { it.at }.filter { it > maxOf(through, now - DAY_MS) }.minOrNull() ?: return
+    am.setWindow(AlarmManager.RTC_WAKEUP, maxOf(next, now + 1000L), 60_000L, alarm(context))
+  }
+
+  /** The alarm: what has come due since the last ring (not older than a day), each its own notification
+   *  opening its note; then the next. */
+  fun fire(context: Context) {
+    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    val now = System.currentTimeMillis()
+    val from = maxOf(prefs.getLong(THROUGH, now), now - DAY_MS)
+    prefs.edit().putLong(THROUGH, now).apply()
+    val due = all(context).filter { it.at > from && it.at <= now }
+    if (due.isNotEmpty()) {
+      val nm = context.getSystemService(NotificationManager::class.java)
+      nm.createNotificationChannel(NotificationChannel(CHANNEL, "Reminders in notes", NotificationManager.IMPORTANCE_HIGH))
+      for (d in due) {
+        val code = (d.id + d.at + d.line).hashCode()
+        val open = PendingIntent.getActivity(context, code,
+          Intent(context, MainActivity::class.java).putExtra(NotesWidget.EXTRA_OPEN, "note:${d.id}")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+          PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        nm.notify(code, Notification.Builder(context, CHANNEL)
+          .setSmallIcon(R.drawable.ic_reminder)
+          .setContentTitle(d.title)
+          .setContentText(d.line)
+          .setWhen(d.at)
+          .setShowWhen(true)
+          .setContentIntent(open)
+          .setAutoCancel(true)
+          .build())
+      }
+    }
+    schedule(context)
+  }
+
+  /** Read again off the main thread (the page calls it as notes are written) */
+  fun scheduleSoon(context: Context) { val app = context.applicationContext; Thread { runCatching { schedule(app) } }.start() }
+
+  private const val DAY_MS = 86_400_000L
+}
+
 /** The alarm going off, and the moments an alarm is lost or goes wrong: a reboot, an update of the app, and
  *  the clock or the time zone changing (the alarm is set at a moment, so 21:00 set in Seoul rang at 13:00 in
  *  London, put right only after it had). */
@@ -120,8 +218,15 @@ class ReminderReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     when (intent.action) {
       Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED,
-      Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED -> Reminder.schedule(context)
+      Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED -> { Reminder.schedule(context); later { LineReminders.schedule(context) } }
+      LineReminders.ACTION -> later { LineReminders.fire(context) }
       else -> Reminder.fire(context, intent.getStringExtra("day"))
     }
+  }
+
+  /** files read off the main thread, the receiver kept alive until they are */
+  private fun later(run: () -> Unit) {
+    val done = goAsync()
+    Thread { try { runCatching(run) } finally { done.finish() } }.start()
   }
 }
