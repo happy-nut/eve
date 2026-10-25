@@ -4,21 +4,32 @@ use tauri::{AppHandle, Manager};
 
 use crate::files::{assets_dir, safe_name};
 
-/// The menu bar as Tauri makes it on a Mac, without Window → Close Window: its ⌘W is the page's, which closes a tab
-/// (Notion's, a browser's) and with one tab left puts Eve away, as closing the window does. The menu could take the
-/// key before the page saw it. The window's red button still closes it (hidden, see lib.rs).
+/// The menu bar as Tauri makes it on a Mac, without Close Window (in File and in Window): its ⌘W is the page's, which
+/// closes a tab (Notion's, a browser's) and with one tab left puts Eve away, as closing the window does. The menu could
+/// take the key before the page saw it. The window's red button still closes it (hidden, see lib.rs).
 pub(crate) fn menu_without_close(app: &AppHandle) -> tauri::Result<()> {
     #[cfg(target_os = "macos")]
     {
-        use tauri::menu::{Menu, MenuItemKind, WINDOW_SUBMENU_ID};
+        use tauri::menu::{Menu, MenuItemKind};
         let menu = Menu::default(app)?;
-        if let Some(MenuItemKind::Submenu(window)) = menu.get(WINDOW_SUBMENU_ID) {
-            // the last two: the separator and Close Window
-            let n = window.items()?.len();
-            if n >= 2 {
-                window.remove_at(n - 1)?;
-                window.remove_at(n - 2)?;
+        for (i, item) in menu.items()?.into_iter().enumerate().rev() {
+            let MenuItemKind::Submenu(sub) = item else { continue };
+            let items = sub.items()?;
+            for (j, it) in items.iter().enumerate().rev() {
+                if let MenuItemKind::Predefined(p) = it {
+                    if p.text()? == "Close Window" {
+                        sub.remove_at(j)?;
+                        // and the separator it leaves at the end of Window
+                        if j > 0 && j == items.len() - 1 {
+                            if let MenuItemKind::Predefined(sep) = &items[j - 1] {
+                                if sep.text()?.is_empty() { sub.remove_at(j - 1)?; }
+                            }
+                        }
+                    }
+                }
             }
+            // File held Close Window alone: no empty menu left in the bar
+            if sub.items()?.is_empty() && sub.text()? == "File" { menu.remove_at(i)?; }
         }
         app.set_menu(menu)?;
     }
