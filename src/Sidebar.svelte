@@ -706,6 +706,9 @@
         {syncLabel}
       </span>
       {#if updates.available}{@render updateButton()}{/if}
+      <button class="icon tip-up trash" aria-label="Trash" data-tip="Trash" onclick={() => ui.openTrash()}>
+        <svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9M6.6 6.8v4.4M9.4 6.8v4.4"/></svg>
+      </button>
       <button class="icon tip-up gear" aria-label="Settings" data-tip="Settings" data-keys={shortcuts.keysFor('settings')} onclick={onSettings}>
         {@html GEAR}
       </button>
@@ -819,7 +822,9 @@
   .title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-  .gear { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
+  .gear, .trash { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
+  .trash { margin-left: auto; } /* with the gear at the footer's end */
+  .trash svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   .gear svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
   /* the update: an icon by Settings, in the accent colour so it is noticed (the Mac's footer, a phone's top bar) */
   .upd { margin-left: auto; color: var(--accent-text); }

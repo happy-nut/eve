@@ -233,4 +233,22 @@ if (fake) {
   assert.equal(signInError(why), null);
 }
 
+// a note's versions: each commit that changed it, newest first, and the file as it was in each
+{
+  const H = fresh(), files = {};
+  const path = N('hist'), other = N('other');
+  for (const [k, text] of [['a', 'one'], ['b', 'two'], ['c', 'three']]) {
+    files[path] = enc.encode(`---\nid: ${uid}-hist\n---\n${text}`);
+    if (k === 'b') files[other] = enc.encode('unrelated');
+    await syncRound(H, () => entries(files), (p) => merge(files, p));
+  }
+  files[other] = enc.encode('unrelated, changed'); // a commit that leaves the note alone is no version of it
+  await syncRound(H, () => entries(files), (p) => merge(files, p));
+  const vs = await H.history(path);
+  assert.equal(vs.length, 3, 'three versions');
+  assert.ok(vs[0].at >= vs[1].at && vs[1].at >= vs[2].at, 'newest first');
+  assert.deepEqual(await Promise.all(vs.map(async (v) => dec.decode(await H.fileAt(path, v.sha)).split('\n').pop())), ['three', 'two', 'one']);
+  assert.equal(await H.fileAt(N('never'), vs[0].sha), null);
+}
+
 console.log('SYNC_OK');

@@ -160,6 +160,17 @@ class Sync {
     this.timer = setTimeout(() => this.now(), ms);
   }
 
+  /** A note's saved versions, newest first, from the repo's commits (version history); [] with sync off */
+  async versions(id: string): Promise<{ sha: string; at: number }[]> {
+    if (!this.enabled) return [];
+    return new Repo({ ...this.settings }).history(`notes/${id}.md`);
+  }
+  /** The note's words in one of `versions` ('' if the note was not there yet) */
+  async versionAt(id: string, sha: string): Promise<string> {
+    const data = await new Repo({ ...this.settings }).fileAt(`notes/${id}.md`, sha);
+    return data ? parse(new TextDecoder().decode(data))?.body ?? '' : '';
+  }
+
   async now(): Promise<boolean> {
     if (!this.enabled || this.status === 'syncing') return false;
     this.status = 'syncing';

@@ -146,6 +146,25 @@ export class Repo {
     return unb64((await this.json('GET', `/git/blobs/${sha}`)).content);
   }
 
+  /**
+   * The versions of one file, newest first: each commit that changed it on the branch, and when (Notion's page
+   * history; sync makes one about every minute something is written).
+   */
+  async history(path: string, max = 50): Promise<{ sha: string; at: number }[]> {
+    const list = await this.json('GET', `/commits?sha=${BRANCH}&path=${encodeURIComponent(path)}&per_page=${max}`);
+    return (list as { sha: string; commit: { committer: { date: string } } }[]).map((c) => ({ sha: c.sha, at: Date.parse(c.commit.committer.date) }));
+  }
+
+  /** A file as it was at commit `sha` (one of `history`'s). Null if it was not there. */
+  async fileAt(path: string, sha: string): Promise<Uint8Array | null> {
+    const res = await this.api('GET', `/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${sha}`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(await explain(res));
+    const f = await res.json();
+    // ponytail: the contents API hands a file past 1 MB over without its content; read its blob by sha then
+    return f.content ? unb64(f.content) : f.sha ? this.blob(f.sha) : null;
+  }
+
   /** The git data API refuses an empty repository (409); the contents API creates the first commit + branch. */
   private async init() {
     const res = await this.api('PUT', `/contents/${PREFIX}.keep`, { message: 'eve: init', content: '', branch: BRANCH });

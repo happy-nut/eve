@@ -244,6 +244,8 @@
       { label: 'Export as Markdown (.md)', sep: true, run: () => void exportCurrent('md') },
       { label: 'Export as PDF', run: () => void exportCurrent('pdf') },
       { label: 'Export as image (.png)', run: () => void exportCurrent('png') },
+      { label: 'Version history…', sep: true, hide: !notes.current, run: () => { const n = notes.current; if (n) { notes.flush(n.id); ui.openHistory(n.id); } } },
+      { label: 'Trash…', run: () => ui.openTrash() },
     ]);
   }
   /** Opened from the Mac's QR: a newer Eve is asked about there and then, not left to a banner. */
@@ -667,6 +669,14 @@
     <span class="drop-pill">{dropHint}</span>
   </div>
 {/if}
+{#if ui.trash}
+  {#await import('./TrashPanel.svelte') then { default: TrashPanel }}<TrashPanel />{/await}
+{/if}
+{#key ui.historyOf}
+  {#if ui.historyOf}
+    {#await import('./HistoryPanel.svelte') then { default: HistoryPanel }}<HistoryPanel />{/await}
+  {/if}
+{/key}
 {#if ui.pending}
   <Confirm />
 {/if}

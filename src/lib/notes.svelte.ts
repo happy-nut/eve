@@ -630,6 +630,38 @@ class NotesStore {
     this.currentId = id;
   }
 
+  /**
+   * The trash (Notion's): deleted notes and days, newest deletion first. One deleted for good keeps its tombstone,
+   * which the other devices need to delete it too, but nothing of what it said, and is no longer here.
+   */
+  get trash(): readonly Note[] {
+    return this.all.filter((n) => n.deleted && n.body !== '' && n.id !== CALENDAR_NOTE_ID && n.id !== DAILY_TEMPLATE_ID).sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+  /** Deleted for good: its words gone from this device and, once synced, from the others' copies and the repo's head
+   *  (the repo's history still has them). No undo: the dialog before it says so. */
+  erase(ids: readonly string[]) {
+    for (const id of ids) {
+      const n = this.all.find((x) => x.id === id);
+      if (!n?.deleted) continue;
+      n.body = '';
+      n.updatedAt = Date.now();
+      this.flush(id);
+    }
+  }
+  /**
+   * A note back to a version of it (Notion's page history). Dated now, so sync carries it to the other devices as the
+   * newest; the open editor takes it as any body from outside. The toast's Undo puts back what it said (the app's
+   * ⌘Z keeps where notes are, not their words: those are the editor's to take back).
+   */
+  restoreVersion(id: string, body: string, when: string) {
+    const n = this.all.find((x) => x.id === id);
+    if (!n || n.deleted || n.body === body) return;
+    const was = n.body;
+    const put = (text: string) => { n.body = text; n.updatedAt = Date.now(); this.flush(id); };
+    put(body);
+    ui.toast(`Restored the version from ${when}`, { label: 'Undo', run: () => put(was) });
+  }
+
   /** Open note by title, creating it if missing (used by [[wiki links]]). */
   /** Follow a `[[link]]`. `Title#Section` opens the page at that heading (Editor reads `section`). */
   /**
