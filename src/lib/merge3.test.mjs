@@ -24,6 +24,10 @@ assert.equal(merge3(base, '# Plan\n\nstep two', base.replace('step two', 'step 2
 assert.equal(merge3(base, base.replace('step one', 'step A'), base.replace('step one', 'step B')), null);
 // a line edited on one side and deleted on the other: no merge (the edit would be lost)
 assert.equal(merge3(base, base.replace('step one', 'step one!'), '# Plan\n\nstep two'), null);
+// the same line changed on both sides, in different words: both (a link renamed there while a word was typed here)
+assert.equal(merge3('# N\n\nbeta line with [[Target]] in it', '# N\n\nbeta ONE line with [[Target]] in it', '# N\n\nbeta line with [[Renamed]] in it'), '# N\n\nbeta ONE line with [[Renamed]] in it');
+// …but the same word changed two ways is still no merge
+assert.equal(merge3('# N\n\ntotal 100 today', '# N\n\ntotal 120 today', '# N\n\ntotal 250 today'), null);
 // nothing in common to go by (a note both devices started from nothing): no merge
 assert.equal(merge3('', 'mine', 'theirs'), null);
 console.log('ok   merge3: both devices\' changes kept, conflicts not guessed at');
