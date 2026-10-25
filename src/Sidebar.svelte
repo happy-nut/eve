@@ -24,6 +24,7 @@
   import { swipeRow } from './lib/swipeRow';
   import { previewOf, rawQuery, searchText } from './lib/markdown';
   import { editedLabel } from './lib/date';
+  import { tabs } from './lib/tabs.svelte';
 
   let { open = $bindable(true), searchEl = $bindable<HTMLInputElement | null>(null), cmdHeld = false, onSettings, onNew }:
     { open: boolean; searchEl: HTMLInputElement | null; cmdHeld?: boolean; onSettings: () => void; onNew?: () => void } = $props();
@@ -431,6 +432,7 @@
       : n
         ? [
             { label: 'Open', run: () => openNote(n) },
+            { label: 'Open in new tab', run: () => tabs.open(n.id), hide: isMobile || n.id === CALENDAR_NOTE_ID },
             { label: 'New page inside', run: newPageIn(n), hide: n.id === CALENDAR_NOTE_ID },
             { label: 'Change icon…', run: () => pickIcon({ note: n }) },
             // a move that would do nothing (the first row up, no page above to nest under) is left out
@@ -611,7 +613,7 @@
             <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!isMobile} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation" use:swipeRow={swipe}>
               <button data-row data-note={n.id} class:active={n.id === CALENDAR_NOTE_ID ? onCalendar : n.id === notes.currentId}
-                class:enter={searching && !!q && n.id === hits[0]?.id} onclick={() => openNote(n)}>
+                class:enter={searching && !!q && n.id === hits[0]?.id} onclick={(e) => (e.metaKey && !isMobile && n.id !== CALENDAR_NOTE_ID ? tabs.open(n.id) : openNote(n))}>
                 <span class="title">
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => iconTap(e, { note: n })}>

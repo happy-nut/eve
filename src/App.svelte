@@ -28,6 +28,8 @@
   import { importTree } from './lib/importTree';
   import { importPaths, exportCurrent } from './lib/transfer';
   import { titleOf } from './lib/notes.svelte';
+  import { tabs } from './lib/tabs.svelte';
+  import TabBar from './TabBar.svelte';
   import { parseTicket } from './lib/handoff';
   import { parseEveLink } from './lib/evelink';
   import { focusNote } from './lib/popup';
@@ -347,6 +349,16 @@
   // a board no longer on screen: what was typed in it was lost, with an error at every key. Its last keys
   // were handed over before the switch (notes.currentId flushes them), so closing it loses nothing.
   $effect(() => { void notes.currentId; untrack(() => { ui.closeDiagramView(); ui.closeCard(); }); });
+  // the front tab shows whatever note is opened, however it was; a tab whose note went (deleted, or a blank one left)
+  // closes (tabs.svelte.ts). The list read too, so a deletion is seen when the open note stays the same.
+  let lastOpen: string | null = null;
+  $effect(() => {
+    const cur = notes.currentId;
+    void notes.visible;
+    if (isMobile || !notes.loaded) return;
+    untrack(() => tabs.follow(lastOpen));
+    lastOpen = cur;
+  });
   // daily notes on: the calendar's row exists (opening it shows the calendar: notes.currentId)
   $effect(() => { if (appearance.s.dailyNotes && notes.loaded) notes.ensureCalendar(); });
   // the phone's reminder alarm follows the settings
@@ -542,6 +554,11 @@
         appearance.set({ theme: dark ? 'light' : 'dark' });
         break;
       }
+      case 'newTab': if (!isMobile) { const n = notes.create('', notes.current?.group ?? ''); tabs.open(n.id); ui.focusOwner = 'editor'; } break;
+      case 'closeTab': if (!isMobile && !tabs.close()) win.hide(); break; // the last tab: put Eve away, as Esc does
+      case 'reopenTab': if (!isMobile) tabs.reopen(); break;
+      case 'nextTab': if (!isMobile) tabs.step(1); break;
+      case 'prevTab': if (!isMobile) tabs.step(-1); break;
       case 'nextNote': step(1); break;
       case 'prevNote': step(-1); break;
       case 'deleteNote': deleteCurrent(); break;
@@ -625,7 +642,8 @@
     </header>
   {/if}
   <Sidebar bind:open={sidebarOpen} bind:searchEl {cmdHeld} onSettings={() => (settingsOpen = true)} onNew={newOnPhone} />
-  <main>
+  <main class:tabbed={!isMobile && tabs.list.length > 1}>
+    {#if !isMobile && tabs.list.length > 1}<TabBar />{/if}
     {#if notes.loaded && notes.current}
       {#key notes.currentId}
         <div class="page" in:fade={{ duration: 160 }}>
