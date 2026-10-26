@@ -22,12 +22,13 @@ class Tabs {
    *  deleted closes. Called from App's effect, and by the methods here. */
   follow(prev: string | null) {
     const live = (id: string) => id === CALENDAR || id === notes.currentId || notes.all.some((n) => n.id === id && !n.deleted);
-    this.list = this.list.filter((t) => live(t.id));
     const cur = notes.currentId;
-    if (!cur || this.list.some((t) => t.id === cur)) return this.save();
+    // the note now open takes the place of the one before it, a deleted one's too: looked up after the deleted tab was
+    // dropped, the new note went to the end of the row (and Undo put the first tab back last)
     const at = prev ? this.list.findIndex((t) => t.id === prev && !t.pinned) : -1;
-    if (at >= 0) this.list[at] = { id: cur };
-    else this.list.push({ id: cur });
+    if (cur && at >= 0 && !this.list.some((t) => t.id === cur)) this.list[at] = { id: cur };
+    this.list = this.list.filter((t) => live(t.id));
+    if (cur && !this.list.some((t) => t.id === cur)) this.list.push({ id: cur });
     this.save();
   }
 

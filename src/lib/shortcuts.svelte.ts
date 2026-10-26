@@ -9,6 +9,12 @@ export interface Action {
   keys: string;
 }
 
+/** keys the app keeps for itself, not offered to any action */
+const FIXED: [keys: string, label: string][] = [
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n): [string, string] => [`Mod-${n}`, `Jump to the note at ${n}`]),
+  ['Mod-z', 'Undo'], ['Mod-Shift-z', 'Redo'], ['Mod-c', 'Copy'], ['Mod-x', 'Cut'], ['Mod-v', 'Paste'],
+];
+
 export const DEFAULTS: Action[] = [
   { id: 'toggleWindow', label: 'Summon / dismiss Eve (system-wide)', scope: 'global', keys: 'Mod-Shift-e' },
 
@@ -90,6 +96,10 @@ class Shortcuts {
   }
   /** Bind `keys` to `id`. Returns the conflicting action instead if another action already uses them. */
   set(id: string, keys: string): Action | null {
+    // keys the app takes before any shortcut: taken, they never reached the action bound to them (⌘1 jumped to the
+    // first note, the action set to it did nothing, and ⌘N no longer made a note either)
+    const fixed = FIXED.find(([k]) => k === keys);
+    if (fixed) return { id: 'fixed', label: fixed[1], scope: 'app', keys };
     const clash = this.actions.find((a) => a.keys === keys && a.id !== id);
     if (clash) return clash;
     this.overrides[id] = keys;

@@ -525,6 +525,29 @@ const levelOf = ($p: any) => { let n = 0; for (let d = $p.depth; d > 0; d--) if 
  * level off. The line after a list's last line, outside it, comes up the same way. False: not that case (the next
  * item at the same level and of the same kind joins as it always did).
  */
+/**
+ * Delete at the end of a line just over a list: the list's first line comes up onto this one, as in Notion, its
+ * sub-items staying where they were. The stock join lifted that line out of its list instead: a to-do lost its box
+ * and became a line of its own, and a second Delete was needed.
+ */
+export function joinListBelow({ tr }: { tr: any }): boolean {
+  const { $from, empty } = tr.selection;
+  const line: PMNode = $from.parent;
+  if (!empty || !line.isTextblock || line.type.spec.code || $from.parentOffset !== line.content.size) return false;
+  if ($from.depth >= 2 && /Item$/.test($from.node(-1).type.name)) return false; // a list's own line: joinNextItem's
+  const after = $from.after(), list: PMNode | null = tr.doc.resolve(after).nodeAfter;
+  if (!list || !/^(bulletList|orderedList|taskList)$/.test(list.type.name)) return false;
+  const item = list.firstChild!, text = item.firstChild;
+  if (!text?.isTextblock || text.type.spec.code || !line.type.validContent(line.content.append(text.content))) return false;
+  const rest = item.content.cut(text.nodeSize); // its sub-items
+  if (list.childCount === 1) tr.delete(after, after + list.nodeSize);
+  else tr.delete(after + 1, after + 1 + item.nodeSize);
+  if (rest.size) tr.insert(after, rest);
+  tr.insert($from.pos, text.content);
+  tr.setSelection(TextSelection.create(tr.doc, $from.pos));
+  return true;
+}
+
 export function joinNextItem({ tr }: { tr: any }): boolean {
   const { $from, empty } = tr.selection;
   const line: PMNode = $from.parent;

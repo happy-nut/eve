@@ -211,7 +211,8 @@
     return false;
   }
   function typed() {
-    const n = flow.nodes.find((x) => x.id === editing);
+    // (a field's blur as the diagram goes away, a phone's back: the chart is gone already, nothing to write into)
+    const n = flow?.nodes.find((x) => x.id === editing);
     if (n && editText.trim()) n.label = editText.trim();
   }
   /** a name typed in a box or a lane is done: the diagram takes its own keys again, so its field lets go of the

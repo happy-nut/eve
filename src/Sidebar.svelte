@@ -337,6 +337,9 @@
     const noteId = el.dataset.note, group = el.dataset.group;
     if (e.altKey && e.key.startsWith('Arrow')) {
       e.preventDefault(); e.stopPropagation();
+      // a search's results are a flat list, not where notes sit: a move there went out of sight, under a page the
+      // results did not show
+      if (q) return;
       if (noteId && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) nudgeNote(noteId, e.key === 'ArrowUp' ? -1 : 1);
       else if (noteId) nestNote(noteId, e.key === 'ArrowRight' ? 'in' : 'out');
       else if (group) nudgeGroup(group, e.key);
@@ -436,8 +439,8 @@
             { label: 'New page inside', run: newPageIn(n), hide: n.id === CALENDAR_NOTE_ID },
             { label: 'Change icon…', run: () => pickIcon({ note: n }) },
             // a move that would do nothing (the first row up, no page above to nest under) is left out
-            { label: 'Move up', sep: true, run: () => nudgeNote(n.id, -1), hide: !moves.nudgeNote(n.id, -1, true) },
-            { label: 'Move down', run: () => nudgeNote(n.id, 1), hide: !moves.nudgeNote(n.id, 1, true) },
+            { label: 'Move up', sep: true, run: () => nudgeNote(n.id, -1), hide: !!q || !moves.nudgeNote(n.id, -1, true) },
+            { label: 'Move down', run: () => nudgeNote(n.id, 1), hide: !!q || !moves.nudgeNote(n.id, 1, true) },
             { label: 'Nest under previous', run: () => nestNote(n.id, 'in'), hide: !moves.nestNote(n.id, 'in', rowAbove(n.id), true) },
             { label: 'Move out', run: () => nestNote(n.id, 'out'), hide: !moves.nestNote(n.id, 'out', undefined, true) },
             { label: 'Delete note', sep: true, danger: true, run: () => removeNote(n) },

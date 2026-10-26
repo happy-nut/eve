@@ -7,7 +7,7 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey, NodeSelection, Selection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
-import type { Node as PMNode } from '@tiptap/pm/model';
+import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { ui, under, type MenuItem } from './ui.svelte';
 
 interface Block { pos: number; node: PMNode; dom: HTMLElement; item?: boolean }
@@ -163,9 +163,11 @@ class Handle {
     const tr = state.tr;
     if (b.node.type.name === 'paragraph' && !b.node.content.size) tr.setSelection(TextSelection.create(tr.doc, b.pos + 1));
     else if (b.item) {
-      // a list's line: a new line of the same list, above or under it
-      const at = above ? b.pos : b.pos + b.node.nodeSize;
-      tr.insert(at, b.node.type.createAndFill()!).setSelection(TextSelection.create(tr.doc, at + 2));
+      // a list's line: a plain line under (over) the whole list, as + on the list did; a new item there took the
+      // / menu's heading or code as half a list, its nesting lost
+      const $top = state.doc.resolve(b.pos), top = $top.before(1), after = $top.after(1);
+      const at = above ? top : after;
+      tr.insert(at, state.schema.nodes.paragraph.create()).setSelection(TextSelection.create(tr.doc, at + 1));
     } else {
       const at = above ? b.pos : b.pos + b.node.nodeSize;
       tr.insert(at, state.schema.nodes.paragraph.create()).setSelection(TextSelection.create(tr.doc, at + 1));
@@ -185,20 +187,39 @@ class Handle {
     // opened where ⋮⋮ had been (off the top of the window). Measured first, and the page kept where it was
     const r = from.getBoundingClientRect(), scroller = this.scroller(), top = scroller?.scrollTop ?? 0;
     const first = Selection.findFrom(doc.resolve(pos), 1, true), last = Selection.findFrom(doc.resolve(end), -1, true);
-    const sel = first && last && first.from >= pos && last.to <= end ? TextSelection.create(doc, first.from, last.to) : NodeSelection.create(doc, pos);
+    // its own text when it has some (and is not a table, whose cells' text the line commands pass over); else the
+    // block itself: a divider's "text" was found in the lines around it, and Duplicate copied those
+    const own = first && last && node.type.name !== 'table' && first.from >= pos && first.from < end && last.to > pos && last.to <= end && first.from <= last.to;
+    const sel = own ? TextSelection.create(doc, first!.from, last!.to) : NodeSelection.create(doc, pos);
     this.view.dispatch(this.view.state.tr.setSelection(sel));
     this.view.focus();
     if (scroller) scroller.scrollTop = top;
     const kind = kindOf(node);
     const items: MenuItem[] = [
-      { label: 'Delete', danger: true, run: () => this.view.dispatch(this.view.state.tr.delete(pos, end).scrollIntoView()) },
-      { label: 'Duplicate', run: () => this.run('duplicate') },
-      { label: 'Move up', run: () => this.run('moveBlockUp') },
-      { label: 'Move down', run: () => this.run('moveBlockDown') },
+      { label: 'Delete', danger: true, run: () => {
+        // the only line of its list: the list goes too (an empty bullet was left)
+        const $p = this.view.state.doc.resolve(pos), alone = b.item && $p.parent.childCount === 1;
+        const [from, to] = alone ? [$p.before(), $p.after()] : [pos, end];
+        this.view.dispatch(this.view.state.tr.delete(from, to).scrollIntoView());
+      } },
+      // a block taken whole (a table, a picture, a divider) is copied and moved as a block: the line commands act on
+      // a selection's lines, and a table chosen whole is its cells to them (they did nothing)
+      { label: 'Duplicate', run: () => (own ? this.run('duplicate') : this.view.dispatch(this.view.state.tr.insert(end, node).scrollIntoView())) },
+      { label: 'Move up', run: () => (own ? this.run('moveBlockUp') : this.step(pos, -1)) },
+      { label: 'Move down', run: () => (own ? this.run('moveBlockDown') : this.step(pos, 1)) },
       ...(kind ? TURN.map(([k, label], i) => ({ label, sep: i === 0, checked: k === kind, run: () => void (k !== kind && this.run(k)) })) : []),
     ];
     this.hide();
     ui.openMenu(under(r), items);
+  }
+
+  /** the block at `pos` past its neighbour above (-1) or under it (1); never above the note's title */
+  private step(pos: number, dir: -1 | 1) {
+    const { state } = this.view, $p = state.doc.resolve(pos), i = $p.index(), parent = $p.parent;
+    const node = parent.child(i), next = parent.maybeChild(i + dir);
+    if (!next || (dir < 0 && $p.depth === 0 && i - 1 === 0)) return;
+    const tr = moveBlockTo(state, pos, dir < 0 ? pos - next.nodeSize : pos + node.nodeSize + next.nodeSize);
+    if (tr) this.view.dispatch(tr);
   }
 
   private dragStart(e: DragEvent) {
@@ -206,7 +227,9 @@ class Handle {
     if (!b || !e.dataTransfer) return;
     const sel = NodeSelection.create(this.view.state.doc, b.pos);
     this.view.dispatch(this.view.state.tr.setSelection(sel));
-    const slice = sel.content();
+    // a list's line goes as a list of one, so it can be written out (and pasted elsewhere) as markdown
+    const list = b.item ? this.view.state.doc.resolve(b.pos).parent : null;
+    const slice = list ? new Slice(Fragment.from(list.type.create(list.attrs, b.node)), 0, 0) : sel.content();
     const { dom, text } = this.view.serializeForClipboard(slice);
     e.dataTransfer.clearData();
     e.dataTransfer.setData('text/html', dom.innerHTML);

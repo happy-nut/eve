@@ -351,10 +351,12 @@ export function slashItems(query: string): SuggestItem[] {
   const turn = /^turn(?:into)?/.exec(q);
   if (turn) q = q.slice(turn[0].length);
   const from = turn ? [TEXT, ...SLASH.filter((i) => TURNS.has(i.label))] : all;
-  const finds = (i: SuggestItem) => [i.label, i.hint, i.keywords].some((w) => w && typedIn(w.toLowerCase(), q));
+  // a word with a space in it ("할 일", "하위 페이지") found typed without it: the / menu ends at a space
+  const has = (w: string | undefined) => !!w && (typedIn(w.toLowerCase(), q) || typedIn(w.toLowerCase().replace(/\s+/g, ''), q));
+  const finds = (i: SuggestItem) => [i.label, i.hint, i.keywords].some(has);
   // a kind found by its group's name is found too ("/diagram" lists every diagram); not by the group's hint, which
   // names a few kinds ("/flow" is Flowchart alone)
-  const named = (i: SuggestItem) => [i.label, i.keywords].some((w) => w && typedIn(w.toLowerCase(), q));
+  const named = (i: SuggestItem) => [i.label, i.keywords].some(has);
   return from.flatMap((i) => (i.sections ? (named(i) ? i.sections : i.sections.filter(finds)) : finds(i) ? [i] : []));
 }
 
@@ -431,7 +433,7 @@ export const SLASH: SuggestItem[] = [
   { label: 'Footnote', hint: '[^1] a note at the end', keywords: 'reference cite 각주 주석', icon: ICONS.text, run: insertFootnote },
   { label: 'Link to note', hint: '[[ another note', icon: ICONS.wikiLink, run: tip('wikiLink', (e) => e.chain().focus().insertContent('[[').run()) },
   // Notion's own, for the line the / was typed on
-  { label: 'Table of contents', hint: 'every section, kept up to date', keywords: 'toc outline 목차', icon: ICONS.text, run: (e) => e.chain().focus().insertContent({ type: 'htmlComment', attrs: { text: ' toc ' } }).run() },
+  { label: 'Table of contents', hint: 'every section, kept up to date', keywords: 'toc outline 목차', icon: ICONS.text, run: (e) => e.chain().focus().insertContent([{ type: 'htmlComment', attrs: { text: ' toc ' } }, { type: 'paragraph' }]).run() }, // the caret on a line under it (left on it, the next key replaced it)
   { label: 'Duplicate', hint: 'this line again under it', keywords: 'copy 복제', icon: ICONS.text, run: (e) => runEditorCommand(e, 'duplicate') },
   { label: 'Move to', hint: 'this line to another page', keywords: 'moveto 옮기기 이동', icon: ICONS.page, run: (e) => void moveLine(e) },
   { label: 'Delete', hint: 'this line', keywords: 'remove 삭제', icon: ICONS.text, run: deleteLine },
@@ -457,6 +459,8 @@ function lineRange(editor: Editor): { from: number; to: number } {
 /** "/delete": the line goes, the caret to the end of the one above */
 function deleteLine(editor: Editor) {
   const { from, to } = lineRange(editor);
+  // never the title: it is the note's name (it went, and the note with no name after it)
+  if (from === 0) return void editor.commands.focus();
   const tr = editor.state.tr.delete(from, to);
   editor.view.dispatch(tr.setSelection(Selection.near(tr.doc.resolve(Math.min(from, tr.doc.content.size)), -1)).scrollIntoView());
   editor.commands.focus();

@@ -5,6 +5,7 @@ import Paragraph from '@tiptap/extension-paragraph';
 import Code from '@tiptap/extension-code';
 import { typedIn } from './hangul';
 import Heading from '@tiptap/extension-heading';
+import Link from '@tiptap/extension-link';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -51,7 +52,7 @@ import { calendar, emojiRow, popup, suggestionVisible, PICKERS, ICONS, slashItem
 import { leaveToApp } from './keys';
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
-import { blockBeside, moveBlock, indentLines, switchItem, switchLines, wrapLines, joinNextItem, itemAbove, liftCounting, leaveTrailer } from './blocks';
+import { blockBeside, moveBlock, indentLines, switchItem, switchLines, wrapLines, joinNextItem, joinListBelow, itemAbove, liftCounting, leaveTrailer } from './blocks';
 import { holdEdit, dropEdit } from './pending';
 import { appearance } from './appearance.svelte';
 
@@ -90,7 +91,8 @@ const ListItemLead = ListItem.extend({
         }
         // a numbered to-do (`1. [ ] task`), which the note has no checkbox for, is read as that text: its brackets
         // are written as they were, not escaped, so another app still finds its to-do there
-        if (parent?.type.name === 'orderedList' && first?.type.name === 'paragraph' && text?.isText && !text.marks.length && /^\[[ xX]\] \S/.test(text.text!)) {
+        // (`parent` is no node when an item is written out on its own: a list line dragged by its ⋮⋮ threw here)
+        if ((parent as PMNode | undefined)?.type?.name === 'orderedList' && first?.type.name === 'paragraph' && text?.isText && !text.marks.length && /^\[[ xX]\] \S/.test(text.text!)) {
           state.write(text.text!.slice(0, 4));
           state.render(first.cut(4), node, 0);
           node.forEach((child, _o, i) => { if (i) state.render(child, node, i); });
@@ -342,6 +344,15 @@ const arrow = (find: RegExp, replace: string) => new InputRule({
  * toggle. Not the note's title, which is the page's name, nor in a table, whose cell holds one line.
  */
 const duplicateLines: Command = (state, dispatch) => {
+  // a block chosen whole (a table, a picture, a divider: ⋮⋮'s Duplicate): it again under it, chosen
+  if (state.selection instanceof NodeSelection && state.selection.node.isBlock) {
+    if (dispatch) {
+      const { node, to } = state.selection;
+      const tr = state.tr.insert(to, node).setMeta(DUPLICATE, true);
+      dispatch(tr.setSelection(NodeSelection.create(tr.doc, to)).scrollIntoView());
+    }
+    return true;
+  }
   const { $from, $to } = state.selection;
   if (inCell($from)) return true;
   // not lines inside an item (the items instead), nor a toggle's title (the toggle); a toggle's body is lines as any
@@ -516,6 +527,8 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     // end of a line) a bare "/" opened nothing and stayed in the text, so a space goes first
     slash: () => {
       const { $from } = editor.state.selection;
+      // a toggle's title holds text only: no / menu opens there, so no "/" is left behind either
+      if ($from.parent.type.name === 'detailsSummary') return false;
       const before = $from.parent.textBetween(Math.max(0, $from.parentOffset - 1), $from.parentOffset, undefined, '\ufffc');
       return c().insertContent(before && !/\s/.test(before) ? ' /' : '/').run();
     },
@@ -578,7 +591,9 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     toggleAll: () => toggleAll(editor.state, editor.view.dispatch),
     selectBlock: () => selectLine(editor.state, editor.view.dispatch),
     selectAll: () => c().selectAll().run(),
-    undo: () => c().undo().run(),
+    // right after a markdown shortcut made something ("---" a divider, "- " a list), ⌘Z gives back what was typed, as
+    // ⌫ does there (it left "--": the last dash was the shortcut's own)
+    undo: () => editor.commands.undoInputRule() || c().undo().run(),
     redo: () => c().redo().run(),
     indent: () => c().command(indentLines(1)).run(),
     outdent: () => c().command(indentLines(-1)).run(),
@@ -972,7 +987,9 @@ export function createEditor(opts: {
       attributes: { class: 'prose' }, // (and the spelling help's, from spellingHelp below)
       // a phone's formatting bar (MobileBar, ~50px) sits over the bottom of the page: the caret is kept
       // clear of it, and scrolled to a little early, instead of typing (or deleting) out of sight
-      ...(isMobile ? { scrollMargin: { top: 16, bottom: 90, left: 0, right: 0 }, scrollThreshold: { top: 16, bottom: 90, left: 0, right: 0 } } : {}),
+      // …and a Mac's caret kept clear of the toolbar's fade at the top and off the window's very foot (↑ took it under the
+      // drag strip for two lines; written at the note's end, it sat 5px from the bottom)
+      ...(isMobile ? { scrollMargin: { top: 16, bottom: 90, left: 0, right: 0 }, scrollThreshold: { top: 16, bottom: 90, left: 0, right: 0 } } : { scrollMargin: { top: 80, bottom: 48, left: 0, right: 0 }, scrollThreshold: { top: 80, bottom: 48, left: 0, right: 0 } }),
       // images pasted or dropped in are stored as files (blob: URLs would die on restart)
       // a copy is markdown (tiptap-markdown's serializer, transformCopiedText below); words inside one line come
       // as just those words, their bold or links kept, not wrapped in the line's list item or heading
@@ -1151,7 +1168,7 @@ export function createEditor(opts: {
         orderedList: false, // replaced below: a new "1. " right after a numbered list continues it
         listItem: false, // replaced below: an image may be an item's first block
         heading: false, // replaced below: a line break in a heading
-        link: { openOnClick: false, autolink: true },
+        link: false, // replaced below: typing at a link's end is not the link's
         codeBlock: false, // replaced below: syntax highlighting + a language chip
         horizontalRule: false, // replaced below: no divider inside a list, and the caret can reach it
         blockquote: false, // replaced below: "> " makes a toggle, as in Notion, so a quote is "| "
@@ -1161,6 +1178,9 @@ export function createEditor(opts: {
       }),
       Text,
       markExit,
+      // A link ends where its words do, as in Notion: typed on at its end (or before it), the words were taken into the
+      // link (stock links grow while autolink is on), and → at its end typed a space into the note each time
+      Link.extend({ inclusive: () => false, exitable: false }).configure({ openOnClick: false, autolink: true }),
       // code inside a link ([run `npm i` first](u)) stays in it: stock code shuts out every other mark, so the link
       // was cut in two around it. Formatting still goes (nothing in code is bold).
       // Inline code all deleted, the next text typed there is not code again. The webview deletes the letters
@@ -1261,6 +1281,18 @@ export function createEditor(opts: {
       MathInline,
       MathBlock,
       Blockquote.extend({
+        // ⌫ at the start of a quote's second (or later) line joins it to the line above, as a callout's and a toggle's
+        // do; the stock key lifted the line out and cut the quote in two
+        addKeyboardShortcuts() {
+          return {
+            ...this.parent?.(),
+            Backspace: () => {
+              const { $from, empty } = this.editor.state.selection;
+              if (!empty || $from.parentOffset !== 0 || $from.depth < 2 || $from.node(-1).type !== this.type || $from.index(-1) === 0) return false;
+              return this.editor.commands.joinBackward();
+            },
+          };
+        },
         addInputRules() {
           // "| " as before, and '" ' as Notion makes one (a Mac may have curled it already)
           return [wrappingInputRule({ find: /^\s*[|"“][^\S\n]$/, type: this.type })];
@@ -1416,11 +1448,19 @@ export function createEditor(opts: {
       }),
       // Delete at the end of a list line over an item at another level or of another kind: that item's text joins the
       // line (joinNextItem). Ahead of the lists' own Delete (priority 101), which took over once that item had sub-items
+      // ⌘Z right after a markdown shortcut made something: what was typed comes back (see editorCommands' undo)
+      Extension.create({
+        name: 'undoShortcut',
+        priority: 1000,
+        addKeyboardShortcuts() {
+          return { 'Mod-z': () => this.editor.commands.undoInputRule() };
+        },
+      }),
       Extension.create({
         name: 'joinNextItem',
         priority: 102,
         addKeyboardShortcuts() {
-          return { Delete: () => this.editor.commands.command(joinNextItem) };
+          return { Delete: () => this.editor.commands.command(joinNextItem) || this.editor.commands.command(joinListBelow) };
         },
       }),
       // ahead of the list items' own Tab, which moves an item's sub-items along with it

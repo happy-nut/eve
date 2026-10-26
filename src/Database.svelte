@@ -410,7 +410,7 @@
   .db { margin: 0.6em 0; font-size: 0.92em; }
   .db-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
   .db-title { flex: 1; min-width: 120px; font: inherit; font-size: 1.15em; font-weight: 600; border: 0; background: none; color: var(--fg); outline: none; padding: 2px 0; }
-  .views { display: flex; gap: 2px; }
+  .views { display: flex; flex-wrap: wrap; gap: 2px; } /* a narrow column, a large text: onto a second line, not past the column */
   button { font: inherit; border: 0; background: none; color: inherit; border-radius: 6px; }
   .views button { padding: 3px 9px; color: var(--fg-dim); }
   .views button.on { background: var(--bg-input); color: var(--fg); }
@@ -452,7 +452,7 @@
   .card-title { font-weight: 500; }
   .card-prop { color: var(--fg-dim); font-size: 0.9em; }
   .add-choice { justify-content: center; color: var(--fg-dim); min-height: 36px; }
-  .cal-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .cal-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
   .cal-bar button { padding: 2px 8px; color: var(--fg-dim); }
   :global(html.mobile) .cal-bar button { min-width: 40px; min-height: 40px; } /* a finger's size */
   .cal-bar button:hover { background: var(--bg-hover); color: var(--fg); }

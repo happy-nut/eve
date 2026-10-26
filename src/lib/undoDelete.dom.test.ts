@@ -98,3 +98,25 @@ test('groups too: made, renamed, moved, deleted (its notes back in it)', async (
   expect(groups.names).not.toContain(g);
   void step; void undo; r.remove();
 });
+
+test('⌘Z takes back a step, not notes no step made: a day written since, another device\'s note', async () => {
+  history.clear();
+  const a = made('# Two\n\nx'); await done();
+  notes.remove(a.id); await done();
+  const day = notes.dayNote('2026-10-27');
+  notes.update(day.id, '# 2026-10-27\n\nmy important day\n'); await done();
+  notes.mergeRemote([{ id: 'from-elsewhere', body: '# Theirs\n', updatedAt: Date.now(), deleted: false, group: '', order: 0 }]); await done();
+  history.undo();
+  expect(where(a.id).deleted).toBe(false);
+  expect(where(day.id).deleted).toBe(false);
+  expect(where('from-elsewhere').deleted).toBe(false);
+});
+
+test('a note deleted for good stays gone: ⌘Z on its delete does not raise it as an empty page', async () => {
+  history.clear();
+  const a = made('# Gone for good\n\nx'); await done();
+  notes.remove(a.id); await done();
+  notes.erase([a.id]); await done();
+  history.undo();
+  expect(where(a.id).deleted).toBe(true);
+});

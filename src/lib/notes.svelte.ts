@@ -340,6 +340,11 @@ class NotesStore {
   }
 
   /** A day's note (today by default), started from the template when there is none yet. */
+  /** the notes a step of the app's undo made (⌘N, an import, a page): ⌘Z may take them back. Not a day's note, a sync's
+   *  arrival or a conflict copy, which no step made: undoing an older step deleted them (a day written after it went to
+   *  the Trash) */
+  readonly madeInStep = new Set<string>();
+
   dayNote(key = dayKey(new Date())): Note {
     const id = dailyId(key);
     let n = this.all.find((x) => x.id === id);
@@ -396,9 +401,10 @@ class NotesStore {
   }
 
   create(body = '', group = this.current?.group ?? '', parent?: string): Note {
-    history.record();
+    const step = history.record();
     const first = this.visible.find((x) => x.group === group);
     const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group, parent, order: first ? first.order - 1 : 0, icon: autoIcon() };
+    if (step) this.madeInStep.add(n.id);
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
     this.untouched.add(n.id);
@@ -413,9 +419,10 @@ class NotesStore {
    * and leaves the open note alone — the file usually links itself into the page being written.
    */
   addImported(body: string, group = this.current?.group ?? '', updatedAt = Date.now(), parent?: string): Note {
-    history.record();
+    const step = history.record();
     const last = this.visible.filter((x) => x.group === group).at(-1);
     const n: Note = { id: newId(), body, updatedAt, deleted: false, group, ...(parent ? { parent } : {}), order: last ? last.order + 1 : 0, icon: autoIcon() };
+    if (step) this.madeInStep.add(n.id);
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
     void storage.write(n.id, serialize(n));
@@ -577,8 +584,9 @@ class NotesStore {
     n.parent = undefined; // dropped by hand: it is a page of its own now, wherever it landed
     n.updatedAt = Date.now();
     this.flush(id);
-    // its own sub-pages follow it into the new group (they keep their rank and their parent)
-    if (from !== group) for (const kid of this.all) if (!kid.deleted && kid.parent === id) this.relabel(kid.id, group);
+    // its own sub-pages follow it into the new group, theirs too, all the way down (they keep their rank and their
+    // parent; only its children went, and a grandchild was left behind as a stray row)
+    if (from !== group) this.followIntoGroup(id, group);
   }
 
   /**
@@ -874,7 +882,7 @@ class NotesStore {
 export const notes = new NotesStore();
 
 // What the app's undo puts back of the notes: where each sits, whether it is there, its icon and look, and which is open. A note
-// made since goes again; a note's text is the note's own undo, not this.
+// a step made since goes again; a note's text is the note's own undo, not this.
 type Spot = [id: string, deleted: boolean, group: string, parent: string, order: number, icon: string, wide: boolean, small: boolean, cover: string];
 undoSource<{ open: string | null; spots: Spot[] }>({
   take: () => ({ open: notes.currentId, spots: notes.all.map((n) => [n.id, n.deleted, n.group ?? '', n.parent ?? '', n.order, n.icon ?? '', !!n.wide, !!n.small, n.cover ?? ''] as Spot) }),
@@ -882,6 +890,10 @@ undoSource<{ open: string | null; spots: Spot[] }>({
     const was = new Map(spots.map((s) => [s[0], s]));
     for (const n of notes.all) {
       const s = was.get(n.id);
+      // deleted for good: no step brings it back (an older delete's undo raised it as an empty "Untitled")
+      if (n.deleted && n.body === '') continue;
+      // made since, but by no step (a day's note, another device's, a conflict copy): not this undo's to take back
+      if (!s && !notes.madeInStep.has(n.id)) continue;
       const [deleted, group, parent, order, icon, wide, small, cover] = s ? [s[1], s[2], s[3] || undefined, s[4], s[5] || undefined, s[6] || undefined, s[7] || undefined, s[8] || undefined] : [true, n.group, n.parent, n.order, n.icon, n.wide, n.small, n.cover];
       if (n.deleted === deleted && (n.group ?? '') === (group ?? '') && n.parent === parent && n.order === order && n.icon === icon && n.wide === wide && n.small === small && n.cover === cover) continue;
       Object.assign(n, { deleted, group, parent, order, icon, wide, small, cover, updatedAt: Date.now() });

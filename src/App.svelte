@@ -213,11 +213,12 @@
   function swipeStart(e: TouchEvent) {
     swipe = null;
     // a diagram on the whole screen pans with the finger, and Find's bar would stay over the list
-    if (!isMobile || sidebarOpen || settingsOpen || ui.card || ui.diagramView !== null || ui.find || e.touches.length !== 1) return;
+    // nor while something is up over the note (a formula being typed: swiped, it stayed open, hidden, taking keys)
+    if (!isMobile || sidebarOpen || settingsOpen || ui.card || ui.diagramView !== null || ui.find || ui.layers.count || hooks.diagramBack || e.touches.length !== 1) return;
     // things that scroll sideways themselves keep the gesture: a wide diagram or equation scrolled back to its start
     // brought the list in instead
     const t = e.target as HTMLElement;
-    if (t.closest('pre, table, .kanban, .mbar, .mhead, input, textarea, .menu, .suggest, .dblock, .diagram-canvas, .math-block')) return;
+    if (t.closest('pre, table, .kanban, .mbar, .mhead, input, textarea, .menu, .suggest, .cal, .dblock, .diagram-canvas, .math-block')) return;
     for (let el: HTMLElement | null = t; el && el !== document.body; el = el.parentElement) {
       if (el.scrollWidth > el.clientWidth + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowX)) return;
     }
@@ -339,6 +340,7 @@
     // what is on top closes first, one at a time: whatever opened last (a picture over a card, a setting's choices over
     // Settings, a dialog over a sheet). A formula being typed is one too: back finishes it, and its keyboard goes with it
     if (ui.layers.closeTop('back')) return;
+    else if (hooks.diagramBack) hooks.diagramBack(); // a diagram being edited: a step out of it, not out of the note
     else if (sidebarOpen && ui.search) ui.search = ''; // the list cut down to a search: back shows all of it, before leaving
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
     else {
@@ -560,7 +562,8 @@
         break;
       }
       case 'newTab': if (!isMobile) { const n = notes.create('', notes.current?.group ?? ''); tabs.open(n.id); ui.focusOwner = 'editor'; } break;
-      case 'closeTab': if (!isMobile && !tabs.close()) win.hide(); break; // the last tab: put Eve away, as Esc does
+      // the last tab: put Eve away, as Esc does (not a pinned one among others: it stays, and so does the window)
+      case 'closeTab': if (!isMobile && !tabs.close() && tabs.list.length <= 1) win.hide(); break;
       case 'reopenTab': if (!isMobile) tabs.reopen(); break;
       case 'nextTab': if (!isMobile) tabs.step(1); break;
       case 'prevTab': if (!isMobile) tabs.step(-1); break;

@@ -193,8 +193,11 @@
     // (where place() just put it: the page is not drawn again yet; the keyboard where it docks, not where it is
     // sliding up from)
     const bottom = Math.max(root.getBoundingClientRect().bottom, !display && tools && popAt?.top !== undefined ? popAt.top + tools.offsetHeight : 0);
-    const over = bottom - (viewSize().h - kb.height - 12);
-    if (over > 0) (root.closest('.scroll') as HTMLElement | null)?.scrollBy({ top: over, behavior: 'smooth' });
+    // lifted no further than keeps its own top (the formula) under the note's bar: on a phone on its side the box is
+    // taller than the room left, and lifted by its foot the formula went up under the bar
+    const over = Math.min(bottom - (viewSize().h - kb.height - 12), root.getBoundingClientRect().top - (screenInsets().top + 60));
+    // the note's own scroll, or a card's or a day's page's (it found none there, and the box stayed under the keyboard)
+    if (over > 0) (root.closest('.scroll, .card-scroll') as HTMLElement | null)?.scrollBy({ top: over, behavior: 'smooth' });
   }
 
   function put(p: MathPart) {

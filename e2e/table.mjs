@@ -76,6 +76,8 @@ try {
     await page.waitForTimeout(250);
     return line;
   }
+  // the caret elsewhere in the note, not in the table: the drag still moves the row (it moved nothing then)
+  await page.evaluate(() => window.__editor.commands.focus('start'));
   await hover('.tiptap td >> text=1');
   const g1 = await box('.tbl-grip.row.on'), last = await box('.tiptap td >> text=3');
   assert.ok(await dragGrip(g1, { x: g1.x, y: last.y + last.height * 0.85 }), 'while a row is dragged, a line shows where it goes');

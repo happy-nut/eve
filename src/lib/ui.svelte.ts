@@ -414,6 +414,8 @@ export const ui = new Ui();
 /** Imperative hooks a component registers for others to call (plain object, not state). */
 export const hooks: {
   openPlus?: (anchor?: HTMLElement) => void;
+  /** a diagram being edited: one step out of it, as Esc does (a phone's back) */
+  diagramBack?: () => void;
   /** append markdown to the open note (a dropped attachment; registered by the editor) */
   attach?: (markdown: string) => void;
   /** the caret in sight, the page moved only if it was not (the window coming back, not an edit) */
