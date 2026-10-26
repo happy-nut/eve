@@ -1744,19 +1744,25 @@ export function createEditor(opts: {
       }).configure({ nested: true }),
       // a phone's bar does the formatting; the markdown hint is for a keyboard
       // the first line is the page's title (drawn as one, app.css): empty, it says so; the line under it, what can be typed
-      // …and an empty block the caret is in says what it is, as Notion's do (an empty heading was a blank 29px line)
-      Placeholder.configure({
-        includeChildren: true,
-        placeholder: ({ editor: ed, node, pos }) => {
-          if (pos === 0) return 'Untitled';
-          if (node.type.name === 'heading') return `Heading ${node.attrs.level}`;
-          if (node.type.name === 'detailsSummary') return 'Toggle';
-          const around = ed.state.doc.resolve(pos).parent.type.name;
-          if (around === 'taskItem') return 'To-do';
-          if (around === 'listItem') return 'List';
-          if (around === 'blockquote') return 'Empty quote';
-          return isMobile ? 'Start writing…' : 'Start typing… # heading, - list, [[ link';
-        },
+      Placeholder.configure({ placeholder: ({ node, pos }) => (pos === 0 ? 'Untitled' : node.type.name === 'heading' ? `Heading ${node.attrs.level}` : isMobile ? 'Start writing…' : 'Start typing… # heading, - list, [[ link') }),
+      // …and an empty block the caret is in says what it is, as Notion's do (an empty heading was a blank 29px line).
+      // Its own small plugin: the stock one's includeChildren put its marks on every block, and a copy took them
+      Extension.create({
+        name: 'blockHint',
+        addProseMirrorPlugins: () => [new Plugin({
+          props: {
+            decorations: (state) => {
+              const { $from, empty } = state.selection;
+              const line = $from.parent;
+              if (!empty || !line.isTextblock || line.content.size || $from.depth < 2) return null; // (the note's own lines: above)
+              const around = $from.depth > 1 ? $from.node(-1).type.name : '';
+              const says = line.type.name === 'heading' ? `Heading ${line.attrs.level}` : line.type.name === 'detailsSummary' ? 'Toggle'
+                : around === 'taskItem' ? 'To-do' : around === 'listItem' ? 'List' : around === 'blockquote' ? 'Empty quote' : '';
+              if (!says) return null;
+              return DecorationSet.create(state.doc, [Decoration.node($from.before(), $from.after(), { class: 'is-empty', 'data-placeholder': says })]);
+            },
+          },
+        })],
       }),
       Markdown.configure({ html: true, transformPastedText: true, transformCopiedText: true, linkify: true, breaks: false }),
       // ahead of the picker's own plugin, which reads where the "[[" was typed in the same transaction
