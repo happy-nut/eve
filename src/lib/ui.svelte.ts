@@ -402,6 +402,9 @@ class Ui {
     if (e.key.toLowerCase() !== 'z' || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return false;
     const t = e.target as Element | null;
     if (t?.closest?.('input, textarea, select, [contenteditable="true"], .tiptap')) return false;
+    // the keyboard nowhere (a click took it off a board's card, a database's checkbox): not the list's either. Taken
+    // for it, ⌘Z after a card dragged in a new note undid the ⌘N, and the note went to the Trash with the board in it
+    if (!t || t === document.body || t === document.documentElement) return false;
     if (!history.undo()) return false;
     this.dismissToast();
     return true;

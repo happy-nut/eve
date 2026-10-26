@@ -59,3 +59,21 @@ test('a group renamed or deleted, then taken back: the same row (its identity), 
   expect(history.undo()).toBe(true);
   expect(groups.id(g)).toBe(id);
 });
+
+test('⌘Z with the keyboard nowhere (on <body>) takes nothing back from the list: it undid the ⌘N of the open note', async () => {
+  const { ui } = await import('./ui.svelte');
+  const { history } = await import('./history.svelte');
+  history.clear();
+  const n = notes.create('# Board\n\nx');
+  await Promise.resolve();
+  const e = new KeyboardEvent('keydown', { key: 'z', metaKey: true, cancelable: true });
+  Object.defineProperty(e, 'target', { value: document.body });
+  expect(ui.undoKey(e)).toBe(false);
+  expect(notes.all.find((x) => x.id === n.id)!.deleted).toBe(false);
+  // from the list's own row it still does
+  const row = document.createElement('button'); document.body.append(row);
+  const f = new KeyboardEvent('keydown', { key: 'z', metaKey: true, cancelable: true });
+  Object.defineProperty(f, 'target', { value: row });
+  expect(ui.undoKey(f)).toBe(true);
+  row.remove();
+});

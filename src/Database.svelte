@@ -23,7 +23,13 @@
   // ---- the table's own undo: each step knows how to undo and redo itself ----
   type Step = { undo: () => void; redo: () => void };
   const done: Step[] = [], undone: Step[] = [];
-  function step(redo: () => void, undo: () => void) { redo(); done.push({ undo, redo }); undone.length = 0; }
+  let root: HTMLDivElement;
+  function step(redo: () => void, undo: () => void) {
+    redo(); done.push({ undo, redo }); undone.length = 0;
+    // the keyboard on the table, so ⌘Z next is this undo: a click on a checkbox or a button gives WebKit no focus, and
+    // a dialog (Delete property) hands it back to the note, whose ⌘Z undid something else (a column, the whole table)
+    if (root && !root.contains(document.activeElement)) root.focus({ preventScroll: true });
+  }
   const apply = (next: DbSchema) => { d = next; commit(next); };
   const put = (next: DbSchema) => { const was = d; step(() => apply(next), () => apply(was)); };
   /** ⌘Z / ⌘⇧Z on the table (a field's own words have the field's own undo) */
@@ -279,7 +285,7 @@
 
 <!-- the table's own ⌘Z, for what is done on it (a field's words keep the field's own undo) -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="db" role="group" aria-label="Database" onkeydown={undoKey}>
+<div class="db" role="group" aria-label="Database" tabindex="-1" bind:this={root} onkeydown={undoKey}>
   <div class="db-top">
     <input class="db-title" value={d.title} placeholder="Untitled database" spellcheck="false" aria-label="Database title"
       onchange={(e) => put({ ...d, title: e.currentTarget.value })} onkeydown={enterKeeps} />
@@ -407,7 +413,7 @@
 </div>
 
 <style>
-  .db { margin: 0.6em 0; font-size: 0.92em; }
+  .db { margin: 0.6em 0; font-size: 0.92em; outline: none; }
   .db-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
   .db-title { flex: 1; min-width: 120px; font: inherit; font-size: 1.15em; font-weight: 600; border: 0; background: none; color: var(--fg); outline: none; padding: 2px 0; }
   .views { display: flex; flex-wrap: wrap; gap: 2px; } /* a narrow column, a large text: onto a second line, not past the column */
