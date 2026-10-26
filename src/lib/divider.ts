@@ -59,9 +59,10 @@ export const Divider = HorizontalRule.extend({
       }),
     ].map((rule) => {
       const run = rule.handler.bind(rule);
-      // nor in a toggle's title, a line of text only
+      // nor in a toggle's title, a line of text only, nor in a table's cell (it took the dashes and made nothing)
       rule.handler = (props: any) => {
-        if (inList(props.state.selection.$from) || props.state.selection.$from.parent.type.name === 'detailsSummary') return null;
+        const $from = props.state.selection.$from;
+        if (inList($from) || $from.parent.type.name === 'detailsSummary' || /^table(Cell|Header)$/.test($from.node(-1)?.type.name ?? '')) return null;
         const made = run(props);
         if (made !== null) justMade = true;
         return made;

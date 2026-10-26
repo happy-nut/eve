@@ -90,7 +90,8 @@ const ListItemLead = ListItem.extend({
         }
         // a numbered to-do (`1. [ ] task`), which the note has no checkbox for, is read as that text: its brackets
         // are written as they were, not escaped, so another app still finds its to-do there
-        if (parent?.type.name === 'orderedList' && first?.type.name === 'paragraph' && text?.isText && !text.marks.length && /^\[[ xX]\] \S/.test(text.text!)) {
+        // (`parent` is no node when an item is written out on its own: a list line dragged by its ⋮⋮ threw here)
+        if ((parent as PMNode | undefined)?.type?.name === 'orderedList' && first?.type.name === 'paragraph' && text?.isText && !text.marks.length && /^\[[ xX]\] \S/.test(text.text!)) {
           state.write(text.text!.slice(0, 4));
           state.render(first.cut(4), node, 0);
           node.forEach((child, _o, i) => { if (i) state.render(child, node, i); });
@@ -342,6 +343,15 @@ const arrow = (find: RegExp, replace: string) => new InputRule({
  * toggle. Not the note's title, which is the page's name, nor in a table, whose cell holds one line.
  */
 const duplicateLines: Command = (state, dispatch) => {
+  // a block chosen whole (a table, a picture, a divider: ⋮⋮'s Duplicate): it again under it, chosen
+  if (state.selection instanceof NodeSelection && state.selection.node.isBlock) {
+    if (dispatch) {
+      const { node, to } = state.selection;
+      const tr = state.tr.insert(to, node).setMeta(DUPLICATE, true);
+      dispatch(tr.setSelection(NodeSelection.create(tr.doc, to)).scrollIntoView());
+    }
+    return true;
+  }
   const { $from, $to } = state.selection;
   if (inCell($from)) return true;
   // not lines inside an item (the items instead), nor a toggle's title (the toggle); a toggle's body is lines as any

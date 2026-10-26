@@ -74,7 +74,7 @@ const DOTS_V = '<svg viewBox="0 0 8 16"><circle cx="2.5" cy="4" r="1.2"/><circle
 const DOTS_H = '<svg viewBox="0 0 16 8"><circle cx="4" cy="2.5" r="1.2"/><circle cx="4" cy="5.5" r="1.2"/><circle cx="8" cy="2.5" r="1.2"/><circle cx="8" cy="5.5" r="1.2"/><circle cx="12" cy="2.5" r="1.2"/><circle cx="12" cy="5.5" r="1.2"/></svg>';
 const PLUS = '<svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 
-interface Over { pos: number; table: HTMLTableElement; wrap: HTMLElement; row: number; col: number }
+interface Over { pos: number; table: HTMLTableElement; wrap: HTMLElement; row: number; col: number; cellEl?: HTMLTableCellElement }
 
 class Handles {
   private host: HTMLElement;
@@ -121,9 +121,12 @@ class Handles {
       const pos = this.view.posAtDOM(table.tBodies[0] ?? table, 0) - 1;
       if (this.view.state.doc.nodeAt(pos)?.type.name !== 'table' || !rows.length) continue;
       const row = rows.findIndex((tr) => y < tr.getBoundingClientRect().bottom);
-      const col = cells.findIndex((c) => x < c.getBoundingClientRect().right);
-      // (ponytail: a first row with merged cells counts its columns by them; TableMap if that is ever wrong)
-      return { pos, table, wrap, row: row < 0 ? rows.length - 1 : row, col: col < 0 ? cells.length - 1 : col };
+      const cellEl = cells.find((c) => x < c.getBoundingClientRect().right) ?? cells[cells.length - 1];
+      // the column by the table's map, not by the first row's cells: two header cells merged shifted every column
+      // after them, and Delete column took the wrong one
+      const map = TableMap.get(this.view.state.doc.nodeAt(pos)!);
+      const col = cellEl ? map.colCount(this.view.posAtDOM(cellEl, 0) - 1 - (pos + 1)) : 0;
+      return { pos, table, wrap, row: row < 0 ? rows.length - 1 : row, col, cellEl };
     }
     return null;
   }
@@ -140,7 +143,7 @@ class Handles {
     this.cur = o;
     const host = this.host.getBoundingClientRect(), t = o.table.getBoundingClientRect(), w = o.wrap.getBoundingClientRect();
     const right = Math.min(t.right, w.right), left = Math.max(t.left, w.left);
-    const row = o.table.rows[o.row].getBoundingClientRect(), cell = o.table.rows[0].cells[o.col].getBoundingClientRect();
+    const row = o.table.rows[o.row].getBoundingClientRect(), cell = (o.cellEl ?? o.table.rows[0].cells[0]).getBoundingClientRect();
     const put = (el: HTMLElement, box: { left: number; top: number; width?: number; height?: number }) => {
       el.style.left = `${Math.round(box.left - host.left)}px`;
       el.style.top = `${Math.round(box.top - host.top)}px`;
@@ -150,7 +153,7 @@ class Handles {
     };
     // on the edges: the row's ⋮⋮ across the table's left border, the column's ⋯ across its top one
     // (12 wide across the border: 6px into the cell, clear of its words at 9px; at 16 it touched them)
-    put(this.rowGrip, { left: t.left - 6, top: row.top + row.height / 2 - 12 });
+    put(this.rowGrip, { left: left - 6, top: row.top + row.height / 2 - 12 });
     if (cell.left >= left - 1 && cell.right <= right + 1) put(this.colGrip, { left: cell.left + cell.width / 2 - 12, top: t.top - 8 });
     else this.colGrip.classList.remove('on');
     put(this.addRow, { left, top: t.bottom + 3, width: right - left, height: 16 });
@@ -183,6 +186,8 @@ class Handles {
       this.dragging = null;
       if (!moved) return this.menu(o, what);
       if (!d || d.to === d.from) return;
+      // its table chosen first: the moves read the selection's table, and with the caret elsewhere nothing moved
+      chooseLine(this.editor, o.pos, what === 'row' ? { row: d.from } : { col: d.from });
       const cmd = what === 'row' ? moveTableRow({ from: d.from, to: d.to, pos: o.pos + 1 }) : moveTableColumn({ from: d.from, to: d.to, pos: o.pos + 1 });
       cmd(this.view.state, this.view.dispatch);
       this.view.focus();
@@ -215,22 +220,24 @@ class Handles {
     chooseLine(this.editor, o.pos, what === 'row' ? { row: o.row } : { col: o.col });
     this.view.focus();
     const c = (name: string) => () => (this.editor.chain().focus() as any)[name]().run();
+    // (no Merge here: a markdown table has no merged cells, and saved, a merge scrambled the columns; a table that has
+    // a cell spanning two, from elsewhere, is not duplicated by row or column, which split it across copies)
+    let spans = false;
+    this.view.state.doc.nodeAt(o.pos)?.descendants((n) => { if ((n.attrs.colspan ?? 1) > 1 || (n.attrs.rowspan ?? 1) > 1) spans = true; return !spans; });
     const items: MenuItem[] = what === 'row'
       ? [
         { label: 'Insert above', run: c('addRowBefore') },
         { label: 'Insert below', run: c('addRowAfter') },
-        { label: 'Duplicate', run: () => duplicateRow(this.editor, o.pos, o.row) },
+        { label: 'Duplicate', hide: spans, run: () => duplicateRow(this.editor, o.pos, o.row) },
         { label: 'Clear contents', run: () => deleteCellSelection(this.view.state, this.view.dispatch) },
         ...(o.row === 0 ? [{ label: 'Header row', checked: o.table.rows[0].cells[0]?.tagName === 'TH', run: c('toggleHeaderRow') }] : []),
-        { label: 'Merge cells', hide: !this.editor.can().mergeCells(), run: c('mergeCells') },
         { label: 'Delete row', danger: true, sep: true, run: c('deleteRow') },
       ]
       : [
         { label: 'Insert left', run: c('addColumnBefore') },
         { label: 'Insert right', run: c('addColumnAfter') },
-        { label: 'Duplicate', run: () => duplicateColumn(this.editor, o.pos, o.col) },
+        { label: 'Duplicate', hide: spans, run: () => duplicateColumn(this.editor, o.pos, o.col) },
         { label: 'Clear contents', run: () => deleteCellSelection(this.view.state, this.view.dispatch) },
-        { label: 'Merge cells', hide: !this.editor.can().mergeCells(), run: c('mergeCells') },
         { label: 'Delete column', danger: true, sep: true, run: c('deleteColumn') },
       ];
     const r = (what === 'row' ? this.rowGrip : this.colGrip).getBoundingClientRect();

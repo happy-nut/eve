@@ -509,6 +509,9 @@ export const TableNodes = [
     },
   }).configure({ resizable: true }),
   TableRow.extend({ addStorage: () => inner }),
-  TableHeader.extend({ addStorage: () => inner, addAttributes() { return { ...this.parent?.(), align }; } }),
-  TableCell.extend({ addStorage: () => inner, addAttributes() { return { ...this.parent?.(), align }; } }),
+  // A cell holds what a markdown table's cell can: lines and pictures. A list, quote, callout, toggle, code or formula
+  // block typed or put into one (a shortcut, the / menu, the phone's bar, a paste) showed in it and was gone from the
+  // note at the next save; held to these, nothing else can be made there at all
+  TableHeader.extend({ content: '(paragraph | image)+', addStorage: () => inner, addAttributes() { return { ...this.parent?.(), align }; } }),
+  TableCell.extend({ content: '(paragraph | image)+', addStorage: () => inner, addAttributes() { return { ...this.parent?.(), align }; } }),
 ];

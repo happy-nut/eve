@@ -2,6 +2,7 @@ import { describe, test, expect, afterEach } from 'vitest';
 import { TextSelection } from '@tiptap/pm/state';
 import { CellSelection, TableMap } from '@tiptap/pm/tables';
 import type { Editor } from '@tiptap/core';
+import { runEditorCommand } from './editor';
 import { editorWith, md, posOf, press, type } from './testEditor';
 
 afterEach(() => { document.body.innerHTML = ''; });
@@ -227,5 +228,28 @@ describe('⌫ on a chosen row or column with nothing in it takes it out', () => 
     expect(md(ed).trim()).toBe('# T\n\nafter');
     ed.commands.undo();
     expect(md(ed)).toBe(before);
+  });
+});
+
+describe('a cell holds lines and pictures only: what a markdown cell can keep', () => {
+  for (const typed of ['- X', '1. X', '[] X', '# X', '> X', '" X', '--- ']) {
+    test(`"${typed}" typed at a cell's start stays the words typed`, () => {
+      const ed = editorWith('# T\n\n| a | b |\n| --- | --- |\n| cc | d |');
+      ed.commands.setTextSelection(posOf(ed, 'cc'));
+      type(ed, typed);
+      let cell = '';
+      ed.state.doc.descendants((n) => { if (!cell && n.type.name === 'tableCell') cell = n.textContent; return !cell; });
+      expect(cell).toBe(`${typed}cc`); // the words as typed (markdown escapes the ones that would be markup)
+      expect(md(editorWith(md(ed)))).toBe(md(ed)); // and reads back the same
+    });
+  }
+  test('a list, a to-do or a formula asked for in a cell (the phone\'s bar, the / menu) loses nothing', () => {
+    for (const id of ['bulletList', 'orderedList', 'taskList', 'blockquote', 'callout', 'toggle', 'divider', 'math']) {
+      const ed = editorWith('# T\n\n| a | b |\n| --- | --- |\n| cell one | d |');
+      ed.commands.setTextSelection(posOf(ed, 'one', true));
+      runEditorCommand(ed, id);
+      expect(md(ed)).toContain('cell one');
+      expect(md(editorWith(md(ed)))).toBe(md(ed));
+    }
   });
 });

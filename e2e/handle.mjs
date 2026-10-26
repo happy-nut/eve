@@ -79,6 +79,54 @@ try {
   assert.ok(await page.locator('.menu button', { hasText: 'Turn into' }).count() >= 0);
   assert.ok(await page.locator('.menu', { hasText: 'Duplicate' }).count() > 0, 'a click on ⋮⋮ opens the block menu');
   console.log('ok   a click on ⋮⋮ opens the block menu');
+  // a list's line dragged by its own ⋮⋮ moves among its list's lines
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  await page.evaluate(() => window.__editor.commands.setContent('# Drag\n\n- one\n- two\n- three\n', true));
+  await page.waitForTimeout(700);
+  {
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    const one = await page.locator('.tiptap li', { hasText: 'one' }).boundingBox();
+    await page.mouse.move(one.x + 20, one.y + one.height / 2);
+    await page.waitForTimeout(120);
+    const g = await page.locator('.block-handle.on .grip').boundingBox();
+    const three = await page.locator('.tiptap li', { hasText: 'three' }).boundingBox();
+    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+    await page.mouse.down();
+    for (let i = 1; i <= 8; i++) await page.mouse.move(g.x + g.width / 2 + i, g.y + ((three.y + three.height * 0.8 - g.y) * i) / 8);
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    const items = await page.evaluate(() => [...document.querySelectorAll('.tiptap li')].map((l) => l.textContent.trim()));
+    assert.deepEqual(items, ['two', 'three', 'one'], `a list's line dragged by ⋮⋮ moves within its list (${errors.join('; ')})`);
+    console.log('ok   a list\'s line dragged by its ⋮⋮ moves within its list');
+  }
+  // ⋮⋮'s menu on a divider and on a table acts on that block, not on the lines around it; the only line of a list
+  // deleted takes its list
+  const menuOn = async (sel, label) => {
+    const b = await page.locator(sel).first().boundingBox();
+    await page.mouse.move(b.x + 20, b.y + b.height / 2);
+    await page.waitForTimeout(120);
+    const g = await page.locator('.block-handle.on .grip').boundingBox();
+    await page.mouse.click(g.x + g.width / 2, g.y + g.height / 2);
+    await page.waitForSelector('.menu');
+    await page.locator('.menu button', { hasText: label }).first().click();
+    await page.waitForTimeout(250);
+  };
+  const md = () => page.evaluate(() => window.__editor.storage.markdown.getMarkdown().trim());
+  await page.evaluate(() => window.__editor.commands.setContent('# M\n\nfirst\n\n---\n\nlast\n', true));
+  await page.waitForTimeout(700);
+  await menuOn('.tiptap hr', 'Duplicate');
+  assert.equal(await md(), '# M\n\nfirst\n\n---\n\n---\n\nlast', '⋮⋮ Duplicate on a divider copies the divider');
+  await page.evaluate(() => window.__editor.commands.setContent('# M\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\nlast\n', true));
+  await page.waitForTimeout(700);
+  await menuOn('.tiptap .tableWrapper', 'Duplicate');
+  assert.equal((await md()).split('| a | b |').length - 1, 2, '⋮⋮ Duplicate on a table copies the table');
+  await page.evaluate(() => window.__editor.commands.setContent('# M\n\nabove\n\n- only\n\nbelow\n', true));
+  await page.waitForTimeout(700);
+  await menuOn('.tiptap li', 'Delete');
+  assert.equal(await md(), '# M\n\nabove\n\nbelow', 'the only line of a list deleted takes its list');
+  console.log('ok   ⋮⋮\'s menu acts on a divider and a table themselves; the only line of a list deleted takes its list');
 } finally {
   await browser.close();
   await server?.close();
