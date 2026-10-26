@@ -124,14 +124,19 @@
   }
   /** a new row, with what the view shows already set (the board's column, the calendar's day, the filter) */
   let fresh = $state<string | null>(null);
-  function addRow(props: Record<string, PropValue> = {}) {
+  async function addRow(props: Record<string, PropValue> = {}) {
     if (!pageId) return;
+    // a board, a calendar, a gallery show no field to name it in: it is named first (it was an "Untitled" no one could
+    // name, and the keys typed next went into the note)
+    const named = d.view === 'table' ? 'Untitled' : await ui.prompt('Name', '');
+    if (named === null || !pageId) return;
     const f = d.filter;
     const given = { ...(f && f.is !== 'checked' && f.is !== '' ? { [f.by]: def(f.by)?.type === 'multi' ? [f.is] : f.is } : f?.is === 'checked' ? { [f.by]: 'true' } : {}), ...props };
-    const id = notes.addRow(pageId, 'Untitled', given).id;
-    fresh = id;
+    const id = notes.addRow(pageId, named.trim() || 'Untitled', given).id;
+    if (d.view === 'table') fresh = id;
     done.push({ undo: () => notes.setGone(id, true), redo: () => notes.setGone(id, false) });
     undone.length = 0;
+    if (d.view !== 'table' && root) root.focus({ preventScroll: true }); // ⌘Z next takes it back
   }
   const dropRow = (n: Note) => { const id = n.id; step(() => notes.setGone(id, true), () => notes.setGone(id, false)); };
   const focusFresh = (el: HTMLInputElement, id: string) => { if (id === fresh) { fresh = null; el.focus(); el.select(); } };
@@ -310,7 +315,7 @@
     {#if p.type === 'checkbox'}
       <input type="checkbox" checked={v === 'true'} aria-label={p.name} onchange={(e) => setCell(n, p, e.currentTarget.checked ? 'true' : null)} />
     {:else if p.type === 'date'}
-      <input type="date" value={typeof v === 'string' ? v : ''} aria-label={p.name} onchange={(e) => setCell(n, p, e.currentTarget.value || null)} />
+      <input type="date" class:blank={!v} value={typeof v === 'string' ? v : ''} aria-label={p.name} onchange={(e) => setCell(n, p, e.currentTarget.value || null)} />
     {:else if p.type === 'select' || p.type === 'multi'}
       <button class="chips" aria-label={p.name} onclick={(e) => choiceMenu(e, n, p)}>
         {#each asList(v) as c}<span class="chip" style:background="var(--tag-{tagColor(c)})">{c}</span>{:else}<span class="empty">&nbsp;</span>{/each}
@@ -422,6 +427,8 @@
 
 <style>
   .db { margin: 0.6em 0; font-size: 0.92em; outline: none; }
+  /* an empty date shows nothing until it is being set: WebKit draws today in it, dimmed, read as a date that is there */
+  .db input[type='date'].blank:not(:focus)::-webkit-datetime-edit { color: transparent; }
   .db-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
   .db-title { flex: 1; min-width: 120px; font: inherit; font-size: 1.15em; font-weight: 600; border: 0; background: none; color: var(--fg); outline: none; padding: 2px 0; }
   .views { display: flex; flex-wrap: wrap; gap: 2px; } /* a narrow column, a large text: onto a second line, not past the column */

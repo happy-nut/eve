@@ -93,7 +93,11 @@ test('the calendar puts rows on their days, + makes one on a day; the gallery sh
   expect(day.textContent).toContain('Dentist');
   (day.querySelector('.day-add') as HTMLElement).click();
   await settle();
-  expect(notes.all.filter((n) => n.parent === page.id && n.props?.When === today).length).toBe(2);
+  // named first: a calendar shows no field to name it in
+  expect(ui.pending?.input).toBe('');
+  ui.done('Haircut');
+  await settle();
+  expect(notes.all.filter((n) => n.parent === page.id && n.props?.When === today).map((n) => n.body.split('\n')[0])).toEqual(['# Dentist', '# Haircut']);
   // to the gallery
   ([...target.querySelectorAll('.views button')].find((b) => b.textContent === 'Gallery') as HTMLElement).click();
   await settle();
