@@ -208,6 +208,32 @@ try {
   await imePage.waitForTimeout(300);
   assert.equal(await colours(), plainColours, 'the comment deleted, the code is coloured as it was');
   console.log('ok   a comment typed through an input method is coloured, and deleted, the code is again');
+
+  // a key just after a 한글 syllable is that key: WebKit's ProseMirror dropped the first one within 0.5s of a
+  // composition (meant for a Japanese IME's confirming ↩), so Tab did not indent and ↩ in code made no line
+  const afterHangul = async (md, at, key) => {
+    await imePage.evaluate(([md, at]) => {
+      const ed = window.__editor;
+      ed.commands.setContent(ed.storage.markdown.parser.parse(md), true);
+      let pos = 0;
+      ed.state.doc.descendants((n, p) => { if (!pos && n.isTextblock && n.textContent.includes(at)) pos = p + 1 + n.content.size; });
+      ed.commands.focus(); ed.commands.setTextSelection(pos);
+    }, [md, at]);
+    await imePage.evaluate(async () => {
+      const el = document.querySelector('.tiptap'), wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      el.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
+      el.dispatchEvent(new CompositionEvent('compositionupdate', { data: '글' }));
+      document.execCommand('insertText', false, '글');
+      el.dispatchEvent(new CompositionEvent('compositionend', { data: '글' }));
+      await wait(100);
+    });
+    await imePage.keyboard.press(key);
+    await imePage.waitForTimeout(200);
+    return imePage.evaluate(() => window.__editor.storage.markdown.getMarkdown());
+  };
+  assert.equal(await afterHangul('- one\n- two', 'two', 'Tab'), '- one\n  - two글', 'Tab just after 한글 indents the item');
+  assert.equal(await afterHangul('```\nlet a\n```', 'let a', 'Enter'), '```\nlet a글\n\n```', '↩ just after 한글 in code makes a line in it');
+  console.log('ok   Tab and ↩ just after a 한글 syllable do what they do');
 } finally {
   await browser.close();
   await server?.close();

@@ -101,6 +101,10 @@ async function newNote(page, mobile) {
   await page.keyboard.type('const x = 1');
   await page.locator('.code-block').hover();
   await check(page, 'code language menu', '.menu', () => page.locator('.code-lang').click(), esc);
+  // a picture chosen by the keyboard, shown by Space: one Esc puts it away (it took two once)
+  await page.evaluate(() => { const e = window.__editor; e.commands.insertContentAt(e.state.doc.content.size, { type: 'image', attrs: { src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' } }); });
+  await page.evaluate(() => { const e = window.__editor; let at = -1; e.state.doc.descendants((n, p) => { if (n.type.name === 'image') at = p; }); e.commands.setNodeSelection(at); e.commands.focus(); });
+  await check(page, 'picture (Space)', 'div.viewer', () => page.keyboard.press('Space'), esc);
   await check(page, 'settings', '.panel', () => page.locator('button[data-tip="Settings"]').first().click(), esc);
   await page.locator('button[data-tip="Settings"]').first().click();
   await page.waitForTimeout(400);

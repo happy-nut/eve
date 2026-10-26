@@ -190,6 +190,30 @@ describe('pasted', () => {
     expect(copyPaste('- [ ] open\n- [x] done', 'open', 'done')).toBe('x\n\n- [ ] open\n- [x] done');
   });
 
+  /** copy from one note, paste at the end of a word in another */
+  function pasteAt(note: string, from: string, to: string, into: string, at: string) {
+    const src = editorWith(note);
+    src.commands.setTextSelection({ from: posOf(src, from), to: posOf(src, to, true) });
+    const { dom } = src.view.serializeForClipboard(src.state.selection.content());
+    const ed = editorWith(into);
+    ed.commands.setTextSelection(posOf(ed, at, true));
+    ed.view.pasteHTML(dom.innerHTML);
+    return md(ed);
+  }
+
+  test('lines pasted at the end of a list\'s line are lines of that list, beside it, not under it', () => {
+    // bullets into a to-do list: to-dos (they went under the to-do, a list of their own)
+    expect(pasteAt('- x1\n- x2', 'x1', 'x2', '- [ ] item\n- [ ] next', 'item')).toBe('- [ ] itemx1\n- [ ] x2\n- [ ] next');
+    expect(pasteAt('- [ ] x1\n- [ ] x2', 'x1', 'x2', '- item\n- next', 'item')).toBe('- itemx1\n- x2\n- next');
+    // two paragraphs into a bullet: two bullets (the second was a paragraph inside the first, the list made loose)
+    expect(pasteAt('x1\n\nx2', 'x1', 'x2', '- item\n- next', 'item')).toBe('- itemx1\n- x2\n- next');
+    expect(pasteAt('x1\n\nx2\n\nx3', 'x1', 'x3', '1. item\n2. next', 'item')).toBe('1. itemx1\n2. x2\n3. x3\n4. next');
+    // the same as markdown text (from a chat): items after the line, of its kind
+    const typed = (into: string, text: string) => { const ed = editorWith(into); ed.commands.setTextSelection(posOf(ed, 'item', true)); paste(ed, text); return md(ed); };
+    expect(typed('- [ ] item\n- [ ] next', '- x1\n- x2')).toBe('- [ ] item\n- [ ] x1\n- [ ] x2\n- [ ] next');
+    expect(typed('- item\n- next', '- [ ] x1\n- [ ] x2')).toBe('- item\n- x1\n- x2\n- next');
+  });
+
   test('a table row, pasted on an empty line: a table in its place, no empty line left above it', () => {
     const src = editorWith('| a | b |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |');
     const cell = (word: string) => { const $p = src.state.doc.resolve(posOf(src, word)); return $p.before($p.depth - 1); };

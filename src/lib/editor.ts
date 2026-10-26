@@ -427,6 +427,13 @@ function vscodeLanguage(data: string): string | null {
   return (mode in own ? own[mode] : mode.toLowerCase()) || null;
 }
 
+/** a list pasted in a list of another kind (bullets in to-dos) as that kind: left as it was, it went in under the line */
+function asList(pasted: PMNode, list: PMNode, item: PMNode): PMNode {
+  const items: PMNode[] = [];
+  pasted.forEach((l) => { items.push(item.type.create(item.type.name === 'taskItem' ? { checked: !!l.attrs.checked } : null, l.content)); });
+  return list.type.create(null, items);
+}
+
 /**
  * Markdown (as HTML) pasted where the caret is, fitted in as any paste is: the first line runs on in the caret's line,
  * the last one takes the rest of it. Put in with insertContent it was a document of its own, every newline and space
@@ -449,6 +456,8 @@ function pasteMarkdown(view: EditorView, html: string, lead = '', trail = ''): T
     slice.content.forEach((p) => items.push(item.type.create(fresh, p)));
     slice = new Slice(Fragment.from(items), slice.openStart + 1, slice.openEnd + 1);
   }
+  const only = slice.content.childCount === 1 ? slice.content.firstChild! : null;
+  if (item && only && LISTS.test(only.type.name) && only.type !== $from.node(-2).type) slice = new Slice(Fragment.from(asList(only, $from.node(-2), item)), slice.openStart, slice.openEnd);
   const tr = state.tr;
   if (lead) tr.replaceSelectionWith(schema.text(lead), false);
   // a list (a heading, a quote) pasted at the start or the end of a line goes before or after that line, a list in a
@@ -920,6 +929,23 @@ function looseLists(editor: Editor) {
 }
 
 /**
+ * A key typed just after a 한글 syllable is that key. In WebKit ProseMirror drops the first key within 0.5s of a
+ * composition's end: a Japanese IME confirms its word with ↩ and sends the ↩ on after it. A Korean syllable is never
+ * confirmed that way (the key that ends it comes while it is still composing, which is skipped anyway), so the drop
+ * only took a real key: ↩ or Tab typed quickly after "한글 " did nothing in code, a toggle's title, a list or the / menu.
+ */
+const hangulKeys = Extension.create({
+  name: 'hangulKeys',
+  addProseMirrorPlugins: () => [new Plugin({ props: { handleDOMEvents: {
+    compositionend: (view, e) => {
+      // after ProseMirror's own handler, which marks the time
+      if (/[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/.test(e.data ?? '')) queueMicrotask(() => { (view as any).input.compositionEndedAt = -2e8; });
+      return false;
+    },
+  } } })],
+});
+
+/**
  * → at the end of a line that ends in bold, code, a highlight… (← at the start of one that starts with it): what is
  * typed next is plain, as in Notion. Typing on without it keeps the formatting going, as a mark does; one press takes
  * it off, the next goes on to the next line as it always did.
@@ -1051,6 +1077,18 @@ export function createEditor(opts: {
         if (line?.isTextblock && openStart === depth + 1 && openEnd === depth + 1 && !(line.type.spec.code && line.textContent.includes('\n'))) {
           return new Slice(line.content, 0, 0);
         }
+        // lines pasted in a list's line are lines of that list, beside it: paragraphs, or a list of another kind (bullets
+        // into to-dos), went inside the line's item instead (a second paragraph that loosened the list, a list under it)
+        const $at = view.state.selection.$from, item = $at.depth >= 2 ? $at.node(-1) : null;
+        if (item && /^(listItem|taskItem)$/.test(item.type.name) && $at.parent.type.name === 'paragraph') {
+          const list = $at.node(-2), only = content.childCount === 1 ? content.firstChild! : null;
+          if (only && LISTS.test(only.type.name) && only.type !== list.type) return new Slice(Fragment.from(asList(only, list, item)), openStart, openEnd);
+          const lines: PMNode[] = []; content.forEach((n) => { lines.push(n); });
+          if (lines.length > 1 && lines.every((n) => n.type.name === 'paragraph')) {
+            const items = list.type.create(null, lines.map((l) => item.type.create(item.type.name === 'taskItem' ? { checked: false } : null, l)));
+            return new Slice(Fragment.from(items), openStart ? openStart + 2 : 1, openEnd ? openEnd + 2 : 1);
+          }
+        }
         return content === slice.content ? slice : new Slice(content, openStart, openEnd);
       },
       handlePaste: (view, event): boolean => {
@@ -1178,6 +1216,7 @@ export function createEditor(opts: {
       }),
       Text,
       markExit,
+      hangulKeys,
       // A link ends where its words do, as in Notion: typed on at its end (or before it), the words were taken into the
       // link (stock links grow while autolink is on), and → at its end typed a space into the note each time
       Link.extend({ inclusive: () => false, exitable: false }).configure({ openOnClick: false, autolink: true }),
