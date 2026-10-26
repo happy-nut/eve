@@ -163,6 +163,7 @@
   let dropAt = $state<{ into?: string; beforeNote?: string; beforeGroup?: string; parent?: string; afterNote?: string } | null>(null);
 
   function dragStartNote(e: DragEvent, n: Note) {
+    if (q) { e.preventDefault(); return; } // search results: the rows around it there are not its neighbours in the list
     drag = { note: n.id };
     e.dataTransfer?.setData('text/plain', n.id);
     e.dataTransfer!.effectAllowed = 'move';
@@ -298,7 +299,8 @@
     const next = neighbourOf(groupSel(g), inside), fromList = inList();
     if (!(await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`))) return;
     const step = history.record(), undo = groups.remove(g);
-    ui.toast(`Deleted group “${leafOf(g)}”`, { label: 'Undo', run: () => { if (!history.undo(step)) undo(); } });
+    // taken back, the keyboard is on its row again (the row it had moved to went back into the group, and was made anew)
+    ui.toast(`Deleted group “${leafOf(g)}”`, { label: 'Undo', run: () => { if (!history.undo(step)) undo(); if (fromList) void focusRow(groupSel(g)); } });
     void afterRemove(next, fromList);
   }
   async function removeNote(n: Note) {

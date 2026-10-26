@@ -244,7 +244,6 @@ class NotesStore {
    * is made in its place: the list is what is on screen.
    */
   letGo() {
-    flushEdits();
     const id = this._cur;
     if (!id || !this.untouched.has(id)) return;
     this.currentId = this.neighbourOf(id)?.id ?? null; // moving on from it takes it away (leave); none left: nothing open

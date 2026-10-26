@@ -40,7 +40,9 @@
     editor = createEditor({
       element: el,
       content: note.body,
-      onUpdate: (md) => { lastEmitted = md; notes.update(note.id, md); },
+      // the note it was opened on: handed over late (a long note's last keys, as Back opens the next), `note` is already
+      // the next one, and the words went there while the new note was taken for empty and deleted
+      onUpdate: (md) => { lastEmitted = md; notes.update(id, md); },
       onNoteMove: (dir, onTitle) => (onTitle || openedFromList.id === note.id) && nudgeNote(note.id, dir),
       onOpenNote: (title) => {
         notes.flush(note.id);
@@ -224,13 +226,14 @@
     {#if note.icon}
       <button class="big-icon" title="Change icon" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={isMobile ? 44 : 56} /></button>
     {:else}
-      <button class="add-icon" onclick={addIcon}>
+      <!-- (a press keeps the caret where it was: the button goes as it is used, and the keyboard fell to <body>) -->
+      <button class="add-icon" onmousedown={(e) => e.preventDefault()} onclick={addIcon}>
         <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 9.5c.6.9 1.5 1.5 2.5 1.5s1.9-.6 2.5-1.5M6 6.5h.01M10 6.5h.01"/></svg>
         Add icon
       </button>
     {/if}
     {#if !note.cover}
-      <button class="add-icon add-cover" onclick={() => notes.setLook(note.id, { cover: randomCover() })}>
+      <button class="add-icon add-cover" onmousedown={(e) => e.preventDefault()} onclick={() => notes.setLook(note.id, { cover: randomCover() })}>
         <svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="m2.5 11 3.5-3.5 3 3 1.5-1.5 3 3"/></svg>
         Add cover
       </button>
