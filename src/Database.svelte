@@ -189,8 +189,11 @@
     if (!nameOk(name, p.name)) return void ui.tell(`“${name}” is taken: a property needs a name of its own.`);
     const ids = rows.map((r) => r.id), was = d, from = p.name;
     const re = (s?: string) => (s === from ? name : s);
+    // a formula that reads it reads it by its new name (left as it was, it read nothing, and showed 0)
+    const said = new RegExp(`prop\\(\\s*(["'])${from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\1\\s*\\)`, 'g');
+    const follow = (x: PropDef) => { const e = x.expr?.replace(said, `prop("${name.replace(/"/g, '\\"')}")`); return e && e !== x.expr ? { expr: e } : {}; };
     const next: DbSchema = {
-      ...d, props: d.props.map((x) => (x === p ? { ...x, name } : { ...x, ...(x.relation === from ? { relation: name } : {}) })), groupBy: re(d.groupBy), dateBy: re(d.dateBy),
+      ...d, props: d.props.map((x) => (x === p ? { ...x, name } : { ...x, ...(x.relation === from ? { relation: name } : {}), ...follow(x) })), groupBy: re(d.groupBy), dateBy: re(d.dateBy),
       ...(d.sort ? { sort: { ...d.sort, by: re(d.sort.by)! } } : {}), ...(d.filter ? { filter: { ...d.filter, by: re(d.filter.by)! } } : {}),
     };
     step(() => { notes.renameProp(ids, from, name); apply(next); }, () => { notes.renameProp(ids, name, from); apply(was); });
@@ -206,7 +209,12 @@
     step(() => { for (const [id] of had) notes.setProp(id, p.name, null); apply(next); }, () => { for (const [id, v] of had) notes.setProp(id, p.name, v); apply(was); });
   }
   async function changeKind(p: PropDef, type: PropType, where: Where) {
-    const more = await configure(type, where, p);
+    // made a choice, what its rows already say are its choices (they were chips no menu offered, and the board put
+    // those rows under "No …")
+    const said = type === 'select' || type === 'multi'
+      ? [...new Set(rows.flatMap((r) => { const v = r.props?.[p.name]; return v == null || v === '' ? [] : Array.isArray(v) ? v.map(String) : type === 'multi' ? String(v).split(',').map((x) => x.trim()).filter(Boolean) : [String(v)]; }))]
+      : [];
+    const more = await configure(type, where, said.length ? { ...p, options: [...(p.options ?? []), ...said.filter((x) => !(p.options ?? []).includes(x))] } : p);
     if (!more) return;
     put({ ...d, props: d.props.map((x) => (x === p ? { name: x.name, type, ...more } : x)) });
   }

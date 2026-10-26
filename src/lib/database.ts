@@ -121,10 +121,12 @@ export function viewRows<T extends Pick<Note, 'props' | 'order'>>(rows: readonly
   const def = d.props.find((p) => p.name === s.by);
   const read = (r: T) => (s.by === NAME ? title(r) : key ? key(r, s.by) : shown(r.props?.[s.by], def?.type ?? 'text'));
   const numeric = def?.type === 'number' || def?.type === 'rollup' || def?.type === 'formula';
+  // a choice sorts by where it stands among the choices (Not started, In progress, Done), as Notion's do, not by its letters
+  const rank = def?.type === 'select' && def.options?.length ? (v: string) => def.options!.indexOf(v) : null;
   return out.sort((a, b) => {
     const x = read(a), y = read(b);
     if (!x || !y) return x === y ? 0 : x ? -1 : 1; // empty last, ascending or not
-    const c = numeric && !isNaN(+x) && !isNaN(+y) ? +x - +y : x.localeCompare(y);
+    const c = rank && rank(x) >= 0 && rank(y) >= 0 ? rank(x) - rank(y) : numeric && !isNaN(+x) && !isNaN(+y) ? +x - +y : x.localeCompare(y);
     return s.desc ? -c : c;
   });
 }
