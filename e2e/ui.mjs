@@ -323,6 +323,22 @@ try {
     await page.close();
   }
 
+  // ---- the page's head, as Notion's: its icon, then the row of what can be added, then the title ("Add cover" sat beside
+  // the icon, at its top corner) ----
+  {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    await page.goto(URL_);
+    await page.waitForSelector('.tiptap');
+    await page.locator('.toolbar .icon').last().click();
+    await page.locator('.menu button', { hasText: 'New note' }).click();
+    await page.waitForTimeout(400);
+    await page.evaluate(() => { window.__editor.commands.setContent('# A page title\n\nwords', true); const n = window.__notes.current; window.__notes.setIcon(n.id, '🌱'); });
+    await page.waitForTimeout(400);
+    const h = await page.evaluate(() => { const R = (s) => document.querySelector(s)?.getBoundingClientRect(); return { icon: R('.big-icon'), add: R('.add-cover'), title: R('main .tiptap > :first-child') }; });
+    if (!h.add || h.add.top < h.icon.bottom - 1 || h.add.bottom > h.title.top + 1 || Math.abs(h.add.left + 6 - h.title.left) > 3) problems.push(`the head's Add cover is not between the icon and the title, in line with it: ${JSON.stringify(h)}`);
+    await page.close();
+  }
+
   // ---- a phone (the bounty's finds): an Android phone's page in WebKit ----
   {
     const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36';

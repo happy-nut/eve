@@ -226,8 +226,11 @@
   <div class="page-head" class:with-icon={!!note.icon} class:with-cover={!!note.cover}>
     {#if note.icon}
       <button class="big-icon" title="Change icon" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={isMobile ? 44 : 56} /></button>
-    {:else}
-      <!-- (a press keeps the caret where it was: the button goes as it is used, and the keyboard fell to <body>) -->
+    {/if}
+    <!-- Notion's row: under the icon, right over the title, shown as the page is hovered. (A press keeps the caret where
+         it was: the button goes as it is used, and the keyboard fell to <body>) -->
+    <div class="page-controls" class:none={!!note.icon && !!note.cover && !backlinks.length}>
+    {#if !note.icon}
       <button class="add-icon" onmousedown={(e) => e.preventDefault()} onclick={addIcon}>
         <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 9.5c.6.9 1.5 1.5 2.5 1.5s1.9-.6 2.5-1.5M6 6.5h.01M10 6.5h.01"/></svg>
         Add icon
@@ -245,6 +248,7 @@
         {backlinks.length} {backlinks.length === 1 ? 'link' : 'links'} here
       </button>
     {/if}
+    </div>
   </div>
   <!-- Tab indents a list (the editor marks those handled); anywhere else it must not walk focus out of the editor -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -285,12 +289,14 @@
   .scroll { height: 100%; overflow-y: auto; scrollbar-width: none; }
   .scroll::-webkit-scrollbar { display: none; }
   .editor { min-height: 100%; }
+  /* the head, as Notion's: the icon, then a row of what can be added (shown as the page is hovered, its room always
+     kept so the title doesn't jump), then the title. "Add cover" stood beside a 56px icon, off at its top corner */
   .page-head {
     max-width: var(--editor-width, 900px); margin: 0 auto; padding: 44px clamp(24px, 8vw, 96px) 0; box-sizing: border-box;
-    height: 72px; /* reserves the "add icon" row so the title doesn't jump */
+    display: flex; flex-direction: column; align-items: flex-start;
   }
-  .page-head.with-icon { height: 118px; }
-  .page-head { display: flex; align-items: flex-start; }
+  .page-controls { display: flex; align-items: center; gap: 2px; width: 100%; height: 28px; margin: 4px 0; }
+  .page-controls.none { height: 0; margin: 0 0 12px; } /* an icon and a cover both: nothing to offer, no empty row */
   .backlinks {
     margin-left: auto; display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--fg-dim);
     font: inherit; font-size: 12.5px; padding: 3px 6px; margin-right: -6px; border-radius: 6px; white-space: nowrap;
@@ -299,8 +305,7 @@
   .backlinks:hover { background: var(--bg-hover); color: var(--fg); }
   /* on a Mac the breadcrumbs sit in the window's top row: the note starts a little further down, clear of them */
   @media screen {
-    :global(html:not(.mobile)) .page-head { padding-top: 68px; height: 96px; }
-    :global(html:not(.mobile)) .page-head.with-icon { height: 142px; }
+    :global(html:not(.mobile)) .page-head { padding-top: 64px; }
   }
   /* level with the window's toolbar, past it when the sidebar is closed and it sits over the note; only the crumbs
      take clicks, the rest of the row still drags the window */
@@ -333,11 +338,12 @@
   /* …and only while that bar is there: back in the list it is gone, and the crumbs were left over the list's title */
   :global(html.mobile .shell:not(:has(> .mhead))) .crumbs { display: none; }
   .add-icon {
-    display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--fg-dim);
-    font: inherit; font-size: 12.5px; padding: 3px 6px; margin-left: -6px; border-radius: 6px; opacity: 0;
+    display: inline-flex; align-items: center; gap: 6px; height: 28px; border: 0; background: none; color: var(--fg-dim);
+    font: inherit; font-size: 13.5px; padding: 0 8px 0 6px; border-radius: 6px; opacity: 0;
     transition: opacity 0.15s, background 0.12s;
   }
-  .add-icon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; }
+  .page-controls > :first-child { margin-left: -6px; } /* the first one's words in line with the title's */
+  .add-icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; }
   :global(main:hover) .add-icon, .add-icon:focus-visible { opacity: 1; }
   /* a phone has no hover: an unseen button above the title took a tap there and gave the note a random icon */
   :global(html.mobile) .add-icon { opacity: 1; }
@@ -364,15 +370,13 @@
   .cover:hover .cover-change, .cover-change:focus-visible { opacity: 1; }
   :global(html.mobile) .cover-change { opacity: 1; }
   .cover-change:hover { color: var(--fg); }
-  .page-head.with-cover, :global(html:not(.mobile)) .page-head.with-cover { padding-top: 14px; height: 52px; }
-  /* the icon pulled up half over the cover: the head only as tall as what is left of it under the cover (76px left 50px
-     between the icon and the title, 10 without a cover) */
-  .page-head.with-cover.with-icon, :global(html:not(.mobile)) .page-head.with-cover.with-icon { padding-top: 0; height: 36px; }
+  .page-head.with-cover, :global(html:not(.mobile)) .page-head.with-cover { padding-top: 12px; }
+  /* the icon pulled up half over the cover, the row under it */
+  .page-head.with-cover.with-icon, :global(html:not(.mobile)) .page-head.with-cover.with-icon { padding-top: 0; }
   /* positioned, as the cover is, so the icon is drawn over the cover's edge, not under it */
   .page-head.with-cover { position: relative; }
   .page-head.with-cover .big-icon { margin-top: -38px; }
-  /* the head's buttons in a row (Add icon, Add cover), the links count at the far end */
-  .add-cover { margin-left: 2px; }
+  /* the links count at the row's far end */
 
   /* On paper the head is a fixed block that holds the icon below the band at the top of the printed
      flow — WebKit lays that band out but never paints it, and the note's title used to vanish into it.
