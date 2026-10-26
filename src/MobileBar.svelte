@@ -23,6 +23,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { hooks } from './lib/ui.svelte';
+  import { scrollHint } from './lib/scrollHint';
 
   /**
    * A phone has no shortcuts: while the note (or a sheet over it) holds the caret and the keyboard is up, a row of
@@ -92,7 +93,8 @@
     <span class="sep"></span>
     <!-- the formatting buttons scroll sideways when the phone is too narrow for them all. No bullets or
          headings: "- " and "## " already make them while typing -->
-    <div class="tools">
+    <!-- more buttons past its end (Insert block, at 390 wide): that end fades, so the row is seen to go on -->
+    <div class="tools" {@attach scrollHint}>
       {#each buttons as b (b.id)}
         <button tabindex="-1" aria-label={b.label} onclick={() => run(b.id)}>
           <svg viewBox="0 0 16 16">{@html b.icon}</svg>

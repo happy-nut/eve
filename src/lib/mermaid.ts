@@ -22,7 +22,8 @@ const dark = () => {
  */
 const PALETTE = {
   light: {
-    fg: '#333d4b', strong: '#191f28', dim: '#8b95a1', canvas: '#f9fafb', node: '#ffffff', border: '#e5e8eb', line: '#c4cad1',
+    // dim: a label on an edge or a group (12px) reads at 4.5:1 on the canvas and a white box (#8b95a1 read at 3:1)
+    fg: '#333d4b', strong: '#191f28', dim: '#66707e', canvas: '#f9fafb', node: '#ffffff', border: '#e5e8eb', line: '#c4cad1',
     accent: '#3182f6', head: '#f2f4f6', tint: '#e8f3ff', tintText: '#1b64da', note: '#fff8e6', noteLine: '#ffe2a6', shadow: 'rgba(0,23,51,0.06)',
     hues: ['#3182f6', '#15c39a', '#ff9f2e', '#8b5cf6', '#f04452', '#f5b800', '#4cc3ff', '#5fbf4a', '#ec5fa8', '#6366f1', '#c08457', '#14b8a6'],
   },

@@ -13,6 +13,14 @@ const DEF = /^\[\^([^\]\s]+)\]:/;
 
 /** `[^label]` in a line, not the `[^label]:` that starts a footnote's own line */
 export function footnoteMarkdown(md: MarkdownIt): void {
+  // `[^1]: Wikipedia` is a footnote's line, not a link's definition: markdown's own rule took a one-word footnote for
+  // one (`[^1]` the name, the word its address), and the line was kept as raw HTML, its ¹ leading nowhere
+  const rule = (md.block.ruler as any).__rules__.find((r: { name: string }) => r.name === 'reference');
+  if (rule) {
+    const reference = rule.fn;
+    md.block.ruler.at('reference', (state: any, start: number, end: number, silent: boolean) =>
+      state.src.startsWith('[^', state.bMarks[start] + state.tShift[start]) ? false : reference(state, start, end, silent));
+  }
   md.inline.ruler.before('link', 'footnoteref', (state, silent) => {
     if (state.src.charCodeAt(state.pos) !== 0x5b || state.src.charCodeAt(state.pos + 1) !== 0x5e) return false; // "[^"
     const m = /^\[\^([^\]\s]+)\]/.exec(state.src.slice(state.pos));

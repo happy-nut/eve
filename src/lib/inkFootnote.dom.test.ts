@@ -38,3 +38,16 @@ test('a footnote: the next number at the caret, its line at the end with the car
   expect(words.view.dom.querySelector('sup.fnref')).toBeNull();
   expect(md(editorWith(md(words)))).toBe(md(words));
 });
+
+test('a footnote of one word (a name, an address) is a footnote\'s line, not raw HTML, and its number leads to it', () => {
+  for (const def of ['Wikipedia', 'https://example.com/a', 'More.']) {
+    const ed = editorWith(`# T\n\nA claim[^1].\n\n[^1]: ${def}`);
+    const kinds: string[] = [];
+    ed.state.doc.forEach((n) => kinds.push(n.type.name));
+    expect(kinds).not.toContain('htmlComment');
+    expect(ed.state.doc.lastChild!.textContent).toBe(`[^1]: ${def}`);
+    // saved and read back, the same (an address is kept as an autolink, <…>, as anywhere)
+    expect(md(editorWith(md(ed)))).toBe(md(ed));
+    if (!def.startsWith('http')) expect(md(ed).trimEnd()).toBe(`# T\n\nA claim[^1].\n\n[^1]: ${def}`);
+  }
+});

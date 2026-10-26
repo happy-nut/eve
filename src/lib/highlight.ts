@@ -1,6 +1,6 @@
 import { Mark, markInputRule, markPasteRule, type Editor } from '@tiptap/core';
 import type MarkdownIt from 'markdown-it';
-import { ui, type MenuItem } from './ui.svelte';
+import { ui, under, type MenuItem } from './ui.svelte';
 import { appearance } from './appearance.svelte';
 
 /** a colour a note may carry on a highlight: #rrggbb, nothing else (it goes into a style attribute) */
@@ -39,7 +39,7 @@ export function highlightMenu(editor: Editor) {
     run: () => editor.chain().focus().setMark('highlight', { color: i ? c : null }).run(),
   }));
   if (editor.isActive('highlight')) items.push({ label: 'Remove highlight', sep: true, run: () => editor.chain().focus().unsetMark('highlight').run() });
-  ui.openMenu({ clientX: Math.round(end.left), clientY: Math.round(end.bottom + 4) }, items);
+  ui.openMenu(under(end), items);
 }
 
 /**

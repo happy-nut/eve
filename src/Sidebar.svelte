@@ -12,7 +12,7 @@
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { typedIn } from './lib/hangul';
   import { sync } from './lib/sync.svelte';
-  import { ui, hooks, type MenuItem } from './lib/ui.svelte';
+  import { ui, under, hooks, type MenuItem } from './lib/ui.svelte';
   import { composing } from './lib/keys';
   import { importFromFinder, importFromFolder } from './lib/transfer';
   import Icon from './Icon.svelte';
@@ -116,7 +116,7 @@
     const n = row ? notes.all.find((x) => x.id === row.dataset.note) : notes.current;
     ctxNote = n && n.id !== CALENDAR_NOTE_ID && !n.deleted ? n : null;
     ctxGroup = row?.dataset.group ?? n?.group ?? '';
-    ui.openMenu(r ? { clientX: r.left + (row && !anchor ? 8 : 0), clientY: r.bottom + 4 } : { clientX: 12, clientY: 40 }, plusItems);
+    ui.openMenu(r ? { ...under(r), clientX: Math.round(r.left + (row && !anchor ? 8 : 0)) } : { clientX: 12, clientY: 40 }, plusItems);
   };
   /** Import / export. A failed export says so instead of doing nothing at all. */
   async function transfer(run: () => Promise<unknown>) {
@@ -652,14 +652,13 @@
             {@const g = r.g}
             <div class="ghead" class:collapsed={groups.isCollapsed(g)} use:swipeRow={{ left: () => removeGroup(g), enabled: () => !drag }}>
               {#if groups.editing === g}
-                {#if isMobile}
-                  <!-- a phone's one way to a group's icon (a tap on it in the list folds the group): pressed, the box keeps
-                       the keyboard until the picker takes it, and the name typed so far is kept as the box closes -->
+                  <!-- the group's icon stays as its name is typed (on a Mac it went, and the rows moved): on a phone the one
+                       way to it (a tap on it in the list folds the group); pressed, the box keeps the keyboard until the
+                       picker takes it, and the name typed so far is kept as the box closes -->
                   <button class="ico-slot rename-ico" aria-label="Change icon" onmousedown={(e) => e.preventDefault()} onclick={(e) => pickIcon({ group: g }, e.currentTarget)}>
                     {#if groups.icon(g)}<Icon icon={groups.icon(g)} />{:else}
                     <svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H2.5a1 1 0 0 0-1 1z"/></svg>{/if}
                   </button>
-                {/if}
                 <input class="rename" class:taken={nameTaken} aria-invalid={nameTaken} aria-describedby={nameTaken ? 'name-taken' : undefined}
                   value={leafOf(g)} use:focusInput onkeydown={(e) => renameKey(e, g)} oninput={() => (nameTaken = false)}
                   onblur={(e) => finishRename(g, e.currentTarget.value)} spellcheck="false" />
@@ -683,7 +682,7 @@
                 </span>
                 <!-- on hover the tools unfold between the count and the chevron; the chevron stays at the edge -->
                 <span class="tools">
-                  <button class="icon mini tip-right" data-tip="New note here" onclick={newNote(g)}>+</button>
+                  <button class="icon mini tip-side" data-tip="New note here" onclick={newNote(g)}>+</button>
                   <button class="icon mini tip-right" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
                 </span>
                 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -784,10 +783,12 @@
   .collapsed .chev { transform: rotate(0deg); }
   .count { font-weight: 500; font-size: 11px; color: var(--fg-dim); padding: 0 2px 0 6px; }
   .rename {
-    flex: 1; min-width: 0; font: inherit; font-size: 12.5px; padding: 3px 6px; border-radius: 4px;
+    /* the row's own size, so the list does not move as a name is typed */
+    flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 3px 6px; border-radius: 4px; line-height: 1.3;
     border: 1px solid var(--accent); background: var(--bg-input); color: var(--fg); outline: none; box-shadow: var(--glow);
   }
-  .rename-ico { border: 0; background: none; color: inherit; padding: 0; margin-right: 6px; width: 38px !important; height: 38px !important; }
+  .rename-ico { border: 0; background: none; color: inherit; padding: 0; margin: 0 5px 0 6px; }
+  :global(html.mobile) .rename-ico { margin: 0 6px 0 0; width: 38px !important; height: 38px !important; }
   .rename.taken { border-color: #ff453a; box-shadow: none; }
   /* a phone: a box a thumb can work in, and 16px text, below which Android zooms the page in on it */
   :global(html.mobile) .rename { min-height: 38px; font-size: 16px; padding: 6px 10px; border-radius: 8px; }

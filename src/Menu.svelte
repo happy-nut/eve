@@ -22,7 +22,9 @@
     if (!m) return;
     x = m.x; y = m.y; maxH = null;
     if (!el) return;
-    const f = floatAt({ x: m.x, y: m.y }, { w: el.offsetWidth, h: el.offsetHeight }, { gap: 0 });
+    // opened from a button (ui.under): under it, or over its top, never over the button itself
+    const at = m.from ? { left: m.x, right: m.x, top: m.from.top - 4, bottom: m.y } : { x: m.x, y: m.y };
+    const f = floatAt(at, { w: el.offsetWidth, h: el.offsetHeight }, { gap: 0 });
     x = f.left; y = f.top; maxH = f.maxHeight;
   });
 

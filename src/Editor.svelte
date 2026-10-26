@@ -8,7 +8,7 @@
   import { notes, titleOf, type Note } from './lib/notes.svelte';
   import { appearance } from './lib/appearance.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
-  import { ui, hooks } from './lib/ui.svelte';
+  import { ui, under, hooks } from './lib/ui.svelte';
   import Icon from './Icon.svelte';
   import { groups, leafOf } from './lib/groups.svelte';
   import Suggest from './Suggest.svelte';
@@ -131,8 +131,7 @@
 
   /** A cover's choices (Notion's): one of the gradients, a picture of one's own, or none */
   function coverMenu(at: HTMLElement) {
-    const r = at.getBoundingClientRect();
-    ui.openMenu({ clientX: Math.round(r.left), clientY: Math.round(r.bottom + 4) }, [
+    ui.openMenu(under(at), [
       ...Object.entries(GRADIENTS).map(([k, g]) => ({
         label: g.label, swatch: g.css, checked: note.cover === gradientCover(k), run: () => notes.setLook(note.id, { cover: gradientCover(k) }),
       })),
@@ -195,9 +194,8 @@
   // the notes that link here (Notion's backlinks): a count over the title, a menu of them on a click
   const backlinks = $derived(notes.linksTo(note.id));
   function showBacklinks(at: HTMLElement) {
-    const r = at.getBoundingClientRect();
     const short = (t: string) => (t.length > 60 ? t.slice(0, 59) + '…' : t);
-    ui.openMenu({ clientX: Math.round(r.left), clientY: Math.round(r.bottom + 4) }, backlinks.map(({ note: n, line }) => ({
+    ui.openMenu(under(at), backlinks.map(({ note: n, line }) => ({
       label: line && line !== titleOf(n) ? `${short(titleOf(n))} — ${short(line)}` : short(titleOf(n)),
       run: () => { notes.flush(note.id); notes.currentId = n.id; },
     })));
@@ -307,17 +305,27 @@
     display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; font-size: 13px; color: var(--fg-dim); white-space: nowrap;
   }
   :global(.shell:not(:has(aside))) .crumbs { left: 214px; }
+  /* tabs open: the note starts under their row, and the crumbs, kept in the window's top row, are 71px above it — left
+     at 10px they ran through the page's icon and "Add cover" */
+  :global(main.tabbed) .crumbs { top: -61px; }
+  /* Find open (top right of the window): the crumbs end before it, not under it */
+  :global(main:has(.find)) .crumbs { right: 400px; }
   .sep { opacity: 0.45; flex: none; padding: 0 1px; }
   .sep:first-child { display: none; }
   .crumb {
     display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 220px; height: 24px; padding: 0 6px;
     border-radius: 6px; border: 0; background: none; color: inherit; font: inherit; pointer-events: auto;
   }
-  .crumb span { overflow: hidden; text-overflow: ellipsis; }
+  /* a block, so a name too long is cut with an ellipsis (inline, it was cut mid-letter with none) */
+  .crumb span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* each place a few letters at least: squeezed, a note three groups deep read "/ / / A really quite lo" */
+  .crumb:not(.here) { min-width: 3.2em; flex-shrink: 1; }
   .crumb.here { color: var(--fg); flex-shrink: 0.2; }
   button.crumb:hover { background: var(--bg-hover); color: var(--fg); }
   /* a phone: in its own bar, between the back button and the note's icons */
-  :global(html.mobile) .crumbs { top: -52px; left: 50px; right: 138px; height: 52px; font-size: 14px; }
+  :global(html.mobile) .crumbs { top: -52px; left: 50px; right: 146px; height: 52px; font-size: 14px; }
+  /* a phone has room for where the note is and what holds it: the rest of the way is the list's */
+  :global(html.mobile) .crumbs > :not(:nth-last-child(-n + 3)) { display: none; }
   /* …and only while that bar is there: back in the list it is gone, and the crumbs were left over the list's title */
   :global(html.mobile .shell:not(:has(> .mhead))) .crumbs { display: none; }
   .add-icon {
@@ -338,7 +346,10 @@
   .big-icon:active { transform: scale(0.95); }
   .editor.has-head :global(.tiptap) { padding-top: 0; min-height: calc(100% - 72px); }
   /* the cover: across the whole pane, the page's icon half over its lower edge, as Notion has it */
+  /* the cover under the window's top row, as Notion's is under its bar: the crumbs and the toolbar's icons are on the
+     page's own colour, not on the picture (on a dark one they could not be read) */
   .cover { position: relative; width: 100%; }
+  :global(html:not(.mobile) main:not(.tabbed)) .cover { margin-top: 44px; }
   .cover-change {
     position: absolute; right: clamp(24px, 8vw, 96px); bottom: 12px; border: 0; border-radius: 6px; padding: 4px 9px;
     font: inherit; font-size: 12.5px; color: var(--fg-dim); background: var(--bg-pop); box-shadow: var(--pop-shadow);
@@ -348,7 +359,9 @@
   :global(html.mobile) .cover-change { opacity: 1; }
   .cover-change:hover { color: var(--fg); }
   .page-head.with-cover, :global(html:not(.mobile)) .page-head.with-cover { padding-top: 14px; height: 52px; }
-  .page-head.with-cover.with-icon, :global(html:not(.mobile)) .page-head.with-cover.with-icon { padding-top: 0; height: 76px; }
+  /* the icon pulled up half over the cover: the head only as tall as what is left of it under the cover (76px left 50px
+     between the icon and the title, 10 without a cover) */
+  .page-head.with-cover.with-icon, :global(html:not(.mobile)) .page-head.with-cover.with-icon { padding-top: 0; height: 36px; }
   /* positioned, as the cover is, so the icon is drawn over the cover's edge, not under it */
   .page-head.with-cover { position: relative; }
   .page-head.with-cover .big-icon { margin-top: -38px; }

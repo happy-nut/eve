@@ -39,7 +39,7 @@ import { TableHandles } from './tableHandles';
 import { ClickTarget } from './clickTarget';
 import { Divider } from './divider';
 import { MathBlock, MathInline, Text, insertMath } from './math';
-import { ui } from './ui.svelte';
+import { ui, under } from './ui.svelte';
 import { notes, titleOf, type Note } from './notes.svelte';
 import { headingsOf, splitLink } from './markdown';
 import { pickImage, openUrl, isMobile } from './platform';
@@ -620,7 +620,7 @@ function chipMenu(editor: Editor, pos: number, dom: HTMLElement) {
     if (typed && isTime(typed)) { set({ remind: true, time: typed }); void askNotify(); } else editor.commands.focus();
   };
   const r = dom.getBoundingClientRect();
-  ui.openMenu({ clientX: Math.round(r.left), clientY: Math.round(r.bottom + 4) }, node.attrs.remind
+  ui.openMenu(under(r), node.attrs.remind
     ? [
       { label: `Remind at ${node.attrs.time}…`, run: () => void askTime(node.attrs.time) },
       { label: 'Stop reminding', run: () => set({ remind: false, time: '' }) },

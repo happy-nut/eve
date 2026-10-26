@@ -4,6 +4,7 @@
   import { ui } from './lib/ui.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
   import Icon from './Icon.svelte';
+  import { scrollHint } from './lib/scrollHint';
 
   // the notes open in tabs, over the note (only with two or more): a click brings one to front, the middle button or
   // its × closes it, the right button pins it or closes the others
@@ -21,9 +22,16 @@
       { label: 'Close other tabs', hide: tabs.list.length < 2, run: () => tabs.closeOthers(i) },
     ]);
   }
+  // more tabs than fit: the open one is brought into sight (it was left off past the bar's end, with no bar to scroll
+  // by), and the bar's edges fade where more of it goes on
+  let bar = $state<HTMLDivElement | null>(null);
+  $effect(() => {
+    void notes.currentId; void tabs.list.length;
+    queueMicrotask(() => bar?.querySelector('.tab.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+  });
 </script>
 
-<div class="tabbar" role="tablist" aria-label="Open notes">
+<div class="tabbar" role="tablist" aria-label="Open notes" bind:this={bar} {@attach scrollHint}>
   {#each tabs.list as t, i (t.id)}
     {@const l = label(t.id)}
     <div class="tab" class:on={t.id === notes.currentId} class:pinned={t.pinned} role="presentation"
@@ -48,12 +56,13 @@
   }
   .tabbar::-webkit-scrollbar { display: none; }
   .tab {
-    flex: 0 1 180px; min-width: 72px; display: flex; align-items: center; height: 26px; margin-top: 2px; border-radius: 7px 7px 0 0;
+    flex: 0 1 180px; min-width: 104px; display: flex; align-items: center; height: 26px; margin-top: 2px; border-radius: 7px 7px 0 0;
     color: var(--fg-dim);
   }
   .tab.pinned { flex: none; min-width: 0; }
   .tab:hover { background: var(--bg-hover); }
-  .tab.on { background: var(--bg-input); color: var(--fg); }
+  /* the open tab is the page itself (its colour, the bar's line broken under it), not a grey a hover shares */
+  .tab.on { background: var(--bg); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line), 0 1px 0 var(--bg); }
   button { border: 0; background: none; color: inherit; font: inherit; }
   .pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 4px 0 10px; font-size: 12.5px; text-align: left; }
   .pinned .pick { padding: 0 9px; }

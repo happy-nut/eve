@@ -8,7 +8,7 @@
   import { createEditor, runEditorCommand } from './lib/editor';
   import { notes } from './lib/notes.svelte';
   import { cardDoc, splitCard } from './lib/markdown';
-  import { hooks, ui, type CardReq } from './lib/ui.svelte';
+  import { hooks, ui, under, type CardReq } from './lib/ui.svelte';
   import type { CardMore } from './lib/board';
   import { TextSelection } from '@tiptap/pm/state';
   import Suggest from './Suggest.svelte';
@@ -20,8 +20,10 @@
 
   // a kanban card as a floating page (Notion "peek"): one markdown editor whose first line is the title,
   // like a note. One editing host, so a drag that starts in the title runs on into the body.
-  const req = ui.card! as CardReq & CardMore;
-  /** the column the card is in now (Move to…) */
+  // the page this one shows: one of the pages open (ui.cards), not whichever is on top now
+  let { req }: { req: CardReq & CardMore } = $props();
+  /** the column the card is in now (Move to…), from where it was as the page opened (each page is its own: keyed) */
+  // svelte-ignore state_referenced_locally
   let column = $state(req.column);
   let el: HTMLDivElement;
   let scrollEl = $state<HTMLDivElement | null>(null);
@@ -87,8 +89,7 @@
 
   /** Move to…: the board's columns, the card's own ticked */
   function moveMenu(e: MouseEvent) {
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    ui.openMenu({ clientX: r.left, clientY: r.bottom + 4 }, (req.columns ?? []).map((c) => ({
+    ui.openMenu(under(e.currentTarget as HTMLElement), (req.columns ?? []).map((c) => ({
       label: c.title || 'Untitled', checked: c.id === column, run: () => { req.move?.(c.id); column = c.id; editor?.commands.focus(); },
     })));
   }

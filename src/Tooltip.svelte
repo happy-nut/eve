@@ -2,14 +2,14 @@
   /**
    * One tooltip for the whole app. Any element with data-tip="text" (and optionally data-keys="Mod-k")
    * gets it on hover, rendered at body level so panes can't clip it. Classes on the element:
-   * tip-up (above), tip-right (right-aligned).
+   * tip-up (above), tip-right (right-aligned), tip-side (beside it: a row's button, whose tip covered the next row).
    */
   import Keys from './Keys.svelte';
   import { claimKeys, PRIORITY } from './lib/keys';
 
   import { floatAt } from './lib/popup';
 
-  let tip = $state<{ text: string; keys: string; at: DOMRect; up: boolean; right: boolean } | null>(null);
+  let tip = $state<{ text: string; keys: string; at: DOMRect; up: boolean; right: boolean; side?: boolean } | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
   let current: HTMLElement | null = null; // element the tooltip belongs to
   let box = $state<HTMLDivElement | null>(null);
@@ -20,7 +20,7 @@
   $effect(() => {
     if (!box || !tip) { pos = null; return; }
     const f = floatAt(tip.at, { w: box.offsetWidth, h: box.offsetHeight },
-      { prefer: tip.up ? 'above' : 'below', align: tip.right ? 'end' : 'center', gap: 7, avoid: { top: 8, right: 8, bottom: 8, left: 8 } });
+      { prefer: tip.side ? 'side' : tip.up ? 'above' : 'below', align: tip.right ? 'end' : 'center', gap: 7, avoid: { top: 8, right: 8, bottom: 8, left: 8 } });
     pos = { left: f.left, top: f.top };
   });
 
@@ -32,8 +32,8 @@
     if (!el) { tip = null; return; }
     timer = setTimeout(() => {
       const r = el.getBoundingClientRect();
-      const up = el.classList.contains('tip-up'), right = el.classList.contains('tip-right');
-      tip = { text: el.dataset.tip ?? '', keys: el.dataset.keys ?? '', at: r, up, right };
+      const up = el.classList.contains('tip-up'), right = el.classList.contains('tip-right'), side = el.classList.contains('tip-side');
+      tip = { text: el.dataset.tip ?? '', keys: el.dataset.keys ?? '', at: r, up, right, side };
     }, 400);
   }
   function out(e?: MouseEvent) {

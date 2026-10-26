@@ -38,6 +38,8 @@
   import { claimKeys, handledBy, PRIORITY } from './lib/keys';
 
   let sidebarOpen = $state(true);
+  // where the note's pane starts across the window, for what sits in its middle (a toast, a hint)
+  $effect(() => { document.documentElement.style.setProperty('--pane-left', !isMobile && sidebarOpen ? '260px' : '0px'); });
   let settingsOpen = $state(false);
   // a layer like any other while it is open (ui.layers): back and Esc reach it in its turn, and it puts the keyboard back
   $effect(() => { if (settingsOpen) return ui.openedSettings(() => (settingsOpen = false)); });
@@ -673,9 +675,9 @@
 {#if settingsOpen}
   {#await import('./Settings.svelte') then { default: Settings }}<Settings onClose={() => (settingsOpen = false)} {hotkeyError} />{/await}
 {/if}
-{#if ui.card}
-  {#await import('./CardPage.svelte') then { default: CardPage }}<CardPage />{/await}
-{/if}
+{#each ui.cards as req (req)}
+  {#await import('./CardPage.svelte') then { default: CardPage }}<CardPage {req} />{/await}
+{/each}
 {#if ui.photo}<ImageViewer />{/if}
 {#if ui.pdf}
   {#await import('./PdfViewer.svelte') then { default: PdfViewer }}<PdfViewer />{/await}

@@ -335,7 +335,10 @@
   function fit() {
     const n = natural();
     if (!canvas || !n) return;
-    zoom = Math.min(Math.max(Math.min((canvas.clientWidth - 48) / n.w, (canvas.clientHeight - 48) / n.h, 2), ZOOM_MIN), ZOOM_MAX);
+    // the zoom bar's room kept clear at the foot: fitted to the whole height, a phone on its side had the bar over the
+    // last row of boxes, and the picture scrolled
+    const bar = canvas.parentElement?.querySelector<HTMLElement>('.zoombar'), foot = bar ? bar.offsetHeight + 24 : 0;
+    zoom = Math.min(Math.max(Math.min((canvas.clientWidth - 48) / n.w, (canvas.clientHeight - 48 - foot) / n.h, 2), ZOOM_MIN), ZOOM_MAX);
   }
   /** zoomed by `f` about a point of the canvas (its middle), which stays where it is */
   function zoomBy(f: number, px?: number, py?: number) {

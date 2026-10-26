@@ -305,4 +305,6 @@
   /* a phone: MathLive's own keyboard is up under it, so the row takes one line each, swiped sideways */
   :global(html.mobile) .parts { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   :global(html.mobile) .part { flex: none; min-width: 44px; min-height: 44px; }
+  /* the shelf's tabs, TeX and Done too (25px tall, the symbols under them 44) */
+  :global(html.mobile) .tabs button, :global(html.mobile) .texb, :global(html.mobile) .done { min-height: 40px; min-width: 40px; }
 </style>

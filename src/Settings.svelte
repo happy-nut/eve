@@ -498,6 +498,10 @@
 <style>
   .pens { display: inline-flex; align-items: center; gap: 6px; flex: none; }
   .pens input[type='color'] { width: 26px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 7px; background: none; cursor: pointer; }
+  /* a phone: pens and their Reset a finger's size */
+  :global(html.mobile) .pens { gap: 10px; }
+  :global(html.mobile) .pens input[type='color'] { width: 40px; height: 40px; }
+  :global(html.mobile) .pens .link { min-height: 40px; padding: 0 10px; }
   .pens input[type='color']::-webkit-color-swatch-wrapper { padding: 2px; }
   .pens input[type='color']::-webkit-color-swatch { border: 0; border-radius: 5px; }
   .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-panel-scrim); }
@@ -505,7 +509,8 @@
   :global(html.mobile) .backdrop { background: var(--bg); }
   .panel:focus { outline: none; }
   .panel {
-    position: fixed; z-index: var(--z-panel); top: 50%; left: 50%; transform: translate(-50%, -50%);
+    /* held by its top, not centred: each tab is its own height, and centred the tabs moved under the pointer */
+    position: fixed; z-index: var(--z-panel); top: max(40px, 9vh); left: 50%; transform: translateX(-50%);
     width: min(560px, 92vw); max-height: 82vh; display: flex; flex-direction: column; overflow: hidden;
     background: var(--bg-pop); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
   }

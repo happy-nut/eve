@@ -22,6 +22,7 @@ jobs:
       - run: npm run e2e:summon
       - run: npm run e2e:table
       - run: npm run e2e:handle
+      - run: npm run e2e:ui
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
