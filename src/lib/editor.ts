@@ -505,15 +505,23 @@ const quoteList = ({ state, tr, dispatch }: { state: EditorState; tr: Transactio
 
 /** Several lines (paragraphs, list lines) made code at once: one block of them all, a line each, where they were.
  * The stock toggle made each a code block of its own. */
-const linesToCode = ({ state, tr, dispatch }: { state: EditorState; tr: Transaction; dispatch?: unknown }) => {
+const linesToCode = (editor: Editor) => ({ state, tr, dispatch }: { state: EditorState; tr: Transaction; dispatch?: unknown }) => {
   const { $from, $to } = state.selection, code = state.schema.nodes.codeBlock;
   const lines: string[] = [];
+  // a formula, a [[link]], a date or a footnote's mark as it is written ($x^2$, [[Page]]…): as their text, they were
+  // nothing, and went (the stock toggle dropped them too)
+  let atoms = false;
+  const written = (leaf: PMNode) => {
+    atoms = true;
+    const serializer = (editor.storage as any).markdown.serializer;
+    return (serializer.serialize(state.schema.nodes.doc.create(null, state.schema.nodes.paragraph.create(null, leaf))) as string).trim();
+  };
   state.doc.nodesBetween($from.pos, $to.pos, (n) => {
     if (!n.isTextblock) return true;
-    lines.push(n.textBetween(0, n.content.size, '\n', (leaf) => (leaf.type.name === 'hardBreak' ? '\n' : leaf.textContent)));
+    lines.push(n.textBetween(0, n.content.size, '\n', (leaf) => (leaf.type.name === 'hardBreak' ? '\n' : written(leaf))));
     return false;
   });
-  if (lines.length < 2 || $from.parent.type === code) return false;
+  if ((lines.length < 2 && !atoms) || $from.parent.type === code) return false;
   const range = $from.blockRange($to, (n) => n.type.contentMatch.matchType(code) != null && !/^table(Cell|Header)$/.test(n.type.name));
   if (!range) return false;
   // the block made goes where the whole range was: a range that also holds lines outside the selection (the rest of a
@@ -530,7 +538,13 @@ const linesToCode = ({ state, tr, dispatch }: { state: EditorState; tr: Transact
 
 function editorCommands(editor: Editor): Record<string, () => boolean> {
   const c = () => editor.chain().focus();
-  const inCode = () => editor.isActive('codeBlock');
+  // in code, or a selection with code in it: a list made of it took its lines as items, and they ran together
+  const inCode = () => {
+    const { from, to } = editor.state.selection;
+    let code = editor.isActive('codeBlock');
+    editor.state.doc.nodesBetween(from, to, (n) => { if (n.type.spec.code) code = true; });
+    return code;
+  };
   return {
     // the / menu opens where a word can start: right after a word (the phone's Insert block, the caret at the
     // end of a line) a bare "/" opened nothing and stayed in the text, so a space goes first
@@ -592,7 +606,7 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
     toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck) || editor.commands.command(toggleHere),
     blockquote: () => editor.commands.command(quoteList) || c().toggleBlockquote().run(),
-    codeBlock: () => !inCell(editor.state.selection.$from) && (editor.commands.command(linesToCode) || c().toggleCodeBlock().run()),
+    codeBlock: () => !inCell(editor.state.selection.$from) && (editor.commands.command(linesToCode(editor)) || c().toggleCodeBlock().run()),
     // in a toggle's title, under the toggle: the title holds text only
     divider: () => {
       const { $from } = editor.state.selection;

@@ -220,3 +220,12 @@ test('a callout whose first line is a divider or a picture is still a callout re
     expect(md(editorWith(once))).toBe(once);
   }
 });
+
+test('a line made code keeps its formula, [[link]] and footnote mark as they are written (they went)', async () => {
+  const { runEditorCommand } = await import('./editor');
+  const ed = editorWith('# T\n\nKilo $x^2$ [[Page]] note[^1] end\n\n[^1]: n');
+  ed.commands.setTextSelection(posOf(ed, 'Kilo', true));
+  runEditorCommand(ed, 'codeBlock');
+  expect(md(ed)).toContain('```\nKilo $x^2$ [[Page]] note[^1] end\n```');
+  document.body.innerHTML = '';
+});
