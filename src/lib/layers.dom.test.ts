@@ -167,3 +167,31 @@ test('…but not while a layer closes and puts it back, nor when it is let go on
   stop();
   expect(heard).toEqual([]);
 });
+
+// a modal layer holds the app's shortcuts too: with Settings up, ⌘N made a note behind it and took the keyboard
+// there, ⌘⇧⌫ asked to delete the hidden note. (A sheet is a phone's: no shortcuts there.)
+test.each(IDS.filter((id) => id !== 'sheet'))('%s: modal, it holds the app\'s shortcuts while it is up', (id) => {
+  const box = open(id);
+  if (ui.layers.top?.modal) expect(ui.layers.grabbing).toBe(true);
+  ui.layers.closeAll('esc');
+  box.remove();
+});
+
+// Tab with a modal layer up goes round its own controls: it walked out of the Trash and Version history onto the
+// toolbar and the list's search behind them
+test.each(IDS.filter((id) => id !== 'sheet'))('%s: modal, Tab goes round its own controls', (id) => {
+  const box = open(id);
+  if (ui.layers.top?.modal && ui.layers.top.own) {
+    box.insertAdjacentHTML('beforeend', '<button>second</button>');
+    const [first, last] = box.querySelectorAll('button');
+    last.focus();
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true });
+    expect(ui.layers.trapTab(tab)).toBe(true);
+    expect(document.activeElement).toBe(first);
+    first.focus();
+    expect(ui.layers.trapTab(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, cancelable: true }))).toBe(true);
+    expect(document.activeElement).toBe(last);
+  }
+  ui.layers.closeAll('esc');
+  box.remove();
+});

@@ -399,10 +399,14 @@
   async function pickIcon(target: { note?: Note; group?: string }, anchor?: HTMLElement) {
     const current = target.note ? target.note.icon ?? '' : groups.icon(target.group!);
     const el = anchor ?? document.querySelector<HTMLElement>(target.note ? `aside [data-note="${target.note.id}"]` : `aside [data-group="${CSS.escape(target.group!)}"]`);
+    const gid = target.group !== undefined ? groups.id(target.group) : '';
     const v = await ui.pickEmoji(el ?? new DOMRect(60, 60, 0, 0), current);
-    if (v !== null) { if (target.note) notes.setIcon(target.note.id, v); else groups.setIcon(target.group!, v); }
+    // the group as it is called now: renamed while the picker was up (its name being typed as it opened), the old
+    // name was no group's, and the icon and the keyboard went nowhere (the list's first row)
+    const g = target.group !== undefined ? groups.names.find((n) => groups.id(n) === gid) ?? target.group : '';
+    if (v !== null) { if (target.note) notes.setIcon(target.note.id, v); else groups.setIcon(g, v); }
     // the keyboard goes back to the row whose icon it was, picked or not
-    if (!isMobile) void focusRow(target.note ? `[data-note="${target.note.id}"]` : groupSel(target.group!));
+    if (!isMobile) void focusRow(target.note ? `[data-note="${target.note.id}"]` : groupSel(g));
   }
 
   /**
@@ -439,10 +443,11 @@
             { label: 'New page inside', run: newPageIn(n), hide: n.id === CALENDAR_NOTE_ID },
             { label: 'Change icon…', run: () => pickIcon({ note: n }) },
             // a move that would do nothing (the first row up, no page above to nest under) is left out
+            // and none in search results, dragged either: the row above there is not the one above in the list
             { label: 'Move up', sep: true, run: () => nudgeNote(n.id, -1), hide: !!q || !moves.nudgeNote(n.id, -1, true) },
             { label: 'Move down', run: () => nudgeNote(n.id, 1), hide: !!q || !moves.nudgeNote(n.id, 1, true) },
-            { label: 'Nest under previous', run: () => nestNote(n.id, 'in'), hide: !moves.nestNote(n.id, 'in', rowAbove(n.id), true) },
-            { label: 'Move out', run: () => nestNote(n.id, 'out'), hide: !moves.nestNote(n.id, 'out', undefined, true) },
+            { label: 'Nest under previous', run: () => nestNote(n.id, 'in'), hide: !!q || !moves.nestNote(n.id, 'in', rowAbove(n.id), true) },
+            { label: 'Move out', run: () => nestNote(n.id, 'out'), hide: !!q || !moves.nestNote(n.id, 'out', undefined, true) },
             { label: 'Delete note', sep: true, danger: true, run: () => removeNote(n) },
           ]
         : [];
@@ -613,7 +618,7 @@
           {#if r.kind === 'note'}
             {@const n = r.n}
             {@const swipe = n.id === CALENDAR_NOTE_ID ? {} : { left: () => removeNote(n), enabled: () => !drag }}
-            <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!isMobile} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
+            <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!isMobile && !q} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation" use:swipeRow={swipe}>
               <button data-row data-note={n.id} class:active={n.id === CALENDAR_NOTE_ID ? onCalendar : n.id === notes.currentId}
                 class:enter={searching && !!q && n.id === hits[0]?.id} onclick={(e) => (e.metaKey && !isMobile && n.id !== CALENDAR_NOTE_ID ? tabs.open(n.id) : openNote(n))}>

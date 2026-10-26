@@ -227,6 +227,9 @@ class NotesStore {
   private untouched = new Set<string>();
   /** the open note moved on from `id`: gone quietly if it was never written in (nothing to undo: it was empty) */
   private leave(id: string | null) {
+    // its last keys first, still on their way from the editor (a long note's wait a moment): Back right after a long
+    // paste took the note for never written in, and it went with them
+    flushEdits();
     if (!id || !this.untouched.has(id)) return;
     this.untouched.delete(id);
     const n = this.all.find((x) => x.id === id);
@@ -241,6 +244,7 @@ class NotesStore {
    * is made in its place: the list is what is on screen.
    */
   letGo() {
+    flushEdits();
     const id = this._cur;
     if (!id || !this.untouched.has(id)) return;
     this.currentId = this.neighbourOf(id)?.id ?? null; // moving on from it takes it away (leave); none left: nothing open

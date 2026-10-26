@@ -7,7 +7,8 @@
   import { scrollHint } from './lib/scrollHint';
 
   // the notes open in tabs, over the note (only with two or more): a click brings one to front, the middle button or
-  // its × closes it, the right button pins it or closes the others
+  // its × closes it, the right button pins it or closes the others. A press keeps the keyboard where it was (in the
+  // note): a tab is no place for it, and it fell to <body> on a click of the front tab or a background one's ×
   const label = (id: string) => {
     if (id === CALENDAR) return { title: notes.calendar.name, icon: notes.calendar.icon };
     const n = notes.all.find((x) => x.id === id);
@@ -35,7 +36,8 @@
   {#each tabs.list as t, i (t.id)}
     {@const l = label(t.id)}
     <div class="tab" class:on={t.id === notes.currentId} class:pinned={t.pinned} role="presentation"
-      onauxclick={(e) => { if (e.button === 1) tabs.close(i); }} oncontextmenu={(e) => menu(e, i)}>
+      onauxclick={(e) => { if (e.button === 1) tabs.close(i); }} oncontextmenu={(e) => menu(e, i)}
+      onmousedown={(e) => e.preventDefault()}>
       <button class="pick" role="tab" aria-selected={t.id === notes.currentId} title={l.title} onclick={() => (notes.currentId = t.id)}>
         {#if l.icon}<Icon icon={l.icon} size={14} />{:else if t.pinned}<span class="initial">{[...l.title][0] ?? '·'}</span>{/if}
         {#if !t.pinned}<span class="name">{l.title}</span>{/if}

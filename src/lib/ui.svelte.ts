@@ -109,6 +109,20 @@ class Layers {
   closeAll(reason: CloseReason) {
     for (let l = this.items.at(-1); l; l = this.items.at(-1)) this.shut(l, reason);
   }
+  /** Tab with a modal layer on top goes round its own controls, never out to the list or the note behind it (it
+   *  walked out of the Trash and Version history onto the toolbar and the list's search). True when it turned it. */
+  trapTab(e: KeyboardEvent): boolean {
+    const l = this.items.at(-1), all = l?.modal && l.own ? document.querySelectorAll<HTMLElement>(l.own) : null, box = all?.[all.length - 1];
+    if (e.key !== 'Tab' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || !box) return false;
+    const els = [...box.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])')]
+      .filter((el) => !(el as HTMLButtonElement).disabled && (el.checkVisibility?.() ?? true));
+    if (!els.length) return false;
+    const i = els.indexOf(document.activeElement as HTMLElement);
+    if (i >= 0 && (e.shiftKey ? i > 0 : i < els.length - 1)) return false; // inside it, not at its end: as usual
+    e.preventDefault();
+    els[e.shiftKey ? els.length - 1 : 0].focus();
+    return true;
+  }
   /** an Esc nothing else took: the layer on top closes, if Esc closes it */
   escape(): boolean {
     return !!this.items.at(-1)?.esc && this.closeTop('esc');
@@ -212,7 +226,7 @@ class Ui {
   /** `menu`: the picture's own menu, opened by a click (or right-click) on it as it is shown. Closed, the keyboard
    *  goes back to where it was: the note (or the card) with the picture still selected. */
   viewImage(src: string, alt = '', menu?: (at: { clientX: number; clientY: number }) => void) {
-    this.photoOff ??= this.layers.push({ id: 'photo', close: () => this.closeImage(), esc: true, modal: true, own: '.viewer', phone: true });
+    this.photoOff ??= this.layers.push({ id: 'photo', close: () => this.closeImage(), esc: true, keys: true, modal: true, own: '.viewer', phone: true });
     this.photo = { src, alt, menu };
   }
   closeImage() {
@@ -291,7 +305,7 @@ class Ui {
   /** Settings (App's): it takes nothing from the keyboard's place. Closed however (Esc, ✕, a click beside it), the
    *  keyboard is back where it was — the list's row, the note — unless something has taken it meanwhile. */
   openedSettings(close: () => void) {
-    return this.layers.push({ id: 'settings', close, modal: true, own: '[aria-label="Settings"]', yields: true });
+    return this.layers.push({ id: 'settings', close, keys: true, modal: true, own: '[role="dialog"][aria-label="Settings"]', yields: true });
   }
 
   /** the find bar over the open note (⌘F); closed however, the caret is back in the note */

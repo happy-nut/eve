@@ -502,7 +502,13 @@
     if (sidebarOpen && appearance.s.closeSidebarOnWrite && !ui.card && isWriting(e)) sidebarOpen = false;
     // the right-click menu takes the keyboard while it is up, wherever the focus actually sits; so do a dialog, the
     // emoji picker and a diagram on the whole screen (they take their own Esc)
-    if (ui.layers.grabbing) { if (e.key === 'Escape' && ui.layers.escape()) e.preventDefault(); return; }
+    if (ui.layers.grabbing) {
+      if (e.key === 'Escape' && ui.layers.escape()) e.preventDefault();
+      else if (ui.layers.trapTab(e)) { /* round its own controls */ }
+      // Settings' own key closes it again, the one shortcut that reaches past it
+      else if (settingsOpen && ui.layers.top?.id === 'settings' && shortcuts.match(e, ['app'])?.id === 'settings') { e.preventDefault(); settingsOpen = false; }
+      return;
+    }
     // Escape puts away what is open over the note, the newest first — the find bar, the PDF panel, a floating page (a
     // board's card, a day from the calendar) — and only a bare note lets it through to hide the window. Tied to the
     // key, not to the rebindable action: closing the thing on top is what Escape means everywhere in the app. A page
@@ -561,7 +567,7 @@
         appearance.set({ theme: dark ? 'light' : 'dark' });
         break;
       }
-      case 'newTab': if (!isMobile) { const n = notes.create('', notes.current?.group ?? ''); tabs.open(n.id); ui.focusOwner = 'editor'; } break;
+      case 'newTab': if (!isMobile) { ui.search = ''; const n = notes.create('', notes.current?.group ?? ''); tabs.open(n.id); ui.focusOwner = 'editor'; } break;
       // the last tab: put Eve away, as Esc does (not a pinned one among others: it stays, and so does the window)
       case 'closeTab': if (!isMobile && !tabs.close() && tabs.list.length <= 1) win.hide(); break;
       case 'reopenTab': if (!isMobile) tabs.reopen(); break;
