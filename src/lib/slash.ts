@@ -9,7 +9,7 @@ import { insertDiagram } from './code';
 import { swimlaneStarter } from './diagram';
 import { insertMath } from './math';
 import { insertImage } from './image';
-import { ui } from './ui.svelte';
+import { ui, under } from './ui.svelte';
 import { notes, titleOf } from './notes.svelte';
 import { isCustom } from './icons';
 import { pickImage, pickVideo } from './platform';
@@ -473,7 +473,7 @@ async function moveLine(editor: Editor) {
     pool = pool.filter((n) => titleOf(n).toLowerCase().includes(q)).slice(0, 30);
   }
   const c = editor.view.coordsAtPos(editor.state.selection.from);
-  ui.openMenu({ clientX: Math.round(c.left), clientY: Math.round(c.bottom + 4) }, pool.length
+  ui.openMenu(under(c), pool.length
     ? pool.map((n) => ({ label: titleOf(n), run: () => {
       const { from, to } = lineRange(editor);
       const { state } = editor;

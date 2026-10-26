@@ -2,7 +2,7 @@
   import { tick } from 'svelte';
   import { focusNote } from './lib/popup';
   import { notes } from './lib/notes.svelte';
-  import { plain } from './lib/markdown';
+  import { previewOf } from './lib/markdown';
   import { ui } from './lib/ui.svelte';
   import { dailyId, dayKey, keyOfDaily, monthGrid } from './lib/daily';
   import Icon from './Icon.svelte';
@@ -41,13 +41,11 @@
   const title = $derived(new Date(year, month, 1).toLocaleDateString(undefined, { year: 'numeric', month: 'long' }));
   const weekdays = Array.from({ length: 7 }, (_, i) => new Date(2026, 8, 27 + i).toLocaleDateString(undefined, { weekday: 'short' }));
 
-  /** what a day says, under its title: the first line that has any text */
+  /** what a day says, under its title, as it reads (previewOf, the phone list's): a table's words, a to-do's, a
+   *  callout's — raw lines showed "| Name | Kind |", "[ ] buy milk", "[!tip] A callout"; code and a board, nothing */
   const lines = $derived.by(() => {
     const m = new Map<string, string>();
-    for (const n of notes.daily) {
-      const first = n.body.split('\n').slice(1).map((l) => plain(l).trim()).find((l) => l && l !== '\u00a0');
-      m.set(keyOfDaily(n.id), first ?? '');
-    }
+    for (const n of notes.daily) m.set(keyOfDaily(n.id), previewOf(n.body, 120).replace(/\u00a0/g, ' ').trim());
     return m;
   });
 
@@ -114,7 +112,8 @@
     <input class="name" bind:value={renaming} onblur={rename} spellcheck="false" aria-label="Name"
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); if (e.key === 'Escape') renaming = notes.calendar.name; else rename(); void moveTo(cursor); } }} />
   </div>
-  <!-- the month's buttons keep the grid's arrows: a click on › left the keyboard there, where ⌘→ (its tip) did nothing -->
+  <!-- the month's buttons keep the grid's arrows: after a click on ‹ or › the keyboard is on the day chosen (WebKit gives a
+       clicked button no focus: it went to nothing, and → or ⌘→, its tip, did nothing) -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="bar" onkeydown={(e) => { if (e.key.startsWith('Arrow')) onKey(e); }}>
     <span class="month">{title}</span>
@@ -123,9 +122,9 @@
       <svg viewBox="0 0 16 16"><path d="M4 1.5h5L12.5 5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h3"/></svg>
       Template
     </button>
-    <button class="nav" aria-label="Previous month" data-tip="Previous month" data-keys="Mod-ArrowLeft" onclick={() => moveTo(shiftMonth(-1), false)}><svg viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg></button>
+    <button class="nav" aria-label="Previous month" data-tip="Previous month" data-keys="Mod-ArrowLeft" onclick={() => moveTo(shiftMonth(-1))}><svg viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg></button>
     <button class="today-btn" onclick={() => moveTo(today)}>Today</button>
-    <button class="nav" aria-label="Next month" data-tip="Next month" data-keys="Mod-ArrowRight" onclick={() => moveTo(shiftMonth(1), false)}><svg viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>
+    <button class="nav" aria-label="Next month" data-tip="Next month" data-keys="Mod-ArrowRight" onclick={() => moveTo(shiftMonth(1))}><svg viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button>
   </div>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="grid" bind:this={grid} onkeydown={onKey}>
@@ -174,7 +173,9 @@
   /* no ruled lines: rounded days with air between them */
   .grid {
     flex: 1; min-height: 0; display: grid; gap: 6px;
-    grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: auto repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: auto repeat(6, minmax(64px, 1fr));
+    /* a short window: the weeks scroll, each its full height (held to the window, a day ran over the week under it) */
+    overflow-y: auto;
   }
   .wd { padding: 0 10px 2px; font-size: 11.5px; font-weight: 500; color: var(--fg-dim); letter-spacing: 0.02em; }
   .day {
@@ -203,6 +204,10 @@
   .line {
     font-size: 12px; line-height: 1.4; color: var(--fg-dim); overflow: hidden;
     display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; word-break: break-word;
+  }
+  /* a day too short for three lines: one, cut with an ellipsis, not a line sliced through */
+  @media (max-height: 760px) {
+    .line { -webkit-line-clamp: 1; line-clamp: 1; }
   }
   /* a phone: the month fits the screen, a day shows its number and a line */
   :global(html.mobile) .calendar { padding: 12px 12px 16px; }

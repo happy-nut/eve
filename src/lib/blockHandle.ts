@@ -8,7 +8,7 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey, NodeSelection, Selection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { ui, type MenuItem } from './ui.svelte';
+import { ui, under, type MenuItem } from './ui.svelte';
 
 interface Block { pos: number; node: PMNode; dom: HTMLElement }
 
@@ -165,7 +165,7 @@ class Handle {
     ];
     const r = from.getBoundingClientRect();
     this.hide();
-    ui.openMenu({ clientX: Math.round(r.left), clientY: Math.round(r.bottom + 4) }, items);
+    ui.openMenu(under(r), items);
   }
 
   private dragStart(e: DragEvent) {

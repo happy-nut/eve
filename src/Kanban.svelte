@@ -7,6 +7,7 @@
   import { plain } from './lib/notes.svelte';
   import { ui } from './lib/ui.svelte';
   import { dayKey, fillTemplate } from './lib/daily';
+  import { scrollHint } from './lib/scrollHint';
 
   /**
    * Notion-style board, mounted inside the `kanban` node view. Every change goes out through `commit`
@@ -266,7 +267,8 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="kb-wrap" bind:this={root} onkeydown={onKey} onfocusin={(e) => { last = e.target as HTMLElement; focused = last.dataset.kb ?? null; }} onfocusout={() => (focused = null)}>
-<div class="kb">
+<!-- more board past its edge (a narrow window): that edge fades, as a wide diagram's does -->
+<div class="kb" {@attach scrollHint}>
   {#each view as col (col.id)}
     <div class="kb-col" data-id={col.id} animate:flip={{ duration: 220 }} ondragover={(e) => dragOver(e, col)} ondrop={drop}>
       {#if editing === col.id}

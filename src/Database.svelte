@@ -1,6 +1,6 @@
 <script lang="ts">
   import { notes, titleOf, OWN_KEYS, propName, type Note, type PropValue } from './lib/notes.svelte';
-  import { ui, type MenuItem } from './lib/ui.svelte';
+  import { ui, under, type MenuItem } from './lib/ui.svelte';
   import { previewOf } from './lib/markdown';
   import { isoDay, monthGrid, monthName, sameMonth, shiftMonths, weekdayNames } from './lib/date';
   import { evaluate, type Val } from './lib/formula';
@@ -77,7 +77,15 @@
   }
   const formulaError = (p: PropDef, n: Note) => evaluate(p.expr ?? '', (x) => val(n, x)).error;
 
-  const at = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return { clientX: Math.round(r.left), clientY: Math.round(r.bottom + 4) }; };
+  const at = (el: HTMLElement) => under(el);
+  /** ↩ in a field: what was written is taken (its change), the keyboard stays in the field — blurred, it was on nothing */
+  const enterKeeps = (e: KeyboardEvent) => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    const el = e.currentTarget as HTMLInputElement;
+    el.blur();
+    el.focus();
+    el.select();
+  };
   type Where = { clientX: number; clientY: number };
   /** a menu as a question: what was picked, or null when it was closed */
   function choose<T>(where: Where, items: { label: string; value: T; checked?: boolean; sep?: boolean }[]): Promise<T | null> {
@@ -274,7 +282,7 @@
 <div class="db" role="group" aria-label="Database" onkeydown={undoKey}>
   <div class="db-top">
     <input class="db-title" value={d.title} placeholder="Untitled database" spellcheck="false" aria-label="Database title"
-      onchange={(e) => put({ ...d, title: e.currentTarget.value })} onkeydown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+      onchange={(e) => put({ ...d, title: e.currentTarget.value })} onkeydown={enterKeeps} />
     <div class="views" role="tablist">
       {#each VIEWS as v (v.view)}
         <button role="tab" aria-selected={d.view === v.view} class:on={d.view === v.view} onclick={() => setView(v.view)}>{v.label}</button>
@@ -302,7 +310,7 @@
       <span class="computed" class:err title={err ?? ''}>{err ? '⚠ ' + err : cell(n, p.name)}</span>
     {:else}
       <input type={p.type === 'number' ? 'number' : 'text'} value={shown(v, p.type)} aria-label={p.name} spellcheck="false"
-        onchange={(e) => setCell(n, p, e.currentTarget.value.trim() || null)} onkeydown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+        onchange={(e) => setCell(n, p, e.currentTarget.value.trim() || null)} onkeydown={enterKeeps} />
     {/if}
   {/snippet}
 
@@ -330,12 +338,12 @@
         <tbody>
           {#each shownRows as n (n.id)}
             <tr>
-              <td class="name">
+              <td class="name"><div class="name-row">
                 <input value={titleOf(n)} spellcheck="false" aria-label="Title" {@attach (el) => focusFresh(el as HTMLInputElement, n.id)}
-                  onchange={(e) => retitle(n, e.currentTarget.value)} onkeydown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+                  onchange={(e) => retitle(n, e.currentTarget.value)} onkeydown={enterKeeps} />
                 <button class="open" aria-label="Open" title="Open" onclick={() => open(n)}>↗</button>
                 <button class="more" aria-label="Row menu" onclick={(e) => ui.openMenu(at(e.currentTarget), [{ label: 'Open', run: () => open(n) }, { label: 'Delete row', danger: true, run: () => dropRow(n) }])}>⋯</button>
-              </td>
+              </div></td>
               {#each d.props as p (p.name)}<td>{@render value(n, p)}</td>{/each}
               <td></td>
             </tr>
@@ -349,7 +357,7 @@
       <!-- the rows with no value, only while there are some (Notion's "No Status" too) -->
       {#each columns.filter((c) => c.value || c.rows.length || !groupProp) as col (col.value)}
         <div class="col" role="group" aria-label={col.value || 'No value'} ondragover={(e) => e.preventDefault()} ondrop={(e) => { e.preventDefault(); dropOn(groupProp, col.value); }}>
-          <div class="col-head">{#if col.value}<span class="chip" style:background="var(--tag-{tagColor(col.value)})">{col.value}</span>{:else}No {groupProp?.name ?? 'value'}{/if} <span class="count">{col.rows.length}</span></div>
+          <div class="col-head">{#if col.value}<span class="chip head-chip" style:background="var(--tag-{tagColor(col.value)})">{col.value}</span>{:else}No {groupProp?.name ?? 'value'}{/if} <span class="count">{col.rows.length}</span></div>
           {#each col.rows as n (n.id)}{@render card(n, groupProp)}{/each}
           <button class="new" onclick={() => addRow(groupProp && col.value ? { [groupProp.name]: col.value } : {})}>+ New</button>
         </div>
@@ -388,7 +396,7 @@
     <div class="gallery">
       {#each shownRows as n (n.id)}
         <button class="g-card" onclick={() => open(n)}>
-          <span class="g-preview">{previewOf(n.body, 140)}</span>
+          {#if previewOf(n.body, 140)}<span class="g-preview">{previewOf(n.body, 140)}</span>{/if}
           <span class="card-title">{titleOf(n)}</span>
           {#each d.props.filter((p) => cell(n, p.name)) as p (p.name)}<span class="card-prop">{p.name}: {cell(n, p.name)}</span>{/each}
         </button>
@@ -420,7 +428,9 @@
   td input:not([type='checkbox']) { width: 100%; box-sizing: border-box; font: inherit; border: 0; background: none; color: var(--fg); padding: 5px 8px; outline: none; }
   td input:focus { box-shadow: inset 0 0 0 2px var(--accent-soft); }
   td input[type='checkbox'] { margin: 0 8px; }
-  .name { display: flex; align-items: center; }
+  /* the row of the title and its buttons inside the cell: flex on the cell itself took it out of the table's row
+     layout, and its borders stood a few px off the others' */
+  .name-row { display: flex; align-items: center; }
   .name input { font-weight: 500; }
   .open, .more { flex: none; width: 24px; height: 24px; color: var(--fg-dim); opacity: 0; }
   tr:hover .open, tr:hover .more, .open:focus-visible, .more:focus-visible { opacity: 1; }
@@ -432,7 +442,10 @@
   .new { display: block; padding: 5px 8px; color: var(--fg-dim); margin-top: 2px; }
   .board { display: flex; gap: 10px; overflow-x: auto; align-items: flex-start; padding-bottom: 4px; }
   .col { flex: none; width: 220px; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 8px; background: var(--bg-input); }
-  .col-head { font-weight: 500; padding: 2px 4px; }
+  .col-head { font-weight: 500; padding: 2px 4px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  /* a long choice: one line, cut short, its count still beside it */
+  .head-chip { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .col-head .count { flex: none; }
   .count { background: none; color: var(--fg-dim); }
   .card, .g-card { display: flex; flex-direction: column; gap: 2px; padding: 8px; text-align: left; background: var(--bg); box-shadow: 0 0 0 1px var(--line); }
   .card:hover, .g-card:hover { background: var(--bg-hover); }

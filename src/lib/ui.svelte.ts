@@ -164,29 +164,32 @@ class Ui {
     this.emojiOff?.();
     this.emojiOff = undefined;
   }
-  card = $state<CardReq | null>(null);
-  private cardOff: (() => void) | undefined;
+  /** the floating pages open, the newest on top: a board's card opened from a day's page goes over that page (with
+   *  one slot the card took the day's place, and the page shown stayed the day's: the card never opened) */
+  cards = $state<CardReq[]>([]);
+  private cardOffs: (() => void)[] = [];
+  /** the floating page on top */
+  get card(): CardReq | null { return this.cards.at(-1) ?? null; }
   /** Closed however (Esc, a click outside, a phone's back): the keyboard goes back where it was. Opened by a
    *  click (the template buttons take no focus) it was nowhere, so it goes to the note, or the calendar's day. */
-  private cardLayer() {
-    this.cardOff ??= this.layers.push({ id: 'card', close: () => this.closeCard(), esc: true, own: '.card-page', phone: true });
+  private pushCard(c: CardReq) {
+    this.cards.push(c);
+    this.cardOffs.push(this.layers.push({ id: 'card', close: () => this.closeCard(), esc: true, own: '.card-page', phone: true }));
   }
   /** Open a card as a floating page; resolves when it closes. */
   openCard(c: { title: string; body: string; note?: string }, onChange: CardReq['onChange'], onDelete?: () => void): Promise<void> {
-    this.cardLayer();
-    return new Promise((res) => { this.card = { ...c, onChange, onDelete, resolve: res }; });
+    return new Promise((res) => this.pushCard({ ...c, onChange, onDelete, resolve: res }));
   }
   /** A note's markdown as a floating page (a day from the calendar, the daily template); resolves when it closes. */
   openPage(markdown: string, onMarkdown: (md: string) => void, note?: string): Promise<void> {
-    this.cardLayer();
-    return new Promise((res) => { this.card = { title: '', body: '', markdown, onMarkdown, note, onChange: () => {}, resolve: res }; });
+    return new Promise((res) => this.pushCard({ title: '', body: '', markdown, onMarkdown, note, onChange: () => {}, resolve: res }));
   }
+  /** the page on top closes; the one under it, if any, is the page again */
   closeCard() {
-    if (!this.card) return;
-    this.card.resolve();
-    this.card = null;
-    this.cardOff?.();
-    this.cardOff = undefined;
+    const c = this.cards.pop();
+    if (!c) return;
+    c.resolve();
+    this.cardOffs.pop()?.();
   }
   /** a diagram block filling the screen, to zoom into and edit there (DiagramBlock.svelte): how to put it back */
   diagramView = $state<(() => void) | null>(null);
@@ -241,10 +244,10 @@ class Ui {
 
   /** every menu (a right click, the list's "+", a code block's language) at a point; the app draws its own
    *  everywhere, the webview's is suppressed. Menu.svelte draws it: a popup on the Mac, a sheet on a phone. */
-  menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  menu = $state<{ x: number; y: number; from?: Edge; items: MenuItem[] } | null>(null);
   private menuOff: (() => void) | undefined;
   private menuClosed: (() => void) | undefined;
-  openMenu(at: { clientX: number; clientY: number }, items: MenuItem[], onclose?: () => void) {
+  openMenu(at: { clientX: number; clientY: number; from?: Edge }, items: MenuItem[], onclose?: () => void) {
     this.menuClosed?.();
     this.menuClosed = onclose;
     // dismissed or picked: whatever had the keyboard gets it back (a picked item may take it again). One opened over
@@ -260,7 +263,7 @@ class Ui {
       shown.push({ ...i, sep: sep && shown.length > 0 });
       sep = false;
     }
-    this.menu = { x: at.clientX, y: at.clientY, items: shown };
+    this.menu = { x: at.clientX, y: at.clientY, from: at.from, items: shown };
   }
   closeMenu() {
     this.menu = null;
@@ -392,6 +395,18 @@ class Ui {
 
   /** what is typed in the list's search box: the list shows only what it finds while there is any */
   search = $state('');
+}
+
+/** a box on screen (a DOMRect, a caret's coordsAtPos) */
+type Edge = { left: number; right: number; top: number; bottom: number };
+/**
+ * Where a menu opened from a button (or the caret) goes: under it, or over it when there is no room under it. Given
+ * only the point under it, a menu turned upwards was drawn up from that point and lay over the button it came from
+ * (a database's column, its + and its tags, near the window's foot).
+ */
+export function under(el: Element | Edge): { clientX: number; clientY: number; from: Edge } {
+  const r = el instanceof Element ? el.getBoundingClientRect() : el;
+  return { clientX: Math.round(r.left), clientY: Math.round(r.bottom + 4), from: { left: r.left, right: r.right, top: r.top, bottom: r.bottom } };
 }
 
 export const ui = new Ui();

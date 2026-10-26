@@ -1081,3 +1081,9 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
 .tbl-drop { position: absolute; z-index: var(--z-block-ui); display: none; pointer-events: none; border-radius: 2px; background: var(--accent); box-shadow: var(--glow); }
 .tbl-drop.on { display: block; }
 @media print { .tbl-grip, .tbl-add, .tbl-drop { display: none !important; } }
+/* the block's + / ⋮⋮ and the outline rail share the margin left of the text (a day's or a card's page, a narrow
+   window): while the handle is up, over the words, the rail steps aside; off the words, it is back */
+:has(.block-handle.on) ~ .outline { opacity: 0; pointer-events: none; transition: opacity 0.12s; }
+/* a board of the note's own is as wide as its columns need, up to --wide, centred on the text as a table is: held to
+   the column, a new board's third column was cut off at an 800-wide window, its + out of sight */
+.editor .tiptap > .kanban { position: relative; width: max-content; min-width: 100%; max-width: max(100%, var(--wide)); left: 50%; translate: -50% 0; }

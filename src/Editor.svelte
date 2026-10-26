@@ -8,7 +8,7 @@
   import { notes, titleOf, type Note } from './lib/notes.svelte';
   import { appearance } from './lib/appearance.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
-  import { ui, hooks } from './lib/ui.svelte';
+  import { ui, under, hooks } from './lib/ui.svelte';
   import Icon from './Icon.svelte';
   import { groups, leafOf } from './lib/groups.svelte';
   import Suggest from './Suggest.svelte';
@@ -131,8 +131,7 @@
 
   /** A cover's choices (Notion's): one of the gradients, a picture of one's own, or none */
   function coverMenu(at: HTMLElement) {
-    const r = at.getBoundingClientRect();
-    ui.openMenu({ clientX: Math.round(r.left), clientY: Math.round(r.bottom + 4) }, [
+    ui.openMenu(under(at), [
       ...Object.entries(GRADIENTS).map(([k, g]) => ({
         label: g.label, swatch: g.css, checked: note.cover === gradientCover(k), run: () => notes.setLook(note.id, { cover: gradientCover(k) }),
       })),
@@ -195,9 +194,8 @@
   // the notes that link here (Notion's backlinks): a count over the title, a menu of them on a click
   const backlinks = $derived(notes.linksTo(note.id));
   function showBacklinks(at: HTMLElement) {
-    const r = at.getBoundingClientRect();
     const short = (t: string) => (t.length > 60 ? t.slice(0, 59) + '…' : t);
-    ui.openMenu({ clientX: Math.round(r.left), clientY: Math.round(r.bottom + 4) }, backlinks.map(({ note: n, line }) => ({
+    ui.openMenu(under(at), backlinks.map(({ note: n, line }) => ({
       label: line && line !== titleOf(n) ? `${short(titleOf(n))} — ${short(line)}` : short(titleOf(n)),
       run: () => { notes.flush(note.id); notes.currentId = n.id; },
     })));

@@ -12,7 +12,7 @@
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { typedIn } from './lib/hangul';
   import { sync } from './lib/sync.svelte';
-  import { ui, hooks, type MenuItem } from './lib/ui.svelte';
+  import { ui, under, hooks, type MenuItem } from './lib/ui.svelte';
   import { composing } from './lib/keys';
   import { importFromFinder, importFromFolder } from './lib/transfer';
   import Icon from './Icon.svelte';
@@ -116,7 +116,7 @@
     const n = row ? notes.all.find((x) => x.id === row.dataset.note) : notes.current;
     ctxNote = n && n.id !== CALENDAR_NOTE_ID && !n.deleted ? n : null;
     ctxGroup = row?.dataset.group ?? n?.group ?? '';
-    ui.openMenu(r ? { clientX: r.left + (row && !anchor ? 8 : 0), clientY: r.bottom + 4 } : { clientX: 12, clientY: 40 }, plusItems);
+    ui.openMenu(r ? { ...under(r), clientX: Math.round(r.left + (row && !anchor ? 8 : 0)) } : { clientX: 12, clientY: 40 }, plusItems);
   };
   /** Import / export. A failed export says so instead of doing nothing at all. */
   async function transfer(run: () => Promise<unknown>) {

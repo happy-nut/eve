@@ -3,7 +3,7 @@ import { textblockTypeInputRule, type Editor } from '@tiptap/core';
 import { NodeSelection, Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
-import { ui } from './ui.svelte';
+import { ui, under } from './ui.svelte';
 import { composing } from './keys';
 import { isMobile } from './platform';
 import { starter, toCode, type Diagram, type Kind } from './diagram';
@@ -555,7 +555,7 @@ export const CodeBlock = CodeBlockBase.extend({
         const items = LANGUAGES.some(([v]) => v === current) ? LANGUAGES : [...LANGUAGES, [current, current] as [string, string]];
         const r = chip.getBoundingClientRect();
         chip.classList.add('open'); // the chip is hover-only, but must stay while its menu is up
-        ui.openMenu({ clientX: r.left, clientY: r.bottom + 4 },
+        ui.openMenu(under(r),
           items.map(([value, label]) => ({ label, checked: value === current, run: () => setLanguage(value) })),
           () => chip.classList.remove('open'));
       });

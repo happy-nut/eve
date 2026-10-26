@@ -673,9 +673,9 @@
 {#if settingsOpen}
   {#await import('./Settings.svelte') then { default: Settings }}<Settings onClose={() => (settingsOpen = false)} {hotkeyError} />{/await}
 {/if}
-{#if ui.card}
-  {#await import('./CardPage.svelte') then { default: CardPage }}<CardPage />{/await}
-{/if}
+{#each ui.cards as req (req)}
+  {#await import('./CardPage.svelte') then { default: CardPage }}<CardPage {req} />{/await}
+{/each}
 {#if ui.photo}<ImageViewer />{/if}
 {#if ui.pdf}
   {#await import('./PdfViewer.svelte') then { default: PdfViewer }}<PdfViewer />{/await}

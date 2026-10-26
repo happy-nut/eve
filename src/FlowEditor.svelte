@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
   import { freshId, type Flowchart, type Line, type Shape } from './lib/diagram';
-  import { ui } from './lib/ui.svelte';
+  import { ui, under } from './lib/ui.svelte';
   import { letGo } from './lib/focusWatch';
   import { claimKeys, composing } from './lib/keys';
   import { isMobile } from './lib/platform';
@@ -286,7 +286,7 @@
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const n = flow.nodes.find((x) => x.id === nodeId);
     if (!n) return;
-    ui.openMenu({ clientX: r.left, clientY: r.bottom + 4 }, [
+    ui.openMenu(under(r), [
       { label: 'Move to lane', disabled: true }, // a phone's sheet said nothing of what its names were for
       ...(flow.lanes ?? []).map((l) => ({ label: l.label, checked: n.lane === l.id, run: () => { n.lane = l.id; } })),
     ]);

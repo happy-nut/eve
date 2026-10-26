@@ -10,7 +10,7 @@ import type { EditorView } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { CellSelection, TableMap, deleteCellSelection, moveTableColumn, moveTableRow } from '@tiptap/pm/tables';
 import type { Editor } from '@tiptap/core';
-import { ui, type MenuItem } from './ui.svelte';
+import { ui, under, type MenuItem } from './ui.svelte';
 
 /** the table at `pos` (its node, its map) */
 function tableAt(doc: PMNode, pos: number) {
@@ -234,7 +234,7 @@ class Handles {
       ];
     const r = (what === 'row' ? this.rowGrip : this.colGrip).getBoundingClientRect();
     this.hide();
-    ui.openMenu({ clientX: Math.round(r.left), clientY: Math.round(r.bottom + 4) }, items);
+    ui.openMenu(under(r), items);
   }
 
   update(view: EditorView, prev: { doc: PMNode }) {
