@@ -203,3 +203,12 @@ describe('an empty block the caret is in says what it is', () => {
     expect((ed.view.dom.querySelector(`${sel}.is-empty`) as HTMLElement | null)?.dataset.placeholder).toBe(says);
   });
 });
+
+test('a callout\'s title made a to-do: the callout has no title, as saved (the note open was not the note read back)', async () => {
+  const { runEditorCommand } = await import('./editor');
+  const ed = editorWith('> [!note] Callout head\n> body');
+  ed.commands.setTextSelection(posOf(ed, 'head', true));
+  runEditorCommand(ed, 'taskList');
+  const saved = md(ed);
+  expect(editorWith(saved).getJSON().content![0]).toEqual(ed.getJSON().content![0]);
+});

@@ -537,9 +537,14 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     slash: () => {
       const { $from } = editor.state.selection;
       // a toggle's title holds text only: no / menu opens there, so no "/" is left behind either
-      if ($from.parent.type.name === 'detailsSummary') return false;
-      const before = $from.parent.textBetween(Math.max(0, $from.parentOffset - 1), $from.parentOffset, undefined, '\ufffc');
-      return c().insertContent(before && !/\s/.test(before) ? ' /' : '/').run();
+      // nor in code, where it was typed into the code ("le /t a = 1") and no menu came
+      if ($from.parent.type.name === 'detailsSummary' || $from.parent.type.spec.code) return false;
+      // inside a word: at its end, not between its letters ("hel /lo" cut the word in two for good)
+      const rest = $from.parent.textBetween($from.parentOffset, $from.parent.content.size, undefined, '\ufffc');
+      const word = /^\S*/.exec(rest)![0].length;
+      const at = $from.pos + word;
+      const before = $from.parent.textBetween(Math.max(0, $from.parentOffset + word - 1), $from.parentOffset + word, undefined, '\ufffc');
+      return c().setTextSelection(at).insertContent(before && !/\s/.test(before) ? ' /' : '/').run();
     },
     callout: () => c().toggleWrap('callout').run(),
     math: () => (insertMath(editor, false), true),

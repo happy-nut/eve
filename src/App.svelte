@@ -233,10 +233,16 @@
     // a swipe is quick: a finger held first is a long press choosing text, and text selected when it
     // lifts means the drag was choosing it (or pulling a handle)
     if (held > 600 || !getSelection()?.isCollapsed) return;
-    if (dx > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) {
-      (document.activeElement as HTMLElement | null)?.blur(); // the keyboard goes with the note
-      sidebarOpen = true;
-    }
+    if (dx > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) toList();
+  }
+  /** A phone's way back to the list (a swipe, back): the keyboard goes with the note, and a new note left unwritten
+   *  goes too (+, then a swipe left an "Untitled" row behind; back did not) */
+  function toList() {
+    // the native back key leaves the focus where it was: the note kept its caret behind the list, and with it the
+    // "/" menu and a table's tools, drawn over the list. They go when the note lets go of the keyboard
+    (document.activeElement as HTMLElement | null)?.blur();
+    notes.letGo(); // a new note left unwritten is no row in the list to come back to
+    sidebarOpen = true;
   }
 
   /** A phone's note bar: ⋯ (find & replace, select all, export to the share sheet), a widget of this note on the home screen, delete. */
@@ -343,13 +349,7 @@
     else if (hooks.diagramBack) hooks.diagramBack(); // a diagram being edited: a step out of it, not out of the note
     else if (sidebarOpen && ui.search) ui.search = ''; // the list cut down to a search: back shows all of it, before leaving
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
-    else {
-      // the native back key leaves the focus where it was: the note kept its caret behind the list, and with it the
-      // "/" menu and a table's tools, drawn over the list. They go when the note lets go of the keyboard, as a swipe does
-      (document.activeElement as HTMLElement | null)?.blur();
-      notes.letGo(); // a new note left unwritten (+, then back) is no row in the list to come back to
-      sidebarOpen = true;
-    }
+    else toList();
   }
   // another note brought up (a link, the widget, a reminder, ⌘1–9, ⌘N, back/forward): a diagram shown full
   // screen was the last one's, and so was a board's card or a day floating over it. A card left up wrote into

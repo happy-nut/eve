@@ -492,6 +492,9 @@
   .pens input[type='color'] { width: 26px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 7px; background: none; cursor: pointer; }
   /* a phone: pens and their Reset a finger's size */
   :global(html.mobile) .pens { gap: 10px; }
+  /* a phone: the pens on a line of their own under what they are (beside them, the words were one to a line) */
+  :global(html.mobile) .row:has(> .pens) { flex-wrap: wrap; row-gap: 10px; }
+  :global(html.mobile) .row:has(> .pens) > .label { flex-basis: 100%; }
   :global(html.mobile) .pens input[type='color'] { width: 40px; height: 40px; }
   :global(html.mobile) .pens .link { min-height: 40px; padding: 0 10px; }
   .pens input[type='color']::-webkit-color-swatch-wrapper { padding: 2px; }

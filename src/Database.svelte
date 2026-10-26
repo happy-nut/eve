@@ -486,6 +486,8 @@
   .day-head { display: flex; justify-content: space-between; align-items: center; font-size: 0.85em; }
   .day-add { width: 18px; height: 18px; line-height: 1; color: var(--fg-dim); opacity: 0; }
   .day:hover .day-add, .day-add:focus-visible { opacity: 1; }
+  /* a phone has no hover: there they are always there, a finger's size (a row could not be opened or deleted) */
+  :global(html.mobile) .db .open, :global(html.mobile) .db .more, :global(html.mobile) .db .day-add { opacity: 1; width: 36px; height: 36px; }
   .day-row { text-align: left; padding: 2px 5px; border-radius: 4px; background: var(--bg-input); color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.88em; }
   .day-row:hover { background: var(--bg-active); }
   .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }

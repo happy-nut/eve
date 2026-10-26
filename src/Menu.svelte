@@ -63,7 +63,7 @@
     <ul class="items" role="menu">
       {#each req.items as it, i (i)}
         <li role="none" class:sep={it.sep}>
-          <button role="menuitem" class:danger={it.danger} class:on={it.checked} disabled={it.disabled} onclick={() => pick(it)}>{#if it.swatch}<span class="swatch" style:background={it.swatch}></span>{/if}{it.label}{#if it.checked}{@render check()}{/if}</button>
+          <button role="menuitem" class:danger={it.danger} class:on={it.checked} disabled={it.disabled} onclick={() => pick(it)}>{#if it.swatch}<span class="swatch" style:background={it.swatch}></span>{/if}<span class="lbl">{it.label}</span>{#if it.checked}{@render check()}{/if}</button>
         </li>
       {/each}
     </ul>
@@ -95,7 +95,9 @@
   .items button:active { background: var(--bg-active); }
   .items button:disabled { color: var(--fg-dim); }
   .items button.danger { color: #ff453a; }
-  .items button { display: flex; align-items: center; justify-content: space-between; }
+  .items button { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  /* the name next to its swatch, the check at the end (pushed apart, a pen's colour sat at one edge, its name at the other) */
+  .items .lbl { flex: 1; text-align: left; }
   .items button.on { font-weight: 600; }
   .check { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--accent-text); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .items .check { width: 20px; height: 20px; }

@@ -509,7 +509,7 @@
     return { duration: 240, easing: cubicOut, css: (t: number) => `transform: translateX(${(t - 1) * 100}%)` };
   }
   function pullStart(e: TouchEvent) {
-    if (!isMobile || !notes.current || e.touches.length !== 1) return;
+    if (!isMobile || !(notes.current || notes.currentId === CALENDAR) || e.touches.length !== 1) return; // (the calendar is a page to go back to too)
     if ((e.target as HTMLElement).closest('input, .fab, .menu')) return;
     touch = { x: e.touches[0].clientX, y: e.touches[0].clientY, axis: '' };
   }
