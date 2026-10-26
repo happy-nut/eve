@@ -342,6 +342,8 @@
   /* a phone has no hover: an unseen button above the title took a tap there and gave the note a random icon */
   :global(html.mobile) .add-icon { opacity: 1; }
   .add-icon:hover { background: var(--bg-hover); color: var(--fg); }
+  /* the keyboard on them: the app's own soft ring, as the list's rows have (WebKit's blue ring cut through the emoji) */
+  .add-icon:focus-visible, .big-icon:focus-visible { outline: none; background: var(--bg-hover); box-shadow: 0 0 0 2px var(--accent-soft); }
   .big-icon {
     border: 0; background: none; font-size: 56px; line-height: 1; padding: 4px; margin-left: -4px; border-radius: 10px;
     transition: background 0.12s, transform 0.12s;

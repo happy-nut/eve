@@ -419,7 +419,8 @@ main.tabbed .page-head.with-icon { height: 98px !important; }
 .tiptap p { margin: 0; }
 /* 700, not 600: the Korean face only steps up at Bold, and 600 reads the same as the text around it */
 .tiptap strong { font-weight: 700; }
-.tiptap > :first-child.is-empty::before, .tiptap > p.is-empty:nth-child(2):last-child::before {
+.tiptap > :first-child.is-empty::before, .tiptap > p.is-empty:nth-child(2):last-child::before,
+.tiptap :is(h1, h2, h3, h4, h5, h6, summary, li p, blockquote > p).is-empty::before {
   content: attr(data-placeholder);
   color: var(--fg-dim);
   float: left; height: 0; pointer-events: none;
@@ -430,9 +431,9 @@ main.tabbed .page-head.with-icon { height: 98px !important; }
   font-size: 2.5em; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; margin-top: 0; color: var(--fg); text-transform: none;
 }
 html.mobile .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5):first-child { font-size: 2em; }
-.tiptap ul, .tiptap ol { padding-left: 1.4em; margin: 0; list-style: none; }
-/* a number needs more room than a bullet: "10." hung out of the column (and touched a quote's bar) */
-.tiptap ol { padding-left: 1.75em; }
+/* every list's words start at one place, as Notion's do: a bullet's at 1.4em began left of a number's and a to-do's,
+   one step in further for each level ("10." needs this much: it hung out of the column at less) */
+.tiptap ul, .tiptap ol { padding-left: 1.75em; margin: 0; list-style: none; }
 .tiptap li > p { margin: 0; }
 .tiptap li { margin: 0.15em 0; position: relative; }
 /* markers drawn by an absolutely positioned ::before instead of ::marker: an outside marker sits in the line box,
@@ -450,7 +451,7 @@ html.mobile .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5):first-child { 
 .tiptap ol ol ol ol ol ol ol > li::before { content: counter(list-item) '.'; }
 .tiptap ol ol ol ol ol ol ol ol > li::before { content: counter(list-item, lower-alpha) '.'; }
 .tiptap ol ol ol ol ol ol ol ol ol > li::before { content: counter(list-item, lower-roman) '.'; }
-.tiptap ul > li::before { content: '•'; }
+.tiptap ul > li::before { content: '•'; right: 100%; width: 1.75em; text-align: center; } /* the dot in the middle of its room, as Notion's */
 .tiptap ul[data-type='taskList'] { padding-left: 0.2em; }
 .tiptap ul[data-type='taskList'] > li::before { content: none; }
 .tiptap ul[data-type='taskList'] li { display: flex; gap: 8px; align-items: flex-start; }
@@ -823,7 +824,9 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 .tiptap.resize-cursor { cursor: col-resize; }
 /* find: every match tinted, the one in view stronger */
 .tiptap .find-hit { background: light-dark(rgba(255, 214, 0, 0.35), rgba(255, 214, 0, 0.25)); border-radius: 2px; }
-.tiptap .find-hit.current { background: light-dark(rgba(255, 176, 0, 0.75), rgba(255, 196, 0, 0.5)); }
+/* the one in view, solid, its words dark on it in both themes (at half a yellow under light words it read 3.6:1, and
+   looked like the rest) */
+.tiptap .find-hit.current { background: light-dark(rgba(255, 176, 0, 0.75), #f5b800); color: light-dark(var(--fg), #1f2328); }
 /* image */
 .tiptap img { max-width: 100%; border-radius: 8px; display: block; margin: 0.6em 0; }
 .tiptap img.ProseMirror-selectednode { outline: 2px solid var(--accent); box-shadow: var(--glow); }

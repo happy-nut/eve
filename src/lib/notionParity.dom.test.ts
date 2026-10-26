@@ -190,3 +190,16 @@ test('⌘Z right after "---" made a divider gives back the dashes typed', () => 
   expect(saved(ed)).toContain('---');
   expect(kinds(ed)).not.toContain('horizontalRule');
 });
+
+describe('an empty block the caret is in says what it is', () => {
+  test.each([
+    ['# T\n\n## \n\nx', 'h2', 'Heading 2'], ['# T\n\n- \n\nx', 'li p', 'List'], ['# T\n\n- [ ] \n\nx', 'li p', 'To-do'],
+    ['# T\n\n> \n\nx', 'blockquote p', 'Empty quote'], ['# T\n\n<details open><summary></summary>\n\nb\n\n</details>\n\nx', 'summary', 'Toggle'],
+  ])('%s', (note, sel, says) => {
+    const ed = editorWith(note);
+    let at = -1;
+    ed.state.doc.descendants((n, p) => { if (at < 0 && p > 2 && n.isTextblock && !n.textContent) at = p + 1; });
+    ed.commands.setTextSelection(at);
+    expect((ed.view.dom.querySelector(`${sel}.is-empty`) as HTMLElement | null)?.dataset.placeholder).toBe(says);
+  });
+});

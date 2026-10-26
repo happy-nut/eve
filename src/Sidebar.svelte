@@ -811,18 +811,19 @@
     background: var(--accent); box-shadow: var(--glow); pointer-events: none; z-index: var(--z-raised);
   }
   .row.drop-after::after { top: auto; bottom: -1px; }
-  .note-row { display: flex; align-items: center; }
+  /* the row's hover and its open mark span it whole, its + / × too: on the button alone they stopped short of them */
+  .note-row { display: flex; align-items: center; border-radius: 6px; transition: background 0.12s; }
   .note-row > button:first-child {
     flex: 1; min-width: 0; text-align: left; border: 0; background: none; color: inherit; font: inherit;
     padding: 5px 6px; border-radius: 6px; display: flex; flex-direction: column;
     cursor: default; transition: background 0.12s, transform 0.12s;
   }
-  :global(html[data-hover]) .note-row > button:first-child:hover { background: var(--bg-hover); }
+  :global(html[data-hover]) .note-row:hover { background: var(--bg-hover); }
   .note-row > button:first-child:active { transform: scale(0.985); }
-  .note-row > button.active { background: var(--bg-active); }
+  .note-row:has(> button.active) { background: var(--bg-active); }
   /* the match ↩ in the search box opens: the keyboard's colour, lighter, as it is not on the row itself */
   .note-row > button.enter { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-  .note-row > button.active.enter { background: color-mix(in srgb, var(--accent) 12%, var(--bg-active)); }
+  .note-row > button.active.enter { background: color-mix(in srgb, var(--accent) 12%, transparent); } /* (over the row's own) */
   /* Keyboard cursor: the row's own background, and it appears at once. The rows fade their background
      over 0.12s, which a held arrow key never gives them — focus moved on before the colour arrived, so
      the list looked unmarked while scrolling through it. A group row had no focus colour at all. */

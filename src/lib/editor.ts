@@ -1421,6 +1421,11 @@ export function createEditor(opts: {
               state.doc.nodesBetween(from, to, (node, pos) => {
                 if (node.isText) return false;
                 const whole = pos >= from && pos + node.nodeSize <= to;
+                // a diagram is drawn, its code hidden: it takes the overlay as a picture does (nothing showed it chosen)
+                if (node.type.name === 'codeBlock' && node.attrs.language === 'mermaid') {
+                  if (whole) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: 'in-sel' }));
+                  return false;
+                }
                 if (node.isAtom) {
                   // a [[link]] or a date in the line takes the text's colour; a block (picture, card…) the overlay
                   if (whole) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: node.isBlock ? 'in-sel' : 'pm-sel' }));
@@ -1739,7 +1744,20 @@ export function createEditor(opts: {
       }).configure({ nested: true }),
       // a phone's bar does the formatting; the markdown hint is for a keyboard
       // the first line is the page's title (drawn as one, app.css): empty, it says so; the line under it, what can be typed
-      Placeholder.configure({ placeholder: ({ pos }) => (pos === 0 ? 'Untitled' : isMobile ? 'Start writing…' : 'Start typing… # heading, - list, [[ link') }),
+      // …and an empty block the caret is in says what it is, as Notion's do (an empty heading was a blank 29px line)
+      Placeholder.configure({
+        includeChildren: true,
+        placeholder: ({ editor: ed, node, pos }) => {
+          if (pos === 0) return 'Untitled';
+          if (node.type.name === 'heading') return `Heading ${node.attrs.level}`;
+          if (node.type.name === 'detailsSummary') return 'Toggle';
+          const around = ed.state.doc.resolve(pos).parent.type.name;
+          if (around === 'taskItem') return 'To-do';
+          if (around === 'listItem') return 'List';
+          if (around === 'blockquote') return 'Empty quote';
+          return isMobile ? 'Start writing…' : 'Start typing… # heading, - list, [[ link';
+        },
+      }),
       Markdown.configure({ html: true, transformPastedText: true, transformCopiedText: true, linkify: true, breaks: false }),
       // ahead of the picker's own plugin, which reads where the "[[" was typed in the same transaction
       Extension.create({ name: 'wikiTyped', priority: 1000, addProseMirrorPlugins: () => [wikiTyped] }),
