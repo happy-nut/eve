@@ -251,5 +251,7 @@ describe('a cell holds lines and pictures only: what a markdown cell can keep', 
       expect(md(ed)).toContain('cell one');
       expect(md(editorWith(md(ed)))).toBe(md(ed));
     }
+    // off the page now: the formula's editor loads MathLive after this, and finds its place gone (jsdom can't run it)
+    document.body.innerHTML = '';
   });
 });
