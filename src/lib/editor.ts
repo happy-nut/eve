@@ -33,6 +33,7 @@ import { Video } from './video';
 import { TableNodes, cellEnter, clearForPaste, upAboveTable } from './table';
 import { Find } from './find';
 import { SelectionLayer } from './selectionLayer';
+import { BlockHandle } from './blockHandle';
 import { ClickTarget } from './clickTarget';
 import { Divider } from './divider';
 import { MathBlock, MathInline, Text, insertMath } from './math';
@@ -1277,6 +1278,8 @@ export function createEditor(opts: {
       // (the colour laid over it), a [[link]] or date in it, an empty line it runs through.
       SelectionLayer,
       ClickTarget,
+      // + and ⋮⋮ beside the block under the pointer: a Mac's, a phone has no pointer to bring them up
+      ...(isMobile ? [] : [BlockHandle.configure({ run: (id) => runEditorCommand(editor, id) })]),
       Extension.create({
         name: 'paintSelection',
         addProseMirrorPlugins: () => [new Plugin({
