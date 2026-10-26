@@ -113,10 +113,21 @@ class Handle {
     this.el.style.top = `${Math.round(mid - host.top - 12)}px`;
     // left of the block itself where it reaches past the text (a wide table, code), not over its first cells
     const edge = Math.min(column, b.dom.getBoundingClientRect().left);
-    this.el.style.left = `${Math.max(2, Math.round(edge - host.left - 46))}px`;
+    // as far left as what can be seen of the page goes, not the editor's own box: a day's or a card's page has its
+    // room for the handle in the padding around the editor, and held to the editor's box the handle sat on the words
+    this.el.style.left = `${Math.round(Math.max(this.seen() + 2, edge - 46) - host.left)}px`;
     this.el.classList.add('on');
   }
   hide() { this.cur = null; this.el.classList.remove('on'); }
+
+  /** where what can be seen of the page begins on the left: the box the note scrolls in (or clips it) */
+  private seen(): number {
+    for (let el: HTMLElement | null = this.host; el; el = el.parentElement) {
+      const cs = getComputedStyle(el);
+      if (/(auto|scroll|hidden|clip)/.test(cs.overflowX)) return el.getBoundingClientRect().left;
+    }
+    return 0;
+  }
 
   /** a new line under the block (or over it), the / menu open on it; an empty line is used as it is */
   private add(above: boolean) {
