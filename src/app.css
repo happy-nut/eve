@@ -1013,6 +1013,16 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
 .tiptap sup.fnref { color: var(--accent-text); font-size: 0.72em; padding: 0 1px; cursor: pointer; }
 .tiptap p.fndef { font-size: 0.86em; color: var(--fg-dim); margin: 0.2em 0; }
 
+/* the / menu's Table of contents (html.ts): the note's headings, each a link to it, Notion's quiet list */
+.tiptap .toc { display: flex; flex-direction: column; margin: 0.4em 0; padding: 4px 0; }
+.tiptap .toc a {
+  color: var(--fg-dim); text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 2px; padding-top: 3px; padding-bottom: 3px; cursor: pointer; border-radius: 4px;
+}
+.tiptap .toc a:hover { color: var(--fg); background: var(--bg-hover); }
+.tiptap .toc .toc-empty { color: var(--fg-dim); }
+.tiptap .toc.ProseMirror-selectednode { outline: 2px solid var(--accent-soft); border-radius: 6px; }
+
 /* + and ⋮⋮ beside the block under the pointer (blockHandle.ts), in the margin left of the text */
 .editor:has(> .block-handle) { position: relative; }
 .block-handle {

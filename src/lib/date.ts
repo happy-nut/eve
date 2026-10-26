@@ -53,6 +53,36 @@ export function typedDay(text: string): string | null {
   return daysFrom(iso, new Date(+m[1], +m[2] - 1, +m[3])) === null ? null : iso;
 }
 
+const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const KO_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+/**
+ * A day said in words, as Notion's @ takes it: `wednesday` (the coming one), `next wednesday` (next week's),
+ * `next week` (next Monday), `in 3 days`, `in 2 weeks`, and the Korean `수요일`, `다음 주 수요일`, `다음 주`,
+ * `3일 후`. A weekday may be its first three letters (`wed`). Null for anything else.
+ */
+export function spokenDay(text: string, now: Date = new Date()): string | null {
+  const q = text.trim().toLowerCase().replace(/\s+/g, ' ');
+  const weekday = (w: string) => {
+    const en = w.length >= 3 ? WEEKDAYS.findIndex((d) => d.startsWith(w)) : -1;
+    const ko = /^([일월화수목금토])(요일)?$/.exec(w);
+    return en >= 0 ? en : ko ? KO_WEEKDAYS.indexOf(ko[1]) : -1;
+  };
+  const today = now.getDay();
+  const ahead = (n: number) => dayFrom(n, now);
+  let m = /^in (\d{1,3}) (day|days|week|weeks)$/.exec(q) ?? /^(\d{1,3}) ?(일|주) ?(후|뒤)$/.exec(q);
+  if (m) return ahead(+m[1] * (/^(week|weeks|주)$/.test(m[2]) ? 7 : 1));
+  if (q === 'next week' || q === '다음 주' || q === '다음주') return ahead(((8 - today) % 7) || 7);
+  m = /^(?:next |다음 ?주 )(.+)$/.exec(q);
+  if (m) {
+    const d = weekday(m[1]);
+    // the day of next week: next Monday, and that many days on from it
+    if (d >= 0) return ahead((((8 - today) % 7) || 7) + ((d + 6) % 7));
+  }
+  const d = weekday(q);
+  if (d >= 0) return ahead(((d - today + 7) % 7) || 7);
+  return null;
+}
+
 /**
  * The days the `@` picker offers, narrowed by what has been typed so far. `exact`: what was typed names that day
  * in full (`today`, `오늘`, `2026-09-24`), not just the start of it.
@@ -70,6 +100,8 @@ export function dayChoices(query: string, now: Date = new Date(), locale?: strin
     // a Korean machine, where nothing else on screen is English), or the date being typed out. From the start of a
     // word only: "cc @a" found the "a" inside "today" and the calendar came up over a name
     .filter((d) => !q || d.label.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)) || d.alias.startsWith(q) || d.iso.startsWith(q));
+  const said = spokenDay(q, now);
+  if (said && !days.some((d) => d.iso === said)) days.unshift({ iso: said, label: dateLabel(said, now, locale), alias: q });
   const out = days.map(({ iso, label, alias }) => ({ iso, label, exact: q === alias || q === label.toLowerCase() || q === iso }));
   if (typed && !out.some((d) => d.iso === typed)) out.unshift({ iso: typed, label: dateLabel(typed, now, locale), exact: true });
   else if (typed) for (const d of out) if (d.iso === typed) d.exact = true;

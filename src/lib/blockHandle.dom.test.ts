@@ -30,3 +30,10 @@ test('…and above, and let go on itself or right beside itself it stays', () =>
   expect(moveBlockTo(ed.state, a, a)).toBeNull();
   expect(moveBlockTo(ed.state, a, a + size)).toBeNull();
 });
+
+test('let go with ⌥ held, a copy goes there and the block stays', () => {
+  ed = editorWith('# Title\n\nfirst\n\nsecond\n');
+  const [, first, second] = starts(ed);
+  ed.view.dispatch(moveBlockTo(ed.state, first, second + ed.state.doc.nodeAt(second)!.nodeSize, true)!);
+  expect(md(ed).trimEnd()).toBe('# Title\n\nfirst\n\nsecond\n\nfirst');
+});

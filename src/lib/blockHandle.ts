@@ -1,7 +1,7 @@
 /**
  * The handle beside a block (Notion's + and ⋮⋮), on a Mac, under the pointer: + opens the / menu on a new line under
  * the block (⌥-click: above it), ⋮⋮ opens the block's menu (delete, duplicate, move, turn into) or, dragged, carries
- * the block to another place in the note. Every change is one transaction, so one ⌘Z takes it back. The title (the
+ * the block to another place in the note (⌥ held: a copy of it). Every change is one transaction, so one ⌘Z takes it back. The title (the
  * note's first line) has none: it is the page's name, not a block to move.
  */
 import { Extension } from '@tiptap/core';
@@ -22,13 +22,14 @@ const TURN: [kind: string, label: string][] = [
  *  (ponytail: a list or a quote turned into another kind as Notion does needs an unwrap first; add when asked for) */
 const kindOf = (n: PMNode) => (n.type.name === 'paragraph' ? 'paragraph' : n.type.name === 'heading' && n.attrs.level <= 3 ? `h${n.attrs.level}` : null);
 
-/** Move the top-level block at `from` to `target` (a position between top-level blocks): null where it already is */
-export function moveBlockTo(state: EditorState, from: number, target: number): Transaction | null {
+/** Move the top-level block at `from` to `target` (a position between top-level blocks): null where it already is.
+ *  `copy` (⌥ held as it is let go, Notion's): a copy goes there, the block stays where it was */
+export function moveBlockTo(state: EditorState, from: number, target: number, copy = false): Transaction | null {
   const node = state.doc.nodeAt(from);
   if (!node) return null;
   const end = from + node.nodeSize;
-  if (target >= from && target <= end) return null;
-  const tr = state.tr.delete(from, end);
+  if (!copy && target >= from && target <= end) return null;
+  const tr = copy ? state.tr : state.tr.delete(from, end);
   const at = tr.mapping.map(target);
   tr.insert(at, node);
   return tr.setSelection(NodeSelection.create(tr.doc, at)).scrollIntoView();
@@ -150,7 +151,7 @@ class Handle {
     e.dataTransfer.clearData();
     e.dataTransfer.setData('text/html', dom.innerHTML);
     e.dataTransfer.setData('text/plain', text);
-    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.effectAllowed = 'copyMove'; // ⌥ makes it a copy
     e.dataTransfer.setDragImage(b.dom, 0, 0);
     this.view.dragging = { slice, move: true };
     this.dragFrom = b.pos;
@@ -185,7 +186,7 @@ class Handle {
     const t = this.target(e.clientY), from = this.dragFrom;
     this.endDrag();
     e.preventDefault();
-    const tr = t && moveBlockTo(this.view.state, from, t.pos);
+    const tr = t && moveBlockTo(this.view.state, from, t.pos, e.altKey);
     if (tr) this.view.dispatch(tr);
     this.view.focus();
     return true;

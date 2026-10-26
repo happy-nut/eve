@@ -246,6 +246,43 @@ describe('a line after a line break (⇧↵) stays a line of the paragraph', () 
     });
 });
 
+// Notion's way with every inline mark, as with code: → at the end of a line that ends in bold (italic, struck, …)
+// lets what is typed next be plain; ← at the start of one that starts with it, the same; one press, then → goes on
+const MARKED: [string, string][] = [
+  ['bold', '**xy**'], ['italic', '*xy*'], ['struck', '~~xy~~'], ['highlighted', '==xy=='], ['coloured', '<span style="color: #c4302b">xy</span>'],
+];
+describe('→ at the end of a line out of its formatting, ← at its start', () => {
+  for (const [name, written] of MARKED) {
+    test(`${name}: → at the end, the next text plain`, () => {
+      const ed = editorWith(`# T\n\na ${written}\n\nnext`);
+      ed.commands.setTextSelection(posOf(ed, 'xy', true));
+      press(ed, 'ArrowRight');
+      type(ed, 'z');
+      expect(md(ed)).toBe(`# T\n\na ${written}z\n\nnext`);
+    });
+    test(`${name}: ← at the start, the next text plain`, () => {
+      const ed = editorWith(`# T\n\n${written} b`);
+      ed.commands.setTextSelection(posOf(ed, 'xy'));
+      press(ed, 'ArrowLeft');
+      type(ed, 'z');
+      expect(md(ed)).toBe(`# T\n\nz${written} b`);
+    });
+    // (a coloured word is inline HTML kept as written, which typing never runs on into)
+    if (name !== 'coloured') test(`${name}: without the press, typing on keeps it (as Notion does)`, () => {
+      const ed = editorWith(`# T\n\na ${written}\n\nnext`);
+      ed.commands.setTextSelection(posOf(ed, 'xy', true));
+      type(ed, 'z');
+      expect(md(ed)).toBe(`# T\n\na ${written.replace('xy', 'xyz')}\n\nnext`);
+    });
+  }
+  test('one press only: the second → is the webview\'s own again, on to the next line', () => {
+    const ed = editorWith('# T\n\na **xy**\n\nnext');
+    ed.commands.setTextSelection(posOf(ed, 'xy', true));
+    expect(press(ed, 'ArrowRight').defaultPrevented).toBe(true);
+    expect(press(ed, 'ArrowRight').defaultPrevented).toBe(false);
+  });
+});
+
 describe('inline code: keys, paste, copy', () => {
   test('→ at the end of a line ending in code: no space typed, the next text plain', () => {
     const ed = editorWith('# T\n\na `xy`\n\nnext');

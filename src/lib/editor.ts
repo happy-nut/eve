@@ -276,6 +276,18 @@ function moveAndFlash(editor: Editor, dir: -1 | 1): boolean {
  * ⌘↩ on a to-do, Notion's way: its box ticked or cleared. Over several lines, every to-do among them: all
  * ticked if any was open, all cleared if every one was done. Elsewhere the key is not ours.
  */
+/** ⌘↵ in a toggle's title: it opens, or closes (Notion's ⌘↵ acts on the block it is in) */
+function toggleHere({ tr, state }: { tr: any; state: any }): boolean {
+  const { $from } = state.selection;
+  for (let d = $from.depth; d > 0; d--) {
+    if ($from.node(d).type.name !== 'detailsSummary') continue;
+    const pos = $from.before(d - 1), details = $from.node(d - 1);
+    tr.setNodeMarkup(pos, undefined, { ...details.attrs, open: !details.attrs.open });
+    return true;
+  }
+  return false;
+}
+
 function toggleCheck({ tr, state }: { tr: any; state: any }): boolean {
   const { from, to } = state.selection;
   const items: number[] = [];
@@ -532,7 +544,7 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     orderedList: () => inCode() || editor.commands.command(switchLines('orderedList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('orderedList', 'listItem')).run() || c().command(leaveTrailer).toggleOrderedList().run(),
     taskList: () => inCode() || editor.commands.command(switchLines('taskList', 'taskItem')) || c().command(leaveTrailer).command(wrapLines('taskList', 'taskItem')).run() || c().command(leaveTrailer).toggleTaskList().run(),
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
-    toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck),
+    toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck) || editor.commands.command(toggleHere),
     blockquote: () => editor.commands.command(quoteList) || c().toggleBlockquote().run(),
     codeBlock: () => !inCell(editor.state.selection.$from) && (editor.commands.command(linesToCode) || c().toggleCodeBlock().run()),
     // in a toggle's title, under the toggle: the title holds text only
@@ -873,6 +885,26 @@ function looseLists(editor: Editor) {
   });
 }
 
+/**
+ * → at the end of a line that ends in bold, code, a highlight… (← at the start of one that starts with it): what is
+ * typed next is plain, as in Notion. Typing on without it keeps the formatting going, as a mark does; one press takes
+ * it off, the next goes on to the next line as it always did.
+ */
+const markExit = Extension.create({
+  name: 'markExit',
+  addKeyboardShortcuts() {
+    const out = (dir: -1 | 1) => () => {
+      const { state, view } = this.editor, sel = state.selection;
+      if (!sel.empty) return false;
+      const $c = sel.$from, marks = state.storedMarks ?? $c.marks();
+      if ((dir > 0 ? $c.pos !== $c.end() : $c.parentOffset !== 0) || !marks.length) return false;
+      view.dispatch(state.tr.setStoredMarks([]));
+      return true;
+    };
+    return { ArrowRight: out(1), ArrowLeft: out(-1) };
+  },
+});
+
 export function createEditor(opts: {
   element: HTMLElement;
   content: string;
@@ -1108,6 +1140,7 @@ export function createEditor(opts: {
         bulletList: false, // replaced below: "-" then Enter is a line of its own
       }),
       Text,
+      markExit,
       // code inside a link ([run `npm i` first](u)) stays in it: stock code shuts out every other mark, so the link
       // was cut in two around it. Formatting still goes (nothing in code is bold).
       // Inline code all deleted, the next text typed there is not code again. The webview deletes the letters
@@ -1115,20 +1148,9 @@ export function createEditor(opts: {
       // cleared out (in WebKit), everything typed after it came out as code.
       Code.extend({
         excludes: 'bold italic strike underline highlight',
-        // → at the end of a line ending in code (← at the start of one starting with it): what is typed next is
-        // plain. The stock exit typed a space there, one more each time the caret came by
+        // → at the end of a line ending in code is markExit's, as for every mark. The stock exit typed a space there,
+        // one more each time the caret came by
         exitable: false,
-        addKeyboardShortcuts() {
-          const out = (dir: -1 | 1) => () => {
-            const { state, view } = this.editor, sel = state.selection;
-            if (!sel.empty) return false;
-            const $c = sel.$from, marks = state.storedMarks ?? $c.marks();
-            if ((dir > 0 ? $c.pos !== $c.end() : $c.parentOffset !== 0) || !this.type.isInSet(marks)) return false;
-            view.dispatch(state.tr.setStoredMarks(this.type.removeFromSet(marks)));
-            return true;
-          };
-          return { ...this.parent?.(), ArrowRight: out(1), ArrowLeft: out(-1) };
-        },
         // its spaces as written (`a  b`, `  `): read as any text, a run of them was one space when the note opened,
         // and code of spaces only went altogether
         parseHTML() {
@@ -1186,6 +1208,18 @@ export function createEditor(opts: {
       // a heading is one line in markdown: a line break in it goes out as `<br>` (as in a table cell), not as the
       // usual backslash and newline, which read back as a heading ending in "\" and a paragraph under it
       Heading.configure({ levels: [1, 2, 3, 4, 5] }).extend({
+        // ⌫ at the start of a heading makes it text, where it is (Notion's); the next ⌫ joins it to the line above.
+        // Not the title, which is the note's name whatever it is written as
+        addKeyboardShortcuts() {
+          return {
+            Backspace: () => {
+              const { $from, empty } = this.editor.state.selection;
+              if (!empty || $from.parentOffset !== 0 || $from.parent.type !== this.type) return false;
+              if ($from.depth === 1 && $from.index(0) === 0) return false;
+              return this.editor.commands.setNode('paragraph');
+            },
+          };
+        },
         addInputRules() {
           return this.options.levels.map((level: number) => textblockTypeInputRule({ find: new RegExp(`^(#{1,${level}})[^\\S\\n]$`), type: this.type, getAttributes: { level } }));
         },
@@ -1661,7 +1695,9 @@ export function createEditor(opts: {
         onChip: chipMenu,
         suggestion: {
           char: PICKERS.date.char,
-          allowSpaces: false,
+          // "@next wednesday", "@in 3 days" (Notion's): spaces go on into the day being named. A name or a sentence
+          // after @ finds no day and the calendar goes; ↩ only picks a day named in full (PICKERS.date)
+          allowSpaces: true,
           pluginKey: DATE_MENU,
           allow: ({ editor, state }) => !menuOpen(editor, state, WIKI_MENU, SLASH_MENU, PAGE_MENU),
           // the days a query could mean; the calendar opens on the first and closes when there is none. "@remind"
