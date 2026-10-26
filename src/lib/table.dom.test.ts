@@ -1,5 +1,7 @@
 import { describe, test, expect, afterEach } from 'vitest';
 import { TextSelection } from '@tiptap/pm/state';
+import { CellSelection, TableMap } from '@tiptap/pm/tables';
+import type { Editor } from '@tiptap/core';
 import { editorWith, md, posOf, press, type } from './testEditor';
 
 afterEach(() => { document.body.innerHTML = ''; });
@@ -178,5 +180,52 @@ describe('column widths', () => {
     const ed = editorWith('> | a | b |\n> | --- | --- |\n> | 1 | 2 |\n>\n> <!-- eve:widths 90 150 -->');
     expect(widths(ed)).toEqual([90, 150]);
     expect(md(editorWith(md(ed)))).toBe(md(ed));
+  });
+});
+
+describe('⌫ on a chosen row or column with nothing in it takes it out', () => {
+  // cells by where they are: row r, column c of the note's first table
+  function choose(ed: Editor, [r1, c1]: [number, number], [r2, c2]: [number, number]) {
+    let table = -1;
+    ed.state.doc.descendants((n, p) => { if (table < 0 && n.type.name === 'table') table = p; return table < 0; });
+    const map = TableMap.get(ed.state.doc.nodeAt(table)!);
+    const at = (r: number, c: number) => table + 1 + map.map[r * map.width + c];
+    ed.view.dispatch(ed.state.tr.setSelection(CellSelection.create(ed.state.doc, at(r1, c1), at(r2, c2))));
+  }
+  const note = '# T\n\n| a | b | c |\n| --- | --- | --- |\n| 1 |  | 3 |\n|  |  |  |\n| 4 |  | 6 |';
+  test('an empty row goes', () => {
+    const ed = editorWith(note);
+    choose(ed, [2, 0], [2, 2]);
+    press(ed, 'Backspace');
+    expect(md(ed).trim()).toBe('# T\n\n| a | b | c |\n| --- | --- | --- |\n| 1 |  | 3 |\n| 4 |  | 6 |');
+  });
+  test('an empty column goes (Delete too)', () => {
+    const ed = editorWith('# T\n\n| a |  | c |\n| --- | --- | --- |\n| 1 |  | 3 |');
+    choose(ed, [0, 1], [1, 1]);
+    press(ed, 'Delete');
+    expect(md(ed).trim()).toBe('# T\n\n| a | c |\n| --- | --- |\n| 1 | 3 |');
+  });
+  test('a row with words in it is emptied, as before, and stays', () => {
+    const ed = editorWith(note);
+    choose(ed, [1, 0], [1, 2]);
+    press(ed, 'Backspace');
+    expect(md(ed).trim()).toBe('# T\n\n| a | b | c |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |\n| 4 |  | 6 |');
+  });
+  test('the empty header row goes, the row under it the header now', () => {
+    const ed = editorWith('# T\n\n|  |  |\n| --- | --- |\n| 1 | 2 |');
+    choose(ed, [0, 0], [0, 1]);
+    press(ed, 'Backspace');
+    expect(md(ed).trim()).toBe('# T\n\n| 1 | 2 |\n| --- | --- |');
+    ed.commands.undo();
+    expect(md(ed).trim()).toBe('# T\n\n|  |  |\n| --- | --- |\n| 1 | 2 |');
+  });
+  test('a whole empty table goes, and one ⌘Z brings it back', () => {
+    const ed = editorWith('# T\n\n|  |  |\n| --- | --- |\n|  |  |\n\nafter');
+    const before = md(ed);
+    choose(ed, [0, 0], [1, 1]);
+    press(ed, 'Backspace');
+    expect(md(ed).trim()).toBe('# T\n\nafter');
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
   });
 });
