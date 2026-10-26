@@ -40,6 +40,23 @@ try {
     await page.waitForTimeout(250);
   }
 
+  // mid-drag: a line where the block will land (under the third line), across the text, before it is let go
+  await fresh();
+  {
+    const g = await grip('first line');
+    const to = await page.locator('.tiptap > p', { hasText: 'third line' }).boundingBox();
+    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+    await page.mouse.down();
+    for (let i = 1; i <= 8; i++) await page.mouse.move(g.x + g.width / 2 + i, g.y + ((to.y + to.height * 0.8 - g.y) * i) / 8);
+    await page.waitForTimeout(150);
+    const line = await page.evaluate(() => { const l = document.querySelector('.block-drop'); const r = l?.getBoundingClientRect(); return l && { on: l.classList.contains('on') && getComputedStyle(l).display !== 'none', y: r.top + r.height / 2, w: r.width, h: r.height }; });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    assert.ok(line?.on && line.h >= 2 && line.w > 200, `while dragging, a line shows where the block will go (${JSON.stringify(line)})`);
+    assert.ok(Math.abs(line.y - (to.y + to.height)) < 12, `…under the line it will go below (line at ${Math.round(line.y)}, the third line ends at ${Math.round(to.y + to.height)})`);
+    console.log('ok   while a block is dragged, a line shows where it will land');
+  }
+
   await fresh();
   await drag('first line', 'third line');
   assert.deepEqual(await lines(), ['second line', 'third line', 'first line'], 'dragged by ⋮⋮ below the third line, the first line is there');

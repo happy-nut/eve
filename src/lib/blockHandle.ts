@@ -71,6 +71,10 @@ class Handle {
     grip.addEventListener('click', () => this.menu(grip));
     grip.addEventListener('dragstart', (e) => this.dragStart(e));
     this.host.addEventListener('mousemove', this.onMove);
+    // the pointer in the margin beside the text (where ⋮⋮ is): the note's own drop handling is not there, so the line
+    // follows and the drop lands from here too
+    this.host.addEventListener('dragover', this.onHostOver);
+    this.host.addEventListener('drop', this.onHostDrop);
     this.host.addEventListener('mouseleave', this.onLeave);
   }
 
@@ -84,6 +88,15 @@ class Handle {
     });
   };
   private onLeave = () => { if (this.dragFrom === null) this.hide(); };
+  private onHostOver = (e: DragEvent) => {
+    if (this.dragFrom === null || this.view.dom.contains(e.target as Node)) return;
+    e.preventDefault();
+    this.over(e);
+  };
+  private onHostDrop = (e: DragEvent) => {
+    if (this.dragFrom === null || this.view.dom.contains(e.target as Node)) return;
+    this.drop(e);
+  };
 
   private show(b: Block) {
     this.cur = b;
@@ -153,7 +166,14 @@ class Handle {
     e.dataTransfer.setData('text/html', dom.innerHTML);
     e.dataTransfer.setData('text/plain', text);
     e.dataTransfer.effectAllowed = 'copyMove'; // ⌥ makes it a copy
-    e.dataTransfer.setDragImage(b.dom, 0, 0);
+    // a small picture of the block beside the pointer, not the whole block under it: the system draws that picture
+    // over the page, and a block-sized one covered the line saying where the block would go
+    const ghost = document.createElement('div');
+    ghost.className = 'block-ghost tiptap';
+    ghost.append(b.dom.cloneNode(true));
+    document.body.append(ghost);
+    e.dataTransfer.setDragImage(ghost, -14, -14);
+    setTimeout(() => ghost.remove());
     this.view.dragging = { slice, move: true };
     this.dragFrom = b.pos;
     document.documentElement.classList.add('block-drag'); // the editor's own drop line gives way to this one
@@ -209,6 +229,8 @@ class Handle {
     cancelAnimationFrame(this.frame);
     this.host.removeEventListener('mousemove', this.onMove);
     this.host.removeEventListener('mouseleave', this.onLeave);
+    this.host.removeEventListener('dragover', this.onHostOver);
+    this.host.removeEventListener('drop', this.onHostDrop);
     this.endDrag();
     this.el.remove();
     this.line.remove();
