@@ -21,6 +21,22 @@ export function footnoteMarkdown(md: MarkdownIt): void {
     md.block.ruler.at('reference', (state: any, start: number, end: number, silent: boolean) =>
       state.src.startsWith('[^', state.bMarks[start] + state.tShift[start]) ? false : reference(state, start, end, silent));
   }
+  // each `[^n]:` line its own line, as GitHub and Obsidian write them one under another: read as one paragraph's
+  // lines, the first save joined them ("[^1]: First. [^2]: Second."), and the second became a reference in the first
+  md.block.ruler.before('paragraph', 'footnotedef', (state: any, start: number, _end: number, silent: boolean) => {
+    const at = state.bMarks[start] + state.tShift[start];
+    if (state.sCount[start] - state.blkIndent >= 4 || !DEF.test(state.src.slice(at, state.eMarks[start]))) return false;
+    if (silent) return true;
+    state.line = start + 1;
+    const open = state.push('paragraph_open', 'p', 1);
+    open.map = [start, state.line];
+    const inline = state.push('inline', '', 0);
+    inline.content = state.getLines(start, start + 1, state.blkIndent, false).trim();
+    inline.map = [start, state.line];
+    inline.children = [];
+    state.push('paragraph_close', 'p', -1);
+    return true;
+  }, { alt: ['paragraph'] });
   md.inline.ruler.before('link', 'footnoteref', (state, silent) => {
     if (state.src.charCodeAt(state.pos) !== 0x5b || state.src.charCodeAt(state.pos + 1) !== 0x5e) return false; // "[^"
     const m = /^\[\^([^\]\s]+)\]/.exec(state.src.slice(state.pos));

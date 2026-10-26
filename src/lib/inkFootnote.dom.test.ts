@@ -51,3 +51,12 @@ test('a footnote of one word (a name, an address) is a footnote\'s line, not raw
     if (!def.startsWith('http')) expect(md(ed).trimEnd()).toBe(`# T\n\nA claim[^1].\n\n[^1]: ${def}`);
   }
 });
+
+test('footnotes written one under another (GitHub, Obsidian) stay one line each after a save', () => {
+  const ed = editorWith('# T\n\nsee[^1] and[^2]\n\n[^1]: First.\n[^2]: Second.');
+  ed.commands.focus('end');
+  ed.commands.insertContent('!');
+  const saved = md(ed);
+  expect(saved).toContain('[^1]: First.\n\n[^2]: Second.!');
+  expect(ed.view.dom.querySelectorAll('p.fndef').length).toBe(2);
+});
