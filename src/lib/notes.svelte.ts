@@ -31,7 +31,8 @@ export type PropValue = string | string[];
 /** the frontmatter keys that are Eve's own: a property may not take one of these names */
 export const OWN_KEYS = new Set(['id', 'updated', 'deleted', 'order', 'group', 'parent', 'icon', 'wide', 'small', 'cover']);
 /** a property's name as a frontmatter key can hold it: one line, no colon, not one of Eve's own */
-export const propName = (name: string) => name.replace(/[:\n\r]/g, ' ').trim();
+// (not one opening with ---: its line in the file read as the end of the properties, and every row's broke there)
+export const propName = (name: string) => name.replace(/[:\n\r]/g, ' ').trim().replace(/^-{3,}\s*/, '');
 /** a value as one frontmatter line: a list (and a word that would read as one) as JSON, anything else as it is */
 const propLine = (v: PropValue) => (Array.isArray(v) || /^[["]/.test(v) || v !== v.trim() ? JSON.stringify(v) : v.replace(/[\n\r]+/g, ' '));
 function readProp(v: string): PropValue {
@@ -490,12 +491,17 @@ class NotesStore {
     // "[[C# notes]]" is the note "C# notes", not "C" with a section, when there is such a note (splitLink)
     const isTitle = (t: string) => same(t, was) || this.all.some((o) => !o.deleted && o.id !== n.id && same(titleOf(o), t));
     const ours = (section: string | undefined) => !section || same(splitLink(was + section, isTitle)[0], was);
+    // a "$" in a title is just a "$"
+    const fix = (t: string) => t.replace(link, (m: string, section?: string) => (ours(section) ? `[[${now}${section ?? ''}` : m));
     for (const other of this.all) {
       if (other.deleted || other.id === n.id) continue;
-      // a "$" in a title is just a "$"
-      const body = other.body.replace(link, (m: string, section?: string) => (ours(section) ? `[[${now}${section ?? ''}` : m));
-      if (body === other.body) continue;
+      const body = fix(other.body);
+      // a database row's relation to it too: left, the link went nowhere, and its rollups counted nothing
+      const props = other.props && Object.fromEntries(Object.entries(other.props).map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => (typeof x === 'string' ? fix(x) : x)) : typeof v === 'string' ? fix(v) : v]));
+      const propsMoved = !!props && JSON.stringify(props) !== JSON.stringify(other.props);
+      if (body === other.body && !propsMoved) continue;
       other.body = body;
+      if (propsMoved) other.props = props as Note['props'];
       other.updatedAt = Date.now();
       this.flush(other.id);
     }

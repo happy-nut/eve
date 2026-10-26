@@ -86,3 +86,18 @@ test('a deleted day begun again: what was written in it stays in the Trash (it w
   expect(notes.trash.some((n) => n.body.includes('important old words'))).toBe(true);
   expect(notes.all.find((n) => n.id === day.id)!.deleted).toBe(false);
 });
+
+test('a page renamed: a database row\'s relation to it follows (it kept the old name and linked nowhere)', () => {
+  const b = notes.create('# Beta Rel\n\nx'); notes.touched(b.id);
+  const a = notes.create('# Alpha Rel\n\nx'); notes.touched(a.id);
+  notes.setProp(a.id, 'Link', ['[[Beta Rel]]']);
+  notes.update(b.id, '# Beta Rel renamed\n\nx');
+  notes.flush(b.id); // (a rename is followed as the note is written, after a pause in typing)
+  expect(notes.all.find((n) => n.id === a.id)!.props!.Link).toEqual(['[[Beta Rel renamed]]']);
+});
+
+test('a property named "--- notes" is "notes": a line opening with --- in a row\'s file ended its properties there', async () => {
+  const { propName } = await import('./notes.svelte');
+  expect(propName('--- notes')).toBe('notes');
+  expect(propName('-x')).toBe('-x');
+});

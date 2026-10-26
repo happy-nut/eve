@@ -106,7 +106,11 @@
   // the head: name and icon, like a note's
   let renaming = $state(notes.calendar.name);
   $effect(() => { renaming = notes.calendar.name; });
-  function rename() { if (renaming.trim() !== notes.calendar.name) notes.setCalendar({ name: renaming }); }
+  function rename() {
+    if (renaming.trim() !== notes.calendar.name) notes.setCalendar({ name: renaming });
+    // emptied, it is called what it was called (its name unchanged, nothing above put that back in the field)
+    renaming = notes.calendar.name;
+  }
   async function changeIcon(anchor: HTMLElement) {
     const v = await ui.pickEmoji(anchor, notes.calendar.icon);
     if (v !== null) notes.setCalendar({ icon: v || '🗓️' });

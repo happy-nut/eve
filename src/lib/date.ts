@@ -198,10 +198,14 @@ const IN_LINE = /(?<![\w@])@(\d{4}-\d{2}-\d{2}) ((?:[01]\d|2[0-3]):[0-5]\d) ⏰/
  */
 export function remindersIn(body: string): LineReminder[] {
   const out: LineReminder[] = [];
-  let fence = false;
-  for (const raw of body.split('\n')) {
-    if (/^\s*(```|~~~)/.test(raw)) { fence = !fence; continue; }
-    if (fence || /^\s*(?:[-*+]|\d+[.)])\s+\[[xX]\]/.test(raw)) continue;
+  // the fence a line is in ('' a plain one): code is code, but a board's cards are words, and a card's reminder rings
+  // (its line is the card's JSON string, read as its words)
+  let fence: string | null = null;
+  for (const line0 of body.split('\n')) {
+    const open = /^\s*(?:```|~~~)(\w*)/.exec(line0);
+    if (open) { fence = fence === null ? open[1] : null; continue; }
+    if ((fence !== null && fence !== 'kanban') || /^\s*(?:[-*+]|\d+[.)])\s+\[[xX]\]/.test(line0)) continue;
+    const raw = fence === 'kanban' ? line0.replace(/^\s*"[^"]*":\s*"/, '').replace(/",?\s*$/, '').replace(/\\n/g, ' ') : line0;
     for (const m of raw.matchAll(IN_LINE)) {
       if (daysFrom(m[1]) === null) continue;
       const [y, mo, d] = m[1].split('-').map(Number), [h, mi] = m[2].split(':').map(Number);
