@@ -78,6 +78,9 @@
   .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .when { flex: none; color: var(--fg-dim); font-size: 12px; }
   .restore, .erase, .close { flex: none; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; color: var(--fg-dim); }
+  /* a phone: a finger's size, and Restore well apart from Delete for good (2px apart, a tap a little off erased the note) */
+  :global(html.mobile) .restore, :global(html.mobile) .erase, :global(html.mobile) .close { width: 44px; height: 44px; }
+  :global(html.mobile) .erase { margin-left: 12px; }
   .restore:hover, .erase:hover, .close:hover { background: var(--bg-input); color: var(--fg); }
   svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   .empty { margin: 0; padding: 18px 16px 22px; color: var(--fg-dim); line-height: 1.45; }

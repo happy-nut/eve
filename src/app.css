@@ -332,6 +332,10 @@ html.mobile :is(aside, .lifted) :is(.note-row, .ghead) > :not(.swipe-act) {
 }
 html.mobile :is(aside, .lifted) :is(.note-row, .ghead).swiping > :not(.swipe-act) { transition: none; }
 html.mobile :is(aside, .lifted) :is(.note-row, .ghead).to-left > :not(.swipe-act) { background: var(--bg); }
+/* a group's name and its fold arrow slide as two pieces: the gap between them and their round inner corners showed the
+   red Delete behind as a sliver; filled with the page while pulled */
+html.mobile :is(aside, .lifted) .ghead.to-left > .gname { border-top-right-radius: 0; border-bottom-right-radius: 0; box-shadow: 4px 0 0 var(--bg); }
+html.mobile :is(aside, .lifted) .ghead.to-left > .fold { border-top-left-radius: 0; border-bottom-left-radius: 0; }
 html.mobile :is(aside, .lifted) .swipe-act {
   position: absolute; z-index: var(--z-flat); inset: 1px 0; display: none; align-items: center; justify-content: flex-end; padding: 0 22px;
   border-radius: 8px; background: #ff453a; font-size: 14.5px; font-weight: 600; color: #fff; opacity: 0.55; transition: opacity 0.12s;
@@ -531,7 +535,7 @@ html.mobile .tiptap .code-lang-ask input { font-size: 16px; } /* under 16px a ph
 /* the diagram's canvas: one look for the note and the builder's preview (DiagramBuilder.svelte), which must draw it
    the same. Toss's manner: a soft grey card, no frame, white cards on it (lib/mermaid.ts holds the same colours). */
 .diagram-canvas {
-  --d-fg: light-dark(#333d4b, #e5e8eb); --d-strong: light-dark(#191f28, #f9fafb); --d-dim: light-dark(#8b95a1, #8b95a1);
+  --d-fg: light-dark(#333d4b, #e5e8eb); --d-strong: light-dark(#191f28, #f9fafb); --d-dim: light-dark(#66707e, #8b95a1); /* 4.5:1 on the canvas, as mermaid.ts's */
   --d-canvas: light-dark(#f9fafb, #17181d); --d-card: light-dark(#ffffff, #23252b); --d-line: light-dark(#e5e8eb, #2e3138);
   --c0: light-dark(#3182f6, #4593fc); --c1: light-dark(#15c39a, #2bd4a9); --c2: light-dark(#ff9f2e, #ffae4d); --c3: light-dark(#8b5cf6, #a07bff);
   --c4: light-dark(#f04452, #ff6673); --c5: light-dark(#f5b800, #ffcd3c); --c6: light-dark(#4cc3ff, #6cd1ff); --c7: light-dark(#5fbf4a, #7ed36a);

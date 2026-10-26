@@ -454,6 +454,7 @@
   .add-choice { justify-content: center; color: var(--fg-dim); min-height: 36px; }
   .cal-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
   .cal-bar button { padding: 2px 8px; color: var(--fg-dim); }
+  :global(html.mobile) .cal-bar button { min-width: 40px; min-height: 40px; } /* a finger's size */
   .cal-bar button:hover { background: var(--bg-hover); color: var(--fg); }
   .cal-month { font-weight: 600; min-width: 9em; text-align: center; }
   .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }

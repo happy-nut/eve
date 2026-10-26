@@ -214,9 +214,11 @@
   :global(html.mobile) .calendar { padding-top: 14px; }
   :global(html.mobile) .name { font-size: 1.65em; }
   :global(html.mobile) .month { font-size: 16px; }
-  :global(html.mobile) .nav { width: 40px; height: 40px; border-radius: 12px; }
+  :global(html.mobile) .nav { flex: none; width: 40px; height: 40px; border-radius: 12px; } /* a finger's size at 360 wide too */
   :global(html.mobile) .today-btn { height: 36px; font-size: 14px; border-radius: 10px; }
-  :global(html.mobile) .grid { gap: 4px; }
+  /* a phone's day is its number and a dot: each week at least that tall, the month scrolling past it on its side (held to
+     the screen in landscape, the weeks were 20px and their numbers ran into each other) */
+  :global(html.mobile) .grid { gap: 4px; grid-template-rows: auto repeat(6, minmax(48px, 1fr)); }
   :global(html.mobile) .day:hover { background: none; } /* a tap leaves no hover behind */
   :global(html.mobile) .day { min-height: 0; padding: 6px 3px 14px; gap: 2px; border-radius: 10px; align-items: center; }
   :global(html.mobile) .wd { padding: 0; font-size: 11px; text-align: center; }

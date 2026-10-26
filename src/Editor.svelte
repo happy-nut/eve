@@ -316,11 +316,16 @@
     display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 220px; height: 24px; padding: 0 6px;
     border-radius: 6px; border: 0; background: none; color: inherit; font: inherit; pointer-events: auto;
   }
-  .crumb span { overflow: hidden; text-overflow: ellipsis; }
+  /* a block, so a name too long is cut with an ellipsis (inline, it was cut mid-letter with none) */
+  .crumb span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* each place a few letters at least: squeezed, a note three groups deep read "/ / / A really quite lo" */
+  .crumb:not(.here) { min-width: 3.2em; flex-shrink: 1; }
   .crumb.here { color: var(--fg); flex-shrink: 0.2; }
   button.crumb:hover { background: var(--bg-hover); color: var(--fg); }
   /* a phone: in its own bar, between the back button and the note's icons */
-  :global(html.mobile) .crumbs { top: -52px; left: 50px; right: 138px; height: 52px; font-size: 14px; }
+  :global(html.mobile) .crumbs { top: -52px; left: 50px; right: 146px; height: 52px; font-size: 14px; }
+  /* a phone has room for where the note is and what holds it: the rest of the way is the list's */
+  :global(html.mobile) .crumbs > :not(:nth-last-child(-n + 3)) { display: none; }
   /* …and only while that bar is there: back in the list it is gone, and the crumbs were left over the list's title */
   :global(html.mobile .shell:not(:has(> .mhead))) .crumbs { display: none; }
   .add-icon {

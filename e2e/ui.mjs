@@ -278,8 +278,64 @@ try {
     await page.close();
   }
 
+  // ---- a phone (the bounty's finds): an Android phone's page in WebKit ----
+  {
+    const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36';
+    const ctx = await browser.newContext({ userAgent: UA, viewport: { width: 360, height: 740 }, hasTouch: true });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => localStorage.setItem('eve.appearance', JSON.stringify({ ...JSON.parse(localStorage.getItem('eve.appearance') ?? '{}'), dailyNotes: true })));
+    await page.goto(URL_);
+    await page.waitForSelector('html.mobile');
+    const say = (what) => problems.push(`phone: ${what}`);
+    const small = (r, n = 40) => !r || r.width < n || r.height < n;
+    // a note: a formula's tabs and Done a finger's size; the formatting bar's end fading where it goes on
+    await page.evaluate(() => document.querySelector('button.fab[aria-label="New note"]')?.click());
+    await page.waitForSelector('.tiptap');
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.__editor.commands.setContent('# P\n\ntext here\n\n$$\nx^2\n$$\n\n| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n', true));
+    await page.waitForTimeout(400);
+    await page.evaluate(() => { const ed = window.__editor; let at = 0; ed.state.doc.descendants((n, p) => { if (!at && n.isText && n.text.includes('text here')) at = p + 4; }); ed.commands.focus(at); });
+    await page.waitForTimeout(400);
+    const bar = await page.evaluate(() => { const t = document.querySelector('.mbar .tools, .tools'); return t && { over: t.scrollWidth - t.clientWidth > 2, faded: t.classList.contains('more-r') }; });
+    if (bar?.over && !bar.faded) say('the formatting bar runs past the screen with nothing to say it goes on');
+    // (a phone's first tap chooses the formula, the next opens it)
+    const mb = await page.locator('.tiptap .math-block').boundingBox();
+    for (let i = 0; i < 3 && !(await page.locator('.tabs button').count()); i++) { await page.touchscreen.tap(mb.x + mb.width / 2, mb.y + mb.height / 2); await page.waitForSelector('.tabs button', { timeout: 900 }).catch(() => {}); }
+    await page.waitForTimeout(500);
+    const shown = await page.evaluate(() => [...document.querySelectorAll('.tabs button, .texb, .done')].filter((b) => b.offsetParent).length);
+    if (!shown) say('a formula tapped opened no editor (this check saw nothing)');
+    const mathSmall = await page.evaluate(() => [...document.querySelectorAll('.tabs button, .texb, .done')].filter((b) => b.offsetParent).map((b) => b.getBoundingClientRect()).filter((r) => r.height < 40).length);
+    if (mathSmall) say(`${mathSmall} of a formula's tabs and buttons are under a finger's size`);
+    await page.evaluate(() => document.querySelector('.done')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await page.waitForTimeout(400);
+    // a table's bar at 360 wide: what does not fit fades at the end
+    await page.evaluate(() => { const ed = window.__editor; let at = 0; ed.state.doc.descendants((n, p) => { if (!at && n.isText && n.text === '2') at = p + 1; }); ed.commands.focus(at); });
+    await page.waitForTimeout(500);
+    const tb = await page.evaluate(() => { const t = document.querySelector('.tbl-tools'); return t && { over: t.scrollWidth - t.clientWidth > 2, faded: t.classList.contains('more-r'), right: t.getBoundingClientRect().right }; });
+    if (!tb) say('a table cell chosen showed no table bar (this check saw nothing)');
+    if (tb && tb.over && !tb.faded) say('the table\'s bar runs past the screen with nothing to say it goes on');
+    if (tb && tb.right > 361) say(`the table's bar runs off the screen (${Math.round(tb.right)})`);
+    // the calendar on its side: each week tall enough for its day's number
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.evaluate(() => (document.activeElement)?.blur?.());
+    const back = await page.locator('.mhead button[aria-label="Back"]').first().boundingBox();
+    await page.touchscreen.tap(back.x + back.width / 2, back.y + back.height / 2);
+    await page.waitForSelector('aside [data-row]');
+    await page.waitForTimeout(400);
+    await page.evaluate(() => [...document.querySelectorAll('aside [data-row]')].find((r) => r.textContent.includes('Daily notes'))?.click());
+    await page.waitForSelector('.day');
+    await page.waitForTimeout(300);
+    const weeks = await page.evaluate(() => [...document.querySelectorAll('.day')].map((d) => d.getBoundingClientRect().height));
+    if (!weeks.length) say('the calendar did not open (this check saw nothing)');
+    else if (Math.min(...weeks) < 40) say(`a week of the calendar on its side is ${Math.round(Math.min(...weeks))}px, its numbers run into each other`);
+    const navs = await page.evaluate(() => [...document.querySelectorAll('.nav')].map((n) => n.getBoundingClientRect()));
+    if (navs.some((r) => small(r))) say('the calendar\'s month arrows are under a finger\'s size');
+    await ctx.close();
+  }
+
   if (problems.length) { console.log(problems.map((p) => 'FAIL ' + p).join('\n')); assert.fail(`${problems.length} things out of place`); }
   console.log('ok   every block\'s handle beside it, off its words, in sight, level with its first line — notes and day pages, both themes');
+  console.log('ok   a phone: formulas, the formatting and table bars, the calendar on its side');
   console.log('ok   around the note: the toolbar off a cover, the crumbs clear of tabs and Find, Settings still, a toast clear of the list');
   console.log('ok   the calendar, databases and boards at 800×600: rows aligned, menus off their buttons, weeks apart, days as words, keys kept, a card over a day');
 } finally {

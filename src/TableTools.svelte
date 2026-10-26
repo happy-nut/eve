@@ -2,6 +2,7 @@
   import type { Editor } from '@tiptap/core';
   import { floatAt, screenInsets } from './lib/popup';
   import { isMobile } from './lib/platform';
+  import { scrollHint } from './lib/scrollHint';
 
   /**
    * Row/column controls for the table the caret is in, on a phone (a Mac has the table's own handles, Notion's:
@@ -149,7 +150,7 @@
 </script>
 
 {#if at}
-  <div class="tbl-tools" class:sheet class:inside={at.inside} bind:this={bar} style:left="{at.x}px" style:top="{at.y}px" onmousedown={hold} role="toolbar" tabindex="-1" aria-label="Table">
+  <div class="tbl-tools" class:sheet class:inside={at.inside} bind:this={bar} {@attach scrollHint} style:left="{at.x}px" style:top="{at.y}px" onmousedown={hold} role="toolbar" tabindex="-1" aria-label="Table">
     {#each GROUPS as group, g}
       {#if g}<span class="tbl-sep"></span>{/if}
       {#each group as b}
@@ -181,6 +182,8 @@
   :global(html.mobile) .tbl-tools { max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; }
   :global(html.mobile) .tbl-tools .icon { flex: none; width: 38px; height: 38px; }
   :global(html.mobile) .tbl-tools svg { width: 19px; height: 19px; }
+  /* set well apart from Merge or split (a tap a little off must not delete the table); on a narrow phone the bar scrolls,
+     its end fading, to reach it */
   :global(html.mobile) .tbl-tools .gap { margin-left: 14px; color: #ff453a; }
   :global(html.mobile) .tbl-sep { flex: none; height: 20px; }
 </style>
