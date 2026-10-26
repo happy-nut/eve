@@ -154,7 +154,8 @@ export const Toggle = [
             const line = $from.parent;
             const tr = state.tr;
             if (!line.content.size) tr.delete($from.before(), $from.after());
-            else if (into && into.$from.parent.inlineContent) tr.delete($from.before(), $from.after()).insert(end, line.content);
+            // (not code: its lines run on in the line above with their raw breaks, and read back as one line)
+            else if (into && into.$from.parent.inlineContent && !line.type.spec.code) tr.delete($from.before(), $from.after()).insert(end, line.content);
             view.dispatch(tr.setSelection(TextSelection.create(tr.doc, end)).scrollIntoView());
             return true;
           }

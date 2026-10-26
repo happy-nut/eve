@@ -1414,6 +1414,40 @@ export function createEditor(opts: {
       ...(isMobile ? [] : [BlockHandle.configure({ run: (id) => runEditorCommand(editor, id) })]),
       // a table's own: ⋮⋮ on a row, ⋯ on a column, + along its foot and side (a phone keeps TableTools' bar)
       ...(isMobile ? [] : [TableHandles]),
+      // a line of words holds no raw newline: code's lines brought into one (copied from code and pasted in a line, a
+      // selection from text into code typed over, a web page's <pre>) ran on in it, and read back they were one line.
+      // Each becomes a line break, as Shift-↩ makes; where a line takes none (a toggle's title), a space
+      Extension.create({
+        name: 'noRawNewlines',
+        addProseMirrorPlugins: () => [new Plugin({
+          appendTransaction: (trs, _old, state) => {
+            if (!trs.some((t) => t.docChanged)) return null;
+            const ranges: [number, number][] = [];
+            trs.forEach((t, i) => t.steps.forEach((step, j) => step.getMap().forEach((_a, _b, from, to) => {
+              let f = from, e = to;
+              for (let k = j + 1; k < t.steps.length; k++) { f = t.steps[k].getMap().map(f, -1); e = t.steps[k].getMap().map(e, 1); }
+              for (let n = i + 1; n < trs.length; n++) { f = trs[n].mapping.map(f, -1); e = trs[n].mapping.map(e, 1); }
+              ranges.push([f, e]);
+            })));
+            const fix: { pos: number; text: string; breaks: boolean }[] = [];
+            for (const [from, to] of ranges) {
+              state.doc.nodesBetween(Math.max(0, from - 1), Math.min(state.doc.content.size, to + 1), (node, pos, parent) => {
+                if (!node.isText || !node.text!.includes('\n') || !parent || parent.type.spec.code) return;
+                if (!fix.some((x) => x.pos === pos)) fix.push({ pos, text: node.text!, breaks: !!parent.type.contentMatch.matchType(state.schema.nodes.hardBreak) });
+              });
+            }
+            if (!fix.length) return null;
+            const tr = state.tr;
+            for (const { pos, text, breaks } of fix.sort((a, b) => b.pos - a.pos)) {
+              const marks = state.doc.nodeAt(pos)!.marks;
+              const parts = text.split('\n');
+              const nodes = parts.flatMap((part, i) => [...(i ? [breaks ? state.schema.nodes.hardBreak.create() : state.schema.text(' ', marks)] : []), ...(part ? [state.schema.text(part, marks)] : [])]);
+              tr.replaceWith(pos, pos + text.length, nodes);
+            }
+            return tr;
+          },
+        })],
+      }),
       Extension.create({
         name: 'paintSelection',
         addProseMirrorPlugins: () => [new Plugin({
