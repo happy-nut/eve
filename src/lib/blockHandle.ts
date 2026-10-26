@@ -10,7 +10,7 @@ import type { EditorView } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { ui, under, type MenuItem } from './ui.svelte';
 
-interface Block { pos: number; node: PMNode; dom: HTMLElement }
+interface Block { pos: number; node: PMNode; dom: HTMLElement; item?: boolean }
 
 /** what a plain line can be turned into: the editor's own commands (editor.ts), as the / menu and the keys run them */
 const TURN: [kind: string, label: string][] = [
@@ -54,6 +54,7 @@ class Handle {
   private host: HTMLElement;
   private cur: Block | null = null;
   private dragFrom: number | null = null;
+  private dragList: HTMLElement | null = null; // a list's line is dragged among its list's lines
   private frame = 0;
 
   constructor(private view: EditorView, private run: (id: string) => boolean) {
@@ -84,10 +85,24 @@ class Handle {
     cancelAnimationFrame(this.frame);
     this.frame = requestAnimationFrame(() => {
       const b = blocks(this.view).find((x) => y >= x.top && y < x.bottom);
-      if (b) this.show(b); else this.hide();
+      if (b) this.show(this.itemAt(b, y) ?? b); else this.hide();
     });
   };
   private onLeave = () => { if (this.dragFrom === null) this.hide(); };
+
+  /** In a list, the line under the pointer is a block of its own, as Notion's are: its handle beside it, its menu and
+   *  drag its own. (Held to the list, the handle of a long one stood at its first line, often off screen.) */
+  private itemAt(b: Block, y: number): Block | null {
+    if (!/^(bulletList|orderedList|taskList)$/.test(b.node.type.name)) return null;
+    let li: HTMLElement | null = null;
+    for (const el of b.dom.querySelectorAll<HTMLElement>('li')) {
+      const r = el.getBoundingClientRect();
+      if (y >= r.top && y < r.bottom) li = el; // the last one found is the innermost
+    }
+    if (!li) return null;
+    const pos = this.view.posAtDOM(li, 0) - 1, node = this.view.state.doc.nodeAt(pos);
+    return node && /Item$/.test(node.type.name) ? { pos, node, dom: li, item: true } : null;
+  }
   private onHostOver = (e: DragEvent) => {
     if (this.dragFrom === null || this.view.dom.contains(e.target as Node)) return;
     e.preventDefault();
@@ -104,21 +119,32 @@ class Handle {
     const page = this.view.dom.getBoundingClientRect();
     const column = page.left + (parseFloat(getComputedStyle(this.view.dom).paddingLeft) || 0);
     // level with the block's first line of text (a heading's, a callout's past its padding), or its top
+    const box = b.dom.getBoundingClientRect();
     const first = Selection.findFrom(this.view.state.doc.resolve(b.pos), 1, true);
-    let mid: number;
+    // no line of text, or one not drawn there (a diagram's hidden source said 0, and the handle went to the note's
+    // top): the block's middle, a short one's (a divider: 12px down put it by the next line), else its first 24px
+    let mid = box.top + Math.min(12, box.height / 2);
     if (first && first.from < b.pos + b.node.nodeSize) {
-      const c = this.view.coordsAtPos(first.from);
-      mid = (c.top + c.bottom) / 2;
-    } else mid = b.dom.getBoundingClientRect().top + 12;
+      const c = this.view.coordsAtPos(first.from), m = (c.top + c.bottom) / 2;
+      if (c.bottom > c.top && m >= box.top - 2 && m <= box.bottom + 2) mid = m;
+    }
     this.el.style.top = `${Math.round(mid - host.top - 12)}px`;
-    // left of the block itself where it reaches past the text (a wide table, code), not over its first cells
-    const edge = Math.min(column, b.dom.getBoundingClientRect().left);
+    // left of the block itself where it reaches past the text (a wide table, code), not over its first cells; a
+    // list's line left of its bullet (its list's own edge); a table further still, clear of its rows' ⋮⋮
+    const list = b.item ? b.dom.parentElement : null;
+    const edge = (list ? list.getBoundingClientRect().left : Math.min(column, box.left)) - (b.node.type.name === 'table' ? 12 : 0);
     // as far left as what can be seen of the page goes, not the editor's own box: a day's or a card's page has its
     // room for the handle in the padding around the editor, and held to the editor's box the handle sat on the words
     this.el.style.left = `${Math.round(Math.max(this.seen() + 2, edge - 46) - host.left)}px`;
     this.el.classList.add('on');
   }
   hide() { this.cur = null; this.el.classList.remove('on'); }
+
+  /** the box the note scrolls in */
+  private scroller(): HTMLElement | null {
+    for (let el = this.host.parentElement; el; el = el.parentElement) if (/(auto|scroll)/.test(getComputedStyle(el).overflowY)) return el;
+    return null;
+  }
 
   /** where what can be seen of the page begins on the left: the box the note scrolls in (or clips it) */
   private seen(): number {
@@ -136,7 +162,11 @@ class Handle {
     const { state } = this.view;
     const tr = state.tr;
     if (b.node.type.name === 'paragraph' && !b.node.content.size) tr.setSelection(TextSelection.create(tr.doc, b.pos + 1));
-    else {
+    else if (b.item) {
+      // a list's line: a new line of the same list, above or under it
+      const at = above ? b.pos : b.pos + b.node.nodeSize;
+      tr.insert(at, b.node.type.createAndFill()!).setSelection(TextSelection.create(tr.doc, at + 2));
+    } else {
       const at = above ? b.pos : b.pos + b.node.nodeSize;
       tr.insert(at, state.schema.nodes.paragraph.create()).setSelection(TextSelection.create(tr.doc, at + 1));
     }
@@ -151,10 +181,14 @@ class Handle {
     if (!b) return;
     const { pos, node } = b, end = pos + node.nodeSize;
     const { doc } = this.view.state;
+    // the press took the focus out of the note; given back, the note scrolled to where its caret had been, the menu
+    // opened where ⋮⋮ had been (off the top of the window). Measured first, and the page kept where it was
+    const r = from.getBoundingClientRect(), scroller = this.scroller(), top = scroller?.scrollTop ?? 0;
     const first = Selection.findFrom(doc.resolve(pos), 1, true), last = Selection.findFrom(doc.resolve(end), -1, true);
     const sel = first && last && first.from >= pos && last.to <= end ? TextSelection.create(doc, first.from, last.to) : NodeSelection.create(doc, pos);
     this.view.dispatch(this.view.state.tr.setSelection(sel));
     this.view.focus();
+    if (scroller) scroller.scrollTop = top;
     const kind = kindOf(node);
     const items: MenuItem[] = [
       { label: 'Delete', danger: true, run: () => this.view.dispatch(this.view.state.tr.delete(pos, end).scrollIntoView()) },
@@ -163,7 +197,6 @@ class Handle {
       { label: 'Move down', run: () => this.run('moveBlockDown') },
       ...(kind ? TURN.map(([k, label], i) => ({ label, sep: i === 0, checked: k === kind, run: () => void (k !== kind && this.run(k)) })) : []),
     ];
-    const r = from.getBoundingClientRect();
     this.hide();
     ui.openMenu(under(r), items);
   }
@@ -189,12 +222,18 @@ class Handle {
     setTimeout(() => ghost.remove());
     this.view.dragging = { slice, move: true };
     this.dragFrom = b.pos;
+    this.dragList = b.item ? b.dom.parentElement : null;
     document.documentElement.classList.add('block-drag'); // the editor's own drop line gives way to this one
   }
 
   /** where a dragged block lands: before the block under the pointer or after it, whichever half it is over */
   private target(y: number): { pos: number; y: number } | null {
-    const all = blocks(this.view);
+    const all = this.dragList
+      ? [...this.dragList.children].filter((el): el is HTMLElement => el.tagName === 'LI').map((dom) => {
+        const pos = this.view.posAtDOM(dom, 0) - 1, r = dom.getBoundingClientRect();
+        return { pos, node: this.view.state.doc.nodeAt(pos)!, dom, top: r.top, bottom: r.bottom };
+      }).filter((b) => b.node)
+      : blocks(this.view);
     if (!all.length) return null;
     for (const b of all) {
       if (y >= b.bottom) continue;
@@ -228,6 +267,7 @@ class Handle {
 
   endDrag() {
     this.dragFrom = null;
+    this.dragList = null;
     this.view.dragging = null;
     this.line.classList.remove('on');
     document.documentElement.classList.remove('block-drag');

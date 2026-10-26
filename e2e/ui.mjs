@@ -11,13 +11,14 @@ const server = process.env.EVE_URL ? null : await (await import('vite')).createS
 const URL_ = process.env.EVE_URL ?? server.resolvedUrls.local[0];
 const browser = await webkit.launch();
 const problems = [];
-const BODY = '# Blocks\n\nA plain line of text.\n\n## A heading\n\n- a bullet\n- another\n\n1. one\n\n- [ ] to do\n\n> [!tip] A callout\n> its body\n\n| quote | it |\n| --- | --- |\n| a | b |\n\n```js\nlet a = 1\n```\n\nlast line\n';
+const BODY = '# Blocks\n\nA plain line of text.\n\n## A heading\n\n- a bullet\n- another\n\n1. one\n\n- [ ] to do\n\n> [!tip] A callout\n> its body\n\n| quote | it |\n| --- | --- |\n| a | b |\n\n```js\nlet a = 1\n```\n\nabove the rule\n\n---\n\n```mermaid\nflowchart LR\n  A[Start] --> B[End]\n```\n\nlast line\n';
 
 /** every top-level block in `scope` but the title, hovered, its handle measured against it */
 async function sweep(page, surface, scope) {
   const n = await page.locator(`${scope} .tiptap > *:not(.sel-layer)`).count();
   for (let i = 1; i < n; i++) {
     const block = page.locator(`${scope} .tiptap > *:not(.sel-layer)`).nth(i);
+    await block.scrollIntoViewIfNeeded();
     const b = await block.boundingBox();
     if (!b || b.height < 4) continue;
     await page.mouse.move(b.x + Math.min(30, b.width / 2), b.y + Math.min(10, b.height / 2));
@@ -29,7 +30,7 @@ async function sweep(page, surface, scope) {
       if (!h || !el) return { missing: !h, tag: el?.tagName };
       const hr = h.getBoundingClientRect(), er = el.getBoundingClientRect();
       // the words: the first text the block shows
-      const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (t) => (t.textContent.trim() && !t.parentElement.closest('[contenteditable="false"], .code-lang, .code-lang-ask, button, select') ? 1 : 2) });
+      const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (t) => (t.textContent.trim() && t.parentElement.getClientRects().length && !t.parentElement.closest('[contenteditable="false"], .code-lang, .code-lang-ask, button, select, svg, pre:not(:has(code))') ? 1 : 2) });
       const t = walk.nextNode();
       const range = t && document.createRange();
       range?.selectNodeContents(t);
@@ -38,15 +39,57 @@ async function sweep(page, surface, scope) {
       let clip = host;
       while (clip && !/(auto|scroll|hidden)/.test(getComputedStyle(clip).overflowX + getComputedStyle(clip).overflowY)) clip = clip.parentElement;
       const cr = (clip ?? document.documentElement).getBoundingClientRect();
-      return { tag: el.tagName + (el.className ? '.' + String(el.className).split(' ')[0] : ''), handle: [hr.left, hr.right, hr.top, hr.bottom].map(Math.round), block: Math.round(er.left), text: tr ? [tr.left, tr.top, tr.bottom].map(Math.round) : null, clip: Math.round(cr.left) };
+      return { tag: el.tagName + (el.className ? '.' + String(el.className).split(' ')[0] : ''), handle: [hr.left, hr.right, hr.top, hr.bottom].map(Math.round), block: Math.round(er.left), span: [Math.round(er.top), Math.round(er.bottom)], text: tr ? [tr.left, tr.top, tr.bottom].map(Math.round) : null, clip: Math.round(cr.left) };
     }, [scope, i]);
     const say = (what) => problems.push(`${surface}: ${r.tag}: ${what}`);
     if (r.missing) { say('no handle came up'); continue; }
     const [hl, hrt, ht, hb] = r.handle;
     if (hl < r.clip - 1) say(`the handle is cut off at the page's left edge (${hl} < ${r.clip})`);
     if (hrt > Math.min(r.block, r.text?.[0] ?? Infinity) + 1) say(`the handle is over the block (it ends at ${hrt}, the block's words start at ${Math.min(r.block, r.text?.[0] ?? Infinity)})`);
-    if (r.text && ((ht + hb) / 2 < r.text[1] - 4 || (ht + hb) / 2 > r.text[2] + 4)) say(`the handle is not level with the first line (${ht}-${hb} against ${r.text[1]}-${r.text[2]})`);
+    if ((ht + hb) / 2 < r.span[0] - 4 || (ht + hb) / 2 > r.span[1] + 4) say(`the handle is not beside the block (${ht}-${hb}, the block ${r.span[0]}-${r.span[1]})`);
+    else if (r.text && ((ht + hb) / 2 < r.text[1] - 4 || (ht + hb) / 2 > r.text[2] + 4)) say(`the handle is not level with the first line (${ht}-${hb} against ${r.text[1]}-${r.text[2]})`);
   }
+}
+
+/** the bounty's finds about blocks, each where it was found */
+async function blockFinds(page) {
+  const say = (what) => problems.push(`blocks: ${what}`);
+  const set = async (body) => { await page.evaluate((b) => window.__editor.commands.setContent(b, true), body); await page.waitForTimeout(600); };
+  // a long list: the line under the pointer has the handle, not the list's first line far above
+  await set('# List\n\n' + Array.from({ length: 40 }, (_, i) => `- item ${i}`).join('\n') + '\n');
+  const item = page.locator('.tiptap li', { hasText: /^item 30$/ });
+  await item.scrollIntoViewIfNeeded();
+  const ib = await item.boundingBox();
+  await page.mouse.move(ib.x + 20, ib.y + ib.height / 2);
+  await page.waitForTimeout(120);
+  const hb = await page.locator('main .block-handle.on').boundingBox();
+  if (!hb || Math.abs(hb.y + hb.height / 2 - (ib.y + ib.height / 2)) > 6) say(`a long list's line has its handle elsewhere (${hb && Math.round(hb.y)} for a line at ${Math.round(ib.y)})`);
+  // ⋮⋮ on a heading far from the caret: the page stays put, and its menu opens by ⋮⋮, in the window
+  await set('# H\n\nfirst line\n\n## A heading here\n\n' + 'filler\n\n'.repeat(40) + 'bottom para\n');
+  await page.locator('.tiptap p', { hasText: 'bottom para' }).click();
+  await page.keyboard.type(' x');
+  await page.evaluate(() => { document.querySelector('main .scroll').scrollTop = 0; });
+  await page.waitForTimeout(150);
+  const h2 = await page.locator('.tiptap h2').boundingBox();
+  await page.mouse.move(h2.x + 20, h2.y + h2.height / 2);
+  await page.waitForTimeout(120);
+  const grip = await page.locator('main .block-handle.on .grip').boundingBox();
+  await page.mouse.click(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.waitForSelector('.menu');
+  const [scrollTop, menu] = await page.evaluate(() => [document.querySelector('main .scroll').scrollTop, document.querySelector('.menu').getBoundingClientRect().top]);
+  if (scrollTop > 2 || menu < 0) say(`⋮⋮ far from the caret scrolled the note (${scrollTop}px) or put its menu off the window (top ${Math.round(menu)})`);
+  await page.keyboard.press('Escape');
+  // a table: the row's ⋮⋮ clear of the first cell's words; a wide one in a callout keeps its words whole
+  await set('# T\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\n> [!warning] Box\n> | ' + Array.from({ length: 12 }, (_, i) => `column number ${i}`).join(' | ') + ' |\n> |' + ' --- |'.repeat(12) + '\n> | ' + Array.from({ length: 12 }, () => 'v').join(' | ') + ' |\n');
+  const cell = page.locator('.tiptap > .tableWrapper td', { hasText: '1' });
+  const cb = await cell.boundingBox();
+  await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height / 2);
+  await page.waitForTimeout(120);
+  const rg = await page.locator('.tbl-grip.row.on').boundingBox();
+  const textLeft = await page.evaluate(() => { const td = [...document.querySelectorAll('.tiptap > .tableWrapper td')].find((t) => t.textContent.trim() === '1'); const r = document.createRange(); r.selectNodeContents(td.querySelector('p') ?? td); return r.getClientRects()[0].left; });
+  if (rg && rg.x + rg.width > textLeft - 2) say(`a row's ⋮⋮ touches the first cell's words (ends ${Math.round(rg.x + rg.width)}, words at ${Math.round(textLeft)})`);
+  const thin = await page.evaluate(() => [...document.querySelectorAll('.callout th')].filter((th) => th.getBoundingClientRect().width < 60).length);
+  if (thin) say(`a wide table in a callout squeezes ${thin} columns too narrow for their words`);
 }
 
 try {
@@ -61,6 +104,7 @@ try {
     await page.evaluate((b) => window.__editor.commands.setContent(b, true), BODY);
     await page.waitForTimeout(600);
     await sweep(page, `${theme} note`, 'main');
+    if (theme === 'light') await blockFinds(page);
     // a day's page, from the calendar
     await page.locator('aside [data-row]', { hasText: 'Daily notes' }).first().click();
     await page.waitForSelector('.day');

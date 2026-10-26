@@ -9,6 +9,9 @@
   --bg-hover: light-dark(rgba(17, 19, 24, 0.05), rgba(255, 255, 255, 0.06));
   --bg-active: light-dark(rgba(17, 19, 24, 0.09), rgba(255, 255, 255, 0.1));
   --line: light-dark(rgba(17, 19, 24, 0.09), rgba(255, 255, 255, 0.09));
+  /* --line as it shows on the page, opaque: a table's cells each draw their side of a shared line, and a see-through
+     one came out twice as dark between cells as round the frame */
+  --line-solid: light-dark(#eaeaea, #212226);
   --accent: light-dark(#1b93f2, #3fc1ff); /* a fill: a button, a toggle, a ring (a white label on it reads at 3.2:1) */
   --accent-text: light-dark(#0a63bd, #3fc1ff); /* the accent as words or an icon: a link, a check mark (4.8:1) */
   --on-accent: light-dark(#fff, #0b0c10); /* text on the accent: white is ~2:1 on the dark theme's light blue */
@@ -773,12 +776,19 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 .tiptap .img-fig .size-grip { height: auto; top: 0; bottom: 22px; }
 
 /* tables: flat grid, header row tinted; a wide one scrolls inside the note instead of stretching it */
-.tiptap .tableWrapper { overflow-x: auto; margin: 0.7em 0; scrollbar-width: none; }
+.tiptap .tableWrapper { overflow-x: auto; margin: 0.7em 0; scrollbar-width: thin; }
 /* a Mac: room under a table for its + bar (tableHandles.ts), which lay over the line under it */
 html:not(.mobile) .tiptap .tableWrapper { margin-bottom: calc(0.7em + 18px); }
-.tiptap .tableWrapper::-webkit-scrollbar { display: none; }
-.tiptap table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 0.95em; }
-.tiptap th, .tiptap td { border: 1px solid var(--line); padding: 6px 9px; vertical-align: top; position: relative; min-width: 3em; }
+/* a table wider than its place: a thin bar under it says it goes on (hidden, its last columns were out of sight with
+   nothing to say so), shown as a code block's is */
+.tiptap .tableWrapper::-webkit-scrollbar { height: 6px; }
+.tiptap .tableWrapper::-webkit-scrollbar-track { background: transparent; }
+.tiptap .tableWrapper::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.tiptap table { border-collapse: collapse; width: 100%; table-layout: auto; font-size: 0.95em; }
+/* a table in a callout, a list or a toggle: its columns by what they hold, each wide enough for a word or two, and
+   past that it scrolls in its wrapper (laid out fixed, a wide one cut its headers mid-word: "colu / mn") */
+.tiptap :not(.tiptap) > .tableWrapper th, .tiptap :not(.tiptap) > .tableWrapper td { min-width: 6em; }
+.tiptap th, .tiptap td { border: 1px solid var(--line-solid); padding: 6px 9px; vertical-align: top; position: relative; min-width: 3em; }
 .tiptap th { background: var(--bg-input); font-weight: 600; text-align: left; }
 .tiptap th > p, .tiptap td > p { margin: 0; }
 /* a phone: eight columns shared out over its width left a few letters a line in each cell. There every column keeps
@@ -1071,7 +1081,7 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
 }
 .tbl-grip.on, .tbl-add.on { display: inline-flex; }
 .tbl-grip { border-radius: 4px; box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgba(0, 0, 0, 0.06); }
-.tbl-grip.row { width: 16px; height: 24px; }
+.tbl-grip.row { width: 12px; height: 24px; }
 .tbl-grip.col { width: 24px; height: 16px; }
 .tbl-grip svg { width: 8px; height: 16px; fill: currentColor; }
 .tbl-grip.col svg { width: 16px; height: 8px; }

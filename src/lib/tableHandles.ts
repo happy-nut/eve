@@ -149,7 +149,8 @@ class Handles {
       el.classList.add('on');
     };
     // on the edges: the row's ⋮⋮ across the table's left border, the column's ⋯ across its top one
-    put(this.rowGrip, { left: t.left - 8, top: row.top + row.height / 2 - 12 });
+    // (12 wide across the border: 6px into the cell, clear of its words at 9px; at 16 it touched them)
+    put(this.rowGrip, { left: t.left - 6, top: row.top + row.height / 2 - 12 });
     if (cell.left >= left - 1 && cell.right <= right + 1) put(this.colGrip, { left: cell.left + cell.width / 2 - 12, top: t.top - 8 });
     else this.colGrip.classList.remove('on');
     put(this.addRow, { left, top: t.bottom + 3, width: right - left, height: 16 });
