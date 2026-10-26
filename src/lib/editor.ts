@@ -13,6 +13,7 @@ import { keydownHandler } from '@tiptap/pm/keymap';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { canJoin, findWrapping, liftTarget } from '@tiptap/pm/transform';
 import { DOMParser, Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
+import { CellSelection } from '@tiptap/pm/tables';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
 import { DateMention, dayChoices, remindChoices, remindTime, isTime } from './date';
@@ -276,6 +277,23 @@ function moveAndFlash(editor: Editor, dir: -1 | 1): boolean {
  * ⌘↩ on a to-do, Notion's way: its box ticked or cleared. Over several lines, every to-do among them: all
  * ticked if any was open, all cleared if every one was done. Elsewhere the key is not ours.
  */
+/**
+ * Cells chosen in a table, copied as text. With the table's header row among them, a markdown table of just those
+ * cells (Settings → General, on unless turned off): pasted into a note, a README or a chat, it is the table again.
+ * Otherwise a tab between cells and a line a row, as a spreadsheet copies and takes them (they came a blank line
+ * apart, one cell a paragraph).
+ */
+function copiedCells(sel: CellSelection, slice: Slice, serializer: any): string {
+  const table = sel.$anchorCell.node(-1);
+  const top = Math.min(sel.$anchorCell.index(-1), sel.$headCell.index(-1));
+  const header = top === 0 && table.firstChild?.firstChild?.type.name === 'tableHeader';
+  const rows: PMNode[] = [];
+  slice.content.descendants((n) => (n.type.name === 'tableRow' ? (rows.push(n), false) : true));
+  if (header && appearance.s.tableCopyMarkdown) return serializer.serialize(Fragment.from(table.type.create(table.attrs, rows))).trim();
+  const plain = (cell: PMNode) => { const words: string[] = []; cell.forEach((b) => words.push(b.textContent)); return words.join(' ').replace(/[\t\n]/g, ' '); };
+  return rows.map((r) => { const cells: string[] = []; r.forEach((c) => cells.push(plain(c))); return cells.join('\t'); }).join('\n');
+}
+
 /** ⌘↵ in a toggle's title: it opens, or closes (Notion's ⌘↵ acts on the block it is in) */
 function toggleHere({ tr, state }: { tr: any; state: any }): boolean {
   const { $from } = state.selection;
@@ -960,6 +978,7 @@ export function createEditor(opts: {
       clipboardTextSerializer: (slice, view) => {
         const { $from, $to } = view.state.selection;
         const serializer = (editor.storage as any).markdown.serializer;
+        if (view.state.selection instanceof CellSelection) return copiedCells(view.state.selection, slice, serializer);
         const inLine = $from.sameParent($to) && $from.parent.isTextblock;
         if (inLine && $from.parent.type.spec.code) return slice.content.textBetween(0, slice.content.size, '\n');
         // words inside inline code: just them, no backticks (pasted in a terminal, those ran a command)

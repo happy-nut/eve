@@ -29,6 +29,8 @@ interface Appearance {
    *  capitalised as you type. Off unless asked for: a note is code, lists and half-sentences as often as prose, and
    *  "git" became "Git" at the start of every line */
   autoCorrect: boolean;
+  /** chosen table cells that take in the header row copy as a markdown table (off: a tab between cells) */
+  tableCopyMarkdown: boolean;
   /** the highlighter's pens, as #rrggbb (Settings → Highlighter): the first is the plain one, written ==text== and
    *  drawn in it; a word marked with another is written with its colour in the note (highlight.ts) */
   highlights: string[];
@@ -46,7 +48,7 @@ interface Appearance {
 export const PASTELS = ['#fff1a8', '#c9f2d4', '#cfe3ff', '#ffd6e3', '#e5d8ff'];
 /** the note's text size, px: the Size slider's range, and where ⌘+ / ⌘- stop */
 export const SIZE_MIN = 12, SIZE_MAX = 28;
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
 
 function load(): Appearance {
   try {
