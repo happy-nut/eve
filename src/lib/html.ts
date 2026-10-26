@@ -236,6 +236,53 @@ export const HtmlComment = Node.create({
   addAttributes: () => ({ text: { default: '', parseHTML: (el: HTMLElement) => el.getAttribute('data-eve-comment') ?? '', rendered: false } }),
   parseHTML: () => [{ tag: 'div[data-eve-comment]', priority: 60 }],
   renderHTML: ({ node }) => ['div', { 'data-eve-comment': node.attrs.text, class: 'html-comment' }, `<!--${node.attrs.text}-->`],
+  // `<!-- toc -->` (the / menu's Table of contents, Notion's): the note's headings, drawn afresh as they change, each
+  // a click away. Kept in the file as the comment, which another app leaves unseen
+  addNodeView() {
+    return ({ node, editor }) => {
+      if (node.attrs.text.trim() !== 'toc') {
+        const dom = document.createElement('div');
+        dom.className = 'html-comment';
+        dom.setAttribute('data-eve-comment', node.attrs.text);
+        dom.textContent = `<!--${node.attrs.text}-->`;
+        return { dom };
+      }
+      const dom = document.createElement('nav');
+      dom.className = 'toc';
+      dom.contentEditable = 'false';
+      let last = '';
+      const draw = () => {
+        const heads: { level: number; text: string; pos: number }[] = [];
+        editor.state.doc.descendants((n, pos) => {
+          if (n.type.name === 'heading' && pos > 0 && n.textContent.trim()) heads.push({ level: n.attrs.level, text: n.textContent, pos });
+          return n.type.name !== 'heading';
+        });
+        const key = heads.map((h) => `${h.level}:${h.text}`).join('\n');
+        if (key === last && dom.childElementCount) return;
+        last = key;
+        dom.replaceChildren(...(heads.length ? heads.map((h) => {
+          const a = document.createElement('a');
+          a.textContent = h.text;
+          a.style.paddingLeft = `${(Math.min(h.level, 3) - Math.min(...heads.map((x) => x.level))) * 1.2}em`;
+          a.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            const at = heads.find((x) => x.text === h.text)?.pos ?? h.pos;
+            editor.chain().focus(at + 1).run();
+            (editor.view.nodeDOM(at) as HTMLElement | null)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+          });
+          return a;
+        }) : [Object.assign(document.createElement('span'), { className: 'toc-empty', textContent: 'Headings will be listed here' })]));
+      };
+      draw();
+      editor.on('update', draw);
+      return {
+        dom,
+        ignoreMutation: () => true,
+        stopEvent: (e: Event) => e.type === 'mousedown',
+        destroy: () => editor.off('update', draw),
+      };
+    };
+  },
   addStorage: () => ({
     markdown: {
       serialize(state: any, node: any) {

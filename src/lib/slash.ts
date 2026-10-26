@@ -1,5 +1,7 @@
 // The popups typed into a note — `/` blocks, `[[` links, `@` dates, `:` emoji — and the `/` menu's items.
 import type { Editor } from '@tiptap/core';
+import { Fragment } from '@tiptap/pm/model';
+import { Selection } from '@tiptap/pm/state';
 import { insertKanban } from './kanban';
 import { insertDatabase } from './databaseNode';
 import { insertFootnote } from './footnote';
@@ -428,6 +430,11 @@ export const SLASH: SuggestItem[] = [
   { label: 'Video', hint: 'Pick a file', icon: ICONS.video, run: (e) => { pickVideo().then((src) => src && e.chain().focus().insertContent({ type: 'video', attrs: { src, name: src.split('/').pop() } }).run()); } },
   { label: 'Footnote', hint: '[^1] a note at the end', keywords: 'reference cite 각주 주석', icon: ICONS.text, run: insertFootnote },
   { label: 'Link to note', hint: '[[ another note', icon: ICONS.wikiLink, run: tip('wikiLink', (e) => e.chain().focus().insertContent('[[').run()) },
+  // Notion's own, for the line the / was typed on
+  { label: 'Table of contents', hint: 'every section, kept up to date', keywords: 'toc outline 목차', icon: ICONS.text, run: (e) => e.chain().focus().insertContent({ type: 'htmlComment', attrs: { text: ' toc ' } }).run() },
+  { label: 'Duplicate', hint: 'this line again under it', keywords: 'copy 복제', icon: ICONS.text, run: (e) => runEditorCommand(e, 'duplicate') },
+  { label: 'Move to', hint: 'this line to another page', keywords: 'moveto 옮기기 이동', icon: ICONS.page, run: (e) => void moveLine(e) },
+  { label: 'Delete', hint: 'this line', keywords: 'remove 삭제', icon: ICONS.text, run: deleteLine },
   {
     label: 'Emoji', hint: '😀 pick one', icon: ICONS.emoji,
     run: (e) => {
@@ -438,6 +445,49 @@ export const SLASH: SuggestItem[] = [
     },
   },
 ];
+
+/** The block the caret is in, as Notion means it: a list's item (with what is under it), or the line itself */
+function lineRange(editor: Editor): { from: number; to: number } {
+  const { $from } = editor.state.selection;
+  const item = $from.depth > 1 && /Item$/.test($from.node(-1).type.name) && $from.index(-1) === 0;
+  const d = item ? $from.depth - 1 : $from.depth;
+  return { from: $from.before(d), to: $from.after(d) };
+}
+
+/** "/delete": the line goes, the caret to the end of the one above */
+function deleteLine(editor: Editor) {
+  const { from, to } = lineRange(editor);
+  const tr = editor.state.tr.delete(from, to);
+  editor.view.dispatch(tr.setSelection(Selection.near(tr.doc.resolve(Math.min(from, tr.doc.content.size)), -1)).scrollIntoView());
+  editor.commands.focus();
+}
+
+/** "/moveto": the line (an item with what is under it) to the end of another page, gone from here.
+ *  (ponytail: the other page's half is not part of ⌘Z here; the page itself keeps its own versions) */
+async function moveLine(editor: Editor) {
+  const here = notes.current;
+  let pool = notes.pages.filter((n) => n.id !== here?.id);
+  if (pool.length > 30) {
+    const q = (await ui.prompt(`Move to which page? (${pool.length} to choose from)`, ''))?.trim().toLowerCase();
+    if (q === undefined) return void editor.commands.focus();
+    pool = pool.filter((n) => titleOf(n).toLowerCase().includes(q)).slice(0, 30);
+  }
+  const c = editor.view.coordsAtPos(editor.state.selection.from);
+  ui.openMenu({ clientX: Math.round(c.left), clientY: Math.round(c.bottom + 4) }, pool.length
+    ? pool.map((n) => ({ label: titleOf(n), run: () => {
+      const { from, to } = lineRange(editor);
+      const { state } = editor;
+      let slice = state.doc.slice(from, to).content;
+      // an item alone is no block of a note: in a list of its own kind
+      const first = slice.firstChild;
+      if (first && /Item$/.test(first.type.name)) slice = Fragment.from(state.doc.resolve(from).parent.copy(slice));
+      const md = (editor.storage as any).markdown.serializer.serialize(state.schema.topNodeType.create(null, slice)).trim();
+      notes.update(n.id, `${n.body.trimEnd()}\n\n${md}\n`);
+      deleteLine(editor);
+      ui.toast(`Moved to “${titleOf(n)}”`);
+    } }))
+    : [{ label: 'No other page to move it to', disabled: true }]);
+}
 
 /** 'Untitled', 'Untitled 2', … — a fresh page needs a title no other page answers to, because
  *  [[links]] resolve by title. Renaming the page carries its links along (see followRename). */
