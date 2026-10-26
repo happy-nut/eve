@@ -289,6 +289,8 @@ const mathNode = (display: boolean) => Node.create({
       handler: ({ state, range, match }) => {
         // in code being typed (`$x$`): the closing backtick makes it code, the dollars and all
         if (((match.input ?? '').slice(0, (match.index ?? 0) + match[1].length).match(/`/g)?.length ?? 0) % 2) return null;
+        // nor where a formula has no place (a toggle's title holds words only): it took the closing $ and drew nothing
+        if (!state.doc.resolve(range.from).parent.type.contentMatch.matchType(this.type)) return null;
         const start = range.from + match[1].length;
         state.tr.replaceWith(start, range.to, this.type.create({ latex: match[2] }));
       },

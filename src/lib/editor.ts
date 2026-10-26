@@ -1078,6 +1078,15 @@ export function createEditor(opts: {
       // new untitled toggle was made of them. They are just the lines; a whole toggle copied is still a toggle.
       transformPasted: (slice, view) => {
         let { content, openStart, openEnd } = slice;
+        // a toggle's title holds words only: what is pasted there is its words, a formula or a link as written. Fitted
+        // as it was, a line with a formula in it, two paragraphs, a list, went in as nothing
+        const $here = view.state.selection.$from;
+        if ($here.parent.type.name === 'detailsSummary') {
+          const serializer = (editor.storage as any).markdown.serializer;
+          const written = (leaf: PMNode) => (leaf.isText ? leaf.text! : leaf.isInline ? (serializer.serialize(view.state.schema.nodes.doc.create(null, view.state.schema.nodes.paragraph.create(null, leaf))) as string).trim() : '');
+          const words = content.textBetween(0, content.size, ' ', written).replace(/\s+/g, ' ').trim();
+          return new Slice(words ? Fragment.from(view.state.schema.text(words)) : Fragment.empty, 0, 0);
+        }
         // rows copied from a table come as rows, open: pasted outside a table, ProseMirror made a table around them
         // and left the empty line above it. They are a table of their own. (Into a table, prosemirror-tables pastes
         // the cells.)
