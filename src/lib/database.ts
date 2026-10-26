@@ -153,6 +153,16 @@ export function byDay<T extends Pick<Note, 'props'>>(rows: readonly T[], prop: s
   return days;
 }
 
+const TAGS = ['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'] as const;
+/** A choice's colour, as Notion gives each tag one: read from its words, so it is the same in every row, view and
+ *  device, and nothing more is written into the file. (ponytail: two choices may share a colour; a colour kept in the
+ *  schema, as Notion keeps it, if someone wants to pick one.) */
+export function tagColor(choice: string): (typeof TAGS)[number] {
+  let h = 0;
+  for (const ch of choice.trim().toLowerCase()) h = (h * 31 + ch.codePointAt(0)!) >>> 0;
+  return TAGS[h % TAGS.length];
+}
+
 /** a choice the rows carry that the property does not list yet (typed on another device, or by hand): added */
 export function withChoice(d: DbSchema, name: string, choice: string): DbSchema {
   return { ...d, props: d.props.map((p) => (p.name === name && !(p.options ?? []).includes(choice) ? { ...p, options: [...(p.options ?? []), choice] } : p)) };

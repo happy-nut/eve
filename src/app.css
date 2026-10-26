@@ -28,16 +28,30 @@
   --ink-gray: light-dark(#6f6e69, #a3a29e); --ink-brown: light-dark(#8a5a44, #c4917a); --ink-orange: light-dark(#b0500a, #e08a52);
   --ink-yellow: light-dark(#8f6516, #d6a84f); --ink-green: light-dark(#2f7a52, #5fb586); --ink-blue: light-dark(#1f6fa8, #6aa6e0);
   --ink-purple: light-dark(#7b4fa8, #b48be0); --ink-pink: light-dark(#b03a78, #e07aae); --ink-red: light-dark(#c4302b, #ef6b66);
-  /* tooltips sit on the same grey as a callout or a code block (opaque, so they read over anything) */
+  /* the same nine as grounds (Notion's palette, its 50 step): a callout's box. One palette for words, boxes and tags,
+     so a red callout and a red word are the same red. Cyan is Obsidian's ([!tip], [!abstract]), not Notion's.
+     See-through, each the colour Notion's opaque one makes over white: the selection is drawn under the text
+     (selectionLayer.ts), and an opaque box hid it there — a drag inside a callout showed nothing selected. */
+  --tint-gray: light-dark(rgba(132, 132, 115, 0.114), rgba(255, 255, 255, 0.06)); --tint-brown: light-dark(rgba(164, 115, 115, 0.121), rgba(184, 101, 72, 0.12)); --tint-orange: light-dark(rgba(239, 177, 115, 0.242), rgba(233, 126, 40, 0.12));
+  --tint-yellow: light-dark(rgba(239, 208, 115, 0.257), rgba(162, 105, 50, 0.16)); --tint-green: light-dark(rgba(122, 166, 115, 0.135), rgba(45, 153, 100, 0.12)); --tint-blue: light-dark(rgba(115, 185, 214, 0.171), rgba(51, 126, 169, 0.16));
+  --tint-purple: light-dark(rgba(173, 115, 220, 0.086), rgba(155, 97, 211, 0.12)); --tint-pink: light-dark(rgba(225, 115, 165, 0.1), rgba(220, 76, 145, 0.1)); --tint-red: light-dark(rgba(241, 115, 122, 0.143), rgba(222, 85, 88, 0.12));
+  --tint-cyan: light-dark(rgba(115, 193, 188, 0.178), rgba(44, 167, 160, 0.13));
+  /* …and a step stronger, a tag in a database (its 100 step): a chip on a white row must show as one */
+  --tag-gray: light-dark(rgba(84, 72, 49, 0.15), rgba(255, 255, 255, 0.11)); --tag-brown: light-dark(rgba(210, 162, 141, 0.35), #3a2d26); --tag-orange: light-dark(rgba(224, 124, 57, 0.27), #45301f);
+  --tag-yellow: light-dark(rgba(236, 191, 66, 0.39), #43361f); --tag-green: light-dark(rgba(123, 183, 129, 0.27), #233328); --tag-blue: light-dark(rgba(93, 165, 206, 0.27), #1f3140);
+  --tag-purple: light-dark(rgba(168, 129, 197, 0.27), #322838); --tag-pink: light-dark(rgba(225, 136, 179, 0.27), #3a2530); --tag-red: light-dark(rgba(244, 171, 159, 0.4), #432724);
+  /* tooltips sit on a grey like a code block's (opaque, so they read over anything) */
   --tip-bg: light-dark(#f3f3f4, #1c1d21);
   --tip-fg: var(--fg);
   /* every floating surface is one of two: a popup (menus, popovers, the caret's popups, Find) or a panel (Settings,
      a confirm, a card, a PDF). Their motion is src/lib/motion.ts. */
   --pop-radius: 10px;
   --pop-border: 1px solid var(--line);
-  --pop-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  /* Notion's layers, a near one and a far one, each faint: the hairline border draws the edge, the shadow only lifts it
+     (one 18% shadow spread wide read as a smudge round every menu). The dark theme's are stronger, or nothing shows. */
+  --pop-shadow: 0 14px 28px -6px light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.4)), 0 2px 4px -1px light-dark(rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.24));
   --panel-radius: 14px;
-  --panel-shadow: 0 0 0 0.5px var(--line), 0 24px 72px rgba(0, 0, 0, 0.28);
+  --panel-shadow: 0 0 0 0.5px var(--line), 0 5px 10px light-dark(rgba(15, 15, 15, 0.1), rgba(0, 0, 0, 0.3)), 0 15px 40px light-dark(rgba(15, 15, 15, 0.2), rgba(0, 0, 0, 0.5));
   --scrim: light-dark(rgba(20, 22, 28, 0.18), rgba(0, 0, 0, 0.38)); /* under a dialog */
   color-scheme: light dark; /* follows the system; Settings -> Appearance -> Theme pins one */
 }
@@ -345,7 +359,10 @@ main { flex: 1; min-width: 0; position: relative; }
 main::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 72px; z-index: var(--z-fade); pointer-events: none;
   background: linear-gradient(to bottom, var(--bg) 38%, rgba(0, 0, 0, 0) 100%);
+  transition: opacity 0.15s;
 }
+/* a cover at the top (Editor.svelte): no text under the icons yet, and the fade would wash the cover's top out */
+main:has(.scroll.cover-top)::before { opacity: 0; }
 /* where is the keyboard? a blue edge flashes on the pane that just took focus, then fades out —
    only when focus moved by keyboard; a mouse click already shows where you are */
 /* set by App.svelte only when the keyboard moves focus from one pane to the other (never within a pane) */
@@ -369,7 +386,7 @@ main.tabbed .page-head.with-icon { height: 98px !important; }
   outline: none;
   min-height: 100%;
   padding: 44px clamp(24px, 8vw, 96px) 40vh;
-  max-width: var(--editor-width, 820px);
+  max-width: var(--editor-width, 900px);
   margin: 0 auto;
   user-select: text;
   font-family: var(--font-editor, inherit);
@@ -377,10 +394,14 @@ main.tabbed .page-head.with-icon { height: 98px !important; }
   font-size: var(--font-size, 15px);
 }
 .tiptap > * + * { margin-top: 0.5em; }
-.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 { font-weight: 600; line-height: 1.25; margin: 1.2em 0 0.3em; letter-spacing: -0.01em; }
-.tiptap h1 { font-size: 1.9em; }
-.tiptap h2 { font-size: 1.45em; }
-.tiptap h3 { font-size: 1.15em; }
+/* Notion's steps, 40 / 30 / 24 / 20 / 16 at 16px: the title, then each heading a clear step down, the smallest still
+   a step above the text (at 1.15em an h3 read as a bold line). The room above each is the text's size times a step
+   (2, 1.4, 1.1), not the heading's own em, which gave an h3 less room than the text gets: a heading sits with what
+   follows it, not with what came before. */
+.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 { font-weight: 600; line-height: 1.3; margin: calc(var(--font-size, 15px) * 1.1) 0 0.15em; letter-spacing: -0.01em; }
+.tiptap h1 { font-size: 1.875em; margin-top: calc(var(--font-size, 15px) * 2); }
+.tiptap h2 { font-size: 1.5em; margin-top: calc(var(--font-size, 15px) * 1.4); }
+.tiptap h3 { font-size: 1.25em; }
 .tiptap h4 { font-size: 1em; }
 .tiptap h5 { font-size: 0.9em; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.04em; }
 .tiptap > h1:first-child { margin-top: 0; }
@@ -395,7 +416,7 @@ main.tabbed .page-head.with-icon { height: 98px !important; }
 /* the page's title is its first line (titleOf), whatever it was written as: a plain line or any heading. It is drawn
    as the title, larger than a heading in the note, in a note's own pane only (a floating card has a title of its own) */
 .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5):first-child {
-  font-size: 2.3em; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; margin-top: 0; color: var(--fg); text-transform: none;
+  font-size: 2.5em; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; margin-top: 0; color: var(--fg); text-transform: none;
 }
 html.mobile .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5):first-child { font-size: 2em; }
 .tiptap ul, .tiptap ol { padding-left: 1.4em; margin: 0; list-style: none; }
@@ -637,8 +658,10 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
   border-top-color: var(--accent); box-shadow: var(--glow);
   outline: 6px solid var(--accent-soft); outline-offset: -1px; border-radius: 1px;
 }
-.tiptap a { color: var(--accent-text); text-decoration: none; cursor: pointer; }
-.tiptap a:hover { text-decoration: underline; }
+/* a link reads as the sentence it is in, as Notion's do: the text's own colour over a faint underline, which darkens
+   under the pointer. Blue words in a paragraph read as a row of buttons; a link to a note already looks this way. */
+.tiptap a { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 2px; cursor: pointer; transition: text-decoration-color 0.12s; }
+.tiptap a:hover { text-decoration-color: currentColor; }
 /* a link to another note reads as text with the note's icon and an underline — no pill, so nothing
    sticks out of the line box to be clipped, and the selected state is the plain selection colour */
 .tiptap .wikilink { cursor: pointer; }
@@ -689,21 +712,22 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 /* callout */
 .tiptap .callout {
   display: flex; gap: 10px; align-items: flex-start;
-  background: var(--code-bg); border-radius: 8px; padding: 12px 14px; margin: 0.6em 0; /* same grey as a code block */
+  /* Notion's box: the palette's grey, its room (16 round, 12 before the icon) and its corners */
+  background: var(--tint-gray); border-radius: 10px; padding: 16px 16px 16px 12px; margin: 0.6em 0;
 }
-.tiptap .callout-emoji { font-size: 1.15em; line-height: 1.5; cursor: pointer; user-select: none; }
+.tiptap .callout-emoji { flex: none; width: 1.5em; text-align: center; font-size: 1.15em; line-height: 1.5; cursor: pointer; user-select: none; } /* one width, so every callout's text starts at one place */
 .tiptap .callout-emoji svg { width: 1.2em; height: 1.2em; vertical-align: -0.2em; }
 .tiptap .callout-body { flex: 1; min-width: 0; }
 .tiptap .callout-body > * + * { margin-top: 0.4em; }
 /* the text on the marker's line ([!warning] Watch out) is the callout's title */
 .tiptap .callout[data-titled] .callout-body > p:first-child { font-weight: 600; }
 /* an Obsidian type ([!warning], [!tip]…) tints the box its colour */
-.tiptap .callout[data-color='blue'] { background: light-dark(rgba(30, 155, 255, 0.1), rgba(63, 193, 255, 0.12)); }
-.tiptap .callout[data-color='cyan'] { background: light-dark(rgba(0, 170, 190, 0.1), rgba(0, 200, 220, 0.12)); }
-.tiptap .callout[data-color='green'] { background: light-dark(rgba(52, 170, 90, 0.11), rgba(60, 200, 110, 0.12)); }
-.tiptap .callout[data-color='orange'] { background: light-dark(rgba(255, 150, 0, 0.12), rgba(255, 170, 40, 0.13)); }
-.tiptap .callout[data-color='red'] { background: light-dark(rgba(255, 69, 58, 0.1), rgba(255, 90, 80, 0.13)); }
-.tiptap .callout[data-color='purple'] { background: light-dark(rgba(140, 90, 230, 0.1), rgba(170, 130, 255, 0.13)); }
+.tiptap .callout[data-color='blue'] { background: var(--tint-blue); }
+.tiptap .callout[data-color='cyan'] { background: var(--tint-cyan); }
+.tiptap .callout[data-color='green'] { background: var(--tint-green); }
+.tiptap .callout[data-color='orange'] { background: var(--tint-orange); }
+.tiptap .callout[data-color='red'] { background: var(--tint-red); }
+.tiptap .callout[data-color='purple'] { background: var(--tint-purple); }
 /* ==highlight== */
 .tiptap mark { background: var(--hl-plain, #fff1a8); color: #1f2328; border-radius: 3px; padding: 0 1px; }
 /* a pen's own colour is on the mark itself (highlight.ts); the text on any pastel stays dark, in the dark theme too */
@@ -998,3 +1022,26 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
 .tiptap .toc a:hover { color: var(--fg); background: var(--bg-hover); }
 .tiptap .toc .toc-empty { color: var(--fg-dim); }
 .tiptap .toc.ProseMirror-selectednode { outline: 2px solid var(--accent-soft); border-radius: 6px; }
+
+/* + and ⋮⋮ beside the block under the pointer (blockHandle.ts), in the margin left of the text */
+.editor:has(> .block-handle) { position: relative; }
+.block-handle {
+  position: absolute; z-index: var(--z-block-ui); display: flex; align-items: center; height: 24px;
+  opacity: 0; pointer-events: none; transition: opacity 0.12s;
+}
+.block-handle.on { opacity: 1; pointer-events: auto; }
+.block-handle button {
+  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 24px; padding: 0;
+  border: 0; border-radius: 4px; background: none; color: var(--fg-dim); transition: background 0.12s, color 0.12s;
+}
+.block-handle .grip { width: 18px; cursor: grab; }
+.block-handle button:hover { background: var(--bg-hover); color: var(--fg); }
+.block-handle svg { width: 15px; height: 15px; fill: currentColor; }
+/* where a dragged block will land: Notion's blue line between the blocks */
+.block-drop {
+  position: absolute; z-index: var(--z-block-ui); height: 3px; border-radius: 2px; pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 50%, transparent); display: none;
+}
+.block-drop.on { display: block; }
+:root.block-drag .prosemirror-dropcursor-block, :root.block-drag .prosemirror-dropcursor-inline { display: none !important; }
+@media print { .block-handle, .block-drop { display: none !important; } }

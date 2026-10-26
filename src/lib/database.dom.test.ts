@@ -1,7 +1,7 @@
 // Databases (Notion's): rows are the pages under a page, their properties frontmatter lines of their own
 import { test, expect } from 'vitest';
 import { notes, parse, serialize, type Note } from './notes.svelte';
-import { parseDb, serializeDb, viewRows, columnsOf, passes, withChoice, defaultDb, type DbSchema } from './database';
+import { parseDb, serializeDb, viewRows, columnsOf, passes, withChoice, defaultDb, tagColor, type DbSchema } from './database';
 
 const note = (props?: Note['props'], order = 0): Note => ({ id: 'x' + order, body: `# R${order}\n`, updatedAt: 1, deleted: false, group: '', order, props });
 
@@ -94,4 +94,10 @@ test('rollups, a relation\'s links, and the calendar\'s days', () => {
   const d = parseDb(serializeDb({ title: 'T', view: 'calendar', dateBy: 'Due', props: [{ name: 'P', type: 'relation', target: 'x' }, { name: 'R', type: 'rollup', relation: 'P', of: 'Name', fn: 'count' }, { name: 'F', type: 'formula', expr: '1+1' }] }));
   expect(d!.props.map((p) => p.type)).toEqual(['relation', 'rollup', 'formula']);
   expect(d!.view).toBe('calendar');
+});
+
+test('a tag has one colour wherever it shows, read from its words; different tags get different ones', () => {
+  expect(tagColor('Doing')).toBe(tagColor(' doing '));
+  const colours = new Set(['Todo', 'Doing', 'Done', 'Blocked', 'Later', 'Idea', '긴급', '보류'].map(tagColor));
+  expect(colours.size).toBeGreaterThan(3);
 });

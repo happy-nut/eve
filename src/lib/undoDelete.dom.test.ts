@@ -18,7 +18,7 @@ const done = () => new Promise((r) => setTimeout(r, 0));
 /** a note made and written in (one left as made goes by itself as another opens: notes.svelte.ts, untouched) */
 const made = (body: string, group?: string) => { const n = notes.create(body, group); notes.touched(n.id); return n; };
 const row = () => document.body.appendChild(document.createElement('div'));
-const where = (id: string) => { const n = notes.all.find((x) => x.id === id)!; return { deleted: n.deleted, group: n.group ?? '', parent: n.parent ?? '', icon: n.icon ?? '', wide: n.wide }; };
+const where = (id: string) => { const n = notes.all.find((x) => x.id === id)!; return { deleted: n.deleted, group: n.group ?? '', parent: n.parent ?? '', icon: n.icon ?? '', wide: n.wide, small: n.small, cover: n.cover }; };
 
 test('a note deleted from the list: ⌘Z there brings it back, open; ⇧⌘Z or ⌘Z in a note does not', async () => {
   history.clear();
@@ -48,7 +48,7 @@ test('the toast\'s Undo and ⌘Z take a delete back once, not twice', async () =
   expect(history.size).toBe(1); // the note's making, still there to undo; not the delete again
 });
 
-test('every change to the list is undoable, newest first: made, moved, nested, an icon, full width, deleted', async () => {
+test('every change to the list is undoable, newest first: made, moved, nested, an icon, full width, small text, a cover, deleted', async () => {
   history.clear();
   const a = made('# A\n\nx', ''); await done();
   const b = made('# B\n\ny', ''); await done();
@@ -57,9 +57,13 @@ test('every change to the list is undoable, newest first: made, moved, nested, a
   notes.setParent(a.id, b.id); await done();
   notes.setIcon(b.id, '🐢'); await done();
   notes.setWide(b.id, true); await done();
+  notes.setLook(b.id, { small: true }); await done();
+  notes.setLook(b.id, { cover: 'gradient:sea' }); await done();
   notes.remove(a.id); await done();
   const r = row();
   ui.undoKey(cmdZ(r)); expect(where(a.id).deleted).toBe(false);
+  ui.undoKey(cmdZ(r)); expect(where(b.id).cover).toBeUndefined();
+  ui.undoKey(cmdZ(r)); expect(where(b.id).small).toBeUndefined();
   ui.undoKey(cmdZ(r)); expect(where(b.id).wide).toBeUndefined();
   ui.undoKey(cmdZ(r)); expect(where(b.id).icon).toBe(before.b.icon);
   ui.undoKey(cmdZ(r)); expect(where(a.id).parent).toBe('');

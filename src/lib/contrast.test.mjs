@@ -55,6 +55,10 @@ const PAIRS = [
   ...['--hl-key', '--hl-str', '--hl-num', '--hl-fn', '--hl-var'].map((h) => [h, ['--code-bg'], TEXT]),
   // a word coloured in a note, on the page, a card and a code-less line's hover
   ...['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'].map((c) => [`--ink-${c}`, ['--bg', '--bg-pop', '--bg-hover'], TEXT]),
+  // the text in a callout of each colour, a code chip in one, and a tag in a database row
+  ...['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red', 'cyan'].map((c) => ['--fg', [`--tint-${c}`, `--code-bg@--tint-${c}`], TEXT]),
+  ['--fg-dim', ['--tint-gray'], TEXT],
+  ...['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'].map((c) => ['--fg', [`--tag-${c}`, `--tag-${c}@--bg-pop`], TEXT]),
   // a button's label on the accent: short, bold words, read as a label (Turtle and Toss keep white on their blue too)
   ['--on-accent', ['--accent'], ICON],
 ];

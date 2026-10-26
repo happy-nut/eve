@@ -82,6 +82,7 @@ for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
         ['set a property', () => { const n = pick(live()); if (n) notes.setProp(n.id, pick(['Status', 'Due', 'id', 'parent'])!, pick(['x', null, ['t']])!); }],
         ['set an icon', () => { const n = pick(live()); if (n) notes.setIcon(n.id, pick(['', '🐢', '📌'])!); }],
         ['make it wide or not', () => { const n = pick(live()); if (n) notes.setWide(n.id, pick([true, false])!); }],
+        ['small text, a cover', () => { const n = pick(live()); if (n) notes.setLook(n.id, pick([{ small: true }, { small: undefined }, { cover: 'gradient:sea' }, { cover: undefined }])!); }],
         ['move a group', () => { const g = pick(groups.names); if (g) groups.move(g, pick(['', ...groups.names.filter((x) => x !== g)]) ?? '', null); }],
         // ⌘Z outside the text: the newest thing done to the notes or the groups taken back (history.svelte.ts)
         ['app undo', () => { history.undo(); }],
