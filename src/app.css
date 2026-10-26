@@ -1037,11 +1037,19 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
 .block-handle .grip { width: 18px; cursor: grab; }
 .block-handle button:hover { background: var(--bg-hover); color: var(--fg); }
 .block-handle svg { width: 15px; height: 15px; fill: currentColor; }
-/* where a dragged block will land: Notion's blue line between the blocks */
+/* where a dragged block will land: a line between the blocks, the same as the list's when a note is dragged in it
+   (Sidebar.svelte, .drop-before) */
 .block-drop {
-  position: absolute; z-index: var(--z-block-ui); height: 3px; border-radius: 2px; pointer-events: none;
-  background: color-mix(in srgb, var(--accent) 50%, transparent); display: none;
+  position: absolute; z-index: var(--z-block-ui); height: 3px; margin-top: -0.5px; border-radius: 2px; pointer-events: none;
+  background: var(--accent); box-shadow: var(--glow), 0 0 0 2px var(--accent-soft); display: none;
 }
+/* the picture of a block being dragged (blockHandle.ts): small, so the line it is dragged to stays in sight */
+.block-ghost {
+  position: fixed; top: -1000px; left: 0; width: 320px; max-height: 72px; overflow: hidden; padding: 6px 10px;
+  border-radius: 8px; background: var(--bg-pop); box-shadow: var(--pop-shadow); font-size: var(--font-size, 15px);
+  line-height: var(--line-height, 1.6); color: var(--fg);
+}
+.block-ghost > * { margin: 0 !important; }
 .block-drop.on { display: block; }
 :root.block-drag .prosemirror-dropcursor-block, :root.block-drag .prosemirror-dropcursor-inline { display: none !important; }
 @media print { .block-handle, .block-drop { display: none !important; } }
