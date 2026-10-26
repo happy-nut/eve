@@ -872,6 +872,26 @@ function looseLists(editor: Editor) {
   });
 }
 
+/**
+ * → at the end of a line that ends in bold, code, a highlight… (← at the start of one that starts with it): what is
+ * typed next is plain, as in Notion. Typing on without it keeps the formatting going, as a mark does; one press takes
+ * it off, the next goes on to the next line as it always did.
+ */
+const markExit = Extension.create({
+  name: 'markExit',
+  addKeyboardShortcuts() {
+    const out = (dir: -1 | 1) => () => {
+      const { state, view } = this.editor, sel = state.selection;
+      if (!sel.empty) return false;
+      const $c = sel.$from, marks = state.storedMarks ?? $c.marks();
+      if ((dir > 0 ? $c.pos !== $c.end() : $c.parentOffset !== 0) || !marks.length) return false;
+      view.dispatch(state.tr.setStoredMarks([]));
+      return true;
+    };
+    return { ArrowRight: out(1), ArrowLeft: out(-1) };
+  },
+});
+
 export function createEditor(opts: {
   element: HTMLElement;
   content: string;
@@ -1107,6 +1127,7 @@ export function createEditor(opts: {
         bulletList: false, // replaced below: "-" then Enter is a line of its own
       }),
       Text,
+      markExit,
       // code inside a link ([run `npm i` first](u)) stays in it: stock code shuts out every other mark, so the link
       // was cut in two around it. Formatting still goes (nothing in code is bold).
       // Inline code all deleted, the next text typed there is not code again. The webview deletes the letters
@@ -1114,20 +1135,9 @@ export function createEditor(opts: {
       // cleared out (in WebKit), everything typed after it came out as code.
       Code.extend({
         excludes: 'bold italic strike underline highlight',
-        // → at the end of a line ending in code (← at the start of one starting with it): what is typed next is
-        // plain. The stock exit typed a space there, one more each time the caret came by
+        // → at the end of a line ending in code is markExit's, as for every mark. The stock exit typed a space there,
+        // one more each time the caret came by
         exitable: false,
-        addKeyboardShortcuts() {
-          const out = (dir: -1 | 1) => () => {
-            const { state, view } = this.editor, sel = state.selection;
-            if (!sel.empty) return false;
-            const $c = sel.$from, marks = state.storedMarks ?? $c.marks();
-            if ((dir > 0 ? $c.pos !== $c.end() : $c.parentOffset !== 0) || !this.type.isInSet(marks)) return false;
-            view.dispatch(state.tr.setStoredMarks(this.type.removeFromSet(marks)));
-            return true;
-          };
-          return { ...this.parent?.(), ArrowRight: out(1), ArrowLeft: out(-1) };
-        },
         // its spaces as written (`a  b`, `  `): read as any text, a run of them was one space when the note opened,
         // and code of spaces only went altogether
         parseHTML() {
