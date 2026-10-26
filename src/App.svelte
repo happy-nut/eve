@@ -38,6 +38,8 @@
   import { claimKeys, handledBy, PRIORITY } from './lib/keys';
 
   let sidebarOpen = $state(true);
+  // where the note's pane starts across the window, for what sits in its middle (a toast, a hint)
+  $effect(() => { document.documentElement.style.setProperty('--pane-left', !isMobile && sidebarOpen ? '260px' : '0px'); });
   let settingsOpen = $state(false);
   // a layer like any other while it is open (ui.layers): back and Esc reach it in its turn, and it puts the keyboard back
   $effect(() => { if (settingsOpen) return ui.openedSettings(() => (settingsOpen = false)); });

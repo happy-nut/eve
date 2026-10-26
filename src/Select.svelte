@@ -31,6 +31,9 @@
     at = Math.max(0, options.findIndex(([id]) => id === value));
     if (btn && !isMobile) place(Math.max(btn.offsetWidth, 160), options.length * 34 + 8);
     open = true;
+    // its keys are its button's: opened by a click, WebKit leaves the focus where it was, and Esc closed the whole of
+    // Settings around it instead of the list
+    btn?.focus();
   }
   /** Under the button, its right edge on the button's; over it when there is no room under it — its bottom edge just
    *  above the button (placed by its top at the button's top, the list covered the button and ran off the bottom of

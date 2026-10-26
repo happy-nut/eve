@@ -505,7 +505,8 @@
   :global(html.mobile) .backdrop { background: var(--bg); }
   .panel:focus { outline: none; }
   .panel {
-    position: fixed; z-index: var(--z-panel); top: 50%; left: 50%; transform: translate(-50%, -50%);
+    /* held by its top, not centred: each tab is its own height, and centred the tabs moved under the pointer */
+    position: fixed; z-index: var(--z-panel); top: max(40px, 9vh); left: 50%; transform: translateX(-50%);
     width: min(560px, 92vw); max-height: 82vh; display: flex; flex-direction: column; overflow: hidden;
     background: var(--bg-pop); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
   }

@@ -305,6 +305,11 @@
     display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; font-size: 13px; color: var(--fg-dim); white-space: nowrap;
   }
   :global(.shell:not(:has(aside))) .crumbs { left: 214px; }
+  /* tabs open: the note starts under their row, and the crumbs, kept in the window's top row, are 71px above it — left
+     at 10px they ran through the page's icon and "Add cover" */
+  :global(main.tabbed) .crumbs { top: -61px; }
+  /* Find open (top right of the window): the crumbs end before it, not under it */
+  :global(main:has(.find)) .crumbs { right: 400px; }
   .sep { opacity: 0.45; flex: none; padding: 0 1px; }
   .sep:first-child { display: none; }
   .crumb {
@@ -336,7 +341,10 @@
   .big-icon:active { transform: scale(0.95); }
   .editor.has-head :global(.tiptap) { padding-top: 0; min-height: calc(100% - 72px); }
   /* the cover: across the whole pane, the page's icon half over its lower edge, as Notion has it */
+  /* the cover under the window's top row, as Notion's is under its bar: the crumbs and the toolbar's icons are on the
+     page's own colour, not on the picture (on a dark one they could not be read) */
   .cover { position: relative; width: 100%; }
+  :global(html:not(.mobile) main:not(.tabbed)) .cover { margin-top: 44px; }
   .cover-change {
     position: absolute; right: clamp(24px, 8vw, 96px); bottom: 12px; border: 0; border-radius: 6px; padding: 4px 9px;
     font: inherit; font-size: 12.5px; color: var(--fg-dim); background: var(--bg-pop); box-shadow: var(--pop-shadow);
@@ -346,7 +354,9 @@
   :global(html.mobile) .cover-change { opacity: 1; }
   .cover-change:hover { color: var(--fg); }
   .page-head.with-cover, :global(html:not(.mobile)) .page-head.with-cover { padding-top: 14px; height: 52px; }
-  .page-head.with-cover.with-icon, :global(html:not(.mobile)) .page-head.with-cover.with-icon { padding-top: 0; height: 76px; }
+  /* the icon pulled up half over the cover: the head only as tall as what is left of it under the cover (76px left 50px
+     between the icon and the title, 10 without a cover) */
+  .page-head.with-cover.with-icon, :global(html:not(.mobile)) .page-head.with-cover.with-icon { padding-top: 0; height: 36px; }
   /* positioned, as the cover is, so the icon is drawn over the cover's edge, not under it */
   .page-head.with-cover { position: relative; }
   .page-head.with-cover .big-icon { margin-top: -38px; }

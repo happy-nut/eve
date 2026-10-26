@@ -200,8 +200,87 @@ try {
     await page.close();
   }
 
+  // ---- around the note (the bounty's finds): tabs, a cover, Settings, toasts, Find, a group renamed ----
+  for (const [w, h] of [[1200, 850], [800, 600]]) {
+    const page = await browser.newPage({ viewport: { width: w, height: h } });
+    await page.goto(URL_);
+    await page.waitForSelector('.tiptap');
+    const say = (what) => problems.push(`chrome ${w}×${h}: ${what}`);
+    const box = async (sel) => ((await page.locator(sel).count()) ? page.locator(sel).first().boundingBox() : null);
+    const meet = (a, b) => a && b && a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    await page.locator('.toolbar .icon').last().click();
+    await page.locator('.menu button', { hasText: 'New note' }).click();
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.__editor.commands.setContent('# Parent page\n\nwords\n', true));
+    await page.waitForTimeout(300);
+    // a page under it, so the crumbs show (a note at the top level has none)
+    await page.locator('.toolbar .icon').last().click();
+    await page.locator('.menu button', { hasText: 'New page in' }).first().click();
+    await page.waitForTimeout(500);
+    await page.evaluate(() => window.__editor.commands.setContent('# A page with a cover\n\nwords\n', true));
+    await page.waitForTimeout(300);
+    if (!(await page.locator('.crumbs').count())) say('a page under another shows no crumbs');
+    // a cover: the crumbs and the toolbar on the page's colour, above it; the icon close over the title
+    // (a new note has an icon already: Eve gives it one)
+    await page.mouse.move(w / 2, 200);
+    if (!(await page.locator('.big-icon').count())) await page.locator('.add-icon:not(.add-cover)').click();
+    await page.waitForTimeout(200);
+    await page.mouse.move(w / 2, 200);
+    await page.locator('.add-cover').click();
+    await page.waitForTimeout(300);
+    const cover = await box('.cover'), icon = await box('.big-icon'), title = await box('.tiptap > :first-child');
+    const tb = await box('.toolbar');
+    if (tb && cover && tb.y + tb.height > cover.y + 1) say(`the toolbar is drawn over the cover (${Math.round(tb.y + tb.height)} > ${Math.round(cover.y)})`);
+    if (icon && title && title.y - (icon.y + icon.height) > 24) say(`a ${Math.round(title.y - icon.y - icon.height)}px gap between the icon and the title under a cover`);
+    // tabs: the crumbs off the page's head
+    await page.keyboard.press('Meta+t');
+    await page.waitForTimeout(500);
+    const crumbs = await box('.crumbs'), head = await box('.page-head');
+    if (meet(crumbs, head)) say('with tabs open, the crumbs lie over the page\'s head');
+    await page.keyboard.press('Meta+w');
+    await page.waitForTimeout(300);
+    // Find open: the crumbs end before it
+    await page.keyboard.press('Meta+f');
+    await page.waitForSelector('.find');
+    if (meet(await box('.crumbs'), await box('.find'))) say('Find lies over the crumbs');
+    await page.keyboard.press('Escape');
+    // Settings: the tabs stay put as one is switched; Esc on an open choice closes the choice, not Settings
+    await page.keyboard.press('Meta+,');
+    await page.waitForSelector('.panel');
+    const tabsAt = [];
+    for (const name of ['Appearance', 'Sync', 'General']) {
+      const t = page.locator('.panel .seg button', { hasText: name }).first();
+      if (!(await t.count())) continue;
+      await t.click();
+      await page.waitForTimeout(200);
+      tabsAt.push(Math.round((await t.boundingBox()).y));
+    }
+    if (new Set(tabsAt).size > 1) say(`Settings' tabs move as one is switched (${tabsAt})`);
+    await page.locator('.panel .seg button', { hasText: 'Appearance' }).first().click();
+    await page.waitForTimeout(200);
+    const choice = page.locator('.panel button[aria-haspopup], .panel .select').first();
+    if (await choice.count()) {
+      await choice.click();
+      await page.waitForTimeout(150);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(200);
+      if (!(await page.locator('.panel').count())) say('Esc on an open choice in Settings closed Settings');
+    }
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    // a toast clear of the list's buttons
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.keyboard.press('Meta+Shift+Backspace');
+    await page.waitForTimeout(400);
+    const toast = await box('.toast');
+    for (const b of ['aside .foot button', 'aside button[aria-label="Trash"]', 'aside button[aria-label="Settings"]']) if (meet(toast, await box(b))) { say(`a toast lies over the list's ${b}`); break; }
+    await page.close();
+  }
+
   if (problems.length) { console.log(problems.map((p) => 'FAIL ' + p).join('\n')); assert.fail(`${problems.length} things out of place`); }
   console.log('ok   every block\'s handle beside it, off its words, in sight, level with its first line — notes and day pages, both themes');
+  console.log('ok   around the note: the toolbar off a cover, the crumbs clear of tabs and Find, Settings still, a toast clear of the list');
   console.log('ok   the calendar, databases and boards at 800×600: rows aligned, menus off their buttons, weeks apart, days as words, keys kept, a card over a day');
 } finally {
   await browser.close();

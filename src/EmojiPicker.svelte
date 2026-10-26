@@ -15,7 +15,9 @@
   // under what it was opened from, over it when there is no room under it; inside the window and clear of the
   // traffic lights / toolbar strip (screenInsets). A phone's picker fills the screen instead (app.css).
   const W = 352, H = 400;
-  const at = $derived(floatAt(req.at, { w: W, h: H }, { gap: 6 }));
+  const below = $derived(floatAt(req.at, { w: W, h: H }, { gap: 6 }));
+  // room on neither side of it (a short window): beside it, where there is the room, not over the icon it came from
+  const at = $derived(below.maxHeight >= H ? below : (() => { const s = floatAt(req.at, { w: W, h: H }, { gap: 6, prefer: 'side' }); return s.side === 'left' || s.side === 'right' ? { ...s, maxHeight: H } : below; })());
   // room for all of it on neither side (a short window): as low as it fits, over what it came from, rather than cut
   // off at the window's foot — it is modal, and its search box is what is wanted
   const x = $derived(at.left), y = $derived(at.maxHeight >= H ? at.top : Math.max(screenInsets().top, viewSize().h - screenInsets().bottom - H));

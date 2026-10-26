@@ -21,8 +21,9 @@
 
 <style>
   .toast {
-    position: fixed; left: 50%; bottom: 24px; translate: -50% 0; z-index: var(--z-toast);
-    display: flex; align-items: center; gap: 12px; max-width: min(440px, calc(100vw - 32px));
+    /* in the middle of the note's pane, not the window's: at a narrow window it lay over the list's Trash and Settings */
+    position: fixed; left: calc(var(--pane-left, 0px) + (100vw - var(--pane-left, 0px)) / 2); bottom: 24px; translate: -50% 0; z-index: var(--z-toast);
+    display: flex; align-items: center; gap: 12px; max-width: min(440px, calc(100vw - var(--pane-left, 0px) - 32px));
     /* dark, as the hints that come up in the same place are (it was a white card there, a stranger to them) */
     padding: 6px 6px 6px 14px; font-size: 13px; color: #f2f3f5;
     background: light-dark(#1d1f24, #2a2d33); border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);

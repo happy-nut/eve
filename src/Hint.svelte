@@ -17,11 +17,13 @@
 
 <style>
   .hint {
-    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: var(--z-toast); display: flex; align-items: center; gap: 9px;
-    max-width: min(560px, calc(100vw - 32px)); padding: 8px 8px 8px 12px; border-radius: 12px;
+    position: fixed; left: calc(var(--pane-left, 0px) + (100vw - var(--pane-left, 0px)) / 2); bottom: 22px; transform: translateX(-50%); z-index: var(--z-toast); display: flex; align-items: center; gap: 9px;
+    max-width: min(560px, calc(100vw - var(--pane-left, 0px) - 32px)); padding: 8px 8px 8px 12px; border-radius: 12px;
     background: light-dark(#1d1f24, #2a2d33); color: #f2f3f5; font-size: 13px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
   }
+  /* a toast up as well: the hint over it, not behind it in the same place */
+  :global(body:has(.toast)) .hint { bottom: 72px; }
   .bulb { font-size: 14px; }
   .text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .keys { display: inline-flex; align-items: center; gap: 4px; flex: none; }
