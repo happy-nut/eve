@@ -9,6 +9,7 @@ import Link from '@tiptap/extension-link';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
+import { defaultMarkdownSerializer } from 'prosemirror-markdown';
 import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
@@ -1249,7 +1250,20 @@ export function createEditor(opts: {
       hangulKeys,
       // A link ends where its words do, as in Notion: typed on at its end (or before it), the words were taken into the
       // link (stock links grow while autolink is on), and → at its end typed a space into the note each time
-      Link.extend({ inclusive: () => false, exitable: false }).configure({ openOnClick: false, autolink: true }),
+      Link.extend({
+        inclusive: () => false, exitable: false,
+        // an address with a space in it (a search's ?q=a b, a path) goes in <…>: bare, markdown ends the address at the
+        // space, and read back the link was gone and its [words](…) showed as text
+        addStorage() {
+          const plain = defaultMarkdownSerializer.marks.link;
+          return { markdown: { serialize: { ...plain, close: (state: any, mark: any, parent: any, index: number) => {
+            const href = String(mark.attrs.href ?? '');
+            if (state.inAutolink || !/\s/.test(href)) return (plain.close as any)(state, mark, parent, index);
+            state.inAutolink = undefined;
+            return `](<${href.replace(/[<>]/g, (c) => encodeURIComponent(c))}>${mark.attrs.title ? ` "${String(mark.attrs.title).replace(/"/g, '\\"')}"` : ''})`;
+          } } } };
+        },
+      }).configure({ openOnClick: false, autolink: true }),
       // code inside a link ([run `npm i` first](u)) stays in it: stock code shuts out every other mark, so the link
       // was cut in two around it. Formatting still goes (nothing in code is bold).
       // Inline code all deleted, the next text typed there is not code again. The webview deletes the letters

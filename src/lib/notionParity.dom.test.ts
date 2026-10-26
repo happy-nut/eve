@@ -236,3 +236,21 @@ test('a ###### heading brought in stays one when the note is saved (it became a 
   ed.commands.insertContent('!');
   expect(md(ed)).toContain('###### Small heading!');
 });
+
+test('a [[link]] to a note whose title ends in "]" reads back as that link', () => {
+  const ed = editorWith('# T\n\nsee [[Re: [draft]]] now');
+  let title = '';
+  ed.state.doc.descendants((n) => { if (n.type.name === 'wikiLink') title = n.attrs.title; });
+  expect(title).toBe('Re: [draft]');
+  expect(md(ed)).toBe('# T\n\nsee [[Re: [draft]]] now');
+});
+
+test('a link whose address has a space reads back as that link (its words showed as [words](…) text)', () => {
+  const ed = editorWith('# T\n\nsee here now');
+  ed.chain().setTextSelection({ from: posOf(ed, 'here'), to: posOf(ed, 'here', true) }).setLink({ href: 'https://e.com/?q=a b' }).run();
+  const saved = md(ed);
+  expect(saved).toBe('# T\n\nsee [here](<https://e.com/?q=a b>) now');
+  let href = '';
+  editorWith(saved).state.doc.descendants((n) => { for (const m of n.marks) if (m.type.name === 'link') href = m.attrs.href; });
+  expect(href).toBe('https://e.com/?q=a%20b');
+});

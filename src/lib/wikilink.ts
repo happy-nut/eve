@@ -137,8 +137,11 @@ export const WikiLink = Node.create<WikiLinkOptions>({
             md.inline.ruler.before('link', 'wikilink', (state, silent) => {
               const src = state.src;
               if (src.charCodeAt(state.pos) !== 0x5b || src.charCodeAt(state.pos + 1) !== 0x5b) return false;
-              const end = src.indexOf(']]', state.pos + 2);
+              let end = src.indexOf(']]', state.pos + 2);
               if (end < 0) return false;
+              // a title ending in "]" ("Re: [draft]") closes on the last of the brackets: on the first, the link went to
+              // "Re: [draft" and a "]" was left after it
+              while (src[end + 2] === ']') end++;
               const inner = src.slice(state.pos + 2, end);
               const [title, alias] = splitAlias(inner);
               if (!title || inner.includes('\n')) return false;
