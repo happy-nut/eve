@@ -293,25 +293,24 @@ export const LocalImage = Image.extend({
 });
 
 /**
- * ↩ on a selected picture shows it full size, as a double-click does. Its own extension, ahead of the
- * others: left to them, Enter would replace the selected picture with a new line.
+ * ↩ (or Space, Notion's) on a selected picture shows it full size, as a double-click does. Its own extension, ahead
+ * of the others: left to them, Enter would replace the selected picture with a new line, and Space with a space.
  */
 export const ImageView = Extension.create({
   name: 'imageView',
   priority: 1000,
   addKeyboardShortcuts() {
-    return {
-      Enter: () => {
-        const sel = this.editor.state.selection;
-        if (!(sel instanceof NodeSelection) || sel.node.type.name !== 'image') return false;
-        const img = this.editor.view.nodeDOM(sel.from) as HTMLElement | null;
-        const shown = img?.querySelector('img');
-        const src = shown?.src || assetUrl(sel.node.attrs.src) || sel.node.attrs.src;
-        const at = sel.from;
-        ui.viewImage(src, sel.node.attrs.alt ?? '', (p) => imageMenu(this.editor, () => at, p, src));
-        return true;
-      },
+    const show = () => {
+      const sel = this.editor.state.selection;
+      if (!(sel instanceof NodeSelection) || sel.node.type.name !== 'image') return false;
+      const img = this.editor.view.nodeDOM(sel.from) as HTMLElement | null;
+      const shown = img?.querySelector('img');
+      const src = shown?.src || assetUrl(sel.node.attrs.src) || sel.node.attrs.src;
+      const at = sel.from;
+      ui.viewImage(src, sel.node.attrs.alt ?? '', (p) => imageMenu(this.editor, () => at, p, src));
+      return true;
     };
+    return { Enter: show, Space: show };
   },
 });
 
