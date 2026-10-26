@@ -199,7 +199,8 @@ class Groups {
     this.saved.icons = Object.fromEntries(Object.entries(this.saved.icons).map(([g, v]) => [sub.includes(g) ? map(g) : g, v]));
     this.ids = new Map([...this.ids].map(([g, v]) => [sub.includes(g) ? map(g) : g, v]));
     this.persist();
-    if (np !== p) for (const n of notes.all) if (!n.deleted && within(n.group, p)) notes.relabel(n.id, map(n.group));
+    // the notes in the Trash too: restored after a rename, one brought the old name back as a group of its own
+    if (np !== p) for (const n of notes.all) if (within(n.group, p)) notes.relabel(n.id, map(n.group));
     return np;
   }
 

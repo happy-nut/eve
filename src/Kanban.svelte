@@ -323,12 +323,13 @@
   :global(html[data-input='keyboard']) :is(.kb-addcol, .kb-x).on { background: var(--accent-soft); color: var(--fg); }
   /* 4px side padding inside the scroller so a focus ring is not clipped at its edge */
   /* columns as tall as the board: a card dragged under a short column's last card drops in it */
+  /* sizes in em: a board follows the note's text size and Small text (in px it stayed 13px beside 28px text) */
   .kb { display: flex; align-items: stretch; gap: 14px; overflow-x: auto; padding: 6px 4px 14px; margin: 0.6em -4px; user-select: none; -webkit-user-select: none; scrollbar-width: thin; }
   /* narrower columns before a sideways scroll: at 236px each a new board's three ran past the note's width, "Done"
      cut and its + out of sight */
   .kb-col { flex: 0 1 236px; min-width: 170px; display: flex; flex-direction: column; gap: 7px; min-height: 60px; }
   .kb-head, .kb-rename {
-    display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 8px; border-radius: 6px; font-size: 13px; font-weight: 500;
+    display: flex; align-items: center; gap: 7px; min-height: 1.87em; padding: 0 8px; border-radius: 6px; font-size: 0.87em; font-weight: 500;
     outline: none; border: 0; background: none; color: var(--fg); font-family: inherit; width: 100%;
   }
   .kb-head:hover { background: var(--bg-hover); }
@@ -344,10 +345,10 @@
   :global(html[data-input='keyboard']) :is(.kb-head, .kb-card, .kb-add):focus { box-shadow: 0 0 0 2px var(--accent), var(--glow); }
   .kb-rename { box-shadow: 0 0 0 2px var(--accent-soft), var(--glow); background: var(--bg-input); }
   .kb-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-  .kb-count { color: var(--fg-dim); font-weight: 400; font-size: 12px; }
+  .kb-count { color: var(--fg-dim); font-weight: 400; font-size: 0.92em; }
   .dim { color: var(--fg-dim); }
   .kb-card {
-    display: flex; flex-direction: column; gap: 3px; padding: 8px 11px; border-radius: 8px; font-size: 13.5px; line-height: 1.4; outline: none;
+    display: flex; flex-direction: column; gap: 3px; padding: 8px 11px; border-radius: 8px; font-size: 0.9em; line-height: 1.4; outline: none;
     background: var(--bg-pop); box-shadow: 0 0 0 1px var(--line), 0 1px 3px rgba(0, 0, 0, 0.06);
     transition: background 0.12s, box-shadow 0.15s, transform 0.15s, opacity 0.15s;
   }
@@ -355,9 +356,9 @@
   .kb-card:active { transform: scale(0.985); }
   .kb-card.ghost { opacity: 0.35; }
   .kb-ctitle { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; word-break: break-word; }
-  .kb-cbody { color: var(--fg-dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kb-cbody { color: var(--fg-dim); font-size: 0.89em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .kb-add {
-    text-align: left; border: 0; background: none; color: var(--fg-dim); font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 6px; outline: none;
+    text-align: left; border: 0; background: none; color: var(--fg-dim); font: inherit; font-size: 0.87em; padding: 5px 8px; border-radius: 6px; outline: none;
     transition: background 0.12s, color 0.12s;
   }
   .kb-add:hover { background: var(--bg-hover); color: var(--fg); }

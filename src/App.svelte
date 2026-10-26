@@ -560,7 +560,8 @@
         break;
       }
       case 'newTab': if (!isMobile) { const n = notes.create('', notes.current?.group ?? ''); tabs.open(n.id); ui.focusOwner = 'editor'; } break;
-      case 'closeTab': if (!isMobile && !tabs.close()) win.hide(); break; // the last tab: put Eve away, as Esc does
+      // the last tab: put Eve away, as Esc does (not a pinned one among others: it stays, and so does the window)
+      case 'closeTab': if (!isMobile && !tabs.close() && tabs.list.length <= 1) win.hide(); break;
       case 'reopenTab': if (!isMobile) tabs.reopen(); break;
       case 'nextTab': if (!isMobile) tabs.step(1); break;
       case 'prevTab': if (!isMobile) tabs.step(-1); break;

@@ -278,6 +278,35 @@ try {
     await page.close();
   }
 
+  // ---- how a note looks under Settings' extremes (round 2): line heights, a large text in a narrow column, small text ----
+  for (const look of [{ lineHeight: 1.2 }, { lineHeight: 2.2 }, { size: 28, width: 520, font: 'mono' }, { size: 12 }]) {
+    const page = await browser.newPage({ viewport: { width: 1200, height: 850 } });
+    await page.addInitScript((l) => localStorage.setItem('eve.appearance', JSON.stringify({ ...JSON.parse(localStorage.getItem('eve.appearance') ?? '{}'), ...l })), look);
+    await page.goto(URL_);
+    await page.waitForSelector('.tiptap');
+    const say = (what) => problems.push(`look ${JSON.stringify(look)}: ${what}`);
+    await page.locator('.toolbar .icon').last().click();
+    await page.locator('.menu button', { hasText: 'New note' }).click();
+    await page.waitForTimeout(400);
+    await page.evaluate((b) => window.__editor.commands.setContent(b, true), '# Look\n\n- [ ] a to-do\n\n<details open><summary>a toggle</summary>\n\nbody\n\n</details>\n\n> [!tip] a callout\n> body\n\n' + Array.from({ length: 10 }, (_, i) => `${i + 1}. item`).join('\n') + '\n');
+    await page.waitForTimeout(500);
+    const m = await page.evaluate(() => {
+      const mid = (r) => (r.top + r.bottom) / 2;
+      const line = (el) => { const r = document.createRange(); const t = [...el.querySelectorAll('*')].concat(el).flatMap((e) => [...e.childNodes]).find((n) => n.nodeType === 3 && n.textContent.trim()); r.selectNodeContents(t); return r.getClientRects()[0]; };
+      const todo = document.querySelector('.tiptap li[data-checked] input'), todoText = line(document.querySelector('.tiptap li[data-checked] p'));
+      const arrow = document.querySelector('.tiptap [data-type="details"] > button'), title = line(document.querySelector('.tiptap summary'));
+      const emoji = document.querySelector('.tiptap .callout-emoji'), call = line(document.querySelector('.tiptap .callout-body p'));
+      const ol = document.querySelector('.tiptap ol'), ten = ol.children[9], col = document.querySelector('.tiptap').getBoundingClientRect().left + parseFloat(getComputedStyle(document.querySelector('.tiptap')).paddingLeft);
+      return { todo: mid(todo.getBoundingClientRect()) - mid(todoText), arrow: mid(arrow.getBoundingClientRect()) - mid(title), emoji: mid(emoji.getBoundingClientRect()) - mid(call),
+        number: ol.getBoundingClientRect().left - col, ten: Math.round(parseFloat(getComputedStyle(ten, '::before').width) || 0), size: parseFloat(getComputedStyle(document.querySelector('.tiptap p')).fontSize) };
+    });
+    for (const k of ['todo', 'arrow', 'emoji']) if (Math.abs(m[k]) > 2.5) say(`the ${k}'s marker is ${m[k].toFixed(1)}px off its first line`);
+    // the numbers' room: the list's own box starts at the text column, and "10." fits in its padding
+    const room = await page.evaluate(() => { const ol = document.querySelector('.tiptap ol'); const li = ol.children[9]; const pad = parseFloat(getComputedStyle(ol).paddingLeft); const r = document.createRange(); const c = getComputedStyle(li, '::before'); return { pad, size: parseFloat(c.fontSize) }; });
+    if (look.font !== 'mono' && room.pad < room.size * 1.6) say(`a numbered list keeps ${room.pad}px for its numbers, "10." needs more`);
+    await page.close();
+  }
+
   // ---- a phone (the bounty's finds): an Android phone's page in WebKit ----
   {
     const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36';

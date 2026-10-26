@@ -427,6 +427,8 @@ main.tabbed .page-head.with-icon { height: 98px !important; }
 }
 html.mobile .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5):first-child { font-size: 2em; }
 .tiptap ul, .tiptap ol { padding-left: 1.4em; margin: 0; list-style: none; }
+/* a number needs more room than a bullet: "10." hung out of the column (and touched a quote's bar) */
+.tiptap ol { padding-left: 1.75em; }
 .tiptap li > p { margin: 0; }
 .tiptap li { margin: 0.15em 0; position: relative; }
 /* markers drawn by an absolutely positioned ::before instead of ::marker: an outside marker sits in the line box,
@@ -449,7 +451,7 @@ html.mobile .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5):first-child { 
 .tiptap ul[data-type='taskList'] > li::before { content: none; }
 .tiptap ul[data-type='taskList'] li { display: flex; gap: 8px; align-items: flex-start; }
 /* checkbox centred on the first text line (line-height 1.6), so the text no longer floats above it */
-.tiptap ul[data-type='taskList'] li > label { flex: none; display: flex; align-items: center; height: 1.6em; margin: 0; }
+.tiptap ul[data-type='taskList'] li > label { flex: none; display: flex; align-items: center; height: calc(var(--line-height, 1.6) * 1em); margin: 0; } /* the first line's own height, at any line height (Settings) */
 .tiptap ul[data-type='taskList'] li > div { flex: 1; }
 /* only the item's own text, not the > div's nested list: Notion strikes the checked line alone and leaves children be */
 .tiptap ul[data-type='taskList'] li[data-checked='true'] > div > p { color: var(--fg-dim); text-decoration: line-through; }
@@ -475,7 +477,7 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
    boxes with their padding, so on any line with code in it the caret came out taller and higher, the text no bigger.
    (Sideways, 0.2em padding and the 0.15em shadow make the 0.35em it always had, a 0.15em margin keeps it clear.) */
 .tiptap code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.88em; background: var(--code-bg); padding: 0 0.2em; margin: 0 0.15em; box-shadow: 0 0 0 0.15em var(--code-bg); border-radius: 4px; }
-.tiptap pre { background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; margin: 0.6em 0; }
+.tiptap pre { background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; margin: 0.6em 0; line-height: 1.5; } /* code its own spacing: the prose's 2.2 double-spaced it */
 /* ProseMirror's own stylesheet sets pre-wrap on code blocks and loads after this one; the extra class
    outweighs it, so a long line scrolls sideways instead of folding onto the next */
 .tiptap .code-block pre, .tiptap .code-block pre code { white-space: pre; }
@@ -725,7 +727,7 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
   /* Notion's box: the palette's grey, its room (16 round, 12 before the icon) and its corners */
   background: var(--tint-gray); border-radius: 10px; padding: 16px 16px 16px 12px; margin: 0.6em 0;
 }
-.tiptap .callout-emoji { flex: none; width: 1.5em; text-align: center; font-size: 1.15em; line-height: 1.5; cursor: pointer; user-select: none; } /* one width, so every callout's text starts at one place */
+.tiptap .callout-emoji { flex: none; width: 1.5em; text-align: center; font-size: 1.15em; line-height: calc(var(--line-height, 1.6) / 1.15); /* its line the text's line */ cursor: pointer; user-select: none; } /* one width, so every callout's text starts at one place */
 .tiptap .callout-emoji svg { width: 1.2em; height: 1.2em; vertical-align: -0.2em; }
 .tiptap .callout-body { flex: 1; min-width: 0; }
 .tiptap .callout-body > * + * { margin-top: 0.4em; }
@@ -794,7 +796,7 @@ html:not(.mobile) .tiptap .tableWrapper { margin-bottom: calc(0.7em + 18px); }
 .tiptap :not(.tiptap) > .tableWrapper th, .tiptap :not(.tiptap) > .tableWrapper td { min-width: 6em; }
 .tiptap th, .tiptap td { border: 1px solid var(--line-solid); padding: 6px 9px; vertical-align: top; position: relative; min-width: 3em; }
 .tiptap th { background: var(--bg-input); font-weight: 600; text-align: left; }
-.tiptap th > p, .tiptap td > p { margin: 0; }
+.tiptap th > p, .tiptap td > p { margin: 0; white-space: pre-wrap; } /* a wrapped word's space hangs at the end of the line, as text does: break-spaces (ProseMirror's) set it at the start of the next, or on a line of its own */
 /* a phone: eight columns shared out over its width left a few letters a line in each cell. There every column keeps
    room for a word or two and the table runs as wide as that needs, scrolling sideways in its wrapper; one that fits
    still fills the width */
@@ -953,7 +955,8 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
    toggle left the body's text unpainted (Chromium), as if the selection had a hole in it */
 .tiptap [data-type='details'] { position: relative; padding-left: calc(1.3em + 4px); margin: 0.15em 0; }
 .tiptap [data-type='details'] > button {
-  position: absolute; left: 0; top: 0.1em; width: 1.3em; height: 1.4em; padding: 0; border: 0; border-radius: 5px;
+  /* centred on the title's first line at any line height (Settings): at 2.2 a fixed top sat it above the words */
+  position: absolute; left: 0; top: calc((var(--line-height, 1.6) - 1.4) * 0.5em); width: 1.3em; height: 1.4em; padding: 0; border: 0; border-radius: 5px;
   background: none; color: var(--fg-dim); cursor: pointer; font-size: inherit; /* a button's own 13px made the twisty a speck */
   display: flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s;
 }

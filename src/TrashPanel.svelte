@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { panelIn, scrimFade } from './lib/motion';
   import { sheet } from './lib/popup';
@@ -19,15 +20,21 @@
     ui.closeTrash();
     notes.restore(id);
   }
+  let searchEl = $state<HTMLInputElement | null>(null);
   async function erase(ids: string[], what: string) {
-    if (ids.length && (await ui.ask(`Delete ${what} for good? It can't be brought back.`))) notes.erase(ids);
+    if (!ids.length || !(await ui.ask(`Delete ${what} for good? It can't be brought back.`))) return;
+    notes.erase(ids);
+    // the button pressed went with its note: the keyboard stays in the Trash (it fell through to the note behind it,
+    // and what was typed next went into that note)
+    await tick();
+    searchEl?.focus();
   }
 </script>
 
 <div class="backdrop" transition:fade|global={scrimFade} onmousedown={() => ui.closeTrash()} role="presentation"></div>
 <div class="rpanel" data-panel="trash" transition:appear|global role="dialog" aria-modal="true" aria-label="Trash">
   <div class="top">
-    <input class="search" placeholder="Search the trash" bind:value={q} use:focus spellcheck="false" />
+    <input class="search" placeholder="Search the trash" bind:value={q} bind:this={searchEl} use:focus spellcheck="false" />
     <button class="close" aria-label="Close" onclick={() => ui.closeTrash()}><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
   </div>
   {#if list.length}
@@ -61,8 +68,9 @@
 <style>
   .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-sheet-scrim); }
   .rpanel {
-    position: fixed; z-index: var(--z-sheet); top: 40%; left: 50%; transform: translate(-50%, -50%);
-    width: min(440px, 92vw); max-height: min(520px, 80vh); display: flex; flex-direction: column;
+    /* held by its top, below the window's top row: centred at 80vh tall, a short window put it on the title bar */
+    position: fixed; z-index: var(--z-sheet); top: max(44px, 12vh); left: 50%; transform: translateX(-50%);
+    width: min(440px, 92vw); max-height: min(520px, calc(100vh - 88px)); display: flex; flex-direction: column;
     border-radius: var(--panel-radius); background: var(--bg-pop); box-shadow: var(--panel-shadow); font-size: 13px; overflow: hidden;
   }
   /* a phone: a sheet from the bottom, as the menus are */

@@ -6,7 +6,7 @@
   import { isMobile, pickImage } from './lib/platform';
   import { GRADIENTS, coverCss, gradientCover, randomCover } from './lib/cover';
   import { notes, titleOf, type Note } from './lib/notes.svelte';
-  import { appearance } from './lib/appearance.svelte';
+  import { appearance, SIZE_MIN } from './lib/appearance.svelte';
   import { shortcuts } from './lib/shortcuts.svelte';
   import { ui, under, hooks } from './lib/ui.svelte';
   import Icon from './Icon.svelte';
@@ -214,7 +214,7 @@
 
 <!-- a wide note takes the whole pane: nothing holds its text to the reading width; a small one is a step smaller -->
 <div class="scroll" bind:this={scrollEl} onscroll={onScroll} class:cover-top={coverTop && !!note.cover}
-  style:--editor-width={note.wide ? 'none' : null} style:--font-size={note.small ? `${Math.round(appearance.textPx * 0.875)}px` : null}>
+  style:--editor-width={note.wide ? 'none' : null} style:--font-size={note.small ? `${Math.max(SIZE_MIN, Math.round(appearance.textPx * 0.875))}px` : null}>
   {#if note.cover}
     <div class="cover" style:background={coverCss(note.cover)} style:height="{COVER_H}px">
       <button class="cover-change" onclick={(e) => coverMenu(e.currentTarget)}>Change cover</button>

@@ -1,5 +1,11 @@
+<script module lang="ts">
+  /** the day the keyboard was on, kept while the calendar is away (a note opened from it, then ⌘[ back): it came back
+   *  on today, the month that was being looked at lost */
+  let kept = '';
+</script>
+
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { focusNote } from './lib/popup';
   import { notes } from './lib/notes.svelte';
   import { previewOf } from './lib/markdown';
@@ -18,7 +24,10 @@
   // Eve stays open for days, hidden and summoned: today is read again when the day turns and whenever the
   // window comes back, or a calendar left open overnight kept showing (and its Today going to) yesterday
   let today = $state(dayKey(new Date()));
-  let cursor = $state(dayKey(new Date())); // the day under the keyboard
+  let cursor = $state(kept || dayKey(new Date())); // the day under the keyboard
+  $effect(() => { kept = cursor; });
+  // back to the calendar (⌘[, the list, ⌃⇧K) with the keyboard on nothing: on its day, so the arrows and ↩ work
+  onMount(() => { if (!document.activeElement || document.activeElement === document.body) void moveTo(cursor); });
   $effect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const check = () => {
