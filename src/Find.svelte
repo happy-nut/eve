@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import { caretIn } from './lib/motion';
   import type { Editor } from '@tiptap/core';
@@ -13,6 +14,7 @@
   let query = $state('');
   let replacement = $state('');
   let replacing = $state(false);
+  let bar = $state<HTMLDivElement | null>(null);
   let count = $state({ index: 0, total: 0 });
 
   const focus = (el: HTMLInputElement) => { el.focus(); el.select(); };
@@ -73,9 +75,10 @@
     // the Enter that ends a Korean or Japanese word being put together is the word's, not a step to the next match
     else if (e.key !== 'Enter' || composing(e)) return;
     e.preventDefault();
-    // with the replace field open, Enter works through the matches one replacement at a time;
-    // ⇧Enter still just walks back, so a match can be stepped over
-    if (replacing && !e.shiftKey) replaceNext();
+    // in the replace field, Enter works through the matches one replacement at a time; ⇧Enter still just walks back,
+    // so a match can be stepped over. In the find field it steps on, the replace line open or not (it replaced there,
+    // with the replacement field empty: each ↩ deleted a match)
+    if (replacing && !e.shiftKey && (e.target as HTMLElement).classList.contains('rep')) replaceNext();
     else walk(e.shiftKey ? -1 : 1);
   }
 </script>
@@ -86,7 +89,7 @@
 <!-- its buttons keep the keyboard in the field (WebKit gives a clicked button no focus: it went to nothing, and ↩ no
      longer stepped through the matches) -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="find" use:makeRoom transition:fly|global={{ ...caretIn, y: -6 }} onkeydown={onKey} onmousedown={(e) => { if ((e.target as Element).closest('button')) e.preventDefault(); }} role="search">
+<div class="find" bind:this={bar} use:makeRoom transition:fly|global={{ ...caretIn, y: -6 }} onkeydown={onKey} onmousedown={(e) => { if ((e.target as Element).closest('button')) e.preventDefault(); }} role="search">
   <div class="line">
     <svg class="glass" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
     <input use:focus placeholder="Find" spellcheck="false" value={query} oninput={(e) => type(e.currentTarget.value)} />
@@ -97,7 +100,7 @@
     <button class="icon" data-tip="Next (↩)" aria-label="Next" onclick={() => walk(1)}>
       <svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>
     </button>
-    <button class="icon" class:on={replacing} data-tip="Replace" aria-label="Replace" onclick={() => (replacing = !replacing)}>
+    <button class="icon" class:on={replacing} data-tip="Replace" aria-label="Replace" onclick={async () => { replacing = !replacing; if (replacing) { await tick(); bar?.querySelector<HTMLInputElement>('input.rep')?.focus(); } }}>
       <svg viewBox="0 0 16 16"><path d="M3 5.5h7.5a2 2 0 0 1 0 4H8M5 3.5l-2 2 2 2M11 12.5l2-2-2-2"/></svg>
     </button>
     <button class="icon" data-tip="Close (Esc)" aria-label="Close" onclick={close}>

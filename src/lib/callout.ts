@@ -164,7 +164,10 @@ export const Callout = Node.create({
               else state.closeBlock(first);
               node.forEach((child: any, _: number, i: number) => { if (i > 0) state.render(child, node, i); });
             } else {
-              state.ensureNewLine();
+              // a first line of words goes right under the marker; anything else a blank line down: "---" just under it
+              // read as the marker's underline (a heading), and the callout was gone the next time
+              if (first?.type.name === 'paragraph') state.ensureNewLine();
+              else state.closeBlock(node);
               state.renderContent(node);
             }
           });

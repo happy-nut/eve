@@ -212,3 +212,11 @@ test('a callout\'s title made a to-do: the callout has no title, as saved (the n
   const saved = md(ed);
   expect(editorWith(saved).getJSON().content![0]).toEqual(ed.getJSON().content![0]);
 });
+
+test('a callout whose first line is a divider or a picture is still a callout read back (the divider read as a heading\'s underline)', () => {
+  for (const note of ['> [!note]\n>\n> ---\n>\n> after', '> [!note]\n>\n> ![a](assets/a.png)']) {
+    const once = md(editorWith(note));
+    expect(once.trimEnd()).toBe(note);
+    expect(md(editorWith(once))).toBe(once);
+  }
+});
