@@ -51,7 +51,9 @@
     // of the table is still under it: what of the table is on screen is what it goes over.
     const shown = above >= tall + 3 ? Math.min(Math.max(r.top, top + 4 + tall + 8), r.bottom) : r.top;
     const f = floatAt({ left: r.left, right: r.right, top: shown, bottom: r.bottom }, { w, h: tall },
-      { prefer: 'above', gap: 8, avoid: { ...ins, top: Math.max(ins.top, top + 4) }, within: { left: -Infinity, right: Infinity, top: r.top - above, bottom: r.bottom + under } });
+      // (a phone: over or under the table, never in its corner: as wide as the table there, it lay over the header row
+      // being typed in; over the line beside the table is the lesser cover)
+      { prefer: 'above', gap: 8, avoid: { ...ins, top: Math.max(ins.top, top + 4) }, within: isMobile ? undefined : { left: -Infinity, right: Infinity, top: r.top - above, bottom: r.bottom + under } });
     // (y is the bar's foot: it is drawn up from there)
     at = { x: f.left, y: f.side === 'above' ? f.top + tall : f.top + h, inside: f.side === 'inside' };
     // smaller in the corner, larger out of it: placed again at its new size

@@ -342,6 +342,9 @@ try {
     await page.waitForTimeout(500);
     const tb = await page.evaluate(() => { const t = document.querySelector('.tbl-tools'); return t && { over: t.scrollWidth - t.clientWidth > 2, faded: t.classList.contains('more-r'), right: t.getBoundingClientRect().right }; });
     if (!tb) say('a table cell chosen showed no table bar (this check saw nothing)');
+    // the bar never over the cell being written in
+    const over = await page.evaluate(() => { const b = document.querySelector('.tbl-tools')?.getBoundingClientRect(); const c = [...document.querySelectorAll('.tiptap td')].find((t) => t.textContent.trim() === '2')?.getBoundingClientRect(); return b && c && b.left < c.right && c.left < b.right && b.top < c.bottom && c.top < b.bottom; });
+    if (over) say('the table\'s bar lies over the cell being written in');
     if (tb && tb.over && !tb.faded) say('the table\'s bar runs past the screen with nothing to say it goes on');
     if (tb && tb.right > 361) say(`the table's bar runs off the screen (${Math.round(tb.right)})`);
     // the calendar on its side: each week tall enough for its day's number
@@ -364,7 +367,8 @@ try {
 
   if (problems.length) { console.log(problems.map((p) => 'FAIL ' + p).join('\n')); assert.fail(`${problems.length} things out of place`); }
   console.log('ok   every block\'s handle beside it, off its words, in sight, level with its first line — notes and day pages, both themes');
-  console.log('ok   a phone: formulas, the formatting and table bars, the calendar on its side');
+  console.log('ok   a phone: formulas, the formatting and table bars (never over the cell written in), the calendar on its side');
+  console.log('ok   Settings\' extremes: markers level at line heights 1.2 and 2.2, numbers with room, a large text in a narrow column');
   console.log('ok   around the note: the toolbar off a cover, the crumbs clear of tabs and Find, Settings still, a toast clear of the list');
   console.log('ok   the calendar, databases and boards at 800×600: rows aligned, menus off their buttons, weeks apart, days as words, keys kept, a card over a day');
 } finally {

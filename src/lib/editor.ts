@@ -527,6 +527,8 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     // end of a line) a bare "/" opened nothing and stayed in the text, so a space goes first
     slash: () => {
       const { $from } = editor.state.selection;
+      // a toggle's title holds text only: no / menu opens there, so no "/" is left behind either
+      if ($from.parent.type.name === 'detailsSummary') return false;
       const before = $from.parent.textBetween(Math.max(0, $from.parentOffset - 1), $from.parentOffset, undefined, '\ufffc');
       return c().insertContent(before && !/\s/.test(before) ? ' /' : '/').run();
     },

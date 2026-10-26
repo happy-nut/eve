@@ -202,6 +202,8 @@ html.mobile .find input { font-size: 16px !important; }
 html.mobile .box {
   top: auto !important; bottom: 0 !important; left: 0 !important; right: 0; transform: none !important; width: auto !important;
   border-radius: 20px 20px 0 0 !important; padding: 22px 20px calc(18px + var(--bottom)) !important; font-size: 16px !important;
+  /* a phone on its side with the keyboard up: what does not fit scrolls (its top was cut off above the screen) */
+  max-height: calc(100dvh - var(--top) - 8px); overflow-y: auto;
 }
 html.mobile .box .mark { width: 36px; height: 36px; }
 html.mobile .box .mark svg { width: 19px; height: 19px; }
@@ -961,6 +963,8 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
   display: flex; align-items: center; justify-content: center; transition: background 0.12s, color 0.12s;
 }
 @media (hover: hover) { .tiptap [data-type='details'] > button:hover { background: var(--bg-hover); color: var(--fg); } }
+/* a phone: a finger's room round the arrow (22×24, a tap beside it put the caret in the title and the keyboard up) */
+html.mobile .tiptap [data-type='details'] > button::after { content: ''; position: absolute; inset: -10px -8px; }
 /* a filled triangle with soft corners, the size of the text's lower case, turning down when open */
 .tiptap [data-type='details'] > button::before {
   content: ''; width: 0.72em; height: 0.72em; background: currentColor; transition: transform 0.15s ease;

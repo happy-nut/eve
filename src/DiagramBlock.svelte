@@ -3,7 +3,7 @@
   import { isMobile, copyPng, copyText } from './lib/platform';
   import { pictureOf } from './lib/snapshot';
   import { fenced } from './lib/markdown';
-  import { ui } from './lib/ui.svelte';
+  import { ui, hooks } from './lib/ui.svelte';
   import { letGo } from './lib/focusWatch';
   import { claimKeys } from './lib/keys';
   import { renderMermaid, themeKey } from './lib/mermaid';
@@ -195,6 +195,14 @@
     };
   });
   $effect(() => { if (codeShown) active = false; });
+  // a phone's back while the diagram is being edited: one step out of it, as Esc on a Mac (it left the note, and its
+  // field, going with it, threw)
+  $effect(() => {
+    if (!active) return;
+    const back = () => { if (!flowEd?.escape()) leave(); };
+    hooks.diagramBack = back;
+    return () => { if (hooks.diagramBack === back) hooks.diagramBack = undefined; };
+  });
   // edited as its code (written by hand, or Code pressed): that is the note's own text, under the whole screen, so the
   // diagram goes back into the note to be edited there
   $effect(() => { if (codeShown && full) untrack(leaveFull); });
