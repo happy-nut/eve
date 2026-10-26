@@ -20,6 +20,7 @@ jobs:
       - run: npm run e2e:popups
       - run: npm run e2e:code
       - run: npm run e2e:summon
+      - run: npm run e2e:table
       - run: npm run e2e:handle
       - if: failure()
         uses: actions/upload-artifact@v4
