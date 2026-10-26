@@ -94,6 +94,8 @@ body {
   user-select: none;
   overflow: hidden;
 }
+/* a field's hint, readable: WebKit's own grey was 1.9:1 on a field's grey (the list's search, the Trash's, Find) */
+::placeholder { color: var(--fg-dim); opacity: 1; }
 button { cursor: default; }
 button.icon {
   border: 0; background: none; color: var(--fg-dim); font-size: 15px; line-height: 1;
@@ -407,30 +409,32 @@ main.tabbed .page-head.with-icon { height: 98px !important; }
    a step above the text (at 1.15em an h3 read as a bold line). The room above each is the text's size times a step
    (2, 1.4, 1.1), not the heading's own em, which gave an h3 less room than the text gets: a heading sits with what
    follows it, not with what came before. */
-.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 { font-weight: 600; line-height: 1.3; margin: calc(var(--font-size, 15px) * 1.1) 0 0.15em; letter-spacing: -0.01em; }
+.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5, .tiptap h6 { font-weight: 600; line-height: 1.3; margin: calc(var(--font-size, 15px) * 1.1) 0 0.15em; letter-spacing: -0.01em; }
 .tiptap h1 { font-size: 1.875em; margin-top: calc(var(--font-size, 15px) * 2); }
 .tiptap h2 { font-size: 1.5em; margin-top: calc(var(--font-size, 15px) * 1.4); }
 .tiptap h3 { font-size: 1.25em; }
 .tiptap h4 { font-size: 1em; }
 .tiptap h5 { font-size: 0.9em; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+.tiptap h6 { font-size: 0.85em; color: var(--fg-dim); }
 .tiptap > h1:first-child { margin-top: 0; }
 .tiptap p { margin: 0; }
 /* 700, not 600: the Korean face only steps up at Bold, and 600 reads the same as the text around it */
 .tiptap strong { font-weight: 700; }
-.tiptap > :first-child.is-empty::before, .tiptap > p.is-empty:nth-child(2):last-child::before {
+.tiptap > :first-child.is-empty::before, .tiptap > p.is-empty:nth-child(2):last-child::before,
+.tiptap :is(h1, h2, h3, h4, h5, h6, summary, li p, blockquote > p).is-empty::before {
   content: attr(data-placeholder);
   color: var(--fg-dim);
   float: left; height: 0; pointer-events: none;
 }
 /* the page's title is its first line (titleOf), whatever it was written as: a plain line or any heading. It is drawn
    as the title, larger than a heading in the note, in a note's own pane only (a floating card has a title of its own) */
-.editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5):first-child {
+.editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5, h6):first-child {
   font-size: 2.5em; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; margin-top: 0; color: var(--fg); text-transform: none;
 }
-html.mobile .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5):first-child { font-size: 2em; }
-.tiptap ul, .tiptap ol { padding-left: 1.4em; margin: 0; list-style: none; }
-/* a number needs more room than a bullet: "10." hung out of the column (and touched a quote's bar) */
-.tiptap ol { padding-left: 1.75em; }
+html.mobile .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5, h6):first-child { font-size: 2em; }
+/* every list's words start at one place, as Notion's do: a bullet's at 1.4em began left of a number's and a to-do's,
+   one step in further for each level ("10." needs this much: it hung out of the column at less) */
+.tiptap ul, .tiptap ol { padding-left: 1.75em; margin: 0; list-style: none; }
 .tiptap li > p { margin: 0; }
 .tiptap li { margin: 0.15em 0; position: relative; }
 /* markers drawn by an absolutely positioned ::before instead of ::marker: an outside marker sits in the line box,
@@ -448,7 +452,7 @@ html.mobile .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5):first-child { 
 .tiptap ol ol ol ol ol ol ol > li::before { content: counter(list-item) '.'; }
 .tiptap ol ol ol ol ol ol ol ol > li::before { content: counter(list-item, lower-alpha) '.'; }
 .tiptap ol ol ol ol ol ol ol ol ol > li::before { content: counter(list-item, lower-roman) '.'; }
-.tiptap ul > li::before { content: '•'; }
+.tiptap ul > li::before { content: '•'; right: 100%; width: 1.75em; text-align: center; } /* the dot in the middle of its room, as Notion's */
 .tiptap ul[data-type='taskList'] { padding-left: 0.2em; }
 .tiptap ul[data-type='taskList'] > li::before { content: none; }
 .tiptap ul[data-type='taskList'] li { display: flex; gap: 8px; align-items: flex-start; }
@@ -784,7 +788,9 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 .tiptap .img-fig .size-grip { height: auto; top: 0; bottom: 22px; }
 
 /* tables: flat grid, header row tinted; a wide one scrolls inside the note instead of stretching it */
-.tiptap .tableWrapper { overflow-x: auto; margin: 0.7em 0; scrollbar-width: thin; }
+/* (a pixel each side: a collapsed border's outer half lies outside the table, and was cut off at the right with a 2px
+   scroll to reach it) */
+.tiptap .tableWrapper { overflow-x: auto; margin: 0.7em 0; padding: 0 2px 0 1px; scrollbar-width: thin; }
 /* a Mac: room under a table for its + bar (tableHandles.ts), which lay over the line under it */
 html:not(.mobile) .tiptap .tableWrapper { margin-bottom: calc(0.7em + 18px); }
 /* a table wider than its place: a thin bar under it says it goes on (hidden, its last columns were out of sight with
@@ -819,7 +825,9 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 .tiptap.resize-cursor { cursor: col-resize; }
 /* find: every match tinted, the one in view stronger */
 .tiptap .find-hit { background: light-dark(rgba(255, 214, 0, 0.35), rgba(255, 214, 0, 0.25)); border-radius: 2px; }
-.tiptap .find-hit.current { background: light-dark(rgba(255, 176, 0, 0.75), rgba(255, 196, 0, 0.5)); }
+/* the one in view, solid, its words dark on it in both themes (at half a yellow under light words it read 3.6:1, and
+   looked like the rest) */
+.tiptap .find-hit.current { background: light-dark(rgba(255, 176, 0, 0.75), #f5b800); color: light-dark(var(--fg), #1f2328); }
 /* image */
 .tiptap img { max-width: 100%; border-radius: 8px; display: block; margin: 0.6em 0; }
 .tiptap img.ProseMirror-selectednode { outline: 2px solid var(--accent); box-shadow: var(--glow); }
@@ -1026,16 +1034,17 @@ html.mobile .tiptap [data-type='details'] > button::after { content: ''; positio
 .more-l.more-r { mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
 .tiptap .math-block.editing { mask-image: none; }
 
-/* a coloured word (textColor.ts): the theme's own shade of it, over the one written in the file (the light theme's) */
-.tiptap span[style*='#6f6e69' i] { color: var(--ink-gray) !important; }
-.tiptap span[style*='#8a5a44' i] { color: var(--ink-brown) !important; }
-.tiptap span[style*='#b0500a' i] { color: var(--ink-orange) !important; }
-.tiptap span[style*='#8f6516' i] { color: var(--ink-yellow) !important; }
-.tiptap span[style*='#2f7a52' i] { color: var(--ink-green) !important; }
-.tiptap span[style*='#1f6fa8' i] { color: var(--ink-blue) !important; }
-.tiptap span[style*='#7b4fa8' i] { color: var(--ink-purple) !important; }
-.tiptap span[style*='#b03a78' i] { color: var(--ink-pink) !important; }
-.tiptap span[style*='#c4302b' i] { color: var(--ink-red) !important; }
+/* a coloured word (textColor.ts): the theme's own shade of it, over the one written in the file (the light theme's). By
+   its hex as written, and as WebKit writes a style back on the page (rgb(…)): by the hex alone, none matched there */
+.tiptap span[style*='#6f6e69' i], .tiptap span[style*='rgb(111, 110, 105)'] { color: var(--ink-gray) !important; }
+.tiptap span[style*='#8a5a44' i], .tiptap span[style*='rgb(138, 90, 68)'] { color: var(--ink-brown) !important; }
+.tiptap span[style*='#b0500a' i], .tiptap span[style*='rgb(176, 80, 10)'] { color: var(--ink-orange) !important; }
+.tiptap span[style*='#8f6516' i], .tiptap span[style*='rgb(143, 101, 22)'] { color: var(--ink-yellow) !important; }
+.tiptap span[style*='#2f7a52' i], .tiptap span[style*='rgb(47, 122, 82)'] { color: var(--ink-green) !important; }
+.tiptap span[style*='#1f6fa8' i], .tiptap span[style*='rgb(31, 111, 168)'] { color: var(--ink-blue) !important; }
+.tiptap span[style*='#7b4fa8' i], .tiptap span[style*='rgb(123, 79, 168)'] { color: var(--ink-purple) !important; }
+.tiptap span[style*='#b03a78' i], .tiptap span[style*='rgb(176, 58, 120)'] { color: var(--ink-pink) !important; }
+.tiptap span[style*='#c4302b' i], .tiptap span[style*='rgb(196, 48, 43)'] { color: var(--ink-red) !important; }
 
 /* footnotes (footnote.ts): the reference raised, a footnote's own line smaller and dim */
 .tiptap sup.fnref { color: var(--accent-text); font-size: 0.72em; padding: 0 1px; cursor: pointer; }

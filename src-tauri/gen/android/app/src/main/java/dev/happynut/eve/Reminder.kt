@@ -142,11 +142,14 @@ object LineReminders {
       if (front?.get("deleted") == "true") continue
       val body = if (front != null) text.substring(text.indexOf("\n---", 4) + 4).trimStart('\n') else text
       var title = ""
-      var fence = false
-      for (raw in body.split("\n")) {
-        if (title.isEmpty() && raw.isNotBlank()) title = raw.replace(Regex("^#+\\s*"), "").trim()
-        if (Regex("^\\s*(```|~~~)").containsMatchIn(raw)) { fence = !fence; continue }
-        if (fence || DONE.containsMatchIn(raw)) continue
+      // the fence a line is in ("" a plain one): code is code, but a board's cards are words (date.ts's remindersIn)
+      var fence: String? = null
+      for (line0 in body.split("\n")) {
+        if (title.isEmpty() && line0.isNotBlank()) title = line0.replace(Regex("^#+\\s*"), "").trim()
+        val opening = Regex("^\\s*(?:```|~~~)(\\w*)").find(line0)
+        if (opening != null) { fence = if (fence == null) opening.groupValues[1] else null; continue }
+        if ((fence != null && fence != "kanban") || DONE.containsMatchIn(line0)) continue
+        val raw = if (fence == "kanban") line0.replace(Regex("^\\s*\"[^\"]*\":\\s*\""), "").replace(Regex("\",?\\s*$"), "").replace("\\n", " ") else line0
         for (m in IN_LINE.findAll(raw)) {
           val at = runCatching { fmt.parse("${m.groupValues[1]} ${m.groupValues[2]}")?.time }.getOrNull() ?: continue
           val line = MARKS.replace(raw.replace(IN_LINE, ""), "").replace(Regex("\\s+"), " ").trim()

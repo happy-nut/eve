@@ -94,6 +94,9 @@ assert.match(html('마감 @2026-09-24 입니다'), /<span data-date="2026-09-24"
 assert.match(html('@2026-09-24'), /<span data-date="2026-09-24">/, 'a date on its own');
 assert.match(html('(@2026-09-24)'), /<span data-date="2026-09-24">/, 'a date in brackets');
 
+assert.match(html('**@2026-09-24**'), /<strong><span data-date="2026-09-24">/, 'a date in bold (it read back as text)');
+assert.match(html('~~@2026-09-24 09:00 ⏰~~'), /<s><span data-date="2026-09-24"/, 'a reminder struck through');
+assert.match(html('마감@2026-09-24'), /<span data-date="2026-09-24">/, 'a date right after a Korean word');
 assert.doesNotMatch(html('write to compensation@toss.im'), /data-date/, 'an address is not a date');
 assert.doesNotMatch(html('2026@2026-09-24'), /data-date/, 'an @ inside a word is not a date');
 assert.doesNotMatch(html('@2026-13-01'), /data-date/, 'a month that does not exist');
@@ -127,6 +130,9 @@ console.log('DATE_OK');
   const rs = remindersIn('# T\n\n- [ ] call Bo @2026-09-25 09:30 ⏰\n- [x] done @2026-09-25 10:00 ⏰\n```\n@2026-09-25 11:00 ⏰\n```\n> ## 회의 @2026-09-26 14:00 ⏰ 준비');
   assert.deepEqual(rs.map((r) => [r.day, r.time, r.line]), [['2026-09-25', '09:30', 'call Bo'], ['2026-09-26', '14:00', '회의 준비']]);
   assert.equal(rs[0].at, new Date(2026, 8, 25, 9, 30).getTime(), 'rung at the local time');
+  // a board's card rings too (its fence was skipped as code)
+  const card = remindersIn('# B\n\n```kanban\n{\n  "columns": [\n    {\n      "title": "To do",\n      "cards": [\n        {\n          "title": "Card",\n          "body": "call Bo @2026-09-25 09:30 ⏰\\nmore"\n        }\n      ]\n    }\n  ]\n}\n```');
+  assert.deepEqual(card.map((r) => [r.day, r.time, r.line]), [['2026-09-25', '09:30', 'call Bo more']]);
 
   assert.equal(remindTime('2026-09-25', now), '09:00');
   assert.equal(remindTime('2026-09-24', new Date(2026, 8, 24, 14, 10)), '15:00', 'today: the next whole hour');

@@ -23,7 +23,13 @@
   // ---- the table's own undo: each step knows how to undo and redo itself ----
   type Step = { undo: () => void; redo: () => void };
   const done: Step[] = [], undone: Step[] = [];
-  function step(redo: () => void, undo: () => void) { redo(); done.push({ undo, redo }); undone.length = 0; }
+  let root: HTMLDivElement;
+  function step(redo: () => void, undo: () => void) {
+    redo(); done.push({ undo, redo }); undone.length = 0;
+    // the keyboard on the table, so ⌘Z next is this undo: a click on a checkbox or a button gives WebKit no focus, and
+    // a dialog (Delete property) hands it back to the note, whose ⌘Z undid something else (a column, the whole table)
+    if (root && !root.contains(document.activeElement)) root.focus({ preventScroll: true });
+  }
   const apply = (next: DbSchema) => { d = next; commit(next); };
   const put = (next: DbSchema) => { const was = d; step(() => apply(next), () => apply(was)); };
   /** ⌘Z / ⌘⇧Z on the table (a field's own words have the field's own undo) */
@@ -118,14 +124,19 @@
   }
   /** a new row, with what the view shows already set (the board's column, the calendar's day, the filter) */
   let fresh = $state<string | null>(null);
-  function addRow(props: Record<string, PropValue> = {}) {
+  async function addRow(props: Record<string, PropValue> = {}) {
     if (!pageId) return;
+    // a board, a calendar, a gallery show no field to name it in: it is named first (it was an "Untitled" no one could
+    // name, and the keys typed next went into the note)
+    const named = d.view === 'table' ? 'Untitled' : await ui.prompt('Name', '');
+    if (named === null || !pageId) return;
     const f = d.filter;
     const given = { ...(f && f.is !== 'checked' && f.is !== '' ? { [f.by]: def(f.by)?.type === 'multi' ? [f.is] : f.is } : f?.is === 'checked' ? { [f.by]: 'true' } : {}), ...props };
-    const id = notes.addRow(pageId, 'Untitled', given).id;
-    fresh = id;
+    const id = notes.addRow(pageId, named.trim() || 'Untitled', given).id;
+    if (d.view === 'table') fresh = id;
     done.push({ undo: () => notes.setGone(id, true), redo: () => notes.setGone(id, false) });
     undone.length = 0;
+    if (d.view !== 'table' && root) root.focus({ preventScroll: true }); // ⌘Z next takes it back
   }
   const dropRow = (n: Note) => { const id = n.id; step(() => notes.setGone(id, true), () => notes.setGone(id, false)); };
   const focusFresh = (el: HTMLInputElement, id: string) => { if (id === fresh) { fresh = null; el.focus(); el.select(); } };
@@ -183,8 +194,11 @@
     if (!nameOk(name, p.name)) return void ui.tell(`“${name}” is taken: a property needs a name of its own.`);
     const ids = rows.map((r) => r.id), was = d, from = p.name;
     const re = (s?: string) => (s === from ? name : s);
+    // a formula that reads it reads it by its new name (left as it was, it read nothing, and showed 0)
+    const said = new RegExp(`prop\\(\\s*(["'])${from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\1\\s*\\)`, 'g');
+    const follow = (x: PropDef) => { const e = x.expr?.replace(said, `prop("${name.replace(/"/g, '\\"')}")`); return e && e !== x.expr ? { expr: e } : {}; };
     const next: DbSchema = {
-      ...d, props: d.props.map((x) => (x === p ? { ...x, name } : { ...x, ...(x.relation === from ? { relation: name } : {}) })), groupBy: re(d.groupBy), dateBy: re(d.dateBy),
+      ...d, props: d.props.map((x) => (x === p ? { ...x, name } : { ...x, ...(x.relation === from ? { relation: name } : {}), ...follow(x) })), groupBy: re(d.groupBy), dateBy: re(d.dateBy),
       ...(d.sort ? { sort: { ...d.sort, by: re(d.sort.by)! } } : {}), ...(d.filter ? { filter: { ...d.filter, by: re(d.filter.by)! } } : {}),
     };
     step(() => { notes.renameProp(ids, from, name); apply(next); }, () => { notes.renameProp(ids, name, from); apply(was); });
@@ -200,7 +214,12 @@
     step(() => { for (const [id] of had) notes.setProp(id, p.name, null); apply(next); }, () => { for (const [id, v] of had) notes.setProp(id, p.name, v); apply(was); });
   }
   async function changeKind(p: PropDef, type: PropType, where: Where) {
-    const more = await configure(type, where, p);
+    // made a choice, what its rows already say are its choices (they were chips no menu offered, and the board put
+    // those rows under "No …")
+    const said = type === 'select' || type === 'multi'
+      ? [...new Set(rows.flatMap((r) => { const v = r.props?.[p.name]; return v == null || v === '' ? [] : Array.isArray(v) ? v.map(String) : type === 'multi' ? String(v).split(',').map((x) => x.trim()).filter(Boolean) : [String(v)]; }))]
+      : [];
+    const more = await configure(type, where, said.length ? { ...p, options: [...(p.options ?? []), ...said.filter((x) => !(p.options ?? []).includes(x))] } : p);
     if (!more) return;
     put({ ...d, props: d.props.map((x) => (x === p ? { name: x.name, type, ...more } : x)) });
   }
@@ -279,7 +298,7 @@
 
 <!-- the table's own ⌘Z, for what is done on it (a field's words keep the field's own undo) -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="db" role="group" aria-label="Database" onkeydown={undoKey}>
+<div class="db" role="group" aria-label="Database" tabindex="-1" bind:this={root} onkeydown={undoKey}>
   <div class="db-top">
     <input class="db-title" value={d.title} placeholder="Untitled database" spellcheck="false" aria-label="Database title"
       onchange={(e) => put({ ...d, title: e.currentTarget.value })} onkeydown={enterKeeps} />
@@ -296,7 +315,7 @@
     {#if p.type === 'checkbox'}
       <input type="checkbox" checked={v === 'true'} aria-label={p.name} onchange={(e) => setCell(n, p, e.currentTarget.checked ? 'true' : null)} />
     {:else if p.type === 'date'}
-      <input type="date" value={typeof v === 'string' ? v : ''} aria-label={p.name} onchange={(e) => setCell(n, p, e.currentTarget.value || null)} />
+      <input type="date" class:blank={!v} value={typeof v === 'string' ? v : ''} aria-label={p.name} onchange={(e) => setCell(n, p, e.currentTarget.value || null)} />
     {:else if p.type === 'select' || p.type === 'multi'}
       <button class="chips" aria-label={p.name} onclick={(e) => choiceMenu(e, n, p)}>
         {#each asList(v) as c}<span class="chip" style:background="var(--tag-{tagColor(c)})">{c}</span>{:else}<span class="empty">&nbsp;</span>{/each}
@@ -407,7 +426,9 @@
 </div>
 
 <style>
-  .db { margin: 0.6em 0; font-size: 0.92em; }
+  .db { margin: 0.6em 0; font-size: 0.92em; outline: none; }
+  /* an empty date shows nothing until it is being set: WebKit draws today in it, dimmed, read as a date that is there */
+  .db input[type='date'].blank:not(:focus)::-webkit-datetime-edit { color: transparent; }
   .db-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
   .db-title { flex: 1; min-width: 120px; font: inherit; font-size: 1.15em; font-weight: 600; border: 0; background: none; color: var(--fg); outline: none; padding: 2px 0; }
   .views { display: flex; flex-wrap: wrap; gap: 2px; } /* a narrow column, a large text: onto a second line, not past the column */
@@ -465,6 +486,8 @@
   .day-head { display: flex; justify-content: space-between; align-items: center; font-size: 0.85em; }
   .day-add { width: 18px; height: 18px; line-height: 1; color: var(--fg-dim); opacity: 0; }
   .day:hover .day-add, .day-add:focus-visible { opacity: 1; }
+  /* a phone has no hover: there they are always there, a finger's size (a row could not be opened or deleted) */
+  :global(html.mobile) .db .open, :global(html.mobile) .db .more, :global(html.mobile) .db .day-add { opacity: 1; width: 36px; height: 36px; }
   .day-row { text-align: left; padding: 2px 5px; border-radius: 4px; background: var(--bg-input); color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.88em; }
   .day-row:hover { background: var(--bg-active); }
   .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }

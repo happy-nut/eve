@@ -9,6 +9,7 @@ import Link from '@tiptap/extension-link';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
+import { defaultMarkdownSerializer } from 'prosemirror-markdown';
 import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
@@ -505,15 +506,23 @@ const quoteList = ({ state, tr, dispatch }: { state: EditorState; tr: Transactio
 
 /** Several lines (paragraphs, list lines) made code at once: one block of them all, a line each, where they were.
  * The stock toggle made each a code block of its own. */
-const linesToCode = ({ state, tr, dispatch }: { state: EditorState; tr: Transaction; dispatch?: unknown }) => {
+const linesToCode = (editor: Editor) => ({ state, tr, dispatch }: { state: EditorState; tr: Transaction; dispatch?: unknown }) => {
   const { $from, $to } = state.selection, code = state.schema.nodes.codeBlock;
   const lines: string[] = [];
+  // a formula, a [[link]], a date or a footnote's mark as it is written ($x^2$, [[Page]]…): as their text, they were
+  // nothing, and went (the stock toggle dropped them too)
+  let atoms = false;
+  const written = (leaf: PMNode) => {
+    atoms = true;
+    const serializer = (editor.storage as any).markdown.serializer;
+    return (serializer.serialize(state.schema.nodes.doc.create(null, state.schema.nodes.paragraph.create(null, leaf))) as string).trim();
+  };
   state.doc.nodesBetween($from.pos, $to.pos, (n) => {
     if (!n.isTextblock) return true;
-    lines.push(n.textBetween(0, n.content.size, '\n', (leaf) => (leaf.type.name === 'hardBreak' ? '\n' : leaf.textContent)));
+    lines.push(n.textBetween(0, n.content.size, '\n', (leaf) => (leaf.type.name === 'hardBreak' ? '\n' : written(leaf))));
     return false;
   });
-  if (lines.length < 2 || $from.parent.type === code) return false;
+  if ((lines.length < 2 && !atoms) || $from.parent.type === code) return false;
   const range = $from.blockRange($to, (n) => n.type.contentMatch.matchType(code) != null && !/^table(Cell|Header)$/.test(n.type.name));
   if (!range) return false;
   // the block made goes where the whole range was: a range that also holds lines outside the selection (the rest of a
@@ -530,16 +539,27 @@ const linesToCode = ({ state, tr, dispatch }: { state: EditorState; tr: Transact
 
 function editorCommands(editor: Editor): Record<string, () => boolean> {
   const c = () => editor.chain().focus();
-  const inCode = () => editor.isActive('codeBlock');
+  // in code, or a selection with code in it: a list made of it took its lines as items, and they ran together
+  const inCode = () => {
+    const { from, to } = editor.state.selection;
+    let code = editor.isActive('codeBlock');
+    editor.state.doc.nodesBetween(from, to, (n) => { if (n.type.spec.code) code = true; });
+    return code;
+  };
   return {
     // the / menu opens where a word can start: right after a word (the phone's Insert block, the caret at the
     // end of a line) a bare "/" opened nothing and stayed in the text, so a space goes first
     slash: () => {
       const { $from } = editor.state.selection;
       // a toggle's title holds text only: no / menu opens there, so no "/" is left behind either
-      if ($from.parent.type.name === 'detailsSummary') return false;
-      const before = $from.parent.textBetween(Math.max(0, $from.parentOffset - 1), $from.parentOffset, undefined, '\ufffc');
-      return c().insertContent(before && !/\s/.test(before) ? ' /' : '/').run();
+      // nor in code, where it was typed into the code ("le /t a = 1") and no menu came
+      if ($from.parent.type.name === 'detailsSummary' || $from.parent.type.spec.code) return false;
+      // inside a word: at its end, not between its letters ("hel /lo" cut the word in two for good)
+      const rest = $from.parent.textBetween($from.parentOffset, $from.parent.content.size, undefined, '\ufffc');
+      const word = /^\S*/.exec(rest)![0].length;
+      const at = $from.pos + word;
+      const before = $from.parent.textBetween(Math.max(0, $from.parentOffset + word - 1), $from.parentOffset + word, undefined, '\ufffc');
+      return c().setTextSelection(at).insertContent(before && !/\s/.test(before) ? ' /' : '/').run();
     },
     callout: () => c().toggleWrap('callout').run(),
     math: () => (insertMath(editor, false), true),
@@ -587,7 +607,7 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
     toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck) || editor.commands.command(toggleHere),
     blockquote: () => editor.commands.command(quoteList) || c().toggleBlockquote().run(),
-    codeBlock: () => !inCell(editor.state.selection.$from) && (editor.commands.command(linesToCode) || c().toggleCodeBlock().run()),
+    codeBlock: () => !inCell(editor.state.selection.$from) && (editor.commands.command(linesToCode(editor)) || c().toggleCodeBlock().run()),
     // in a toggle's title, under the toggle: the title holds text only
     divider: () => {
       const { $from } = editor.state.selection;
@@ -978,6 +998,8 @@ export function createEditor(opts: {
   cursor?: number;
   /** ⌥↑ / ⌥↓ that should move the note itself, not a line: true when it did (`onTitle`: the caret is on the title) */
   onNoteMove?: (dir: -1 | 1, onTitle: boolean) => boolean;
+  /** the note this is (a database in it keeps its rows under it); left out, the note open */
+  page?: () => string | null;
 }) {
   // the menus at the caret, so one can stay shut while another is open: in "[[Meeting :sm" both the link picker and
   // the emoji row came up, one over the other, and Enter picked from whichever answered first
@@ -1057,6 +1079,15 @@ export function createEditor(opts: {
       // new untitled toggle was made of them. They are just the lines; a whole toggle copied is still a toggle.
       transformPasted: (slice, view) => {
         let { content, openStart, openEnd } = slice;
+        // a toggle's title holds words only: what is pasted there is its words, a formula or a link as written. Fitted
+        // as it was, a line with a formula in it, two paragraphs, a list, went in as nothing
+        const $here = view.state.selection.$from;
+        if ($here.parent.type.name === 'detailsSummary') {
+          const serializer = (editor.storage as any).markdown.serializer;
+          const written = (leaf: PMNode) => (leaf.isText ? leaf.text! : leaf.isInline ? (serializer.serialize(view.state.schema.nodes.doc.create(null, view.state.schema.nodes.paragraph.create(null, leaf))) as string).trim() : '');
+          const words = content.textBetween(0, content.size, ' ', written).replace(/\s+/g, ' ').trim();
+          return new Slice(words ? Fragment.from(view.state.schema.text(words)) : Fragment.empty, 0, 0);
+        }
         // rows copied from a table come as rows, open: pasted outside a table, ProseMirror made a table around them
         // and left the empty line above it. They are a table of their own. (Into a table, prosemirror-tables pastes
         // the cells.)
@@ -1219,7 +1250,20 @@ export function createEditor(opts: {
       hangulKeys,
       // A link ends where its words do, as in Notion: typed on at its end (or before it), the words were taken into the
       // link (stock links grow while autolink is on), and → at its end typed a space into the note each time
-      Link.extend({ inclusive: () => false, exitable: false }).configure({ openOnClick: false, autolink: true }),
+      Link.extend({
+        inclusive: () => false, exitable: false,
+        // an address with a space in it (a search's ?q=a b, a path) goes in <…>: bare, markdown ends the address at the
+        // space, and read back the link was gone and its [words](…) showed as text
+        addStorage() {
+          const plain = defaultMarkdownSerializer.marks.link;
+          return { markdown: { serialize: { ...plain, close: (state: any, mark: any, parent: any, index: number) => {
+            const href = String(mark.attrs.href ?? '');
+            if (state.inAutolink || !/\s/.test(href)) return (plain.close as any)(state, mark, parent, index);
+            state.inAutolink = undefined;
+            return `](<${href.replace(/[<>]/g, (c) => encodeURIComponent(c))}>${mark.attrs.title ? ` "${String(mark.attrs.title).replace(/"/g, '\\"')}"` : ''})`;
+          } } } };
+        },
+      }).configure({ openOnClick: false, autolink: true }),
       // code inside a link ([run `npm i` first](u)) stays in it: stock code shuts out every other mark, so the link
       // was cut in two around it. Formatting still goes (nothing in code is bold).
       // Inline code all deleted, the next text typed there is not code again. The webview deletes the letters
@@ -1286,7 +1330,8 @@ export function createEditor(opts: {
       }),
       // a heading is one line in markdown: a line break in it goes out as `<br>` (as in a table cell), not as the
       // usual backslash and newline, which read back as a heading ending in "\" and a paragraph under it
-      Heading.configure({ levels: [1, 2, 3, 4, 5] }).extend({
+      // (six, as markdown has: a note brought in with ###### lost the heading at its first save)
+      Heading.configure({ levels: [1, 2, 3, 4, 5, 6] }).extend({
         // ⌫ at the start of a heading makes it text, where it is (Notion's); the next ⌫ joins it to the line above.
         // Not the title, which is the note's name whatever it is written as
         addKeyboardShortcuts() {
@@ -1407,6 +1452,40 @@ export function createEditor(opts: {
       ...(isMobile ? [] : [BlockHandle.configure({ run: (id) => runEditorCommand(editor, id) })]),
       // a table's own: ⋮⋮ on a row, ⋯ on a column, + along its foot and side (a phone keeps TableTools' bar)
       ...(isMobile ? [] : [TableHandles]),
+      // a line of words holds no raw newline: code's lines brought into one (copied from code and pasted in a line, a
+      // selection from text into code typed over, a web page's <pre>) ran on in it, and read back they were one line.
+      // Each becomes a line break, as Shift-↩ makes; where a line takes none (a toggle's title), a space
+      Extension.create({
+        name: 'noRawNewlines',
+        addProseMirrorPlugins: () => [new Plugin({
+          appendTransaction: (trs, _old, state) => {
+            if (!trs.some((t) => t.docChanged)) return null;
+            const ranges: [number, number][] = [];
+            trs.forEach((t, i) => t.steps.forEach((step, j) => step.getMap().forEach((_a, _b, from, to) => {
+              let f = from, e = to;
+              for (let k = j + 1; k < t.steps.length; k++) { f = t.steps[k].getMap().map(f, -1); e = t.steps[k].getMap().map(e, 1); }
+              for (let n = i + 1; n < trs.length; n++) { f = trs[n].mapping.map(f, -1); e = trs[n].mapping.map(e, 1); }
+              ranges.push([f, e]);
+            })));
+            const fix: { pos: number; text: string; breaks: boolean }[] = [];
+            for (const [from, to] of ranges) {
+              state.doc.nodesBetween(Math.max(0, from - 1), Math.min(state.doc.content.size, to + 1), (node, pos, parent) => {
+                if (!node.isText || !node.text!.includes('\n') || !parent || parent.type.spec.code) return;
+                if (!fix.some((x) => x.pos === pos)) fix.push({ pos, text: node.text!, breaks: !!parent.type.contentMatch.matchType(state.schema.nodes.hardBreak) });
+              });
+            }
+            if (!fix.length) return null;
+            const tr = state.tr;
+            for (const { pos, text, breaks } of fix.sort((a, b) => b.pos - a.pos)) {
+              const marks = state.doc.nodeAt(pos)!.marks;
+              const parts = text.split('\n');
+              const nodes = parts.flatMap((part, i) => [...(i ? [breaks ? state.schema.nodes.hardBreak.create() : state.schema.text(' ', marks)] : []), ...(part ? [state.schema.text(part, marks)] : [])]);
+              tr.replaceWith(pos, pos + text.length, nodes);
+            }
+            return tr;
+          },
+        })],
+      }),
       Extension.create({
         name: 'paintSelection',
         addProseMirrorPlugins: () => [new Plugin({
@@ -1419,6 +1498,11 @@ export function createEditor(opts: {
               state.doc.nodesBetween(from, to, (node, pos) => {
                 if (node.isText) return false;
                 const whole = pos >= from && pos + node.nodeSize <= to;
+                // a diagram is drawn, its code hidden: it takes the overlay as a picture does (nothing showed it chosen)
+                if (node.type.name === 'codeBlock' && node.attrs.language === 'mermaid') {
+                  if (whole) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: 'in-sel' }));
+                  return false;
+                }
                 if (node.isAtom) {
                   // a [[link]] or a date in the line takes the text's colour; a block (picture, card…) the overlay
                   if (whole) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: node.isBlock ? 'in-sel' : 'pm-sel' }));
@@ -1737,7 +1821,26 @@ export function createEditor(opts: {
       }).configure({ nested: true }),
       // a phone's bar does the formatting; the markdown hint is for a keyboard
       // the first line is the page's title (drawn as one, app.css): empty, it says so; the line under it, what can be typed
-      Placeholder.configure({ placeholder: ({ pos }) => (pos === 0 ? 'Untitled' : isMobile ? 'Start writing…' : 'Start typing… # heading, - list, [[ link') }),
+      Placeholder.configure({ placeholder: ({ node, pos }) => (pos === 0 ? 'Untitled' : node.type.name === 'heading' ? `Heading ${node.attrs.level}` : isMobile ? 'Start writing…' : 'Start typing… # heading, - list, [[ link') }),
+      // …and an empty block the caret is in says what it is, as Notion's do (an empty heading was a blank 29px line).
+      // Its own small plugin: the stock one's includeChildren put its marks on every block, and a copy took them
+      Extension.create({
+        name: 'blockHint',
+        addProseMirrorPlugins: () => [new Plugin({
+          props: {
+            decorations: (state) => {
+              const { $from, empty } = state.selection;
+              const line = $from.parent;
+              if (!empty || !line.isTextblock || line.content.size || $from.depth < 2) return null; // (the note's own lines: above)
+              const around = $from.depth > 1 ? $from.node(-1).type.name : '';
+              const says = line.type.name === 'heading' ? `Heading ${line.attrs.level}` : line.type.name === 'detailsSummary' ? 'Toggle'
+                : around === 'taskItem' ? 'To-do' : around === 'listItem' ? 'List' : around === 'blockquote' ? 'Empty quote' : '';
+              if (!says) return null;
+              return DecorationSet.create(state.doc, [Decoration.node($from.before(), $from.after(), { class: 'is-empty', 'data-placeholder': says })]);
+            },
+          },
+        })],
+      }),
       Markdown.configure({ html: true, transformPastedText: true, transformCopiedText: true, linkify: true, breaks: false }),
       // ahead of the picker's own plugin, which reads where the "[[" was typed in the same transaction
       Extension.create({ name: 'wikiTyped', priority: 1000, addProseMirrorPlugins: () => [wikiTyped] }),
@@ -1850,7 +1953,7 @@ export function createEditor(opts: {
       }),
       Bookmark,
       Kanban,
-      DatabaseBlock,
+      opts.page ? DatabaseBlock.configure({ page: opts.page }) : DatabaseBlock,
       FootnoteRef,
       FootnoteText,
       Extension.create({

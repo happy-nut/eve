@@ -198,10 +198,14 @@ const IN_LINE = /(?<![\w@])@(\d{4}-\d{2}-\d{2}) ((?:[01]\d|2[0-3]):[0-5]\d) ⏰/
  */
 export function remindersIn(body: string): LineReminder[] {
   const out: LineReminder[] = [];
-  let fence = false;
-  for (const raw of body.split('\n')) {
-    if (/^\s*(```|~~~)/.test(raw)) { fence = !fence; continue; }
-    if (fence || /^\s*(?:[-*+]|\d+[.)])\s+\[[xX]\]/.test(raw)) continue;
+  // the fence a line is in ('' a plain one): code is code, but a board's cards are words, and a card's reminder rings
+  // (its line is the card's JSON string, read as its words)
+  let fence: string | null = null;
+  for (const line0 of body.split('\n')) {
+    const open = /^\s*(?:```|~~~)(\w*)/.exec(line0);
+    if (open) { fence = fence === null ? open[1] : null; continue; }
+    if ((fence !== null && fence !== 'kanban') || /^\s*(?:[-*+]|\d+[.)])\s+\[[xX]\]/.test(line0)) continue;
+    const raw = fence === 'kanban' ? line0.replace(/^\s*"[^"]*":\s*"/, '').replace(/",?\s*$/, '').replace(/\\n/g, ' ') : line0;
     for (const m of raw.matchAll(IN_LINE)) {
       if (daysFrom(m[1]) === null) continue;
       const [y, mo, d] = m[1].split('-').map(Number), [h, mi] = m[2].split(':').map(Number);
@@ -220,8 +224,9 @@ export function remindersIn(body: string): LineReminder[] {
 export function dateMarkdown(md: MarkdownIt): void {
   md.inline.ruler.before('link', 'datemention', (state, silent) => {
     if (state.src.charCodeAt(state.pos) !== 0x40) return false; // '@'
-    // an address is not a date: only an `@` that starts a word is one
-    if (state.pos > 0 && /[^\s([{]/.test(state.src[state.pos - 1])) return false;
+    // an address is not a date: not an `@` after what an address's name is made of. Anything else may stand before
+    // one, as a chip is written back: bold around it (`**@…**`), a word in Korean ("마감@…"); they read back as text
+    if (state.pos > 0 && /[A-Za-z0-9._%+-]/.test(state.src[state.pos - 1])) return false;
     const m = /^@(\d{4}-\d{2}-\d{2})(?: ((?:[01]\d|2[0-3]):[0-5]\d) ⏰)?(?![\d-])/.exec(state.src.slice(state.pos));
     if (!m || daysFrom(m[1]) === null) return false;
     if (!silent) {

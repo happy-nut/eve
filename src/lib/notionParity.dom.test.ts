@@ -190,3 +190,72 @@ test('⌘Z right after "---" made a divider gives back the dashes typed', () => 
   expect(saved(ed)).toContain('---');
   expect(kinds(ed)).not.toContain('horizontalRule');
 });
+
+describe('an empty block the caret is in says what it is', () => {
+  test.each([
+    ['# T\n\n## \n\nx', 'h2', 'Heading 2'], ['# T\n\n- \n\nx', 'li p', 'List'], ['# T\n\n- [ ] \n\nx', 'li p', 'To-do'],
+    ['# T\n\n> \n\nx', 'blockquote p', 'Empty quote'], ['# T\n\n<details open><summary></summary>\n\nb\n\n</details>\n\nx', 'summary', 'Toggle'],
+  ])('%s', (note, sel, says) => {
+    const ed = editorWith(note);
+    let at = -1;
+    ed.state.doc.descendants((n, p) => { if (at < 0 && p > 2 && n.isTextblock && !n.textContent) at = p + 1; });
+    ed.commands.setTextSelection(at);
+    expect((ed.view.dom.querySelector(`${sel}.is-empty`) as HTMLElement | null)?.dataset.placeholder).toBe(says);
+  });
+});
+
+test('a callout\'s title made a to-do: the callout has no title, as saved (the note open was not the note read back)', async () => {
+  const { runEditorCommand } = await import('./editor');
+  const ed = editorWith('> [!note] Callout head\n> body');
+  ed.commands.setTextSelection(posOf(ed, 'head', true));
+  runEditorCommand(ed, 'taskList');
+  const saved = md(ed);
+  expect(editorWith(saved).getJSON().content![0]).toEqual(ed.getJSON().content![0]);
+});
+
+test('a callout whose first line is a divider or a picture is still a callout read back (the divider read as a heading\'s underline)', () => {
+  for (const note of ['> [!note]\n>\n> ---\n>\n> after', '> [!note]\n>\n> ![a](assets/a.png)']) {
+    const once = md(editorWith(note));
+    expect(once.trimEnd()).toBe(note);
+    expect(md(editorWith(once))).toBe(once);
+  }
+});
+
+test('a line made code keeps its formula, [[link]] and footnote mark as they are written (they went)', async () => {
+  const { runEditorCommand } = await import('./editor');
+  const ed = editorWith('# T\n\nKilo $x^2$ [[Page]] note[^1] end\n\n[^1]: n');
+  ed.commands.setTextSelection(posOf(ed, 'Kilo', true));
+  runEditorCommand(ed, 'codeBlock');
+  expect(md(ed)).toContain('```\nKilo $x^2$ [[Page]] note[^1] end\n```');
+  document.body.innerHTML = '';
+});
+
+test('a ###### heading brought in stays one when the note is saved (it became a line of text)', () => {
+  const ed = editorWith('# T\n\n###### Small heading');
+  ed.commands.focus('end');
+  ed.commands.insertContent('!');
+  expect(md(ed)).toContain('###### Small heading!');
+});
+
+test('a [[link]] to a note whose title ends in "]" reads back as that link', () => {
+  const ed = editorWith('# T\n\nsee [[Re: [draft]]] now');
+  let title = '';
+  ed.state.doc.descendants((n) => { if (n.type.name === 'wikiLink') title = n.attrs.title; });
+  expect(title).toBe('Re: [draft]');
+  expect(md(ed)).toBe('# T\n\nsee [[Re: [draft]]] now');
+});
+
+test('a link whose address has a space reads back as that link (its words showed as [words](…) text)', () => {
+  const ed = editorWith('# T\n\nsee here now');
+  ed.chain().setTextSelection({ from: posOf(ed, 'here'), to: posOf(ed, 'here', true) }).setLink({ href: 'https://e.com/?q=a b' }).run();
+  const saved = md(ed);
+  expect(saved).toBe('# T\n\nsee [here](<https://e.com/?q=a b>) now');
+  let href = '';
+  editorWith(saved).state.doc.descendants((n) => { for (const m of n.marks) if (m.type.name === 'link') href = m.attrs.href; });
+  expect(href).toBe('https://e.com/?q=a%20b');
+});
+
+test.each([['text', 'Text'], ['table', 'Table'], ['red', 'Red'], ['표', 'Table'], ['코드', 'Code block'], ['토글', 'Toggle'], ['구분선', 'Divider'], ['이미지', 'Image'], ['텍스트', 'Text']])(
+  '"/%s" offers %s first, as ↩ takes the first', (q, first) => {
+    expect(slashItems(q)[0]?.label).toBe(first);
+  });

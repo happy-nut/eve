@@ -127,9 +127,20 @@ class Groups {
   /** stable identity that survives renames and moves (sidebar row key, so rows animate instead of re-mounting).
    *  Plain Map, not $state: it is filled lazily from inside a $derived. */
   private ids = new Map<string, string>();
+  /** the identity a name had before a rename or a delete took it: brought back by ⌘Z or the toast's Undo, it is the
+   *  same row again, not a new one (a new row took the keyboard with it, to <body>) */
+  private retired = new Map<string, string>();
   id(g: string) {
     let id = this.ids.get(g);
-    if (!id) { id = Math.random().toString(36).slice(2, 10); this.ids.set(g, id); }
+    if (!id) {
+      const was = this.retired.get(g), holder = [...this.ids].find(([, v]) => v === was)?.[0];
+      // (held still by the name it was renamed to, gone itself now the rename is taken back: it is this one's again)
+      if (holder !== undefined && !this.names.includes(holder)) this.ids.delete(holder);
+      const inUse = was !== undefined && [...this.ids.values()].includes(was);
+      id = was !== undefined && !inUse ? was : Math.random().toString(36).slice(2, 10);
+      this.retired.delete(g);
+      this.ids.set(g, id);
+    }
     return id;
   }
 
@@ -197,6 +208,7 @@ class Groups {
     this.saved.order = rest;
     this.saved.collapsed = this.saved.collapsed.map((g) => (sub.includes(g) ? map(g) : g));
     this.saved.icons = Object.fromEntries(Object.entries(this.saved.icons).map(([g, v]) => [sub.includes(g) ? map(g) : g, v]));
+    for (const g of sub) { const v = this.ids.get(g); if (v) this.retired.set(g, v); }
     this.ids = new Map([...this.ids].map(([g, v]) => [sub.includes(g) ? map(g) : g, v]));
     this.persist();
     // the notes in the Trash too: restored after a rename, one brought the old name back as a group of its own
@@ -229,7 +241,7 @@ class Groups {
     const spots = new Map(notes.all.filter((n) => !n.deleted).map((n) => [n.id, { group: n.group, parent: n.parent, order: n.order }]));
     this.saved.order = this.names.filter((g) => !sub.includes(g));
     this.saved.collapsed = this.saved.collapsed.filter((g) => !sub.includes(g));
-    for (const g of sub) { delete this.saved.icons[g]; this.ids.delete(g); }
+    for (const g of sub) { delete this.saved.icons[g]; const v = this.ids.get(g); if (v) this.retired.set(g, v); this.ids.delete(g); }
     this.persist();
     // its notes go to the top level as the list showed them, each group's in turn, and a page's sub-pages stay under
     // it (they follow their page); one at a time from storage order, they came out reversed and flattened

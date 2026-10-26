@@ -49,6 +49,7 @@
       onUpdate: (md) => (req.onMarkdown ? req.onMarkdown(md) : req.onChange(cardOf(md))),
       onOpenNote: (t) => { close(); notes.openByTitle(t); },
       targets: () => notes.pages,
+      page: req.page ?? (() => null),
       suggestionUI: suggest.ui,
       calendarUI: dateMenu.ui,
       emojiUI: emojiRow.ui,
@@ -65,8 +66,11 @@
     // the page grows in from a day opened with Enter: if the webview left the focus on that day behind
     // it, the keys (Esc included) would go to the calendar, not to the page
     const again = requestAnimationFrame(() => { if (!el.contains(document.activeElement)) editor?.view.focus(); });
-    hooks.cardCommand = (id) => { if (editor) runEditorCommand(editor, id); }; // the phone's formatting bar
-    return () => { cancelAnimationFrame(again); hooks.cardCommand = undefined; editor?.destroy(); };
+    // the phone's formatting bar; closed, the page under it has it back (a card shut over a day took it with it, and
+    // the bar did nothing in the day after)
+    const under = hooks.cardCommand, mine = (id: string) => { if (editor) runEditorCommand(editor, id); };
+    hooks.cardCommand = mine;
+    return () => { cancelAnimationFrame(again); if (hooks.cardCommand === mine) hooks.cardCommand = under; editor?.destroy(); };
   });
 
   /** a sheet slides up on a phone; the Mac's floating page grows in place */

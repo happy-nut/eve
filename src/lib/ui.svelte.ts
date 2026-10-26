@@ -22,6 +22,8 @@ export interface CardReq {
   onDelete?: () => void;
   /** a whole note's markdown, edited as it is (a daily note: its first line need not be a title) */
   markdown?: string; onMarkdown?: (md: string) => void;
+  /** the note it is (a day's): a database in it keeps its rows under it. None, a card's: no rows of its own */
+  page?: () => string | null;
   resolve: () => void;
 }
 
@@ -62,8 +64,11 @@ export interface Layer {
 
 /** The keyboard back to `from`; with that gone (taken off the page, <body>, inside what is closing), to the note. */
 export function focusBack(from: Element | null, own?: string) {
-  const el = from as HTMLElement | null;
-  if (el?.isConnected && el !== document.body && !(own && el.closest(own)) && typeof el.focus === 'function') {
+  const ok = (e: HTMLElement | null) => !!e?.isConnected && e !== document.body && !(own && e.closest(own)) && typeof e.focus === 'function';
+  // nowhere to go back to (a button WebKit gave no focus, so <body>): the note, kept where it was read too — the ⋯
+  // menu closed on Esc took a note scrolled far down back up to its caret
+  const el = ok(from as HTMLElement | null) ? (from as HTMLElement) : isMobile ? null : document.querySelector<HTMLElement>('main .tiptap, main .calendar .day.cursor');
+  if (el) {
     // what it is in stays where it was: the note, focused, has the webview bring its caret into sight all the same
     // (preventScroll or not), and a diagram put back from the whole screen left the note at its end
     const kept: [Element, number, number][] = [];
@@ -72,7 +77,7 @@ export function focusBack(from: Element | null, own?: string) {
     const put = () => { for (const [s, top, left] of kept) { s.scrollTop = top; s.scrollLeft = left; } };
     put();
     requestAnimationFrame(put);
-  } else if (!isMobile) focusNote(); // (on a phone the note would raise its keyboard: nothing, there)
+  } // (on a phone the note would raise its keyboard: nothing, there)
 }
 
 class Layers {
@@ -108,6 +113,20 @@ class Layers {
   /** Close everything, the newest first. */
   closeAll(reason: CloseReason) {
     for (let l = this.items.at(-1); l; l = this.items.at(-1)) this.shut(l, reason);
+  }
+  /** Tab with a modal layer on top goes round its own controls, never out to the list or the note behind it (it
+   *  walked out of the Trash and Version history onto the toolbar and the list's search). True when it turned it. */
+  trapTab(e: KeyboardEvent): boolean {
+    const l = this.items.at(-1), all = l?.modal && l.own ? document.querySelectorAll<HTMLElement>(l.own) : null, box = all?.[all.length - 1];
+    if (e.key !== 'Tab' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || !box) return false;
+    const els = [...box.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])')]
+      .filter((el) => !(el as HTMLButtonElement).disabled && (el.checkVisibility?.() ?? true));
+    if (!els.length) return false;
+    const i = els.indexOf(document.activeElement as HTMLElement);
+    if (i >= 0 && (e.shiftKey ? i > 0 : i < els.length - 1)) return false; // inside it, not at its end: as usual
+    e.preventDefault();
+    els[e.shiftKey ? els.length - 1 : 0].focus();
+    return true;
   }
   /** an Esc nothing else took: the layer on top closes, if Esc closes it */
   escape(): boolean {
@@ -181,8 +200,8 @@ class Ui {
     return new Promise((res) => this.pushCard({ ...c, onChange, onDelete, resolve: res }));
   }
   /** A note's markdown as a floating page (a day from the calendar, the daily template); resolves when it closes. */
-  openPage(markdown: string, onMarkdown: (md: string) => void, note?: string): Promise<void> {
-    return new Promise((res) => this.pushCard({ title: '', body: '', markdown, onMarkdown, note, onChange: () => {}, resolve: res }));
+  openPage(markdown: string, onMarkdown: (md: string) => void, note?: string, page?: () => string | null): Promise<void> {
+    return new Promise((res) => this.pushCard({ title: '', body: '', markdown, onMarkdown, note, page, onChange: () => {}, resolve: res }));
   }
   /** the page on top closes; the one under it, if any, is the page again */
   closeCard() {
@@ -212,7 +231,7 @@ class Ui {
   /** `menu`: the picture's own menu, opened by a click (or right-click) on it as it is shown. Closed, the keyboard
    *  goes back to where it was: the note (or the card) with the picture still selected. */
   viewImage(src: string, alt = '', menu?: (at: { clientX: number; clientY: number }) => void) {
-    this.photoOff ??= this.layers.push({ id: 'photo', close: () => this.closeImage(), esc: true, modal: true, own: '.viewer', phone: true });
+    this.photoOff ??= this.layers.push({ id: 'photo', close: () => this.closeImage(), esc: true, keys: true, modal: true, own: '.viewer', phone: true });
     this.photo = { src, alt, menu };
   }
   closeImage() {
@@ -291,7 +310,7 @@ class Ui {
   /** Settings (App's): it takes nothing from the keyboard's place. Closed however (Esc, ✕, a click beside it), the
    *  keyboard is back where it was — the list's row, the note — unless something has taken it meanwhile. */
   openedSettings(close: () => void) {
-    return this.layers.push({ id: 'settings', close, modal: true, own: '[aria-label="Settings"]', yields: true });
+    return this.layers.push({ id: 'settings', close, keys: true, modal: true, own: '[role="dialog"][aria-label="Settings"]', yields: true });
   }
 
   /** the find bar over the open note (⌘F); closed however, the caret is back in the note */
@@ -388,6 +407,9 @@ class Ui {
     if (e.key.toLowerCase() !== 'z' || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return false;
     const t = e.target as Element | null;
     if (t?.closest?.('input, textarea, select, [contenteditable="true"], .tiptap')) return false;
+    // the keyboard nowhere (a click took it off a board's card, a database's checkbox): not the list's either. Taken
+    // for it, ⌘Z after a card dragged in a new note undid the ⌘N, and the note went to the Trash with the board in it
+    if (!t || t === document.body || t === document.documentElement) return false;
     if (!history.undo()) return false;
     this.dismissToast();
     return true;

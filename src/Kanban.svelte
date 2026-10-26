@@ -88,11 +88,16 @@
     if (index < 0) index = cards.length;
     if (over?.colId !== col.id || over.index !== index) over = { colId: col.id, index };
   }
-  function drop(e: DragEvent) {
+  async function drop(e: DragEvent) {
     if (!dragging) return; // a file dragged in from Finder belongs to the app's own drop handler
     e.preventDefault();
+    const id = dragging.id;
     if (over) commit(view);
     dragEnd();
+    // the keyboard on the card moved, as a keyboard move leaves it: the drag took it off the board, to nowhere, and
+    // ⌘Z then went past the board (to the list's undo)
+    await tick();
+    root?.querySelector<HTMLElement>(`[data-kb="card"][data-id="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
   }
   function dragEnd() { dragging = null; over = null; }
   // a card moving between columns flies there (keyboard moves); while the mouse drags, it just appears

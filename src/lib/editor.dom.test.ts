@@ -161,6 +161,15 @@ describe('insert block (the phone bar\'s /)', () => {
     ed.commands.focus('end');
     runEditorCommand(ed, 'slash');
     expect(ed.state.doc.textContent).toBe(out);
+  });  test('inside a word, at its end (it cut the word in two for good); in code, nothing (it typed " /" into the code)', () => {
+    const ed = editorWith('hello world');
+    ed.commands.setTextSelection(posOf(ed, 'hel', true));
+    runEditorCommand(ed, 'slash');
+    expect(ed.state.doc.textContent).toBe('hello / world');
+    const code = editorWith('```js\nlet a = 1\n```');
+    code.commands.setTextSelection(posOf(code, 'le', true));
+    expect(runEditorCommand(code, 'slash')).toBe(false);
+    expect(md(code)).toBe('```js\nlet a = 1\n```');
   });
 });
 

@@ -31,7 +31,8 @@ export type PropValue = string | string[];
 /** the frontmatter keys that are Eve's own: a property may not take one of these names */
 export const OWN_KEYS = new Set(['id', 'updated', 'deleted', 'order', 'group', 'parent', 'icon', 'wide', 'small', 'cover']);
 /** a property's name as a frontmatter key can hold it: one line, no colon, not one of Eve's own */
-export const propName = (name: string) => name.replace(/[:\n\r]/g, ' ').trim();
+// (not one opening with ---: its line in the file read as the end of the properties, and every row's broke there)
+export const propName = (name: string) => name.replace(/[:\n\r]/g, ' ').trim().replace(/^-{3,}\s*/, '');
 /** a value as one frontmatter line: a list (and a word that would read as one) as JSON, anything else as it is */
 const propLine = (v: PropValue) => (Array.isArray(v) || /^[["]/.test(v) || v !== v.trim() ? JSON.stringify(v) : v.replace(/[\n\r]+/g, ' '));
 function readProp(v: string): PropValue {
@@ -227,6 +228,9 @@ class NotesStore {
   private untouched = new Set<string>();
   /** the open note moved on from `id`: gone quietly if it was never written in (nothing to undo: it was empty) */
   private leave(id: string | null) {
+    // its last keys first, still on their way from the editor (a long note's wait a moment): Back right after a long
+    // paste took the note for never written in, and it went with them
+    flushEdits();
     if (!id || !this.untouched.has(id)) return;
     this.untouched.delete(id);
     const n = this.all.find((x) => x.id === id);
@@ -262,7 +266,8 @@ class NotesStore {
   // nothing may sort or splice them in place.
   get pages(): readonly Note[] { return this.#pages; }
   get visible(): readonly Note[] { return this.#visible; }
-  #visible = $derived(this.all.filter((n) => !n.deleted && !isDailyId(n.id) && n.id !== DAILY_TEMPLATE_ID && (n.id !== CALENDAR_NOTE_ID || appearance.s.dailyNotes)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt));
+  // (a day's database rows too: under a day, which the list does not show, they came up at its top as pages of their own)
+  #visible = $derived(this.all.filter((n) => !n.deleted && !isDailyId(n.id) && !(n.parent && isDailyId(n.parent)) && n.id !== DAILY_TEMPLATE_ID && (n.id !== CALENDAR_NOTE_ID || appearance.s.dailyNotes)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt));
   #pages = $derived(this.#visible.filter((n) => n.id !== CALENDAR_NOTE_ID));
   /**
    * The list as the sidebar stacks it: `shown` without what folded groups and pages hide, `all` with it.
@@ -350,7 +355,17 @@ class NotesStore {
     let n = this.all.find((x) => x.id === id);
     if (n && !n.deleted) return n;
     const body = dailyBody(this.dailyTemplate, key);
-    if (n) Object.assign(n, { deleted: false, body, updatedAt: Date.now() }); // a deleted day, begun again
+    if (n) {
+      // a deleted day, begun again: what was written in it stays in the Trash, a note of its own (written over, it was
+      // gone from there)
+      if (n.body.trim() && n.body !== body) {
+        const kept: Note = { ...n, id: newId() };
+        this.all.push(kept);
+        this.titles.set(kept.id, titleOf(kept));
+        void storage.write(kept.id, serialize(kept));
+      }
+      Object.assign(n, { deleted: false, body, updatedAt: Date.now() });
+    }
     else { this.all.push({ id, body, updatedAt: UNWRITTEN, deleted: false, group: '', order: 0, icon: '🗓️' }); n = this.all.at(-1)!; }
     this.titles.set(id, titleOf(n));
     void storage.write(id, serialize(n));
@@ -476,12 +491,17 @@ class NotesStore {
     // "[[C# notes]]" is the note "C# notes", not "C" with a section, when there is such a note (splitLink)
     const isTitle = (t: string) => same(t, was) || this.all.some((o) => !o.deleted && o.id !== n.id && same(titleOf(o), t));
     const ours = (section: string | undefined) => !section || same(splitLink(was + section, isTitle)[0], was);
+    // a "$" in a title is just a "$"
+    const fix = (t: string) => t.replace(link, (m: string, section?: string) => (ours(section) ? `[[${now}${section ?? ''}` : m));
     for (const other of this.all) {
       if (other.deleted || other.id === n.id) continue;
-      // a "$" in a title is just a "$"
-      const body = other.body.replace(link, (m: string, section?: string) => (ours(section) ? `[[${now}${section ?? ''}` : m));
-      if (body === other.body) continue;
+      const body = fix(other.body);
+      // a database row's relation to it too: left, the link went nowhere, and its rollups counted nothing
+      const props = other.props && Object.fromEntries(Object.entries(other.props).map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => (typeof x === 'string' ? fix(x) : x)) : typeof v === 'string' ? fix(v) : v]));
+      const propsMoved = !!props && JSON.stringify(props) !== JSON.stringify(other.props);
+      if (body === other.body && !propsMoved) continue;
       other.body = body;
+      if (propsMoved) other.props = props as Note['props'];
       other.updatedAt = Date.now();
       this.flush(other.id);
     }

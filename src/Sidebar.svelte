@@ -163,6 +163,7 @@
   let dropAt = $state<{ into?: string; beforeNote?: string; beforeGroup?: string; parent?: string; afterNote?: string } | null>(null);
 
   function dragStartNote(e: DragEvent, n: Note) {
+    if (q) { e.preventDefault(); return; } // search results: the rows around it there are not its neighbours in the list
     drag = { note: n.id };
     e.dataTransfer?.setData('text/plain', n.id);
     e.dataTransfer!.effectAllowed = 'move';
@@ -298,7 +299,8 @@
     const next = neighbourOf(groupSel(g), inside), fromList = inList();
     if (!(await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`))) return;
     const step = history.record(), undo = groups.remove(g);
-    ui.toast(`Deleted group “${leafOf(g)}”`, { label: 'Undo', run: () => { if (!history.undo(step)) undo(); } });
+    // taken back, the keyboard is on its row again (the row it had moved to went back into the group, and was made anew)
+    ui.toast(`Deleted group “${leafOf(g)}”`, { label: 'Undo', run: () => { if (!history.undo(step)) undo(); if (fromList) void focusRow(groupSel(g)); } });
     void afterRemove(next, fromList);
   }
   async function removeNote(n: Note) {
@@ -399,10 +401,14 @@
   async function pickIcon(target: { note?: Note; group?: string }, anchor?: HTMLElement) {
     const current = target.note ? target.note.icon ?? '' : groups.icon(target.group!);
     const el = anchor ?? document.querySelector<HTMLElement>(target.note ? `aside [data-note="${target.note.id}"]` : `aside [data-group="${CSS.escape(target.group!)}"]`);
+    const gid = target.group !== undefined ? groups.id(target.group) : '';
     const v = await ui.pickEmoji(el ?? new DOMRect(60, 60, 0, 0), current);
-    if (v !== null) { if (target.note) notes.setIcon(target.note.id, v); else groups.setIcon(target.group!, v); }
+    // the group as it is called now: renamed while the picker was up (its name being typed as it opened), the old
+    // name was no group's, and the icon and the keyboard went nowhere (the list's first row)
+    const g = target.group !== undefined ? groups.names.find((n) => groups.id(n) === gid) ?? target.group : '';
+    if (v !== null) { if (target.note) notes.setIcon(target.note.id, v); else groups.setIcon(g, v); }
     // the keyboard goes back to the row whose icon it was, picked or not
-    if (!isMobile) void focusRow(target.note ? `[data-note="${target.note.id}"]` : groupSel(target.group!));
+    if (!isMobile) void focusRow(target.note ? `[data-note="${target.note.id}"]` : groupSel(g));
   }
 
   /**
@@ -439,10 +445,11 @@
             { label: 'New page inside', run: newPageIn(n), hide: n.id === CALENDAR_NOTE_ID },
             { label: 'Change icon…', run: () => pickIcon({ note: n }) },
             // a move that would do nothing (the first row up, no page above to nest under) is left out
+            // and none in search results, dragged either: the row above there is not the one above in the list
             { label: 'Move up', sep: true, run: () => nudgeNote(n.id, -1), hide: !!q || !moves.nudgeNote(n.id, -1, true) },
             { label: 'Move down', run: () => nudgeNote(n.id, 1), hide: !!q || !moves.nudgeNote(n.id, 1, true) },
-            { label: 'Nest under previous', run: () => nestNote(n.id, 'in'), hide: !moves.nestNote(n.id, 'in', rowAbove(n.id), true) },
-            { label: 'Move out', run: () => nestNote(n.id, 'out'), hide: !moves.nestNote(n.id, 'out', undefined, true) },
+            { label: 'Nest under previous', run: () => nestNote(n.id, 'in'), hide: !!q || !moves.nestNote(n.id, 'in', rowAbove(n.id), true) },
+            { label: 'Move out', run: () => nestNote(n.id, 'out'), hide: !!q || !moves.nestNote(n.id, 'out', undefined, true) },
             { label: 'Delete note', sep: true, danger: true, run: () => removeNote(n) },
           ]
         : [];
@@ -502,7 +509,7 @@
     return { duration: 240, easing: cubicOut, css: (t: number) => `transform: translateX(${(t - 1) * 100}%)` };
   }
   function pullStart(e: TouchEvent) {
-    if (!isMobile || !notes.current || e.touches.length !== 1) return;
+    if (!isMobile || !(notes.current || notes.currentId === CALENDAR) || e.touches.length !== 1) return; // (the calendar is a page to go back to too)
     if ((e.target as HTMLElement).closest('input, .fab, .menu')) return;
     touch = { x: e.touches[0].clientX, y: e.touches[0].clientY, axis: '' };
   }
@@ -613,7 +620,7 @@
           {#if r.kind === 'note'}
             {@const n = r.n}
             {@const swipe = n.id === CALENDAR_NOTE_ID ? {} : { left: () => removeNote(n), enabled: () => !drag }}
-            <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!isMobile} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
+            <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!isMobile && !q} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation" use:swipeRow={swipe}>
               <button data-row data-note={n.id} class:active={n.id === CALENDAR_NOTE_ID ? onCalendar : n.id === notes.currentId}
                 class:enter={searching && !!q && n.id === hits[0]?.id} onclick={(e) => (e.metaKey && !isMobile && n.id !== CALENDAR_NOTE_ID ? tabs.open(n.id) : openNote(n))}>
@@ -804,18 +811,19 @@
     background: var(--accent); box-shadow: var(--glow); pointer-events: none; z-index: var(--z-raised);
   }
   .row.drop-after::after { top: auto; bottom: -1px; }
-  .note-row { display: flex; align-items: center; }
+  /* the row's hover and its open mark span it whole, its + / × too: on the button alone they stopped short of them */
+  .note-row { display: flex; align-items: center; border-radius: 6px; transition: background 0.12s; }
   .note-row > button:first-child {
     flex: 1; min-width: 0; text-align: left; border: 0; background: none; color: inherit; font: inherit;
     padding: 5px 6px; border-radius: 6px; display: flex; flex-direction: column;
     cursor: default; transition: background 0.12s, transform 0.12s;
   }
-  :global(html[data-hover]) .note-row > button:first-child:hover { background: var(--bg-hover); }
+  :global(html[data-hover]) .note-row:hover { background: var(--bg-hover); }
   .note-row > button:first-child:active { transform: scale(0.985); }
-  .note-row > button.active { background: var(--bg-active); }
+  .note-row:has(> button.active) { background: var(--bg-active); }
   /* the match ↩ in the search box opens: the keyboard's colour, lighter, as it is not on the row itself */
   .note-row > button.enter { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-  .note-row > button.active.enter { background: color-mix(in srgb, var(--accent) 12%, var(--bg-active)); }
+  .note-row > button.active.enter { background: color-mix(in srgb, var(--accent) 12%, transparent); } /* (over the row's own) */
   /* Keyboard cursor: the row's own background, and it appears at once. The rows fade their background
      over 0.12s, which a held arrow key never gives them — focus moved on before the colour arrived, so
      the list looked unmarked while scrolling through it. A group row had no focus colour at all. */

@@ -214,6 +214,19 @@ describe('pasted', () => {
     expect(typed('- item\n- next', '- [ ] x1\n- [ ] x2')).toBe('- item\n- x1\n- x2\n- next');
   });
 
+  test('lines of code pasted into a line of words stay lines (they ran on with raw breaks, and read back were one line)', () => {
+    const out = pasteAt('```\nline one\nline two\nline three\n```', 'one', 'two', 'Para word end', 'word');
+    const back = md(editorWith(out));
+    expect(back).toBe(out);
+    expect(editorWith(out).state.doc.textBetween(0, editorWith(out).state.doc.content.size, '|', '/')).toContain('one/line two');
+  });
+
+  test('pasted in a toggle\'s title: its words, a formula and a link as written (it took nothing)', () => {
+    const out = pasteAt('Kilo $x^2$ and [[Page]]\n\nsecond line', 'Kilo', 'line', '<details open><summary>Title</summary>\n\nbody\n\n</details>', 'Title');
+    expect(out).toContain('<summary>TitleKilo $x^2$ and [[Page]] second line</summary>');
+    document.body.innerHTML = '';
+  });
+
   test('a table row, pasted on an empty line: a table in its place, no empty line left above it', () => {
     const src = editorWith('| a | b |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |');
     const cell = (word: string) => { const $p = src.state.doc.resolve(posOf(src, word)); return $p.before($p.depth - 1); };

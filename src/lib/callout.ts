@@ -1,5 +1,5 @@
 import { Extension, Node, mergeAttributes } from '@tiptap/core';
-import { Selection, TextSelection } from '@tiptap/pm/state';
+import { Plugin, Selection, TextSelection } from '@tiptap/pm/state';
 import { liftTarget } from '@tiptap/pm/transform';
 import { ui } from './ui.svelte';
 import { isMobile } from './platform';
@@ -109,6 +109,24 @@ export const Callout = Node.create({
       };
     };
   },
+  // a title is a line of words: its first line made something else (a to-do from the phone's bar, a list, a heading),
+  // the callout has none, as its file then says. Left titled, the note open was not the note saved, and read back
+  // it changed under the caret
+  addProseMirrorPlugins() {
+    return [new Plugin({
+      appendTransaction: (trs, _old, state) => {
+        if (!trs.some((t) => t.docChanged)) return null;
+        let tr = null as ReturnType<typeof state.tr.setNodeAttribute> | null;
+        state.doc.descendants((n, pos) => {
+          if (n.type.name !== 'callout' || !n.attrs.titled) return;
+          const first = n.firstChild;
+          if (first?.type.name === 'paragraph' && first.content.size) return;
+          tr = (tr ?? state.tr).setNodeAttribute(pos, 'titled', false);
+        });
+        return tr;
+      },
+    })];
+  },
   addKeyboardShortcuts() {
     // Enter on an empty trailing paragraph leaves the callout
     return {
@@ -146,7 +164,10 @@ export const Callout = Node.create({
               else state.closeBlock(first);
               node.forEach((child: any, _: number, i: number) => { if (i > 0) state.render(child, node, i); });
             } else {
-              state.ensureNewLine();
+              // a first line of words goes right under the marker; anything else a blank line down: "---" just under it
+              // read as the marker's underline (a heading), and the callout was gone the next time
+              if (first?.type.name === 'paragraph') state.ensureNewLine();
+              else state.closeBlock(node);
               state.renderContent(node);
             }
           });

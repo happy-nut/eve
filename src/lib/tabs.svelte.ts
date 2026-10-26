@@ -1,4 +1,5 @@
 import { notes, CALENDAR } from './notes.svelte';
+import { appearance } from './appearance.svelte';
 
 /**
  * Notes open side by side in tabs (Notion's desktop tabs), on the Mac. The tab in front is always the open note
@@ -14,6 +15,8 @@ class Tabs {
   list = $state<Tab[]>(load());
   /** the closed ones, newest last, for ⌘⇧T */
   private closed: Tab[] = [];
+  /** a deleted note's tab: where it stood, and the note that took its place there (null: none did) */
+  private gone = new Map<string, { at: number; by: string | null }>();
 
   /** the front tab's index: the one showing the open note */
   get front(): number { return this.list.findIndex((t) => t.id === notes.currentId); }
@@ -21,12 +24,25 @@ class Tabs {
   /** The open note changed: the front tab shows it (made the first tab when there is none). A tab whose note was
    *  deleted closes. Called from App's effect, and by the methods here. */
   follow(prev: string | null) {
-    const live = (id: string) => id === CALENDAR || id === notes.currentId || notes.all.some((n) => n.id === id && !n.deleted);
+    // (the calendar's tab goes with Daily notes turned off: left, it opened nothing)
+    const live = (id: string) => (id === CALENDAR && appearance.s.dailyNotes) || id === notes.currentId || notes.all.some((n) => n.id === id && !n.deleted);
     const cur = notes.currentId;
     // the note now open takes the place of the one before it, a deleted one's too: looked up after the deleted tab was
     // dropped, the new note went to the end of the row (and Undo put the first tab back last)
     const at = prev ? this.list.findIndex((t) => t.id === prev && !t.pinned) : -1;
-    if (cur && at >= 0 && !this.list.some((t) => t.id === cur)) this.list[at] = { id: cur };
+    const back = cur ? this.gone.get(cur) : undefined;
+    if (cur && back && !this.list.some((t) => t.id === cur)) {
+      // a deleted note's tab brought back (Undo): in its place, over the note that took that place if one did. Put
+      // over the tab before it, the next tab went (deleted with [A, B] open, B in front: Undo left only A)
+      const i = Math.min(back.at, this.list.length);
+      if (back.by && this.list[i]?.id === back.by) this.list[i] = { id: cur };
+      else this.list.splice(i, 0, { id: cur });
+    } else if (cur && at >= 0 && !this.list.some((t) => t.id === cur)) {
+      if (!live(prev!)) this.gone.set(prev!, { at, by: cur });
+      this.list[at] = { id: cur };
+    }
+    if (cur) this.gone.delete(cur);
+    this.list.forEach((t, i) => { if (!live(t.id)) this.gone.set(t.id, { at: i, by: null }); });
     this.list = this.list.filter((t) => live(t.id));
     if (cur && !this.list.some((t) => t.id === cur)) this.list.push({ id: cur });
     this.save();

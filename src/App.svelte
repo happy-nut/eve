@@ -233,10 +233,16 @@
     // a swipe is quick: a finger held first is a long press choosing text, and text selected when it
     // lifts means the drag was choosing it (or pulling a handle)
     if (held > 600 || !getSelection()?.isCollapsed) return;
-    if (dx > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) {
-      (document.activeElement as HTMLElement | null)?.blur(); // the keyboard goes with the note
-      sidebarOpen = true;
-    }
+    if (dx > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) toList();
+  }
+  /** A phone's way back to the list (a swipe, back): the keyboard goes with the note, and a new note left unwritten
+   *  goes too (+, then a swipe left an "Untitled" row behind; back did not) */
+  function toList() {
+    // the native back key leaves the focus where it was: the note kept its caret behind the list, and with it the
+    // "/" menu and a table's tools, drawn over the list. They go when the note lets go of the keyboard
+    (document.activeElement as HTMLElement | null)?.blur();
+    notes.letGo(); // a new note left unwritten is no row in the list to come back to
+    sidebarOpen = true;
   }
 
   /** A phone's note bar: ⋯ (find & replace, select all, export to the share sheet), a widget of this note on the home screen, delete. */
@@ -308,12 +314,12 @@
   function openTemplate() {
     const n = notes.templateNote();
     void ui.openPage(n.body, (md) => notes.update(n.id, md),
-      'Template — every new day starts like this. {{date}} and {{weekday}} are filled in.').then(() => notes.flush(n.id));
+      'Template — every new day starts like this. {{date}} and {{weekday}} are filled in.', () => n.id).then(() => notes.flush(n.id));
   }
   /** A day picked in the calendar: its note, floating over the calendar like a board's card. */
   function openDay(key: string) {
     const day = notes.dayDraft(key); // made only once something is written in it
-    void ui.openPage(day.body, (md) => day.write(md)).then(() => { if (day.note) notes.flush(day.note.id); });
+    void ui.openPage(day.body, (md) => day.write(md), undefined, () => day.note?.id ?? null).then(() => { if (day.note) notes.flush(day.note.id); });
   }
   /**
    * Where is the keyboard? The pane it just moved to (the list ↔ the note) flashes blue once. Only on a
@@ -343,13 +349,7 @@
     else if (hooks.diagramBack) hooks.diagramBack(); // a diagram being edited: a step out of it, not out of the note
     else if (sidebarOpen && ui.search) ui.search = ''; // the list cut down to a search: back shows all of it, before leaving
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
-    else {
-      // the native back key leaves the focus where it was: the note kept its caret behind the list, and with it the
-      // "/" menu and a table's tools, drawn over the list. They go when the note lets go of the keyboard, as a swipe does
-      (document.activeElement as HTMLElement | null)?.blur();
-      notes.letGo(); // a new note left unwritten (+, then back) is no row in the list to come back to
-      sidebarOpen = true;
-    }
+    else toList();
   }
   // another note brought up (a link, the widget, a reminder, ⌘1–9, ⌘N, back/forward): a diagram shown full
   // screen was the last one's, and so was a board's card or a day floating over it. A card left up wrote into
@@ -502,7 +502,13 @@
     if (sidebarOpen && appearance.s.closeSidebarOnWrite && !ui.card && isWriting(e)) sidebarOpen = false;
     // the right-click menu takes the keyboard while it is up, wherever the focus actually sits; so do a dialog, the
     // emoji picker and a diagram on the whole screen (they take their own Esc)
-    if (ui.layers.grabbing) { if (e.key === 'Escape' && ui.layers.escape()) e.preventDefault(); return; }
+    if (ui.layers.grabbing) {
+      if (e.key === 'Escape' && ui.layers.escape()) e.preventDefault();
+      else if (ui.layers.trapTab(e)) { /* round its own controls */ }
+      // Settings' own key closes it again, the one shortcut that reaches past it
+      else if (settingsOpen && ui.layers.top?.id === 'settings' && shortcuts.match(e, ['app'])?.id === 'settings') { e.preventDefault(); settingsOpen = false; }
+      return;
+    }
     // Escape puts away what is open over the note, the newest first — the find bar, the PDF panel, a floating page (a
     // board's card, a day from the calendar) — and only a bare note lets it through to hide the window. Tied to the
     // key, not to the rebindable action: closing the thing on top is what Escape means everywhere in the app. A page
@@ -561,7 +567,7 @@
         appearance.set({ theme: dark ? 'light' : 'dark' });
         break;
       }
-      case 'newTab': if (!isMobile) { const n = notes.create('', notes.current?.group ?? ''); tabs.open(n.id); ui.focusOwner = 'editor'; } break;
+      case 'newTab': if (!isMobile) { ui.search = ''; const n = notes.create('', notes.current?.group ?? ''); tabs.open(n.id); ui.focusOwner = 'editor'; } break;
       // the last tab: put Eve away, as Esc does (not a pinned one among others: it stays, and so does the window)
       case 'closeTab': if (!isMobile && !tabs.close() && tabs.list.length <= 1) win.hide(); break;
       case 'reopenTab': if (!isMobile) tabs.reopen(); break;

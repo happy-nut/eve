@@ -101,6 +101,9 @@
     if (recording) {
       e.preventDefault(); e.stopPropagation();
       if (e.key === 'Escape') { recording = null; conflict = null; return; }
+      // ⌫ puts back its own key, the one Eve came with: Hide window could not be set back to Esc (Esc ends recording),
+      // and only Reset all undid one changed shortcut
+      if (e.key === 'Backspace' && !e.metaKey && !e.ctrlKey && !e.altKey) { shortcuts.reset(recording); recording = null; conflict = null; return; }
       const keys = eventToKeys(e);
       if (!keys) return; // modifier only, keep waiting
       // a key with no ⌘ / ⌃ / ⌥ is one the note types (a letter, ⇧ and a letter, Space, ↩): bound, it could not be typed
@@ -112,21 +115,10 @@
       return;
     }
     if (e.key === 'Escape') { e.stopPropagation(); onClose(); return true; }
-    if (e.key === 'Tab' && !ui.menu) trapTab(e);
+    if (e.key === 'Tab' && !ui.menu) ui.layers.trapTab(e); // round Settings' own controls, never out behind it
   }
   let panel: HTMLDivElement;
   const takeFocus = (el: HTMLElement) => { if (!isMobile) el.focus({ preventScroll: true }); };
-  /** Tab goes round Settings' own controls, never out to the list or the note behind it */
-  function trapTab(e: KeyboardEvent) {
-    const els = [...panel.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])')]
-      .filter((el) => !(el as HTMLButtonElement).disabled && el.offsetParent !== null);
-    if (!els.length) return;
-    const i = els.indexOf(document.activeElement as HTMLElement);
-    if (i < 0 || (e.shiftKey ? i === 0 : i === els.length - 1)) {
-      e.preventDefault();
-      els[i < 0 ? (e.shiftKey ? els.length - 1 : 0) : (e.shiftKey ? els.length - 1 : 0)].focus();
-    }
-  }
   /** Esc with the keyboard still behind Settings (the list's row, the note) closes Settings first: left to them,
    *  the list's own Esc took the keyboard to the note. Inside Settings, its popups keep their own Esc. */
   function escBehind(e: KeyboardEvent) {
@@ -183,7 +175,7 @@
             <div class="row">
               <span class="label">{a.label}</span>
               <button class="chip" class:rec={recording === a.id} class:bad={conflict?.id === a.id} onclick={() => { recording = a.id; conflict = null; }}>
-                {#if recording === a.id}press keys…{:else if a.keys}<Keys keys={a.keys} />{:else}unbound{/if}
+                {#if recording === a.id}press keys… (⌫ default){:else if a.keys}<Keys keys={a.keys} />{:else}unbound{/if}
               </button>
             </div>
             {#if conflict?.id === a.id}
@@ -500,6 +492,9 @@
   .pens input[type='color'] { width: 26px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 7px; background: none; cursor: pointer; }
   /* a phone: pens and their Reset a finger's size */
   :global(html.mobile) .pens { gap: 10px; }
+  /* a phone: the pens on a line of their own under what they are (beside them, the words were one to a line) */
+  :global(html.mobile) .row:has(> .pens) { flex-wrap: wrap; row-gap: 10px; }
+  :global(html.mobile) .row:has(> .pens) > .label { flex-basis: 100%; }
   :global(html.mobile) .pens input[type='color'] { width: 40px; height: 40px; }
   :global(html.mobile) .pens .link { min-height: 40px; padding: 0 10px; }
   .pens input[type='color']::-webkit-color-swatch-wrapper { padding: 2px; }

@@ -40,7 +40,9 @@
     editor = createEditor({
       element: el,
       content: note.body,
-      onUpdate: (md) => { lastEmitted = md; notes.update(note.id, md); },
+      // the note it was opened on: handed over late (a long note's last keys, as Back opens the next), `note` is already
+      // the next one, and the words went there while the new note was taken for empty and deleted
+      onUpdate: (md) => { lastEmitted = md; notes.update(id, md); },
       onNoteMove: (dir, onTitle) => (onTitle || openedFromList.id === note.id) && nudgeNote(note.id, dir),
       onOpenNote: (title) => {
         notes.flush(note.id);
@@ -53,6 +55,7 @@
         }
       },
       targets: () => notes.pages,
+      page: () => id,
       suggestionUI: suggest.ui,
       calendarUI: dateMenu.ui,
       emojiUI: emojiRow.ui,
@@ -224,13 +227,14 @@
     {#if note.icon}
       <button class="big-icon" title="Change icon" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={isMobile ? 44 : 56} /></button>
     {:else}
-      <button class="add-icon" onclick={addIcon}>
+      <!-- (a press keeps the caret where it was: the button goes as it is used, and the keyboard fell to <body>) -->
+      <button class="add-icon" onmousedown={(e) => e.preventDefault()} onclick={addIcon}>
         <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 9.5c.6.9 1.5 1.5 2.5 1.5s1.9-.6 2.5-1.5M6 6.5h.01M10 6.5h.01"/></svg>
         Add icon
       </button>
     {/if}
     {#if !note.cover}
-      <button class="add-icon add-cover" onclick={() => notes.setLook(note.id, { cover: randomCover() })}>
+      <button class="add-icon add-cover" onmousedown={(e) => e.preventDefault()} onclick={() => notes.setLook(note.id, { cover: randomCover() })}>
         <svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="m2.5 11 3.5-3.5 3 3 1.5-1.5 3 3"/></svg>
         Add cover
       </button>
@@ -246,8 +250,8 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="editor has-head" bind:this={el} {@attach paneWidth}
     onkeydown={(e) => {
-      // …but a row of a diagram's form keeps Tab: to the next row, as anywhere a form is filled in
-      if (e.key === 'Tab' && !e.defaultPrevented && !(e.target as HTMLElement).closest?.('.dblock .form')) e.preventDefault();
+      // …but a row of a diagram's form keeps Tab: to the next row, as anywhere a form is filled in (a database's fields too)
+      if (e.key === 'Tab' && !e.defaultPrevented && !(e.target as HTMLElement).closest?.('.dblock .form, .db')) e.preventDefault();
       // any other key (or a click, below) means the note is being written in: ⌥↑ / ⌥↓ move lines again
       if (!(e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown'))) openedFromList.id = '';
     }}
@@ -338,6 +342,8 @@
   /* a phone has no hover: an unseen button above the title took a tap there and gave the note a random icon */
   :global(html.mobile) .add-icon { opacity: 1; }
   .add-icon:hover { background: var(--bg-hover); color: var(--fg); }
+  /* the keyboard on them: the app's own soft ring, as the list's rows have (WebKit's blue ring cut through the emoji) */
+  .add-icon:focus-visible, .big-icon:focus-visible { outline: none; background: var(--bg-hover); box-shadow: 0 0 0 2px var(--accent-soft); }
   .big-icon {
     border: 0; background: none; font-size: 56px; line-height: 1; padding: 4px; margin-left: -4px; border-radius: 10px;
     transition: background 0.12s, transform 0.12s;

@@ -101,3 +101,9 @@ test('a tag has one colour wherever it shows, read from its words; different tag
   const colours = new Set(['Todo', 'Doing', 'Done', 'Blocked', 'Later', 'Idea', '긴급', '보류'].map(tagColor));
   expect(colours.size).toBeGreaterThan(3);
 });
+
+test('a select sorts by where each choice stands among its choices, not by its letters', () => {
+  const d: DbSchema = { title: 'T', view: 'table', props: [{ name: 'S', type: 'select', options: ['Not started', 'In progress', 'Done'] }] };
+  const rows = [note({ S: 'Done' }, 0), note({ S: 'Not started' }, 1), note({ S: 'In progress' }, 2)];
+  expect(viewRows(rows, { ...d, sort: { by: 'S' } }, (r) => r.body).map((r) => r.props!.S)).toEqual(['Not started', 'In progress', 'Done']);
+});
