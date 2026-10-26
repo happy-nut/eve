@@ -4,7 +4,7 @@ import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { Plugin, PluginKey, Selection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { imageMarkdown } from './image';
 import { hidePipesInMath } from './math';
-import { CellSelection, cellAround, columnResizingPluginKey, fixTables, inSameTable, nextCell, tableEditingKey } from '@tiptap/pm/tables';
+import { CellSelection, cellAround, columnResizingPluginKey, deleteColumn, deleteRow, fixTables, inSameTable, nextCell, tableEditingKey } from '@tiptap/pm/tables';
 
 /**
  * Tables. The markdown form is the GFM pipe table everyone else writes:
@@ -348,12 +348,42 @@ function lessTableEditing(plugin: Plugin): Plugin {
       handleKeyDown(view, e) {
         const sel = view.state.selection;
         if ((e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey && !e.altKey && !e.ctrlKey && halfInTable(sel)) return clearHalf(view);
+        if ((e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey && !e.altKey && !e.ctrlKey && dropEmptyLines(view)) return true;
         if (e.shiftKey && sel instanceof TextSelection && !cellAround(sel.$anchor)) return false;
         if (e.shiftKey && !e.altKey && !e.metaKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp') && outOfTable(view, e.key === 'ArrowDown' ? 1 : -1)) return true;
         return props!.handleKeyDown!.call(plugin, view, e);
       },
     },
   });
+}
+
+/**
+ * ⌫ (or Delete) on whole rows or columns chosen with nothing in them: they go, as with the table's own Delete row /
+ * Delete column. Chosen with words in them, ⌫ empties them as it always did (a second ⌫ then takes them out). The
+ * header row emptied and taken out, the row under it is the header (a markdown table always has one). The whole
+ * table is prosemirror-tables' own: it goes.
+ */
+function dropEmptyLines(view: EditorView): boolean {
+  const sel = view.state.selection;
+  if (!(sel instanceof CellSelection) || (sel.isRowSelection() && sel.isColSelection())) return false;
+  let empty = true;
+  sel.forEachCell((cell) => { if (cell.textContent.trim() || cell.content.childCount > 1) empty = false; });
+  if (!empty) return false;
+  if (sel.isRowSelection()) {
+    const header = Math.min(sel.$anchorCell.index(-1), sel.$headCell.index(-1)) === 0;
+    // one step for ⌘Z: the row taken out and the new header made in the same transaction
+    return deleteRow(view.state, (tr) => {
+      const $cell = header ? cellAround(tr.selection.$from) : null;
+      const table = $cell?.node(-1);
+      if ($cell && table?.firstChild && table.firstChild.firstChild?.type.name !== 'tableHeader') {
+        const th = tr.doc.type.schema.nodes.tableHeader;
+        let pos = $cell.before(-1) + 2; // the first row's first cell
+        table.firstChild.forEach((c) => { tr.setNodeMarkup(pos, th, c.attrs); pos += c.nodeSize; });
+      }
+      view.dispatch(tr);
+    });
+  }
+  return sel.isColSelection() && deleteColumn(view.state, view.dispatch);
 }
 
 /**
