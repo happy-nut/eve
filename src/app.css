@@ -479,6 +479,9 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
    further than 1280px, however wide the window. Code, diagrams, pictures and tables all keep to it, so on a big screen
    they line up with one another instead of each running to the window's edge. */
 .editor .tiptap { --wide: min(calc(var(--pane, 100%) - 48px), 1280px); }
+/* a Mac: 56px kept free on each side, where a wide block's + / ⋮⋮ handle stands (blockHandle.ts) — at 24px it fell
+   over the table's first cells */
+html:not(.mobile) .editor .tiptap { --wide: min(calc(var(--pane, 100%) - 112px), 1280px); }
 /* Code and diagrams are as wide as they need, as far as --wide goes, not held to the
    width the text reads at: a long line or a wide flowchart scrolled sideways inside a column with empty page on both
    sides of it. Still never narrower than the text, and centred on it. Only a block of the note's own: one in a list,
@@ -771,6 +774,8 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 
 /* tables: flat grid, header row tinted; a wide one scrolls inside the note instead of stretching it */
 .tiptap .tableWrapper { overflow-x: auto; margin: 0.7em 0; scrollbar-width: none; }
+/* a Mac: room under a table for its + bar (tableHandles.ts), which lay over the line under it */
+html:not(.mobile) .tiptap .tableWrapper { margin-bottom: calc(0.7em + 18px); }
 .tiptap .tableWrapper::-webkit-scrollbar { display: none; }
 .tiptap table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 0.95em; }
 .tiptap th, .tiptap td { border: 1px solid var(--line); padding: 6px 9px; vertical-align: top; position: relative; min-width: 3em; }
@@ -1057,3 +1062,22 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
 /* a table whose columns are held while it is written in (table.ts, holdWidths): laid out by those widths, not by
    what the cells hold, so the words wrap where they are */
 .tiptap .tableWrapper.held table { table-layout: fixed; width: var(--held-w) !important; }
+
+/* a table's own handles (tableHandles.ts): ⋮⋮ across a row's left border, ⋯ across a column's top one, + bars
+   along the foot and the right side — on the table's edges, never over its cells */
+.tbl-grip, .tbl-add {
+  position: absolute; z-index: var(--z-block-ui); display: none; align-items: center; justify-content: center; padding: 0;
+  border: 0; color: var(--fg-dim); background: var(--bg-pop); cursor: grab;
+}
+.tbl-grip.on, .tbl-add.on { display: inline-flex; }
+.tbl-grip { border-radius: 4px; box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgba(0, 0, 0, 0.06); }
+.tbl-grip.row { width: 16px; height: 24px; }
+.tbl-grip.col { width: 24px; height: 16px; }
+.tbl-grip svg { width: 8px; height: 16px; fill: currentColor; }
+.tbl-grip.col svg { width: 16px; height: 8px; }
+.tbl-add { cursor: pointer; border-radius: 4px; background: var(--bg-hover); opacity: 0.7; transition: opacity 0.12s, background 0.12s; }
+.tbl-add svg { width: 14px; height: 14px; }
+.tbl-grip:hover, .tbl-add:hover { color: var(--fg); background: var(--bg-active); opacity: 1; }
+.tbl-drop { position: absolute; z-index: var(--z-block-ui); display: none; pointer-events: none; border-radius: 2px; background: var(--accent); box-shadow: var(--glow); }
+.tbl-drop.on { display: block; }
+@media print { .tbl-grip, .tbl-add, .tbl-drop { display: none !important; } }

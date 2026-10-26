@@ -111,7 +111,9 @@ class Handle {
       mid = (c.top + c.bottom) / 2;
     } else mid = b.dom.getBoundingClientRect().top + 12;
     this.el.style.top = `${Math.round(mid - host.top - 12)}px`;
-    this.el.style.left = `${Math.max(2, Math.round(column - host.left - 46))}px`;
+    // left of the block itself where it reaches past the text (a wide table, code), not over its first cells
+    const edge = Math.min(column, b.dom.getBoundingClientRect().left);
+    this.el.style.left = `${Math.max(2, Math.round(edge - host.left - 46))}px`;
     this.el.classList.add('on');
   }
   hide() { this.cur = null; this.el.classList.remove('on'); }
