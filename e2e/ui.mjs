@@ -307,6 +307,22 @@ try {
     await page.close();
   }
 
+  // ---- a small diagram in the narrowest column keeps its size (its block grows into the page's room; it fell to 80%) ----
+  {
+    const page = await browser.newPage({ viewport: { width: 1200, height: 850 } });
+    await page.addInitScript(() => localStorage.setItem('eve.appearance', JSON.stringify({ ...JSON.parse(localStorage.getItem('eve.appearance') ?? '{}'), width: 520 })));
+    await page.goto(URL_);
+    await page.waitForSelector('.tiptap');
+    await page.locator('.toolbar .icon').last().click();
+    await page.locator('.menu button', { hasText: 'New note' }).click();
+    await page.waitForTimeout(400);
+    await page.evaluate((b) => window.__editor.commands.setContent(b, true), '# Small diagram\n\nabove\n\n```mermaid\nflowchart LR\n  A[Start] --> B[Middle] --> C[End]\n```\n\nbelow\n');
+    await page.waitForSelector('main .tiptap .diagram-canvas svg', { timeout: 10000 });
+    const d = await page.evaluate(() => { const svg = document.querySelector('main .tiptap .diagram-canvas svg'); return { shown: svg.getBoundingClientRect().width, own: svg.viewBox.baseVal.width }; });
+    if (d.shown < d.own - 1) problems.push(`a small diagram at width 520 is drawn ${Math.round(d.shown)}px wide, under its own ${Math.round(d.own)}px`);
+    await page.close();
+  }
+
   // ---- a phone (the bounty's finds): an Android phone's page in WebKit ----
   {
     const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36';

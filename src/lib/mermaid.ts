@@ -173,8 +173,10 @@ async function draw(code: string): Promise<{ svg: string } | { error: string }> 
     const { svg } = await m.render(`eve-mermaid-${++seq}`, code);
     // shrunk to the note's width, but never past 80% of its size (60% on a phone, a third narrower: a two-part sequence
     // diagram was cut off at the card's edge), where its text stops being easy to read: wider
-    // than that, it scrolls sideways in its card (and opens full size from its expand button)
-    const sized = svg.replace(/(<svg[^>]*?style="max-width: )([\d.]+)px;/, (_, head, w) => `${head}${w}px; min-width: ${Math.round(+w * MIN_SCALE)}px;`);
+    // than that, it scrolls sideways in its card (and opens full size from its expand button). Its own width too, not
+    // mermaid's 100%: the block around it is as wide as its content, and a 100% of that is nothing to go by, so a small
+    // diagram fell to its 80% with the page beside it empty
+    const sized = svg.replace(/(<svg[^>]*?style="max-width: )([\d.]+)px;/, (_, head, w) => `${head}min(100%, ${w}px); width: ${w}px; min-width: ${Math.round(+w * MIN_SCALE)}px;`);
     return { svg: sized.includes('actor-man') ? smallActors(sized) : sized };
   } catch (e) {
     // mermaid leaves its error drawing in the page when a render fails
