@@ -1,9 +1,10 @@
-import { test, expect, describe } from 'vitest';
+import { test, expect, describe, afterEach } from 'vitest';
 import type { Editor } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { closeHistory } from '@tiptap/pm/history';
 import { CellSelection } from '@tiptap/pm/tables';
 import { editorWith, md, paste, posOf, press } from './testEditor';
+import { appearance } from './appearance.svelte';
 
 /** what a copy of the selection puts on the clipboard as plain text */
 function copied(md: string, from: string, to: string, opts: { all?: boolean } = {}) {
@@ -198,5 +199,29 @@ describe('pasted', () => {
     newLine('x')(ed);
     ed.view.pasteHTML(dom.innerHTML);
     expect(md(ed).trim()).toBe('x\n\n| 1 | 2 |\n| --- | --- |');
+  });
+});
+
+describe('cells chosen in a table and copied, as text', () => {
+  const note = '# T\n\n| Name | Qty |\n| --- | --- |\n| apple | 2 |\n| pear | 3 |';
+  function cells(from: string, to: string) {
+    const ed = editorWith(note);
+    const cell = (w: string) => { const $p = ed.state.doc.resolve(posOf(ed, w)); return $p.before($p.depth - 1); };
+    ed.view.dispatch(ed.state.tr.setSelection(CellSelection.create(ed.state.doc, cell(from), cell(to))));
+    const slice = ed.state.selection.content();
+    return ed.view.someProp('clipboardTextSerializer', (f) => f(slice, ed.view)) as string;
+  }
+  afterEach(() => appearance.set({ tableCopyMarkdown: true }));
+  test('the header row among them: a markdown table of just those cells', () => {
+    expect(cells('Name', '3').trim()).toBe('| Name | Qty |\n| --- | --- |\n| apple | 2 |\n| pear | 3 |');
+    expect(cells('Qty', '2').trim()).toBe('| Qty |\n| --- |\n| 2 |');
+    expect(cells('Name', 'pear').trim()).toBe('| Name |\n| --- |\n| apple |\n| pear |');
+  });
+  test('without the header row: the cells a tab apart, a row a line, as a spreadsheet takes them', () => {
+    expect(cells('apple', '3')).toBe('apple\t2\npear\t3');
+  });
+  test('with the setting off (Settings → General), the header row is cells like any other', () => {
+    appearance.set({ tableCopyMarkdown: false });
+    expect(cells('Name', '3')).toBe('Name\tQty\napple\t2\npear\t3');
   });
 });

@@ -211,6 +211,11 @@
           <input type="checkbox" class="switch" checked={appearance.s.autoCorrect}
             onchange={(e) => appearance.set({ autoCorrect: e.currentTarget.checked })} />
         </label>
+        <label class="row">
+          <span class="label">Copy tables as Markdown <span class="sub">cells chosen with the header row copy as a markdown table; off, or without it, a tab between cells</span></span>
+          <input type="checkbox" class="switch" checked={appearance.s.tableCopyMarkdown}
+            onchange={(e) => appearance.set({ tableCopyMarkdown: e.currentTarget.checked })} />
+        </label>
         <div class="row">
           <span class="label">Highlighter <span class="sub">the pens {isMobile ? 'the formatting bar' : prettyKeys(shortcuts.keysFor('highlight')) || 'Highlight…'} offers on chosen words; the first is the plain one (==text==)</span></span>
           <span class="pens">
