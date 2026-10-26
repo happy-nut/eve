@@ -197,7 +197,8 @@ export const Toggle = [
           const pos = getPos();
           if (typeof pos !== 'number' || !editor.isEditable) return;
           const open = !editor.state.doc.nodeAt(pos)?.attrs.open;
-          editor.view.dispatch(editor.state.tr.setNodeAttribute(pos, 'open', open));
+          // no step of the undo: a ⌘Z after typing opened the toggle again instead of taking the words back
+          editor.view.dispatch(editor.state.tr.setNodeAttribute(pos, 'open', open).setMeta('addToHistory', false));
         });
         return {
           dom,

@@ -409,12 +409,13 @@ main.tabbed .page-head.with-icon { height: 98px !important; }
    a step above the text (at 1.15em an h3 read as a bold line). The room above each is the text's size times a step
    (2, 1.4, 1.1), not the heading's own em, which gave an h3 less room than the text gets: a heading sits with what
    follows it, not with what came before. */
-.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 { font-weight: 600; line-height: 1.3; margin: calc(var(--font-size, 15px) * 1.1) 0 0.15em; letter-spacing: -0.01em; }
+.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5, .tiptap h6 { font-weight: 600; line-height: 1.3; margin: calc(var(--font-size, 15px) * 1.1) 0 0.15em; letter-spacing: -0.01em; }
 .tiptap h1 { font-size: 1.875em; margin-top: calc(var(--font-size, 15px) * 2); }
 .tiptap h2 { font-size: 1.5em; margin-top: calc(var(--font-size, 15px) * 1.4); }
 .tiptap h3 { font-size: 1.25em; }
 .tiptap h4 { font-size: 1em; }
 .tiptap h5 { font-size: 0.9em; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+.tiptap h6 { font-size: 0.85em; color: var(--fg-dim); }
 .tiptap > h1:first-child { margin-top: 0; }
 .tiptap p { margin: 0; }
 /* 700, not 600: the Korean face only steps up at Bold, and 600 reads the same as the text around it */
@@ -427,10 +428,10 @@ main.tabbed .page-head.with-icon { height: 98px !important; }
 }
 /* the page's title is its first line (titleOf), whatever it was written as: a plain line or any heading. It is drawn
    as the title, larger than a heading in the note, in a note's own pane only (a floating card has a title of its own) */
-.editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5):first-child {
+.editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5, h6):first-child {
   font-size: 2.5em; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; margin-top: 0; color: var(--fg); text-transform: none;
 }
-html.mobile .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5):first-child { font-size: 2em; }
+html.mobile .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5, h6):first-child { font-size: 2em; }
 /* every list's words start at one place, as Notion's do: a bullet's at 1.4em began left of a number's and a to-do's,
    one step in further for each level ("10." needs this much: it hung out of the column at less) */
 .tiptap ul, .tiptap ol { padding-left: 1.75em; margin: 0; list-style: none; }

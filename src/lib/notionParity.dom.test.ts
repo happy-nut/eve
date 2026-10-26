@@ -229,3 +229,10 @@ test('a line made code keeps its formula, [[link]] and footnote mark as they are
   expect(md(ed)).toContain('```\nKilo $x^2$ [[Page]] note[^1] end\n```');
   document.body.innerHTML = '';
 });
+
+test('a ###### heading brought in stays one when the note is saved (it became a line of text)', () => {
+  const ed = editorWith('# T\n\n###### Small heading');
+  ed.commands.focus('end');
+  ed.commands.insertContent('!');
+  expect(md(ed)).toContain('###### Small heading!');
+});

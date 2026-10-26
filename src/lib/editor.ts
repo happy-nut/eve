@@ -1316,7 +1316,8 @@ export function createEditor(opts: {
       }),
       // a heading is one line in markdown: a line break in it goes out as `<br>` (as in a table cell), not as the
       // usual backslash and newline, which read back as a heading ending in "\" and a paragraph under it
-      Heading.configure({ levels: [1, 2, 3, 4, 5] }).extend({
+      // (six, as markdown has: a note brought in with ###### lost the heading at its first save)
+      Heading.configure({ levels: [1, 2, 3, 4, 5, 6] }).extend({
         // ⌫ at the start of a heading makes it text, where it is (Notion's); the next ⌫ joins it to the line above.
         // Not the title, which is the note's name whatever it is written as
         addKeyboardShortcuts() {
