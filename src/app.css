@@ -983,6 +983,8 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
 /* a picture, link card, PDF or video the selection covers whole (the in-sel decoration, editor.ts): the
    selection's colour laid over it, so an opaque picture shows it too and the selection reads unbroken */
 .tiptap .in-sel { position: relative; }
+/* a formula scrolls sideways: the selection's colour laid inside it, not 3px past it (that made it grow and fade) */
+.tiptap .math-block.in-sel::after { inset: 0; }
 .tiptap .in-sel::after {
   content: ''; position: absolute; inset: -3px; border-radius: 10px; pointer-events: none; z-index: var(--z-raised);
   background: color-mix(in srgb, var(--sel) 55%, transparent);

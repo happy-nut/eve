@@ -147,3 +147,46 @@ test('Space on a chosen picture shows it full size, as ↩ does', () => {
   ui.closeImage();
   expect(md(ed)).toContain('![](a.png)');
 });
+
+describe('a link ends where its words do', () => {
+  test('words typed at its end are not the link\'s; → there types nothing', () => {
+    const ed = at('# T\n\nsee [link](https://a.com)', 'link', true);
+    press(ed, 'ArrowRight');
+    type(ed, ' more');
+    expect(saved(ed)).toBe('# T\n\nsee [link](https://a.com) more');
+  });
+  test('words typed before it are not the link\'s', () => {
+    const ed = at('# T\n\n[link](https://a.com) after', 'link');
+    type(ed, 'pre ');
+    expect(saved(ed)).toBe('# T\n\npre [link](https://a.com) after');
+  });
+});
+
+describe('Delete at the end of a line over a list', () => {
+  for (const [kind, list, rest] of [['to-do', '- [ ] a\n- [ ] b', '- [ ] b'], ['bullet', '- a\n- b', '- b'], ['number', '1. a\n2. b', '1. b']]) {
+    test(`a ${kind}'s first line comes up onto it, in one press`, () => {
+      const ed = at(`# T\n\npara\n\n${list}`, 'para', true);
+      press(ed, 'Delete');
+      expect(saved(ed)).toBe(`# T\n\nparaa\n\n${rest}`);
+    });
+  }
+});
+
+test('⌫ at the start of a quote\'s second line joins it to the first, the quote whole', () => {
+  const ed = at('# T\n\n> q1\n>\n> q2\n>\n> q3', 'q2');
+  press(ed, 'Backspace');
+  expect(saved(ed)).toBe('# T\n\n> q1q2\n>\n> q3');
+});
+
+test('"/할일" finds the to-do list (its word written "할 일", which the / menu cannot type)', () => {
+  expect(slashItems('할일').map((i) => i.label)).toContain('To-do list');
+});
+
+test('⌘Z right after "---" made a divider gives back the dashes typed', () => {
+  const ed = at('# T\n\nx', 'x', true);
+  press(ed, 'Enter');
+  type(ed, '---');
+  press(ed, 'z', { ctrlKey: true });
+  expect(saved(ed)).toContain('---');
+  expect(kinds(ed)).not.toContain('horizontalRule');
+});

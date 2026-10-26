@@ -251,22 +251,25 @@ export const HtmlComment = Node.create({
       dom.className = 'toc';
       dom.contentEditable = 'false';
       let last = '';
+      let now: { pos: number }[] = []; // the headings where they are now: a click goes to the n-th of them
       const draw = () => {
         const heads: { level: number; text: string; pos: number }[] = [];
         editor.state.doc.descendants((n, pos) => {
           if (n.type.name === 'heading' && pos > 0 && n.textContent.trim()) heads.push({ level: n.attrs.level, text: n.textContent, pos });
           return n.type.name !== 'heading';
         });
+        now = heads; // kept up to date even when the list drawn stays: a line written above moved every heading
         const key = heads.map((h) => `${h.level}:${h.text}`).join('\n');
         if (key === last && dom.childElementCount) return;
         last = key;
-        dom.replaceChildren(...(heads.length ? heads.map((h) => {
+        dom.replaceChildren(...(heads.length ? heads.map((h, i) => {
           const a = document.createElement('a');
           a.textContent = h.text;
           a.style.paddingLeft = `${(Math.min(h.level, 3) - Math.min(...heads.map((x) => x.level))) * 1.2}em`;
           a.addEventListener('mousedown', (e) => {
             e.preventDefault();
-            const at = heads.find((x) => x.text === h.text)?.pos ?? h.pos;
+            // the i-th heading as it is now (by its text, two "Notes" both went to the first)
+            const at = now[i]?.pos ?? h.pos;
             editor.chain().focus(at + 1).run();
             (editor.view.nodeDOM(at) as HTMLElement | null)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
           });

@@ -83,7 +83,10 @@
 <!-- the keys come from the fields and buttons inside, which are focusable on their own; the bar only
      catches them once on the way up, so it needs no role of its own beyond the landmark -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="find" use:makeRoom transition:fly|global={{ ...caretIn, y: -6 }} onkeydown={onKey} role="search">
+<!-- its buttons keep the keyboard in the field (WebKit gives a clicked button no focus: it went to nothing, and ↩ no
+     longer stepped through the matches) -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div class="find" use:makeRoom transition:fly|global={{ ...caretIn, y: -6 }} onkeydown={onKey} onmousedown={(e) => { if ((e.target as Element).closest('button')) e.preventDefault(); }} role="search">
   <div class="line">
     <svg class="glass" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
     <input use:focus placeholder="Find" spellcheck="false" value={query} oninput={(e) => type(e.currentTarget.value)} />

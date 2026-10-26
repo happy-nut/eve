@@ -23,7 +23,11 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
     if (at && (at.pos < sel.from || at.pos > sel.to)) editor.commands.setTextSelection(at.pos);
   }
   const empty = editor.state.selection.empty;
-  const linked = editor.isActive('link');
+  // on a link: the caret in it or at either end of it (a link no longer takes in the place at its ends: a right-click on
+  // its first letter put the caret before it)
+  const $h = editor.state.selection.$head;
+  const linkMark = [...$h.marks(), ...($h.nodeAfter?.marks ?? []), ...($h.nodeBefore?.marks ?? [])].find((m) => m.type.name === 'link');
+  const linked = !!linkMark;
   const caret = editor.view.coordsAtPos(editor.state.selection.head);
   const at = event ?? { clientX: Math.round(caret.left), clientY: Math.round(caret.bottom) };
   // a link card selected (⌥↩ on it, or a right-click): back to a plain link, or open / copy it
@@ -42,7 +46,7 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
   }
   // the caret on a link (⌥↩ there, or a right-click on it): the link's own menu, its card first
   if (empty && linked) {
-    const href = editor.getAttributes('link').href ?? '';
+    const href = (linkMark?.attrs.href as string | undefined) ?? '';
     const unlink = () => editor.chain().focus().extendMarkRange('link').unsetLink().run();
     // an address that would not read back as a card is not offered as one (see cardable)
     const card = cardable(editor, href) ? [{ label: 'Show as card', run: () => void linkToCard(editor) }] : [];
