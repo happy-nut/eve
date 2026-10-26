@@ -35,6 +35,7 @@ import { TableNodes, cellEnter, clearForPaste, upAboveTable } from './table';
 import { Find } from './find';
 import { SelectionLayer } from './selectionLayer';
 import { BlockHandle } from './blockHandle';
+import { TableHandles } from './tableHandles';
 import { ClickTarget } from './clickTarget';
 import { Divider } from './divider';
 import { MathBlock, MathInline, Text, insertMath } from './math';
@@ -1333,6 +1334,8 @@ export function createEditor(opts: {
       ClickTarget,
       // + and ⋮⋮ beside the block under the pointer: a Mac's, a phone has no pointer to bring them up
       ...(isMobile ? [] : [BlockHandle.configure({ run: (id) => runEditorCommand(editor, id) })]),
+      // a table's own: ⋮⋮ on a row, ⋯ on a column, + along its foot and side (a phone keeps TableTools' bar)
+      ...(isMobile ? [] : [TableHandles]),
       Extension.create({
         name: 'paintSelection',
         addProseMirrorPlugins: () => [new Plugin({

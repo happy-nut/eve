@@ -4,7 +4,8 @@
   import { isMobile } from './lib/platform';
 
   /**
-   * Row/column controls for the table the caret is in. A small bar over the table's top-left corner,
+   * Row/column controls for the table the caret is in, on a phone (a Mac has the table's own handles, Notion's:
+   * tableHandles.ts). A small bar over the table's top-left corner,
    * the way the outline rail sits beside the page — no grips to hunt for, and nothing on screen while
    * you are writing anywhere else. On a Mac only while the pointer is over that table (or the bar): there with every
    * caret in the table, it sat over the top-right cells and covered what was being typed in them. A phone has no
@@ -18,6 +19,8 @@
   let at = $state<{ x: number; y: number; inside?: boolean } | null>(null);
 
   function place() {
+    // a Mac has the table's own handles instead, under the pointer (tableHandles.ts)
+    if (!isMobile) { at = null; return; }
     const e = editor;
     if (!e || e.isDestroyed) { at = null; return; } // gone already (the note was switched)
     // the caret's own element, not view.hasFocus(): a window that is not the frontmost one still has
