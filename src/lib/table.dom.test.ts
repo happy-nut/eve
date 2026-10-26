@@ -255,3 +255,16 @@ describe('a cell holds lines and pictures only: what a markdown cell can keep', 
     document.body.innerHTML = '';
   });
 });
+
+test('"$$ " or /equation in a cell keeps the table whole (a block formula cut it in two)', async () => {
+  const { insertMath } = await import('./math');
+  const ed = editorWith('# T\n\n| a | b |\n| --- | --- |\n| 3 | 4 |');
+  ed.commands.setTextSelection(posOf(ed, '3', true));
+  type(ed, ' $$ ');
+  insertMath(ed, true);
+  let tables = 0;
+  ed.state.doc.descendants((n) => { if (n.type.name === 'table') tables++; });
+  expect(tables).toBe(1);
+  expect(md(editorWith(md(ed)))).toBe(md(ed));
+  document.body.innerHTML = ''; // (the formula's editor loads MathLive after this; jsdom can't run it)
+});

@@ -7,6 +7,7 @@ import { fullSize } from './mathParts';
 import { mountMath, type MathEditing } from './mathEdit.svelte';
 import { scrollHint } from './scrollHint';
 import { HTML_TAGS } from './html';
+import { inCell } from './code';
 
 /**
  * Formulas: `$E = mc^2$` in a line of text, and a block of its own,
@@ -276,6 +277,7 @@ const mathNode = (display: boolean) => Node.create({
         handler: ({ state, range }) => {
           const $from = state.doc.resolve(range.from);
           if ($from.parent.type.name !== 'paragraph' || $from.parent.textContent.trim() !== '$$') return null;
+          if (inCell($from)) return null; // a cell holds lines, not a block: put there, it cut the table in two
           openNext = true;
           state.tr.replaceRangeWith($from.before(), $from.after(), this.type.create({ latex: '' }));
         },
@@ -444,6 +446,8 @@ export function insertMath(editor: Editor, display: boolean) {
     if (display) editor.chain().focus().insertContentAt(sel.$from.after(-1), { type: 'mathBlock', attrs: { latex: '' } }).run();
     return;
   }
+  // a cell holds lines, not a block: the formula goes in the line (a block one cut the table in two)
+  if (display && inCell(sel.$from)) display = false;
   const text = sel.empty ? '' : state.doc.textBetween(sel.from, sel.to, ' ');
   openNext = true;
   const node = display
