@@ -64,8 +64,9 @@ class Handle {
     this.line.className = 'block-drop';
     this.host.append(this.el, this.line);
     const [plus, grip] = this.el.querySelectorAll('button');
-    // pressing either keeps the caret and the focus in the note: the menu gives the keyboard back to it
-    for (const b of [plus, grip]) b.addEventListener('mousedown', (e) => e.preventDefault());
+    // pressing + keeps the caret and the focus in the note. Not ⋮⋮: a press the page turns down is no drag to WebKit,
+    // and the block never moved (the menu and the drop put the focus back in the note themselves)
+    plus.addEventListener('mousedown', (e) => e.preventDefault());
     plus.addEventListener('click', (e) => this.add(e.altKey));
     grip.addEventListener('click', () => this.menu(grip));
     grip.addEventListener('dragstart', (e) => this.dragStart(e));
