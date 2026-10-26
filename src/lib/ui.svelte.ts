@@ -22,6 +22,8 @@ export interface CardReq {
   onDelete?: () => void;
   /** a whole note's markdown, edited as it is (a daily note: its first line need not be a title) */
   markdown?: string; onMarkdown?: (md: string) => void;
+  /** the note it is (a day's): a database in it keeps its rows under it. None, a card's: no rows of its own */
+  page?: () => string | null;
   resolve: () => void;
 }
 
@@ -195,8 +197,8 @@ class Ui {
     return new Promise((res) => this.pushCard({ ...c, onChange, onDelete, resolve: res }));
   }
   /** A note's markdown as a floating page (a day from the calendar, the daily template); resolves when it closes. */
-  openPage(markdown: string, onMarkdown: (md: string) => void, note?: string): Promise<void> {
-    return new Promise((res) => this.pushCard({ title: '', body: '', markdown, onMarkdown, note, onChange: () => {}, resolve: res }));
+  openPage(markdown: string, onMarkdown: (md: string) => void, note?: string, page?: () => string | null): Promise<void> {
+    return new Promise((res) => this.pushCard({ title: '', body: '', markdown, onMarkdown, note, page, onChange: () => {}, resolve: res }));
   }
   /** the page on top closes; the one under it, if any, is the page again */
   closeCard() {

@@ -220,8 +220,9 @@ export function remindersIn(body: string): LineReminder[] {
 export function dateMarkdown(md: MarkdownIt): void {
   md.inline.ruler.before('link', 'datemention', (state, silent) => {
     if (state.src.charCodeAt(state.pos) !== 0x40) return false; // '@'
-    // an address is not a date: only an `@` that starts a word is one
-    if (state.pos > 0 && /[^\s([{]/.test(state.src[state.pos - 1])) return false;
+    // an address is not a date: not an `@` after what an address's name is made of. Anything else may stand before
+    // one, as a chip is written back: bold around it (`**@…**`), a word in Korean ("마감@…"); they read back as text
+    if (state.pos > 0 && /[A-Za-z0-9._%+-]/.test(state.src[state.pos - 1])) return false;
     const m = /^@(\d{4}-\d{2}-\d{2})(?: ((?:[01]\d|2[0-3]):[0-5]\d) ⏰)?(?![\d-])/.exec(state.src.slice(state.pos));
     if (!m || daysFrom(m[1]) === null) return false;
     if (!silent) {

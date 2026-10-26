@@ -265,7 +265,8 @@ class NotesStore {
   // nothing may sort or splice them in place.
   get pages(): readonly Note[] { return this.#pages; }
   get visible(): readonly Note[] { return this.#visible; }
-  #visible = $derived(this.all.filter((n) => !n.deleted && !isDailyId(n.id) && n.id !== DAILY_TEMPLATE_ID && (n.id !== CALENDAR_NOTE_ID || appearance.s.dailyNotes)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt));
+  // (a day's database rows too: under a day, which the list does not show, they came up at its top as pages of their own)
+  #visible = $derived(this.all.filter((n) => !n.deleted && !isDailyId(n.id) && !(n.parent && isDailyId(n.parent)) && n.id !== DAILY_TEMPLATE_ID && (n.id !== CALENDAR_NOTE_ID || appearance.s.dailyNotes)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt));
   #pages = $derived(this.#visible.filter((n) => n.id !== CALENDAR_NOTE_ID));
   /**
    * The list as the sidebar stacks it: `shown` without what folded groups and pages hide, `all` with it.
@@ -353,7 +354,17 @@ class NotesStore {
     let n = this.all.find((x) => x.id === id);
     if (n && !n.deleted) return n;
     const body = dailyBody(this.dailyTemplate, key);
-    if (n) Object.assign(n, { deleted: false, body, updatedAt: Date.now() }); // a deleted day, begun again
+    if (n) {
+      // a deleted day, begun again: what was written in it stays in the Trash, a note of its own (written over, it was
+      // gone from there)
+      if (n.body.trim() && n.body !== body) {
+        const kept: Note = { ...n, id: newId() };
+        this.all.push(kept);
+        this.titles.set(kept.id, titleOf(kept));
+        void storage.write(kept.id, serialize(kept));
+      }
+      Object.assign(n, { deleted: false, body, updatedAt: Date.now() });
+    }
     else { this.all.push({ id, body, updatedAt: UNWRITTEN, deleted: false, group: '', order: 0, icon: '🗓️' }); n = this.all.at(-1)!; }
     this.titles.set(id, titleOf(n));
     void storage.write(id, serialize(n));

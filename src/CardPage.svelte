@@ -49,6 +49,7 @@
       onUpdate: (md) => (req.onMarkdown ? req.onMarkdown(md) : req.onChange(cardOf(md))),
       onOpenNote: (t) => { close(); notes.openByTitle(t); },
       targets: () => notes.pages,
+      page: req.page ?? (() => null),
       suggestionUI: suggest.ui,
       calendarUI: dateMenu.ui,
       emojiUI: emojiRow.ui,

@@ -77,3 +77,12 @@ test('⌘Z with the keyboard nowhere (on <body>) takes nothing back from the lis
   expect(ui.undoKey(f)).toBe(true);
   row.remove();
 });
+
+test('a deleted day begun again: what was written in it stays in the Trash (it was written over)', () => {
+  const day = notes.dayNote('2031-01-02');
+  notes.update(day.id, `${day.body}\n\nimportant old words`);
+  notes.remove(day.id);
+  notes.dayNote('2031-01-02');
+  expect(notes.trash.some((n) => n.body.includes('important old words'))).toBe(true);
+  expect(notes.all.find((n) => n.id === day.id)!.deleted).toBe(false);
+});

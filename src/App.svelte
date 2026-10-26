@@ -308,12 +308,12 @@
   function openTemplate() {
     const n = notes.templateNote();
     void ui.openPage(n.body, (md) => notes.update(n.id, md),
-      'Template — every new day starts like this. {{date}} and {{weekday}} are filled in.').then(() => notes.flush(n.id));
+      'Template — every new day starts like this. {{date}} and {{weekday}} are filled in.', () => n.id).then(() => notes.flush(n.id));
   }
   /** A day picked in the calendar: its note, floating over the calendar like a board's card. */
   function openDay(key: string) {
     const day = notes.dayDraft(key); // made only once something is written in it
-    void ui.openPage(day.body, (md) => day.write(md)).then(() => { if (day.note) notes.flush(day.note.id); });
+    void ui.openPage(day.body, (md) => day.write(md), undefined, () => day.note?.id ?? null).then(() => { if (day.note) notes.flush(day.note.id); });
   }
   /**
    * Where is the keyboard? The pane it just moved to (the list ↔ the note) flashes blue once. Only on a

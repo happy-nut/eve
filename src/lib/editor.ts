@@ -978,6 +978,8 @@ export function createEditor(opts: {
   cursor?: number;
   /** ⌥↑ / ⌥↓ that should move the note itself, not a line: true when it did (`onTitle`: the caret is on the title) */
   onNoteMove?: (dir: -1 | 1, onTitle: boolean) => boolean;
+  /** the note this is (a database in it keeps its rows under it); left out, the note open */
+  page?: () => string | null;
 }) {
   // the menus at the caret, so one can stay shut while another is open: in "[[Meeting :sm" both the link picker and
   // the emoji row came up, one over the other, and Enter picked from whichever answered first
@@ -1850,7 +1852,7 @@ export function createEditor(opts: {
       }),
       Bookmark,
       Kanban,
-      DatabaseBlock,
+      opts.page ? DatabaseBlock.configure({ page: opts.page }) : DatabaseBlock,
       FootnoteRef,
       FootnoteText,
       Extension.create({

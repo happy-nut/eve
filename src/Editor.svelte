@@ -55,6 +55,7 @@
         }
       },
       targets: () => notes.pages,
+      page: () => id,
       suggestionUI: suggest.ui,
       calendarUI: dateMenu.ui,
       emojiUI: emojiRow.ui,

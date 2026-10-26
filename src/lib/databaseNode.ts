@@ -19,6 +19,11 @@ export const DatabaseBlock = Node.create({
   atom: true,
   selectable: false,
 
+  // the note the editor is (createEditor says): a day's page or a card floats over another note, the one open
+  addOptions() {
+    return { page: (): string | null => notes.currentId };
+  },
+
   addAttributes() {
     return { schema: { default: defaultDb(), parseHTML: (el) => parseDb(el.textContent ?? '') ?? defaultDb(), rendered: false } };
   },
@@ -40,8 +45,9 @@ export const DatabaseBlock = Node.create({
         props: {
           schema: node.attrs.schema,
           commit: (schema: DbSchema) => editor.view.dispatch(editor.state.tr.setNodeMarkup(pos(), undefined, { ...editor.state.doc.nodeAt(pos())!.attrs, schema })),
-          // the note it is in: the one open (a database is a page's, and the page is the note shown)
-          page: () => notes.currentId,
+          // the note it is in: a day's page's own, not the calendar's (every day's database showed the same rows, written
+          // under the calendar)
+          page: () => this.options.page(),
         },
       });
       return {
