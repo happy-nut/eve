@@ -350,14 +350,23 @@ export function slashItems(query: string): SuggestItem[] {
   // Notion's "/turn": what the line can be turned into ("/turnh2", "/turnbullet"), plain text among them
   const turn = /^turn(?:into)?/.exec(q);
   if (turn) q = q.slice(turn[0].length);
-  const from = turn ? [TEXT, ...SLASH.filter((i) => TURNS.has(i.label))] : all;
+  // (plain text is one of what the menu makes, "/text" too: it found only the nine colours, and ↩ greyed the line)
+  const from = turn ? [TEXT, ...SLASH.filter((i) => TURNS.has(i.label))] : [TEXT, ...all];
   // a word with a space in it ("할 일", "하위 페이지") found typed without it: the / menu ends at a space
   const has = (w: string | undefined) => !!w && (typedIn(w.toLowerCase(), q) || typedIn(w.toLowerCase().replace(/\s+/g, ''), q));
   const finds = (i: SuggestItem) => [i.label, i.hint, i.keywords].some(has);
   // a kind found by its group's name is found too ("/diagram" lists every diagram); not by the group's hint, which
   // names a few kinds ("/flow" is Flowchart alone)
   const named = (i: SuggestItem) => [i.label, i.keywords].some(has);
-  return from.flatMap((i) => (i.sections ? (named(i) ? i.sections : i.sections.filter(finds)) : finds(i) ? [i] : []));
+  const found = from.flatMap((i) => (i.sections ? (named(i) ? i.sections : i.sections.filter(finds)) : finds(i) ? [i] : []));
+  // the closest first, as ↩ takes the first: the name itself, then a name that starts so, then a keyword that is the
+  // word, then the rest as they come ("/table" took Database, "/red" a bulleted list for the "red" in "unordered")
+  const words = (i: SuggestItem) => (i.keywords ?? '').toLowerCase().split(/\s+/);
+  const rank = (i: SuggestItem) => {
+    const name = i.label.toLowerCase();
+    return name === q ? 0 : name.startsWith(q) ? 1 : words(i).includes(q) ? 2 : words(i).some((w) => w.startsWith(q)) ? 3 : 4;
+  };
+  return found.map((i, n) => ({ i, n, r: rank(i) })).sort((a, b) => a.r - b.r || a.n - b.n).map((x) => x.i);
 }
 
 /** the kinds of line "/turn" offers, by label */
@@ -407,12 +416,12 @@ export const SLASH: SuggestItem[] = [
   { label: 'To-do list', hint: '[ ]', keywords: 'todo task checkbox check 할 일', icon: ICONS.todo, run: line('taskList') },
   { label: 'Quote', hint: '|', keywords: 'blockquote 인용', icon: ICONS.quote, run: line('blockquote') },
   { label: 'Callout', hint: '💡 highlighted box', icon: ICONS.callout, run: tip('callout', (e) => e.chain().focus().toggleWrap('callout').run()) },
-  { label: 'Toggle', hint: '> folds its content', icon: ICONS.toggle, run: (e) => e.chain().focus().setDetails().updateAttributes('details', { open: true }).run() },
+  { label: 'Toggle', hint: '> folds its content', keywords: '토글 접기', icon: ICONS.toggle, run: (e) => e.chain().focus().setDetails().updateAttributes('details', { open: true }).run() },
   // as ``` and --- make them as you type
-  { label: 'Code block', hint: '``` code, highlighted', icon: ICONS.code, run: tip('codeBlock', (e) => { if (!e.isActive('tableCell') && !e.isActive('tableHeader')) e.chain().focus().toggleCodeBlock().run(); }) },
-  { label: 'Divider', hint: '--- a line across', icon: ICONS.divider, run: tip('divider', (e) => e.chain().focus().setHorizontalRule().run()) },
+  { label: 'Code block', hint: '``` code, highlighted', keywords: '코드', icon: ICONS.code, run: tip('codeBlock', (e) => { if (!e.isActive('tableCell') && !e.isActive('tableHeader')) e.chain().focus().toggleCodeBlock().run(); }) },
+  { label: 'Divider', hint: '--- a line across', keywords: '구분선 hr rule', icon: ICONS.divider, run: tip('divider', (e) => e.chain().focus().setHorizontalRule().run()) },
   { label: 'Kanban', hint: 'board', keywords: '칸반', icon: ICONS.kanban, run: insertKanban },
-  { label: 'Database', hint: 'a table of pages under this one', keywords: 'table view board 데이터베이스 표 db', icon: ICONS.table, run: insertDatabase },
+  { label: 'Database', hint: 'a table of pages under this one', keywords: 'table view board 데이터베이스 db', icon: ICONS.table, run: insertDatabase },
   {
     label: 'Diagram', hint: 'flowchart, sequence, pie…', keywords: 'mermaid chart 다이어그램 차트', icon: ICONS.diagram, folder: true,
     sections: [
@@ -427,8 +436,8 @@ export const SLASH: SuggestItem[] = [
   },
   { label: 'Equation', hint: '∑ formula, its own line ($$)', icon: ICONS.math, run: (e) => insertMath(e, true) },
   { label: 'Inline equation', hint: 'x² formula, in the line ($)', icon: ICONS.mathInline, run: (e) => insertMath(e, false) },
-  { label: 'Table', hint: '3×3, with a header row', icon: ICONS.table, run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-  { label: 'Image', hint: 'Pick a file', icon: ICONS.image, run: tip('image', (e) => { pickImage().then((src) => src && insertImage(e, src)); }) },
+  { label: 'Table', hint: '3×3, with a header row', keywords: '표 grid', icon: ICONS.table, run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+  { label: 'Image', hint: 'Pick a file', keywords: '이미지 그림 사진 picture photo', icon: ICONS.image, run: tip('image', (e) => { pickImage().then((src) => src && insertImage(e, src)); }) },
   { label: 'Video', hint: 'Pick a file', icon: ICONS.video, run: (e) => { pickVideo().then((src) => src && e.chain().focus().insertContent({ type: 'video', attrs: { src, name: src.split('/').pop() } }).run()); } },
   { label: 'Footnote', hint: '[^1] a note at the end', keywords: 'reference cite 각주 주석', icon: ICONS.text, run: insertFootnote },
   { label: 'Link to note', hint: '[[ another note', icon: ICONS.wikiLink, run: tip('wikiLink', (e) => e.chain().focus().insertContent('[[').run()) },

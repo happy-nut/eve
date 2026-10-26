@@ -254,3 +254,8 @@ test('a link whose address has a space reads back as that link (its words showed
   editorWith(saved).state.doc.descendants((n) => { for (const m of n.marks) if (m.type.name === 'link') href = m.attrs.href; });
   expect(href).toBe('https://e.com/?q=a%20b');
 });
+
+test.each([['text', 'Text'], ['table', 'Table'], ['red', 'Red'], ['표', 'Table'], ['코드', 'Code block'], ['토글', 'Toggle'], ['구분선', 'Divider'], ['이미지', 'Image'], ['텍스트', 'Text']])(
+  '"/%s" offers %s first, as ↩ takes the first', (q, first) => {
+    expect(slashItems(q)[0]?.label).toBe(first);
+  });
