@@ -1,7 +1,7 @@
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
-import type { EditorView } from '@tiptap/pm/view';
-import { Plugin, Selection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
+import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
+import { Plugin, PluginKey, Selection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { imageMarkdown } from './image';
 import { hidePipesInMath } from './math';
 import { CellSelection, cellAround, columnResizingPluginKey, fixTables, inSameTable, nextCell, tableEditingKey } from '@tiptap/pm/tables';
@@ -401,11 +401,81 @@ const dragOutOfTable = new Plugin({
   },
 });
 
+/**
+ * A table's columns stay as wide as they are while its cells are written in, as Notion's do. Opened, a table is laid
+ * out by what its cells hold (a column of long words wide, one of numbers narrow); then those widths are held, so a
+ * cell's words wrap in it, where they used to push its column wider and squeeze the others under the caret. Held on
+ * screen only, never in the note (a GFM table has no widths to keep): a window or pane of another width, a column
+ * added or taken away, and the table is laid out afresh. One sized by hand (colwidth) keeps the widths it was given.
+ */
+interface Pin { pos: number; widths: number[]; total: number }
+const pinKey = new PluginKey<Pin[]>('tableWidths');
+const sizedByHand = (table: PMNode) => { let by = false; table.descendants((n) => { if (n.attrs.colwidth) by = true; return !by; }); return by; };
+const fits = (table: PMNode, pin: Pin) => table.type.name === 'table' && table.firstChild?.childCount === pin.widths.length && !sizedByHand(table);
+
+const holdWidths = new Plugin<Pin[]>({
+  key: pinKey,
+  state: {
+    init: () => [],
+    apply: (tr, pins) => tr.getMeta(pinKey) ?? (tr.docChanged
+      ? pins.flatMap((p) => { const r = tr.mapping.mapResult(p.pos, 1); return r.deleted ? [] : [{ ...p, pos: r.pos }]; })
+      : pins),
+  },
+  props: {
+    decorations(state) {
+      const decos: Decoration[] = [];
+      for (const pin of pinKey.getState(state) ?? []) {
+        const table = state.doc.nodeAt(pin.pos);
+        if (!table || !fits(table, pin)) continue;
+        decos.push(Decoration.node(pin.pos, pin.pos + table.nodeSize, { class: 'held', style: `--held-w: ${pin.total}px` }));
+        let at = pin.pos + 2; // into the table, into its first row
+        table.firstChild!.forEach((cell, _o, i) => { decos.push(Decoration.node(at, at + cell.nodeSize, { style: `width: ${pin.widths[i]}px` })); at += cell.nodeSize; });
+      }
+      return DecorationSet.create(state.doc, decos);
+    },
+  },
+  view(view) {
+    let frame = 0, width = view.dom.clientWidth;
+    // the tables not held yet, measured as the page laid them out, and held from then on
+    const measure = () => {
+      frame = 0;
+      const pins = pinKey.getState(view.state) ?? [];
+      const next = pins.filter((p) => { const t = view.state.doc.nodeAt(p.pos); return t && fits(t, p); });
+      let added = false;
+      view.state.doc.descendants((node, pos) => {
+        if (node.type.name !== 'table') return true;
+        if (next.some((p) => p.pos === pos) || sizedByHand(node)) return false;
+        const wrap = view.nodeDOM(pos) as HTMLElement | null, row = wrap?.querySelector('tr');
+        const total = wrap?.querySelector('table')?.getBoundingClientRect().width ?? 0;
+        if (!row || !total) return false; // not laid out (a closed toggle, a test's page)
+        next.push({ pos, widths: [...row.children].map((c) => Math.round(c.getBoundingClientRect().width)), total: Math.round(total) });
+        added = true;
+        return false;
+      });
+      if (added || next.length !== pins.length) view.dispatch(view.state.tr.setMeta(pinKey, next).setMeta('addToHistory', false));
+    };
+    const soon = () => { if (!frame) frame = requestAnimationFrame(measure); };
+    // another width for the note: every table laid out afresh for the room there is now
+    const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
+      if (view.dom.clientWidth === width) return;
+      width = view.dom.clientWidth;
+      view.dispatch(view.state.tr.setMeta(pinKey, []).setMeta('addToHistory', false));
+      soon();
+    });
+    resized?.observe(view.dom);
+    soon();
+    return {
+      update: (v, prev) => { if (v.state.doc !== prev.doc || pinKey.getState(v.state) !== pinKey.getState(prev)) soon(); },
+      destroy: () => { cancelAnimationFrame(frame); resized?.disconnect(); },
+    };
+  },
+});
+
 export const TableNodes = [
   Table.extend({
     addStorage: () => tableMarkdown,
     addProseMirrorPlugins() {
-      return [dragOutOfTable, pasteAfterClear, ...(this.parent?.() ?? []).map((p) => (p.spec.key === tableEditingKey ? lessTableEditing(p) : p))];
+      return [dragOutOfTable, pasteAfterClear, holdWidths, ...(this.parent?.() ?? []).map((p) => (p.spec.key === tableEditingKey ? lessTableEditing(p) : p))];
     },
   }).configure({ resizable: true }),
   TableRow.extend({ addStorage: () => inner }),

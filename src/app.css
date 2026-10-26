@@ -1045,3 +1045,7 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
 .block-drop.on { display: block; }
 :root.block-drag .prosemirror-dropcursor-block, :root.block-drag .prosemirror-dropcursor-inline { display: none !important; }
 @media print { .block-handle, .block-drop { display: none !important; } }
+
+/* a table whose columns are held while it is written in (table.ts, holdWidths): laid out by those widths, not by
+   what the cells hold, so the words wrap where they are */
+.tiptap .tableWrapper.held table { table-layout: fixed; width: var(--held-w) !important; }
