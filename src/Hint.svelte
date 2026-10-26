@@ -3,9 +3,11 @@
   import { cubicOut } from 'svelte/easing';
   import { hints } from './lib/hints.svelte';
   import Keys from './Keys.svelte';
+  import { ui } from './lib/ui.svelte';
 </script>
 
-{#if hints.current}
+<!-- a tip about the note, not over what is opened on it (a picker, Settings: it covered their last row) -->
+{#if hints.current && !ui.layers.modal}
   {@const h = hints.current}
   <div class="hint" role="status" transition:fly|global={{ y: 16, duration: 220, easing: cubicOut }}>
     <span class="bulb">💡</span>

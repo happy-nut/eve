@@ -84,3 +84,16 @@ for (const p of files(SRC).filter((p) => /\.(svelte|css)$/.test(p))) {
   });
 }
 assert.deepEqual(asText, [], 'the accent as text or an icon is var(--accent-text): --accent is for fills');
+
+// a coloured word (textColor.ts) gets its theme's shade by the colour in its style, which WebKit writes back on the page
+// as rgb(…): by the hex alone no rule matched there, and the dark theme drew the light theme's 3.3:1 shades
+{
+  const ts = readFileSync(join(SRC, 'lib/textColor.ts'), 'utf8');
+  const colors = [...ts.matchAll(/name: '(\w+)', label: '\w+', hex: '#([0-9a-f]{6})'/g)].map((m) => [m[1], m[2]]);
+  assert.equal(colors.length, 9, 'the nine colours read from textColor.ts');
+  for (const [name, hex] of colors) {
+    const rgb = `rgb(${parseInt(hex.slice(0, 2), 16)}, ${parseInt(hex.slice(2, 4), 16)}, ${parseInt(hex.slice(4), 16)})`;
+    const rule = new RegExp(`span\\[style\\*='${rgb.replace(/[()]/g, '\\$&')}'\\][^{]*\\{ color: var\\(--ink-${name}\\)`);
+    assert.match(css, rule, `${name}: a rule for its colour as WebKit writes it (${rgb})`);
+  }
+}

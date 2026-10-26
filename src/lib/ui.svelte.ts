@@ -64,8 +64,11 @@ export interface Layer {
 
 /** The keyboard back to `from`; with that gone (taken off the page, <body>, inside what is closing), to the note. */
 export function focusBack(from: Element | null, own?: string) {
-  const el = from as HTMLElement | null;
-  if (el?.isConnected && el !== document.body && !(own && el.closest(own)) && typeof el.focus === 'function') {
+  const ok = (e: HTMLElement | null) => !!e?.isConnected && e !== document.body && !(own && e.closest(own)) && typeof e.focus === 'function';
+  // nowhere to go back to (a button WebKit gave no focus, so <body>): the note, kept where it was read too — the ⋯
+  // menu closed on Esc took a note scrolled far down back up to its caret
+  const el = ok(from as HTMLElement | null) ? (from as HTMLElement) : isMobile ? null : document.querySelector<HTMLElement>('main .tiptap, main .calendar .day.cursor');
+  if (el) {
     // what it is in stays where it was: the note, focused, has the webview bring its caret into sight all the same
     // (preventScroll or not), and a diagram put back from the whole screen left the note at its end
     const kept: [Element, number, number][] = [];
@@ -74,7 +77,7 @@ export function focusBack(from: Element | null, own?: string) {
     const put = () => { for (const [s, top, left] of kept) { s.scrollTop = top; s.scrollLeft = left; } };
     put();
     requestAnimationFrame(put);
-  } else if (!isMobile) focusNote(); // (on a phone the note would raise its keyboard: nothing, there)
+  } // (on a phone the note would raise its keyboard: nothing, there)
 }
 
 class Layers {

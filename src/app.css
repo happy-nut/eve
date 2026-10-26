@@ -94,6 +94,8 @@ body {
   user-select: none;
   overflow: hidden;
 }
+/* a field's hint, readable: WebKit's own grey was 1.9:1 on a field's grey (the list's search, the Trash's, Find) */
+::placeholder { color: var(--fg-dim); opacity: 1; }
 button { cursor: default; }
 button.icon {
   border: 0; background: none; color: var(--fg-dim); font-size: 15px; line-height: 1;
@@ -784,7 +786,9 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 .tiptap .img-fig .size-grip { height: auto; top: 0; bottom: 22px; }
 
 /* tables: flat grid, header row tinted; a wide one scrolls inside the note instead of stretching it */
-.tiptap .tableWrapper { overflow-x: auto; margin: 0.7em 0; scrollbar-width: thin; }
+/* (a pixel each side: a collapsed border's outer half lies outside the table, and was cut off at the right with a 2px
+   scroll to reach it) */
+.tiptap .tableWrapper { overflow-x: auto; margin: 0.7em 0; padding: 0 2px 0 1px; scrollbar-width: thin; }
 /* a Mac: room under a table for its + bar (tableHandles.ts), which lay over the line under it */
 html:not(.mobile) .tiptap .tableWrapper { margin-bottom: calc(0.7em + 18px); }
 /* a table wider than its place: a thin bar under it says it goes on (hidden, its last columns were out of sight with
@@ -1026,16 +1030,17 @@ html.mobile .tiptap [data-type='details'] > button::after { content: ''; positio
 .more-l.more-r { mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
 .tiptap .math-block.editing { mask-image: none; }
 
-/* a coloured word (textColor.ts): the theme's own shade of it, over the one written in the file (the light theme's) */
-.tiptap span[style*='#6f6e69' i] { color: var(--ink-gray) !important; }
-.tiptap span[style*='#8a5a44' i] { color: var(--ink-brown) !important; }
-.tiptap span[style*='#b0500a' i] { color: var(--ink-orange) !important; }
-.tiptap span[style*='#8f6516' i] { color: var(--ink-yellow) !important; }
-.tiptap span[style*='#2f7a52' i] { color: var(--ink-green) !important; }
-.tiptap span[style*='#1f6fa8' i] { color: var(--ink-blue) !important; }
-.tiptap span[style*='#7b4fa8' i] { color: var(--ink-purple) !important; }
-.tiptap span[style*='#b03a78' i] { color: var(--ink-pink) !important; }
-.tiptap span[style*='#c4302b' i] { color: var(--ink-red) !important; }
+/* a coloured word (textColor.ts): the theme's own shade of it, over the one written in the file (the light theme's). By
+   its hex as written, and as WebKit writes a style back on the page (rgb(…)): by the hex alone, none matched there */
+.tiptap span[style*='#6f6e69' i], .tiptap span[style*='rgb(111, 110, 105)'] { color: var(--ink-gray) !important; }
+.tiptap span[style*='#8a5a44' i], .tiptap span[style*='rgb(138, 90, 68)'] { color: var(--ink-brown) !important; }
+.tiptap span[style*='#b0500a' i], .tiptap span[style*='rgb(176, 80, 10)'] { color: var(--ink-orange) !important; }
+.tiptap span[style*='#8f6516' i], .tiptap span[style*='rgb(143, 101, 22)'] { color: var(--ink-yellow) !important; }
+.tiptap span[style*='#2f7a52' i], .tiptap span[style*='rgb(47, 122, 82)'] { color: var(--ink-green) !important; }
+.tiptap span[style*='#1f6fa8' i], .tiptap span[style*='rgb(31, 111, 168)'] { color: var(--ink-blue) !important; }
+.tiptap span[style*='#7b4fa8' i], .tiptap span[style*='rgb(123, 79, 168)'] { color: var(--ink-purple) !important; }
+.tiptap span[style*='#b03a78' i], .tiptap span[style*='rgb(176, 58, 120)'] { color: var(--ink-pink) !important; }
+.tiptap span[style*='#c4302b' i], .tiptap span[style*='rgb(196, 48, 43)'] { color: var(--ink-red) !important; }
 
 /* footnotes (footnote.ts): the reference raised, a footnote's own line smaller and dim */
 .tiptap sup.fnref { color: var(--accent-text); font-size: 0.72em; padding: 0 1px; cursor: pointer; }
