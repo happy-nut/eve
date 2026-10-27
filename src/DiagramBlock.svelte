@@ -8,7 +8,8 @@
   import { claimKeys } from './lib/keys';
   import { renderMermaid, themeKey } from './lib/mermaid';
   import { foldSeq, foldable, markFolds, type SeqBlock } from './lib/seqFold';
-  import { KINDS, fromCode, isEmpty, toCode, whyCode, type Diagram } from './lib/diagram';
+  import { spreadLabels } from './lib/edgeLabels';
+  import { KINDS, across, fromCode, isEmpty, toCode, whyCode, type Diagram } from './lib/diagram';
   import FlowEditor from './FlowEditor.svelte';
   import { scrollHint } from './lib/scrollHint';
   import DiagramForm from './DiagramForm.svelte';
@@ -119,6 +120,7 @@
     const list = shown, f = drawnFolds;
     tick().then(() => {
       const el = canvas?.querySelector(':scope > svg');
+      if (el instanceof SVGSVGElement) spreadLabels(el); // a line's label off another's (edgeLabels.ts)
       labelled = !list.some(foldable) || (!!el && markFolds(el, list, f));
     });
   });
@@ -471,8 +473,8 @@
       {#if flow}
         <div class="seg">
           <!-- a phone's row has room for the arrows alone: with their words, Done went onto a line of its own -->
-          <button class:on={flow.dir === 'LR'} aria-label="Across" title="Across" onclick={() => (flow.dir = 'LR')}>{isMobile ? '→' : '→ Across'}</button>
-          <button class:on={flow.dir === 'TD'} aria-label="Down" title="Down" onclick={() => (flow.dir = 'TD')}>{isMobile ? '↓' : '↓ Down'}</button>
+          <button class:on={across(flow)} aria-label="Across" title="Across" onclick={() => (flow.dir = 'LR')}>{isMobile ? '→' : '→ Across'}</button>
+          <button class:on={!across(flow)} aria-label="Down" title="Down" onclick={() => (flow.dir = 'TD')}>{isMobile ? '↓' : '↓ Down'}</button>
         </div>
         <button class="ghost" onclick={() => flowEd?.addBox()}>+ Box</button>
         <button class="ghost" onclick={() => flowEd?.addLane()}>+ Lane</button>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
-  import { freshId, type Flowchart, type Line, type Shape } from './lib/diagram';
+  import { across, freshId, type Flowchart, type Line, type Shape } from './lib/diagram';
   import { ui, under } from './lib/ui.svelte';
   import { letGo } from './lib/focusWatch';
   import { claimKeys, composing } from './lib/keys';
@@ -542,7 +542,7 @@
   const plusAt = (b: Box) => {
     // clear of the text box while the box is typed in (at least 140 wide, centred on it)
     const w = b.id === editing ? Math.max(b.w, 140) : b.w;
-    return flow.dir === 'LR' ? { x: b.x + b.w / 2 + w / 2 + 14, y: b.y + b.h / 2 } : { x: b.x + b.w / 2, y: b.y + b.h + (b.id === editing ? 22 : 14) };
+    return across(flow) ? { x: b.x + b.w / 2 + w / 2 + 14, y: b.y + b.h / 2 } : { x: b.x + b.w / 2, y: b.y + b.h + (b.id === editing ? 22 : 14) };
   };
   /** a text box `w` wide centred on x, kept inside the picture (at its edge it was cut off, past a phone's screen) */
   const clampX = (x: number, w: number) => Math.max(4, Math.min((layer?.clientWidth ?? 600) - w - 4, x - w / 2));
@@ -619,12 +619,12 @@
         <!-- over the lane's own name (picked, it is ringed): above or under it, the bar covered the next lane's name and
              boxes, and a click meant for them deleted the lane -->
         {@const at = { left: clampX(hb.x + hb.w / 2, 240), top: Math.max(4, hb.y + hb.h / 2 - 21) }}
-        {@const across = flow.dir === 'LR'}
+        {@const sideways = across(flow)}
         <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
           <button type="button" class="text" aria-label="Rename the lane" title="Rename (or click its name again)" onmousedown={(e) => e.preventDefault()} onclick={() => startLaneEdit(lid)}><svg viewBox="0 0 16 16"><path d="M10.5 3.5l2 2L6 12l-2.6.6L4 10z" /></svg>Name</button>
           <span class="sep"></span>
-          <button type="button" aria-label={across ? 'Move up' : 'Move left'} title={across ? 'Move up' : 'Move left'} disabled={i === 0} onclick={() => moveLane(lid, -1)}><svg viewBox="0 0 16 16"><path d={across ? 'M8 12.5v-9M4.5 7 8 3.5 11.5 7' : 'M12.5 8h-9M7 4.5 3.5 8 7 11.5'} /></svg></button>
-          <button type="button" aria-label={across ? 'Move down' : 'Move right'} title={across ? 'Move down' : 'Move right'} disabled={i === (flow.lanes?.length ?? 0) - 1} onclick={() => moveLane(lid, 1)}><svg viewBox="0 0 16 16"><path d={across ? 'M8 3.5v9M4.5 9 8 12.5 11.5 9' : 'M3.5 8h9M9 4.5 12.5 8 9 11.5'} /></svg></button>
+          <button type="button" aria-label={sideways ? 'Move up' : 'Move left'} title={sideways ? 'Move up' : 'Move left'} disabled={i === 0} onclick={() => moveLane(lid, -1)}><svg viewBox="0 0 16 16"><path d={sideways ? 'M8 12.5v-9M4.5 7 8 3.5 11.5 7' : 'M12.5 8h-9M7 4.5 3.5 8 7 11.5'} /></svg></button>
+          <button type="button" aria-label={sideways ? 'Move down' : 'Move right'} title={sideways ? 'Move down' : 'Move right'} disabled={i === (flow.lanes?.length ?? 0) - 1} onclick={() => moveLane(lid, 1)}><svg viewBox="0 0 16 16"><path d={sideways ? 'M8 3.5v9M4.5 9 8 12.5 11.5 9' : 'M3.5 8h9M9 4.5 12.5 8 9 11.5'} /></svg></button>
           <button type="button" aria-label="Add a step in this lane" title="Add a step in this lane" onclick={() => addAfter(null, lid)}><svg viewBox="0 0 16 16"><rect x="2.5" y="4.5" width="11" height="7" rx="2.2" /><path d="M8 6.5v3M6.5 8h3" /></svg>{#if isMobile}<span class="lbl">Step</span>{/if}</button>
           <button type="button" class="danger" aria-label="Delete the lane" title="Delete the lane (its steps go to the one beside it)" onclick={() => dropLane(lid)}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
         </div>
@@ -670,7 +670,7 @@
     <!-- under the box (one near the top) it goes below the + too: it sat over the + there, and a press on the + changed
          the box's shape instead. On a phone the shapes fold into one button: all six in a row ran off its narrow picture -->
     {@const compact = isMobile && !shapesOpen}
-    {@const at = barAt(selBox.x + selBox.w / 2, selBox.y, selBox.y + selBox.h + (flow.dir === 'LR' ? 0 : isMobile ? 34 : 26), compact ? 290 : isMobile ? 290 : 480, selNode.id)}
+    {@const at = barAt(selBox.x + selBox.w / 2, selBox.y, selBox.y + selBox.h + (across(flow) ? 0 : isMobile ? 34 : 26), compact ? 290 : isMobile ? 290 : 480, selNode.id)}
     {@const current = SHAPES.find(([sh]) => sh === selNode.shape) ?? SHAPES[0]}
     <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
       {#if isMobile && shapesOpen}

@@ -38,10 +38,6 @@ assert.equal(fromCode('graph TD\n  A --> B').dir, 'TD');
 
 // what it cannot show is left to the code
 for (const code of [
-  'flowchart LR\n  A --> B\n  style A fill:#f9f',
-  'flowchart LR\n  A --> B\n  style A fill:#f00',
-  'flowchart LR\n  %% a note\n  A --> B',
-  'flowchart LR\n  A --> B --> C',
   'sequenceDiagram\n  Note over A: hi',
   'sequenceDiagram\n  loop Every day\n  A->>B: x\n  end',
   'classDiagram\n  A <|-- B',
@@ -67,7 +63,6 @@ assert.equal(fromCode('flowchart LR\n  A["Tom #amp; Jerry"] --> B').nodes[0].lab
 assert.equal(fromCode('pie\n  "R#amp;D" : 1').slices[0].label, 'R&D');
 assert.equal(fromCode('flowchart LR\n  A["#copy; 2026"] --> B'), null);
 // parallelograms and trapezoids are shapes the chart cannot keep
-assert.equal(fromCode('flowchart LR\n  A[/Input/] --> B[\\Out\\]'), null);
 assert.equal(fromCode('flowchart LR\n  A["/path/"] --> B').nodes[0].label, '/path/');
 // a mind map's class or icon line is not a branch
 assert.equal(fromCode('mindmap\n  root((x))\n    A\n    :::urgent large'), null);
@@ -99,7 +94,6 @@ console.log('diagram hunt ok');
   // more than lanes: kept as code
   assert.equal(fromCode('flowchart LR\n  subgraph a\n    subgraph b\n      x\n    end\n  end'), null, 'a lane in a lane');
   assert.equal(fromCode('flowchart LR\n  subgraph a\n    x'), null, 'a lane never closed');
-  assert.equal(fromCode('flowchart LR\n  subgraph Two words\n    x\n  end'), null, 'a title with no id');
   assert.equal(fromCode('flowchart LR\n  x\n  end'), null, 'an end with no lane');
   assert.equal(fromCode('flowchart LR\n  direction TB\n  x'), null, 'a direction outside a lane');
   // drawn: a lane per subgraph (and one for the boxes in none), every box, every line, in the chart's order
@@ -116,7 +110,7 @@ console.log('swimlanes ok');
 
 // why a diagram opens as its code: the line the editor cannot show, or the kind it has no form for
 assert.equal(whyCode('flowchart LR\n  A --> B'), null);
-assert.deepEqual(whyCode('flowchart LR\n  A --> B\n  style A fill:#f9f'), { line: 'style A fill:#f9f' });
+assert.deepEqual(whyCode('sequenceDiagram\n  A->>B: hi\n  Note over A: n'), { line: 'Note over A: n' });
 assert.deepEqual(whyCode('sequenceDiagram\n  A->>B: hi\n  Note over A: thinking'), { line: 'Note over A: thinking' });
 assert.deepEqual(whyCode('classDiagram\n  A <|-- B'), { kind: 'classDiagram' });
 console.log('why code ok');
@@ -140,4 +134,45 @@ console.log('empty ok');
   assert.equal(back.edges[1].label, 'when the order\nis paid');
   assert.equal(back.nodes[0].label, 'Start\nhere');
   assert.equal(toCode(back), code);
+}
+
+// ---- a flowchart pasted in, as other apps (Notion, GitHub, a chat) write it: drawn and edited as any other ----
+{
+  const code = [
+    '%%{init: {"theme": "neutral"}}%%',
+    'graph LR',
+    '  %% where it starts',
+    '  시작([주문]) --> 결제{결제됐나?}',
+    '  결제 -- 예 --> 포장[[포장]] --> 배송[/배송/]',
+    '  결제 -.->|아니오| 시작',
+    '  A & B --> C:::hot; C --- D',
+    '  D --o E',
+    '  E <--> F',
+    '  subgraph 물류 팀',
+    '    포장',
+    '  end',
+    '  classDef hot fill:#f96',
+    '  style A fill:#9f9',
+    '  linkStyle 0 stroke:#f00',
+    '  click A "https://example.com"',
+  ].join('\n');
+  const d = fromCode(code);
+  assert.ok(d, 'read');
+  assert.equal(d.dir, 'LR');
+  assert.deepEqual(d.edges.map((e) => [e.from, e.to, e.label, e.line, e.arrow ?? '']), [
+    ['시작', '결제', '', 'solid', ''], ['결제', '포장', '예', 'solid', ''], ['포장', '배송', '', 'solid', ''], ['결제', '시작', '아니오', 'dotted', ''],
+    ['A', 'C', '', 'solid', ''], ['B', 'C', '', 'solid', ''], ['C', 'D', '', 'solid', '---'], ['D', 'E', '', 'solid', '--o'], ['E', 'F', '', 'solid', '<-->'],
+  ]);
+  assert.deepEqual(d.nodes.find((n) => n.id === '포장').raw, { open: '[[', close: ']]', as: 'box' });
+  assert.deepEqual(d.nodes.find((n) => n.id === '배송').raw, { open: '[/', close: '/]', as: 'box' });
+  assert.equal(d.nodes.find((n) => n.id === 'C').cls, 'hot');
+  assert.equal(d.lanes[0].label, '물류 팀');
+  // written back: what it showed as it was, what it could not show kept, and read again the same
+  const out = toCode(d);
+  for (const kept of ['%%{init: {"theme": "neutral"}}%%', '%% where it starts', 'classDef hot fill:#f96', 'style A fill:#9f9', 'linkStyle 0 stroke:#f00', 'click A "https://example.com"', 'C --- D', 'D --o E', 'E <--> F', '포장[["포장"]]', '배송[/"배송"/]', ':::hot']) assert.ok(out.includes(kept), `${kept} kept in\n${out}`);
+  assert.equal(toCode(fromCode(out)), out, 'written once, it reads and writes the same');
+  // a line's style changed in the editor: written as the forms write it
+  d.edges[6].line = 'dotted';
+  assert.match(toCode(d), /C -\.-> D/);
+  console.log('pasted flowchart ok');
 }
