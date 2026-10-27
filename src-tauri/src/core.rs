@@ -4,8 +4,9 @@
 //!
 //! It reads `notes/*.md` straight from disk: the app writes every edit there 300 ms after the keystroke
 //! and every synced change at once, so the folder is current whether or not Eve runs. Nothing here
-//! writes: reading needs no single writer. `open` only asks the running app to show a note (an eve://
-//! link); writing, when it comes, goes through the app so its in-memory store stays the only writer.
+//! writes a note: `open` only asks the running app to show one (an eve:// link), and a change (create,
+//! append, edit) is handed to the app (`ask_app`), so its in-memory store stays the only writer — a file
+//! written beside it would be written over from memory at the note's next save.
 //!
 //! No Tauri in this file, so `cargo test` covers it without a window. The note format mirrors
 //! `parse` / `titleOf` / `plain` in src/lib (notes.svelte.ts, markdown.ts); the tests pin the cases.
@@ -455,9 +456,21 @@ pub struct Command {
     /// what it does, for Claude and for `eve help <cli>` alike (tool names are shown as commands there)
     pub help: &'static str,
     pub params: &'static [Param],
-    /// it changes what is on the screen (not the notes): not read-only, never destructive
-    pub shows: bool,
-    pub run: fn(&[Note], &Value) -> Result<String, String>,
+    pub effect: Effect,
+    /// the notes folder (where the app's inbox is found), the notes read from it, the arguments
+    pub run: fn(&Path, &[Note], &Value) -> Result<String, String>,
+}
+
+/// What a command does besides reading, for the MCP client's annotations.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Effect {
+    Reads,
+    /// changes what is on the screen, not the notes
+    Shows,
+    /// adds to the notes, taking nothing away
+    Adds,
+    /// may take text out of a note
+    Rewrites,
 }
 
 const GROUP: Param = text("group", "Folder path such as \"Work\" or \"Work/Projects\"");
@@ -478,8 +491,8 @@ pub const COMMANDS: &[Command] = &[
             TO,
             Param { kind: Kind::Number(1, 500), ..text("limit", "At most this many (default 50)") },
         ],
-        shows: false,
-        run: list_notes,
+        effect: Effect::Reads,
+        run: |_, notes, args| list_notes(notes, args),
     },
     Command {
         tool: "search_notes",
@@ -493,8 +506,8 @@ pub const COMMANDS: &[Command] = &[
             TO,
             Param { kind: Kind::Number(1, 100), ..text("limit", "At most this many (default 20)") },
         ],
-        shows: false,
-        run: search_notes,
+        effect: Effect::Reads,
+        run: |_, notes, args| search_notes(notes, args),
     },
     Command {
         tool: "read_note",
@@ -507,8 +520,8 @@ pub const COMMANDS: &[Command] = &[
             text("section", "A heading inside the note"),
             text("cursor", "Where the last answer stopped, when it said the note continues"),
         ],
-        shows: false,
-        run: read_note,
+        effect: Effect::Reads,
+        run: |_, notes, args| read_note(notes, args),
     },
     Command {
         tool: "read_notes",
@@ -519,8 +532,8 @@ pub const COMMANDS: &[Command] = &[
             Param { kind: Kind::Texts(1, MAX_IDS), ..needed(bare(text("ids", "Note ids, in the order to read them"))) },
             text("cursor", "Where the last answer stopped, when it said there is more"),
         ],
-        shows: false,
-        run: read_notes,
+        effect: Effect::Reads,
+        run: |_, notes, args| read_notes(notes, args),
     },
     Command {
         tool: "open_note",
@@ -528,8 +541,55 @@ pub const COMMANDS: &[Command] = &[
         title: "Open a note in Eve",
         help: "Shows a note in the Eve app on the user's Mac, so they can see it and edit it: Eve comes to the front with that note open (and started if it was not running). Give its title (as in a [[wiki link]]) or its id, and optionally a section to open it at that heading. Changes nothing in the notes. Use it when the user wants to see or work on a note themselves.",
         params: &[TITLE, ID, text("section", "A heading inside the note to open it at")],
-        shows: true,
-        run: |notes, args| open_note(notes, args).and_then(|(url, said)| launch(&url).map(|_| said)),
+        effect: Effect::Shows,
+        run: |_, notes, args| open_note(notes, args).and_then(|(url, said)| launch(&url, false).map(|_| said)),
+    },
+    Command {
+        tool: "create_note",
+        cli: "create",
+        title: "Create a note",
+        help: "Makes a new note in Eve with this title and markdown under it, as the user would write it: headings, lists, - [ ] to-dos, tables, [[Title]] links to other notes. Optionally in a folder (group) or under another note as its sub-page (parent: its title or id). The note the user has open stays open. Returns the new note's id.",
+        params: &[
+            needed(bare(text("title", "The new note's title"))),
+            text("body", "Markdown under the title"),
+            text("group", "Folder path such as \"Work\" or \"Work/Projects\" (default: no folder)"),
+            text("parent", "Title or id of the note to put it under, as a sub-page"),
+        ],
+        effect: Effect::Adds,
+        run: create_note,
+    },
+    Command {
+        tool: "append_note",
+        cli: "append",
+        title: "Add to a note",
+        help: "Adds markdown at the end of a note, after a blank line. Give the note's title (as in a [[wiki link]]) or its id. Takes nothing away; if the user has the note open, it shows there at once.",
+        params: &[TITLE, ID, needed(text("text", "Markdown to add at the end"))],
+        effect: Effect::Adds,
+        run: |dir, notes, args| {
+            let (note, _, _) = pick(notes, args)?;
+            ask_app(dir, serde_json::json!({ "op": "append", "id": note.id, "text": arg_str(args, "text") }))
+        },
+    },
+    Command {
+        tool: "edit_note",
+        cli: "edit",
+        title: "Edit a note",
+        help: "Replaces one passage of a note: old must be copied exactly from the note as read_note returns it (markdown, every character), and appear in it only once — give more of the text around it if it appears more than once. new is what goes there instead; an empty new takes the passage out. To change the title, edit its first line. Read the note first; if the user has it open, the change shows there at once and their caret stays where it was.",
+        params: &[
+            TITLE,
+            ID,
+            needed(text("old", "The passage to replace, exactly as it is in the note")),
+            needed(text("new", "What goes there instead (empty to take it out)")),
+        ],
+        effect: Effect::Rewrites,
+        run: |dir, notes, args| {
+            let (note, _, _) = pick(notes, args)?;
+            let old = arg_str(args, "old");
+            if old.is_empty() {
+                return Err("Give old: the passage to replace. To add at the end, use append_note.".into());
+            }
+            ask_app(dir, serde_json::json!({ "op": "edit", "id": note.id, "old": old, "new": arg_str(args, "new") }))
+        },
     },
 ];
 
@@ -542,7 +602,7 @@ pub fn command(name: &str) -> Option<&'static Command> {
 pub fn run(dir: &Path, name: &str, args: &Value) -> Result<String, String> {
     let cmd = command(name).ok_or_else(|| format!("Unknown command \"{name}\"."))?;
     let notes = load(dir)?;
-    (cmd.run)(&notes, args)
+    (cmd.run)(dir, &notes, args)
 }
 
 /// Text written for Claude, with each tool named as the command a terminal types (`read_note` -> `eve read`).
@@ -875,12 +935,18 @@ pub fn open_note(notes: &[Note], args: &Value) -> Result<(String, String), Strin
     Ok((link_to(&note.id, &heading), said))
 }
 
-/// Hand the link to macOS, which gives it to the running Eve (or starts Eve with it).
-fn launch(url: &str) -> Result<(), String> {
+/// Hand the link to macOS, which gives it to the running Eve (or starts Eve with it); in the background,
+/// Eve is not brought to the front.
+fn launch(url: &str, background: bool) -> Result<(), String> {
     if !cfg!(target_os = "macos") {
-        return Err("Opening a note in the app works on the Mac only.".into());
+        return Err("Reaching the Eve app works on the Mac only.".into());
     }
+    // to Eve by its bundle id: another app (a second Eve, a build of it) may have claimed eve:// links too.
+    // EVE_APP_ID names another build, as EVE_NOTES_DIR names its notes
+    let app = std::env::var("EVE_APP_ID").unwrap_or_else(|_| IDENTIFIER.to_string());
     let out = std::process::Command::new("/usr/bin/open")
+        .args(if background { &["-g"][..] } else { &[][..] })
+        .args(["-b", &app])
         .arg(url)
         .output()
         .map_err(|e| format!("Could not ask macOS to open Eve: {e}"))?;
@@ -891,6 +957,74 @@ fn launch(url: &str) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+// ---- writing: through the app -------------------------------------------------------
+/// Where a change waits for the app: beside the notes folder, not in it (the list and sync read that).
+pub fn inbox(dir: &Path) -> PathBuf {
+    dir.parent().unwrap_or(dir).join("inbox")
+}
+
+/// How long a change waits for Eve to take it: long enough for Eve to start.
+const ANSWER_WITHIN: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Hand Eve one change and wait for its answer. The change is a file in the app's inbox, which only this
+/// Mac's own programs can write; the `eve://inbox` link only tells Eve to look there (a web page can
+/// hand macOS that link too, so the link itself carries nothing). Eve applies it through its notes store
+/// and writes `<id>.reply`: what was done, or why not.
+pub fn ask_app(dir: &Path, mut ask: Value) -> Result<String, String> {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    let inbox = inbox(dir);
+    std::fs::create_dir_all(&inbox).map_err(|e| format!("Could not reach Eve's inbox at {} ({e}).", inbox.display()))?;
+    let millis = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
+    let id = format!("{millis}-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
+    ask["ask"] = Value::from(id.as_str());
+    let (part, ready, reply) = (inbox.join(format!("{id}.part")), inbox.join(format!("{id}.json")), inbox.join(format!("{id}.reply")));
+    // written whole before it is named .json: Eve never reads half a change
+    std::fs::write(&part, ask.to_string()).and_then(|_| std::fs::rename(&part, &ready)).map_err(|e| format!("Could not hand the change to Eve ({e})."))?;
+    // the tests play Eve themselves
+    if !cfg!(test) {
+        if let Err(e) = launch("eve://inbox", true) {
+            let _ = std::fs::remove_file(&ready);
+            return Err(e);
+        }
+    }
+    let start = std::time::Instant::now();
+    while start.elapsed() < ANSWER_WITHIN {
+        if let Ok(text) = std::fs::read_to_string(&reply) {
+            let _ = std::fs::remove_file(&reply);
+            let v: Value = serde_json::from_str(&text).map_err(|e| format!("Eve's answer could not be read ({e})."))?;
+            let said = v.get("text").and_then(Value::as_str).unwrap_or("").to_string();
+            return if v.get("ok").and_then(Value::as_bool) == Some(true) { Ok(said) } else { Err(said) };
+        }
+        std::thread::sleep(std::time::Duration::from_millis(40));
+    }
+    // not taken: take it back, so it is not done later behind a retry
+    if std::fs::remove_file(&ready).is_ok() {
+        return Err("Eve did not take the change: nothing was written. Is Eve 0.7.69 or later installed, and can it start?".into());
+    }
+    Err("Eve took the change but did not answer in time. Read the note before trying again: it may be done.".into())
+}
+
+/// `create_note`: the parent found here, from the notes on disk; the rest is the app's.
+fn create_note(dir: &Path, notes: &[Note], args: &Value) -> Result<String, String> {
+    let title = arg_str(args, "title").trim();
+    if title.is_empty() || title.contains('\n') {
+        return Err("Give the new note a title, one line.".into());
+    }
+    let parent = arg_str(args, "parent").trim();
+    let parent = if parent.is_empty() {
+        String::new()
+    } else {
+        let key = if notes.iter().any(|n| n.id == parent) { "id" } else { "title" };
+        let which = serde_json::json!({ key: parent });
+        pick(notes, &which).map_err(|e| format!("The parent: {e}"))?.0.id.clone()
+    };
+    let body = arg_str(args, "body").trim_matches('\n');
+    let text = if body.is_empty() { format!("# {title}\n") } else { format!("# {title}\n\n{body}\n") };
+    let group = arg_str(args, "group").trim().trim_matches('/');
+    ask_app(dir, serde_json::json!({ "op": "create", "body": text, "group": group, "parent": parent }))
 }
 
 /// At most this many ids in one read_notes call.

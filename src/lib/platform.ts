@@ -342,13 +342,25 @@ export const links = {
   },
 };
 
+/** Changes the MCP server left in the app's inbox (inbox.ts): taken now, once the notes are in, and at each eve://inbox. */
+export const inbox = {
+  async onAsk(cb: (texts: string[], answer: (ask: string, reply: { ok: boolean; text: string }) => void) => void) {
+    if (!desktop) return;
+    const { listen } = await import('@tauri-apps/api/event');
+    const answer = (ask: string, reply: { ok: boolean; text: string }) => void invoke('answer_inbox', { ask, reply: JSON.stringify(reply) });
+    const take = async () => { const texts = await invoke<string[]>('take_inbox'); if (texts.length) cb(texts, answer); };
+    await listen('inbox', () => void take());
+    await take();
+  },
+};
+
 /** Which app macOS opens a .md with. macOS only; a browser reports false and refuses to change it. */
 export const defaultApp = {
   get: () => (desktop ? invoke<boolean>('is_default_for_markdown') : Promise.resolve(false)),
   set: (on: boolean) => (isTauri ? invoke<void>('set_default_for_markdown', { on }) : Promise.reject(new Error('desktop only'))),
 };
 
-/** A Claude app that can start `eve mcp` (src-tauri/src/mcp.rs), the notes server (read-only, and open_note to show one). */
+/** A Claude app that can start `eve mcp` (src-tauri/src/mcp.rs), the notes server (it reads, shows a note, and writes through the app's inbox). */
 export interface McpClient { id: string; name: string; installed: boolean; connected: boolean; stale: boolean }
 /** Settings → Claude: find the Claude apps on this Mac and register Eve with all of them in one go. Desktop only. */
 export const mcp = {
