@@ -23,6 +23,7 @@ jobs:
       - run: npm run e2e:table
       - run: npm run e2e:handle
       - run: npm run e2e:ui
+      - run: npm run e2e:head
       - run: npm run e2e:overlap
       - run: npm run e2e:forms
       - if: failure()

@@ -153,7 +153,6 @@ html.mobile .mhead svg {
 html.mobile .page { top: 52px; }
 /* the note: phone margins, room under the last line for the formatting bar */
 @media screen {
-  html.mobile .page-head { padding: 18px 20px 0 !important; }
   html.mobile .tiptap { padding-left: 20px !important; padding-right: 20px !important; padding-bottom: 160px !important; }
 }
 /* the list: a title, then rows a thumb can hit */
@@ -388,7 +387,6 @@ aside.focus-flash::after, main.focus-flash::after {
 .page { position: absolute; inset: 0; }
 /* tabs open: the note starts under their row (TabBar.svelte), its head no longer clearing the window's top row itself */
 main.tabbed .page { top: 71px; }
-main.tabbed .page-head { padding-top: 24px !important; }
 
 /* ---- editor ---- */
 .editor .tiptap {

@@ -74,4 +74,16 @@ const conf = JSON.parse(readFileSync(join(SRC, '../src-tauri/tauri.conf.json'), 
 assert.ok(!conf.app.windows.some((w) => w.transparent), 'the window is not transparent: WebKit left the page white');
 const root = readFileSync(join(SRC, 'app.css'), 'utf8').match(/^#app\s*\{[^}]*\}/m)?.[0] ?? '';
 assert.ok(!/border-radius|overflow\s*:\s*hidden/.test(root), '#app clips nothing to rounded corners: ' + root);
-console.log('z-index, window size, containers and an opaque window: ok');
+
+// ---- the page's head: laid out in Editor.svelte only ----
+// The Mac's, the phone's and tabs' rules for it were in app.css with !important, a cover's in Editor.svelte, and each
+// fix for one window broke another (the phone's Add cover over the title; the icon off the cover's edge with tabs).
+// A window sets --head-top / --head-side there; nothing else styles the head (e2e/head.mjs checks how it looks).
+const heads = [];
+for (const p of all.filter((p) => /\.(svelte|css)$/.test(p) && rel(p) !== 'Editor.svelte')) {
+  readFileSync(p, 'utf8').split('\n').forEach((line, i) => {
+    if (/\.(page-head|page-controls)\b/.test(line.replace(/\/\*.*?(\*\/|$)/g, ''))) heads.push(`${rel(p)}:${i + 1}: ${line.trim()}`);
+  });
+}
+assert.deepEqual(heads, [], "the page's head is laid out in Editor.svelte only (a window sets --head-top / --head-side there)");
+console.log('z-index, window size, containers, an opaque window and the page\'s head: ok');

@@ -291,8 +291,19 @@
   .editor { min-height: 100%; }
   /* the head, as Notion's: the icon, then a row of what can be added (shown as the page is hovered, its room always
      kept so the title doesn't jump), then the title. "Add cover" stood beside a 56px icon, off at its top corner */
+  /* how far down the head starts and how far in, by window: set here as values and nowhere else, read once by the
+     head. Each window used to set the head's padding itself (the phone's and tabs' with !important), and a cover's
+     rule won or lost by window: with tabs open the icon sat 18px under the cover's edge */
+  .scroll { --head-top: 44px; --head-side: clamp(24px, 8vw, 96px); }
+  @media screen {
+    /* a Mac: the breadcrumbs sit in the window's top row, the note starts clear of them */
+    :global(html:not(.mobile)) .scroll { --head-top: 64px; }
+    /* tabs open: the note starts under their row, which already clears the window's top row */
+    :global(main.tabbed) .scroll { --head-top: 24px; }
+    :global(html.mobile) .scroll { --head-top: 18px; --head-side: 20px; }
+  }
   .page-head {
-    max-width: var(--editor-width, 900px); margin: 0 auto; padding: 44px clamp(24px, 8vw, 96px) 0; box-sizing: border-box;
+    max-width: var(--editor-width, 900px); margin: 0 auto; padding: var(--head-top) var(--head-side) 0; box-sizing: border-box;
     display: flex; flex-direction: column; align-items: flex-start;
   }
   .page-controls { display: flex; align-items: center; gap: 2px; width: 100%; height: 28px; margin: 4px 0; }
@@ -303,10 +314,6 @@
   }
   .backlinks svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; }
   .backlinks:hover { background: var(--bg-hover); color: var(--fg); }
-  /* on a Mac the breadcrumbs sit in the window's top row: the note starts a little further down, clear of them */
-  @media screen {
-    :global(html:not(.mobile)) .page-head { padding-top: 64px; }
-  }
   /* level with the window's toolbar, past it when the sidebar is closed and it sits over the note; only the crumbs
      take clicks, the rest of the row still drags the window */
   .crumbs {
@@ -370,9 +377,9 @@
   .cover:hover .cover-change, .cover-change:focus-visible { opacity: 1; }
   :global(html.mobile) .cover-change { opacity: 1; }
   .cover-change:hover { color: var(--fg); }
-  .page-head.with-cover, :global(html:not(.mobile)) .page-head.with-cover { padding-top: 12px; }
+  .page-head.with-cover { padding-top: 12px; }
   /* the icon pulled up half over the cover, the row under it */
-  .page-head.with-cover.with-icon, :global(html:not(.mobile)) .page-head.with-cover.with-icon { padding-top: 0; }
+  .page-head.with-cover.with-icon { padding-top: 0; }
   /* positioned, as the cover is, so the icon is drawn over the cover's edge, not under it */
   .page-head.with-cover { position: relative; }
   .page-head.with-cover .big-icon { margin-top: -38px; }
