@@ -8,6 +8,7 @@
   import { claimKeys } from './lib/keys';
   import { renderMermaid, themeKey } from './lib/mermaid';
   import { foldSeq, foldable, markFolds, type SeqBlock } from './lib/seqFold';
+  import { spreadLabels } from './lib/edgeLabels';
   import { KINDS, across, fromCode, isEmpty, toCode, whyCode, type Diagram } from './lib/diagram';
   import FlowEditor from './FlowEditor.svelte';
   import { scrollHint } from './lib/scrollHint';
@@ -119,6 +120,7 @@
     const list = shown, f = drawnFolds;
     tick().then(() => {
       const el = canvas?.querySelector(':scope > svg');
+      if (el instanceof SVGSVGElement) spreadLabels(el); // a line's label off another's (edgeLabels.ts)
       labelled = !list.some(foldable) || (!!el && markFolds(el, list, f));
     });
   });

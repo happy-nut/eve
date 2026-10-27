@@ -433,15 +433,43 @@ try {
   await page.close();
 
   // ---- written by hand: opens as its code ----
-  page = await open('# Plan\n\n```mermaid\nflowchart LR\n  A --> B\n  style A fill:#f9f\n```\n');
+  page = await open('# Plan\n\n```mermaid\nsequenceDiagram\n  A->>B: hi\n  Note over A: n\n```\n');
   await page.waitForSelector('.tiptap .mermaid-view svg');
   await page.locator('.tiptap .mermaid-view').click();
   await page.waitForSelector('.tiptap .code-block.editing');
   assert.equal(await page.locator('.tiptap .dblock.active').count(), 0);
-  assert.match(await page.locator('.tiptap .codebar').textContent(), /style A fill:#f9f.*can't show/s, 'it says why: the line it cannot show');
+  assert.match(await page.locator('.tiptap .codebar').textContent(), /Note over A: n.*can't show/s, 'it says why: the line it cannot show');
   await page.locator('.tiptap .codebar .done').click();
   await page.waitForFunction(() => !document.querySelector('.tiptap .code-block.editing'));
   console.log('ok   hand-written: opens as code, saying why; Done leaves it');
+  await page.close();
+
+  // ---- a flowchart pasted in as code (another app's ways: a style, a chain, an open line): edited in the drawing, what
+  // it cannot show kept; its line labels off one another ----
+  page = await open('# Plan\n\n```mermaid\ngraph TD\n  A[Order] -->|paid by card| B{Check}\n  B -->|in stock, ship today| C[Pack]\n  B -->|out of stock| D[Wait]\n  B -->|address wrong| E[Ask]\n  D -.->|stock arrived| B\n  E -.->|fixed| B\n  C --- F([End])\n  style A fill:#9f9\n```\n');
+  await page.waitForSelector('.tiptap .mermaid-view svg');
+  await page.waitForTimeout(600);
+  const overlaps = await page.evaluate(() => {
+    const chips = [...document.querySelectorAll('.tiptap .mermaid-view svg .edgeLabel .labelBkg')].filter((e) => e.textContent.trim()).map((e) => e.getBoundingClientRect());
+    let n = 0;
+    for (let i = 0; i < chips.length; i++) for (let j = i + 1; j < chips.length; j++) { const a = chips[i], b = chips[j]; if (a.left - 5 < b.right + 5 && b.left - 5 < a.right + 5 && a.top - 5 < b.bottom + 5 && b.top - 5 < a.bottom + 5) n++; }
+    return n;
+  });
+  assert.equal(overlaps, 0, 'no line label drawn over another');
+  await page.locator('.tiptap .mermaid-view').click();
+  await page.waitForSelector('.tiptap .dblock.active');
+  at = await boxAt(page, 'Pack');
+  await page.mouse.dblclick(at.x, at.y);
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('Pack it');
+  await page.keyboard.press('Enter');
+  await page.locator('.tiptap h1').click();
+  await settle(page);
+  text = await md(page);
+  assert.match(text, /C\["Pack it"\]/, 'a box of the pasted chart renamed in the drawing');
+  assert.match(text, /style A fill:#9f9/, 'its style kept');
+  assert.match(text, /C --- F/, 'its open line kept');
+  console.log('ok   a flowchart pasted as code: edited in the drawing, its style and lines kept, its labels apart');
   await page.close();
 
   // ---- readable, its code shown: back to the drawing by a button or ⌘↵ ----
