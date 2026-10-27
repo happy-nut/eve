@@ -560,8 +560,8 @@ export const CodeBlock = CodeBlockBase.extend({
         const r = chip.getBoundingClientRect();
         chip.classList.add('open'); // the chip is hover-only, but must stay while its menu is up
         ui.openMenu(under(r),
-          items.map(([value, label]) => ({ label, checked: value === current, run: () => setLanguage(value) })),
-          () => chip.classList.remove('open'));
+          items.map(([value, label]) => ({ label, keywords: [value, ...Object.keys(ALIASES).filter((k) => ALIASES[k] === value)].join(' '), checked: value === current, run: () => setLanguage(value) })),
+          () => chip.classList.remove('open'), 'Search languages');
       });
 
       // the language field, where ``` puts the keyboard: a name (or the start of one, an alias) and ↓, Tab, ↩ or a
