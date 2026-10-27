@@ -68,6 +68,9 @@ class AppearanceStore {
   set(patch: Partial<Appearance>) { Object.assign(this.s, patch); localStorage.setItem(LS, JSON.stringify(this.s)); }
   /** the note's text size as shown: the Settings size and the ⌘+ / ⌘- steps on it */
   get textPx() { return Math.min(SIZE_MAX, Math.max(SIZE_MIN, this.s.size + this.s.zoom)); }
+  /** the page's width as shown: Settings' width, wider or narrower with the ⌘+ / ⌘- steps as a browser zooms (the text
+   *  grew in a page that did not, and each step left fewer words a line) */
+  get widthPx() { return Math.round((this.s.width * this.textPx) / Math.min(SIZE_MAX, Math.max(SIZE_MIN, this.s.size))); }
   /**
    * ⌘+ / ⌘- / ⌘0: the note's text a step larger or smaller (1px, within the Size slider's range), or back to the size
    * Settings has. A step is the keys' own, on top of that size: ⌘0 set Settings' size to the default, and the size
@@ -91,7 +94,7 @@ class AppearanceStore {
       r.setProperty('--font-editor', this.stack);
       r.setProperty('--font-size', `${this.textPx}px`);
       r.setProperty('--line-height', String(this.s.lineHeight));
-      r.setProperty('--editor-width', `${this.s.width}px`);
+      r.setProperty('--editor-width', `${this.widthPx}px`);
       r.setProperty('--hl-plain', this.s.highlights[0] ?? PASTELS[0]); // the ==plain== pen (app.css, .tiptap mark)
     });
     // the remembered window size, on every launch and again whenever it is changed
