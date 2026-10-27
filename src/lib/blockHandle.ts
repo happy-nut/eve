@@ -29,24 +29,46 @@ export function moveBlockTo(state: EditorState, from: number, target: number, co
   if (!node) return null;
   const end = from + node.nodeSize;
   if (!copy && target >= from && target <= end) return null;
-  const tr = copy ? state.tr : state.tr.delete(from, end);
+  // only where such a block may stand (a table is no list's line)
+  const $t = state.doc.resolve(target);
+  if (!$t.parent.canReplaceWith($t.index(), $t.index(), node.type)) return null;
+  // the only block of what holds it (a toggle's body, a callout): an empty line left in its place, which must hold one
+  const $f = state.doc.resolve(from), alone = !copy && $f.depth > 0 && $f.parent.childCount === 1;
+  const tr = copy ? state.tr : alone ? state.tr.replaceWith(from, end, state.schema.nodes.paragraph.create()) : state.tr.delete(from, end);
   const at = tr.mapping.map(target);
   tr.insert(at, node);
+  // into a folded toggle: it opens, so what was put there is seen
+  const $at = tr.doc.resolve(at);
+  for (let d = $at.depth; d > 0; d--) if ($at.node(d).type.name === 'details' && !$at.node(d).attrs.open) tr.setNodeAttribute($at.before(d), 'open', true);
   return tr.setSelection(NodeSelection.create(tr.doc, at)).scrollIntoView();
 }
 
-/** each top-level block but the title, with where it sits on screen (its margins counted, so a gap is never no one's) */
-function blocks(view: EditorView): (Block & { top: number; bottom: number })[] {
-  const out: (Block & { top: number; bottom: number })[] = [];
+type Placed = Block & { top: number; bottom: number; depth: number };
+/** what holds blocks of its own, as Notion's pages do: a toggle's body, a callout, a quote */
+const HOLDS = /^(detailsContent|callout|blockquote)$/;
+/** each block but the title, with where it sits on screen (its margins counted, so a gap is never no one's): the
+ *  note's own, and the ones in a toggle's body, a callout or a quote, each its own block to hover, drag and drop by
+ *  (held to the note's own blocks, a line could not be dragged into a toggle, nor out of one) */
+function blocks(view: EditorView): Placed[] {
+  const out: Placed[] = [];
   // ponytail: every block measured on each move of the pointer; a binary search over them if long notes lag
-  view.state.doc.forEach((node, pos, i) => {
+  const walk = (parent: PMNode, start: number, depth: number) => parent.forEach((node, offset, i) => {
+    const pos = start + offset;
+    if (depth === 0 && i === 0) return; // the title
+    if (node.type.name === 'detailsSummary') return;
+    if (node.type.name === 'detailsContent') { walk(node, pos + 1, depth); return; } // its lines are the toggle's
     const dom = view.nodeDOM(pos);
-    if (i === 0 || !(dom instanceof HTMLElement)) return;
+    if (!(dom instanceof HTMLElement)) return;
     const r = dom.getBoundingClientRect(), cs = getComputedStyle(dom);
-    out.push({ pos, node, dom, top: r.top - (parseFloat(cs.marginTop) || 0), bottom: r.bottom + (parseFloat(cs.marginBottom) || 0) });
+    if (!r.height) return; // in a folded toggle
+    out.push({ pos, node, dom, depth, top: r.top - (parseFloat(cs.marginTop) || 0), bottom: r.bottom + (parseFloat(cs.marginBottom) || 0) });
+    if (node.type.name === 'details' || HOLDS.test(node.type.name)) walk(node, pos + 1, depth + 1);
   });
+  walk(view.state.doc, 0, 0);
   return out;
 }
+/** the innermost block at height y (in a toggle, the line in it, not the toggle) */
+const deepest = (all: Placed[], y: number) => all.filter((b) => y >= b.top && y < b.bottom).sort((a, b) => b.depth - a.depth)[0];
 
 class Handle {
   private el = document.createElement('div');
@@ -84,7 +106,7 @@ class Handle {
     const y = e.clientY;
     cancelAnimationFrame(this.frame);
     this.frame = requestAnimationFrame(() => {
-      const b = blocks(this.view).find((x) => y >= x.top && y < x.bottom);
+      const b = deepest(blocks(this.view), y);
       if (b) this.show(this.itemAt(b, y) ?? b); else this.hide();
     });
   };
@@ -249,22 +271,48 @@ class Handle {
     document.documentElement.classList.add('block-drag'); // the editor's own drop line gives way to this one
   }
 
-  /** where a dragged block lands: before the block under the pointer or after it, whichever half it is over */
-  private target(y: number): { pos: number; y: number } | null {
-    const all = this.dragList
-      ? [...this.dragList.children].filter((el): el is HTMLElement => el.tagName === 'LI').map((dom) => {
+  /** where a dragged block lands: before the block under the pointer or after it, whichever half it is over, at that
+   *  block's own depth (a line in a toggle: beside it, in the toggle). Over a toggle's title's lower half: first in its
+   *  body, as Notion puts a block dropped there. `left`/`width`: the drop line, as wide as where it lands */
+  private target(y: number): { pos: number; y: number; left?: number; width?: number } | null {
+    if (this.dragList) {
+      const all = [...this.dragList.children].filter((el): el is HTMLElement => el.tagName === 'LI').map((dom) => {
         const pos = this.view.posAtDOM(dom, 0) - 1, r = dom.getBoundingClientRect();
         return { pos, node: this.view.state.doc.nodeAt(pos)!, dom, top: r.top, bottom: r.bottom };
-      }).filter((b) => b.node)
-      : blocks(this.view);
-    if (!all.length) return null;
-    for (const b of all) {
-      if (y >= b.bottom) continue;
-      const r = b.dom.getBoundingClientRect();
-      return y < (r.top + r.bottom) / 2 ? { pos: b.pos, y: r.top } : { pos: b.pos + b.node.nodeSize, y: r.bottom };
+      }).filter((b) => b.node);
+      if (!all.length) return null;
+      for (const b of all) {
+        if (y >= b.bottom) continue;
+        const r = b.dom.getBoundingClientRect();
+        return y < (r.top + r.bottom) / 2 ? { pos: b.pos, y: r.top } : { pos: b.pos + b.node.nodeSize, y: r.bottom };
+      }
+      const b = all[all.length - 1];
+      return { pos: b.pos + b.node.nodeSize, y: b.dom.getBoundingClientRect().bottom };
     }
-    const b = all[all.length - 1];
-    return { pos: b.pos + b.node.nodeSize, y: b.dom.getBoundingClientRect().bottom };
+    const { state } = this.view, from = this.dragFrom!, moving = state.doc.nodeAt(from);
+    // not into itself: the dragged block and what is in it are no place for it
+    const all = blocks(this.view).filter((b) => !moving || b.pos < from || b.pos >= from + moving.nodeSize);
+    if (!all.length) return null;
+    const fits = (pos: number) => { const $p = state.doc.resolve(pos); return !moving || $p.parent.canReplaceWith($p.index(), $p.index(), moving.type); };
+    const line = (b: Placed, pos: number, at: number) => { const r = b.dom.getBoundingClientRect(); return { pos, y: at, left: r.left, width: r.width }; };
+    const b = deepest(all, y) ?? (y < all[0].top ? all[0] : all.filter((x) => x.depth === 0).at(-1)!);
+    const r = b.dom.getBoundingClientRect();
+    if (b.node.type.name === 'details') {
+      const title = b.dom.querySelector('summary')?.getBoundingClientRect();
+      if (title && y >= (title.top + title.bottom) / 2 && y < title.bottom + 4) {
+        const inside = b.pos + 1 + b.node.child(0).nodeSize + 1; // the body's first place
+        const body = b.dom.querySelector<HTMLElement>('[data-type="detailsContent"]')?.getBoundingClientRect();
+        if (fits(inside)) return { pos: inside, y: title.bottom, left: body?.left ?? title.left, width: body?.width ?? title.width };
+      }
+    }
+    const before = y < (r.top + r.bottom) / 2;
+    const pos = before ? b.pos : b.pos + b.node.nodeSize;
+    if (fits(pos)) return line(b, pos, before ? r.top : r.bottom);
+    // where such a block may not stand (a table in a quote): beside what holds it
+    const $b = state.doc.resolve(b.pos), outer = $b.depth ? $b.before($b.depth) : null;
+    if (outer === null) return null;
+    const holder = state.doc.nodeAt(outer)!, hr = (this.view.nodeDOM(outer) as HTMLElement).getBoundingClientRect();
+    return before ? { pos: outer, y: hr.top } : { pos: outer + holder.nodeSize, y: hr.bottom };
   }
 
   over(e: DragEvent) {
@@ -273,7 +321,9 @@ class Handle {
     if (!t) return;
     const host = this.host.getBoundingClientRect(), page = this.view.dom.getBoundingClientRect();
     const pad = parseFloat(getComputedStyle(this.view.dom).paddingLeft) || 0;
-    Object.assign(this.line.style, { top: `${Math.round(t.y - host.top - 2)}px`, left: `${Math.round(page.left + pad - host.left)}px`, width: `${Math.round(page.width - 2 * pad)}px` });
+    // as wide as where it lands: in a toggle, the toggle's body, so it is seen to go in
+    const left = t.left ?? page.left + pad, width = t.width ?? page.width - 2 * pad;
+    Object.assign(this.line.style, { top: `${Math.round(t.y - host.top - 2)}px`, left: `${Math.round(left - host.left)}px`, width: `${Math.round(width)}px` });
     this.line.classList.add('on');
   }
 
