@@ -345,6 +345,22 @@ try {
     if (!h.add || h.add.top < h.icon.bottom - 1 || h.add.bottom > h.title.top + 1 || Math.abs(h.add.left + 6 - h.title.left) > 3) problems.push(`the head's Add cover is not between the icon and the title, in line with it: ${JSON.stringify(h)}`);
     await page.close();
   }
+  // …and on a phone, whose head was a fixed 80px: the row ran out of it and over the title
+  {
+    const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36';
+    const ctx = await browser.newContext({ userAgent: UA, viewport: { width: 360, height: 740 }, hasTouch: true });
+    const page = await ctx.newPage();
+    await page.goto(URL_);
+    await page.waitForSelector('html.mobile');
+    await page.evaluate(() => document.querySelector('button.fab[aria-label="New note"]')?.click());
+    await page.locator('.sheet button', { hasText: 'New note' }).click(); // (the + offers a note, a group, the day)
+    await page.waitForSelector('.tiptap');
+    await page.evaluate(() => { window.__editor.commands.setContent('# A page title\n\nwords', true); window.__notes.setIcon(window.__notes.current.id, '😍'); });
+    await page.waitForTimeout(400);
+    const h = await page.evaluate(() => { const R = (s) => document.querySelector(s)?.getBoundingClientRect(); return { icon: R('.big-icon'), add: R('.add-cover'), title: R('main .tiptap > :first-child') }; });
+    if (!h.add || h.add.top < h.icon.bottom - 1 || h.add.bottom > h.title.top + 1) problems.push(`phone: the head's Add cover is not between the icon and the title: ${JSON.stringify(h)}`);
+    await ctx.close();
+  }
 
   // ---- a phone (the bounty's finds): an Android phone's page in WebKit ----
   {
@@ -358,6 +374,7 @@ try {
     const small = (r, n = 40) => !r || r.width < n || r.height < n;
     // a note: a formula's tabs and Done a finger's size; the formatting bar's end fading where it goes on
     await page.evaluate(() => document.querySelector('button.fab[aria-label="New note"]')?.click());
+    await page.locator('.sheet button', { hasText: 'New note' }).click(); // (the + offers a note, a group, the day)
     await page.waitForSelector('.tiptap');
     await page.waitForTimeout(400);
     await page.evaluate(() => window.__editor.commands.setContent('# P\n\ntext here\n\n$$\nx^2\n$$\n\n| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n', true));
