@@ -8,9 +8,9 @@ import { merge3 } from './merge3';
 
 /**
  * Sync through a private GitHub repository (see github.ts). Layout mirrors the local notes dir:
- * notes/<id>.md (frontmatter included) and notes/assets/*. Conflicts resolve last-writer-wins on
- * updatedAt (notes.mergeRemote); a note untouched locally since the last sync takes the remote
- * version unconditionally, so edits made on github.com come through too. The GitHub is github.com or,
+ * notes/<id>.md (frontmatter included) and notes/assets/*. A note changed on both sides since they
+ * last agreed is merged line by line (merge3), or kept as a conflict copy; a note untouched locally
+ * since the last sync takes the remote version unconditionally, so edits made on github.com come through too. The GitHub is github.com or,
  * `host` set, a GitHub Enterprise one (NAME.ghe.com, or a server of the company's own).
  */
 const LS = 'eve.sync';

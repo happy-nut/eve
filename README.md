@@ -2,7 +2,32 @@
 
 # Eve
 
-Markdown notes for macOS (and Android) that open in a keystroke, look like a page, and stay plain files you own.
+Notion's editor on plain Markdown files you own — up in a keystroke on the Mac, and on your Android phone.
+
+## Why Eve
+
+Every notes app asks you to give something up. Notion writes like a page but keeps your notes on its servers.
+Obsidian keeps them as files but has you looking at Markdown. A quick-capture app opens fast but holds only scraps.
+Eve gives up none of these:
+
+- **Notion's page, without Notion's servers.** The same editor and the same keys — `/` blocks, toggles, callouts,
+  databases, `⌘⌥1` for a heading — but every note is a `.md` file on your disk that Obsidian, GitHub or `grep`
+  reads as it is. Leaving Eve means nothing to export.
+- **Files, without writing Markdown.** You see headings, to-dos, tables, flowcharts and equations, and edit them
+  where they are drawn. The Markdown is underneath for any other tool.
+- **Faster than switching to a tab.** `⌘⇧E` from any app, type, `Esc`, and you are back where you were. A native
+  app (Tauri and the system's WebKit, an 8 MB download), not Electron.
+- **Sync with no one in between.** A private GitHub repository of your own is the server. There is no Eve account
+  and no subscription, and git keeps every version. A note written on two devices before they synced is merged
+  line by line. Whatever cannot be merged is kept as a copy beside it, never dropped.
+- **Claude knows your notes.** One click connects Eve's MCP server. Claude finds, reads and writes notes, and each
+  change goes through the app as if you had typed it. It never deletes a note.
+- **On your phone too.** An Android app with a home-screen widget and background sync, and the same notes.
+
+Not for you if you need an iPhone, Windows or an Intel Mac, or want to edit a page live with other people: Eve is
+one person's notes on Apple silicon Macs and Android.
+
+## A look
 
 ### 1. Write it down before you forget it
 
@@ -21,7 +46,7 @@ Each is drawn in the note and edited by clicking on it — no Mermaid or TeX nee
 ### 3. Your notes stay yours
 
 Every note is a plain `.md` file — readable by Obsidian, GitHub, or any editor — synced through a private
-GitHub repo with no server in between. Claude can read them too, with one click to connect.
+GitHub repo with no server in between. Claude can read and write them too, with one click to connect.
 
 <p align="center"><img src="docs/eve-files.gif" alt="Edits in Eve showing up live in the note's Markdown file" width="800"></p>
 
@@ -36,7 +61,7 @@ GitHub repo with no server in between. Claude can read them too, with one click 
 - **Opens any `.md`** from Finder's *Open With*, edited in place.
 - **Every shortcut is rebindable** in Settings (`⌘,`).
 - **Command line** — `eve search`, `eve read`, `eve open` from a terminal.
-- **Small and fast** — Tauri 2 (native WebKit, ~10 MB), Svelte 5, TipTap. No Electron.
+- **Small and fast** — Tauri 2 (native WebKit, an 8 MB download), Svelte 5, TipTap. No Electron.
 
 </details>
 
@@ -155,8 +180,9 @@ existing one) and starts syncing. Sync runs 2 s after edits, every minute, and o
 
 The repo mirrors the local folder: `notes/<id>.md` (frontmatter included) and `notes/assets/*`. Each round is
 one `main` head lookup; changed files are fetched by blob and pushed as a single commit through the git data API
-(no git binary). Conflicts resolve last-writer-wins by `updatedAt`; deletes are tombstones; a note untouched
-locally since the last sync takes the remote version, so edits made on github.com win.
+(no git binary). A note changed on both sides since they last agreed is merged line by line from the version they
+agreed on; what cannot be merged is kept as a conflict copy beside it, never dropped. Deletes are tombstones; a note
+untouched locally since the last sync takes the remote version, so edits made on github.com come through.
 
 **GitHub Enterprise, an organization, or a token**: under the Sign in button, *GitHub Enterprise, an
 organization, or a token…* takes a server (`acme.ghe.com` for Enterprise Cloud with data residency, or a
