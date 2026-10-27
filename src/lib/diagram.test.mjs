@@ -127,3 +127,17 @@ assert.equal(isEmpty({ kind: 'flowchart', dir: 'LR', nodes: [], edges: [] }), tr
 assert.equal(isEmpty({ kind: 'gantt', title: '', sections: [{ name: 'A', tasks: [] }] }), true);
 assert.equal(isEmpty(fromCode('flowchart LR')), true);
 console.log('empty ok');
+
+// a line's label (and a box's) over two lines: written as mermaid's <br>, read back as the break it was
+{
+  const d = starter('flowchart');
+  d.edges[1].label = 'when the order\nis paid';
+  d.nodes[0].label = 'Start\nhere';
+  const code = toCode(d);
+  assert.match(code, /\|"when the order<br>is paid"\|/);
+  assert.match(code, /"Start<br>here"/);
+  const back = fromCode(code);
+  assert.equal(back.edges[1].label, 'when the order\nis paid');
+  assert.equal(back.nodes[0].label, 'Start\nhere');
+  assert.equal(toCode(back), code);
+}

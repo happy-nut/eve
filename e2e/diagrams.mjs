@@ -68,8 +68,14 @@ try {
   await page.mouse.up();
   await page.waitForSelector('.layer .bar .edge-label');
   await page.locator('.layer .bar button[aria-label="Dotted"]').click();
-  await page.locator('.layer .bar .edge-label').fill('later');
-  await page.keyboard.press('Escape');
+  // a line's label of two lines: ⇧↩ breaks it, ↩ is done (the field held one line, two words)
+  await page.locator('.layer .bar .edge-label').click();
+  await page.keyboard.type('later');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.type('maybe');
+  const field = await page.locator('.layer .bar .edge-label').boundingBox();
+  assert.ok(field.width >= 140 && field.height >= 34, `the label's field has room for words and its second line (${Math.round(field.width)}×${Math.round(field.height)})`);
+  await page.keyboard.press('Enter');
   await settle(page);
   at = await boxAt(page, 'Write');
   await page.mouse.click(at.x, at.y);
@@ -82,7 +88,7 @@ try {
   assert.match(text, /n1\(\["Draft"\]\)/, 'the box typed in');
   assert.match(text, /n4\[\("Write"\)\]/, 'the new step, as a database');
   assert.match(text, /n1 --> n4\n/, 'joined after the box whose + made it');
-  assert.match(text, /n4 -\.->\|"later"\| n3/, 'the line dragged onto Done, dotted, labelled');
+  assert.match(text, /n4 -\.->\|"later<br>maybe"\| n3/, 'the line dragged onto Done, dotted, labelled');
   console.log('ok   flowchart: typed in its boxes, + and drag, the bars; the note keeps the code');
 
   await page.locator('.tiptap p').first().click();
