@@ -408,6 +408,9 @@ describe("the language chip's menu: what is typed narrows it", () => {
     flushSync();
     expect(ed.state.doc.child(1).attrs.language).toBe('rust');
     expect(ui.menu).toBeNull();
+    // the app keeps the menu drawn while it slides away, the keyboard gone back to the note by then: taken out at
+    // once here, with the field still focused, the keyboard would fall to <body>
+    ed.view.focus();
     unmount(app);
   });
 });
