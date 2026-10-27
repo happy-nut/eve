@@ -134,7 +134,11 @@ function config(mode: 'light' | 'dark') {
     gantt: { useWidth: 680, barHeight: 24, barGap: 8, topPadding: 44, leftPadding: 90, fontSize: 13, sectionFontSize: 13, axisFormat: '%m/%d' },
     pie: { textPosition: 0.72 },
     mindmap: { padding: 16 },
-    er: { entityPadding: 16, fontSize: 13, minEntityWidth: 120, diagramPadding: 16 },
+    // a line between two classes (or tables) carries a label chip and an end at each side ("1", "*", a crow's foot,
+    // a diamond): at mermaid's 50 (80) the chip was drawn over the ends. A class diagram is spaced by `state`'s
+    // settings (mermaid 11 reads those for it), a state diagram's lines the same room
+    state: { rankSpacing: 84 },
+    er: { entityPadding: 16, fontSize: 13, minEntityWidth: 120, diagramPadding: 16, rankSpacing: 104 },
   };
 }
 
