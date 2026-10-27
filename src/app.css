@@ -490,24 +490,14 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 .tiptap pre code { background: none; padding: 0; margin: 0; box-shadow: none; font-size: 0.85em; }
 /* the chip sits on the wrapper, not the <pre>: inside a scrolling <pre> it would slide away with long lines */
 .tiptap .code-block { position: relative; }
-/* How wide a block of the note's own may grow past the text: as far as the pane goes (24px short of each side), but no
-   further than 1280px, however wide the window. Code, diagrams, pictures and tables all keep to it, so on a big screen
-   they line up with one another instead of each running to the window's edge. */
-.editor .tiptap { --wide: min(calc(var(--pane, 100%) - 48px), 1280px); }
-/* a Mac: 56px kept free on each side, where a wide block's + / ⋮⋮ handle stands (blockHandle.ts) — at 24px it fell
-   over the table's first cells */
-html:not(.mobile) .editor .tiptap { --wide: min(calc(var(--pane, 100%) - 112px), 1280px); }
-/* Code and diagrams are as wide as they need, as far as --wide goes, not held to the
-   width the text reads at: a long line or a wide flowchart scrolled sideways inside a column with empty page on both
-   sides of it. Still never narrower than the text, and centred on it. Only a block of the note's own: one in a list,
-   a quote or a toggle keeps to it. (--pane is the editor's width, kept on it by Editor.svelte. It was a size container
-   (container-type) once: WebKit then at times drew nothing of the note but its white page, a part of it or all.) */
-.editor .tiptap > .code-block {
-  width: max-content; min-width: 100%; max-width: max(100%, var(--wide));
-  left: 50%; translate: -50% 0;
-}
-/* a diagram filling the screen from in here is placed against the window: a translate around it would make it this
-   block's size instead */
+/* How far a block may reach, as Notion has it (its page grid: margins | a text column of 720px | margins). Code,
+   diagrams, pictures, embeds keep to the text column, a long line or a wide diagram scrolling inside it. A table, a
+   board and a database start where the text does and may run on to the right, into the page's room past the column,
+   as far as the pane goes (short of its edge by the room a block's + / ⋮⋮ takes on a Mac), and scroll there. Only a
+   block of the note's own: one in a list, a quote or a toggle keeps to its column. (--pane is the editor's width, kept
+   on it by Editor.svelte; a % in --reach is the column's, where it is used.) */
+.editor .tiptap { --reach: max(100%, calc(100% + (var(--pane, 100%) - 100%) / 2 - 24px)); }
+html:not(.mobile) .editor .tiptap { --reach: max(100%, calc(100% + (var(--pane, 100%) - 100%) / 2 - 56px)); }
 .editor .tiptap > .code-block:has(.dblock.full) { left: 0; translate: none; }
 .tiptap .code-lang {
   position: absolute; top: 0; left: 12px; transform: translateY(-50%); z-index: var(--z-raised); /* straddles the block's top edge */
@@ -812,7 +802,7 @@ html.mobile .tiptap table { table-layout: auto; }
 /* A table of the note's own is as wide as its cells need, up to --wide, centred on the text as code is: held to the
    column, a table of a few wide columns folded every cell into a few words a line. Past --wide its cells fold their
    lines; one with columns sized by hand keeps those widths (scrolling sideways when they are wider still). */
-.editor .tiptap > .tableWrapper { position: relative; width: max-content; min-width: 100%; max-width: max(100%, var(--wide)); left: 50%; translate: -50% 0; }
+.editor .tiptap > .tableWrapper { position: relative; width: max-content; min-width: 100%; max-width: var(--reach); }
 .editor .tiptap > .tableWrapper table { table-layout: auto; }
 html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 .tiptap .selectedCell::after {
@@ -832,17 +822,10 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 .tiptap img { max-width: 100%; border-radius: 8px; display: block; margin: 0.6em 0; }
 .tiptap img.ProseMirror-selectednode { outline: 2px solid var(--accent); box-shadow: var(--glow); }
 /* an image and its caption: the caption is the alt text, shown under the picture */
-.tiptap .img-fig { margin: 0.6em 0; width: fit-content; max-width: 100%; } /* shrink to the picture, so the caption sits under it */
+.tiptap .img-fig { margin: 0.6em 0; width: fit-content; max-width: 100%; } /* shrink to the picture, so the caption sits under it; as wide as the text column at most, as Notion's */
 /* where it sits across the page (its menu: a click on it) */
 .tiptap .img-fig[data-align='center'] { margin-left: auto; margin-right: auto; }
 .tiptap .img-fig[data-align='right'] { margin-left: auto; margin-right: 0; }
-/* A picture is shown as large as it is (or as it was sized), out past the text to the pane's edges (24px short), as
-   code and diagrams are: held to the column, a wide screenshot came out too small to read. Where it sits says which
-   way it grows — from the left edge rightwards, from the right edge leftwards, centred both ways. Only a picture of
-   the note's own: one in a list or a quote keeps to its column. Never narrower than the column allowed before. */
-.editor .tiptap > .img-fig { width: max-content; max-width: max(100%, calc(50% + var(--wide) / 2)); }
-.editor .tiptap > .img-fig[data-align='center'] { max-width: max(100%, var(--wide)); margin-left: 0; margin-right: 0; left: 50%; translate: -50% 0; }
-.editor .tiptap > .img-fig[data-align='right'] { margin-left: 0; left: 100%; translate: -100% 0; }
 .tiptap .img-fig[data-align='center'] .img-cap { text-align: center; }
 .tiptap .img-fig[data-align='right'] .img-cap { text-align: right; }
 .tiptap .img-fig img { margin: 0; }
@@ -1118,4 +1101,4 @@ html.mobile .tiptap [data-type='details'] > button::after { content: ''; positio
 :has(.block-handle.on) ~ .outline { opacity: 0; pointer-events: none; transition: opacity 0.12s; }
 /* a board of the note's own is as wide as its columns need, up to --wide, centred on the text as a table is: held to
    the column, a new board's third column was cut off at an 800-wide window, its + out of sight */
-.editor .tiptap > .kanban { position: relative; width: max-content; min-width: 100%; max-width: max(100%, var(--wide)); left: 50%; translate: -50% 0; }
+.editor .tiptap > .kanban, .editor .tiptap > .database { position: relative; width: max-content; min-width: 100%; max-width: var(--reach); }

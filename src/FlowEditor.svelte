@@ -29,6 +29,13 @@
 
   type Box = { id: string; x: number; y: number; w: number; h: number };
   let layer = $state<HTMLDivElement>(null!);
+  /** a field as tall as its lines (to four): one line at first, the next ones in sight as they are typed */
+  const grow = (el: HTMLTextAreaElement) => {
+    const fit = () => { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 92)}px`; };
+    fit();
+    el.addEventListener('input', fit);
+    return () => el.removeEventListener('input', fit);
+  };
   let boxes = $state<Box[]>([]);
   let sel = $state<{ node: string } | { edge: number; x: number; y: number } | { lane: string } | null>(untrack(() => (pick ? { node: pick } : null)));
   /** where each swimlane's name is drawn (lanes.ts), to be clicked, renamed and moved */
@@ -480,7 +487,7 @@
     // in a line's label: Esc or Enter is done with it (Esc closed the whole builder), the rest is typing (a word still
     // being put together there is the IME's, and its keys never get here: keys.ts)
     if (typing && layer.contains(e.target as Node)) {
-      if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); sel = null; }
+      if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); e.stopPropagation(); sel = null; }
       return;
     }
     if (typing) return;
@@ -695,14 +702,15 @@
   {/if}
 
   {#if selEdge && sel && 'edge' in sel && !drag}
-    {@const at = barAt(sel.x, sel.y - 6, sel.y + 6, isMobile ? 360 : 366)}
+    {@const at = barAt(sel.x, sel.y - 6, sel.y + 6, isMobile ? 360 : 486)}
     {@const i = sel.edge}
     <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
       {#each LINES as [line, label, icon] (line)}
         <button type="button" class:on={selEdge.line === line} aria-label={label} title={label} onclick={() => (selEdge.line = line)}><svg viewBox="0 0 16 16">{@html icon}</svg></button>
       {/each}
       <span class="sep"></span>
-      <input class="edge-label" bind:value={selEdge.label} placeholder="Label" aria-label="Line label" />
+      <!-- room for a few words, and lines: ⇧↩ breaks one (a one-line field of 110px held two words, and no break) -->
+      <textarea class="edge-label" rows="1" bind:value={selEdge.label} placeholder="Label" aria-label="Line label" title="⇧↩ a new line" {@attach grow}></textarea>
       <button type="button" aria-label="Put a step in this line" title="Put a step in the middle of this line" onclick={() => splitEdge(i)}><svg viewBox="0 0 16 16"><path d="M1.5 8h3M11.5 8h3" /><rect x="4.5" y="5" width="7" height="6" rx="1.6" /></svg></button>
       <button type="button" aria-label="Reverse" title="Reverse" onclick={() => reverse(i)}><svg viewBox="0 0 16 16"><path d="M3 5.5h9.5M10.5 3l2.5 2.5L10.5 8M13 10.5H3.5M5.5 8 3 10.5 5.5 13" /></svg></button>
       <button type="button" class="danger" aria-label="Delete" title="Delete (⌫)" onclick={() => dropEdge(i)}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
@@ -766,9 +774,10 @@
   .bar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
   .sep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; }
   .edge-label {
-    width: 110px; height: 30px; box-sizing: border-box; border: 0; border-radius: 8px; padding: 0 9px; font: inherit; font-size: 13px;
-    background: var(--bg-input); color: var(--fg); outline: none;
+    width: 230px; min-height: 30px; max-height: 92px; box-sizing: border-box; border: 0; border-radius: 8px; padding: 6px 9px; font: inherit;
+    font-size: 13px; line-height: 18px; background: var(--bg-input); color: var(--fg); outline: none; resize: none; overflow-y: auto; align-self: center;
   }
+  :global(html.mobile) .edge-label { width: 150px; }
   .edge-label:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   :global(.diagram-canvas path.hit) { stroke: transparent !important; stroke-width: 14px !important; fill: none !important; pointer-events: stroke; cursor: pointer; }
   /* a finger's width along a line: 14 was a hair to hit */

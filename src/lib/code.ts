@@ -225,6 +225,10 @@ const caretInSight = new Plugin({
       const at = view.domAtPos(selection.head).node;
       const pre = (at instanceof Element ? at : at.parentElement)?.closest('pre');
       if (!pre || pre.scrollWidth <= pre.clientWidth) return;
+      // at a line's start: the block's very left, whatever the pixels round to (a block placed at a fraction of a pixel
+      // was left 1px scrolled, its first letter's edge cut)
+      const { $head } = selection;
+      if (!$head.parentOffset || $head.parent.textBetween($head.parentOffset - 1, $head.parentOffset) === '\n') { pre.scrollLeft = 0; return; }
       let c: { left: number; right: number };
       try { c = view.coordsAtPos(selection.head); } catch { return; }
       const r = pre.getBoundingClientRect(), pad = parseFloat(getComputedStyle(pre).paddingLeft) || 0;

@@ -107,6 +107,9 @@ const unkeyword = (s: string) => (KEYWORD.test(s) ? `#${s.charCodeAt(0)};${s.sli
 const one = (s: string) => s.replace(/\s*\n\s*/g, ' ').trim(); // a label is one line
 const quoted = (s: string) => `"${ent(one(s), '"#|')}"`;
 const unquote = (s: string) => unent(s.trim().replace(/^"(.*)"$/, '$1'));
+// a flowchart's label may hold line breaks: written as mermaid's <br>, read back as the breaks they were
+const brQuoted = (s: string) => `"${ent(s.split('\n').map(one).join('\n').replace(/^\n+|\n+$/g, ''), '"#|').replace(/\n/g, '<br>')}"`;
+const unlines = (s: string) => unquote(s).replace(/<br\s*\/?>/gi, '\n');
 
 // ---- flowchart ----
 const SHAPES: Record<Shape, [string, string]> = {
@@ -116,7 +119,7 @@ const ARROWS: Record<Line, string> = { solid: '-->', dotted: '-.->', thick: '==>
 
 function flowCode(d: Flowchart) {
   const lines = [`flowchart ${d.dir}`];
-  const nodeLine = (n: FlowNode, pad: string) => { const [a, b] = SHAPES[n.shape]; return `${pad}${n.id}${a}${quoted(n.label)}${b}`; };
+  const nodeLine = (n: FlowNode, pad: string) => { const [a, b] = SHAPES[n.shape]; return `${pad}${n.id}${a}${brQuoted(n.label)}${b}`; };
   // swimlanes are subgraphs: each lane's boxes inside its own (any other app draws them as groups); boxes in no lane after
   const lanes = d.lanes ?? [];
   for (const l of lanes) {
@@ -128,7 +131,7 @@ function flowCode(d: Flowchart) {
   const ids = new Set(d.nodes.map((n) => n.id));
   for (const e of d.edges) {
     if (!ids.has(e.from) || !ids.has(e.to)) continue;
-    lines.push(`  ${e.from} ${ARROWS[e.line]}${one(e.label) ? `|${quoted(e.label)}|` : ''} ${e.to}`);
+    lines.push(`  ${e.from} ${ARROWS[e.line]}${one(e.label) ? `|${brQuoted(e.label)}|` : ''} ${e.to}`);
   }
   return lines.join('\n');
 }
@@ -152,7 +155,7 @@ function readNode(s: string): { id: string; label?: string; shape?: Shape; rest:
     const inner = rest.slice(open.length, end);
     // [/…/], [\…\] and their mixes are parallelograms and trapezoids, shapes the chart cannot keep
     if (open === '[' && !inner.startsWith('"') && /^[/\\]/.test(inner)) return null;
-    const label = unquote(inner);
+    const label = unlines(inner);
     return { id, label, shape, rest: rest.slice(end + close.length) };
   }
   return { id, rest };
@@ -195,7 +198,7 @@ function flowRead(lines: string[], head: string): Flowchart | null {
     const b = readNode(rest.slice(arrow[0].length));
     if (!b || b.rest.trim()) return null;
     node(b);
-    d.edges.push({ from: a.id, to: b.id, label: arrow[2] === undefined ? '' : unquote(arrow[2]), line: arrow[1] === '-->' ? 'solid' : arrow[1] === '==>' ? 'thick' : 'dotted' });
+    d.edges.push({ from: a.id, to: b.id, label: arrow[2] === undefined ? '' : unlines(arrow[2]), line: arrow[1] === '-->' ? 'solid' : arrow[1] === '==>' ? 'thick' : 'dotted' });
   }
   if (lane) return null; // a lane never closed
   return d;
