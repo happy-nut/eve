@@ -57,6 +57,44 @@ try {
     console.log('ok   while a block is dragged, a line shows where it will land');
   }
 
+  // a block into a toggle and out of it, as Notion's: let go over the toggle's title (its lower half), it goes first in
+  // the toggle's body; a line in the body is a block of its own, its ⋮⋮ beside it, dragged out under the toggle
+  {
+    await page.evaluate(() => window.__editor.commands.setContent('# Drag\n\n<details open>\n<summary>The toggle</summary>\n\ninside line\n\n</details>\n\nloose line\n\nlast line\n', true));
+    await page.waitForTimeout(700);
+    const md = () => page.evaluate(() => window.__editor.storage.markdown.getMarkdown());
+    const g = await grip('loose line');
+    const title = await page.locator('.tiptap summary').boundingBox();
+    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+    await page.mouse.down();
+    for (let i = 1; i <= 8; i++) await page.mouse.move(g.x + g.width / 2 + i, g.y + ((title.y + title.height * 0.75 - g.y) * i) / 8);
+    await page.waitForTimeout(150);
+    const line = await page.evaluate(() => { const l = document.querySelector('.block-drop'), r = l.getBoundingClientRect(), body = document.querySelector('.tiptap [data-type="detailsContent"]').getBoundingClientRect(); return { left: r.left, body: body.left }; });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    assert.ok(Math.abs(line.left - line.body) < 4, `the drop line starts at the toggle's body (${Math.round(line.left)} vs ${Math.round(line.body)})`);
+    assert.match(await md(), /<summary>The toggle<\/summary>\n\nloose line\n\ninside line\n\n<\/details>\n\nlast line/, `dropped over the toggle's title, the line is first in its body:\n${await md()}`);
+    await page.waitForTimeout(600); // past the 500ms in which edits are one step of ⌘Z
+    // out again: the line in the body has its own ⋮⋮, and goes under the last line
+    const inner = await page.locator('.tiptap [data-type="detailsContent"] p', { hasText: 'inside line' }).boundingBox();
+    await page.mouse.move(inner.x + 20, inner.y + inner.height / 2);
+    await page.waitForSelector('.block-handle.on');
+    await page.waitForTimeout(100);
+    const g2 = await page.locator('.block-handle .grip').boundingBox();
+    assert.ok(g2.x + g2.width <= inner.x + 2 && Math.abs(g2.y + g2.height / 2 - (inner.y + inner.height / 2)) < 10, 'a line in a toggle has its ⋮⋮ beside it');
+    const last = await page.locator('.tiptap > p', { hasText: 'last line' }).boundingBox();
+    await page.mouse.move(g2.x + g2.width / 2, g2.y + g2.height / 2);
+    await page.mouse.down();
+    for (let i = 1; i <= 8; i++) await page.mouse.move(g2.x + g2.width / 2 + i, g2.y + ((last.y + last.height * 0.8 - g2.y) * i) / 8);
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    assert.match(await md(), /<summary>The toggle<\/summary>\n\nloose line\n\n<\/details>\n\nlast line\n\ninside line/, `the line dragged out of the toggle, under the last line:\n${await md()}`);
+    await page.keyboard.press('Meta+z');
+    await page.waitForTimeout(200);
+    assert.match(await md(), /loose line\n\ninside line\n\n<\/details>/, 'one ⌘Z puts it back in the toggle');
+    console.log('ok   a block dragged into a toggle (over its title) and out of it; a line in a toggle has its own ⋮⋮');
+  }
+
   await fresh();
   await drag('first line', 'third line');
   assert.deepEqual(await lines(), ['second line', 'third line', 'first line'], 'dragged by ⋮⋮ below the third line, the first line is there');
