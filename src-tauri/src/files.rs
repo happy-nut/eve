@@ -19,6 +19,29 @@ pub(crate) fn safe_id(id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Changes the MCP server left for the app (`eve mcp`, core.rs ask_app), oldest first, each taken out of the
+/// inbox as it is read: it is done once, by this app's notes store.
+#[tauri::command]
+pub(crate) fn take_inbox(app: AppHandle) -> Result<Vec<String>, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("inbox");
+    let mut asks: Vec<PathBuf> = match fs::read_dir(&dir) {
+        Ok(entries) => entries.flatten().map(|e| e.path()).filter(|p| p.extension().and_then(|e| e.to_str()) == Some("json")).collect(),
+        Err(_) => return Ok(Vec::new()),
+    };
+    asks.sort(); // named by the time they were asked
+    Ok(asks.iter().filter_map(|p| fs::read_to_string(p).ok().filter(|_| fs::remove_file(p).is_ok())).collect())
+}
+
+/// The app's answer to one change, for the server waiting on it.
+#[tauri::command]
+pub(crate) fn answer_inbox(app: AppHandle, ask: String, reply: String) -> Result<(), String> {
+    if ask.is_empty() || !ask.chars().all(|c| c.is_ascii_digit() || c == '-') {
+        return Err("invalid ask".into());
+    }
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("inbox");
+    write_atomic(&dir.join(format!("{ask}.reply")), reply.as_bytes())
+}
+
 /// Returns raw file contents of every note; parsing happens in the frontend.
 #[tauri::command]
 pub(crate) fn list_notes(app: AppHandle) -> Result<Vec<String>, String> {

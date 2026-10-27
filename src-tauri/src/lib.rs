@@ -53,6 +53,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             files::list_notes,
             files::write_note,
+            files::take_inbox,
+            files::answer_inbox,
             files::import_asset,
             files::save_asset,
             mac::pdf_thumb,
@@ -110,11 +112,19 @@ pub fn run() {
                     app.state::<Pending>().0.lock().unwrap().extend(paths.clone());
                     let _ = app.emit("open-files", paths);
                 }
-                if let Some(link) = urls.iter().rev().find(|u| u.scheme() == "eve") {
+                // eve://inbox: the MCP server left a change in the inbox. Taken without coming to the front (a
+                // started Eve takes the inbox once its notes are in, so nothing is kept for it here)
+                let inbox = urls.iter().any(|u| u.scheme() == "eve" && u.host_str() == Some("inbox"));
+                if inbox {
+                    let _ = app.emit("inbox", ());
+                }
+                if let Some(link) = urls.iter().rev().find(|u| u.scheme() == "eve" && u.host_str() != Some("inbox")) {
                     *app.state::<PendingLink>().0.lock().unwrap() = Some(link.to_string());
                     let _ = app.emit("open-link", link.to_string());
                 }
-                let _ = window::show_window(app.clone());
+                if !(inbox && urls.len() == 1) {
+                    let _ = window::show_window(app.clone());
+                }
             }
         });
 }

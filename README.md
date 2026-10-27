@@ -175,23 +175,30 @@ in-memory fake; `EVE_TEST_REPO=owner/name EVE_TEST_TOKEN=… npm test` runs it a
 
 ## Claude (MCP)
 
-Settings → Sync & app → Claude → **Connect** lets Claude read your notes. One click registers Eve's
-read-only [MCP](https://modelcontextprotocol.io) server with every Claude app on the Mac: it adds `eve` to
+Settings → Sync & app → Claude → **Connect** lets Claude read and write your notes. One click registers Eve's
+[MCP](https://modelcontextprotocol.io) server with every Claude app on the Mac: it adds `eve` to
 Claude Desktop's `claude_desktop_config.json` (every other key kept, in its order; the file as it was before is
 saved once as `claude_desktop_config.json.eve-backup`), and runs
 `claude mcp add --scope user eve -- …/Eve.app/Contents/MacOS/eve mcp` for Claude Code. Restart Claude Desktop
 after connecting.
 
 The server is the app's own binary started as `eve mcp` (no window, no Tauri): it reads `notes/*.md` from disk,
-so it works while Eve is closed. It only hands over the notes, exactly as written; what to do with them is up to
-Claude and you. Nothing it offers writes. Tools: `list_notes` and `search_notes` (every word must match; title
+so it works while Eve is closed. It hands over the notes exactly as written. Tools: `list_notes` and `search_notes` (every word must match; title
 hits first) find notes, narrowed by group and by the dates a note was made or last changed (`from` / `to`:
 `2026-09` or `2026-09-05`, local time); `read_note` returns one (by title or id, a `[[Title#Section]]` link, or
 one section) and `read_notes` several, by id, in the order given. `open_note` shows one in Eve — the running
 app comes to the front with that note open, at a section if one is named (Eve starts if it was not running):
 "find last week's meeting notes and open them". It hands macOS an `eve://open?id=…&section=…` link, which Eve
 registers; such a link only ever shows a note, an unknown id is ignored, and nothing is created or changed.
-Being the one tool that is not read-only, Claude asks before its first use. A note's creation time comes from its id (a
+`create_note` makes a note (a title, markdown under it, a folder, or a page to put it under as a sub-page),
+`append_note` adds to the end of one, and `edit_note` replaces one passage, copied exactly from the note and found in it
+only once (like an editor's find-and-replace, it refuses a passage that is missing or there twice). None of them
+writes a file: each change goes into the app's inbox (`inbox/` beside `notes/`, which only programs on this Mac can
+write), an `eve://inbox` link tells Eve to look there without bringing it to the front (starting it in the background
+if it was closed), and Eve does it through its notes store as if it were typed — saved, synced, and shown at once in
+a note that is open, the caret where it was — then answers. A file written beside the running app would have been
+written over from its memory at the note's next save. Nothing deletes a note. Claude asks before a tool that is not
+read-only is first used. A note's creation time comes from its id (a
 day's note is its day); only its last change is known, so a note edited in September and again in October is
 found under October. Deleted notes and the calendar's own are left out.
 

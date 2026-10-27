@@ -11,7 +11,7 @@
   import { groups, leafOf, parentOf } from './lib/groups.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
-  import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, widget, links, saveAsset } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, widget, links, inbox, saveAsset } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Confirm from './Confirm.svelte';
@@ -32,6 +32,7 @@
   import TabBar from './TabBar.svelte';
   import { parseTicket } from './lib/handoff';
   import { parseEveLink } from './lib/evelink';
+  import { applyAll } from './lib/inbox';
   import { focusNote } from './lib/popup';
   import { cameBack } from './lib/comeBack';
   import { flushEdits } from './lib/pending';
@@ -104,6 +105,8 @@
         notes.section = link.section;
         notes.currentId = link.id;
       });
+      // what Claude writes through the MCP server: done through the store, as typed (inbox.ts)
+      void inbox.onAsk(applyAll);
       widget.onOpen((ask) => {
         // the phone-setup page: take the sign-in the Mac's QR points at
         const ticket = parseTicket(ask);

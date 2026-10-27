@@ -466,7 +466,7 @@
       <h3>Claude</h3>
       <div class="card">
         <div class="row">
-          <span class="label">Let Claude read your notes
+          <span class="label">Let Claude read and write your notes
             <span class="sub">{isTauri ? claudeText : 'Needs the desktop app.'}</span></span>
           {#if claudeOn}
             <button class="btn" disabled={claudeBusy} onclick={() => connectClaude(false)}>
@@ -479,7 +479,7 @@
           {/if}
         </div>
         {#if claudeError}<p class="alert">{claudeError}</p>
-        {:else if claudeOn}<p class="alert dim">Claude can list, search and read notes, and open one here for you — never change them. Restart Claude Desktop to pick it up; Claude Code sees it in its next session.</p>{/if}
+        {:else if claudeOn}<p class="alert dim">Claude can list, search and read notes, open one here for you, make notes and add to or change one — never delete them. Restart Claude Desktop to pick it up; Claude Code sees it in its next session.</p>{/if}
       </div>
 {/if}
 
