@@ -433,12 +433,12 @@ try {
   await page.close();
 
   // ---- written by hand: opens as its code ----
-  page = await open('# Plan\n\n```mermaid\nsequenceDiagram\n  A->>B: hi\n  Note over A: n\n```\n');
+  page = await open('# Plan\n\n```mermaid\nmindmap\n  root((R))\n    A\n    B[Square]\n```\n');
   await page.waitForSelector('.tiptap .mermaid-view svg');
   await page.locator('.tiptap .mermaid-view').click();
   await page.waitForSelector('.tiptap .code-block.editing');
   assert.equal(await page.locator('.tiptap .dblock.active').count(), 0);
-  assert.match(await page.locator('.tiptap .codebar').textContent(), /Note over A: n.*can't show/s, 'it says why: the line it cannot show');
+  assert.match(await page.locator('.tiptap .codebar').textContent(), /B\[Square\].*can't show/s, 'it says why: the line it cannot show');
   await page.locator('.tiptap .codebar .done').click();
   await page.waitForFunction(() => !document.querySelector('.tiptap .code-block.editing'));
   console.log('ok   hand-written: opens as code, saying why; Done leaves it');

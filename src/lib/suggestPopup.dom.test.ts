@@ -45,6 +45,7 @@ test('the / menu: Heading and Diagram are one row each, ↩ opens it below, ↩ 
   expect(picked).toEqual(['Flowchart']);
   // typed: every match its own row, wherever it sits
   expect(slashItems('flow').map((i) => i.label)).toEqual(['Flowchart']);
-  expect(slashItems('diagram').length).toBe(7);
+  expect(slashItems('diagram').length).toBe(10);
+  expect(slashItems('class').map((i) => i.label)).toEqual(['Class diagram']);
   expect(slashItems('heading').map((i) => i.label)).toEqual(['Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5']);
 });

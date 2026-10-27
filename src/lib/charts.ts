@@ -1,12 +1,12 @@
-import { fromCode, type Gantt, type Pie, type Timeline } from './diagram';
+import { fromCode, ganttDates, type Gantt, type Pie, type Timeline } from './diagram';
 import { laneSvg } from './lanes';
 
 /**
  * The charts Eve draws itself, from the same mermaid code: a pie as a donut with its parts listed beside it, a
  * timeline as a column of dates, a Gantt chart as a tidy schedule. Mermaid's own drawings of these three stretched
  * and crowded (a timeline's dashed drops and arrows, a Gantt's labels between its rows). The note still keeps
- * mermaid's code, so other apps draw it their way; code these cannot read (a Gantt with `after`, a timeline with
- * sections) is left to mermaid. HTML for the diagram canvas, styled by app.css (.chart-*), colours by CSS
+ * mermaid's code, so other apps draw it their way; code these cannot read (a timeline with sections), or a Gantt
+ * with what this drawing has no look for (done, crit, milestone; days excluded), is left to mermaid. HTML for the diagram canvas, styled by app.css (.chart-*), colours by CSS
  * variables, so the light and dark themes need no drawing again.
  */
 export function chartHtml(code: string, laneMin = 0.64): string | null {
@@ -17,7 +17,7 @@ export function chartHtml(code: string, laneMin = 0.64): string | null {
   if (d.kind === 'sequence' && !d.people.length) return `<div class="chart chart-empty"><p>Nothing to show yet</p></div>`;
   if (d.kind === 'pie') return pie(d);
   if (d.kind === 'timeline') return timeline(d);
-  if (d.kind === 'gantt') return gantt(d);
+  if (d.kind === 'gantt') return d.extra?.length || d.sections.some((s) => s.tasks.some((t) => t.tags?.length)) ? null : gantt(d);
   return null;
 }
 
@@ -64,7 +64,8 @@ const dayNum = (iso: string) => Math.round(Date.parse(`${iso}T00:00:00Z`) / DAY)
 const md = (n: number) => { const d = new Date(n * DAY); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
 
 function gantt(d: Gantt) {
-  const tasks = d.sections.flatMap((s) => s.tasks);
+  const dates = ganttDates(d); // a task after another starts where that one ends
+  const tasks = [...dates.values()];
   if (!tasks.length) return `<div class="chart chart-empty">${title(d.title)}<p>Nothing to show yet</p></div>`;
   const from = Math.min(...tasks.map((t) => dayNum(t.start)));
   const to = Math.max(...tasks.map((t) => dayNum(t.start) + Math.max(1, t.days)));
@@ -94,7 +95,7 @@ function gantt(d: Gantt) {
   const rows = d.sections.map((s, si) => {
     const head = `<div class="g-sec">${esc(s.name)}</div><div class="g-track g-sec-track">${grid}</div>`;
     const bars = s.tasks.map((t) => {
-      const a = dayNum(t.start), days = Math.max(1, t.days);
+      const a = dayNum(dates.get(t)!.start), days = Math.max(1, t.days);
       return `<div class="g-name"><span>${esc(t.name)}</span><small>${md(a)} – ${md(a + days - 1)} · ${days}d</small></div>`
         + `<div class="g-track">${grid}<div class="g-bar c${si % 12}" style="left:${pct(a)};width:${((days / span) * 100).toFixed(3)}%"></div></div>`;
     }).join('');
