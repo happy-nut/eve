@@ -307,19 +307,26 @@ try {
     await page.close();
   }
 
-  // ---- a small diagram in the narrowest column keeps its size (its block grows into the page's room; it fell to 80%) ----
-  {
-    const page = await browser.newPage({ viewport: { width: 1200, height: 850 } });
-    await page.addInitScript(() => localStorage.setItem('eve.appearance', JSON.stringify({ ...JSON.parse(localStorage.getItem('eve.appearance') ?? '{}'), width: 520 })));
+  // ---- how far a block reaches, as Notion's: code, a diagram and a picture keep to the text column (scrolling inside
+  // it); a table starts where the text does and may run on to the right, short of the pane's edge ----
+  for (const w of [1600, 1000]) {
+    const page = await browser.newPage({ viewport: { width: w, height: 1000 } });
     await page.goto(URL_);
     await page.waitForSelector('.tiptap');
     await page.locator('.toolbar .icon').last().click();
     await page.locator('.menu button', { hasText: 'New note' }).click();
     await page.waitForTimeout(400);
-    await page.evaluate((b) => window.__editor.commands.setContent(b, true), '# Small diagram\n\nabove\n\n```mermaid\nflowchart LR\n  A[Start] --> B[Middle] --> C[End]\n```\n\nbelow\n');
+    const wide = '| ' + Array.from({ length: 12 }, (_, i) => `column number ${i}`).join(' | ') + ' |\n|' + ' --- |'.repeat(12) + '\n| ' + Array.from({ length: 12 }, () => 'some words').join(' | ') + ' |';
+    await page.evaluate((b) => window.__editor.commands.setContent(b, true), '# Reach\n\nA line of text.\n\n```js\nconst aVeryLongLine = "this line is long enough to run well past the width of the editor column and on";\n```\n\n```mermaid\nflowchart LR\n  A[Start here] --> B[Second step] --> C[Third step] --> D[Fourth step] --> E[Fifth step] --> F[The end]\n```\n\n' + wide + '\n\nend\n');
     await page.waitForSelector('main .tiptap .diagram-canvas svg', { timeout: 10000 });
-    const d = await page.evaluate(() => { const svg = document.querySelector('main .tiptap .diagram-canvas svg'); return { shown: svg.getBoundingClientRect().width, own: svg.viewBox.baseVal.width }; });
-    if (d.shown < d.own - 1) problems.push(`a small diagram at width 520 is drawn ${Math.round(d.shown)}px wide, under its own ${Math.round(d.own)}px`);
+    const m = await page.evaluate(() => {
+      const R = (e) => e.getBoundingClientRect(), t = document.querySelector('main .tiptap');
+      return { pane: R(t.parentElement).right, p: R(t.querySelector(':scope > p')), code: R(t.querySelector(':scope > .code-block:not(.mermaid)')), dia: R(t.querySelector(':scope > .code-block.mermaid')), table: R(t.querySelector(':scope > .tableWrapper')) };
+    });
+    const say = (what) => problems.push(`reach at ${w}: ${what}`);
+    for (const k of ['code', 'dia']) if (Math.abs(m[k].left - m.p.left) > 1 || Math.abs(m[k].right - m.p.right) > 1) say(`${k} is ${Math.round(m[k].left)}–${Math.round(m[k].right)}, not the text column ${Math.round(m.p.left)}–${Math.round(m.p.right)}`);
+    if (Math.abs(m.table.left - m.p.left) > 1) say(`a wide table starts at ${Math.round(m.table.left)}, not where the text does (${Math.round(m.p.left)})`);
+    if (m.table.right <= m.p.right + 1 || m.table.right > m.pane - 55) say(`a wide table ends at ${Math.round(m.table.right)}: past the column (${Math.round(m.p.right)}), short of the pane's edge (${Math.round(m.pane)}) by 56`);
     await page.close();
   }
 
