@@ -64,9 +64,30 @@ describe('⌫ at the start of a line turns it into text, where it is', () => {
     ['bullet', '# T\n\n- a\n- b', 'b', '# T\n\n- a\n\nb'],
     ['to-do', '# T\n\n- [ ] a\n- [ ] b', 'b', '# T\n\n- [ ] a\n\nb'],
     ['number', '# T\n\n1. a\n2. b', 'b', '# T\n\n1. a\n\nb'],
+    ['bullet in a quote', '# T\n\n> - a\n> - b', 'b', '# T\n\n> - a\n>\n> b'],
   ]) {
     test(name, () => {
       const ed = at(note, word);
+      press(ed, 'Backspace');
+      expect(saved(ed)).toBe(after);
+    });
+  }
+});
+
+describe('the next ⌫ joins the line to the one above', () => {
+  // in a quote, the line made text went back into the list as a bullet, and back out on the next ⌫, for ever
+  for (const [name, note] of [['quote', '# T\n\n> - a\n> - b'], ['callout', '# T\n\n> [!tip] x\n> - a\n> - b'], ['toggle', '# T\n\n<details open>\n<summary>x</summary>\n\n- a\n- b\n\n</details>']]) {
+    test(`a bullet in a ${name}`, () => {
+      const ed = at(note, 'b');
+      press(ed, 'Backspace');
+      press(ed, 'Backspace');
+      expect(saved(ed)).toBe(saved(editorWith(note.replace(/(- a)\n(> )?- b/, '$1b'))));
+    });
+  }
+  for (const [name, note, after] of [['number', '# T\n\n> 1. a\n> 2. b', '# T\n\n> 1. ab'], ['to-do', '# T\n\n> - [ ] a\n> - [ ] b', '# T\n\n> - [ ] ab']]) {
+    test(`a ${name} in a quote`, () => {
+      const ed = at(note, 'b');
+      press(ed, 'Backspace');
       press(ed, 'Backspace');
       expect(saved(ed)).toBe(after);
     });
