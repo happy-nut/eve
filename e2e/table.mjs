@@ -26,6 +26,10 @@ try {
   const now = await widths();
   for (let i = 0; i < was.length; i++) assert.ok(Math.abs(now[i] - was[i]) <= 1, `column ${i + 1} stays as wide as it was while a cell is written in (${was} → ${now})`);
   console.log('ok   writing in a cell leaves every column as wide as it was');
+  // a cell being written in is not positioned: WebKit, taking back a half-typed syllable that was the cell's only
+  // word, took the cell's line out with it and the next syllable went in front (결격 → 격결) — app.css
+  assert.equal(await page.evaluate(() => getComputedStyle(getSelection().anchorNode.parentElement.closest('td, th')).position), 'static', 'the cell with the caret is not positioned');
+  console.log('ok   the cell with the caret is not positioned (Hangul in an empty cell keeps its order)');
   // the window resized: laid out afresh for the room there is now
   await page.setViewportSize({ width: 900, height: 800 });
   await page.waitForTimeout(400);
