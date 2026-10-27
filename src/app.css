@@ -357,8 +357,7 @@ html.mobile .mhead .micon.on svg { fill: currentColor; }
 /* on screen only: printed (Export as PDF, as an image) the head is the Mac's (Editor.svelte), or the icon, laid out
    for a taller head, came down over the title */
 @media screen {
-  html.mobile .page-head { height: 46px; } /* room for "Add icon", shown on a phone (no hover to bring it up) */
-  html.mobile .page-head.with-icon { height: 80px; }
+  /* the head as tall as what it holds: held to 80px, the row under the icon ran over the title */
   html.mobile .big-icon { font-size: 44px; }
 }
 html.mobile .tiptap h1 { font-size: 1.65em; font-weight: 700; }
@@ -389,8 +388,7 @@ aside.focus-flash::after, main.focus-flash::after {
 .page { position: absolute; inset: 0; }
 /* tabs open: the note starts under their row (TabBar.svelte), its head no longer clearing the window's top row itself */
 main.tabbed .page { top: 71px; }
-main.tabbed .page-head { padding-top: 24px !important; height: 52px !important; }
-main.tabbed .page-head.with-icon { height: 98px !important; }
+main.tabbed .page-head { padding-top: 24px !important; }
 
 /* ---- editor ---- */
 .editor .tiptap {
