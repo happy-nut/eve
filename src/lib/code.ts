@@ -78,22 +78,15 @@ function highlight(doc: PMNode, round = 0): DecorationSet {
  *  colours stayed wrong even after the comment was deleted again. Once it is in, the highlighting is drawn again,
  *  told apart from the last drawing (`round`) so that the editor does draw it. */
 let round = 0;
-/** what the highlighting depends on: each block's language and text */
-function codeOf(doc: PMNode) {
-  let s = '';
-  doc.descendants((n) => {
-    if (n.type.name === 'codeBlock') s += `${n.attrs.language}\u0000${n.textContent}\u0001`;
-    return n.type.name !== 'codeBlock';
-  });
-  return s;
-}
 const highlighter = new Plugin<DecorationSet>({
   key: HIGHLIGHT,
   state: {
     init: (_, { doc }) => highlight(doc),
-    apply: (tr, set, old, now) =>
+    apply: (tr, set, _old, now) =>
       tr.getMeta(HIGHLIGHT) === 'redraw' ? highlight(now.doc, ++round)
-        : tr.getMeta(HIGHLIGHT) || (tr.docChanged && codeOf(old.doc) !== codeOf(now.doc)) ? highlight(now.doc) : set.map(tr.mapping, tr.doc),
+        // drawn again on every change, not carried over: a block put back with the same code (synced in, moved, an
+        // undo) lost the colours carried with the old one, and stayed plain. Each block's spans are kept (`spans`).
+        : tr.getMeta(HIGHLIGHT) || tr.docChanged ? highlight(now.doc, round) : set,
   },
   props: {
     decorations: (state) => HIGHLIGHT.getState(state),
