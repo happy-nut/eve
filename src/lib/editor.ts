@@ -1371,8 +1371,20 @@ export function createEditor(opts: {
           return {
             ...this.parent?.(),
             Backspace: () => {
-              const { $from, empty } = this.editor.state.selection;
+              const { state, view } = this.editor;
+              const { $from, empty } = state.selection;
               if (!empty || $from.parentOffset !== 0 || $from.depth < 2 || $from.node(-1).type !== this.type || $from.index(-1) === 0) return false;
+              // a list just above: the line's words go on the end of its last line, as in a callout or a toggle. The stock
+              // join put the line back into the list as a bullet, which the next ⌫ made text again, round and round
+              const above = $from.node(-1).child($from.index(-1) - 1);
+              if (/List$/.test(above.type.name) && $from.parent.type.name === 'paragraph') {
+                const into = Selection.findFrom(state.doc.resolve($from.before()), -1, true);
+                if (into?.$from.parent.inlineContent && !into.$from.parent.type.spec.code) {
+                  const tr = state.tr.delete($from.before(), $from.after()).insert(into.from, $from.parent.content);
+                  view.dispatch(tr.setSelection(TextSelection.create(tr.doc, into.from)).scrollIntoView());
+                  return true;
+                }
+              }
               return this.editor.commands.joinBackward();
             },
           };

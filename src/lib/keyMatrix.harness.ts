@@ -12,6 +12,8 @@ const BLOCKS: Record<string, string> = {
   'a line': 'one two',
   'a heading': '## Head line',
   'a bulleted list': '- one\n- two\n  - three',
+  // nothing nested: the second item's ⌫ lifts it to a line of its own, as the user's list in a quote went round
+  'a flat list': '- one\n- two',
   'a numbered list': '1. one\n2. two\n   1. three',
   'to-dos': '- [ ] one\n- [x] two\n  - [ ] three',
   'a quote': '> one\n>\n> two',
@@ -25,6 +27,7 @@ const INSIDE = {
   'in a list item': (b: string) => '- item\n\n' + b.split('\n').map((l) => (l ? `  ${l}` : '')).join('\n'),
   'in a callout': (b: string) => '> [!tip] Box\n' + b.split('\n').map((l) => (l ? `> ${l}` : '>')).join('\n'),
   'in a toggle': (b: string) => `<details open>\n<summary>T</summary>\n\n${b}\n\n</details>`,
+  'in a quote': (b: string) => b.split('\n').map((l) => (l ? `> ${l}` : '>')).join('\n'),
 };
 const KEYS: [string, KeyboardEventInit][] = [
   ['Enter', {}], ['Backspace', {}], ['Delete', {}], ['Tab', {}], ['Tab', { shiftKey: true }],
@@ -81,6 +84,16 @@ export function keyMatrix(where: keyof typeof INSIDE) {
           if (!ed.state.doc.eq(doc0)) {
             ed.commands.undo();
             if (md(ed) !== before) problems.push(`${label}: one ⌘Z gave back\n${JSON.stringify(md(ed))}\nnot\n${JSON.stringify(before)}`);
+          }
+          // ⌫ (or Delete) pressed again goes on deleting: in a quote, a bullet's line made text by the first ⌫ was made a
+          // bullet again by the second, round and round, and the line could never be taken out
+          if ((key === 'Backspace' || key === 'Delete') && !init.ctrlKey && !init.altKey && !init.shiftKey) {
+            ed.view.updateState(EditorState.create({ doc: doc0, plugins: ed.state.plugins, selection: TextSelection.create(doc0, at) }));
+            press(ed, key, init);
+            if (!ed.state.doc.eq(doc0)) {
+              press(ed, key, init);
+              if (ed.state.doc.eq(doc0)) problems.push(`${label}: pressed twice, it gives the note back as it was (the key undoes itself)`);
+            }
           }
         }
       }
