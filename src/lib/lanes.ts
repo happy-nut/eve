@@ -64,7 +64,7 @@ function rounded(pts: [number, number][], r = 10): string {
 
 /** `minScale`: how far it may shrink to the note's width before it scrolls sideways in its card */
 export function laneSvg(d: Flowchart, minScale = 0.8): string {
-  const LR = d.dir === 'LR';
+  const LR = d.dir === 'LR' || d.dir === 'RL'; // (across, as diagram.ts's: a value import here would not load in node's tests)
   const id = `sl${++uid}`;
   const lanes = [...(d.lanes ?? [])];
   const laneIx = new Map(lanes.map((l, i) => [l.id, i]));

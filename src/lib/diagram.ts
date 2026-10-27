@@ -7,11 +7,28 @@
 
 export type Shape = 'round' | 'box' | 'pill' | 'diamond' | 'circle' | 'db';
 export type Line = 'solid' | 'dotted' | 'thick';
-export interface FlowNode { id: string; label: string; shape: Shape; /** the swimlane it is in (a lane's id), if the chart has lanes */ lane?: string }
+export interface FlowNode {
+  id: string; label: string; shape: Shape; /** the swimlane it is in (a lane's id), if the chart has lanes */ lane?: string;
+  /** a shape as written that the forms have no button for ([/…/], {{…}}, [[…]], >…]): kept while its shape is left alone */
+  raw?: { open: string; close: string; as: Shape };
+  /** mermaid's `:::class` on it, kept */
+  cls?: string;
+}
 /** a swimlane: who or what does the steps in it (mermaid's subgraph) */
 export interface Lane { id: string; label: string }
-export interface FlowEdge { from: string; to: string; label: string; line: Line }
-export interface Flowchart { kind: 'flowchart'; dir: 'LR' | 'TD'; nodes: FlowNode[]; edges: FlowEdge[]; lanes?: Lane[] }
+export interface FlowEdge {
+  from: string; to: string; label: string; line: Line;
+  /** the arrow as written when it is not one the forms make (---, --o, --x, <-->, --->): kept while its line is left alone */
+  arrow?: string;
+}
+export interface Flowchart {
+  kind: 'flowchart'; dir: 'LR' | 'TD' | 'RL' | 'BT'; nodes: FlowNode[]; edges: FlowEdge[]; lanes?: Lane[];
+  /** what a chart pasted in says that the forms do not show (style, classDef, class, linkStyle, click, %% comments): kept
+   *  as written, after the chart; `pre`: what came before its first line (a %%{init}%% setting) */
+  extra?: string[]; pre?: string[];
+}
+/** the chart goes across (left to right, or right to left), not down */
+export const across = (d: Pick<Flowchart, 'dir'>) => d.dir === 'LR' || d.dir === 'RL';
 
 export interface Person { id: string; name: string; actor: boolean }
 export interface Message { from: string; to: string; text: string; reply: boolean }
@@ -117,9 +134,13 @@ const SHAPES: Record<Shape, [string, string]> = {
 };
 const ARROWS: Record<Line, string> = { solid: '-->', dotted: '-.->', thick: '==>' };
 
+/** an arrow as written: its kind of line (= thick, . dotted, - solid) */
+const lineOf = (arrow: string): Line => (arrow.includes('=') ? 'thick' : arrow.includes('.') ? 'dotted' : 'solid');
+
 function flowCode(d: Flowchart) {
-  const lines = [`flowchart ${d.dir}`];
-  const nodeLine = (n: FlowNode, pad: string) => { const [a, b] = SHAPES[n.shape]; return `${pad}${n.id}${a}${brQuoted(n.label)}${b}`; };
+  const lines = [...(d.pre ?? []), `flowchart ${d.dir}`];
+  const shapeOf = (n: FlowNode) => (n.raw && n.raw.as === n.shape ? [n.raw.open, n.raw.close] : SHAPES[n.shape]);
+  const nodeLine = (n: FlowNode, pad: string) => { const [a, b] = shapeOf(n); return `${pad}${n.id}${a}${brQuoted(n.label)}${b}${n.cls ? `:::${n.cls}` : ''}`; };
   // swimlanes are subgraphs: each lane's boxes inside its own (any other app draws them as groups); boxes in no lane after
   const lanes = d.lanes ?? [];
   for (const l of lanes) {
@@ -131,74 +152,142 @@ function flowCode(d: Flowchart) {
   const ids = new Set(d.nodes.map((n) => n.id));
   for (const e of d.edges) {
     if (!ids.has(e.from) || !ids.has(e.to)) continue;
-    lines.push(`  ${e.from} ${ARROWS[e.line]}${one(e.label) ? `|${brQuoted(e.label)}|` : ''} ${e.to}`);
+    const arrow = e.arrow && lineOf(e.arrow) === e.line ? e.arrow : ARROWS[e.line];
+    lines.push(`  ${e.from} ${arrow}${one(e.label) ? `|${brQuoted(e.label)}|` : ''} ${e.to}`);
   }
+  for (const x of d.extra ?? []) lines.push(`  ${x}`);
   return lines.join('\n');
 }
 
-// a node as written: an id, and its shape and label if given here (A, A[Text], A{"Text"}, …). Longer brackets first.
-const OPENS = ['([', '[(', '((', '[', '(', '{'];
-function readNode(s: string): { id: string; label?: string; shape?: Shape; rest: string } | null {
-  const m = /^([A-Za-z0-9_]+)/.exec(s);
+// a node as written: an id, and its shape and label if given here (A, A[Text], A{"Text"}, A[/Text/], …), and a :::class
+// after it. Longer brackets first; the ones the forms have no button for are kept as written (raw), drawn as `as`.
+const OPENS: [string, string[], Shape, boolean][] = [
+  ['(((', [')))'], 'circle', true], ['([', ['])'], 'pill', false], ['[[', [']]'], 'box', true], ['[(', [')]'], 'db', false],
+  ['((', ['))'], 'circle', false], ['{{', ['}}'], 'diamond', true], ['[/', ['/]', '\\]'], 'box', true], ['[\\', ['\\]', '/]'], 'box', true],
+  ['[', [']'], 'box', false], ['(', [')'], 'round', false], ['{', ['}'], 'diamond', false], ['>', [']'], 'box', true],
+];
+// an id: letters and digits of any script (시작 --> 끝), and _ (a "-" would run into the arrow after it)
+const ID = /^[\p{L}\p{N}_]+/u;
+function readNode(s: string): { id: string; label?: string; shape?: Shape; raw?: FlowNode['raw']; cls?: string; rest: string } | null {
+  const m = ID.exec(s);
   if (!m) return null;
-  const id = m[1];
+  const id = m[0];
   let rest = s.slice(id.length);
-  for (const open of OPENS) {
+  const withClass = <T extends { rest: string; cls?: string }>(n: T): T => {
+    const c = /^:::([\w-]+)/.exec(n.rest);
+    return c ? { ...n, cls: c[1], rest: n.rest.slice(c[0].length) } : n;
+  };
+  for (const [open, closes, shape, kept] of OPENS) {
     if (!rest.startsWith(open)) continue;
-    const shape = (Object.keys(SHAPES) as Shape[]).find((k) => SHAPES[k][0] === open)!;
-    const close = SHAPES[shape][1];
     // a quoted label ends at its closing quote: the bracket after it closes the shape
     const q = rest[open.length] === '"' ? rest.indexOf('"', open.length + 1) : open.length - 1;
     if (q < 0) return null;
-    const end = rest.indexOf(close, q + 1);
-    if (end < 0) return null;
-    const inner = rest.slice(open.length, end);
-    // [/…/], [\…\] and their mixes are parallelograms and trapezoids, shapes the chart cannot keep
-    if (open === '[' && !inner.startsWith('"') && /^[/\\]/.test(inner)) return null;
-    const label = unlines(inner);
-    return { id, label, shape, rest: rest.slice(end + close.length) };
+    const found = closes.map((c) => [c, rest.indexOf(c, q + 1)] as const).filter(([, at]) => at >= 0).sort((x, y) => x[1] - y[1])[0];
+    if (!found) return null;
+    const [close, end] = found;
+    const label = unlines(rest.slice(open.length, end));
+    rest = rest.slice(end + close.length);
+    return withClass({ id, label, shape, ...(kept ? { raw: { open, close, as: shape } } : {}), rest });
   }
-  return { id, rest };
+  return withClass({ id, rest });
 }
+/** boxes joined by & (A & B --> C): each, and what follows them */
+function readNodes(s: string): { nodes: NonNullable<ReturnType<typeof readNode>>[]; rest: string } | null {
+  const nodes = [];
+  let rest = s;
+  for (;;) {
+    const n = readNode(rest.trimStart());
+    if (!n) return null;
+    nodes.push(n);
+    rest = n.rest.trimStart();
+    if (!rest.startsWith('&')) return { nodes, rest };
+    rest = rest.slice(1);
+  }
+}
+/** an arrow at the start of `s`, and its label: -->, ---, -.->, ==>, --o, --x, <-->, --->, with |a label| after it, or
+ *  written inside it (-- a label -->, -. a label .->, == a label ==>) */
+function readArrow(s: string): { arrow: string; label: string; rest: string } | null {
+  const inside = /^([<ox]?)(--|-\.|==)\s+(.*?)\s+(-{2,}|\.+-|={2,})([>ox]?)(?![-=.])/u.exec(s);
+  if (inside && !/^[-=.]/.test(inside[3])) {
+    const close = inside[4] + inside[5];
+    const arrow = inside[1] + (inside[2] === '-.' ? '-' + close : close);
+    return { arrow, label: inside[3], rest: s.slice(inside[0].length) };
+  }
+  const bare = /^([<ox]?)(-{2,}|-\.+-|={2,})([>ox]?)\s*(?:\|([^|]*)\|)?/.exec(s);
+  if (!bare || bare[0].trim() === '') return null;
+  return { arrow: bare[1] + bare[2] + bare[3], label: bare[4] ?? '', rest: s.slice(bare[0].length) };
+}
+/** a line's statements: mermaid takes `;` between them, outside a label's quotes or brackets */
+function statements(line: string): string[] {
+  const out: string[] = [];
+  let depth = 0, quote = false, from = 0;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') quote = !quote;
+    else if (!quote && '[({'.includes(c)) depth++;
+    else if (!quote && '])}'.includes(c)) depth = Math.max(0, depth - 1);
+    else if (!quote && !depth && c === ';') { out.push(line.slice(from, i)); from = i + 1; }
+  }
+  out.push(line.slice(from));
+  return out.map((x) => x.trim()).filter(Boolean);
+}
+/** a line the forms do not show, kept as written: styles, classes, a link's style, a click, a comment, accessibility */
+const KEPT = /^(%%|style\s|classDef\s|class\s|linkStyle\s|click\s|accTitle\b|accDescr\b)/;
 
-function flowRead(lines: string[], head: string): Flowchart | null {
-  const dir = /^(?:flowchart|graph)\s+(LR|TD|TB)\s*;?$/.exec(head);
+function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart | null {
+  const dir = /^(?:flowchart|graph)\s+(LR|RL|TD|TB|BT)\s*;?$/.exec(head) ?? (/^(?:flowchart|graph)\s*;?$/.test(head) ? [head, 'TD'] : null);
   if (!dir) return null;
-  const d: Flowchart = { kind: 'flowchart', dir: dir[1] === 'LR' ? 'LR' : 'TD', nodes: [], edges: [] };
+  const d: Flowchart = { kind: 'flowchart', dir: dir[1] === 'TB' ? 'TD' : (dir[1] as Flowchart['dir']), nodes: [], edges: [] };
+  if (pre.length) d.pre = pre;
   const seen = new Map<string, FlowNode>();
   let lane: Lane | null = null; // the subgraph being read
-  const node = (n: { id: string; label?: string; shape?: Shape }) => {
+  const node = (n: { id: string; label?: string; shape?: Shape; raw?: FlowNode['raw']; cls?: string }) => {
     let have = seen.get(n.id);
     if (!have) { have = { id: n.id, label: n.label ?? n.id, shape: n.shape ?? 'box' }; seen.set(n.id, have); d.nodes.push(have); }
-    else if (n.label !== undefined) { have.label = n.label; have.shape = n.shape!; }
+    else if (n.label !== undefined) { have.label = n.label; have.shape = n.shape!; delete have.raw; }
+    if (n.raw) have.raw = n.raw;
+    if (n.cls) have.cls = n.cls;
     // in a lane: the lane it is first named in (mermaid's own rule: a box mentioned in a subgraph is in it)
     if (lane && !have.lane) have.lane = lane.id;
     return have;
   };
+  const keep = (x: string) => (d.extra ??= []).push(x);
   for (const raw of lines) {
-    const line = raw.trim().replace(/;$/, '');
-    // a swimlane: `subgraph id["Label"]` (or id[Label], or a bare id) … `end`; one inside another is more than lanes
-    const sub = /^subgraph\s+([A-Za-z0-9_]+)\s*(?:\[(.*)\])?$/.exec(line);
-    if (sub) {
-      if (lane || (d.lanes ?? []).some((l) => l.id === sub[1]) || seen.has(sub[1])) return null;
-      lane = { id: sub[1], label: sub[2] === undefined ? sub[1] : unquote(sub[2]) };
-      (d.lanes ??= []).push(lane);
-      continue;
+    const whole = raw.trim();
+    if (KEPT.test(whole)) { keep(whole); continue; }
+    for (const line of statements(whole)) {
+      if (KEPT.test(line)) { keep(line); continue; }
+      // a swimlane: `subgraph id["Label"]` (or id[Label], or a bare id, or a title of words) … `end`; one inside
+      // another is more than lanes
+      const sub = /^subgraph\s+([\p{L}\p{N}_]+)\s*(?:\[(.*)\])?$/u.exec(line) ?? /^subgraph\s+(.+)$/.exec(line);
+      if (sub) {
+        if (lane) return null;
+        const words = sub.length === 2 || (sub[2] === undefined && /\s/.test(sub[1]));
+        const id = words ? freshId('L', [...(d.lanes ?? []), ...d.nodes]) : sub[1];
+        if ((d.lanes ?? []).some((l) => l.id === id) || seen.has(id)) return null;
+        lane = { id, label: words ? unquote(sub[1]) : sub[2] === undefined ? sub[1] : unquote(sub[2]) };
+        (d.lanes ??= []).push(lane);
+        continue;
+      }
+      if (line === 'end') { if (!lane) return null; lane = null; continue; }
+      if (/^direction\s+(LR|RL|TB|TD|BT)$/.test(line)) { if (!lane) return null; continue; } // written anew with the chart's
+      // boxes, and the arrows between them: A --> B, A --> B --> C, A & B --> C & D
+      let group = readNodes(line);
+      if (!group) return null;
+      let from = group.nodes.map(node);
+      let rest = group.rest;
+      while (rest) {
+        const arrow = readArrow(rest);
+        if (!arrow) return null;
+        group = readNodes(arrow.rest);
+        if (!group) return null;
+        const to = group.nodes.map(node);
+        const line_ = lineOf(arrow.arrow);
+        for (const a of from) for (const b of to) d.edges.push({ from: a.id, to: b.id, label: unlines(arrow.label), line: line_, ...(arrow.arrow !== ARROWS[line_] ? { arrow: arrow.arrow } : {}) });
+        from = to;
+        rest = group.rest;
+      }
     }
-    if (line === 'end') { if (!lane) return null; lane = null; continue; }
-    if (/^direction\s+(LR|RL|TB|TD|BT)$/.test(line)) { if (!lane) return null; continue; } // written anew with the chart's
-    if (/^subgraph\b/.test(line)) return null; // a title with spaces, no id: kept as code
-    const a = readNode(line);
-    if (!a) return null;
-    node(a);
-    let rest = a.rest.trim();
-    if (!rest) continue;
-    const arrow = /^(-->|-\.->|==>)\s*(?:\|([^|]*)\|)?\s*/.exec(rest);
-    if (!arrow) return null;
-    const b = readNode(rest.slice(arrow[0].length));
-    if (!b || b.rest.trim()) return null;
-    node(b);
-    d.edges.push({ from: a.id, to: b.id, label: arrow[2] === undefined ? '' : unlines(arrow[2]), line: arrow[1] === '-->' ? 'solid' : arrow[1] === '==>' ? 'thick' : 'dotted' });
   }
   if (lane) return null; // a lane never closed
   return d;
@@ -370,11 +459,14 @@ export function toCode(d: Diagram): string {
 export function fromCode(code: string): Diagram | null {
   // an entity the forms would not read back (#copy;): written anew it would change, so the code is left as it is
   for (const m of code.matchAll(/#([a-zA-Z]+);/g)) if (!(m[1] in NAMED)) return null;
+  // a flowchart pasted in as other apps write it: its comments and settings kept as written (flowRead), the rest read
+  const filled = code.split('\n').filter((l) => l.trim());
+  const at = filled.findIndex((l) => !/^\s*%%/.test(l));
+  if (at >= 0 && /^(flowchart|graph)\b/.test(filled[at].trim())) return flowRead(filled.slice(at + 1), filled[at].trim(), filled.slice(0, at).map((l) => l.trim()));
   const lines = code.split('\n').filter((l) => l.trim() && !/^\s*%%/.test(l) === true);
   if (lines.length !== code.split('\n').filter((l) => l.trim()).length) return null; // a %% comment would be lost
   const head = lines.shift()?.trim() ?? '';
   const word = head.split(/\s+/)[0];
-  if (word === 'flowchart' || word === 'graph') return flowRead(lines, head);
   if (head === 'sequenceDiagram') return seqRead(lines);
   if (word === 'pie') return pieRead(lines, head);
   if (head === 'mindmap') return mindRead(lines);
