@@ -5,7 +5,9 @@ import { shifting, shiftingUntil } from './focusWatch';
 /** One line of a menu. `sep` starts a group above it; a `hide` item never makes the list; `checked` is the current choice. */
 export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean; checked?: boolean;
   /** a colour drawn as a chip before the label (a highlighter's pen) */
-  swatch?: string }
+  swatch?: string;
+  /** other words a menu with a search field finds it by (a language's aliases: py, js) */
+  keywords?: string }
 
 /** In-app confirm/prompt (WKWebView has no native JS dialogs). Rendered by Confirm.svelte. */
 interface Pending { message: string; input?: string; danger?: boolean; yes?: string; alert?: boolean;
@@ -263,10 +265,11 @@ class Ui {
 
   /** every menu (a right click, the list's "+", a code block's language) at a point; the app draws its own
    *  everywhere, the webview's is suppressed. Menu.svelte draws it: a popup on the Mac, a sheet on a phone. */
-  menu = $state<{ x: number; y: number; from?: Edge; items: MenuItem[] } | null>(null);
+  menu = $state<{ x: number; y: number; from?: Edge; items: MenuItem[]; search?: string } | null>(null);
   private menuOff: (() => void) | undefined;
   private menuClosed: (() => void) | undefined;
-  openMenu(at: { clientX: number; clientY: number; from?: Edge }, items: MenuItem[], onclose?: () => void) {
+  /** `search`: a field over the items, its placeholder; what is typed narrows them (a long list: a code block's languages) */
+  openMenu(at: { clientX: number; clientY: number; from?: Edge }, items: MenuItem[], onclose?: () => void, search?: string) {
     this.menuClosed?.();
     this.menuClosed = onclose;
     // dismissed or picked: whatever had the keyboard gets it back (a picked item may take it again). One opened over
@@ -282,7 +285,7 @@ class Ui {
       shown.push({ ...i, sep: sep && shown.length > 0 });
       sep = false;
     }
-    this.menu = { x: at.clientX, y: at.clientY, from: at.from, items: shown };
+    this.menu = { x: at.clientX, y: at.clientY, from: at.from, items: shown, search };
   }
   closeMenu() {
     this.menu = null;

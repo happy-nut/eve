@@ -374,3 +374,43 @@ describe('code block edges', () => {
     expect(md(ed)).toBe(before);
   });
 });
+
+describe("the language chip's menu: what is typed narrows it", () => {
+  test('letters typed keep only the languages they name, an alias too; ↩ takes the first', async () => {
+    const { mount, unmount, flushSync } = await import('svelte');
+    const { ui } = await import('./ui.svelte');
+    const Menu = (await import('../Menu.svelte')).default;
+    // jsdom lays nothing out and animates nothing
+    Element.prototype.scrollIntoView ??= () => {};
+    Element.prototype.animate ??= (() => ({ cancel() {}, finished: Promise.resolve() })) as never;
+    const ed = editorWith('# T\n\n```\nprint(1)\n```');
+    ed.view.dom.querySelector<HTMLElement>('.code-lang')!.click();
+    const app = mount(Menu, { target: document.body });
+    flushSync();
+    const field = document.querySelector<HTMLInputElement>('.menu .search input')!;
+    expect(document.activeElement).toBe(field); // typed at once, no click into it
+    const labels = () => [...document.querySelectorAll('.menu button')].map((b) => b.textContent!.trim());
+    const all = labels().length;
+    const typeIn = (t: string) => { field.value = t; field.dispatchEvent(new Event('input')); flushSync(); };
+    typeIn('ja');
+    expect(labels()).toEqual(['Java', 'JavaScript']);
+    typeIn('PY'); // any case, and a language's alias: py is Python
+    expect(labels()[0]).toBe('Python');
+    typeIn('script'); // inside a name too, after those that start with it
+    expect(labels()).toEqual(expect.arrayContaining(['JavaScript', 'TypeScript']));
+    typeIn('zzz');
+    expect(labels()).toEqual([]);
+    expect(document.querySelector('.menu .none')?.textContent).toBe('No match');
+    typeIn('');
+    expect(labels().length).toBe(all);
+    typeIn('rust');
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    flushSync();
+    expect(ed.state.doc.child(1).attrs.language).toBe('rust');
+    expect(ui.menu).toBeNull();
+    // the app keeps the menu drawn while it slides away, the keyboard gone back to the note by then: taken out at
+    // once here, with the field still focused, the keyboard would fall to <body>
+    ed.view.focus();
+    unmount(app);
+  });
+});

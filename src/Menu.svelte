@@ -13,6 +13,17 @@
   // the last menu opened: closing, it slides away showing what it showed (ui.menu is already null by then)
   const req = $derived.by(held(() => ui.menu));
   let el = $state<HTMLUListElement | null>(null);
+  // a menu with a search field: what is typed in it, and the items it leaves (names starting with it first)
+  let q = $state('');
+  $effect(() => { if (ui.menu) q = ''; });
+  const shown = $derived.by(() => {
+    const t = q.trim().toLowerCase();
+    if (!req.search || !t) return req.items;
+    const words = (it: MenuItem) => `${it.label} ${it.keywords ?? ''}`.toLowerCase().split(/\s+/);
+    const hits = req.items.filter((it) => `${it.label} ${it.keywords ?? ''}`.toLowerCase().includes(t));
+    const starts = (it: MenuItem) => words(it).some((w) => w.startsWith(t));
+    return [...hits.filter(starts), ...hits.filter((it) => !starts(it))].map((it) => ({ ...it, sep: false }));
+  });
   let x = $state(0), y = $state(0), maxH = $state<number | null>(null);
 
   // placed at the pointer, then, once its size is known, pulled back inside the window across and over the pointer
@@ -36,7 +47,17 @@
   function onKey(e: KeyboardEvent) {
     const items = [...(el?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
     const i = items.indexOf(document.activeElement as HTMLButtonElement);
-    if (e.key === 'ArrowDown') items[(i + 1) % items.length]?.focus();
+    const field = el?.querySelector<HTMLInputElement>('.search input');
+    if (field && document.activeElement === field) {
+      // the field: ↓ into the list, ↩ the first match; any other key is typed
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === 'ArrowDown') items[0]?.focus();
+      else if (e.key === 'Enter') { if (shown[0] && !shown[0].disabled) pick(shown[0]); }
+      else if (e.key === 'Escape') ui.closeMenu();
+      else return;
+    } else if (field && e.key === 'ArrowUp' && i === 0) field.focus(); // back up into the field
+    else if (field && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) { field.focus(); return; } // the key goes on into it
+    else if (e.key === 'ArrowDown') items[(i + 1) % items.length]?.focus();
     else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length]?.focus();
     else if (e.key === 'Escape') ui.closeMenu();
     else return;
@@ -48,7 +69,9 @@
     // a long list (a code block's languages) opens at the current choice
     const on = node.querySelector<HTMLElement>('button.on');
     on?.scrollIntoView({ block: 'nearest' });
-    const first = document.documentElement.dataset.input === 'keyboard' && (on ?? node.querySelector<HTMLElement>('button:not(:disabled)'));
+    // a search field takes the keys at once: typed, the list narrows
+    const field = node.querySelector<HTMLElement>('.search input');
+    const first = field ?? (document.documentElement.dataset.input === 'keyboard' && (on ?? node.querySelector<HTMLElement>('button:not(:disabled)')));
     (first || node).focus();
   };
   // WebKit does not focus a clicked button, it blurs the menu — which would close it mid-click
@@ -74,7 +97,11 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <ul bind:this={el} class="menu" role="menu" tabindex="-1" use:autofocus style="left: {x}px; top: {y}px" style:max-height={maxH === null ? null : `min(${maxH}px, 360px, 70vh)`}
   transition:scale|global={popIn} onkeydown={onKey}>
-  {#each req.items as it, i (i)}
+  {#if req.search}
+    <li role="none" class="search"><input bind:value={q} placeholder={req.search} aria-label={req.search} spellcheck="false" autocomplete="off" autocapitalize="off" /></li>
+    {#if !shown.length}<li role="none" class="none">No match</li>{/if}
+  {/if}
+  {#each shown as it, i (i)}
     <li role="none" class:sep={it.sep}>
       <button role="menuitem" class:danger={it.danger} class:on={it.checked} disabled={it.disabled}
         onmousedown={hold} onmouseenter={(e) => e.currentTarget.focus()} onclick={() => pick(it)}>
@@ -117,6 +144,11 @@
   .menu kbd { flex: none; color: var(--fg-dim); font: inherit; font-size: 11.5px; }
   .menu button:focus { background: var(--accent-soft); outline: none; }
   .menu button:disabled { color: var(--fg-dim); }
+  /* the search field: held at the top while the items scroll under it */
+  .menu .search { position: sticky; top: -4px; margin: -4px -4px 4px; padding: 4px; background: var(--bg-pop); border-bottom: 1px solid var(--line); }
+  .menu .search input { width: 100%; border: 0; outline: none; background: none; color: inherit; font: inherit; font-size: 13px; padding: 5px 8px; }
+  .menu .search input::placeholder { color: var(--fg-dim); }
+  .menu .none { padding: 6px 8px; font-size: 13px; color: var(--fg-dim); }
   .menu button.danger { color: #ff453a; }
   .menu button.danger:focus { background: light-dark(rgba(255, 69, 58, 0.12), rgba(255, 69, 58, 0.18)); }
   .menu li.sep { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--line); }
