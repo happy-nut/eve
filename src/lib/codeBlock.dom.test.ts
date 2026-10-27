@@ -2,6 +2,7 @@ import { describe, test, expect, afterEach } from 'vitest';
 import { editorWith, md, posOf, type, press, paste } from './testEditor';
 import { runEditorCommand } from './editor';
 import { matchLanguage } from './code';
+import { takeBody } from './takeBody';
 
 afterEach(() => { document.body.innerHTML = ''; });
 
@@ -197,6 +198,25 @@ describe('highlighting', () => {
     type(ed, 'var x; ');
     expect(keywords(ed, 0)).toEqual(['let', 'return']);
     expect(keywords(ed, 1)).toEqual(['var', 'const']);
+  });
+
+  test('a block put back as it was (synced in, moved, undone): it keeps its colours', async () => {
+    // the same code in a block made anew: its highlighting was carried over from the old block, which was gone, and
+    // the block stayed plain until its code was typed in again
+    const ed = editorWith('# T\n\nabove\n\n```js\nlet a = 1\n```\n\nbelow');
+    await grammars(ed);
+    expect(keywords(ed, 0)).toEqual(['let']);
+    takeBody(ed, '# T\n\nabove, from the phone\n\n```js\nlet a = 1\n```\n\nbelow, too');
+    expect(keywords(ed, 0)).toEqual(['let']);
+    // the block moved: cut from its place, put in again over the line above
+    const { state } = ed;
+    let at = -1;
+    state.doc.forEach((n, p) => { if (n.type.name === 'codeBlock') at = p; });
+    const code = state.doc.nodeAt(at)!;
+    ed.view.dispatch(state.tr.delete(at, at + code.nodeSize).insert(state.doc.child(0).nodeSize, code));
+    expect(keywords(ed, 0)).toEqual(['let']);
+    ed.commands.undo();
+    expect(keywords(ed, 0)).toEqual(['let']);
   });
 
   test('plain text, or a language it has no grammar for: drawn plain, no language guessed for it', async () => {
