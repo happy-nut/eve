@@ -51,6 +51,11 @@ try {
     assert.ok(Math.abs(now.y - was.y) <= 2, `back by ${how}: the line being written stays where it was on screen (${was.y} → ${now.y})`);
     await page.keyboard.type('Y');
     assert.match(await page.evaluate(() => window.__editor.state.selection.$head.parent.textContent), /xY$/, `back by ${how}: what is typed goes on at the caret`);
+    if (hotkey) {
+      // summoned, the page is drawn anew (WebKit at times left it white under the crumbs): for a frame only, nothing left on it
+      const drawn = await page.evaluate(() => [...document.querySelectorAll('main .tiptap, aside')].map((el) => el.style.transform).join(''));
+      assert.equal(drawn, '', `summoned, the page is redrawn and left as it was (${drawn})`);
+    }
     console.log(`ok   back by ${how}: caret and page where they were`);
   }
 

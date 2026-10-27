@@ -139,7 +139,7 @@
     // coming back by click, ⌘Tab or the Dock fires no DOM 'focus' when the webview never let go of it
     let unfocus: (() => void) | undefined;
     // (not over a click that brought it back: that click puts the caret, cameBack)
-    onWindowFocus(() => cameBack(restoreFocus)).then((u) => (unfocus = u));
+    onWindowFocus(() => { redrawPanes(); cameBack(restoreFocus); }).then((u) => (unfocus = u));
     const stopSync = sync.start();
     const stopReminder = startReminder();
     updates.start();
@@ -195,8 +195,20 @@
 
   /** The window called up by the hotkey: the caret back, and in sight, ready to write. */
   function onSummon() {
+    redrawPanes();
     restoreFocus();
     hooks.caretIntoView?.();
+  }
+  /**
+   * The note's pane drawn again as the window comes back. WebKit at times shows a window brought back from hidden with
+   * what scrolls in it undrawn: the crumbs over it there, the note a white page under them, until something made it
+   * draw (a scroll, a click). The note's page (and the list) is given a layer of its own for a frame, and drawn anew;
+   * not a page with a diagram on the whole screen, which a transform around it would shrink to the page's size.
+   */
+  function redrawPanes() {
+    const panes = [...document.querySelectorAll<HTMLElement>('main .tiptap, .card-page .tiptap, aside')].filter((el) => !el.querySelector('.dblock.full'));
+    for (const el of panes) el.style.transform = 'translateZ(0)';
+    requestAnimationFrame(() => requestAnimationFrame(() => { for (const el of panes) el.style.transform = ''; }));
   }
 
   function step(delta: number) {
