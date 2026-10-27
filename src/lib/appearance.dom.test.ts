@@ -29,3 +29,18 @@ test('⌘+ / ⌘- step on top of the Settings size, and ⌘0 goes back to it, no
   expect(appearance.textSize(1)).toBe(28);
   expect(appearance.textSize(0)).toBe(28);
 });
+
+test('⌘+ / ⌘- make the page wider and narrower with the text, as a browser zooms; ⌘0 back to Settings\' width', () => {
+  // the text grew and the page did not: fewer words a line at each step, the margins left as they were
+  appearance.set({ size: 16, zoom: 0, width: 800 });
+  expect(appearance.widthPx).toBe(800);
+  appearance.textSize(1); appearance.textSize(1);
+  expect(appearance.widthPx).toBe(900); // 18 / 16 of it
+  appearance.textSize(-1); appearance.textSize(-1); appearance.textSize(-1); appearance.textSize(-1);
+  expect(appearance.widthPx).toBe(700);
+  appearance.textSize(0);
+  expect(appearance.widthPx).toBe(800);
+  // Settings' own size leaves the width as Settings has it
+  appearance.set({ size: 20 });
+  expect(appearance.widthPx).toBe(800);
+});
