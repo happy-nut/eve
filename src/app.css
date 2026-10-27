@@ -792,7 +792,12 @@ html:not(.mobile) .tiptap .tableWrapper { margin-bottom: calc(0.7em + 18px); }
 /* a table in a callout, a list or a toggle: its columns by what they hold, each wide enough for a word or two, and
    past that it scrolls in its wrapper (laid out fixed, a wide one cut its headers mid-word: "colu / mn") */
 .tiptap :not(.tiptap) > .tableWrapper th, .tiptap :not(.tiptap) > .tableWrapper td { min-width: 6em; }
-.tiptap th, .tiptap td { border: 1px solid var(--line-solid); padding: 6px 9px; vertical-align: top; position: relative; min-width: 3em; }
+.tiptap th, .tiptap td { border: 1px solid var(--line-solid); padding: 6px 9px; vertical-align: top; min-width: 3em; }
+/* a cell is positioned only while something is drawn over it (its tint when chosen, the column's resize bar): in a
+   positioned cell WebKit, taking back the half-typed syllable of the cell's only word (겱 of 결, before 겨), takes
+   the cell's line out with it and leaves the caret outside the cell, so the next syllable went in front: 결격 came
+   out 격결. ponytail: typing with the mouse resting on the column's edge still positions it */
+.tiptap .selectedCell, .tiptap :is(th, td):has(> .column-resize-handle) { position: relative; }
 .tiptap th { background: var(--bg-input); font-weight: 600; text-align: left; }
 .tiptap th > p, .tiptap td > p { margin: 0; white-space: pre-wrap; } /* a wrapped word's space hangs at the end of the line, as text does: break-spaces (ProseMirror's) set it at the start of the next, or on a line of its own */
 /* a phone: eight columns shared out over its width left a few letters a line in each cell. There every column keeps
