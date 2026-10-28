@@ -59,6 +59,54 @@ pub(crate) fn keep_page_awake(app: &AppHandle) {
     let _ = app;
 }
 
+/// The window seen or not, while it stays shown (and so drawn into): its alpha. Shown with alpha 0, WebKit takes the
+/// page as on screen and draws it; nothing white is seen meanwhile.
+pub(crate) fn set_seen(app: &AppHandle, seen: bool) {
+    #[cfg(target_os = "macos")]
+    if let Some(window) = app.get_webview_window("main") {
+        let w = window.clone();
+        let _ = window.run_on_main_thread(move || {
+            if let Ok(ns) = w.ns_window() {
+                let ns: &objc2_app_kit::NSWindow = unsafe { &*(ns as *mut objc2_app_kit::NSWindow) };
+                ns.setAlphaValue(if seen { 1.0 } else { 0.0 });
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, seen);
+}
+
+/// The window's ground in the page's colour (the theme's), under a webview that draws none of its own: what shows
+/// before the page has drawn — summoned, back from behind another app, out of the Dock — was WebKit's white.
+#[tauri::command]
+pub(crate) fn set_ground(app: AppHandle, r: u8, g: u8, b: u8) {
+    #[cfg(target_os = "macos")]
+    if let Some(window) = app.get_webview_window("main") {
+        let w = window.clone();
+        let _ = window.run_on_main_thread(move || {
+            use objc2_app_kit::{NSColor, NSWindow};
+            let color = NSColor::colorWithSRGBRed_green_blue_alpha(r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0, 1.0);
+            if let Ok(ns) = w.ns_window() {
+                let ns: &NSWindow = unsafe { &*(ns as *mut NSWindow) };
+                ns.setBackgroundColor(Some(&color));
+            }
+            let _ = w.with_webview(move |platform| unsafe {
+                use objc2::runtime::NSObjectProtocol;
+                use objc2_foundation::{ns_string, NSNumber, NSObjectNSKeyValueCoding};
+                use objc2_web_kit::WKWebView;
+                let webview: &WKWebView = &*(platform.inner() as *mut WKWebView);
+                // WebKit's own white, drawn where the page has not drawn yet (the key wry's transparent webview turns off)
+                webview.setValue_forKey(Some(&NSNumber::numberWithBool(false)), ns_string!("drawsBackground"));
+                if webview.respondsToSelector(objc2::sel!(setUnderPageBackgroundColor:)) {
+                    webview.setUnderPageBackgroundColor(Some(&color)); // macOS 12 and later
+                }
+            });
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, r, g, b);
+}
+
 /// First page of a stored PDF as a PNG, for the card in a note. Rendered by Quick Look (the same
 /// picture Finder shows) and cached, so a note full of PDFs costs one render each, once.
 /// ponytail: runs qlmanage on the async runtime; if a huge PDF ever makes that felt, move it to

@@ -390,14 +390,33 @@ export const dock = {
 };
 
 /**
- * Summon / dismiss. No fade: the page keeps its pixels while hidden, so the window comes back whole —
- * the traffic lights and the note appearing together instead of the chrome arriving a few frames early.
+ * Summon / dismiss. No fade: the window is seen whole once the page has drawn in it — the traffic lights and the
+ * note appearing together instead of the chrome arriving a few frames early, or a white page under it.
  */
 async function show() {
-  await invoke<void>('show_window');
+  // shown but not yet seen: WebKit may have thrown away what the page drew while Eve was hidden, and the window
+  // came up white until the page had drawn again. It is seen once two frames are drawn in it (Rust reveals it
+  // anyway after a moment, so a page that cannot draw never leaves it invisible)
+  await invoke<void>('summon_window');
   // the webview can come back with nothing focused; App puts the caret back (window 'focus' alone
   // is not dependable here — the webview may already hold focus while the app was hidden)
   window.dispatchEvent(new Event('eve-summon'));
+  await new Promise((drawn) => requestAnimationFrame(() => requestAnimationFrame(drawn)));
+  await invoke<void>('reveal_window');
+}
+let ground = '';
+/**
+ * The window's own ground painted the page's colour (html's background, as the theme has it), so whatever shows
+ * before the page has drawn — summoned, back from behind another app, out of the Dock — is the note's colour, not
+ * WebKit's white. Called whenever the theme may have changed.
+ */
+export async function paintGround() {
+  if (!desktop) return;
+  const m = getComputedStyle(document.documentElement).backgroundColor.match(/\d+/g);
+  if (!m || m.join() === ground) return;
+  ground = m.join();
+  const [r, g, b] = m.map(Number);
+  await invoke<void>('set_ground', { r, g, b });
 }
 async function dismiss() {
   document.dispatchEvent(new Event('visibilitychange')); // closes tooltips/popovers on the way out
