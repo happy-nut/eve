@@ -77,6 +77,7 @@ class Handle {
   private cur: Block | null = null;
   private dragFrom: number | null = null;
   private dragList: HTMLElement | null = null; // a list's line is dragged among its list's lines
+  private zone: HTMLElement | null = null; // where a drag is heard besides the editor (dragStart)
   private frame = 0;
 
   constructor(private view: EditorView, private run: (id: string) => boolean) {
@@ -157,7 +158,9 @@ class Handle {
     const edge = (list ? list.getBoundingClientRect().left : Math.min(column, box.left)) - (b.node.type.name === 'table' ? 12 : 0);
     // as far left as what can be seen of the page goes, not the editor's own box: a day's or a card's page has its
     // room for the handle in the padding around the editor, and held to the editor's box the handle sat on the words
-    this.el.style.left = `${Math.round(Math.max(this.seen() + 2, edge - 46) - host.left)}px`;
+    const left = Math.round(Math.max(this.seen() + 2, edge - 46) - host.left);
+    this.el.style.left = `${left}px`;
+    this.el.style.setProperty('--bridge', `${Math.max(0, -(left + this.el.offsetWidth)) + 2}px`);
     this.el.classList.add('on');
   }
   hide() { this.cur = null; this.el.classList.remove('on'); }
@@ -269,6 +272,13 @@ class Handle {
     this.dragFrom = b.pos;
     this.dragList = b.item ? b.dom.parentElement : null;
     document.documentElement.classList.add('block-drag'); // the editor's own drop line gives way to this one
+    // dragged down the margin where ⋮⋮ is: on a day's or a card's page that is past the editor's edge, where the editor
+    // heard nothing, and the block stayed put. The box the page scrolls in hears it while the drag lasts
+    this.zone = this.scroller();
+    if (this.zone && this.zone !== this.host) {
+      this.zone.addEventListener('dragover', this.onHostOver);
+      this.zone.addEventListener('drop', this.onHostDrop);
+    }
   }
 
   /** where a dragged block lands: before the block under the pointer or after it, whichever half it is over, at that
@@ -339,6 +349,11 @@ class Handle {
   }
 
   endDrag() {
+    if (this.zone && this.zone !== this.host) {
+      this.zone.removeEventListener('dragover', this.onHostOver);
+      this.zone.removeEventListener('drop', this.onHostDrop);
+    }
+    this.zone = null;
     this.dragFrom = null;
     this.dragList = null;
     this.view.dragging = null;
