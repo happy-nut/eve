@@ -43,9 +43,9 @@ export function press(ed: Editor, key: string, init: KeyboardEventInit = {}) {
 }
 
 /** Paste plain text the way the clipboard hands it over. */
-export function paste(ed: Editor, text: string) {
+export function paste(ed: Editor, text: string, html = '') {
   // jsdom has no DataTransfer: the handlers only read these
-  const clipboardData = { getData: (t: string) => (t === 'text/plain' ? text : ''), files: [], types: ['text/plain'] };
+  const clipboardData = { getData: (t: string) => (t === 'text/plain' ? text : t === 'text/html' ? html : ''), files: [], types: html ? ['text/plain', 'text/html'] : ['text/plain'] };
   const e = new Event('paste', { bubbles: true, cancelable: true });
   Object.defineProperty(e, 'clipboardData', { value: clipboardData });
   ed.view.dom.dispatchEvent(e);

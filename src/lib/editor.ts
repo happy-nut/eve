@@ -13,6 +13,7 @@ import { defaultMarkdownSerializer } from 'prosemirror-markdown';
 import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
+import { NOTION_COPY, fromNotion } from './notionPaste';
 import { canJoin, findWrapping, liftTarget } from '@tiptap/pm/transform';
 import { DOMParser, Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { CellSelection } from '@tiptap/pm/tables';
@@ -1164,9 +1165,14 @@ export function createEditor(opts: {
           view.dispatch(state.tr.insertText(text.replace(/\s*\r?\n\s*/g, ' ')).scrollIntoView());
           return true;
         }
+        const html = event.clipboardData?.getData('text/html') ?? '';
+        // blocks copied in Notion: its markdown says what they were, its HTML does not (notionPaste.ts)
+        if (text && NOTION_COPY.test(html) && !editor.isActive('codeBlock') && !inCell($from)) {
+          view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse(fromNotion(raw))));
+          return true;
+        }
         // markdown copied from a chat or a terminal comes as plain text that happens to carry HTML of the
         // same characters; render it instead of pasting the ** and # in literally. Real formatting wins.
-        const html = event.clipboardData?.getData('text/html') ?? '';
         if (text && MD_SYNTAX.test(text) && !RICH_HTML.test(html) && !editor.isActive('codeBlock')) {
           const parsed = (editor.storage as any).markdown.parser.parse(raw);
           // a line pasted into a line keeps the spaces at its ends (read as markdown, " $x$ ok" lost its first)
