@@ -574,7 +574,7 @@ pub const COMMANDS: &[Command] = &[
         tool: "edit_note",
         cli: "edit",
         title: "Edit a note",
-        help: "Replaces one passage of a note: old must be copied exactly from the note as read_note returns it (markdown, every character), and appear in it only once — give more of the text around it if it appears more than once. new is what goes there instead; an empty new takes the passage out. To change the title, edit its first line. Read the note first; if the user has it open, the change shows there at once and their caret stays where it was.",
+        help: "Replaces one passage of a note: old is copied from the note as read_note returns it (markdown) and must appear in it only once — give more of the text around it if it appears more than once. Small differences in copying are forgiven: escapes such as \\* or \\[ left out, spaces at a line's end or around a table's |, a table rule's length, the number of backticks, Windows line ends. If it is still not found, the answer names the nearest line of the note. new is what goes there instead; an empty new takes the passage out. To change the title, edit its first line. Read the note first; if the user has it open, the change shows there at once and their caret stays where it was.",
         params: &[
             TITLE,
             ID,
@@ -589,6 +589,18 @@ pub const COMMANDS: &[Command] = &[
                 return Err("Give old: the passage to replace. To add at the end, use append_note.".into());
             }
             ask_app(dir, serde_json::json!({ "op": "edit", "id": note.id, "old": old, "new": arg_str(args, "new") }))
+        },
+    },
+    Command {
+        tool: "delete_note",
+        cli: "delete",
+        title: "Delete a note",
+        help: "Deletes a note as the user deletes one: it goes to Eve's trash, where the user can bring it back (and Eve offers Undo for a few seconds). Give its title (as in a [[wiki link]]) or its id. Its sub-pages are not deleted with it. Only when the user asked for the note to go.",
+        params: &[TITLE, ID],
+        effect: Effect::Rewrites,
+        run: |dir, notes, args| {
+            let (note, _, _) = pick(notes, args)?;
+            ask_app(dir, serde_json::json!({ "op": "delete", "id": note.id }))
         },
     },
 ];
