@@ -40,7 +40,8 @@ function wrap(s: string, max: number, size: number, weight = 400): string[] {
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 const SIZE = 14, LINE = 19;
-const GAP = 40; // between steps, along the flow
+const GAP = 40; // between steps, along the flow (wider where a line's label stands in it)
+const LABEL_MAX = 150, LABEL_LINE = 15, LABEL_AIR = 8; // a line's label: its width before it wraps, and room around it
 const PAD = 20; // before the first step and after the last
 const SLOT_GAP = 26; // between two steps side by side in a lane
 const LANE_PAD = 14;
@@ -129,12 +130,36 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   const names = lanes.map((l, i) => wrap(l.label, LR ? HEAD - 20 : laneC[i] - 20, 13, 600));
   const HEAD_M = LR ? HEAD : Math.max(40, Math.max(...names.map((n) => n.length)) * 17 + 22);
   const laneAt = lanes.map((_, i) => laneC.slice(0, i).reduce((a, b) => a + b, 0));
-  const colAt = colM.map((_, r) => HEAD_M + PAD + colM.slice(0, r).reduce((a, b) => a + b, 0) + GAP * r);
-  for (const b of boxes.values()) {
-    b.m = colAt[b.rank] + colM[b.rank] / 2;
-    b.c = laneAt[b.lane] + LANE_PAD + b.slot * slotC[b.lane] + (slotC[b.lane] - SLOT_GAP) / 2;
+  for (const b of boxes.values()) b.c = laneAt[b.lane] + LANE_PAD + b.slot * slotC[b.lane] + (slotC[b.lane] - SLOT_GAP) / 2;
+  // each line's label, wrapped, and its size across the flow (m) and along a lane (c)
+  const chips = edges.map((e) => {
+    const lines = e.label.trim() ? wrap(e.label, LABEL_MAX, 12) : [];
+    const w = lines.length ? Math.ceil(Math.max(...lines.map((l) => textW(l, 12)))) + 14 : 0, h = 22 + (lines.length - 1) * LABEL_LINE;
+    return { lines, m: LR ? w : h, c: LR ? h : w };
+  });
+  // a line to a later step turns (and its label stands) in the gap just after the step it leaves. Labels that would
+  // stand at the same height there go side by side, each line turning in a track of its own, the gap as wide as its
+  // tracks. At 40 wide, one track, the labels of a busy chart stood on one another and over the boxes either side
+  const gapW = Array.from({ length: Math.max(0, ranks - 1) }, () => GAP);
+  const track = new Map<number, { k: number }>(), tracksW: number[][] = gapW.map(() => []);
+  for (let r = 0; r < gapW.length; r++) {
+    const here = edges.map((e, i) => ({ e, i, a: boxes.get(e.from)!, b: boxes.get(e.to)! })).filter((x) => x.b.rank > x.a.rank && x.a.rank === r && chips[x.i].lines.length)
+      .map((x) => { const c = (x.a.c + x.b.c) / 2; return { ...x, c0: c - chips[x.i].c / 2 - LABEL_AIR, c1: c + chips[x.i].c / 2 + LABEL_AIR }; })
+      .sort((p, q) => p.c0 - q.c0);
+    const ends: number[] = [];
+    for (const x of here) {
+      let k = ends.findIndex((end) => end <= x.c0);
+      if (k < 0) k = ends.push(-Infinity) - 1;
+      ends[k] = x.c1;
+      track.set(x.i, { k });
+      tracksW[r][k] = Math.max(tracksW[r][k] ?? 0, chips[x.i].m + LABEL_AIR * 2);
+    }
+    gapW[r] = Math.max(GAP, tracksW[r].reduce((a, b) => a + b, 0));
   }
-  const M = HEAD_M + PAD * 2 + colM.reduce((a, b) => a + b, 0) + GAP * (ranks - 1);
+  const gapsTo = (r: number) => gapW.slice(0, r).reduce((a, b) => a + b, 0);
+  const colAt = colM.map((_, r) => HEAD_M + PAD + colM.slice(0, r).reduce((a, b) => a + b, 0) + gapsTo(r));
+  for (const b of boxes.values()) b.m = colAt[b.rank] + colM[b.rank] / 2;
+  const M = HEAD_M + PAD * 2 + colM.reduce((a, b) => a + b, 0) + gapsTo(ranks - 1);
   // a line back to an earlier step runs under the boxes: room for it (and its label) past the last lane's edge
   let C = Math.max(1, laneC.reduce((a, b) => a + b, 0));
   for (const e of d.edges) {
@@ -165,6 +190,34 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
       + `</g>`;
   });
 
+  // ---- where a line's label stands: on its own line, clear of the boxes, the lane names and the labels already placed.
+  // Each stood at its line's bend, and a busy chart put several on one spot, or on a box; now the bend is tried first,
+  // then points further along the line, and with none clear, the one that covers least ----
+  type R = { m0: number; m1: number; c0: number; c1: number };
+  const taken: R[] = [...boxes.values()].map((b) => ({ m0: b.m - main(b) / 2 - 4, m1: b.m + main(b) / 2 + 4, c0: b.c - cross(b) / 2 - 4, c1: b.c + cross(b) / 2 + 4 }));
+  taken.push({ m0: -Infinity, m1: HEAD_M + 4, c0: -Infinity, c1: Infinity }); // the lane names
+  const over = (a: R, b: R) => Math.max(0, Math.min(a.m1, b.m1) - Math.max(a.m0, b.m0)) * Math.max(0, Math.min(a.c1, b.c1) - Math.max(a.c0, b.c0));
+  const ALONG = [0.5, 0.35, 0.65, 0.2, 0.8, 0.08, 0.92];
+  function placeLabel(pts: [number, number][], at: [number, number], chip: { m: number; c: number }): [number, number] {
+    const rect = ([m, c]: [number, number]): R => ({ m0: m - chip.m / 2 - 3, m1: m + chip.m / 2 + 3, c0: c - chip.c / 2 - 3, c1: c + chip.c / 2 + 3 });
+    // the segment holding the bend first, then the rest of the line
+    const segs = pts.slice(1).map((q, k) => [pts[k], q] as const);
+    const home = segs.findIndex(([p, q]) => Math.min(p[0], q[0]) - 0.5 <= at[0] && at[0] <= Math.max(p[0], q[0]) + 0.5 && Math.min(p[1], q[1]) - 0.5 <= at[1] && at[1] <= Math.max(p[1], q[1]) + 0.5);
+    const order = home < 0 ? segs : [segs[home], ...segs.filter((_, k) => k !== home)];
+    const spots: [number, number][] = [at];
+    for (const [p, q] of order) for (const f of ALONG) spots.push([p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f]);
+    let best = spots[0], least = Infinity;
+    for (const s of spots) {
+      const r = rect(s);
+      if (r.c0 < 0) continue;
+      const cover = taken.reduce((n, t) => n + over(r, t), 0);
+      if (cover < least) { least = cover; best = s; }
+      if (!cover) break;
+    }
+    taken.push(rect(best));
+    return best;
+  }
+
   // ---- the lines: out of a step's far side into the next one's near side, turning in the gap between them ----
   const labels: string[] = [];
   edges.forEach((e, i) => {
@@ -177,9 +230,10 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
       at = [a.m, top - 16];
     } else if (b.rank > a.rank) {
       const s: [number, number] = [a.m + main(a) / 2, a.c], t: [number, number] = [b.m - main(b) / 2, b.c];
-      const mid = colAt[a.rank] + colM[a.rank] + GAP / 2;
+      const start = colAt[a.rank] + colM[a.rank], t0 = track.get(i);
+      const mid = t0 ? start + tracksW[a.rank].slice(0, t0.k).reduce((p, q) => p + q, 0) + tracksW[a.rank][t0.k] / 2 : start + gapW[a.rank] / 2;
       pts = s[1] === t[1] ? [s, t] : [s, [mid, s[1]], [mid, t[1]], t];
-      at = s[1] === t[1] ? [(s[0] + t[0]) / 2, s[1]] : [mid, (s[1] + t[1]) / 2];
+      at = s[1] === t[1] ? [mid, s[1]] : [mid, (s[1] + t[1]) / 2];
     } else if (b.rank === a.rank) {
       const down = b.c > a.c ? 1 : -1;
       pts = [[a.m, a.c + (down * cross(a)) / 2], [b.m, b.c - (down * cross(b)) / 2]];
@@ -192,12 +246,13 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
     }
     const p = pts.map(([m, c]) => xy(m, c));
     svg += `<path class="flowchart-link sl-edge ${e.line}" data-id="${id}-e${i}" d="${rounded(p)}" marker-end="url(#${id}-arrow)"/>`;
-    const text = e.label.trim();
-    if (text) {
-      const [x, y] = xy(at[0], at[1]);
-      const tw = Math.ceil(textW(text, 12)) + 14;
-      labels.push(`<g class="edgeLabel"><g class="label" data-id="${id}-e${i}"><rect class="sl-chip" x="${x - tw / 2}" y="${y - 11}" width="${tw}" height="22" rx="11"/>`
-        + `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central">${esc(text)}</text></g></g>`);
+    const chip = chips[i];
+    if (chip.lines.length) {
+      const [m, c] = placeLabel(pts, at, chip);
+      const [x, y] = xy(m, c), [w, h] = LR ? [chip.m, chip.c] : [chip.c, chip.m];
+      const tspans = chip.lines.map((l, k) => `<tspan x="${x}" y="${y + (k - (chip.lines.length - 1) / 2) * LABEL_LINE}">${esc(l)}</tspan>`).join('');
+      labels.push(`<g class="edgeLabel"><g class="label" data-id="${id}-e${i}"><rect class="sl-chip" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="11"/>`
+        + `<text text-anchor="middle" dominant-baseline="central">${tspans}</text></g></g>`);
     }
   });
   svg += labels.join('');
