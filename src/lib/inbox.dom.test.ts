@@ -54,6 +54,42 @@ test('a passage is changed only where it is, exactly once', () => {
   expect(apply({ ask: '6', op: 'append', id: open.id, text: 'x' }).ok).toBe(false);
 });
 
+// Claude copies a passage from read_note and writes it back a little differently: the escapes the note keeps (2 \* 3,
+// \[x\], a line ending in \), a table's | --- | as |---|, spaces at a line's end gone, Windows line ends. Each was
+// "not in the note as written", and an edit was tried again and again. The same passage is found, as written, once
+test('a passage copied a little differently is still found, and changed as written in the note', () => {
+  const open = fresh();
+  const body = '# Open\n\n| 이름 | 값 |\n| --- | --- |\n| a | 1 |\n| 긴 이름 | 22 |\n\n2 \\* 3 = 6, \\[x\\] here\n\nline\\\nnext\n\n```js\nlet a = 1   \n```\n\nuse `` b`c `` there\n';
+  for (const [old, now, after] of [
+    ['|---|---|\n|a|1|', '| --- | --- |\n| a | 2 |', '| --- | --- |\n| a | 2 |\n| 긴 이름'],
+    ['| a | 1 |  ', '| a | 3 |', '| a | 3 |\n'],
+    ['2 * 3 = 6, [x] here', '2 \\* 3 = 7', '2 \\* 3 = 7\n'],
+    ['line\nnext', 'line\\\nafter', 'line\\\nafter\n'],
+    ['let a = 1\n```', 'let a = 2\n```', 'let a = 2\n```'],
+    ['| 이름 | 값 |\r\n| --- | --- |', '| Name | Value |\n| --- | --- |', '| Name | Value |'],
+    ['use ` b`c ` there', 'use `x` there', 'use `x` there'],
+  ]) {
+    notes.update(open.id, body);
+    const r = apply({ ask: '1', op: 'edit', id: open.id, old, new: now });
+    expect([old, r.ok, get(open.id).body.includes(after)]).toEqual([old, true, true]);
+  }
+  // still one place only, and still refused where it is not
+  notes.update(open.id, '# Open\n\n| a | 1 |\n\n|a|1|\n');
+  expect(apply({ ask: '2', op: 'edit', id: open.id, old: '| a |1|', new: 'x' }).text).toContain('more than once');
+  const none = apply({ ask: '3', op: 'edit', id: open.id, old: '| a | 9 |', new: 'x' });
+  expect([none.ok, none.text]).toEqual([false, expect.stringContaining('| a | 1 |')]); // the nearest line, to copy from
+});
+
+test('a note deleted goes to the trash, and comes back from there', () => {
+  const open = fresh();
+  const other = notes.addImported('# Other\n\nwords\n', '');
+  expect(apply({ ask: '1', op: 'delete', id: other.id })).toEqual({ ok: true, text: 'Deleted "Other" (it is in Eve\'s trash, where the user can bring it back).' });
+  expect([get(other.id).deleted, notes.trash.some((n) => n.id === other.id), notes.currentId]).toEqual([true, true, open.id]);
+  expect(apply({ ask: '2', op: 'delete', id: other.id }).ok).toBe(false); // gone already
+  notes.restore(other.id);
+  expect(get(other.id).body).toBe('# Other\n\nwords\n');
+});
+
 test('every change is answered, a broken one too', () => {
   const open = fresh();
   const answers: [string, Answer][] = [];

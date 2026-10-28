@@ -21,7 +21,7 @@ Eve gives up none of these:
   and no subscription, and git keeps every version. A note written on two devices before they synced is merged
   line by line. Whatever cannot be merged is kept as a copy beside it, never dropped.
 - **Claude knows your notes.** One click connects Eve's MCP server. Claude finds, reads and writes notes, and each
-  change goes through the app as if you had typed it. It never deletes a note.
+  change goes through the app as if you had typed it; a note it deletes goes to the trash.
 - **On your phone too.** An Android app with a home-screen widget and background sync, and the same notes.
 
 Not for you if you need an iPhone, Windows or an Intel Mac, or want to edit a page live with other people: Eve is
@@ -217,13 +217,16 @@ app comes to the front with that note open, at a section if one is named (Eve st
 "find last week's meeting notes and open them". It hands macOS an `eve://open?id=…&section=…` link, which Eve
 registers; such a link only ever shows a note, an unknown id is ignored, and nothing is created or changed.
 `create_note` makes a note (a title, markdown under it, a folder, or a page to put it under as a sub-page),
-`append_note` adds to the end of one, and `edit_note` replaces one passage, copied exactly from the note and found in it
-only once (like an editor's find-and-replace, it refuses a passage that is missing or there twice). None of them
+`append_note` adds to the end of one, `edit_note` replaces one passage found in it only once (like an editor's
+find-and-replace, it refuses a passage that is missing or there twice; what copying from read_note changes — an escape
+left out, spaces at a line's end or by a table's `|`, a table rule's length, backticks, Windows line ends — is forgiven,
+and a passage not found is answered with the note's nearest line), and `delete_note` deletes one as the user would: to
+Eve's trash, with Undo offered. None of them
 writes a file: each change goes into the app's inbox (`inbox/` beside `notes/`, which only programs on this Mac can
 write), an `eve://inbox` link tells Eve to look there without bringing it to the front (starting it in the background
 if it was closed), and Eve does it through its notes store as if it were typed — saved, synced, and shown at once in
 a note that is open, the caret where it was — then answers. A file written beside the running app would have been
-written over from its memory at the note's next save. Nothing deletes a note. Claude asks before a tool that is not
+written over from its memory at the note's next save. Claude asks before a tool that is not
 read-only is first used. A note's creation time comes from its id (a
 day's note is its day); only its last change is known, so a note edited in September and again in October is
 found under October. Deleted notes and the calendar's own are left out.

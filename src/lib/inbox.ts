@@ -1,5 +1,5 @@
 /**
- * Changes Claude makes through the MCP server (`eve mcp`: create_note, append_note, edit_note). Each comes as a
+ * Changes Claude makes through the MCP server (`eve mcp`: create_note, append_note, edit_note, delete_note). Each comes as a
  * file in the app's inbox (src-tauri/src/core.rs ask_app), taken once (files.rs take_inbox), and is done here
  * through the notes store as if it were typed: the store stays the only writer, the change is saved and synced as
  * any edit, and a note the user has open shows it at once (Editor.svelte's takeBody, the caret kept by its text).
@@ -7,10 +7,11 @@
  */
 import { notes, titleOf, type Note } from './notes.svelte';
 import { depthOf, MAX_DEPTH } from './groups.svelte';
+import { findPassage, nearestLine } from './passage';
 
 export interface Ask {
   ask: string;
-  op: 'create' | 'append' | 'edit';
+  op: 'create' | 'append' | 'edit' | 'delete';
   id?: string;
   body?: string;
   group?: string;
@@ -36,12 +37,17 @@ export function apply(a: Ask): Answer {
     const where = up ? ` under "${titleOf(up)}"` : group ? ` in ${group}` : '';
     return { ok: true, text: `Made "${titleOf(n)}"${where} in Eve (id ${n.id}).` };
   }
-  if (a.op !== 'append' && a.op !== 'edit') return no(`Eve does not know "${a.op}": update Eve.`);
+  if (a.op !== 'append' && a.op !== 'edit' && a.op !== 'delete') return no(`Eve does not know "${a.op}": update Eve.`);
   const was = live(a.id);
   if (!was) return no(`No note with id "${a.id}" (deleted since it was found?).`);
   notes.flush(was.id); // the open editor's last keys first: the change is made to what the user sees
   const n = live(a.id) as Note;
   const title = titleOf(n);
+  // deleted as the user deletes one: to the trash, the toast's Undo and the trash bringing it back
+  if (a.op === 'delete') {
+    notes.remove(n.id);
+    return { ok: true, text: `Deleted "${title}" (it is in Eve's trash, where the user can bring it back).` };
+  }
   let body: string;
   if (a.op === 'append') {
     const text = (a.text ?? '').replace(/^\n+|\n+$/g, '');
@@ -49,10 +55,13 @@ export function apply(a: Ask): Answer {
     body = `${n.body.replace(/\n+$/, '')}\n\n${text}\n`;
   } else {
     const old = a.old ?? '';
-    const at = old ? n.body.indexOf(old) : -1;
-    if (at < 0) return no(`That passage is not in "${title}" as written. Read the note again (read_note) and copy it exactly.`);
-    if (n.body.indexOf(old, at + 1) >= 0) return no(`That passage is in "${title}" more than once: give more of the text around it.`);
-    body = n.body.slice(0, at) + (a.new ?? '') + n.body.slice(at + old.length);
+    const found = findPassage(n.body, old);
+    if (found === 'many') return no(`That passage is in "${title}" more than once: give more of the text around it.`);
+    if (found === 'none') {
+      const near = nearestLine(n.body, old);
+      return no(`That passage is not in "${title}".${near ? ` The nearest line in it is:\n${near}\n` : ' '}Read the note again (read_note) and copy the passage from it.`);
+    }
+    body = n.body.slice(0, found.at) + (a.new ?? '') + n.body.slice(found.end);
   }
   notes.update(n.id, body);
   notes.flush(n.id);
