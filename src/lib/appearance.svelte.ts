@@ -1,5 +1,5 @@
 /** Theme + editor typography, applied on <html> (data-theme and CSS variables). Persisted locally. */
-import { setWindowSize, isMobile } from './platform';
+import { setWindowSize, isMobile, paintGround } from './platform';
 const LS = 'eve.appearance';
 
 export const FONTS: { id: string; label: string; stack: string }[] = [
@@ -96,7 +96,10 @@ class AppearanceStore {
       r.setProperty('--line-height', String(this.s.lineHeight));
       r.setProperty('--editor-width', `${this.widthPx}px`);
       r.setProperty('--hl-plain', this.s.highlights[0] ?? PASTELS[0]); // the ==plain== pen (app.css, .tiptap mark)
+      void paintGround();
     });
+    // a theme that follows the system changes with it, and the window's ground with it
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => void paintGround());
     // the remembered window size, on every launch and again whenever it is changed
     $effect(() => { void setWindowSize(this.s.winW, this.s.winH); });
   }

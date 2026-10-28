@@ -27,6 +27,26 @@ pub(crate) fn show_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Summoned by the hotkey: shown and focused but not yet seen, until the page has drawn in it (`reveal_window`).
+/// While Eve was hidden WebKit may have let go of what the page drew, and a window seen at once was white until
+/// the page drew again (some 60–110 ms, measured). If the page never says so, the window is seen anyway a moment later.
+#[tauri::command]
+pub(crate) fn summon_window(app: AppHandle) -> Result<(), String> {
+    crate::mac::set_seen(&app, false);
+    show_window(app.clone())?;
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        reveal_window(app);
+    });
+    Ok(())
+}
+
+/// The page has drawn: the summoned window is seen.
+#[tauri::command]
+pub(crate) fn reveal_window(app: AppHandle) {
+    crate::mac::set_seen(&app, true);
+}
+
 /// Show + focus the main window, or hide the whole app (returning focus to the previous app).
 #[tauri::command]
 pub(crate) fn toggle_window(app: AppHandle) -> Result<(), String> {
