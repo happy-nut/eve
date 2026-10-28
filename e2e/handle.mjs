@@ -9,6 +9,24 @@ import { webkit } from 'playwright-core';
 const server = process.env.EVE_URL ? null : await (await import('vite')).createServer({ server: { port: 0 }, logLevel: 'error' }).then((v) => v.listen());
 const URL_ = process.env.EVE_URL ?? server.resolvedUrls.local[0];
 const browser = await webkit.launch();
+
+/** from (x, y) over a block in `scope` to its ⋮⋮, as a hand goes there — not jumped onto it. On a day's page ⋮⋮ sat past
+ *  the editor's edge, and the pointer left the editor on its way: the handle went before it could be taken */
+async function walkTo(page, scope, x, y) {
+  await page.mouse.move(x, y);
+  await page.waitForSelector(`${scope} .block-handle.on`);
+  await page.waitForTimeout(100);
+  const g = await page.locator(`${scope} .block-handle .grip`).boundingBox();
+  const tx = g.x + g.width / 2, ty = g.y + g.height / 2;
+  for (let i = 1; i <= 16; i++) {
+    const px = x + ((tx - x) * i) / 16, py = y + ((ty - y) * i) / 16;
+    await page.mouse.move(px, py);
+    await page.waitForTimeout(25);
+    assert.ok(await page.locator(`${scope} .block-handle.on`).count(), `${scope}: ⋮⋮ went away as the pointer went to it (at ${Math.round(px)}, ${Math.round(py)}; ⋮⋮ at ${Math.round(tx)})`);
+  }
+  return g;
+}
+
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
   await page.goto(URL_);
@@ -23,10 +41,7 @@ try {
   /** the pointer over a line, then on its ⋮⋮ */
   async function grip(text) {
     const box = await page.locator('.tiptap > p', { hasText: text }).boundingBox();
-    await page.mouse.move(box.x + 20, box.y + box.height / 2);
-    await page.waitForSelector('.block-handle.on');
-    await page.waitForTimeout(100);
-    return page.locator('.block-handle .grip').boundingBox();
+    return walkTo(page, 'main', box.x + 20, box.y + box.height / 2);
   }
   async function drag(text, below, alt = false) {
     const g = await grip(text);
@@ -165,6 +180,36 @@ try {
   await menuOn('.tiptap li', 'Delete');
   assert.equal(await md(), '# M\n\nabove\n\nbelow', 'the only line of a list deleted takes its list');
   console.log('ok   ⋮⋮\'s menu acts on a divider and a table themselves; the only line of a list deleted takes its list');
+
+  // a day's page from the calendar (a page over the note, its ⋮⋮ in the room around its editor): reached, and dragged
+  {
+    const day = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+    await day.addInitScript(() => localStorage.setItem('eve.appearance', JSON.stringify({ dailyNotes: true })));
+    await day.goto(URL_);
+    await day.waitForSelector('.tiptap');
+    await day.locator('aside [data-row]', { hasText: 'Daily notes' }).first().click();
+    await day.locator('.day.today').click();
+    await day.waitForSelector('.card-page .tiptap');
+    await day.waitForTimeout(400);
+    await day.evaluate(() => document.querySelector('.card-page .tiptap').editor.commands.setContent('# A day\n\nfirst line\n\nsecond line\n\n- a bullet\n\n> quoted\n', true));
+    await day.waitForTimeout(700);
+    for (const sel of ['p:nth-child(2)', 'p:nth-child(3)', 'ul', 'blockquote']) {
+      const b = await day.locator(`.card-page .tiptap > ${sel}`).boundingBox();
+      await walkTo(day, '.card-page', b.x + 30, b.y + Math.min(10, b.height / 2));
+    }
+    // taken, and moved: the first line dragged below the second
+    const g = await walkTo(day, '.card-page', (await day.locator('.card-page .tiptap > p', { hasText: 'first line' }).boundingBox()).x + 30, (await day.locator('.card-page .tiptap > p', { hasText: 'first line' }).boundingBox()).y + 10);
+    const to = await day.locator('.card-page .tiptap > p', { hasText: 'second line' }).boundingBox();
+    await day.mouse.down();
+    for (let i = 1; i <= 8; i++) await day.mouse.move(g.x + g.width / 2 + i, g.y + ((to.y + to.height * 0.8 - g.y) * i) / 8);
+    await day.waitForTimeout(150);
+    await day.mouse.up();
+    await day.waitForTimeout(300);
+    const order = await day.evaluate(() => [...document.querySelectorAll('.card-page .tiptap > p')].map((p) => p.textContent).filter(Boolean));
+    assert.deepEqual(order.slice(-2), ['second line', 'first line'], `a day's page: a line dragged by its ⋮⋮ moves (${JSON.stringify(order)})`);
+    await day.close();
+    console.log('ok   a day\'s page: ⋮⋮ stays as the pointer goes to it, and a line dragged by it moves');
+  }
 } finally {
   await browser.close();
   await server?.close();

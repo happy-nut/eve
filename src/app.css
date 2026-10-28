@@ -1051,6 +1051,9 @@ html.mobile .tiptap [data-type='details'] > button::after { content: ''; positio
   opacity: 0; pointer-events: none; transition: opacity 0.12s;
 }
 .block-handle.on { opacity: 1; pointer-events: auto; }
+/* where ⋮⋮ sits past the editor's edge (a day's or a card's page), the room between them is the handle's too: crossed on
+   the way to ⋮⋮, it was outside the editor, and the handle went before the pointer got there */
+.block-handle::after { content: ''; position: absolute; left: 100%; top: 0; bottom: 0; width: var(--bridge, 0px); }
 .block-handle button {
   display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 24px; padding: 0;
   border: 0; border-radius: 4px; background: none; color: var(--fg-dim); transition: background 0.12s, color 0.12s;
