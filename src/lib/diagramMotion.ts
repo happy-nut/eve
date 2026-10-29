@@ -9,7 +9,8 @@ const MAX = 2.4; // a long diagram's levels are squeezed so the whole of it is d
 const FADE = 400, TOKEN = 0.5;
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-type Step = { el: Element; at: number; line?: SVGPathElement | SVGLineElement };
+/** `stage`: which press of → in a presentation brings it up (a flowchart's level, a sequence's message) */
+type Step = { el: Element; at: number; stage: number; line?: SVGPathElement | SVGLineElement };
 
 /** what comes up when: an element, the second it starts at, and its line when it is one */
 export function timeline(svg: SVGSVGElement): Step[] {
@@ -17,14 +18,14 @@ export function timeline(svg: SVGSVGElement): Step[] {
   if (kind === 'sequence') {
     const msgs = [...svg.querySelectorAll<SVGLineElement>('line[class^="messageLine"]')];
     const u = Math.min(UNIT, MAX / Math.max(1, msgs.length));
-    const steps: Step[] = [...svg.querySelectorAll('rect.actor, text.actor, g.actor-man')].map((el) => ({ el, at: 0 }));
-    for (const el of svg.querySelectorAll('line.actor-line')) steps.push({ el, at: 0.2 });
+    const steps: Step[] = [...svg.querySelectorAll('rect.actor, text.actor, g.actor-man')].map((el) => ({ el, at: 0, stage: 0 }));
+    for (const el of svg.querySelectorAll('line.actor-line')) steps.push({ el, at: 0.2, stage: 0 });
     msgs.forEach((line, i) => {
       const at = 0.4 + i * u;
-      steps.push({ el: line, at, line });
+      steps.push({ el: line, at, stage: i + 1, line });
       // its words are the text just before it
       const t = line.previousElementSibling;
-      if (t?.classList.contains('messageText')) steps.push({ el: t, at });
+      if (t?.classList.contains('messageText')) steps.push({ el: t, at, stage: i + 1 });
     });
     return steps;
   }
@@ -41,15 +42,17 @@ export function timeline(svg: SVGSVGElement): Step[] {
   const lines = [...svg.querySelectorAll<SVGPathElement>('path.flowchart-link[data-id]')].map((p) => ({ p, ends: ends(p.dataset.id!) }));
   const level = levels(ids, lines.flatMap((l) => (l.ends ? [l.ends] : [])));
   const u = Math.min(UNIT, MAX / (Math.max(0, ...level.values()) + 1));
-  const steps: Step[] = [...nodes].map(([id, el]) => ({ el, at: level.get(id)! * u }));
+  const steps: Step[] = [...nodes].map(([id, el]) => ({ el, at: level.get(id)! * u, stage: level.get(id)! }));
   const labels = new Map([...svg.querySelectorAll<SVGGElement>('g.edgeLabel > g.label[data-id]')].map((g) => [g.dataset.id!, g.parentElement!]));
   for (const { p, ends } of lines) {
     const [s, d] = ends ?? ['', ''];
     // from its source once that is up, landing about when its target comes up (a line back up the chart: when it is due)
     const at = Math.max((level.get(s) ?? 0) * u + 0.25 * (u / UNIT), (level.get(d) ?? 0) * u - 0.4 * (u / UNIT));
-    steps.push({ el: p, at, line: p });
+    // a step at a time it comes with its target (a line back up the chart: with its source, the later of the two)
+    const stage = Math.max(level.get(s) ?? 0, level.get(d) ?? 0);
+    steps.push({ el: p, at, stage, line: p });
     const label = labels.get(p.dataset.id!);
-    if (label) steps.push({ el: label, at: at + 0.15 });
+    if (label) steps.push({ el: label, at: at + 0.15, stage });
   }
   return steps;
 }
@@ -73,7 +76,46 @@ export function levels(ids: string[], pairs: [string, string][]): Map<string, nu
   return level;
 }
 
-const len = (l: SVGPathElement | SVGLineElement) => (l instanceof SVGPathElement ? l.getTotalLength() : Math.hypot(l.x2.baseVal.value - l.x1.baseVal.value, l.y2.baseVal.value - l.y1.baseVal.value));
+// by its tag: a page without SVG's classes (jsdom) has no SVGPathElement to ask
+const len = (l: SVGPathElement | SVGLineElement) => {
+  if (l.tagName === 'path') return (l as SVGPathElement).getTotalLength();
+  const { x1, x2, y1, y2 } = l as SVGLineElement;
+  return Math.hypot(x2.baseVal.value - x1.baseVal.value, y2.baseVal.value - y1.baseVal.value);
+};
+
+/** one element coming up: a line drawn from its start, anything else faded in */
+function enter({ el, line }: Step, delay: number): Animation {
+  if (!line) return el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' });
+  const n = len(line);
+  // the dash is the keyframes' own, so a dotted line goes back to its dots when it is drawn
+  // and its arrowhead only once it has got there (drawn at its end from the start, it was there before the line)
+  const head = getComputedStyle(line).markerEnd, arrow = head && head !== 'none' ? { markerEnd: 'none' } : {};
+  return line.animate([
+    { strokeDasharray: `${n}`, strokeDashoffset: `${n}`, ...arrow },
+    { strokeDasharray: `${n}`, strokeDashoffset: '0', ...arrow, offset: 0.99 },
+    { strokeDasharray: `${n}`, strokeDashoffset: '0' },
+  ], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' });
+}
+
+/**
+ * The diagram a step at a time, as a presentation's → and ← walk it: `count` steps (0 when it has none to take), and
+ * `show(k)` puts up steps 0…k, the one just reached coming in as it does when the diagram draws itself.
+ */
+export function stepper(svg: SVGSVGElement): { count: number; show(k: number): void } {
+  const steps = timeline(svg);
+  const count = steps.length ? Math.max(...steps.map((s) => s.stage)) + 1 : 0;
+  let shown = count - 1;
+  return {
+    count: count > 1 ? count : 0,
+    show(k) {
+      for (const s of steps) {
+        (s.el as SVGElement).style.opacity = s.stage > k ? '0' : '';
+        if (s.stage === k && k > shown && 'animate' in s.el && !reduced()) enter(s, 0);
+      }
+      shown = k;
+    },
+  };
+}
 
 /** the diagram drawn in, once it is well in sight; the returned function stops it (drawn again, put away) */
 export function drawIn(svg: SVGSVGElement): () => void {
@@ -81,22 +123,7 @@ export function drawIn(svg: SVGSVGElement): () => void {
   const steps = timeline(svg);
   if (!steps.length) return () => {};
   const running: Animation[] = [];
-  const play = () => {
-    for (const { el, at, line } of steps) {
-      const delay = at * 1000;
-      if (line) {
-        const n = len(line);
-        // the dash is the keyframes' own, so a dotted line goes back to its dots when it is drawn
-        // and its arrowhead only once it has got there (drawn at its end from the start, it was there before the line)
-        const head = getComputedStyle(line).markerEnd, arrow = head && head !== 'none' ? { markerEnd: 'none' } : {};
-        running.push(line.animate([
-          { strokeDasharray: `${n}`, strokeDashoffset: `${n}`, ...arrow },
-          { strokeDasharray: `${n}`, strokeDashoffset: '0', ...arrow, offset: 0.99 },
-          { strokeDasharray: `${n}`, strokeDashoffset: '0' },
-        ], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' }));
-      } else running.push(el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' }));
-    }
-  };
+  const play = () => { for (const s of steps) running.push(enter(s, s.at * 1000)); };
   const io = new IntersectionObserver(([e]) => { if (e?.isIntersecting) { io.disconnect(); play(); } }, { threshold: 0.3 });
   io.observe(svg);
   return () => { io.disconnect(); for (const a of running) a.cancel(); };

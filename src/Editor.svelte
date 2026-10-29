@@ -77,6 +77,7 @@
       runEditorCommand(editor, id);
     };
     hooks.section = (heading) => editor && goToSection(editor, heading);
+    hooks.page = () => el.querySelector<HTMLElement>('.tiptap');
     // summoned back: the page stays as it was left, the caret where the eyes left it. Only a caret out of sight (or
     // under the toolbar's fade) is brought to the middle of the page. Centred every time, the line being written at
     // the bottom of the window jumped up to the middle on each ⌘⇧E.
@@ -110,6 +111,7 @@
       hooks.attach = undefined;
       hooks.caretIntoView = undefined;
       hooks.section = undefined;
+      hooks.page = undefined;
       hooks.command = undefined;
       if (editor) notes.cursor.set(id, editor.state.selection.from);
       editor?.destroy();

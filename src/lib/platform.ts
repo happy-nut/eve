@@ -454,6 +454,17 @@ export async function setWindowSize(width: number, height: number): Promise<void
   await getCurrentWindow().setSize(new LogicalSize(width, height));
 }
 
+/** The Mac's window over the whole screen (a presentation), or back. True when it changed: one already on the whole
+ *  screen is left there, and stays there after. */
+export async function wholeScreen(on: boolean): Promise<boolean> {
+  if (!desktop) return false;
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  const w = getCurrentWindow();
+  if ((await w.isFullscreen()) === on) return false;
+  await w.setFullscreen(on);
+  return true;
+}
+
 /**
  * The window became frontmost again (hotkey, a click, ⌘Tab, the Dock). Separate from the DOM 'focus'
  * event, which stays silent when the webview held focus the whole time the app was in the background.

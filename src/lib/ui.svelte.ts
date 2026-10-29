@@ -39,7 +39,7 @@ interface EmojiReq { at: DOMRect; current: string; resolve: (v: string | null) =
  * by some of them, and each put the focus back its own way. Now they are one stack, in the order they opened —
  * which is the order back and Esc take them away, the newest first.
  */
-export type LayerId = 'photo' | 'math' | 'sheet' | 'emoji' | 'menu' | 'confirm' | 'diagramView' | 'find' | 'pdf' | 'card' | 'settings' | 'trash' | 'history';
+export type LayerId = 'photo' | 'math' | 'sheet' | 'emoji' | 'menu' | 'confirm' | 'diagramView' | 'find' | 'pdf' | 'card' | 'settings' | 'trash' | 'history' | 'present';
 /** what closed it: a phone's back, Esc, or the app putting everything away (a note brought up from outside) */
 export type CloseReason = 'back' | 'esc' | 'putAway';
 export interface Layer {
@@ -342,6 +342,19 @@ class Ui {
     this.trashOff = undefined;
   }
   /** the note whose versions are shown (HistoryPanel.svelte), or null */
+  /** the open note shown a slide at a time over everything (Present.svelte): its page's blocks are what is shown */
+  present = $state<HTMLElement | null>(null);
+  private presentOff: (() => void) | undefined;
+  openPresent(page: HTMLElement) {
+    this.presentOff ??= this.layers.push({ id: 'present', close: () => this.closePresent(), esc: true, keys: true, modal: true, own: '.present', phone: true });
+    this.present = page;
+  }
+  closePresent() {
+    if (!this.present) return;
+    this.present = null;
+    this.presentOff?.();
+    this.presentOff = undefined;
+  }
   historyOf = $state<string | null>(null);
   private historyOff: (() => void) | undefined;
   openHistory(id: string) {
@@ -451,4 +464,6 @@ export const hooks: {
   cardCommand?: (id: string) => void;
   /** go to one of the open note's headings (an eve:// link into the note already open) */
   section?: (heading: string) => void;
+  /** the open note's page, the blocks a presentation shows (registered by the editor) */
+  page?: () => HTMLElement | null;
 } = {};

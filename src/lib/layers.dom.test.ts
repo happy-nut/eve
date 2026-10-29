@@ -33,6 +33,7 @@ const OPENERS = {
   settings: () => { own.settings = true; const off = ui.openedSettings(() => { own.settings = false; queueMicrotask(off); }); },
   trash: () => ui.openTrash(),
   history: () => ui.openHistory('n1'),
+  present: () => ui.openPresent(note),
 } satisfies Record<LayerId, () => void>;
 const IDS = Object.keys(OPENERS) as LayerId[];
 
@@ -40,7 +41,7 @@ const IDS = Object.keys(OPENERS) as LayerId[];
 const SHOWN: Record<LayerId, () => boolean> = {
   photo: () => !!ui.photo, math: () => own.math, sheet: () => own.sheet, emoji: () => !!ui.emoji, menu: () => !!ui.menu,
   confirm: () => !!ui.pending, diagramView: () => ui.diagramView !== null, find: () => ui.find, pdf: () => !!ui.pdf,
-  card: () => !!ui.card, settings: () => own.settings, trash: () => ui.trash, history: () => ui.historyOf !== null,
+  card: () => !!ui.card, settings: () => own.settings, trash: () => ui.trash, history: () => ui.historyOf !== null, present: () => !!ui.present,
 };
 
 /** opened, the keyboard goes into it as its component takes it (a button of its own DOM), which leaves the page as
