@@ -9,7 +9,19 @@ vi.mock('@tauri-apps/api/core', () => ({
     return cmd === 'is_front' ? false : undefined;
   },
 }));
-const { win, paintGround } = await import('./platform');
+const login: string[] = [];
+let loginOn = false;
+vi.mock('@tauri-apps/plugin-autostart', () => ({
+  isEnabled: async () => loginOn,
+  enable: async () => { loginOn = true; login.push('enable'); },
+  disable: async () => { loginOn = false; login.push('disable'); },
+}));
+const keys: string[] = [];
+vi.mock('@tauri-apps/plugin-global-shortcut', () => ({
+  unregisterAll: async () => {},
+  register: async (k: string) => { keys.push(k); },
+}));
+const { win, paintGround, autostart, setGlobalHotkey } = await import('./platform');
 
 test('summoned, the window is seen only after the page has drawn in it: never a white page first', async () => {
   window.addEventListener('eve-summon', () => calls.push('eve-summon'), { once: true });
@@ -35,4 +47,29 @@ test("the window's own ground is the page's: what shows before the page draws is
   calls.length = 0;
   await paintGround(); // the same colour again is not sent again
   expect(calls).toEqual([]);
+});
+
+// summoned after a login, the Eve that came up was a months-old build run from the code: each `tauri dev`, its pages
+// kept apart from the app's, took itself for a first run and wrote itself in as the login item
+test('the login item is this Eve: on at the first launch, written again at each launch while on, never by a build run from the code', async () => {
+  localStorage.removeItem('eve.autostart.init');
+  await autostart.keep(true);
+  expect(login).toEqual([]); // a build run from the code
+  await autostart.set(true, true);
+  expect(login).toEqual([]);
+  await autostart.keep(false);
+  expect(login).toEqual(['enable']); // the first launch
+  await autostart.keep(false);
+  expect(login).toEqual(['enable', 'enable']); // on: written again, pointing at where this Eve runs from
+  await autostart.set(false, false);
+  login.length = 0;
+  await autostart.keep(false);
+  expect(login).toEqual([]); // turned off in Settings: left off
+});
+
+test('a build run from the code takes no summon key: only the app answers it', async () => {
+  await setGlobalHotkey('Mod-Shift-e', true);
+  expect(keys).toEqual([]);
+  await setGlobalHotkey('Mod-Shift-e', false);
+  expect(keys).toEqual(['CmdOrCtrl+Shift+E']);
 });
