@@ -111,6 +111,20 @@ try {
     await page.locator('.day.today').click();
     await page.waitForSelector('.card-page .tiptap');
     await page.waitForTimeout(400);
+    // the page over the calendar (a board's card too) grows with the window: two-thirds of a wide one, not a small
+    // box in its middle; in a small window as before
+    if (theme === 'light') {
+      const was = page.viewportSize();
+      for (const [w, h, min] of [[1920, 1200, 1200], [1104, 832, 740]]) {
+        await page.setViewportSize({ width: w, height: h });
+        await page.waitForTimeout(150);
+        const r = await page.locator('.card-page').boundingBox();
+        assert.ok(r.width >= min && r.width <= w * 0.92 + 1 && r.height <= h * 0.86 + 1, `a ${w}×${h} window: the page over it ${Math.round(r.width)}×${Math.round(r.height)}`);
+      }
+      await page.setViewportSize(was);
+      await page.waitForTimeout(150);
+      console.log('ok   the page over the calendar grows with the window');
+    }
     await page.evaluate((b) => { const pm = document.querySelector('.card-page .tiptap'); pm.editor.commands.setContent(b, true); }, BODY.replace('# Blocks', '# A day'));
     await page.waitForTimeout(500);
     await sweep(page, `${theme} day page`, '.card-page');
