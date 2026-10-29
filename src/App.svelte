@@ -77,10 +77,8 @@
 
   if (import.meta.env.DEV) Object.assign(window as any, { __notes: notes, __sync: sync });
   onMount(() => {
-    // first run: launch at login so the summon hotkey is always available (toggle in Settings)
-    if (isTauri && !localStorage.getItem('eve.autostart.init')) {
-      autostart.set(true).finally(() => localStorage.setItem('eve.autostart.init', '1'));
-    }
+    // launched at login so the summon hotkey is always there (toggle in Settings), as this Eve
+    void autostart.keep().catch(() => {});
     if (dock.hidden) dock.set(true);
     // a file opened from Finder joins the notes like any import — it is a note from then on, movable
     // in the sidebar and synced (the file on disk is left as it was)

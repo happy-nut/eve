@@ -371,10 +371,22 @@ export const mcp = {
 /** Launch at login, so the global hotkey works even after the app was quit. */
 export const autostart = {
   async get() { if (!desktop) return false; return (await import('@tauri-apps/plugin-autostart')).isEnabled(); },
-  async set(on: boolean) {
-    if (!desktop) return;
+  // a build run from the code (`tauri dev`) leaves the login item alone: it wrote itself there, and at login a
+  // months-old build came up instead of Eve, a white page with no dev server to load, holding the summon key
+  async set(on: boolean, dev = import.meta.env.DEV) {
+    if (!desktop || dev) return;
     const m = await import('@tauri-apps/plugin-autostart');
     await (on ? m.enable() : m.disable());
+  },
+  /**
+   * At launch: on at the first, and from then on, while it is on, pointed at this Eve (written again with where it
+   * runs from), so one moved, reinstalled, or written over by a build run from the code is put right
+   */
+  async keep(dev = import.meta.env.DEV) {
+    if (!desktop || dev) return;
+    if (!localStorage.getItem('eve.autostart.init')) {
+      await autostart.set(true, dev).finally(() => localStorage.setItem('eve.autostart.init', '1'));
+    } else if (await autostart.get()) await autostart.set(true, dev);
   },
 };
 
@@ -454,9 +466,12 @@ export async function onBack(cb: () => void): Promise<() => void> {
   return () => void l.unregister();
 }
 
-/** Register the global "summon" hotkey. Re-callable: unregisters everything first. */
-export async function setGlobalHotkey(keys: string): Promise<string | null> {
-  if (!desktop) return null;
+/**
+ * Register the global "summon" hotkey. Re-callable: unregisters everything first. A build run from the code takes
+ * none: beside the app it took the same keys, and once its dev server was gone it was summoned as a white page.
+ */
+export async function setGlobalHotkey(keys: string, dev = import.meta.env.DEV): Promise<string | null> {
+  if (!desktop || dev) return null;
   const gs = await import('@tauri-apps/plugin-global-shortcut');
   await gs.unregisterAll();
   try {
