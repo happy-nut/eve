@@ -162,7 +162,9 @@
   .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-sheet-scrim); }
   .card-page {
     position: fixed; z-index: var(--z-sheet); top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: min(760px, 92vw); height: min(80vh, 760px); display: flex; flex-direction: column; overflow: hidden;
+    /* as large as the window lets it be: 760 wide in a small window, two-thirds of a wide one (held to 760 and 760
+       tall, a calendar's day or a board's card stayed a small box in the middle of a big screen) */
+    width: min(92vw, max(760px, 66vw), 1240px); height: min(86vh, max(760px, 80vh), 1100px); display: flex; flex-direction: column; overflow: hidden;
     background: var(--bg-pop); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
   }
   /* the scroller sits inside the card so the outline rail can stay put while the page scrolls */
