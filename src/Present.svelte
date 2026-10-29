@@ -3,28 +3,47 @@
   import { fade } from 'svelte/transition';
   import { scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
-  import { slides } from './lib/slides';
+  import { slides, paginate } from './lib/slides';
   import { stepper } from './lib/diagramMotion';
   import { wholeScreen } from './lib/platform';
 
   /**
-   * The open note a slide at a time, over everything (⋯ → Present): a slide at each divider and each of its biggest
-   * headings (slides.ts). → (Space, ↓, a click on the right) goes on, ← (↑, a click on the left) back, Esc or a phone's
+   * The open note a slide at a time, over everything (⋯ → Present), cut by itself (slides.ts): a slide at each of its
+   * biggest headings, and one of those longer than the screen goes on to the next, cut again as the window changes size. → (Space, ↓, a click on the right) goes on, ← (↑, a click on the left) back, Esc or a phone's
    * back leaves. A diagram that draws itself in is walked a step at a time first, and a slide taller than the screen
    * scrolled through, before → turns the page.
    */
   // read once: the slides are the page as it was when the presentation began
   const page = ui.present!;
   // copies of the note's blocks as they are drawn now: diagrams, formulas and pictures the same, nothing to edit
-  const deck = slides([...page.children]).map((blocks) => blocks.map((b) => {
+  const sections = slides([...page.children]).map((blocks) => blocks.map((b) => {
     const c = b.cloneNode(true) as HTMLElement;
     for (const e of [c, ...c.querySelectorAll('[contenteditable]')]) e.removeAttribute('contenteditable');
+    // a diagram larger than in the note, up to twice its size, as much as the slide holds (the note sets it a width)
+    for (const svg of c.querySelectorAll<SVGSVGElement>('.mermaid-view svg')) {
+      const w = parseFloat(svg.style.width);
+      if (w) Object.assign(svg.style, { width: `min(100%, ${w * 2}px)`, maxWidth: 'none' });
+    }
     return c;
   }));
+  let deck = $state.raw<Element[][]>([]);
   let at = $state(0);
   let box: HTMLDivElement, body: HTMLDivElement;
   /** the diagrams on the slide shown, each with the step it is at */
   let walks: { svg: SVGSVGElement; walk: ReturnType<typeof stepper>; k: number }[] = [];
+
+  /** the slides cut to the screen as it is now, measured on the slide itself; still on the same words after */
+  function cut() {
+    const here = deck[at]?.find((b) => !b.classList.contains('again'));
+    // the room is the screen's, not the slide's: the slide is only as tall as what is on it
+    const pad = getComputedStyle(box), room = box.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom);
+    deck = paginate(sections, (blocks) => {
+      body.replaceChildren(...blocks);
+      return !(room > 0) || body.scrollHeight <= room + 1; // (no room measured: a page with no layout, one slide a section)
+    }, (h) => { const c = h.cloneNode(true) as Element; c.classList.add('again'); return c; });
+    const i = here ? deck.findIndex((s) => s.includes(here)) : 0;
+    void go(Math.max(0, i));
+  }
 
   /** slide `i` put up, its diagrams at their first step (come to going forward) or whole (going back) */
   async function go(i: number, back = false) {
@@ -32,11 +51,6 @@
     await tick();
     body.replaceChildren(...deck[i]);
     body.scrollTop = back ? body.scrollHeight : 0;
-    // a diagram larger than in the note, up to twice its size, as much as the slide holds (the note sets it a width)
-    for (const svg of body.querySelectorAll<SVGSVGElement>('.mermaid-view svg')) {
-      const w = parseFloat(svg.style.width);
-      if (w) Object.assign(svg.style, { width: `min(100%, ${w * 2}px)`, maxWidth: 'none' });
-    }
     walks = [...body.querySelectorAll<SVGSVGElement>('svg[aria-roledescription]')].map((svg) => {
       const walk = stepper(svg);
       const k = back ? walk.count - 1 : 0;
@@ -75,10 +89,19 @@
 
   onMount(() => {
     box.focus();
-    void go(0);
+    cut();
+    // cut again as the window changes size (going to the whole screen, as it starts, too)
+    let h = box.clientHeight, w = box.clientWidth, wait = 0;
+    const watch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
+      if (box.clientHeight === h && box.clientWidth === w) return;
+      h = box.clientHeight; w = box.clientWidth;
+      clearTimeout(wait);
+      wait = window.setTimeout(cut, 150);
+    });
+    watch?.observe(box);
     // the Mac's window over the whole screen while it is up, as a slideshow is (and back as it was after)
     const screen = wholeScreen(true).catch(() => false);
-    return () => void screen.then((changed) => changed && wholeScreen(false));
+    return () => { watch?.disconnect(); clearTimeout(wait); void screen.then((changed) => changed && wholeScreen(false)); };
   });
 </script>
 

@@ -1,6 +1,7 @@
-// A note presented (⋯ → Present), in WebKit: a slide at each of its biggest headings, the text a size up and clear of
+// A note presented (⋯ → Present), in WebKit: a slide at each of its biggest headings, one longer than the screen
+// cut onto the next under its heading again (and cut again as the window changes size), no slide scrolled, the text a size up and clear of
 // the window's edges; a flowchart that draws itself walked a box a press, the lines into a box with it, before → turns
-// the page; ← the same way back; Esc gives the note back.
+// the page; ← the same way back; a divider no place to cut; Esc gives the note back.
 // Run: npm run e2e:present (starts its own dev server, or uses EVE_URL)
 import assert from 'node:assert/strict';
 import { webkit } from 'playwright-core';
@@ -29,7 +30,9 @@ try {
   });
 
   let v = await look();
-  assert.equal(v.h, 'Talk'); assert.equal(await count(), '1 / 4');
+  const total = () => count().then((c) => Number(c.split(' / ')[1]));
+  assert.equal(v.h, 'Talk'); assert.equal(await count(), `1 / ${await total()}`);
+  assert.ok(await total() >= 5, `the long section cut onto slides of its own (${await count()})`);
   assert.ok(v.size > 22, `the text a size up (${v.size}px)`);
   assert.ok(v.box[0] > 0 && v.box[1] > 0 && v.box[2] < 1280 && v.box[3] < 800, `the slide inside the window (${v.box})`);
   await page.screenshot({ path: 'e2e/out/present-1.png' });
@@ -47,15 +50,30 @@ try {
   v = await look();
   assert.deepEqual([v.h, v.nodes, v.lines], ['The flow', 3, 2]);
 
-  await press('ArrowRight');
-  v = await look();
-  assert.equal(v.h, 'Long'); assert.ok(v.tall, 'a slide longer than the screen');
-  await press('ArrowRight');
-  v = await look();
-  assert.equal(v.h, 'Long'); assert.ok(v.scrolled > 100, 'scrolled through before the page turns');
-  for (let i = 0; i < 6 && (await count()) !== '4 / 4'; i++) await press('ArrowRight');
-  assert.equal(await count(), '4 / 4');
-  assert.equal(await page.textContent('.present .slide'), 'The end.');
+  // the long section: slide after slide, each under its heading, none scrolled, the divider not a cut
+  const seen = [];
+  for (let i = 0; i < 12 && !(await page.textContent('.present .slide')).includes('The end.'); i++) {
+    await press('ArrowRight');
+    v = await look();
+    assert.equal(v.h, 'Long'); assert.ok(!v.tall, `slide ${await count()} fits the screen`);
+    seen.push(await page.evaluate(() => [...document.querySelectorAll('.present .slide p')].map((p) => p.textContent)));
+  }
+  assert.equal(await count(), `${await total()} / ${await total()}`);
+  assert.ok(seen.at(-1).includes('Line 39') || seen.at(-1)[0] === 'The end.', 'the end with the lines before it, or right after them');
+  assert.deepEqual(seen.flat().filter((t) => t.startsWith('Line')), Array.from({ length: 40 }, (_, i) => `Line ${i}`), 'every line once, in order');
+  await page.screenshot({ path: 'e2e/out/present-3.png' });
+
+  // a smaller window: more slides, and still on the words that were up
+  await press('ArrowLeft');
+  const first = await page.textContent('.present .slide p');
+  const before = await total();
+  await page.setViewportSize({ width: 1280, height: 520 }); // (narrower, the text is smaller too: a lower one holds less)
+  await page.waitForTimeout(800);
+  assert.ok((await total()) > before, `cut again for a smaller window (${before} → ${await total()})`);
+  assert.ok((await page.textContent('.present .slide')).includes(first), `still on "${first}"`);
+  assert.ok(!(await look()).tall);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.waitForTimeout(800);
 
   await press('Home');
   await press('ArrowRight');
@@ -73,7 +91,7 @@ try {
   assert.ok(await page.evaluate(() => !!document.activeElement?.closest('.tiptap')), 'the keyboard back in the note');
   // the note's own diagram is whole: the slides were copies
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('.tiptap g.node')].filter((g) => getComputedStyle(g).opacity === '0').length), 0);
-  console.log('ok   a note presented: slides at its headings, a flowchart a step a press, a long slide scrolled, back into the note');
+  console.log('ok   a note presented: slides at its headings, a long section cut to the screen (and again for a smaller window), a flowchart a step a press, back into the note');
 } finally {
   await browser.close();
   await server?.close();
