@@ -11,7 +11,7 @@
   import { groups, leafOf, parentOf } from './lib/groups.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
-  import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, widget, links, inbox, saveAsset } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, widget, links, inbox, saveAsset, storage, copyText } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Confirm from './Confirm.svelte';
@@ -271,9 +271,18 @@
       { label: 'Export as Markdown (.md)', sep: true, run: () => void exportCurrent('md') },
       { label: 'Export as PDF', run: () => void exportCurrent('pdf') },
       { label: 'Export as image (.png)', run: () => void exportCurrent('png') },
-      { label: 'Version history…', sep: true, hide: !notes.current, run: () => { const n = notes.current; if (n) { notes.flush(n.id); ui.openHistory(n.id); } } },
+      // the .md file itself, for a terminal, an agent or another app (a phone's is inside the app, of no use outside it)
+      { label: 'Copy file path', sep: true, hide: !isTauri || isMobile || !notes.current, run: () => void copyPath() },
+      { label: 'Version history…', sep: !isTauri || isMobile, hide: !notes.current, run: () => { const n = notes.current; if (n) { notes.flush(n.id); ui.openHistory(n.id); } } },
       { label: 'Trash…', run: () => ui.openTrash() },
     ]);
+  }
+  async function copyPath() {
+    const n = notes.current;
+    if (!n) return;
+    notes.flush(n.id); // on disk as it reads now
+    await copyText(`${await storage.path()}/${n.id}.md`);
+    ui.toast(`Path to “${titleOf(n)}” copied`);
   }
   /** Opened from the Mac's QR: a newer Eve is asked about there and then, not left to a banner. */
   async function offerUpdate() {
