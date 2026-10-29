@@ -27,21 +27,53 @@ const kindOf = (n: PMNode) => (n.type.name === 'paragraph' ? 'paragraph' : n.typ
 export function moveBlockTo(state: EditorState, from: number, target: number, copy = false): Transaction | null {
   const node = state.doc.nodeAt(from);
   if (!node) return null;
-  const end = from + node.nodeSize;
-  if (!copy && target >= from && target <= end) return null;
+  let start = from, end = from + node.nodeSize;
+  if (!copy && target >= start && target <= end) return null;
+  const $f = state.doc.resolve(from);
+  // a list's line let go outside a list goes as a list of its own kind, of that one line (and what hangs under it)
+  const list = /Item$/.test(node.type.name) ? $f.parent : null;
+  const where = placeFor(state, target, node, list);
   // only where such a block may stand (a table is no list's line)
-  const $t = state.doc.resolve(target);
-  if (!$t.parent.canReplaceWith($t.index(), $t.index(), node.type)) return null;
+  if (!where) return null;
+  const { put } = where;
+  // the only line of its list: the list goes too (an empty list is no list)
+  if (list && !copy && list.childCount === 1) { start = $f.before(); end = $f.after(); }
   // the only block of what holds it (a toggle's body, a callout): an empty line left in its place, which must hold one
-  const $f = state.doc.resolve(from), alone = !copy && $f.depth > 0 && $f.parent.childCount === 1;
-  const tr = copy ? state.tr : alone ? state.tr.replaceWith(from, end, state.schema.nodes.paragraph.create()) : state.tr.delete(from, end);
-  const at = tr.mapping.map(target);
-  tr.insert(at, node);
+  const $s = state.doc.resolve(start), alone = !copy && $s.depth > 0 && $s.parent.childCount === 1;
+  const tr = copy ? state.tr : alone ? state.tr.replaceWith(start, end, state.schema.nodes.paragraph.create()) : state.tr.delete(start, end);
+  let at = tr.mapping.map(where.pos);
+  if (where.split) {
+    // between two lines of a list it is no line of: the list is cut there, and the part after it counts on
+    const $at = tr.doc.resolve(at), cut = $at.parent;
+    tr.split(at);
+    at += 1;
+    if (cut.type.name === 'orderedList') tr.setNodeAttribute(at, 'start', (cut.attrs.start ?? 1) + $at.index());
+  }
+  tr.insert(at, put);
   // into a folded toggle: it opens, so what was put there is seen
   const $at = tr.doc.resolve(at);
   for (let d = $at.depth; d > 0; d--) if ($at.node(d).type.name === 'details' && !$at.node(d).attrs.open) tr.setNodeAttribute($at.before(d), 'open', true);
-  return tr.setSelection(NodeSelection.create(tr.doc, at)).scrollIntoView();
+  // the block chosen where it went (a list's line its line, not the list made around it)
+  return tr.setSelection(NodeSelection.create(tr.doc, put === node ? at : at + 1)).scrollIntoView();
 }
+/**
+ * Where a block let go at `pos` goes, as what: there as it is; a list's line outside a list (or in a list of another
+ * kind) as a list of its own; and at a list's edge or between its lines, a block that is no line of that list before
+ * or after the list, or between two halves of it (`split`). Null where it cannot stand at all.
+ */
+function placeFor(state: EditorState, pos: number, node: PMNode, list: PMNode | null): { pos: number; put: PMNode; split?: boolean } | null {
+  if (fitsAt(state, pos, node)) return { pos, put: node };
+  const put = list ? asList(list, node) : node;
+  if (fitsAt(state, pos, put)) return { pos, put };
+  const $p = state.doc.resolve(pos);
+  if (!/List$/.test($p.parent.type.name) || $p.depth < 1) return null;
+  const i = $p.index(), edge = i === 0 ? $p.before() : i === $p.parent.childCount ? $p.after() : null;
+  if (edge !== null) return fitsAt(state, edge, put) ? { pos: edge, put } : null;
+  return fitsAt(state, $p.before(), put) ? { pos, put, split: true } : null;
+}
+const fitsAt = (state: EditorState, pos: number, node: PMNode) => { const $p = state.doc.resolve(pos); return $p.parent.canReplaceWith($p.index(), $p.index(), node.type); };
+/** a list of one line, of the kind it came from; numbered, it counts from 1 where it goes */
+const asList = (list: PMNode, item: PMNode) => list.type.create(list.type.name === 'orderedList' ? { ...list.attrs, start: 1 } : list.attrs, item);
 
 type Placed = Block & { top: number; bottom: number; depth: number };
 /** what holds blocks of its own, as Notion's pages do: a toggle's body, a callout, a quote */
@@ -67,6 +99,20 @@ function blocks(view: EditorView): Placed[] {
   walk(view.state.doc, 0, 0);
   return out;
 }
+/** every list's lines, with where each sits on screen, deeper than the list that holds it */
+function items(view: EditorView): Placed[] {
+  const out: Placed[] = [];
+  view.state.doc.descendants((node, pos) => {
+    if (!/Item$/.test(node.type.name)) return true;
+    const dom = view.nodeDOM(pos);
+    if (dom instanceof HTMLElement) {
+      const r = dom.getBoundingClientRect();
+      if (r.height) out.push({ pos, node, dom, item: true, depth: view.state.doc.resolve(pos).depth, top: r.top, bottom: r.bottom });
+    }
+    return true;
+  });
+  return out;
+}
 /** the innermost block at height y (in a toggle, the line in it, not the toggle) */
 const deepest = (all: Placed[], y: number) => all.filter((b) => y >= b.top && y < b.bottom).sort((a, b) => b.depth - a.depth)[0];
 
@@ -76,7 +122,6 @@ class Handle {
   private host: HTMLElement;
   private cur: Block | null = null;
   private dragFrom: number | null = null;
-  private dragList: HTMLElement | null = null; // a list's line is dragged among its list's lines
   private zone: HTMLElement | null = null; // where a drag is heard besides the editor (dragStart)
   private frame = 0;
 
@@ -270,7 +315,6 @@ class Handle {
     setTimeout(() => ghost.remove());
     this.view.dragging = { slice, move: true };
     this.dragFrom = b.pos;
-    this.dragList = b.item ? b.dom.parentElement : null;
     document.documentElement.classList.add('block-drag'); // the editor's own drop line gives way to this one
     // dragged down the margin where ⋮⋮ is: on a day's or a card's page that is past the editor's edge, where the editor
     // heard nothing, and the block stayed put. The box the page scrolls in hears it while the drag lasts
@@ -285,25 +329,13 @@ class Handle {
    *  block's own depth (a line in a toggle: beside it, in the toggle). Over a toggle's title's lower half: first in its
    *  body, as Notion puts a block dropped there. `left`/`width`: the drop line, as wide as where it lands */
   private target(y: number): { pos: number; y: number; left?: number; width?: number } | null {
-    if (this.dragList) {
-      const all = [...this.dragList.children].filter((el): el is HTMLElement => el.tagName === 'LI').map((dom) => {
-        const pos = this.view.posAtDOM(dom, 0) - 1, r = dom.getBoundingClientRect();
-        return { pos, node: this.view.state.doc.nodeAt(pos)!, dom, top: r.top, bottom: r.bottom };
-      }).filter((b) => b.node);
-      if (!all.length) return null;
-      for (const b of all) {
-        if (y >= b.bottom) continue;
-        const r = b.dom.getBoundingClientRect();
-        return y < (r.top + r.bottom) / 2 ? { pos: b.pos, y: r.top } : { pos: b.pos + b.node.nodeSize, y: r.bottom };
-      }
-      const b = all[all.length - 1];
-      return { pos: b.pos + b.node.nodeSize, y: b.dom.getBoundingClientRect().bottom };
-    }
     const { state } = this.view, from = this.dragFrom!, moving = state.doc.nodeAt(from);
+    // a list's line: every list's lines are places too, its own list's and others' (and anywhere else, as a list)
+    const list = moving && /Item$/.test(moving.type.name) ? state.doc.resolve(from).parent : null;
     // not into itself: the dragged block and what is in it are no place for it
-    const all = blocks(this.view).filter((b) => !moving || b.pos < from || b.pos >= from + moving.nodeSize);
+    const all = [...blocks(this.view), ...(list ? items(this.view) : [])].filter((b) => !moving || b.pos < from || b.pos >= from + moving.nodeSize);
     if (!all.length) return null;
-    const fits = (pos: number) => { const $p = state.doc.resolve(pos); return !moving || $p.parent.canReplaceWith($p.index(), $p.index(), moving.type); };
+    const fits = (pos: number) => !moving || !!placeFor(state, pos, moving, list);
     const line = (b: Placed, pos: number, at: number) => { const r = b.dom.getBoundingClientRect(); return { pos, y: at, left: r.left, width: r.width }; };
     const b = deepest(all, y) ?? (y < all[0].top ? all[0] : all.filter((x) => x.depth === 0).at(-1)!);
     const r = b.dom.getBoundingClientRect();
@@ -355,7 +387,6 @@ class Handle {
     }
     this.zone = null;
     this.dragFrom = null;
-    this.dragList = null;
     this.view.dragging = null;
     this.line.classList.remove('on');
     document.documentElement.classList.remove('block-drag');

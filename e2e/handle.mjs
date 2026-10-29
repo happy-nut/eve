@@ -153,6 +153,22 @@ try {
     const items = await page.evaluate(() => [...document.querySelectorAll('.tiptap li')].map((l) => l.textContent.trim()));
     assert.deepEqual(items, ['two', 'three', 'one'], `a list's line dragged by ⋮⋮ moves within its list (${errors.join('; ')})`);
     console.log('ok   a list\'s line dragged by its ⋮⋮ moves within its list');
+    // …and out of it, as Notion's: under the line below the list, as a list of its own (it could only stay in its list)
+    await page.evaluate(() => window.__editor.commands.setContent('# Drag\n\n- one\n- two\n\nbelow\n', true));
+    await page.waitForTimeout(700);
+    const two = await page.locator('.tiptap li', { hasText: 'two' }).boundingBox();
+    await page.mouse.move(two.x + 20, two.y + two.height / 2);
+    await page.waitForTimeout(120);
+    const g2 = await page.locator('.block-handle.on .grip').boundingBox();
+    const below = await page.locator('.tiptap > p', { hasText: 'below' }).boundingBox();
+    await page.mouse.move(g2.x + g2.width / 2, g2.y + g2.height / 2);
+    await page.mouse.down();
+    for (let i = 1; i <= 8; i++) await page.mouse.move(g2.x + g2.width / 2 + i, g2.y + ((below.y + below.height * 0.8 - g2.y) * i) / 8);
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    const out = (await page.evaluate(() => window.__editor.storage.markdown.getMarkdown())).trimEnd();
+    assert.equal(out, '# Drag\n\n- one\n\nbelow\n\n- two', `a list's line dragged out of its list goes there (${errors.join('; ')})`);
+    console.log('ok   a list\'s line dragged out of its list goes there, a list of its own');
   }
   // ⋮⋮'s menu on a divider and on a table acts on that block, not on the lines around it; the only line of a list
   // deleted takes its list
