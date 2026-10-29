@@ -13,6 +13,10 @@ export const FONTS: { id: string; label: string; stack: string }[] = [
 export const THEMES = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']] as const;
 export type Theme = (typeof THEMES)[number][0];
 
+/** how a presentation turns its page (Settings → Appearance → Presenting) */
+export const SLIDE_TURNS = [['push', 'Slide'], ['fade', 'Fade'], ['zoom', 'Zoom'], ['none', 'None']] as const;
+export type SlideTurn = (typeof SLIDE_TURNS)[number][0];
+
 interface Appearance {
   theme: Theme; font: string; custom: string; size: number; lineHeight: number; width: number;
   /** close the sidebar as soon as you start writing (typing in the editor; the arrows only read). Off unless asked
@@ -40,6 +44,8 @@ interface Appearance {
   zoom: number;
   /** the size the window opens at; changing it resizes the window there and then, as a preview of itself */
   winW: number; winH: number;
+  /** a presentation's page turn, and whether a slide's lines come in one after another as it is put up */
+  slideTurn: SlideTurn; slideBuild: boolean;
 }
 // the window's own defaults match tauri.conf.json, so a fresh install never resizes on launch
 // A phone starts from bigger type. Appearance lives in this device's localStorage and never syncs, so a
@@ -48,7 +54,7 @@ interface Appearance {
 export const PASTELS = ['#fff1a8', '#c9f2d4', '#cfe3ff', '#ffd6e3', '#e5d8ff'];
 /** the note's text size, px: the Size slider's range, and where ⌘+ / ⌘- stop */
 export const SIZE_MIN = 12, SIZE_MAX = 28;
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832 };
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832, slideTurn: 'push', slideBuild: true };
 
 function load(): Appearance {
   try {

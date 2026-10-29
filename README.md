@@ -58,7 +58,9 @@ GitHub repo with no server in between. Claude can read and write them too, with 
 - **Sidebar** — groups (3 levels), emoji icons, drag to reorder, `⌘1`…`⌘9` to jump, `⌘\` to drive it from the keyboard.
 - **Link cards, pictures, find & replace** (`⌘F`), section outline, text size (`⌘+` `⌘-`).
 - **Present a note** — ⋯ → Present: cut into slides by itself, at its biggest headings and wherever the screen ends,
-  the window on the whole screen; → walks a diagram that draws itself in a step at a time before it turns the page.
+  a slide gone on to the next under its heading and subheading again, the window on the whole screen; → walks a diagram
+  that draws itself in a step at a time before it turns the page. The page turn (slide, fade, zoom, none) and lines
+  coming in one by one are in Settings → Appearance → Presenting.
 - **Import a folder** — drop an Obsidian vault, a Notion export or Google Keep Takeout on the sidebar.
 - **Opens any `.md`** from Finder's *Open With*, edited in place.
 - **Every shortcut is rebindable** in Settings (`⌘,`).

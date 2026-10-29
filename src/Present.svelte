@@ -6,6 +6,7 @@
   import { slides, paginate } from './lib/slides';
   import { stepper } from './lib/diagramMotion';
   import { wholeScreen } from './lib/platform';
+  import { appearance } from './lib/appearance.svelte';
 
   /**
    * The open note a slide at a time, over everything (⋯ → Present), cut by itself (slides.ts): a slide at each of its
@@ -42,14 +43,52 @@
       return !(room > 0) || body.scrollHeight <= room + 1; // (no room measured: a page with no layout, one slide a section)
     }, (h) => { const c = h.cloneNode(true) as Element; c.classList.add('again'); return c; });
     const i = here ? deck.findIndex((s) => s.includes(here)) : 0;
-    void go(Math.max(0, i));
+    void go(Math.max(0, i), false, false);
+  }
+
+  const EASE = 'cubic-bezier(.2, .7, .2, 1)';
+  /**
+   * The page turned (Settings → Appearance → Presenting): the slide leaving drawn over as a copy that goes, the new one
+   * coming in from the side it is turned to; then its lines one after another. A slide going on under the heading the
+   * last one had turns no page: its heading stays where it is and only the words under it change.
+   */
+  function turn(old: { el: HTMLElement; at: DOMRect; top: number } | null, back: boolean) {
+    if (matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const head = (e: Element | null | undefined) => (e && /^H[1-6]$/.test(e.tagName) ? e.textContent : null);
+    const same = !!old && head(old.el.firstElementChild) != null && head(old.el.firstElementChild) === head(body.firstElementChild);
+    const kind = same ? 'none' : appearance.s.slideTurn;
+    const d = back ? -1 : 1;
+    const frames: Record<string, [Keyframe[], Keyframe[]]> = {
+      push: [[{ transform: `translateX(${-6 * d}vw)`, opacity: 0 }], [{ transform: `translateX(${6 * d}vw)`, opacity: 0 }, {}]],
+      fade: [[{ opacity: 0 }], [{ opacity: 0 }, {}]],
+      zoom: [[{ transform: 'scale(1.04)', opacity: 0 }], [{ transform: 'scale(.96)', opacity: 0 }, {}]],
+    };
+    const f = frames[kind];
+    if (old && f) {
+      // the copy where the slide was, gone as the new one comes
+      const rb = box.getBoundingClientRect(), { el } = old;
+      Object.assign(el.style, { position: 'absolute', left: `${old.at.left - rb.left}px`, top: `${old.at.top - rb.top}px`, width: `${old.at.width}px`, height: `${old.at.height}px`, margin: '0' });
+      el.classList.remove('first');
+      el.classList.add('leaving');
+      box.append(el);
+      el.scrollTop = old.top;
+      el.animate(f[0], { duration: 260, easing: EASE, fill: 'forwards' }).finished.finally(() => el.remove());
+      body.animate(f[1], { duration: 420, easing: EASE });
+    }
+    if (!appearance.s.slideBuild) return;
+    // the lines, one after another (the heading it goes on under already there)
+    [...body.children].filter((b) => !b.classList.contains('again')).slice(0, 14).forEach((b, n) =>
+      b.animate([{ opacity: 0, transform: 'translateY(.6em)' }, {}], { duration: 380, delay: (f && !same ? 120 : 0) + n * 55, easing: EASE, fill: 'backwards' }));
   }
 
   /** slide `i` put up, its diagrams at their first step (come to going forward) or whole (going back) */
-  async function go(i: number, back = false) {
+  async function go(i: number, back = false, animate = true) {
+    // what was up, kept to be drawn leaving
+    const old = animate && body?.childElementCount ? { el: body.cloneNode(true) as HTMLElement, at: body.getBoundingClientRect(), top: body.scrollTop } : null;
     at = i;
     await tick();
     body.replaceChildren(...deck[i]);
+    if (animate) turn(old, back);
     body.scrollTop = back ? body.scrollHeight : 0;
     walks = [...body.querySelectorAll<SVGSVGElement>('svg[aria-roledescription]')].map((svg) => {
       const walk = stepper(svg);
@@ -129,6 +168,8 @@
   }
   /* the first slide, the title's, in the middle of the screen; the others from the top, each heading where the last was */
   .slide.first { align-self: center; }
+  /* the slide that was up, going as the next comes */
+  .present > :global(.leaving) { pointer-events: none; overflow: hidden; }
   .slide :global(.mermaid-view svg) { height: auto; max-height: 62vh; }
   .slide::-webkit-scrollbar { display: none; }
   .slide > :global(:first-child) { margin-top: 0; }

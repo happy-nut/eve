@@ -16,17 +16,30 @@ export function slides(blocks: Element[]): Element[][] {
 
 /**
  * Each slide as many slides as it takes to show without scrolling: as many blocks as `fits` says the screen holds, the
- * rest on the next one under the slide's heading again (`again` copies it). A block taller than the screen on its own
+ * rest on the next one under the slide's heading and the subheading it has reached again (`again` copies them), so a
+ * screen always says where in the talk it is; a new subheading takes the old one's place. A heading is never a slide's
+ * last line: it goes on with the words under it. A block taller than the screen on its own
  * is a slide of its own, scrolled through. A divider at a slide's edge has nothing to divide there and goes.
  */
 export function paginate(deck: Element[][], fits: (blocks: Element[]) => boolean, again: (heading: Element) => Element): Element[][] {
+  const level = (b?: Element) => Number(/^H([1-6])$/.exec(b?.tagName ?? '')?.[1] ?? 9);
   const out: Element[][] = [];
   for (const s of deck) {
-    const head = /^H[1-6]$/.test(s[0]?.tagName ?? '') ? s[0] : null;
+    const head = level(s[0]) < 9 ? s[0] : null;
+    // the subheadings are the biggest headings under the slide's own
+    const subs = Math.min(9, ...s.slice(head ? 1 : 0).map(level).filter((l) => l > level(head ?? undefined) || !head));
+    let sub: Element | null = null;
     let now: Element[] = [];
     for (const b of s) {
-      if (now.length && !fits([...now, b])) { out.push(now); now = head ? [again(head), b] : [b]; }
-      else now.push(b);
+      if (now.length && !fits([...now, b])) {
+        const carried: Element[] = [];
+        while (now.length > 1 && level(now.at(-1)) < 9) carried.unshift(now.pop()!);
+        out.push(now);
+        const newSub = [...carried, b].some((x) => level(x) <= subs);
+        now = [...(head ? [again(head)] : []), ...(sub && !newSub ? [again(sub)] : []), ...carried, b];
+      } else now.push(b);
+      if (b !== head && level(b) === subs) sub = b;
+      if (b !== head && level(b) < subs) sub = null;
     }
     out.push(now);
   }
