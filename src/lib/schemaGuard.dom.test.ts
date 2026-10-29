@@ -61,12 +61,18 @@ for (const [where, wrap] of Object.entries(INSIDE)) {
   });
 }
 
-// what another app gets as plain text is the note's own markdown (a chat, a terminal, another editor)
+// what another app gets as plain text is the note's own markdown (a chat, a terminal, another editor), but for two
+// lines of text one after the other, which come a line apart as in the note (Slack and a chat drew markdown's blank
+// line between them as an empty line after every Enter): the same lines, only those blank lines left out
 test.each(Object.entries(SAMPLES))('%s: copied as plain text, it is its markdown', (_k, note) => {
   const ed = editorWith(note);
   ed.commands.selectAll();
   const { text } = ed.view.serializeForClipboard(ed.state.selection.content());
-  expect(text.replace(/\n+$/, '')).toBe(note.replace(/\n+$/, ''));
+  const lines = (s: string) => s.replace(/\n+$/, '').split(/\n+/);
+  expect(lines(text)).toEqual(lines(note));
+  // …and everywhere else the blank lines markdown needs: what is not two lines of text is as the note writes it
+  const kept = (s: string) => s.replace(/\n+$/, '').split(/\n\n/).length;
+  expect(kept(text)).toBe(kept(note) - (ed.state.doc.content.content.filter((b, i, all) => i && b.type.name === 'paragraph' && all[i - 1].type.name === 'paragraph').length));
 });
 
 // any two blocks one after the other: neither runs into the other (a list swallowing the line after it, a table its

@@ -17,7 +17,16 @@ function copied(md: string, from: string, to: string, opts: { all?: boolean } = 
 
 test('spaces opening a line are copied as spaces, not as the `&#32;` the note keeps them as', () => {
   expect(copied('&#32;&#32;indented\n\n- &#9;item', 'indented', 'item').trim()).toBe('indented\n\n- \titem');
-  expect(copied('&#32;&#32;indented\n\nx', '', '', { all: true }).trimEnd()).toBe('  indented\n\nx');
+  expect(copied('&#32;&#32;indented\n\nx', '', '', { all: true }).trimEnd()).toBe('  indented\nx');
+});
+
+// pasted into Slack, a chat or a mail, each Enter came out as two: lines were a markdown blank line apart, and those
+// apps draw a blank line as one. A line follows the one before it, as in the note; an empty line is one empty line
+test('lines of text copied come a line apart, as in the note, not a blank line apart', () => {
+  expect(copied('one\n\ntwo\n\nthree', '', '', { all: true }).trimEnd()).toBe('one\ntwo\nthree');
+  expect(copied('one\n\n\u00a0\n\ntwo', '', '', { all: true }).trimEnd()).toBe('one\n\ntwo');
+  // a heading, a list, code keep the blank line around them: the copy still reads as markdown
+  expect(copied('# Plan\n\nfirst\n\nsecond\n\n- a\n- b\n\nlast', '', '', { all: true }).trimEnd()).toBe('# Plan\n\nfirst\nsecond\n\n- a\n- b\n\nlast');
 });
 
 test('a whole code block keeps its fence and language; a few words inside it are just the code', () => {
