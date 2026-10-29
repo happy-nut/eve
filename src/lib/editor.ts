@@ -1921,7 +1921,17 @@ export function createEditor(opts: {
           // after @ finds no day and the calendar goes; ↩ only picks a day named in full (PICKERS.date)
           allowSpaces: true,
           pluginKey: DATE_MENU,
-          allow: ({ editor, state }) => !menuOpen(editor, state, WIKI_MENU, SLASH_MENU, PAGE_MENU),
+          // the caret come back to an @ already written ("ask @|Tom", by a click or the arrows): the word on it is what
+          // the @ names, and a word that is no day is a name, not a day being typed (the calendar opened on today)
+          allow: ({ editor, state, range }) => {
+            if (menuOpen(editor, state, WIKI_MENU, SLASH_MENU, PAGE_MENU)) return false;
+            const { $head } = state.selection;
+            const rest = /^\S+/.exec($head.parent.textBetween($head.parentOffset, $head.parent.content.size, undefined, '￼'))?.[0];
+            if (!rest || $head.pos <= range.from) return true;
+            // (a day named in full: "tomorrow" is "Tom" so far, but "Tom" written out is no day)
+            const word = state.doc.textBetween(range.from + 1, $head.pos) + rest;
+            return !!remindChoices(word) || (dayChoices(word) as { exact?: boolean }[]).some((d) => d.exact);
+          },
           // the days a query could mean; the calendar opens on the first and closes when there is none. "@remind"
           // offers them as reminders (Notion's), at 09:00 or the next hour today
           items: ({ query }) => remindChoices(query) ?? dayChoices(query),
