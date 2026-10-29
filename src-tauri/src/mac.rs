@@ -53,6 +53,12 @@ pub(crate) fn keep_page_awake(app: &AppHandle) {
             if prefs.respondsToSelector(sel!(setInactiveSchedulingPolicy:)) {
                 prefs.setInactiveSchedulingPolicy(WKInactiveSchedulingPolicy::None);
             }
+            // nor stopped from drawing as a window it takes for covered: summoned, the window is invisible (alpha 0)
+            // until the page has drawn in it, and a window macOS counts as covered is one WebKit does not draw into
+            // (the window was then seen as it was, white)
+            if webview.respondsToSelector(sel!(_setWindowOcclusionDetectionEnabled:)) {
+                let _: () = objc2::msg_send![webview, _setWindowOcclusionDetectionEnabled: objc2::runtime::Bool::NO];
+            }
         });
     }
     #[cfg(not(target_os = "macos"))]
@@ -60,20 +66,24 @@ pub(crate) fn keep_page_awake(app: &AppHandle) {
 }
 
 /// The window seen or not, while it stays shown (and so drawn into): its alpha. Shown with alpha 0, WebKit takes the
-/// page as on screen and draws it; nothing white is seen meanwhile.
-pub(crate) fn set_seen(app: &AppHandle, seen: bool) {
+/// page as on screen and draws it (its own check of whether the window is covered is off, `keep_page_awake`); nothing
+/// white is seen meanwhile. `then` hears, before the window is seen, whether macOS took it as on screen.
+pub(crate) fn set_seen(app: &AppHandle, seen: bool, then: Option<Box<dyn FnOnce(Option<bool>) + Send>>) {
     #[cfg(target_os = "macos")]
     if let Some(window) = app.get_webview_window("main") {
         let w = window.clone();
         let _ = window.run_on_main_thread(move || {
+            let mut visible = None;
             if let Ok(ns) = w.ns_window() {
                 let ns: &objc2_app_kit::NSWindow = unsafe { &*(ns as *mut objc2_app_kit::NSWindow) };
+                visible = Some(ns.occlusionState().contains(objc2_app_kit::NSWindowOcclusionState::Visible));
                 ns.setAlphaValue(if seen { 1.0 } else { 0.0 });
             }
+            if let Some(then) = then { then(visible) }
         });
     }
     #[cfg(not(target_os = "macos"))]
-    let _ = (app, seen);
+    { let _ = (app, seen); if let Some(then) = then { then(None) } }
 }
 
 /// The window's ground in the page's colour (the theme's), under a webview that draws none of its own: what shows

@@ -1,4 +1,6 @@
 //! The one window: summon, dismiss, Dock, always on top.
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
 /// Is the main window currently visible and frontmost? (the frontend decides whether to summon or dismiss)
@@ -27,24 +29,54 @@ pub(crate) fn show_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Summoned by the hotkey: shown and focused but not yet seen, until the page has drawn in it (`reveal_window`).
-/// While Eve was hidden WebKit may have let go of what the page drew, and a window seen at once was white until
-/// the page drew again (some 60–110 ms, measured). If the page never says so, the window is seen anyway a moment later.
+/// Summoned (the hotkey, a link from another app): shown and focused but not yet seen, until the page has drawn in it
+/// again (`reveal_window`). While Eve was hidden WebKit may have let go of what the page drew, and a window seen at once
+/// was white until the page drew again. The page is told to (`eve-reveal`); if it never says so, the window is seen
+/// anyway, a while later: at 300 ms that was too soon on a busy Mac, just back from sleep, and it was seen white.
 #[tauri::command]
 pub(crate) fn summon_window(app: AppHandle) -> Result<(), String> {
-    crate::mac::set_seen(&app, false);
+    use tauri::Emitter;
+    let n = SUMMONS.fetch_add(1, Ordering::SeqCst) + 1;
+    *SUMMONED_AT.lock().unwrap() = Some(std::time::Instant::now());
+    crate::mac::set_seen(&app, false, None);
     show_window(app.clone())?;
+    let _ = app.emit("eve-reveal", n);
     std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        reveal_window(app);
+        std::thread::sleep(std::time::Duration::from_millis(FALLBACK_MS));
+        reveal(&app, n, "not drawn: seen anyway");
     });
     Ok(())
 }
 
-/// The page has drawn: the summoned window is seen.
+/// how long a summoned window waits for the page before it is seen anyway
+const FALLBACK_MS: u64 = 1500;
+static SUMMONS: AtomicU64 = AtomicU64::new(0);
+static SEEN: AtomicU64 = AtomicU64::new(0);
+static SUMMONED_AT: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+
+/// The page has drawn since summon `n`: the window is seen.
 #[tauri::command]
-pub(crate) fn reveal_window(app: AppHandle) {
-    crate::mac::set_seen(&app, true);
+pub(crate) fn reveal_window(app: AppHandle, n: Option<u64>) {
+    reveal(&app, n.unwrap_or_else(|| SUMMONS.load(Ordering::SeqCst)), "drawn");
+}
+
+/// seen once per summon, by whichever comes first; how long it took is written down (Logs/dev.happynut.eve/summon.log),
+/// so a white page on someone's Mac says why
+fn reveal(app: &AppHandle, n: u64, how: &'static str) {
+    if SEEN.fetch_max(n, Ordering::SeqCst) >= n { return; }
+    let ms = SUMMONED_AT.lock().unwrap().map(|t| t.elapsed().as_millis()).unwrap_or(0);
+    let log = app.path().app_log_dir().ok().map(|d| d.join("summon.log"));
+    crate::mac::set_seen(app, true, Some(Box::new(move |visible: Option<bool>| {
+        let Some(path) = log else { return };
+        let _ = std::fs::create_dir_all(path.parent().unwrap());
+        // kept short: the last few hundred summons
+        if std::fs::metadata(&path).map(|m| m.len() > 64 * 1024).unwrap_or(false) { let _ = std::fs::remove_file(&path); }
+        let at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let shown = match visible { Some(true) => "on screen", Some(false) => "hidden from WebKit (occluded)", None => "?" };
+        let line = format!("{at} summon {n}: {how} after {ms} ms; before it was seen the window was {shown}\n");
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) { let _ = f.write_all(line.as_bytes()); }
+    })));
 }
 
 /// Show + focus the main window, or hide the whole app (returning focus to the previous app).
