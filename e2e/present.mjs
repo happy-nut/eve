@@ -37,7 +37,17 @@ try {
   assert.ok(v.box[0] > 0 && v.box[1] > 0 && v.box[2] < 1280 && v.box[3] < 800, `the slide inside the window (${v.box})`);
   await page.screenshot({ path: 'e2e/out/present-1.png' });
 
-  await press('ArrowRight');
+  // the page turns: the slide leaving drawn going while the next comes in, then gone, the new one still and whole
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(110);
+  const mid = await page.evaluate(() => ({ leaving: document.querySelectorAll('.present .leaving').length, t: getComputedStyle(document.querySelector('.present .slide')).transform }));
+  await page.screenshot({ path: 'e2e/out/present-turn.png' });
+  assert.equal(mid.leaving, 1, 'the slide that was up drawn leaving');
+  assert.notEqual(mid.t, 'none', 'the next one on its way in');
+  await page.waitForTimeout(600);
+  const after = await page.evaluate(() => { const s = document.querySelector('.present .slide'); return { leaving: document.querySelectorAll('.present .leaving').length, t: getComputedStyle(s).transform, o: [...s.children].map((b) => getComputedStyle(b).opacity) }; });
+  assert.equal(after.leaving, 0, 'the leaving copy gone');
+  assert.ok(after.t === 'none' && after.o.every((o) => o === '1'), `the slide still and whole (${after.t}, ${after.o})`);
   v = await look();
   assert.deepEqual([v.h, v.nodes, v.lines], ['The flow', 1, 0], 'a flowchart starts with its first box only');
   await press('ArrowRight');

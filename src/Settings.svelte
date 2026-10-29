@@ -7,7 +7,7 @@
   import { storage, autostart, dock, defaultApp, mcp, isTauri, isMobile, copyText, openUrl, type McpClient } from './lib/platform';
   import { normHost, webBase } from './lib/github';
   import { ui } from './lib/ui.svelte';
-  import { appearance, PASTELS, SIZE_MIN, SIZE_MAX, FONTS, THEMES, type Theme } from './lib/appearance.svelte';
+  import { appearance, PASTELS, SIZE_MIN, SIZE_MAX, FONTS, THEMES, SLIDE_TURNS, type Theme, type SlideTurn } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
   import Select from './Select.svelte';
   import Slider from './Slider.svelte';
@@ -343,6 +343,18 @@
         The quick brown fox jumps over the lazy dog. 다람쥐 헌 쳇바퀴에 타고파. 0123456789
       </p>
       <div class="foot"><button class="link reset" onclick={resetLook}>Reset to defaults</button></div>
+      <h3>Presenting</h3>
+      <div class="card">
+        <div class="row">
+          <span class="label">Page turn <span class="sub">from one slide to the next (⋯ → Present)</span></span>
+          <Select label="Page turn" value={appearance.s.slideTurn} options={SLIDE_TURNS} onchange={(v) => appearance.set({ slideTurn: v as SlideTurn })} />
+        </div>
+        <label class="row">
+          <span class="label">Lines come in one by one <span class="sub">as a slide is put up; the heading it goes on under stays where it is</span></span>
+          <input type="checkbox" class="switch" checked={appearance.s.slideBuild}
+            onchange={(e) => appearance.set({ slideBuild: e.currentTarget.checked })} />
+        </label>
+      </div>
 
     {:else if tab === 'sync'}
       <h3>GitHub sync</h3>
