@@ -25,7 +25,12 @@ export function paginate(deck: Element[][], fits: (blocks: Element[]) => boolean
     const head = /^H[1-6]$/.test(s[0]?.tagName ?? '') ? s[0] : null;
     let now: Element[] = [];
     for (const b of s) {
-      if (now.length && !fits([...now, b])) { out.push(now); now = head ? [again(head), b] : [b]; }
+      if (now.length && !fits([...now, b])) {
+        const carried: Element[] = [];
+        while (now.length > 1 && /^H[1-6]$/.test(now.at(-1)!.tagName)) carried.unshift(now.pop()!);
+        out.push(now);
+        now = head ? [again(head), ...carried, b] : [...carried, b];
+      }
       else now.push(b);
     }
     out.push(now);
