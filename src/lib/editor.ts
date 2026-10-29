@@ -1136,7 +1136,16 @@ export function createEditor(opts: {
         // an empty line is just empty, and spaces opening a line (or ending one before a line break) just spaces:
         // another app shows the `&#32;` they are saved as as written
         const spaces = (s: string) => s.replace(/&#32;/g, ' ').replace(/&#9;/g, '\t');
-        return (serializer.serialize(content) as string).replace(new RegExp(`^${BLANK}$`, 'gm'), '')
+        // a line of text right after another a line apart, as in the note: markdown's blank line between them came out
+        // in Slack, a chat or a mail as an empty line after every Enter (Eve reads them back as lines of their own).
+        // A heading, a list, code, a table… keep the blank line around them, so the copy still reads as markdown
+        let text = '', prev: PMNode | null = null;
+        content.forEach((block) => {
+          if (prev) text += prev.type.name === 'paragraph' && block.type.name === 'paragraph' ? '\n' : '\n\n';
+          text += (serializer.serialize(Fragment.from(block)) as string).replace(/\n+$/, '');
+          prev = block;
+        });
+        return text.replace(new RegExp(`^${BLANK}$`, 'gm'), '')
           .replace(/^([ \t>]*(?:[-*+] (?:\[[ xX]\] )?|\d+[.)] )?)((?:&#(?:32|9);)+)/gm, (_, pre, run) => pre + spaces(run))
           .replace(/(?:&#(?:32|9);)+(?=\\\n)/g, spaces);
       },
