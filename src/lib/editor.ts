@@ -986,6 +986,70 @@ const markExit = Extension.create({
   },
 });
 
+/**
+ * The caret at an edge of inline code (`ab|cd`): inside the code or outside it, which is what a letter typed there gets.
+ * Null away from an edge. `inside` is the stored marks' (an arrow's step across) or else the letters' own.
+ */
+function codeEdge(state: EditorState, $c = state.selection.$from, stored = state.storedMarks) {
+  const code = state.schema.marks.code;
+  if (!code || $c.parent.type.spec.code || !$c.parent.inlineContent) return null;
+  const b = $c.nodeBefore, a = $c.nodeAfter;
+  const inB = !!b?.isText && !!code.isInSet(b.marks), inA = !!a?.isText && !!code.isInSet(a.marks);
+  if (inB === inA) return null;
+  const other = inB ? a : b;
+  return { after: inB, inside: !!code.isInSet(stored ?? $c.marks()), inMarks: (inB ? b : a)!.marks, outMarks: other?.isText ? other.marks : [] };
+}
+
+/**
+ * ← → at an edge of inline code take the caret across the edge first, where it is: after `ab`, → once and what is
+ * typed is plain, beside the code; → again goes on to the next letter. Come back with ←, the caret is outside first,
+ * and ← again takes it in. The caret is drawn on its side (inside the code's box or outside it), since the webview's
+ * own stood at the same place either way. Notion's web editor has no such step (typed there, a letter went into the
+ * code from both sides), which left no way to write plain text just after code in the middle of a line.
+ */
+const codeEdges = Extension.create({
+  name: 'codeEdges',
+  priority: 110, // before markExit, which takes → at the end of a line for every mark
+  addKeyboardShortcuts() {
+    const step = (dir: -1 | 1) => () => {
+      const { state, view } = this.editor, sel = state.selection;
+      if (!(sel instanceof TextSelection) || !sel.empty) return false;
+      const e = codeEdge(state);
+      // across the edge, in place: → out of the code it ends, or into the code it starts; ← the other way
+      if (e && (dir > 0) === (e.after === e.inside)) {
+        view.dispatch(state.tr.setStoredMarks(e.inside ? e.outMarks : e.inMarks));
+        return true;
+      }
+      // a letter on to an edge: the caret is on the side of the letter it came past (inside, out of the code)
+      const $c = sel.$from, node = dir > 0 ? $c.nodeAfter : $c.nodeBefore;
+      if (!node?.isText) return false;
+      const letters = Array.from(node.text!), letter = dir > 0 ? letters[0] : letters[letters.length - 1];
+      const $to = state.doc.resolve($c.pos + dir * letter.length), there = codeEdge(state, $to, null);
+      const inside = !!state.schema.marks.code.isInSet(node.marks);
+      if (!there || there.inside === inside) return false; // where the webview's own move puts it already
+      view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, $to.pos)).setStoredMarks(inside ? there.inMarks : there.outMarks).scrollIntoView());
+      return true;
+    };
+    return { ArrowRight: step(1), ArrowLeft: step(-1) };
+  },
+  addProseMirrorPlugins() {
+    const caret = () => Object.assign(document.createElement('span'), { className: 'code-caret' });
+    return [new Plugin({
+      key: new PluginKey('codeEdges'),
+      props: {
+        // the webview's caret hidden at an edge, and one drawn on the caret's side: in the code's box or beside it
+        attributes: (state): Record<string, string> => (state.selection.empty && codeEdge(state) ? { class: 'at-code-edge' } : {}),
+        decorations: (state) => {
+          const e = state.selection.empty ? codeEdge(state) : null;
+          if (!e) return null;
+          const toward = e.after === e.inside ? -1 : 1; // the code's side of the edge, or the other
+          return DecorationSet.create(state.doc, [Decoration.widget(state.selection.from, caret, { side: toward, marks: e.inside ? e.inMarks : e.outMarks, key: `code-caret-${e.inside}`, ignoreSelection: true })]);
+        },
+      },
+    })];
+  },
+});
+
 export function createEditor(opts: {
   element: HTMLElement;
   content: string;
@@ -1253,6 +1317,7 @@ export function createEditor(opts: {
       }),
       Text,
       markExit,
+      codeEdges,
       hangulKeys,
       // A link ends where its words do, as in Notion: typed on at its end (or before it), the words were taken into the
       // link (stock links grow while autolink is on), and → at its end typed a space into the note each time

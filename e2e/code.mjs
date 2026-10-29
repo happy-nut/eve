@@ -234,6 +234,47 @@ try {
   assert.equal(await afterHangul('- one\n- two', 'two', 'Tab'), '- one\n  - two글', 'Tab just after 한글 indents the item');
   assert.equal(await afterHangul('```\nlet a\n```', 'let a', 'Enter'), '```\nlet a글\n\n```', '↩ just after 한글 in code makes a line in it');
   console.log('ok   Tab and ↩ just after a 한글 syllable do what they do');
+
+  // ← → at an edge of inline code step across it first, in place, with the webview's own arrows: after `ab` → once and
+  // what is typed is plain, the caret drawn outside the code's box; → again goes on. Typed through an input method too
+  const atEdge = async (keys, text, ime = false) => {
+    await imePage.evaluate(() => {
+      const ed = window.__editor;
+      ed.commands.setContent(ed.storage.markdown.parser.parse('# T\n\nw `ab`cd'), true);
+      let pos = 0;
+      ed.state.doc.descendants((n, p) => { if (!pos && n.isText && n.text === 'ab') pos = p + 2; });
+      ed.commands.focus(); ed.commands.setTextSelection(pos);
+    });
+    for (const k of keys) await imePage.keyboard.press(k);
+    await imePage.waitForTimeout(50);
+    const drawn = await imePage.evaluate(() => {
+      const c = document.querySelector('.tiptap .code-caret'), code = document.querySelector('.tiptap p code');
+      return c && { inCode: !!c.closest('code'), x: Math.round(c.getBoundingClientRect().left), right: Math.round(code.getBoundingClientRect().right) };
+    });
+    if (ime) await imePage.evaluate(async (t) => {
+      const el = document.querySelector('.tiptap'), wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      el.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
+      el.dispatchEvent(new CompositionEvent('compositionupdate', { data: t }));
+      document.execCommand('insertText', false, t);
+      el.dispatchEvent(new CompositionEvent('compositionend', { data: t }));
+      await wait(100);
+    }, text);
+    else await imePage.keyboard.type(text);
+    await imePage.waitForTimeout(150);
+    return { line: (await imePage.evaluate(() => window.__editor.storage.markdown.getMarkdown())).split('\n\n')[1].trimEnd(), drawn };
+  };
+  let r = await atEdge([], 'z');
+  assert.equal(r.line, 'w `abz`cd', 'after the code, typed on, the letter is code');
+  assert.ok(r.drawn?.inCode, `the caret is drawn in the code (${JSON.stringify(r.drawn)})`);
+  r = await atEdge(['ArrowRight'], 'z');
+  assert.equal(r.line, 'w `ab`zcd', '→ once after the code: what is typed is plain, beside it');
+  assert.ok(r.drawn && !r.drawn.inCode && r.drawn.x >= r.drawn.right, `…and the caret is drawn outside the code's box (${JSON.stringify(r.drawn)})`);
+  assert.equal((await atEdge(['ArrowRight', 'ArrowRight'], 'z')).line, 'w `ab`czd', '→ twice goes on past the next letter');
+  assert.equal((await atEdge(['ArrowRight', 'ArrowRight', 'ArrowLeft'], 'z')).line, 'w `ab`zcd', 'back with ←: outside the code first');
+  assert.equal((await atEdge(['ArrowRight', 'ArrowRight', 'ArrowLeft', 'ArrowLeft'], 'z')).line, 'w `abz`cd', '← again: into it, in place');
+  assert.equal((await atEdge(['ArrowRight'], '글', true)).line, 'w `ab`글cd', 'a 한글 syllable typed outside the code is plain');
+  assert.equal((await atEdge([], '글', true)).line, 'w `ab글`cd', '…and inside it, code');
+  console.log('ok   ← → at an edge of inline code step across it in place; the caret is drawn on its side');
 } finally {
   await browser.close();
   await server?.close();
