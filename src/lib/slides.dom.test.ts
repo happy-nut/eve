@@ -36,3 +36,8 @@ test('a subheading at the foot of a slide goes on with its words, under the slid
   const deck = slides(blocks('<h1>T</h1><p>x</p><h1>A</h1><p>1</p><h2>Sub</h2><p>2</p>'));
   expect(text(paginate(deck, three, again))).toEqual(['T|x', 'A|1', 'A|Sub|2']);
 });
+
+test('a slide gone on to the next keeps its heading and the subheading it is under on top; a new subheading takes the old one\'s place', () => {
+  const deck = slides(blocks('<h1>T</h1><h1>A</h1><h2>S1</h2><p>1</p><p>2</p><p>3</p><h2>S2</h2><p>4</p><p>5</p>'));
+  expect(text(paginate(deck, (b) => b.length <= 4, again))).toEqual(['T', 'A|S1|1|2', 'A|S1|3', 'A|S2|4|5']);
+});
