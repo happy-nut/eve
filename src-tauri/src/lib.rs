@@ -125,8 +125,9 @@ pub fn run() {
                     *app.state::<PendingLink>().0.lock().unwrap() = Some(link.to_string());
                     let _ = app.emit("open-link", link.to_string());
                 }
+                // brought up as the hotkey brings it: unseen until the page has drawn
                 if !(inbox && urls.len() == 1) {
-                    let _ = window::show_window(app.clone());
+                    let _ = window::summon_window(app.clone());
                 }
             }
         });

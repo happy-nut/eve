@@ -9,6 +9,7 @@ vi.mock('@tauri-apps/api/core', () => ({
     return cmd === 'is_front' ? false : undefined;
   },
 }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => {} }));
 const login: string[] = [];
 let loginOn = false;
 vi.mock('@tauri-apps/plugin-autostart', () => ({
@@ -21,22 +22,21 @@ vi.mock('@tauri-apps/plugin-global-shortcut', () => ({
   unregisterAll: async () => {},
   register: async (k: string) => { keys.push(k); },
 }));
-const { win, paintGround, autostart, setGlobalHotkey } = await import('./platform');
+const { win, paintGround, autostart, setGlobalHotkey, revealWhenDrawn } = await import('./platform');
 
 test('summoned, the window is seen only after the page has drawn in it: never a white page first', async () => {
   window.addEventListener('eve-summon', () => calls.push('eve-summon'), { once: true });
+  await win.toggle();
+  await vi.waitFor(() => expect(calls).toContain('eve-summon'));
+  expect(calls.filter((c) => c !== 'is_front')).toEqual(['summon_window', 'eve-summon']); // shown unseen, the caret put back
+  // Rust asks the page (eve-reveal, summon 7): seen once two frames are drawn after it, and as that summon
   let frames = 0;
   const raf = window.requestAnimationFrame;
   window.requestAnimationFrame = (cb) => { frames++; calls.push(`frame ${frames}`); return raf(cb); };
-  await win.toggle();
-  await vi.waitFor(() => expect(calls).toContain('reveal_window'));
+  calls.length = 0;
+  await revealWhenDrawn(7);
   window.requestAnimationFrame = raf;
-  // shown unseen, the caret put back and the panes redrawn, two frames drawn, then seen
-  const order = calls.filter((c) => c !== 'is_front');
-  expect(order.indexOf('summon_window')).toBe(0);
-  expect(order.indexOf('eve-summon')).toBeGreaterThan(0);
-  expect(order.indexOf('reveal_window')).toBeGreaterThan(order.lastIndexOf('frame 2'));
-  expect(order.indexOf('frame 1')).toBeGreaterThan(order.indexOf('eve-summon'));
+  expect(calls).toEqual(['frame 1', 'frame 2', 'reveal_window {"n":7}']);
 });
 
 test("the window's own ground is the page's: what shows before the page draws is the theme's colour, not white", async () => {

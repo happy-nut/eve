@@ -407,15 +407,20 @@ export const dock = {
  */
 async function show() {
   // shown but not yet seen: WebKit may have thrown away what the page drew while Eve was hidden, and the window
-  // came up white until the page had drawn again. It is seen once two frames are drawn in it (Rust reveals it
-  // anyway after a moment, so a page that cannot draw never leaves it invisible)
+  // came up white until the page had drawn again. Rust asks for it (`eve-reveal`, onReveal below), as it does for
+  // a window brought up by a link from another app
   await invoke<void>('summon_window');
   // the webview can come back with nothing focused; App puts the caret back (window 'focus' alone
   // is not dependable here — the webview may already hold focus while the app was hidden)
   window.dispatchEvent(new Event('eve-summon'));
-  await new Promise((drawn) => requestAnimationFrame(() => requestAnimationFrame(drawn)));
-  await invoke<void>('reveal_window');
 }
+/** Summon `n` is seen once two frames are drawn after it (Rust sees it anyway after a while, so a page that cannot
+ *  draw never leaves it invisible). */
+export async function revealWhenDrawn(n: number) {
+  await new Promise((drawn) => requestAnimationFrame(() => requestAnimationFrame(drawn)));
+  await invoke<void>('reveal_window', { n });
+}
+if (desktop) void import('@tauri-apps/api/event').then(({ listen }) => listen<number>('eve-reveal', (e) => void revealWhenDrawn(e.payload)));
 let ground = '';
 /**
  * The window's own ground painted the page's colour (html's background, as the theme has it), so whatever shows
