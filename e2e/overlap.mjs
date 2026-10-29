@@ -126,6 +126,16 @@ try {
     const open = await overlaps(page, 0);
     if (open.length) failed.push(`${where}, flowchart open for editing:\n    ${open.join('\n    ')}`);
     else console.log(`ok   ${where}: a flowchart open for editing`);
+    // …and on the whole screen: its bar clear of a Mac window's traffic lights (x 0–78, y 0–40), which stay over it
+    if (!opts.isMobile) {
+      await page.locator('.tiptap .dblock.active .mermaid-expand').click({ force: true });
+      await page.waitForSelector('.dblock.full.active .tools');
+      const under = await page.evaluate(() => [...document.querySelectorAll('.dblock.full :is(.tools, .codebar, .foldchips) > *')]
+        .map((el) => [el.textContent.trim().slice(0, 20), el.getBoundingClientRect()]).filter(([, r]) => r.width && r.left < 78 && r.top < 40).map(([t]) => t));
+      if (under.length) failed.push(`${where}, on the whole screen, under the traffic lights: ${under.join(', ')}`);
+      else console.log(`ok   ${where}: on the whole screen, its bar clear of the traffic lights`);
+      await page.keyboard.press('Escape');
+    }
     await ctx.close();
   }
   assert.deepEqual(failed, [], `drawn over one another:\n  ${failed.join('\n  ')}`);

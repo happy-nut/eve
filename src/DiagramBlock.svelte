@@ -583,6 +583,10 @@
     grid-template-rows: auto auto minmax(0, 1fr) auto; outline: none;
   }
   .dblock.full > .tools, .dblock.full > .codebar { grid-column: 1 / -1; grid-row: 1; background: var(--bg); padding-right: 60px; }
+  /* clear of a Mac window's traffic lights, which stay over the top-left corner of the whole screen (its bar was under
+     them, its name hidden), as the app's own toolbar is */
+  :global(html:not(.mobile)) .dblock.full > :is(.tools, .codebar) { padding-left: 86px; }
+  :global(html:not(.mobile)) .dblock.full .foldchips { left: 86px; }
   .dblock.full > .dtip { grid-column: 1 / -1; grid-row: 2; margin: 0; padding: 2px 12px 6px; background: var(--bg); }
   .dblock.full > .pic { grid-column: 1; grid-row: 3 / 5; min-height: 0; }
   .dblock.full > :global(.form) { grid-column: 2; grid-row: 3; width: min(380px, 40vw); overflow: auto; padding: 12px; background: var(--bg); border-left: 1px solid var(--border, var(--bg-hover)); }
