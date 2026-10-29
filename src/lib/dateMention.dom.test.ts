@@ -60,6 +60,19 @@ test('a day named in full, a bare @, Tab, or the arrows still pick', async () =>
   }
 });
 
+test('the caret put right after an @ with a word on it that is no day ("ask @Tom") does not bring the calendar up', async () => {
+  for (const [text, opens] of [['ask @Tom later', false], ['mail me@home.com', false], ['due @tomorrow', true], ['due @ later', true]] as const) {
+    const { ed, open } = editor();
+    ed.commands.setContent(`<p>${text}</p>`);
+    await settle();
+    let at = -1;
+    ed.state.doc.descendants((n: any, pos: number) => { if (at < 0 && n.isText && n.text.includes('@')) at = pos + n.text.indexOf('@') + 1; });
+    ed.commands.setTextSelection(at);
+    await settle();
+    expect(open(), text).toBe(opens);
+  }
+});
+
 test('not while the [[ picker is open: "[[Meeting @to" is still the title being typed', async () => {
   const { ed, open } = editor();
   type(ed, 'see [[Meeting @to');
