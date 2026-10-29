@@ -1106,3 +1106,10 @@ html.mobile .tiptap [data-type='details'] > button::after { content: ''; positio
 /* a board of the note's own is as wide as its columns need, up to --wide, centred on the text as a table is: held to
    the column, a new board's third column was cut off at an 800-wide window, its + out of sight */
 .editor .tiptap > .kanban, .editor .tiptap > .database { position: relative; width: max-content; min-width: 100%; max-width: var(--reach); }
+
+/* the caret at an edge of inline code, drawn on its side (editor.ts, codeEdges): the webview's own stands at the same
+   place inside the code or out of it */
+.tiptap.at-code-edge, html.mobile .tiptap.at-code-edge { caret-color: transparent; }
+.tiptap .code-caret { display: inline-block; width: 0; height: 1.15em; margin-right: -1.5px; border-left: 1.5px solid currentColor; vertical-align: text-bottom; pointer-events: none; animation: code-caret 1.1s steps(1) infinite; }
+.tiptap:not(.ProseMirror-focused) .code-caret { display: none; }
+@keyframes code-caret { 50% { opacity: 0; } }
