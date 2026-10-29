@@ -264,7 +264,8 @@
     ui.openMenu({ clientX: r.right, clientY: r.bottom }, [
       { label: 'Full width', checked: !!notes.current?.wide, hide: isMobile, run: () => { const n = notes.current; if (n) notes.setWide(n.id, !n.wide); } },
       { label: 'Small text', checked: !!notes.current?.small, run: () => { const n = notes.current; if (n) notes.setLook(n.id, { small: !n.small || undefined }); } },
-      { label: 'Find & replace', sep: !isMobile, run: () => ui.openFind() },
+      { label: 'Present', sep: !isMobile, hide: !notes.current, run: present },
+      { label: 'Find & replace', run: () => ui.openFind() },
       { label: 'Select all', run: () => hooks.command?.('selectAll') },
       { label: 'Export as Markdown (.md)', sep: true, run: () => void exportCurrent('md') },
       { label: 'Export as PDF', run: () => void exportCurrent('pdf') },
@@ -274,6 +275,11 @@
       { label: 'Version history…', sep: !isTauri || isMobile, hide: !notes.current, run: () => { const n = notes.current; if (n) { notes.flush(n.id); ui.openHistory(n.id); } } },
       { label: 'Trash…', run: () => ui.openTrash() },
     ]);
+  }
+  /** the open note a slide at a time (Present.svelte), from the page as it is drawn */
+  function present() {
+    const page = hooks.page?.();
+    if (page) ui.openPresent(page);
   }
   async function copyPath() {
     const n = notes.current;
@@ -710,6 +716,9 @@
   {#await import('./CardPage.svelte') then { default: CardPage }}<CardPage {req} />{/await}
 {/each}
 {#if ui.photo}<ImageViewer />{/if}
+{#if ui.present}
+  {#await import('./Present.svelte') then { default: Present }}<Present />{/await}
+{/if}
 {#if ui.pdf}
   {#await import('./PdfViewer.svelte') then { default: PdfViewer }}<PdfViewer />{/await}
 {/if}
