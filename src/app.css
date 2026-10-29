@@ -1113,3 +1113,5 @@ html.mobile .tiptap [data-type='details'] > button::after { content: ''; positio
 .tiptap .code-caret { display: inline-block; width: 0; height: 1.15em; margin-right: -1.5px; border-left: 1.5px solid currentColor; vertical-align: text-bottom; pointer-events: none; animation: code-caret 1.1s steps(1) infinite; }
 .tiptap:not(.ProseMirror-focused) .code-caret { display: none; }
 @keyframes code-caret { 50% { opacity: 0; } }
+/* a dot running along a diagram's line while it is hovered (diagramMotion.ts) */
+.diagram-canvas .eve-token { fill: var(--accent-text); pointer-events: none; }

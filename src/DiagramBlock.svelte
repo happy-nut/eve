@@ -9,6 +9,7 @@
   import { renderMermaid, themeKey } from './lib/mermaid';
   import { foldSeq, foldable, markFolds, type SeqBlock } from './lib/seqFold';
   import { spreadLabels } from './lib/edgeLabels';
+  import { drawIn, tokens } from './lib/diagramMotion';
   import { KINDS, across, fromCode, isEmpty, toCode, whyCode, type Diagram } from './lib/diagram';
   import FlowEditor from './FlowEditor.svelte';
   import { scrollHint } from './lib/scrollHint';
@@ -123,6 +124,21 @@
       if (el instanceof SVGSVGElement) spreadLabels(el); // a line's label off another's (edgeLabels.ts)
       labelled = !list.some(foldable) || (!!el && markFolds(el, list, f));
     });
+  });
+  // drawn in once, the first time it is seen in the note: not again as it is edited, folded or drawn in the other theme
+  let introduced = false;
+  $effect(() => {
+    void svg;
+    if (active || full) return;
+    let stop = () => {};
+    tick().then(() => {
+      const el = canvas?.querySelector(':scope > svg');
+      if (!(el instanceof SVGSVGElement)) return;
+      const intro = introduced ? () => {} : drawIn(el), dots = tokens(el);
+      introduced = true;
+      stop = () => { intro(); dots(); };
+    });
+    return () => stop();
   });
   function toggleFold(key: string) {
     const next = new Set(folds);

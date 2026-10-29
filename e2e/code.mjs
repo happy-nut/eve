@@ -275,6 +275,31 @@ try {
   assert.equal((await atEdge(['ArrowRight'], '글', true)).line, 'w `ab`글cd', 'a 한글 syllable typed outside the code is plain');
   assert.equal((await atEdge([], '글', true)).line, 'w `ab글`cd', '…and inside it, code');
   console.log('ok   ← → at an edge of inline code step across it in place; the caret is drawn on its side');
+
+  // a diagram draws itself in once it is seen (diagramMotion.ts): not again when it is changed; hovered, dots run its lines
+  {
+    const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+    const body = '# M\n\n```mermaid\nflowchart LR\n  A[Write] -->|save| B{Synced?}\n  B --> C[Done]\n```\n';
+    await page.addInitScript((body) => { localStorage.clear(); localStorage.setItem('eve.notes.a', `---\nid: a\nupdated: 1\ndeleted: false\norder: 0\n---\n${body}`); }, body);
+    await page.goto(URL_);
+    await page.waitForSelector('.tiptap .mermaid-view svg');
+    const anims = () => page.evaluate(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).length);
+    assert.ok((await anims()) >= 5, 'its boxes, lines and label are drawn in');
+    await page.waitForFunction(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).length === 0, null, { timeout: 5000 });
+    const b = await page.locator('.tiptap .mermaid-view svg').boundingBox();
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.waitForTimeout(200);
+    assert.equal(await page.locator('.eve-token').count(), 2, 'hovered: a dot for each line');
+    await page.mouse.move(2, 2);
+    assert.equal(await page.locator('.eve-token').count(), 0, 'and none once the pointer leaves');
+    const was = await page.evaluate(() => document.querySelector('.tiptap .mermaid-view svg').id);
+    await page.evaluate(() => { const ed = window.__editor; let at = -1, node; ed.state.doc.descendants((n, p) => { if (at < 0 && n.type.name === 'codeBlock') { at = p; node = n; } }); ed.view.dispatch(ed.state.tr.insertText('\n  C --> D[Shipped]', at + 1 + node.textContent.length)); });
+    await page.waitForFunction((was) => document.querySelector('.tiptap .mermaid-view svg')?.id !== was, was);
+    await page.waitForTimeout(100);
+    assert.equal(await anims(), 0, 'drawn again after a change: no intro this time');
+    await page.close();
+    console.log('ok   a diagram draws itself in once; hovered, dots run along its lines');
+  }
 } finally {
   await browser.close();
   await server?.close();
