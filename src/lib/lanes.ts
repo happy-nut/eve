@@ -162,11 +162,12 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   const M = HEAD_M + PAD * 2 + colM.reduce((a, b) => a + b, 0) + gapsTo(ranks - 1);
   // a line back to an earlier step runs under the boxes: room for it (and its label) past the last lane's edge
   let C = Math.max(1, laneC.reduce((a, b) => a + b, 0));
-  for (const e of d.edges) {
-    const a = boxes.get(e.from), b = boxes.get(e.to);
-    if (!a || !b || b.rank >= a.rank || a === b) continue;
-    C = Math.max(C, Math.max(a.c + cross(a) / 2, b.c + cross(b) / 2) + 14 + (e.label.trim() ? 14 : 4));
-  }
+  // (the whole of its label, which stands on it there: half of one as wide as 150, down the page, fell past the edge)
+  edges.forEach((e, i) => {
+    const a = boxes.get(e.from)!, b = boxes.get(e.to)!;
+    if (b.rank >= a.rank || a === b) return;
+    C = Math.max(C, Math.max(a.c + cross(a) / 2, b.c + cross(b) / 2) + 14 + (chips[i].lines.length ? chips[i].c / 2 + 4 : 4));
+  });
   const W = Math.ceil(LR ? M : C), H = Math.ceil(LR ? C : M);
   const xy = (m: number, c: number): [number, number] => (LR ? [m, c] : [c, m]);
 

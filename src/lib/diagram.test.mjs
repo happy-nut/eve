@@ -105,6 +105,17 @@ console.log('diagram hunt ok');
   assert.ok(!/NaN|undefined/.test(odd), 'no NaN in the drawing');
   assert.match(odd, /A &#60;&#38;&#62; &#34;B&#34;/, 'a lane name is text, not markup');
 }
+// a line back up the chart runs round the boxes, and its label stands on it there: inside the drawing, not cut off at its
+// edge (down the page a two-line label stood half outside the right edge, its middle words gone)
+for (const dir of ['LR', 'TD']) {
+  const long = '10. 위반 보고 (+오탐 제보 채널) and a little more said about it';
+  const svg = laneSvg({ kind: 'flowchart', dir, lanes: [{ id: 'S', label: 'Service' }, { id: 'D', label: 'Defense' }],
+    nodes: [{ id: 'a', label: 'DTO', shape: 'rect', lane: 'S' }, { id: 'b', label: 'Weave', shape: 'rect', lane: 'S' }, { id: 'c', label: 'SonarQube static analysis', shape: 'rect', lane: 'D' }],
+    edges: [{ from: 'a', to: 'b', label: '', line: 'solid' }, { from: 'b', to: 'c', label: 'scan', line: 'solid' }, { from: 'c', to: 'a', label: long, line: 'solid' }, { from: 'c', to: 'b', label: long, line: 'dotted' }] });
+  const [, , W, H] = /viewBox="([\d. ]+)"/.exec(svg)[1].split(' ').map(Number);
+  for (const [, x, y, w, h] of svg.matchAll(/class="sl-chip" x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)"/g))
+    assert.ok(+x >= 0 && +y >= 0 && +x + +w <= W && +y + +h <= H, `${dir}: a label at ${x},${y} ${w}×${h} inside the ${W}×${H} drawing`);
+}
 console.log('swimlanes ok');
 
 // why a diagram opens as its code: the line the editor cannot show, or the kind it has no form for
