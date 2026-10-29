@@ -203,7 +203,7 @@ function hopOutOfList(state: any, range: any, dir: -1 | 1, done: number): any {
   const base = lift && !across ? start : alone && !lift ? listStart : start - 1; // where the moved piece began
   const tr = state.tr.delete(cut.from, cut.to);
   // the first items gone up, the ones left behind go on counting from where they were (3. stays 3.)
-  if (numbered && !alone && dir < 0 && range.startIndex === 0) tr.setNodeAttribute(tr.mapping.map(listStart), 'start', (parent.attrs.start ?? 1) + range.endIndex);
+  if (numbered && !alone && dir < 0 && range.startIndex === 0) tr.setNodeAttribute(tr.mapping.slice(done).map(listStart), 'start', (parent.attrs.start ?? 1) + range.endIndex);
   const at = tr.mapping.slice(done).map(target);
   tr.insert(at, moved);
   // a list put between two items of a numbered list splits it: the half after it goes on counting

@@ -141,6 +141,20 @@ assert.deepEqual(last(run(doc('``` x', '- a', '- b', '끝'), 'x', null, down)), 
   assert.deepEqual(lists, [1, 2], 'the part after the bullet starts at 2, not 1');
 }
 
+// a numbered list's first item going up past a list of several bullets: the bullets are split, and the items left
+// behind go on counting from where they were (the split moved the list, and its number was put on another node)
+{
+  let state = EditorState.create({ doc: doc('- a', '- b', '1. one', '1. two') });
+  let p = -1;
+  state.doc.descendants((n, pos) => { if (p < 0 && n.isText && n.text === 'one') p = pos; });
+  state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, p)));
+  up(state, (tr) => { state = state.apply(tr); });
+  assert.deepEqual(lines(state.doc), ['- a', '1. one', '- b', '1. two']);
+  const lists = [];
+  state.doc.forEach((n) => { if (n.type.name === 'orderedList') lists.push(n.attrs.start); });
+  assert.deepEqual(lists, [1, 2], 'two is still 2. after one went up past the bullets');
+}
+
 // empty lines are lines: an item steps over each one
 assert.deepEqual(run(doc('하나', '', '- a', '- b', '', '둘'), 'a', null, down, down, down).map((x) => x.lines), [
   ['하나', '', '- b', '- a', '', '둘'],
