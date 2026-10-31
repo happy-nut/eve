@@ -271,7 +271,8 @@ function settles(code, kind) {
   assert.deepEqual(tasks[1], { name: '구현', start: '', days: 14, id: 'a2', tags: ['crit', 'active'], after: 'a1' });
   assert.deepEqual(tasks[2], { name: '리뷰', start: '', days: 2, after: '' });
   assert.equal(tasks[4].days, 3, 'an end date is a length');
-  assert.deepEqual(d.extra, ['excludes weekends']);
+  assert.equal(d.skipWeekends, true); assert.equal(d.extra, undefined); // a box to tick, not a kept line too
+  assert.ok(out.includes('excludes weekends'), out);
   assert.ok(out.includes('구현 : crit, active, a2, after a1, 14d'), out);
   assert.ok(out.includes('리뷰 : 2d'), out);
   // drawn where mermaid puts them: after a task when it ends, after the one before when that ends
@@ -360,6 +361,8 @@ function settles(code, kind) {
   // a state put inside itself, through another: drawn at the top, not lost
   d.states[0].parent = '결제';
   assert.deepEqual(fromCode(toCode(d)).states.map((s) => s.id).sort(), ['갈래', '결제', '모임', '주문', '카드'].sort());
+  // a description drawn with the state's name, not in its place
+  assert.match(toCode({ kind: 'state', v2: true, states: [{ id: '대기', name: '대기', desc: '결제 전' }], links: [] }), /state "대기" as 대기\n {2}대기 : 결제 전/);
   console.log('nested state ok');
 }
 {

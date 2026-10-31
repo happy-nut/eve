@@ -5,7 +5,7 @@ import { laneSvg } from './lanes';
  * The charts Eve draws itself, from the same mermaid code: a pie as a donut with its parts listed beside it, a
  * timeline as a column of dates, a Gantt chart as a tidy schedule. Mermaid's own drawings of these three stretched
  * and crowded (a timeline's dashed drops and arrows, a Gantt's labels between its rows). The note still keeps
- * mermaid's code, so other apps draw it their way; code these cannot read (a timeline with sections), or a Gantt
+ * mermaid's code, so other apps draw it their way; code these cannot read, or a Gantt
  * with what this drawing has no look for (done, crit, milestone; days excluded), is left to mermaid. HTML for the diagram canvas, styled by app.css (.chart-*), colours by CSS
  * variables, so the light and dark themes need no drawing again.
  */
@@ -17,7 +17,7 @@ export function chartHtml(code: string, laneMin = 0.64): string | null {
   if (d.kind === 'sequence' && !d.people.length) return `<div class="chart chart-empty"><p>Nothing to show yet</p></div>`;
   if (d.kind === 'pie') return pie(d);
   if (d.kind === 'timeline') return timeline(d);
-  if (d.kind === 'gantt') return d.extra?.length || d.sections.some((s) => s.tasks.some((t) => t.tags?.length)) ? null : gantt(d);
+  if (d.kind === 'gantt') return d.extra?.length || d.skipWeekends || d.sections.some((s) => s.tasks.some((t) => t.tags?.length)) ? null : gantt(d);
   return null;
 }
 
@@ -53,7 +53,9 @@ function pie(d: Pie) {
 function timeline(d: Timeline) {
   const rows = d.periods.map((p, i) => {
     const events = p.events.filter((e) => e.trim());
-    return `<div class="tl-row c${i % 12}"><div class="tl-when">${esc(p.label)}</div><div class="tl-dot"></div>`
+    // a section's name over its first period, across the column (they were not drawn at all)
+    const head = p.section !== undefined ? `<div class="tl-sec">${esc(p.section.trim() || 'Section')}</div>` : '';
+    return `${head}<div class="tl-row c${i % 12}"><div class="tl-when">${esc(p.label)}</div><div class="tl-dot"></div>`
       + `<div class="tl-what">${events.length ? events.map((e) => `<div>${esc(e)}</div>`).join('') : '<div class="tl-none">—</div>'}</div></div>`;
   }).join('');
   return `<div class="chart chart-timeline">${title(d.title)}<div class="tl">${rows}</div></div>`;

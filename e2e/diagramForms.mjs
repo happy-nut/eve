@@ -74,14 +74,26 @@ try {
   await choose(task(2), 'And after', 'And “구현”');
   await page.getByRole('checkbox', { name: 'Skip weekends' }).check();
   has(await md(page), ['설계 : milestone, a1, 2026-01-05, 0d', '구현 : active, crit, a2, 2026-01-08, 2d', '리뷰 : after a1 a2, 2d', 'excludes weekends']);
+  assert.equal(await page.locator('.form textarea').filter({ hasText: 'excludes' }).count(), 0, 'a setting ticked is not shown again as code kept');
   console.log('ok   a Gantt chart: active and critical, a milestone of no length, a task after two, weekends skipped');
   await page.close();
 
   // ---- a mind map's shapes, a timeline's sections, a state diagram's states in states, choices and notes ----
   page = await open('mindmap\n  root((제품))\n    편집기\n    동기화');
   await choose(page.locator('.form .m-item').first(), 'Shape', '☁ Cloud');
+  await choose(page.locator('.form .m-item').nth(1), 'Shape', '○ Circle');
+  await page.waitForTimeout(600);
+  const fill = await page.evaluate(() => getComputedStyle(document.querySelector('.tiptap .mermaid-view .mindmap-node.section-1 > circle')).fill);
+  assert.ok(!['rgb(242, 244, 246)', 'rgb(255, 255, 255)'].includes(fill), `a circle branch in its branch's colour, not ${fill}`);
   await choose(page.locator('.form'), 'Centre shape', '▢ Square');
   has(await md(page), ['root[제품]', ')편집기(']);
+  await page.close();
+  page = await open('timeline\n  2020 : 시작\n  2021 : 첫 고객');
+  await page.locator('.form .adds button.add', { hasText: 'Section' }).click();
+  assert.match(await md(page), /section Section 1\n {2}2020 : 시작\n {2}2021 : 첫 고객/, 'the first section is around the periods there are');
+  assert.equal(await page.locator('.tiptap .mermaid-view .tl-sec').count(), 1, 'the section is drawn');
+  await page.locator('.form .t-period').first().getByRole('button', { name: 'Move down' }).click();
+  assert.match(await md(page), /section Section 1\n {2}2021 : 첫 고객\n {2}2020 : 시작/, 'a period moved down');
   await page.close();
   page = await open('timeline\n  section 창업기\n    2020 : 시작');
   await page.locator('.form .adds button.add', { hasText: 'Section' }).click();
@@ -95,6 +107,11 @@ try {
   const sd = await md(page);
   has(sd, ['state 분기 <<choice>>', 'state 검토 {', 'note right of 검토 : 사람이 본다', '[*] --> 대기']);
   assert.match(sd, /\n {2}\[\*\] --> 대기/, `the chart's start stays the chart's\n${sd}`);
+  await page.locator('.form button.add', { hasText: 'Add transition' }).click();
+  const tr = page.locator('.form .st-link').last();
+  await choose(tr, 'From', '● Start in “검토”');
+  await choose(tr, 'To', '대기');
+  assert.match(await md(page), /state 검토 \{\n {4}\[\*\] --> 대기/, `a start inside the state of states\n${await md(page)}`);
   console.log('ok   a mind map\'s shapes, a timeline\'s sections, a state in a state, a choice and a note');
   await page.close();
 
@@ -199,6 +216,10 @@ try {
   await page.mouse.click(five.x + five.width / 2, five.y + five.height / 2);
   const moved = await md(page);
   assert.match(moved, /a[^\n]*go[^\n]*e\b|a -->\|go\| e/, `the line from One now ends at Five\n${moved}`);
+  await page.locator('.tiptap .dblock.active .mermaid-view').evaluate((h) => { h.scrollLeft = h.scrollWidth; });
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.waitForTimeout(400);
+  assert.equal(await page.locator('.tiptap .mermaid-view').first().evaluate((h) => h.scrollLeft), 0, 'done, the picture from its start');
   console.log('ok   a flowchart: a new step past the edge is brought into view, a line\'s bar covers no box, its end moves');
   await page.close();
 

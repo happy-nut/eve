@@ -72,7 +72,8 @@ export interface Task {
 }
 export interface Phase { name: string; tasks: Task[] }
 /** `extra`: settings the forms do not show (excludes, todayMarker, an axis format…), kept as written */
-export interface Gantt { kind: 'gantt'; title: string; sections: Phase[]; extra?: string[] }
+/** `skipWeekends`, `noToday`: the two settings the rows show as boxes to tick (excludes weekends, todayMarker off) */
+export interface Gantt { kind: 'gantt'; title: string; sections: Phase[]; extra?: string[]; skipWeekends?: true; noToday?: true }
 
 export type Dir = 'TB' | 'BT' | 'LR' | 'RL';
 /** a class diagram: `members` as written ("+String name", "+run() bool", "<<interface>>") */
@@ -588,6 +589,8 @@ function ganttCode(d: Gantt) {
     if (span > 120) lines.push('  axisFormat %Y-%m');
   }
   if (one(d.title)) lines.push(`  title ${ent(one(d.title), '#;')}`);
+  if (d.skipWeekends) lines.push('  excludes weekends');
+  if (d.noToday) lines.push('  todayMarker off');
   for (const x of d.extra ?? []) lines.push(`  ${x}`);
   for (const s of d.sections) {
     lines.push(`  section ${ent(one(s.name) || 'Tasks', '#;')}`);
@@ -612,6 +615,8 @@ function ganttRead(lines: string[]): Gantt | null {
     const line = raw.trim();
     if (line === 'dateFormat YYYY-MM-DD' || /^tickInterval 1(day|week|month)$/.test(line) || line === 'axisFormat %Y-%m') continue; // written anew
     if (/^dateFormat\b/i.test(line)) return null; // its dates in another form: the date fields would misread them
+    if (/^excludes\s+weekends$/i.test(line)) { d.skipWeekends = true; continue; }
+    if (/^todayMarker\s+off$/i.test(line)) { d.noToday = true; continue; }
     if (GANTT_KEPT.test(line)) { (d.extra ??= []).push(line); continue; }
     const t = /^title\s+(.*)$/i.exec(line);
     if (t) { d.title = unent(t[1].trim()); continue; }
@@ -769,11 +774,15 @@ function stateCode(d: StateDiagram) {
   };
   const write = (parent: string | undefined, pad: string) => {
     for (const st of d.states.filter((x) => stateParent(d, x) === parent)) {
+      const kids = !st.kind && d.states.some((x) => stateParent(d, x) === st.id);
+      // a description is drawn in place of the state's name unless the name is declared too (a state of states draws
+      // neither: mermaid fails on one with a description)
+      const desc = st.kind || kids ? [] : st.desc.split('\n').map(one).filter(Boolean);
       if (st.kind) lines.push(`${pad}state ${st.id} <<${st.kind}>>`);
-      else if (one(st.name) && one(st.name) !== st.id) lines.push(`${pad}state "${one(st.name).replace(/"/g, "'")}" as ${st.id}`);
+      else if (one(st.name) && (one(st.name) !== st.id || desc.length)) lines.push(`${pad}state "${one(st.name).replace(/"/g, "'")}" as ${st.id}`);
       else if (st.decl) lines.push(`${pad}state ${st.id}`);
-      if (!st.kind) for (const x of st.desc.split('\n').map(one).filter(Boolean)) lines.push(`${pad}${st.id} : ${x}`);
-      if (!st.kind && d.states.some((x) => stateParent(d, x) === st.id)) {
+      for (const x of desc) lines.push(`${pad}${st.id} : ${x}`);
+      if (kids) {
         lines.push(`${pad}state ${st.id} {`);
         write(st.id, `${pad}  `);
         lines.push(`${pad}}`);

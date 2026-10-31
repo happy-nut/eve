@@ -68,6 +68,7 @@
   $effect(() => { if (sel && !editing && !laneEditing) untrack(releaseKeys); });
 
   const nodeIdOf = (g: Element) => /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null;
+  let linePts: { x: number; y: number; from: string; to: string }[] = [];
   const boxOf = (id: string | null) => boxes.find((b) => b.id === id) ?? null;
   /** the lines as written: those whose ends both exist, in order (toCode skips the rest) */
   const drawnEdges = () => flow.edges.map((e, i) => ({ e, i })).filter(({ e }) => flow.nodes.some((n) => n.id === e.from) && flow.nodes.some((n) => n.id === e.to));
@@ -89,6 +90,17 @@
     });
     // each line gets a wide clear twin to be clicked by (the drawing stays exactly as mermaid made it)
     const lines = [...host.querySelectorAll('path.flowchart-link')];
+    // points along each line, with the boxes it joins: where a + would sit over one (plusAt)
+    const ends = drawnEdges();
+    linePts = lines.flatMap((p, i) => {
+      const el = p as SVGPathElement, m = el.getScreenCTM(), L = el.getTotalLength?.() ?? 0;
+      if (!m || !L) return [];
+      const { from, to } = ends[i]?.e ?? { from: '', to: '' };
+      return Array.from({ length: Math.ceil(L / 8) + 1 }, (_, k) => {
+        const q = el.getPointAtLength(Math.min(L, k * 8));
+        return { x: q.x * m.a + q.y * m.c + m.e - o.left, y: q.x * m.b + q.y * m.d + m.f - o.top, from, to };
+      });
+    });
     lines.forEach((p, i) => {
       if (p.nextElementSibling?.classList.contains('hit')) return;
       const twin = p.cloneNode() as SVGPathElement;
@@ -124,7 +136,9 @@
     host.addEventListener('scroll', measure, { passive: true });
     // ahead of the note's keymaps: a picked box's ⌫ and arrows are the drawing's, not the text's
     const unclaim = claimKeys('global', { '*': onKey }, { capture: true });
-    return () => { ro.disconnect(); host.removeEventListener('scroll', measure); unclaim(); };
+    // done: the picture from its start again (scrolled to the last box worked on, its first boxes and lanes' names
+    // stayed off the card's left edge)
+    return () => { ro.disconnect(); host.removeEventListener('scroll', measure); unclaim(); host.scrollLeft = 0; };
   });
 
   // ---- what the chart becomes ----
@@ -559,7 +573,20 @@
   const plusAt = (b: Box) => {
     // clear of the text box while the box is typed in (at least 140 wide, centred on it)
     const w = b.id === editing ? Math.max(b.w, 140) : b.w;
-    return across(flow) ? { x: b.x + b.w / 2 + w / 2 + 14, y: b.y + b.h / 2 } : { x: b.x + b.w / 2, y: b.y + b.h + (b.id === editing ? 22 : 14) };
+    const after = across(flow) ? { x: b.x + b.w / 2 + w / 2 + 14, y: b.y + b.h / 2 } : { x: b.x + b.w / 2, y: b.y + b.h + (b.id === editing ? 22 : 14) };
+    if (b.id === editing) return after;
+    // where it reads next, unless it sits over another box or a line between others there (a phone's finger-sized +
+    // took the tap meant for the short line or the box beside it, and made a step no one wanted): then the side that
+    // is clear, or covers least
+    const r = isMobile ? 22 : 13;
+    const cost = (p: { x: number; y: number }) =>
+      boxes.reduce((n, o) => n + (o.id !== b.id && p.x + r > o.x && p.x - r < o.x + o.w && p.y + r > o.y && p.y - r < o.y + o.h ? 100 : 0), 0)
+      + linePts.reduce((n, q) => n + (q.from !== b.id && q.to !== b.id && Math.hypot(q.x - p.x, q.y - p.y) < r ? 1 : 0), 0)
+      + (p.x < r || p.x > (layer?.clientWidth ?? 1e4) - r ? 50 : 0); // half off the card
+    const sides = across(flow)
+      ? [after, { x: b.x + b.w / 2, y: b.y + b.h + 14 }, { x: b.x + b.w / 2, y: b.y - 14 }, { x: b.x - 14, y: b.y + b.h / 2 }]
+      : [after, { x: b.x + b.w + 14, y: b.y + b.h / 2 }, { x: b.x - 14, y: b.y + b.h / 2 }, { x: b.x + b.w / 2, y: b.y - 14 }];
+    return sides.reduce((best, p) => (cost(p) < cost(best) ? p : best));
   };
   /** a text box `w` wide centred on x, kept inside the picture (at its edge it was cut off, past a phone's screen) */
   const clampX = (x: number, w: number) => Math.max(4, Math.min((layer?.clientWidth ?? 600) - w - 4, x - w / 2));

@@ -593,6 +593,8 @@ svg.lanes .edgeLabel text { fill: var(--d-dim); font-size: 12px; }
 /* one grid for every row (subgrid), so the dates share a column and the line through them stays straight: each row its
    own grid, a long date pushed its dot right and the line crooked. A date wraps past a third of the width. */
 .tl { position: relative; display: grid; grid-template-columns: fit-content(34%) 22px 1fr; column-gap: 12px; }
+.tl-sec { grid-column: 1 / -1; margin: 6px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--d-line); font-size: 12px; font-weight: 650; letter-spacing: 0.02em; color: var(--d-dim); }
+.tl-sec:not(:first-child) { margin-top: 18px; }
 .tl-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
 .tl-when { min-width: 52px; font-size: 13px; font-weight: 600; color: var(--c); text-align: right; padding-top: 9px; overflow-wrap: anywhere; word-break: keep-all; }
 .tl-dot { position: relative; }
