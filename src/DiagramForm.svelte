@@ -778,7 +778,8 @@
   /* a row's buttons kept together at its end: wrapped one by one, a ▼ or a × sat alone on a line of its own, an
      event's × between two events */
   .tools { display: inline-flex; flex: none; align-items: center; gap: 2px; margin-left: auto; }
-  .events .row { flex-wrap: nowrap; }
+  .events .row, .t-period { flex-wrap: nowrap; } /* a period's buttons by its date, not under its events, over the next section */
+  .row > .x:last-child { margin-left: auto; } /* a row's × wrapped alone: at its end, not under its first field */
   .settings { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
   .g-phase > :global(.add) { margin-left: 14px; }
   .swatch, .bullet { flex: none; width: 10px; height: 10px; border-radius: 50%; }

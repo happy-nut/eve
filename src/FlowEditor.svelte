@@ -583,10 +583,12 @@
       boxes.reduce((n, o) => n + (o.id !== b.id && p.x + r > o.x && p.x - r < o.x + o.w && p.y + r > o.y && p.y - r < o.y + o.h ? 100 : 0), 0)
       + linePts.reduce((n, q) => n + (q.from !== b.id && q.to !== b.id && Math.hypot(q.x - p.x, q.y - p.y) < r ? 1 : 0), 0)
       + (p.x < r || p.x > (layer?.clientWidth ?? 1e4) - r ? 50 : 0); // half off the card
+    // a picked box's bar is over or under it, across a chart going across: the + not there, under the bar
+    const barred = across(flow) && selNode?.id === b.id ? 1000 : 0;
     const sides = across(flow)
-      ? [after, { x: b.x + b.w / 2, y: b.y + b.h + 14 }, { x: b.x + b.w / 2, y: b.y - 14 }, { x: b.x - 14, y: b.y + b.h / 2 }]
-      : [after, { x: b.x + b.w + 14, y: b.y + b.h / 2 }, { x: b.x - 14, y: b.y + b.h / 2 }, { x: b.x + b.w / 2, y: b.y - 14 }];
-    return sides.reduce((best, p) => (cost(p) < cost(best) ? p : best));
+      ? [[after, 0], [{ x: b.x + b.w / 2, y: b.y + b.h + 14 }, barred], [{ x: b.x + b.w / 2, y: b.y - 14 }, barred], [{ x: b.x - 14, y: b.y + b.h / 2 }, 0]] as const
+      : [[after, 0], [{ x: b.x + b.w + 14, y: b.y + b.h / 2 }, 0], [{ x: b.x - 14, y: b.y + b.h / 2 }, 0], [{ x: b.x + b.w / 2, y: b.y - 14 }, 0]] as const;
+    return sides.map(([p, extra]) => ({ p, c: cost(p) + extra })).reduce((best, x) => (x.c < best.c ? x : best)).p;
   };
   /** a text box `w` wide centred on x, kept inside the picture (at its edge it was cut off, past a phone's screen) */
   const clampX = (x: number, w: number) => Math.max(4, Math.min((layer?.clientWidth ?? 600) - w - 4, x - w / 2));
@@ -637,7 +639,8 @@
     const paths = [...host.querySelectorAll('path.flowchart-link')];
     paths.forEach((p, j) => p.classList.toggle('picked', j === at));
   });
-  const handles = $derived([...new Set([hover, selNode?.id ?? null, drag?.from ?? null].filter((x): x is string => !!x))].map(boxOf).filter((b): b is Box => !!b));
+  // (a phone has no hover: a tap's leftover one left a + over the line tapped next)
+  const handles = $derived([...new Set([isMobile ? null : hover, selNode?.id ?? null, drag?.from ?? null].filter((x): x is string => !!x))].map(boxOf).filter((b): b is Box => !!b));
 </script>
 
 <div class="layer" bind:this={layer}>

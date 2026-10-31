@@ -221,6 +221,35 @@ try {
   await page.waitForTimeout(400);
   assert.equal(await page.locator('.tiptap .mermaid-view').first().evaluate((h) => h.scrollLeft), 0, 'done, the picture from its start');
   console.log('ok   a flowchart: a new step past the edge is brought into view, a line\'s bar covers no box, its end moves');
+
+  // ---- on a phone, a picked box's + is where a finger can take it: not under the box's bar, not over a line ----
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true,
+      userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36' });
+    const ph = await ctx.newPage();
+    ph.on('pageerror', (e) => errors.push(e.message));
+    await ph.addInitScript((body) => { localStorage.clear(); localStorage.setItem('eve.notes.a', `---\nid: a\nupdated: 1\ndeleted: false\norder: 0\n---\n${body}`); },
+      `# Flow\n\n${F}mermaid\nflowchart LR\n  a[주문] --> b[결제] --> c[배송] --> d[도착] --> e[마감 정산]\n${F}\n\n`);
+    await ph.goto(URL_);
+    await ph.waitForSelector('html.mobile');
+    await ph.locator('.note-item, .list .item, [data-note]').first().click().catch(() => {});
+    await ph.waitForSelector('.tiptap .mermaid-view svg', { timeout: 30000 });
+    await ph.locator('.tiptap .mermaid-view').first().click({ position: { x: 6, y: 6 } });
+    await ph.waitForSelector('.tiptap .dblock.active');
+    for (const label of ['결제', '마감 정산']) {
+      // the last box at the picture's end, the card scrolled to it as a finger would
+      if (label === '마감 정산') { await ph.locator('.tiptap .dblock.active .mermaid-view').evaluate((h) => { h.scrollLeft = h.scrollWidth; }); await ph.waitForTimeout(300); }
+      const g = await ph.locator('.tiptap .dblock.active g.node').filter({ hasText: label }).first().boundingBox();
+      await ph.mouse.click(g.x + g.width / 2, g.y + g.height / 2);
+      await ph.waitForTimeout(400);
+      const plus = ph.getByRole('button', { name: 'Add a step after this, or drag onto another box to connect' });
+      const p = await plus.boundingBox();
+      const hit = await ph.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('button')?.getAttribute('aria-label'), [p.x + p.width / 2, p.y + p.height / 2]);
+      assert.equal(hit, 'Add a step after this, or drag onto another box to connect', `"${label}": a tap on its + takes the + (not ${hit})`);
+    }
+    await ctx.close();
+  }
+  console.log('ok   on a phone, a picked box\'s + is not under its bar');
   await page.close();
 
   // ---- a sequence diagram's numbers are drawn so they can be read ----
