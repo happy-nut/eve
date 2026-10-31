@@ -250,6 +250,28 @@ try {
     await ctx.close();
   }
   console.log('ok   on a phone, a picked box\'s + is not under its bar');
+  {
+    // a timeline period on a phone: its events have room to be read and written
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true,
+      userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36' });
+    const ph = await ctx.newPage();
+    await ph.addInitScript((body) => { localStorage.clear(); localStorage.setItem('eve.notes.a', `---\nid: a\nupdated: 1\ndeleted: false\norder: 0\n---\n${body}`); },
+      `# T\n\n${F}mermaid\ntimeline\n  2021 : 정식 출시\n  2023 : 해외 진출\n${F}\n\n`);
+    await ph.goto(URL_);
+    // a note made as a person on a phone makes one (the list is what a phone opens on)
+    await ph.waitForSelector('html.mobile');
+    await ph.locator('button.fab[aria-label="New note"]').click();
+    await ph.locator('.sheet button', { hasText: 'New note' }).click();
+    await ph.waitForSelector('.tiptap');
+    await ph.evaluate((md) => window.__editor.commands.setContent(md, true), `# T\n\n${F}mermaid\ntimeline\n  2021 : 정식 출시\n  2023 : 해외 진출\n${F}\n`);
+    await ph.waitForSelector('.tiptap .mermaid-view .chart', { timeout: 30000 });
+    await ph.locator('.tiptap .mermaid-view').first().click({ position: { x: 6, y: 6 } });
+    await ph.waitForSelector('.tiptap .dblock.active .form');
+    const w = (await ph.locator('.form input[aria-label="Event"]').first().boundingBox()).width;
+    assert.ok(w >= 150, `an event's box is ${Math.round(w)}px wide on a phone`);
+    await ctx.close();
+  }
+  console.log('ok   on a phone, a timeline\'s events have room');
   await page.close();
 
   // ---- a sequence diagram's numbers are drawn so they can be read ----

@@ -829,6 +829,11 @@
   }
   :global(html.mobile) .s-step .grow, :global(html.mobile) .c-link .grow, :global(html.mobile) .e-link .grow, :global(html.mobile) .st-link .grow { flex: 1 1 70%; }
   :global(html.mobile) .st-state .name { width: 40%; }
+  /* a period on a phone: its date and its buttons on a line, its events the whole width under them (beside them, an
+     event's box was two letters wide) */
+  :global(html.mobile) .t-period { flex-wrap: wrap; }
+  :global(html.mobile) .t-period .when { flex: 1 1 auto; }
+  :global(html.mobile) .t-period .events { flex: 1 1 100%; order: 3; }
 
   /* a task: its name a line of its own, its start and length under it (four in a row left the name a few letters) */
   :global(html.mobile) .g-task { flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
