@@ -173,6 +173,8 @@
       }
       if (e.defaultPrevented) return;
       const t = e.target as Element;
+      // a list open in a row (Select): its keys are its own — heard here first, its Esc closed the whole diagram
+      if (t.closest?.('[aria-expanded="true"]')) return;
       const typing = t instanceof HTMLElement && t.matches('input, textarea, select');
       // on the whole screen: + − 0 zoom, and Esc with nothing being edited puts it back in the note
       // ⌘Z on the whole screen, open for editing or not: the note's undo (the note itself has no keyboard there)
@@ -197,6 +199,9 @@
       if (!ours) return;
       // Esc lets go of what is picked in the picture first (a box, a line, a lane, Connect), then of the diagram
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (!flowEd?.escape()) leave(); }
+      // ⌘A on a row's button or with the keyboard let go: the page's own select-all took in the note's text, the note
+      // took that for its selection, and the next letter typed replaced the whole note
+      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && (t === document.body || root.contains(t))) { e.preventDefault(); e.stopPropagation(); }
       else if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y')) && t === document.body) {
         e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y');
       }

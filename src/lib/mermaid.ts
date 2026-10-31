@@ -100,7 +100,10 @@ function config(mode: 'light' | 'dark') {
       .row-rect-odd path + path, .row-rect-even path + path { stroke: ${c.border}; stroke-width: 0.8px; }
       g.node:has(> g.label.name) > g.divider { display: none; } /* no column lines: a list, not a spreadsheet */
       g.label.name .nodeLabel p { color: ${c.strong}; font-weight: 600; }
-      marker circle { fill: ${c.canvas} !important; stroke: ${c.line} !important; } marker path { stroke: ${c.line}; }
+      /* a sequence diagram's numbers: the canvas's colour on a circle of the quiet text's, so they read (white on the
+         lines' light grey they did not, and the rule under this made the circle white as well) */
+      marker[id$='-sequencenumber'] circle { fill: ${c.dim} !important; stroke: none !important; }
+      marker:not([id$='-sequencenumber']) circle { fill: ${c.canvas} !important; stroke: ${c.line} !important; } marker path { stroke: ${c.line}; }
       g.label.attribute-name .nodeLabel p { color: ${c.fg}; }
       g.label.attribute-type .nodeLabel p, g.label.attribute-comment .nodeLabel p { color: ${c.dim}; font-size: 12.5px; }
       g.label.attribute-keys .nodeLabel p { color: ${c.tintText}; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; }
@@ -116,7 +119,7 @@ function config(mode: 'light' | 'dark') {
       actorBkg: c.node, actorBorder: c.border, actorTextColor: c.strong, actorLineColor: c.line,
       signalColor: c.line, signalTextColor: c.fg, labelBoxBkgColor: c.node, labelBoxBorderColor: c.border,
       labelTextColor: c.fg, loopTextColor: c.dim, activationBkgColor: c.tint, activationBorderColor: c.accent,
-      sequenceNumberColor: '#ffffff',
+      sequenceNumberColor: c.canvas,
       pieStrokeColor: c.canvas, pieStrokeWidth: '2px', pieOuterStrokeWidth: '0px', pieOpacity: '1',
       pieTitleTextColor: c.strong, pieSectionTextColor: '#ffffff', pieLegendTextColor: c.fg, pieTitleTextSize: '16px',
       sectionBkgColor: c.canvas, altSectionBkgColor: c.canvas, sectionBkgColor2: c.canvas, gridColor: c.border,

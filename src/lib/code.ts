@@ -193,6 +193,19 @@ const editingDiagram = new Plugin({
       }
       return null;
     },
+    // a click beside a drawn diagram whose code is hidden (the margin by it, where a wide chart's boxes run past its
+    // edge): the diagram is selected. The caret went to the nearest place, inside its code (from the gap just after
+    // the block, the end of its code), and the code took the drawing's place while a box was being clicked on
+    handleClick(view, pos) {
+      const $p = view.state.doc.resolve(pos);
+      let at = -1;
+      for (let d = $p.depth; d > 0 && at < 0; d--) if ($p.node(d).type.name === 'codeBlock') at = $p.before(d);
+      if (at < 0 && !$p.parent.isTextblock) at = $p.nodeBefore?.type.name === 'codeBlock' ? pos - $p.nodeBefore.nodeSize : $p.nodeAfter?.type.name === 'codeBlock' ? pos : -1;
+      const n = at < 0 ? null : view.state.doc.nodeAt(at), { $head } = view.state.selection;
+      if (!n || !isDrawn(view, n, at) || ($head.pos > at && $head.pos < at + n.nodeSize)) return false; // its code showing
+      view.dispatch(selectBlock(view.state, at));
+      return true;
+    },
   },
 });
 
