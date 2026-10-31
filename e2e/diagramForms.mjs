@@ -33,11 +33,36 @@ try {
   await page.locator('.form input[aria-label="Message"]').first().fill('로그인 요청');
   has(await md(page), ['사용자->>+앱: 로그인 요청', 'loop 세 번까지', '앱->>서버: 확인', 'Note over 앱,서버: 암호화', 'activate 서버', '앱-->>-사용자: 끝']);
   await page.locator('.form input[aria-label="Note"]').fill('TLS로 암호화');
-  await page.locator('.form button.add', { hasText: 'Group' }).click();
+  await page.locator('.form .adds button.add', { hasText: 'Group' }).click();
   const seq = await md(page);
   has(seq, ['Note over 앱,서버: TLS로 암호화']);
   assert.match(seq, /\n {2}loop\n {4}사용자->>앱:\n {2}end\n/, `a group added, a message in it\n${seq}`);
   console.log('ok   a pasted sequence diagram edits in its rows: notes, groups, activations and its own lines kept');
+  await page.close();
+
+  // ---- a sequence diagram's groups: a row added inside one, an else, rows moved in and out; arrows and bars ----
+  page = await open('sequenceDiagram\n  A->>B: one\n  loop again\n    A->>B: two\n  end\n  alt ok\n    B->>A: yes\n  end\n  A->>B: three');
+  const endRow = (n) => page.locator('.form .s-step').filter({ has: page.locator('span.end') }).nth(n);
+  await endRow(0).getByRole('button', { name: 'Message', exact: true }).click();
+  assert.match(await md(page), /loop again\n {4}A->>B: two\n {4}A->>B:\n {2}end/, 'a message added in the loop, above its end');
+  await endRow(1).getByRole('button', { name: 'Else', exact: true }).click();
+  assert.match(await md(page), /alt ok\n {4}B->>A: yes\n {2}else\n {2}end/, 'an else added in the if');
+  await page.locator('.form input[aria-label="Message"]').last().focus();
+  await page.keyboard.press('Alt+ArrowUp');
+  assert.match(await md(page), /else\n {4}A->>B: three\n {2}end\n?$/m, '⌥↑ takes the last message into the group above');
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Message', 'the keyboard goes with the row');
+  const before = await md(page);
+  await endRow(0).getByRole('button', { name: 'Group', exact: true }).focus();
+  for (let k = 0; k < 4; k++) await page.keyboard.press('Alt+ArrowUp'); // up past the loop's own start: refused there
+  assert.match(await md(page), /loop again[\s\S]*end/, `the loop still closes\n${await md(page)}`);
+  assert.notEqual(before, null);
+  const first = page.locator('.form .s-msg').first();
+  await first.getByRole('button', { name: 'Sends or replies' }).click();
+  await page.getByRole('option', { name: /no wait/ }).first().click();
+  await first.getByRole('button', { name: 'Activation' }).click();
+  await page.getByRole('option', { name: 'Bar starts' }).click();
+  assert.match(await md(page), /\n {2}A-\)\+B: one\n/, 'a message sent without waiting, starting a bar');
+  console.log('ok   a sequence diagram: rows go into a group, an else, rows move in and out, arrows and bars chosen');
   await page.close();
 
   // ---- a Gantt chart: a task after another, or after the one before it; a setting it cannot show kept ----

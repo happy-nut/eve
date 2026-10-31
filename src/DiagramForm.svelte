@@ -117,11 +117,11 @@
   /** what divides a group of this kind: an if's else, an at-once's and, a critical's option */
   const SPLIT_OF: Partial<Record<BlockKind, BlockKind>> = { alt: 'else', par: 'and', critical: 'option' };
   /** a row put in a group, just above its end (added at the bottom, it was outside every group, and there was no way in) */
-  async function addInside(s: Sequence, end: number, step: Sequence['messages'][number] | 'group') {
+  async function addInside(s: Sequence, end: number, step: 'message' | 'group' | BlockKind) {
     const [a, b] = [s.people[0]?.id, s.people[1]?.id ?? s.people[0]?.id];
     if (!a || !b) return;
     const msg = { from: a, to: b, text: '', reply: false };
-    s.messages.splice(end, 0, ...(step === 'group' ? [{ block: 'loop' as const, text: '' }, msg, { block: 'end' as const, text: '' }] : [step]));
+    s.messages.splice(end, 0, ...(step === 'group' ? [{ block: 'loop' as const, text: '' }, msg, { block: 'end' as const, text: '' }] : step === 'message' ? [msg] : [{ block: step, text: '' }]));
     await tick();
     box.querySelectorAll('.s-step')[end]?.querySelector<HTMLElement>('input.grow')?.focus();
   }
@@ -165,7 +165,7 @@
   ];
   const arrowOf = (m: Message) => m.arrow ?? (m.reply ? '-->>' : '->>');
   // an arrow written some other way (->, <<->>) stays a choice as written
-  const arrowOptions = (m: Message) => (ARROWS.some(([a]) => a === arrowOf(m)) ? ARROWS : [...ARROWS, [arrowOf(m), arrowOf(m)] as [string, string]]);
+  const seqArrows = (m: Message) => (ARROWS.some(([a]) => a === arrowOf(m)) ? ARROWS : [...ARROWS, [arrowOf(m), arrowOf(m)] as [string, string]]);
   function setArrow(m: Message, v: string) {
     m.reply = replies(v);
     if (v === '->>' || v === '-->>') delete m.arrow; else m.arrow = v;
@@ -337,6 +337,19 @@
   </button>
 {/snippet}
 
+{#snippet addSmall(run: () => void, label: string)}
+  <button class="add small" type="button" onclick={run}><svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" /></svg>{label}</button>
+{/snippet}
+
+{#snippet moves(s: Sequence, i: number)}
+  <button class="x mv" type="button" aria-label="Move up" title="Move up (⌥↑)" disabled={i === 0} onclick={(e) => moveStep(s, i, -1, e.currentTarget)}>
+    <svg viewBox="0 0 16 16"><path d="M4.5 9.5 8 6l3.5 3.5" /></svg>
+  </button>
+  <button class="x mv" type="button" aria-label="Move down" title="Move down (⌥↓)" disabled={i === s.messages.length - 1} onclick={(e) => moveStep(s, i, 1, e.currentTarget)}>
+    <svg viewBox="0 0 16 16"><path d="M4.5 6.5 8 10l3.5-3.5" /></svg>
+  </button>
+{/snippet}
+
 {#snippet add(run: () => void, label: string)}
   <button class="add" type="button" onclick={run}><svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" /></svg>{label}</button>
 {/snippet}
@@ -372,16 +385,27 @@
       </div>
       {#each seqD.messages as st, i (i)}
         <!-- a group's steps indented under it, as the drawing boxes them -->
-        <div class="row s-step" class:s-msg={isMessage(st)} style:padding-left={`${depthAt(seqD, i) * 18}px`}>
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <div class="row s-step" class:s-msg={isMessage(st)} role="group" style:padding-left={`${depthAt(seqD, i) * 18}px`} onkeydown={(e) => stepKey(e, seqD, i)}>
           {#if 'raw' in st}
             <input class="grow code" bind:value={st.raw} spellcheck="false" aria-label="Code kept as written" />
+            {@render moves(seqD, i)}
             {@render remove(() => dropStep(seqD, i), 'Remove line')}
           {:else if 'block' in st}
             {#if st.block === 'end'}
               <span class="end">end</span>
+              <!-- a row put in the group, above its end -->
+              {@render addSmall(() => addInside(seqD, i, 'message'), 'Message')}
+              {#if SPLIT_OF[openerOf(seqD, i) ?? 'end']}
+                {@const split = SPLIT_OF[openerOf(seqD, i) ?? 'end']!}
+                {@render addSmall(() => addInside(seqD, i, split), SPLITS.find(([k]) => k === split)![1])}
+              {/if}
+              {@render addSmall(() => addInside(seqD, i, 'group'), 'Group')}
+              {@render moves(seqD, i)}
             {:else}
               <Select label="Group" value={st.block} options={DIVIDERS.has(st.block) ? SPLITS : OPENERS} onchange={(v) => (st.block = v as BlockKind)} />
               <input class="grow" bind:value={st.text} placeholder={st.block === 'rect' ? 'Colour, rgb(…)' : 'Condition'} aria-label="Group" />
+              {@render moves(seqD, i)}
               {@render remove(() => dropStep(seqD, i), 'Remove group')}
             {/if}
           {:else if 'note' in st}
@@ -391,12 +415,15 @@
               <Select label="And" value={st.who[1] ?? ''} options={[['', '—'], ...peopleOptions(seqD)]} onchange={(v) => (st.who = v ? [st.who[0], v] : [st.who[0]])} />
             {/if}
             <input class="grow" bind:value={st.text} placeholder="Note" aria-label="Note" />
+            {@render moves(seqD, i)}
             {@render remove(() => dropStep(seqD, i), 'Remove note')}
           {:else}
             <Select label="From" value={st.from} options={peopleOptions(seqD)} onchange={(v) => (st.from = v)} />
-            <Select label="Sends or replies" value={st.reply ? 'reply' : 'send'} options={[['send', '→  Sends'], ['reply', '⇠  Replies']]} onchange={(v) => (st.reply = v === 'reply')} />
+            <Select label="Sends or replies" value={arrowOf(st)} options={seqArrows(st)} onchange={(v) => setArrow(st, v)} />
             <Select label="To" value={st.to} options={peopleOptions(seqD)} onchange={(v) => (st.to = v)} />
+            <Select label="Activation" value={st.act ?? ''} options={BARS} onchange={(v) => { if (v) st.act = v as '+' | '-'; else delete st.act; }} />
             <input class="grow" bind:value={st.text} placeholder="Message" aria-label="Message" onkeydown={(e) => rowEnter(e, '.s-msg input.grow', () => addMessage(seqD))} />
+            {@render moves(seqD, i)}
             {@render remove(() => dropStep(seqD, i), 'Remove message')}
           {/if}
         </div>
@@ -640,6 +667,10 @@
   textarea:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   input.code, textarea.code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; }
   .adds { display: flex; flex-wrap: wrap; gap: 2px; }
+  /* a row's ↑↓ while it is the one being worked on: on every row, they crowded out its words */
+  .s-step .mv { display: none; }
+  .s-step:focus-within .mv, :global(html.mobile) .s-step .mv { display: inline-flex; }
+  @media (hover: hover) { .s-step:hover .mv { display: inline-flex; } }
   .end { flex: 1; padding: 4px 9px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; color: var(--fg-dim); }
   .name { font-weight: 600; }
   .st-state .name { width: 160px; flex: none; }
