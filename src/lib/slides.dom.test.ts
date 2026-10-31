@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { slides, paginate } from './slides';
+import { slides, paginate, sentences, join } from './slides';
 
 const blocks = (html: string) => { const d = document.createElement('div'); d.innerHTML = html; return [...d.children]; };
 const text = (s: Element[][]) => s.map((x) => x.map((b) => b.textContent).join('|'));
@@ -40,4 +40,20 @@ test('a subheading at the foot of a slide goes on with its words, under the slid
 test('a slide gone on to the next keeps its heading and the subheading it is under on top; a new subheading takes the old one\'s place', () => {
   const deck = slides(blocks('<h1>T</h1><h1>A</h1><h2>S1</h2><p>1</p><p>2</p><p>3</p><h2>S2</h2><p>4</p><p>5</p>'));
   expect(text(paginate(deck, (b) => b.length <= 4, again))).toEqual(['T', 'A|S1|1|2', 'A|S1|3', 'A|S2|4|5']);
+});
+
+test('a paragraph cut into its sentences, its bold and links kept, put back together the same', () => {
+  const [p] = blocks('<p>One <b>two.</b> Three? <a href="x">Four</a>! Five</p>');
+  const parts = sentences(p);
+  expect(parts.map((x) => x.textContent)).toEqual(['One two.', ' Three?', ' Four!', ' Five']);
+  expect(join(parts).map((x) => x.innerHTML)).toEqual([p.innerHTML]);
+  expect(sentences(blocks('<p>Just one sentence.</p>')[0])).toHaveLength(1);
+});
+
+test('a long paragraph goes on from where the screen ends, a short one goes whole; the note\'s title is not shown again', () => {
+  // a screen of five sentences, a heading or paragraph counted as one
+  const room = (b: Element[]) => b.reduce((n, x) => n + Math.max(1, x.textContent!.split('.').length - 1), 0) <= 5;
+  const deck = slides(blocks('<h1>Novel</h1><p>a. b. c.</p><p>d. e. f. g. h. i.</p><p>j. k.</p>'));
+  const out = paginate(deck, room, again, sentences);
+  expect(text(out)).toEqual(['Novel|a. b. c.|d.', ' e. f. g. h. i.', 'j. k.']);
 });

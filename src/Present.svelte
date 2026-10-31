@@ -3,7 +3,7 @@
   import { fade } from 'svelte/transition';
   import { scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
-  import { slides, paginate } from './lib/slides';
+  import { slides, paginate, sentences } from './lib/slides';
   import { stepper } from './lib/diagramMotion';
   import { wholeScreen } from './lib/platform';
   import { appearance } from './lib/appearance.svelte';
@@ -31,18 +31,21 @@
   let at = $state(0);
   let box: HTMLDivElement, body: HTMLDivElement;
   /** the diagrams on the slide shown, each with the step it is at */
+  /** the slide up is taller than the screen, scrolled through before the page turns */
+  let tall = false;
   let walks: { svg: SVGSVGElement; walk: ReturnType<typeof stepper>; k: number }[] = [];
 
   /** the slides cut to the screen as it is now, measured on the slide itself; still on the same words after */
   function cut() {
-    const here = deck[at]?.find((b) => !b.classList.contains('again'));
+    // the words up now, found again by their text: a paragraph may be cut elsewhere after
+    const here = deck[at]?.find((b) => !b.classList.contains('again'))?.textContent?.trim().slice(0, 40);
     // the room is the screen's, not the slide's: the slide is only as tall as what is on it
     const pad = getComputedStyle(box), room = box.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom);
     deck = paginate(sections, (blocks) => {
       body.replaceChildren(...blocks);
       return !(room > 0) || body.scrollHeight <= room + 1; // (no room measured: a page with no layout, one slide a section)
-    }, (h) => { const c = h.cloneNode(true) as Element; c.classList.add('again'); return c; });
-    const i = here ? deck.findIndex((s) => s.includes(here)) : 0;
+    }, (h) => { const c = h.cloneNode(true) as Element; c.classList.add('again'); return c; }, sentences);
+    const i = here ? deck.findIndex((s) => s.some((b) => !b.classList.contains('again') && b.textContent?.includes(here))) : 0;
     void go(Math.max(0, i), false, false);
   }
 
@@ -88,6 +91,8 @@
     at = i;
     await tick();
     body.replaceChildren(...deck[i]);
+    // taller than the screen, measured before its lines come in: while they rise they reach below it for a moment
+    tall = body.scrollHeight > body.clientHeight + 2;
     if (animate) turn(old, back);
     body.scrollTop = back ? body.scrollHeight : 0;
     walks = [...body.querySelectorAll<SVGSVGElement>('svg[aria-roledescription]')].map((svg) => {
@@ -100,7 +105,7 @@
   function next() {
     const w = walks.find((w) => w.k < w.walk.count - 1);
     if (w) { w.walk.show(++w.k); w.svg.scrollIntoView?.({ block: 'nearest' }); return; }
-    if (body.scrollTop + body.clientHeight < body.scrollHeight - 2) return body.scrollBy({ top: body.clientHeight * 0.85, behavior: 'smooth' });
+    if (tall && body.scrollTop + body.clientHeight < body.scrollHeight - 2) return body.scrollBy({ top: body.clientHeight * 0.85, behavior: 'smooth' });
     if (at < deck.length - 1) void go(at + 1);
   }
   function prev() {
@@ -175,6 +180,13 @@
   .slide :global(.mermaid-view svg) { height: auto; max-height: 50vh; } /* room left for the headings above it */
   .slide::-webkit-scrollbar { display: none; }
   .slide > :global(:first-child) { margin-top: 0; }
+  /* a heading shown again, the slide going on under it: small, up in the corner, as a breadcrumb, the room for words */
+  .slide > :global(.again) {
+    display: inline-block; margin: 0 0 1em; font-size: 0.55em; line-height: 1.3; font-weight: 600; color: var(--fg-dim);
+  }
+  .slide > :global(.again + .again)::before { content: '›'; margin: 0 0.5em; font-weight: 400; }
+  /* paragraphs apart, as a page of prose reads */
+  .slide > :global(p + p) { margin-top: 0.6em; }
   /* a copy to look at: a block's own tools have no place on a slide */
   .slide :global(:is(.tools, .codebar, .foldchips, .drag-handle, .block-handle)) { display: none !important; }
   .count { position: absolute; right: 20px; bottom: calc(14px + var(--bottom, 0px)); color: var(--fg-dim); font-size: 12px; font-variant-numeric: tabular-nums; }

@@ -23,7 +23,8 @@ try {
   await page.waitForTimeout(300); // faded in, the menu gone
   const count = () => page.textContent('.present .count');
   const press = async (k) => { await page.keyboard.press(k); await page.waitForTimeout(500); };
-  const look = () => page.evaluate(() => {
+  const look = () => page.evaluate(async () => {
+    await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))); // its lines all in
     const s = document.querySelector('.present .slide'), r = s.getBoundingClientRect();
     const on = (sel) => [...s.querySelectorAll(sel)].filter((e) => getComputedStyle(e).opacity !== '0').length;
     return { h: s.querySelector('h1, h2')?.textContent, size: parseFloat(getComputedStyle(s).fontSize), box: [r.left, r.top, r.right, r.bottom], nodes: on('g.node'), lines: on('path.flowchart-link'), scrolled: s.scrollTop, tall: s.scrollHeight > s.clientHeight };
@@ -102,7 +103,13 @@ try {
   assert.ok(await page.evaluate(() => !!document.activeElement?.closest('.tiptap')), 'the keyboard back in the note');
   // the note's own diagram is whole: the slides were copies
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('.tiptap g.node')].filter((g) => getComputedStyle(g).opacity === '0').length), 0);
-  console.log('ok   a note presented: slides at its headings, a long section cut to the screen (and again for a smaller window), a flowchart a step a press, back into the note');
+  // ⇧⌘↩ from the note presents it too (Settings → Shortcuts can change it), and Esc leaves again
+  await page.keyboard.press('Meta+Shift+Enter');
+  await page.waitForSelector('.present .slide h1');
+  assert.equal(await count(), `1 / ${await total()}`, 'from the first slide');
+  await press('Escape');
+  assert.equal(await page.locator('.present').count(), 0);
+  console.log('ok   a note presented: slides at its headings, a long section cut to the screen (and again for a smaller window), a flowchart a step a press, back into the note; ⇧⌘↩ presents it');
 } finally {
   await browser.close();
   await server?.close();

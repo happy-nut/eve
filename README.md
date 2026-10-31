@@ -57,7 +57,7 @@ GitHub repo with no server in between. Claude can read and write them too, with 
 - **Lists that nest like a document** — `1.` → `a.` → `i.`; bullets, numbers and to-dos mix freely.
 - **Sidebar** — groups (3 levels), emoji icons, drag to reorder, `⌘1`…`⌘9` to jump, `⌘\` to drive it from the keyboard.
 - **Link cards, pictures, find & replace** (`⌘F`), section outline, text size (`⌘+` `⌘-`).
-- **Present a note** — ⋯ → Present: cut into slides by itself, at its biggest headings and wherever the screen ends,
+- **Present a note** — ⋯ → Present (⇧⌘↩): cut into slides by itself, at its biggest headings and wherever the screen ends,
   a slide gone on to the next under its heading and subheading again, the window on the whole screen; → walks a diagram
   that draws itself in a step at a time before it turns the page. The page turn (slide, fade, zoom, none) and lines
   coming in one by one are in Settings → Appearance → Presenting.
