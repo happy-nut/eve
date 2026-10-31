@@ -34,8 +34,12 @@ describe('a diagram drawing itself in', () => {
     const svg = svgOf(`<svg aria-roledescription="sequence" xmlns="http://www.w3.org/2000/svg">
       <rect class="actor actor-top" id="p"/><line class="actor-line" id="ll"/>
       <text class="messageText" id="t0"/><line class="messageLine0" id="m0"/>
-      <text class="messageText" id="t1"/><line class="messageLine1" id="m1"/></svg>`);
+      <text class="messageText" id="t1"/><line class="messageLine1" id="m1"/>
+      <text class="messageText" id="t2"/><path class="messageLine0" id="self"/></svg>`);
     expect(at(svg, '#p')).toBe(0);
+    // a message to oneself, a loop drawn as a path, comes in its turn with its words
+    expect(at(svg, '#self')).toBeGreaterThan(at(svg, '#m1')!);
+    expect(at(svg, '#t2')).toBe(at(svg, '#self'));
     expect(at(svg, '#m0')).toBeGreaterThan(at(svg, '#ll')!);
     expect(at(svg, '#t0')).toBe(at(svg, '#m0'));
     expect(at(svg, '#m1')).toBeGreaterThan(at(svg, '#m0')!);

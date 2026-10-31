@@ -16,7 +16,8 @@ type Step = { el: Element; at: number; stage: number; line?: SVGPathElement | SV
 export function timeline(svg: SVGSVGElement): Step[] {
   const kind = svg.getAttribute('aria-roledescription');
   if (kind === 'sequence') {
-    const msgs = [...svg.querySelectorAll<SVGLineElement>('line[class^="messageLine"]')];
+    // a message to oneself is drawn as a loop, a path, not a line
+    const msgs = [...svg.querySelectorAll<SVGLineElement | SVGPathElement>(':is(line, path)[class^="messageLine"]')];
     const u = Math.min(UNIT, MAX / Math.max(1, msgs.length));
     const steps: Step[] = [...svg.querySelectorAll('rect.actor, text.actor, g.actor-man')].map((el) => ({ el, at: 0, stage: 0 }));
     for (const el of svg.querySelectorAll('line.actor-line')) steps.push({ el, at: 0.2, stage: 0 });
