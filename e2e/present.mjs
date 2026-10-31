@@ -35,6 +35,7 @@ try {
   assert.ok(await total() >= 5, `the long section cut onto slides of its own (${await count()})`);
   assert.ok(v.size > 22, `the text a size up (${v.size}px)`);
   assert.ok(v.box[0] > 0 && v.box[1] > 0 && v.box[2] < 1280 && v.box[3] < 800, `the slide inside the window (${v.box})`);
+  assert.ok(v.box[2] - v.box[0] > 0.85 * 1280, `the slide the window's width, as a slide is (${v.box})`);
   await page.screenshot({ path: 'e2e/out/present-1.png' });
 
   // the page turns: the slide leaving drawn going while the next comes in, then gone, the new one still and whole
@@ -73,13 +74,13 @@ try {
   assert.deepEqual(seen.flat().filter((t) => t.startsWith('Line')), Array.from({ length: 40 }, (_, i) => `Line ${i}`), 'every line once, in order');
   await page.screenshot({ path: 'e2e/out/present-3.png' });
 
-  // a smaller window: more slides, and still on the words that were up
+  // a narrower window, its words smaller: cut again, and still on the words that were up
   await press('ArrowLeft');
   const first = await page.textContent('.present .slide p');
   const before = await total();
-  await page.setViewportSize({ width: 1280, height: 520 }); // (narrower, the text is smaller too: a lower one holds less)
+  await page.setViewportSize({ width: 700, height: 800 });
   await page.waitForTimeout(800);
-  assert.ok((await total()) > before, `cut again for a smaller window (${before} → ${await total()})`);
+  assert.ok((await total()) !== before, `cut again for a narrower window (${before} → ${await total()})`);
   assert.ok((await page.textContent('.present .slide')).includes(first), `still on "${first}"`);
   assert.ok(!(await look()).tall);
   await page.setViewportSize({ width: 1280, height: 800 });
