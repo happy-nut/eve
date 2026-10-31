@@ -53,6 +53,11 @@
   /** "Connect" pressed on this box: the next box tapped gets a line from it (a phone's way to join two boxes, where
    *  dragging the + is fiddly and the + of a box being typed in was not there at all) */
   let linking = $state<string | null>(null);
+  /** a line whose end is being moved: the next box tapped is where it goes (it had to be deleted and drawn again, its
+   *  label and look with it) */
+  let moveEnd = $state<number | null>(null);
+  /** the box a line is being drawn from, or moved away from: the others are rung to be picked */
+  const picking = $derived(linking ?? (moveEnd !== null ? flow.edges[moveEnd]?.from ?? null : null));
   /** a phone's bar showing the shapes in place of its other buttons */
   let shapesOpen = $state(false);
   $effect(() => { void selId; shapesOpen = false; }); // another box picked: its bar starts over
@@ -95,6 +100,7 @@
       twin.dataset.index = String(i);
       p.after(twin);
     });
+    if (toReveal && boxOf(toReveal)) reveal(toReveal);
   }
   $effect(() => { void version; void k; tick().then(measure); });
   // the drawing's own size too: zoomed on the whole screen (DiagramBlock.svelte), it grows or shrinks inside a canvas
@@ -202,9 +208,13 @@
     // focused without the page scrolling to it: a box past the card's edge scrolled the whole note sideways, under the list
     tick().then(() => { const el = layer.querySelector<HTMLInputElement>('input.rename'); el?.focus({ preventScroll: true }); el?.select(); });
   }
-  /** a box scrolled out of the card brought back into it (the picture scrolls sideways inside its card) */
+  /** a box scrolled out of the card brought back into it (the picture scrolls sideways inside its card). One not drawn
+   *  yet (a step just added) is brought in once it is: drawn past the card's edge, a click on it fell beside the
+   *  diagram and closed it */
+  let toReveal: string | null = null;
   function reveal(id: string) {
     const b = boxOf(id);
+    toReveal = b ? null : id;
     if (!b || !layer) return;
     const W = layer.clientWidth, pad = 24;
     const by = b.x < pad ? b.x - pad : b.x + b.w + 80 > W ? b.x + b.w + 80 - W : 0;
@@ -214,7 +224,7 @@
   export function escape(): boolean {
     if (editing) { cancelEdit(); return true; }
     if (laneEditing) { doneTyping(); laneEditing = null; return true; }
-    if (linking || sel) { linking = null; sel = null; return true; }
+    if (linking || moveEnd !== null || sel) { linking = null; moveEnd = null; sel = null; return true; }
     return false;
   }
   function typed() {
@@ -313,6 +323,12 @@
       if (sel && 'lane' in sel && sel.lane === id) startLaneEdit(id); else { sel = { lane: id }; letGo(); }
       return;
     }
+    if (moveEnd !== null) {
+      const e = flow.edges[moveEnd], id = g ? nodeIdOf(g) : null;
+      moveEnd = null;
+      if (e && id && id !== e.from && !flow.edges.some((x) => x !== e && x.from === e.from && x.to === id)) e.to = id;
+      return;
+    }
     if (linking) {
       const from = linking, id = g ? nodeIdOf(g) : null;
       linking = null;
@@ -329,6 +345,7 @@
       if (sel && 'node' in sel && sel.node === id) startEdit(id);
       else {
         sel = { node: id };
+        reveal(id); // its + and bar inside the card: by the card's edge they were cut off, or off a phone's screen
         // the keyboard off the note's text: its keys (⌫, Enter, Tab) are the box's now, and a phone's keyboard goes down
         if (!editing) letGo();
       }
@@ -477,7 +494,7 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    if (linking && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); linking = null; return; }
+    if ((linking || moveEnd !== null) && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); linking = null; moveEnd = null; return; }
     if (editing || laneEditing || !sel) return;
     // only keys meant for this diagram: the keyboard on it, or on nothing (after a box's typing is done) — not keys
     // typed in the list or another note's page, which deleted the box behind them
@@ -568,6 +585,9 @@
       return sum + (w > 0 && h > 0 ? w * h : 0);
     }, 0);
     const a = up.top - o.top, b = down.top - o.top;
+    // covering boxes either way (a line between boxes at the picture's top): under them all, the picture growing at
+    // its foot to hold it, as when there is no room. Over them, the boxes one came to click were under the bar
+    if (cost(a) > 0 && cost(b) > 0) return { left, top: Math.max(bottom, ...boxes.map((x) => x.y + x.h)) + 8 };
     return { left, top: up.side === down.side || cost(a) <= cost(b) ? a : b };
   }
   /** how much the picture grew at its foot to hold a bar under a box (see barAt) */
@@ -632,11 +652,11 @@
     {/if}
   {/if}
 
-  {#if linking}
-    {#each boxes.filter((b) => b.id !== linking) as b (b.id)}
+  {#if picking}
+    {#each boxes.filter((b) => b.id !== picking) as b (b.id)}
       <div class="ring target pick" style:left={`${b.x - 4}px`} style:top={`${b.y - 4}px`} style:width={`${b.w + 8}px`} style:height={`${b.h + 8}px`}></div>
     {/each}
-    <div class="pickhint">{isMobile ? 'Tap the box to connect to · tap elsewhere to cancel' : 'Click the box to connect to · Esc or a click elsewhere cancels'}</div>
+    <div class="pickhint">{isMobile ? `Tap the box to ${linking ? 'connect' : 'move the end'} to · tap elsewhere to cancel` : `Click the box to ${linking ? 'connect' : 'move the end'} to · Esc or a click elsewhere cancels`}</div>
   {/if}
 
   {#each moving ? [] : handles as b (b.id)}
@@ -702,7 +722,7 @@
   {/if}
 
   {#if selEdge && sel && 'edge' in sel && !drag}
-    {@const at = barAt(sel.x, sel.y - 6, sel.y + 6, isMobile ? 360 : 486)}
+    {@const at = barAt(sel.x, sel.y - 6, sel.y + 6, isMobile ? 360 : 518)}
     {@const i = sel.edge}
     <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
       {#each LINES as [line, label, icon] (line)}
@@ -712,6 +732,7 @@
       <!-- room for a few words, and lines: ⇧↩ breaks one (a one-line field of 110px held two words, and no break) -->
       <textarea class="edge-label" rows="1" bind:value={selEdge.label} placeholder="Label" aria-label="Line label" title="⇧↩ a new line" {@attach grow}></textarea>
       <button type="button" aria-label="Put a step in this line" title="Put a step in the middle of this line" onclick={() => splitEdge(i)}><svg viewBox="0 0 16 16"><path d="M1.5 8h3M11.5 8h3" /><rect x="4.5" y="5" width="7" height="6" rx="1.6" /></svg></button>
+      <button type="button" aria-label="Move its end" title="Move its end to another box" onclick={() => { moveEnd = i; sel = null; }}><svg viewBox="0 0 16 16"><path d="M1.5 8h7M6.5 5.5 9 8l-2.5 2.5" /><rect x="10.5" y="5" width="4" height="6" rx="1.4" stroke-dasharray="2 1.5" /></svg></button>
       <button type="button" aria-label="Reverse" title="Reverse" onclick={() => reverse(i)}><svg viewBox="0 0 16 16"><path d="M3 5.5h9.5M10.5 3l2.5 2.5L10.5 8M13 10.5H3.5M5.5 8 3 10.5 5.5 13" /></svg></button>
       <button type="button" class="danger" aria-label="Delete" title="Delete (⌫)" onclick={() => dropEdge(i)}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
     </div>

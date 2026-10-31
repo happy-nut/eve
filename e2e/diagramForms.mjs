@@ -65,6 +65,39 @@ try {
   console.log('ok   a sequence diagram: rows go into a group, an else, rows move in and out, arrows and bars chosen');
   await page.close();
 
+  // ---- a Gantt chart: two statuses at once, a milestone of no length, a task after two, weekends skipped ----
+  page = await open('gantt\n  dateFormat YYYY-MM-DD\n  section 개발\n    설계 :a1, 2026-01-05, 3d\n    구현 :a2, 2026-01-08, 2d\n    리뷰 :after a1, 2d');
+  const task = (n) => page.locator('.form .g-task').nth(n);
+  const choose = async (row, label, option) => { await row.getByRole('button', { name: label }).click(); await page.getByRole('listbox').last().getByRole('option', { name: option, exact: true }).click(); await page.waitForTimeout(150); };
+  await choose(task(1), 'Status', 'Active, critical');
+  await choose(task(0), 'Status', 'Milestone');
+  await choose(task(2), 'And after', 'And “구현”');
+  await page.getByRole('checkbox', { name: 'Skip weekends' }).check();
+  has(await md(page), ['설계 : milestone, a1, 2026-01-05, 0d', '구현 : active, crit, a2, 2026-01-08, 2d', '리뷰 : after a1 a2, 2d', 'excludes weekends']);
+  console.log('ok   a Gantt chart: active and critical, a milestone of no length, a task after two, weekends skipped');
+  await page.close();
+
+  // ---- a mind map's shapes, a timeline's sections, a state diagram's states in states, choices and notes ----
+  page = await open('mindmap\n  root((제품))\n    편집기\n    동기화');
+  await choose(page.locator('.form .m-item').first(), 'Shape', '☁ Cloud');
+  await choose(page.locator('.form'), 'Centre shape', '▢ Square');
+  has(await md(page), ['root[제품]', ')편집기(']);
+  await page.close();
+  page = await open('timeline\n  section 창업기\n    2020 : 시작');
+  await page.locator('.form .adds button.add', { hasText: 'Section' }).click();
+  has(await md(page), ['section 창업기', 'section Section 2']);
+  await page.close();
+  page = await open('stateDiagram-v2\n  [*] --> 대기\n  대기 --> 분기\n  분기 --> 검토\n  검토 --> [*]');
+  const st = (n) => page.locator('.form .st-state').nth(n);
+  await choose(st(1), 'Kind', '◇ Choice');
+  await choose(st(0), 'Inside', 'In “검토”');
+  await st(2).getByRole('textbox', { name: 'Note' }).fill('사람이 본다');
+  const sd = await md(page);
+  has(sd, ['state 분기 <<choice>>', 'state 검토 {', 'note right of 검토 : 사람이 본다', '[*] --> 대기']);
+  assert.match(sd, /\n {2}\[\*\] --> 대기/, `the chart's start stays the chart's\n${sd}`);
+  console.log('ok   a mind map\'s shapes, a timeline\'s sections, a state in a state, a choice and a note');
+  await page.close();
+
   // ---- a Gantt chart: a task after another, or after the one before it; a setting it cannot show kept ----
   page = await open('gantt\n  dateFormat YYYY-MM-DD\n  excludes weekends\n  section 개발\n    설계 :a1, 2026-01-05, 3d\n    구현 :crit, a2, after a1, 2w\n    리뷰 : 2d');
   await page.locator('.form input[aria-label="Task"]').nth(2).fill('코드 리뷰');
@@ -135,6 +168,38 @@ try {
     await page.waitForTimeout(300);
   }
   console.log('ok   a click beside an open diagram does not open its code');
+
+  // ---- a step added past the card's edge is brought into it; a picked line's bar covers no box ----
+  const card = () => page.locator('.tiptap .dblock.active .mermaid-view').boundingBox();
+  const boxAt = (label) => page.locator('.tiptap .dblock.active g.node').filter({ hasText: label }).first().boundingBox();
+  await page.locator('.tiptap .dblock.active .mermaid-view').evaluate((h) => { h.scrollLeft = h.scrollWidth; });
+  await page.waitForTimeout(300);
+  let h8 = await boxAt('Eight');
+  await page.mouse.click(h8.x + h8.width / 2, h8.y + h8.height / 2);
+  await page.getByRole('button', { name: 'Add a step after this, or drag onto another box to connect' }).click();
+  await page.keyboard.type('Nine'); await page.keyboard.press('Enter');
+  await page.waitForTimeout(900);
+  const c = await card(), n9 = await boxAt('Nine');
+  assert.ok(n9.x + n9.width <= c.x + c.width + 1 && n9.x >= c.x - 1, `the new step is inside the card (${Math.round(n9.x)}–${Math.round(n9.x + n9.width)} in ${Math.round(c.x)}–${Math.round(c.x + c.width)})`);
+  await page.locator('.tiptap .dblock.active .mermaid-view').evaluate((h) => { h.scrollLeft = 0; });
+  await page.waitForTimeout(300);
+  const mid = await page.locator('.tiptap .dblock.active path.flowchart-link').first().evaluate((el) => { const q = el.getPointAtLength(el.getTotalLength() / 2), m = el.getScreenCTM(); return { x: q.x * m.a + m.e, y: q.y * m.d + m.f }; });
+  await page.mouse.click(mid.x, mid.y);
+  await page.waitForSelector('textarea.edge-label');
+  const bar = await page.locator('textarea.edge-label').locator('xpath=..').boundingBox();
+  for (const g of await page.locator('.tiptap .dblock.active g.node').all()) {
+    const b = await g.boundingBox();
+    const over = Math.min(bar.x + bar.width, b.x + b.width) > Math.max(bar.x, b.x) && Math.min(bar.y + bar.height, b.y + b.height) > Math.max(bar.y, b.y);
+    assert.ok(!over, `the line's bar covers no box (${await g.textContent()})`);
+  }
+  // its end moved to another box: label and look kept
+  await page.locator('textarea.edge-label').fill('go');
+  await page.getByRole('button', { name: 'Move its end' }).click();
+  const five = await boxAt('Five');
+  await page.mouse.click(five.x + five.width / 2, five.y + five.height / 2);
+  const moved = await md(page);
+  assert.match(moved, /a[^\n]*go[^\n]*e\b|a -->\|go\| e/, `the line from One now ends at Five\n${moved}`);
+  console.log('ok   a flowchart: a new step past the edge is brought into view, a line\'s bar covers no box, its end moves');
   await page.close();
 
   // ---- a sequence diagram's numbers are drawn so they can be read ----

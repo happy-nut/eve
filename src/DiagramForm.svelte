@@ -6,7 +6,7 @@
   import { sliceColor, branchColor } from './lib/mermaid';
   import {
     starter, freshId, addDays, ganttDates, isMessage, replies, type Diagram, type Message, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task,
-    type BlockKind, type ClassDiagram, type StateDiagram, type ErDiagram,
+    type BlockKind, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type StateBox, stateParent,
   } from './lib/diagram';
   import Select from './Select.svelte';
 
@@ -225,6 +225,15 @@
 
   // ---- timeline ----
   function addPeriod(t: Timeline) { t.periods.push({ label: '', events: [''] }); void focusLast('.t-period input.label'); }
+  /** a section: a stretch of periods under one name, from a new period on (they could not be grouped at all) */
+  function addSection(t: Timeline) {
+    t.periods.push({ label: '', events: [''], section: `Section ${t.periods.filter((p) => p.section !== undefined).length + 1}` });
+    void focusLast('.t-section input');
+  }
+
+  // ---- mind map shapes ----
+  const MIND_SHAPES: [MindShape, string][] = [['plain', 'Plain'], ['square', '▢ Square'], ['rounded', '▢ Rounded'], ['circle', '○ Circle'], ['bang', '✸ Bang'], ['cloud', '☁ Cloud'], ['hexagon', '⬡ Hexagon']];
+  const ROOT_SHAPES = MIND_SHAPES.filter(([k]) => k !== 'plain'); // the centre is always drawn in a shape
 
   // ---- gantt ----
   /** a start the note keeps: a whole date in a year people plan in. Typed with the keys, a date field reports every
@@ -241,7 +250,8 @@
     const others = g.sections.flatMap((s) => s.tasks).map((x, k) => [x, k] as const).filter(([x]) => x !== t);
     const opts: [string, string][] = [['date', 'On a date'], ['prev', 'After the one before'],
       ...others.map(([x, k]) => [x.id ? `after ${x.id}` : `task ${k}`, `After “${x.name.trim() || 'Task'}”`] as [string, string])];
-    if (!opts.some(([v]) => v === startOf(t))) opts.push([startOf(t), `After ${t.after}`]); // ids naming more than one, kept
+    // after more than one: their names
+    if (!opts.some(([v]) => v === startOf(t))) opts.push([startOf(t), `After ${t.after!.split(' ').map((id) => `“${taskName(g, id)}”`).join(' and ')}`]);
     return opts;
   }
   function setStart(g: Gantt, t: Task, v: string) {
@@ -253,7 +263,40 @@
     t.after = v.replace(/^after /, '');
     t.start = '';
   }
-  const TAG_OPTIONS: [string, string][] = [['', '—'], ['done', 'Done'], ['active', 'Active'], ['crit', 'Critical'], ['milestone', 'Milestone']];
+  /** a task's own name, or what it is said to start after */
+  const taskName = (g: Gantt, id: string) => g.sections.flatMap((s) => s.tasks).find((x) => x.id === id)?.name.trim() || id;
+  /** a task that starts when more than one ends: each picked in a choice of its own after the first */
+  function andAfterOptions(g: Gantt, t: Task) {
+    const has = new Set((t.after ?? '').split(' '));
+    const others = g.sections.flatMap((s) => s.tasks).map((x, k) => [x, k] as const).filter(([x]) => x !== t && !(x.id && has.has(x.id)));
+    return [['', '+ And after…'] as [string, string], ...others.map(([x, k]) => [x.id ?? `task ${k}`, `And “${x.name.trim() || 'Task'}”`] as [string, string])];
+  }
+  function addAfter(g: Gantt, t: Task, v: string) {
+    if (!v) return;
+    const all = g.sections.flatMap((s) => s.tasks);
+    const k = /^task (\d+)$/.exec(v);
+    if (k) { const x = all[+k[1]]; x.id ??= freshId('t', all.filter((y) => y.id).map((y) => ({ id: y.id! }))); v = x.id; }
+    t.after = `${t.after} ${v}`.trim();
+  }
+  // a critical task under way, or done, and a critical milestone: two at once, as mermaid allows
+  const TAG_OPTIONS: [string, string][] = [
+    ['', '—'], ['done', 'Done'], ['active', 'Active'], ['crit', 'Critical'], ['milestone', 'Milestone'],
+    ['active, crit', 'Active, critical'], ['done, crit', 'Done, critical'], ['crit, milestone', 'Critical milestone'],
+  ];
+  /** a milestone is a moment: 0 days, drawn as a diamond (at a day long it was a bar like any other) */
+  function setTags(t: Task, v: string) {
+    const was = t.tags?.includes('milestone');
+    if (v) t.tags = v.split(', '); else delete t.tags;
+    const is = !!t.tags?.includes('milestone');
+    if (is && !was) t.days = 0;
+    if (!is && t.days < 1) t.days = 1;
+  }
+  /** a chart setting the rows show as a box to tick, a line of `extra` when on (or, `off`, when off) */
+  const hasSetting = (g: Gantt, line: string) => (g.extra ?? []).some((x) => x.toLowerCase() === line.toLowerCase());
+  function setSetting(g: Gantt, line: string, on: boolean) {
+    const rest = (g.extra ?? []).filter((x) => x.toLowerCase() !== line.toLowerCase());
+    g.extra = on ? [...rest, line] : rest;
+  }
   const tagOptions = (t: Task) => (TAG_OPTIONS.some(([v]) => v === (t.tags ?? []).join(', ')) ? TAG_OPTIONS : [...TAG_OPTIONS, [(t.tags ?? []).join(', '), (t.tags ?? []).join(', ')] as [string, string]]);
 
   // ---- class, state and table diagrams ----
@@ -286,6 +329,26 @@
   function addClassLink(c: ClassDiagram) {
     const [a, b] = [c.classes[0]?.id, c.classes[1]?.id ?? c.classes[0]?.id];
     if (a && b) c.links.push({ from: a, to: b, arrow: '-->', label: '', fromCard: '', toCard: '' });
+  }
+  /** how deep in states of states a state is drawn */
+  const stateDepth = (s: StateDiagram, st: StateBox) => { let n = 0; for (let p = stateParent(s, st); p; p = stateParent(s, s.states.find((x) => x.id === p)!)) n++; return n; };
+  const STATE_KINDS: [string, string][] = [['state', 'State'], ['choice', '◇ Choice'], ['fork', '▬ Fork'], ['join', '▬ Join']];
+  /** the states it can be put in: not itself, nor one inside it (it would hold itself), nor a choice or a bar */
+  function insideOptions(s: StateDiagram, st: StateBox) {
+    const under = (x: StateBox): boolean => { for (let p = stateParent(s, x); p; p = stateParent(s, s.states.find((y) => y.id === p)!)) if (p === st.id) return true; return false; };
+    return [['', 'Not inside one'] as [string, string], ...s.states.filter((x) => x !== st && !x.kind && !under(x)).map((x) => [x.id, `In “${x.name.trim() || x.id}”`] as [string, string])];
+  }
+  /** a state renamed: the states in it follow it, as its lines do */
+  function renameState(s: StateDiagram, st: StateBox, name: string) {
+    const was = st.id;
+    rename(s.states, s.links, st, name, NAME_ID);
+    if (st.id !== was) for (const x of s.states) if (x.parent === was) x.parent = st.id;
+  }
+  /** a state gone: those in it are left in what held it */
+  function dropState(s: StateDiagram, i: number) {
+    const st = s.states[i];
+    for (const x of s.states) if (x.parent === st.id) { if (st.parent) x.parent = st.parent; else delete x.parent; }
+    drop(s.states, s.links, i);
   }
   function addState(s: StateDiagram) {
     const id = freshId('State', s.states);
@@ -460,7 +523,10 @@
   {:else if mind}
     <div class="section">
       <div class="head">Centre</div>
-      <input bind:value={mind.root} placeholder="The main idea" aria-label="Centre" />
+      <div class="row">
+        <input class="grow" bind:value={mind.root} placeholder="The main idea" aria-label="Centre" />
+        <Select label="Centre shape" value={mind.rootShape ?? 'circle'} options={ROOT_SHAPES} onchange={(v) => { if (v === 'circle') delete mind.rootShape; else mind.rootShape = v as MindShape; }} />
+      </div>
     </div>
     <div class="section">
       <div class="head">Branches <span class="tip">{isMobile ? '' : '↩ new · ⇥ deeper · ⇧⇥ back'}</span></div>
@@ -469,6 +535,7 @@
         <div class="row m-item" style:padding-left={`${(b.depth - 1) * 22}px`}>
           <span class="bullet" style:background={b.depth === 1 ? branchColor(mind.items.slice(0, i + 1).filter((x) => x.depth === 1).length - 1) : 'var(--fg-dim)'}></span>
           <input class="grow" bind:value={b.text} placeholder="Idea" aria-label="Branch" onkeydown={(e) => branchKey(e, mind, i)} />
+          <Select label="Shape" value={b.shape ?? 'plain'} options={MIND_SHAPES} onchange={(v) => { if (v === 'plain') delete b.shape; else b.shape = v as MindShape; }} />
           <button class="x" type="button" aria-label="Back a level" title="Back a level" disabled={b.depth <= 1} onclick={() => indent(mind, i, -1)}>
             <svg viewBox="0 0 16 16"><path d="M9.5 4.5 6 8l3.5 3.5" /></svg>
           </button>
@@ -488,7 +555,13 @@
     <div class="section">
       <div class="head">When · what</div>
       {#each time.periods as p, i (i)}
-        <div class="row t-period top" data-i={i}>
+        {#if p.section !== undefined}
+          <div class="row t-section">
+            <input class="grow phase" bind:value={p.section} placeholder="Section" aria-label="Section" />
+            {@render remove(() => { delete p.section; }, 'Remove section')}
+          </div>
+        {/if}
+        <div class="row t-period top" data-i={i} class:in-section={time.periods.slice(0, i + 1).some((x) => x.section !== undefined)}>
           <input class="label when" bind:value={p.label} placeholder="2026" aria-label="When" onkeydown={(e) => { if (e.key === 'Enter' && !composing(e)) { e.preventDefault(); void focusAt(`.t-period[data-i="${i}"] .events input`, 0); } }} />
           <div class="events grow">
             {#each p.events as _, j (j)}
@@ -505,12 +578,19 @@
           {@render remove(() => time.periods.splice(i, 1), 'Remove period')}
         </div>
       {/each}
-      {@render add(() => addPeriod(time), 'Add period')}
+      <div class="adds">
+        {@render add(() => addPeriod(time), 'Add period')}
+        {@render add(() => addSection(time), 'Section')}
+      </div>
     </div>
   {:else if gantt}
     <div class="section">
       <div class="head">Title</div>
       <input bind:value={gantt.title} placeholder="Optional" aria-label="Title" />
+      <div class="settings">
+        <label class="check"><input type="checkbox" checked={hasSetting(gantt, 'excludes weekends')} onchange={(e) => setSetting(gantt, 'excludes weekends', e.currentTarget.checked)} />Skip weekends</label>
+        <label class="check"><input type="checkbox" checked={!hasSetting(gantt, 'todayMarker off')} onchange={(e) => setSetting(gantt, 'todayMarker off', !e.currentTarget.checked)} />Today line</label>
+      </div>
     </div>
     {#each gantt.sections as s, i (i)}
       <div class="section g-phase" data-i={i}>
@@ -525,8 +605,11 @@
             {#if t.after === undefined}
               <input class="date" type="date" value={t.start} aria-label="Starts" oninput={(e) => { const v = e.currentTarget.value; if (plausible(v)) t.start = v; }} onblur={(e) => (e.currentTarget.value = t.start)} />
             {/if}
-            <Select label="Status" value={(t.tags ?? []).join(', ')} options={tagOptions(t)} onchange={(v) => { if (v) t.tags = v.split(', '); else delete t.tags; }} />
-            <span class="days"><input class="num" type="number" min="1" max="3650" step="1" inputmode="numeric" value={t.days} aria-label="Days" oninput={(e) => { const n = Math.round(+e.currentTarget.value); if (n >= 1) t.days = Math.min(n, 3650); }} onblur={(e) => (e.currentTarget.value = String(t.days))} />d</span>
+            {#if t.after}
+              <Select label="And after" value="" options={andAfterOptions(gantt, t)} onchange={(v) => addAfter(gantt, t, v)} />
+            {/if}
+            <Select label="Status" value={(t.tags ?? []).join(', ')} options={tagOptions(t)} onchange={(v) => setTags(t, v)} />
+            <span class="days"><input class="num" type="number" min={t.tags?.includes('milestone') ? 0 : 1} max="3650" step="1" inputmode="numeric" value={t.days} aria-label="Days" oninput={(e) => { const n = Math.round(+e.currentTarget.value); if (n >= (t.tags?.includes('milestone') ? 0 : 1)) t.days = Math.min(n, 3650); }} onblur={(e) => (e.currentTarget.value = String(t.days))} />d</span>
             {@render remove(() => s.tasks.splice(j, 1), 'Remove task')}
           </div>
         {/each}
@@ -568,10 +651,15 @@
     <div class="section">
       <div class="head">States</div>
       {#each state.states as st, i (i)}
-        <div class="row st-state">
-          <input class="name" value={st.name} oninput={(e) => rename(state.states, state.links, st, e.currentTarget.value, NAME_ID)} placeholder="State" aria-label="State name" />
-          <input class="grow" bind:value={st.desc} placeholder="What it means (optional)" aria-label="Description" />
-          {@render remove(() => drop(state.states, state.links, i), 'Remove state')}
+        <!-- a state inside another indented under it, as the drawing boxes it -->
+        <div class="row st-state" style:padding-left={`${stateDepth(state, st) * 18}px`}>
+          <input class="name" value={st.name} oninput={(e) => renameState(state, st, e.currentTarget.value)} placeholder="State" aria-label="State name" />
+          {#if !st.kind}<input class="grow" bind:value={st.desc} placeholder="What it means (optional)" aria-label="Description" />{/if}
+          <Select label="Kind" value={st.kind ?? 'state'} options={STATE_KINDS} onchange={(v) => { if (v === 'state') delete st.kind; else st.kind = v as 'choice'; }} />
+          <Select label="Inside" value={stateParent(state, st) ?? ''} options={insideOptions(state, st)} onchange={(v) => { if (v) st.parent = v; else delete st.parent; }} />
+          <input class="grow" value={st.note?.text ?? ''} placeholder="Note" aria-label="Note"
+            oninput={(e) => { const text = e.currentTarget.value; if (text) st.note = { side: st.note?.side ?? 'right', text }; else delete st.note; }} />
+          {@render remove(() => dropState(state, i), 'Remove state')}
         </div>
       {/each}
       {@render add(() => addState(state), 'Add state')}
@@ -600,7 +688,7 @@
           <div class="row e-col">
             <input class="type code" bind:value={c.type} placeholder="type" aria-label="Type" spellcheck="false" />
             <input class="grow" bind:value={c.name} placeholder="column" aria-label="Column" spellcheck="false" />
-            <input class="keys" bind:value={c.keys} placeholder="PK, FK" aria-label="Keys" spellcheck="false" />
+            <input class="pkfk" bind:value={c.keys} placeholder="PK, FK" aria-label="Keys" spellcheck="false" />
             <input class="grow" bind:value={c.comment} placeholder="Comment" aria-label="Comment" />
             {@render remove(() => t.columns.splice(j, 1), 'Remove column')}
           </div>
@@ -636,10 +724,12 @@
   .head { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--fg-dim); }
   .head .check { margin-left: auto; }
   .tip { margin-left: auto; font-weight: 400; opacity: 0.8; }
-  .row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  /* a row too full goes on to a second line: its choices cut to a few letters (Composit…, After the one be…) could
+     not be read */
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
   .row.top { align-items: flex-start; }
-  .row :global(.select) { flex: none; max-width: 150px; }
-  .grow { flex: 1; min-width: 0; }
+  .row :global(.select) { flex: none; max-width: 100%; }
+  .grow { flex: 1 1 120px; min-width: 0; }
   input:not([type='checkbox']) {
     box-sizing: border-box; font: inherit; font-size: 13px; padding: 6px 9px; border-radius: 8px;
     border: 0; background: var(--bg-input); color: var(--fg); outline: none; min-width: 0;
@@ -655,6 +745,8 @@
   .events { display: flex; flex-direction: column; }
   .phase { font-weight: 600; }
   .g-phase .g-task { padding-left: 14px; }
+  .t-period.in-section { padding-left: 14px; }
+  .settings { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
   .g-phase > :global(.add) { margin-left: 14px; }
   .swatch, .bullet { flex: none; width: 10px; height: 10px; border-radius: 50%; }
   .bullet { width: 7px; height: 7px; margin: 0 2px; }
@@ -681,7 +773,8 @@
   .e-table .e-col { padding-left: 14px; }
   .e-table > :global(.add) { margin-left: 14px; }
   .type { width: 90px; }
-  .keys { width: 70px; }
+  /* not .keys: a phone hides every .keys, the shortcuts shown beside a menu's items (app.css) */
+  .pkfk { width: 70px; }
 
 
   .x {
