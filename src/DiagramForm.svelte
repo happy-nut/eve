@@ -30,6 +30,17 @@
     box.querySelectorAll<HTMLInputElement>(sel)[i]?.focus();
   }
 
+  /** a row gone with its ×: the keyboard goes to the × that took its place (or the last one left, or the rows' first
+   *  button). It fell to the page with the row, and the next ⌘A and letter were the note's — the whole note went */
+  async function removed(x: HTMLElement, run: () => unknown) {
+    const at = [...box.querySelectorAll('button.x')].indexOf(x);
+    await run();
+    await tick();
+    if (box.contains(document.activeElement)) return;
+    const xs = box.querySelectorAll<HTMLElement>('button.x');
+    (xs[Math.min(at, xs.length - 1)] ?? box.querySelector<HTMLElement>('button'))?.focus();
+  }
+
   // ---- sequence ----
   function addPerson(s: Sequence) {
     s.people.push({ id: freshId('p', s.people), name: `Person ${s.people.length + 1}`, actor: false });
@@ -252,7 +263,7 @@
 </script>
 
 {#snippet remove(run: () => void, label: string)}
-  <button class="x" type="button" aria-label={label} title={label} onclick={run}>
+  <button class="x" type="button" aria-label={label} title={label} onclick={(e) => removed(e.currentTarget, run)}>
     <svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
   </button>
 {/snippet}

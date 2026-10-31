@@ -73,6 +73,58 @@ try {
   console.log('ok   a pasted ER diagram: a column added, a relation renamed');
   await page.close();
 
+  // ---- Esc in an open list closes the list, not the diagram; a row's × leaves the keyboard in the rows ----
+  page = await open('classDiagram\n  A <|-- B\n  B --> C');
+  await page.locator('.c-link').first().getByRole('button', { name: 'Kind' }).click();
+  await page.waitForSelector('[role=listbox]');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator('[role=listbox]').count(), 0, 'the list closed');
+  assert.equal(await page.locator('.tiptap .dblock.active .form').count(), 1, 'the diagram is still open');
+  await page.locator('.c-link').first().getByRole('button', { name: 'Remove relation' }).click();
+  await page.waitForTimeout(200);
+  assert.ok(await page.evaluate(() => !!document.activeElement?.closest('.dblock.active .form')), 'the keyboard stays in the rows');
+  await page.keyboard.press('Meta+a');
+  await page.keyboard.type('x');
+  has(await md(page), ['# Diagram', 'The end.', 'B --> C']);
+  console.log('ok   Esc in a list closes only it; after a row\'s × the keyboard is still in the rows, and ⌘A there leaves the note');
+  await page.close();
+
+  // ---- a click in the margin beside an open diagram (where a box drawn past the block's edge is): the note's caret
+  // does not go into the diagram's hidden code, which then showed in its place ----
+  page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.addInitScript((body) => { localStorage.clear(); localStorage.setItem('eve.notes.a', `---\nid: a\nupdated: 1\ndeleted: false\norder: 0\n---\n${body}`); },
+    `# Flow\n\n${F}mermaid\nflowchart LR\n  a[One] --> b[Two] --> c[Three] --> d[Four] --> e[Five] --> f[Six] --> g[Seven] --> h[Eight]\n${F}\n\n`);
+  await page.goto(URL_);
+  await page.waitForSelector('.tiptap .mermaid-view svg', { timeout: 30000 });
+  await page.locator('.tiptap .mermaid-view').first().click({ position: { x: 6, y: 6 } });
+  await page.waitForSelector('.tiptap .dblock.active');
+  const blk = await page.locator('.tiptap .mermaid-host').boundingBox();
+  const inCode = () => page.evaluate(() => { const s = window.__editor.state.selection; return !s.node && s.$from.parent.type.name === 'codeBlock'; });
+  for (const x of [blk.x + blk.width + 28, blk.x - 28]) {
+    await page.mouse.click(x, blk.y + 74);
+    await page.waitForTimeout(300);
+    assert.equal(await inCode(), false, `a click beside the diagram (x ${Math.round(x)}) does not put the caret in its code`);
+    await page.locator('.tiptap .mermaid-view').first().click({ position: { x: 6, y: 6 } });
+    await page.waitForTimeout(300);
+  }
+  console.log('ok   a click beside an open diagram does not open its code');
+  await page.close();
+
+  // ---- a sequence diagram's numbers are drawn so they can be read ----
+  page = await open('sequenceDiagram\n  autonumber\n  A->>B: hi\n  B-->>A: ok');
+  const num = await page.evaluate(() => {
+    const t = document.querySelector('.tiptap .mermaid-view text.sequenceNumber');
+    const c = document.querySelector('.tiptap .mermaid-view marker[id$="-sequencenumber"] circle');
+    return t && c && [getComputedStyle(t).fill, getComputedStyle(c).fill];
+  });
+  const lum = (c) => { const [r, g, b] = c.match(/\d+/g).slice(0, 3).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const [hi, lo] = num ? [lum(num[0]), lum(num[1])].sort((a, b) => b - a) : [0, 0];
+  assert.ok(num && (hi + 0.05) / (lo + 0.05) >= 4.5, `a number reads on its circle (4.5:1): ${num}`);
+  console.log('ok   a sequence diagram\'s numbers read on their circles');
+  await page.close();
+
   // ---- the / menu makes each new kind, drawn and open ----
   page = await browser.newPage({ viewport: { width: 1200, height: 1000 } });
   page.on('pageerror', (e) => errors.push(e.message));
