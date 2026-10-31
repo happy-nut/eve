@@ -170,7 +170,7 @@
   .slide.first { align-self: center; }
   /* the slide that was up, going as the next comes */
   .present > :global(.leaving) { pointer-events: none; overflow: hidden; }
-  .slide :global(.mermaid-view svg) { height: auto; max-height: 62vh; }
+  .slide :global(.mermaid-view svg) { height: auto; max-height: 50vh; } /* room left for the headings above it */
   .slide::-webkit-scrollbar { display: none; }
   .slide > :global(:first-child) { margin-top: 0; }
   /* a copy to look at: a block's own tools have no place on a slide */
