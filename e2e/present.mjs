@@ -103,7 +103,13 @@ try {
   assert.ok(await page.evaluate(() => !!document.activeElement?.closest('.tiptap')), 'the keyboard back in the note');
   // the note's own diagram is whole: the slides were copies
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('.tiptap g.node')].filter((g) => getComputedStyle(g).opacity === '0').length), 0);
-  console.log('ok   a note presented: slides at its headings, a long section cut to the screen (and again for a smaller window), a flowchart a step a press, back into the note');
+  // ⇧⌘↩ from the note presents it too (Settings → Shortcuts can change it), and Esc leaves again
+  await page.keyboard.press('Meta+Shift+Enter');
+  await page.waitForSelector('.present .slide h1');
+  assert.equal(await count(), `1 / ${await total()}`, 'from the first slide');
+  await press('Escape');
+  assert.equal(await page.locator('.present').count(), 0);
+  console.log('ok   a note presented: slides at its headings, a long section cut to the screen (and again for a smaller window), a flowchart a step a press, back into the note; ⇧⌘↩ presents it');
 } finally {
   await browser.close();
   await server?.close();

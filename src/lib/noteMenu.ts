@@ -73,7 +73,7 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
     // words chosen: the menu is about them; the whole note's things wait for nothing to be chosen
     { label: 'Select all', sep: true, keys: 'Mod-a', hide: !empty, run: () => editor.chain().focus().selectAll().run() },
     { label: 'Find & replace…', keys: keys('find'), hide: !empty, run: () => ui.openFind() },
-    { label: 'Present', hide: !empty, run: () => ui.openPresent(editor.view.dom) },
+    { label: 'Present', keys: keys('present'), hide: !empty, run: () => ui.openPresent(editor.view.dom) },
     { label: 'Export as Markdown…', sep: true, keys: keys('exportMd'), hide: !empty, run: () => void exportCurrent('md') },
     { label: 'Export as PDF…', keys: keys('exportPdf'), hide: !empty, run: () => void exportCurrent('pdf') },
     { label: 'Export as image…', keys: keys('exportPng'), hide: !empty, run: () => void exportCurrent('png') },

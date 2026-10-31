@@ -43,6 +43,8 @@ export const DEFAULTS: Action[] = [
   { id: 'exportMd', label: 'Export note as Markdown…', scope: 'app', keys: 'Mod-Shift-m' },
   { id: 'exportPdf', label: 'Export note as PDF…', scope: 'app', keys: 'Mod-Shift-p' },
   { id: 'exportPng', label: 'Export note as an image…', scope: 'app', keys: 'Mod-Alt-p' },
+  // PowerPoint's play-from-the-start key
+  { id: 'present', label: 'Present this note', scope: 'app', keys: 'Mod-Shift-Enter' },
   { id: 'settings', label: 'Settings', scope: 'app', keys: 'Mod-,' },
   // the note's text only: the list, menus and bars keep their size, so nothing around the note moves
   { id: 'textBigger', label: 'Larger text', scope: 'app', keys: 'Mod-=' },

@@ -264,7 +264,7 @@
     ui.openMenu({ clientX: r.right, clientY: r.bottom }, [
       { label: 'Full width', checked: !!notes.current?.wide, hide: isMobile, run: () => { const n = notes.current; if (n) notes.setWide(n.id, !n.wide); } },
       { label: 'Small text', checked: !!notes.current?.small, run: () => { const n = notes.current; if (n) notes.setLook(n.id, { small: !n.small || undefined }); } },
-      { label: 'Present', sep: !isMobile, hide: !notes.current, run: present },
+      { label: 'Present', keys: shortcuts.keysFor('present'), sep: !isMobile, hide: !notes.current, run: present },
       { label: 'Find & replace', run: () => ui.openFind() },
       { label: 'Select all', run: () => hooks.command?.('selectAll') },
       { label: 'Export as Markdown (.md)', sep: true, run: () => void exportCurrent('md') },
@@ -607,6 +607,7 @@
       case 'exportMd': void exportCurrent('md'); break;
       case 'exportPdf': void exportCurrent('pdf'); break;
       case 'exportPng': void exportCurrent('png'); break;
+      case 'present': if (!ui.present) present(); break;
       case 'settings': settingsOpen = !settingsOpen; break;
       case 'textBigger': showSize(appearance.textSize(1)); break;
       case 'textSmaller': showSize(appearance.textSize(-1)); break;
