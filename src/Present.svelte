@@ -20,10 +20,10 @@
   const sections = slides([...page.children]).map((blocks) => blocks.map((b) => {
     const c = b.cloneNode(true) as HTMLElement;
     for (const e of [c, ...c.querySelectorAll('[contenteditable]')]) e.removeAttribute('contenteditable');
-    // a diagram larger than in the note, up to twice its size, as much as the slide holds (the note sets it a width)
+    // a diagram larger than in the note, up to three times its size, as much as the slide holds (the note sets it a width)
     for (const svg of c.querySelectorAll<SVGSVGElement>('.mermaid-view svg')) {
       const w = parseFloat(svg.style.width);
-      if (w) Object.assign(svg.style, { width: `min(100%, ${w * 2}px)`, maxWidth: 'none' });
+      if (w) Object.assign(svg.style, { width: `min(100%, ${w * 3}px)`, maxWidth: 'none' });
     }
     return c;
   }));
@@ -162,8 +162,10 @@
   }
   /* the note's own styles (.tiptap), a size up for a room to read it from */
   .slide {
-    --font-size: clamp(17px, 2.1vw, 30px); font-size: var(--font-size);
-    width: min(100% - 48px, 100% - 12vw, 40em); max-height: 100%; overflow-y: auto; scrollbar-width: none;
+    /* the whole screen's width, as a slide is, and words sized to the screen both ways, so a slide looks the same on
+       any screen of its shape and a big one is not a narrow column of small type */
+    --font-size: clamp(17px, min(2vw, 3.4vh), 48px); font-size: var(--font-size);
+    width: calc(100% - 2 * max(24px, 5vw)); max-height: 100%; overflow-y: auto; scrollbar-width: none;
     margin: 0; align-self: flex-start; pointer-events: none; user-select: none;
   }
   /* the first slide, the title's, in the middle of the screen; the others from the top, each heading where the last was */
