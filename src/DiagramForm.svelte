@@ -5,7 +5,7 @@
   import { composing } from './lib/keys';
   import { sliceColor, branchColor } from './lib/mermaid';
   import {
-    starter, freshId, addDays, ganttDates, isMessage, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task,
+    starter, freshId, addDays, ganttDates, isMessage, replies, type Diagram, type Message, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task,
     type BlockKind, type ClassDiagram, type StateDiagram, type ErDiagram,
   } from './lib/diagram';
   import Select from './Select.svelte';
@@ -103,6 +103,75 @@
     s.messages.push({ from: a, to: b, text: '', reply: !!last && !last.reply }); // the answer to the one above
     void focusLast('.s-step input.grow');
   }
+  /** the opening of the group whose `end` is at `i` */
+  function openerOf(s: Sequence, i: number) {
+    let depth = 0;
+    for (let j = i - 1; j >= 0; j--) {
+      const x = s.messages[j];
+      if (!('block' in x) || DIVIDERS.has(x.block)) continue;
+      if (x.block === 'end') depth++;
+      else if (depth-- === 0) return x.block;
+    }
+    return null;
+  }
+  /** what divides a group of this kind: an if's else, an at-once's and, a critical's option */
+  const SPLIT_OF: Partial<Record<BlockKind, BlockKind>> = { alt: 'else', par: 'and', critical: 'option' };
+  /** a row put in a group, just above its end (added at the bottom, it was outside every group, and there was no way in) */
+  async function addInside(s: Sequence, end: number, step: Sequence['messages'][number] | 'group') {
+    const [a, b] = [s.people[0]?.id, s.people[1]?.id ?? s.people[0]?.id];
+    if (!a || !b) return;
+    const msg = { from: a, to: b, text: '', reply: false };
+    s.messages.splice(end, 0, ...(step === 'group' ? [{ block: 'loop' as const, text: '' }, msg, { block: 'end' as const, text: '' }] : [step]));
+    await tick();
+    box.querySelectorAll('.s-step')[end]?.querySelector<HTMLElement>('input.grow')?.focus();
+  }
+  /** each group closed, an else only in its own kind of group: what mermaid can draw */
+  function wellFormed(steps: Sequence['messages']) {
+    const open: BlockKind[] = [];
+    for (const st of steps) {
+      if (!('block' in st)) continue;
+      if (st.block === 'end') { if (!open.pop()) return false; }
+      else if (DIVIDERS.has(st.block)) { if (SPLIT_OF[open[open.length - 1]] !== st.block) return false; }
+      else open.push(st.block);
+    }
+    return !open.length;
+  }
+  /** a row one up or down, past the row beside it: into a group past its end, out of it past its start. A group's own
+   *  start or end moved takes a row in or leaves it out. Not where the groups would no longer close */
+  async function moveStep(s: Sequence, i: number, by: -1 | 1, from?: HTMLElement) {
+    const j = i + by;
+    if (j < 0 || j >= s.messages.length) return;
+    const next = [...s.messages];
+    [next[i], next[j]] = [next[j], next[i]];
+    if (wellFormed(s.messages) && !wellFormed(next)) return;
+    s.messages = next;
+    await tick();
+    // the keyboard goes with the row
+    const row = box.querySelectorAll('.s-step')[j];
+    const label = from?.getAttribute('aria-label');
+    (row?.querySelector<HTMLElement>(label ? `[aria-label="${label}"]` : 'input.grow') ?? row?.querySelector<HTMLElement>('button'))?.focus();
+  }
+  /** ⌥↑ / ⌥↓ (or ⌘⇧↑ / ⌘⇧↓, as Notion moves a block) in a row moves it */
+  function stepKey(e: KeyboardEvent, s: Sequence, i: number) {
+    if (composing(e) || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    if (!(e.altKey && !e.metaKey && !e.ctrlKey) && !((e.metaKey || e.ctrlKey) && e.shiftKey)) return;
+    if ((e.target as Element).closest('[aria-expanded="true"]')) return; // an open list's own arrows
+    e.preventDefault();
+    void moveStep(s, i, e.key === 'ArrowUp' ? -1 : 1, (e.target as Element).closest('button') ?? undefined);
+  }
+  /** how a message goes: sends or replies, waiting for it or not, or lost on the way */
+  const ARROWS: [string, string][] = [
+    ['->>', '→  Sends'], ['-->>', '⇠  Replies'], ['-)', '→  Sends, no wait'], ['--)', '⇠  Replies, no wait'], ['-x', '→  Lost'], ['--x', '⇠  Lost reply'],
+  ];
+  const arrowOf = (m: Message) => m.arrow ?? (m.reply ? '-->>' : '->>');
+  // an arrow written some other way (->, <<->>) stays a choice as written
+  const arrowOptions = (m: Message) => (ARROWS.some(([a]) => a === arrowOf(m)) ? ARROWS : [...ARROWS, [arrowOf(m), arrowOf(m)] as [string, string]]);
+  function setArrow(m: Message, v: string) {
+    m.reply = replies(v);
+    if (v === '->>' || v === '-->>') delete m.arrow; else m.arrow = v;
+  }
+  /** a message's activation bar: the receiver's starts (+), the sender's ends (-) */
+  const BARS: [string, string][] = [['', 'No bar'], ['+', 'Bar starts'], ['-', 'Bar ends']];
   // a participant with no name yet: said so, not its inner id ("p3")
   const peopleOptions = (s: Sequence) => s.people.map((p) => [p.id, p.name.trim() || '(no name)'] as const);
 

@@ -377,7 +377,7 @@ const NOTE = new RegExp(String.raw`^note\s+(over|left of|right of)\s+(${SID})(?:
 const BLOCK = /^(loop|alt|else|opt|par|and|critical|option|break|rect)\b\s*(.*)$/;
 const OPENS_BLOCK = new Set(['loop', 'alt', 'opt', 'par', 'critical', 'break', 'rect']);
 /** an arrow replies when it is dashed (-->>, --x, --)) */
-const replies = (arrow: string) => arrow.replace(/^<</, '').startsWith('--');
+export const replies = (arrow: string) => arrow.replace(/^<</, '').startsWith('--');
 // a name can hold what a participant line could not (`as`, spaces): it is written with an id and an alias
 function seqCode(d: Sequence) {
   const lines = ['sequenceDiagram'];
