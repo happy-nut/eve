@@ -12,7 +12,7 @@ const browser = await webkit.launch();
 const F = '```';
 const errors = [];
 
-async function open(code) {
+async function open(code, rows = true) {
   const page = await browser.newPage({ viewport: { width: 1200, height: 1000 } });
   page.on('pageerror', (e) => errors.push(e.message));
   await page.addInitScript((body) => { localStorage.clear(); localStorage.setItem('eve.notes.a', `---\nid: a\nupdated: 1\ndeleted: false\norder: 0\n---\n${body}`); }, `# Diagram\n\n${F}mermaid\n${code}\n${F}\n\nThe end.\n`);
@@ -21,6 +21,9 @@ async function open(code) {
   await page.waitForTimeout(300);
   assert.equal(await page.locator('.tiptap .code-block.mermaid-error').count(), 0, 'drawn');
   await page.locator('.tiptap .mermaid-view').first().click({ position: { x: 6, y: 6 } });
+  await page.waitForSelector('.tiptap .dblock.active .tools', { timeout: 5000 });
+  if (!rows) return page;
+  await page.locator('.tiptap .dblock.active .tools button', { hasText: 'List' }).click(); // every part as a row
   await page.waitForSelector('.tiptap .dblock.active .form', { timeout: 5000 });
   return page;
 }
@@ -83,7 +86,7 @@ try {
   await choose(page.locator('.form .m-item').first(), 'Shape', '☁ Cloud');
   await choose(page.locator('.form .m-item').nth(1), 'Shape', '○ Circle');
   await page.waitForTimeout(600);
-  const fill = await page.evaluate(() => getComputedStyle(document.querySelector('.tiptap .mermaid-view .mindmap-node.section-1 > circle')).fill);
+  const fill = await page.evaluate(() => getComputedStyle(document.querySelector('.tiptap .mermaid-view [data-spot="branch:1"] > circle')).fill);
   assert.ok(!['rgb(242, 244, 246)', 'rgb(255, 255, 255)'].includes(fill), `a circle branch in its branch's colour, not ${fill}`);
   await choose(page.locator('.form'), 'Centre shape', '▢ Square');
   has(await md(page), ['root[제품]', ')편집기(']);
@@ -266,6 +269,7 @@ try {
     await ph.evaluate((md) => window.__editor.commands.setContent(md, true), `# T\n\n${F}mermaid\ntimeline\n  2021 : 정식 출시\n  2023 : 해외 진출\n${F}\n`);
     await ph.waitForSelector('.tiptap .mermaid-view .chart', { timeout: 30000 });
     await ph.locator('.tiptap .mermaid-view').first().click({ position: { x: 6, y: 6 } });
+    await ph.locator('.tiptap .dblock.active .tools button', { hasText: 'List' }).click();
     await ph.waitForSelector('.tiptap .dblock.active .form');
     const w = (await ph.locator('.form input[aria-label="Event"]').first().boundingBox()).width;
     assert.ok(w >= 150, `an event's box is ${Math.round(w)}px wide on a phone`);
@@ -287,6 +291,67 @@ try {
   console.log('ok   a sequence diagram\'s numbers read on their circles');
   await page.close();
 
+  // ---- any chart's parts are clicked and typed in where they are drawn: Tab adds the next one, Enter is done, Esc puts
+  // back what was there; the field sits on its part ----
+  const spot = async (page, key) => {
+    const at = await page.evaluate((k) => {
+      const all = [...document.querySelectorAll(`.tiptap .mermaid-view [data-spot="${k}"]`)];
+      const el = all.find((e) => e.textContent.trim()) ?? all[0];
+      if (!el) return null;
+      el.scrollIntoView({ block: 'center', inline: 'center' });
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }, key);
+    assert.ok(at, `${key} is drawn to be clicked`);
+    await page.mouse.click(at.x, at.y);
+    await page.waitForSelector('.tiptap .dblock.active .layer input.field');
+    const f = await page.locator('.tiptap .layer input.field').boundingBox();
+    assert.ok(Math.abs(f.y + f.height / 2 - at.y) < 6, `${key}'s field is on it`);
+  };
+  const typeIn = async (page, key, words, after = 'Enter') => {
+    await spot(page, key);
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(700);
+    assert.equal(await page.locator('.tiptap .layer input.field').count(), 1, `${key}: Tab types in the one it added`);
+    await page.keyboard.type(words);
+    await page.keyboard.press(after);
+    return md(page);
+  };
+  const clicked = [
+    ['pie title Pets\n  "Dogs" : 40\n  "Cats" : 30', 'slice:1', 'Birds', /"Cats" : 30\n {2}"Birds" : 10/],
+    ['mindmap\n  root((Plan))\n    Design\n    Build', 'branch:0', 'Sketch', /Design\n {6}Sketch\n {4}Build/],
+    ['timeline\n  2001 : Founded\n  2005 : Series A', 'event:0:0', 'First hire', /2001 : Founded : First hire/],
+    ['gantt\n  dateFormat YYYY-MM-DD\n  section Build\n  Design :d1, 2026-01-05, 4d', 'task:0:0', 'Test', /Design : d1, 2026-01-05, 4d\n {4}Test : 2d/],
+    ['sequenceDiagram\n  participant A\n  participant B\n  A->>B: Hello', 'step:0', 'Hi back', /A->>B: Hello\n {2}B-->>A: Hi back/],
+    ['stateDiagram-v2\n  [*] --> Idle\n  Idle --> Busy', 'state:Idle', 'Done', /Idle --> Done/],
+    ['erDiagram\n  USER {\n    int id PK\n    string name\n  }', 'col:USER:1', 'email', /string name\n {4}string email/],
+    ['classDiagram\n  class Animal\n  class Dog\n  Animal <|-- Dog', 'class:Dog', 'Puppy', /Dog --> Puppy/],
+  ];
+  for (const [code, key, words, want] of clicked) {
+    page = await open(code, false);
+    if (key === 'branch:0') assert.equal(await page.locator('.tiptap .mermaid-view svg.mindmap').count(), 1, 'a mind map drawn by Eve');
+    assert.match(await typeIn(page, key, words), want, `${key}: added after it`);
+    await page.close();
+  }
+  // typed over and put back: Esc
+  page = await open('pie title Pets\n  "Dogs" : 40\n  "Cats" : 30', false);
+  await spot(page, 'slice:0');
+  await page.keyboard.type('Wolves');
+  await page.waitForTimeout(400);
+  assert.equal(await page.locator('.tiptap .pie-legend .lbl').first().textContent(), 'Wolves', 'the drawing follows the typing');
+  await page.keyboard.press('Escape');
+  assert.match(await md(page), /"Dogs" : 40/, 'Esc puts it back');
+  assert.equal(await page.locator('.tiptap .dblock.active').count(), 1, 'Esc lets go of the part, not of the chart');
+  // a class renamed: once typed (its id, and its lines, follow it)
+  await page.close();
+  page = await open('classDiagram\n  class Animal\n  class Dog\n  Animal <|-- Dog', false);
+  await spot(page, 'class:Dog');
+  await page.keyboard.type('Puppy');
+  await page.keyboard.press('Enter');
+  assert.match(await md(page), /Animal <\|-- Puppy/, 'a class renamed where it is drawn, its line with it');
+  console.log('ok   every kind: a part clicked is typed in where it is drawn; Tab adds the next, Enter is done, Esc puts it back');
+  await page.close();
+
   // ---- the / menu makes each new kind, drawn and open ----
   page = await browser.newPage({ viewport: { width: 1200, height: 1000 } });
   page.on('pageerror', (e) => errors.push(e.message));
@@ -301,7 +366,7 @@ try {
     await page.waitForTimeout(300);
     if (down) await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
-    await page.waitForSelector('.tiptap .dblock.active .form', { timeout: 15000 });
+    await page.waitForSelector('.tiptap .dblock.active .tools', { timeout: 15000 });
     await page.waitForSelector('.tiptap .dblock.active .mermaid-view svg', { timeout: 30000 });
     assert.equal(await page.locator('.tiptap .code-block.mermaid-error').count(), 0, `${item} drawn`);
     await page.locator('.tiptap .dblock.active .tools button.done').click();

@@ -9,6 +9,9 @@
     type BlockKind, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type StateBox, type StateLink, stateParent,
   } from './lib/diagram';
   import Select from './Select.svelte';
+  import {
+    depthAt, DIVIDERS, OPENERS, SPLITS, dropStep, openerOf, SPLIT_OF, wellFormed, ARROWS, arrowOf, seqArrows, setArrow, BARS, pieValue, dropBranch, deeper, indent, movePeriod, MIND_SHAPES, ROOT_SHAPES, plausible, endOf, startOf, startOptions, setStart, taskName, andAfterOptions, addAfter, TAG_OPTIONS, setTags, tagOptions, rename, NAME_ID, TABLE_ID, drop, options, CLASS_ARROWS, arrowOptions, stateDepth, STATE_KINDS, insideOptions, renameState, dropState, LEFT, RIGHT,
+  } from './lib/diagramOps';
 
   /**
    * The parts of a sequence, pie, mind map, timeline, Gantt, class, state or table diagram, as rows to fill in, under its
@@ -56,33 +59,6 @@
     s.people.splice(i, 1);
     s.messages = s.messages.filter((m) => !theirs(m));
   }
-  /** how deep in groups the step at `i` is drawn: a group's own else, and its end, at the group's depth */
-  function depthAt(s: Sequence, i: number) {
-    let depth = 0;
-    for (let j = 0; j < i; j++) {
-      const st = s.messages[j];
-      if ('block' in st) depth += st.block === 'end' ? -1 : DIVIDERS.has(st.block) ? 0 : 1;
-    }
-    const st = s.messages[i];
-    return Math.max(0, depth - ('block' in st && (st.block === 'end' || DIVIDERS.has(st.block)) ? 1 : 0));
-  }
-  const DIVIDERS = new Set<BlockKind>(['else', 'and', 'option']);
-  const OPENERS: [BlockKind, string][] = [['loop', 'Loop'], ['alt', 'If / else'], ['opt', 'Optional'], ['par', 'At once'], ['critical', 'Critical'], ['break', 'Break'], ['rect', 'Highlight']];
-  const SPLITS: [BlockKind, string][] = [['else', 'Else'], ['and', 'And'], ['option', 'Option']];
-  /** a step gone; a group's opening takes its end with it (what was in it stays) */
-  function dropStep(s: Sequence, i: number) {
-    const st = s.messages[i];
-    if ('block' in st && !DIVIDERS.has(st.block) && st.block !== 'end') {
-      let depth = 0;
-      for (let j = i + 1; j < s.messages.length; j++) {
-        const x = s.messages[j];
-        if (!('block' in x) || DIVIDERS.has(x.block)) continue;
-        if (x.block !== 'end') depth++;
-        else if (depth-- === 0) { s.messages.splice(j, 1); break; }
-      }
-    }
-    s.messages.splice(i, 1);
-  }
   function addNote(s: Sequence) {
     const who = s.people[0]?.id;
     if (!who) return;
@@ -103,19 +79,6 @@
     s.messages.push({ from: a, to: b, text: '', reply: !!last && !last.reply }); // the answer to the one above
     void focusLast('.s-step input.grow');
   }
-  /** the opening of the group whose `end` is at `i` */
-  function openerOf(s: Sequence, i: number) {
-    let depth = 0;
-    for (let j = i - 1; j >= 0; j--) {
-      const x = s.messages[j];
-      if (!('block' in x) || DIVIDERS.has(x.block)) continue;
-      if (x.block === 'end') depth++;
-      else if (depth-- === 0) return x.block;
-    }
-    return null;
-  }
-  /** what divides a group of this kind: an if's else, an at-once's and, a critical's option */
-  const SPLIT_OF: Partial<Record<BlockKind, BlockKind>> = { alt: 'else', par: 'and', critical: 'option' };
   /** a row put in a group, just above its end (added at the bottom, it was outside every group, and there was no way in) */
   async function addInside(s: Sequence, end: number, step: 'message' | 'group' | BlockKind) {
     const [a, b] = [s.people[0]?.id, s.people[1]?.id ?? s.people[0]?.id];
@@ -124,17 +87,6 @@
     s.messages.splice(end, 0, ...(step === 'group' ? [{ block: 'loop' as const, text: '' }, msg, { block: 'end' as const, text: '' }] : step === 'message' ? [msg] : [{ block: step, text: '' }]));
     await tick();
     box.querySelectorAll('.s-step')[end]?.querySelector<HTMLElement>('input.grow')?.focus();
-  }
-  /** each group closed, an else only in its own kind of group: what mermaid can draw */
-  function wellFormed(steps: Sequence['messages']) {
-    const open: BlockKind[] = [];
-    for (const st of steps) {
-      if (!('block' in st)) continue;
-      if (st.block === 'end') { if (!open.pop()) return false; }
-      else if (DIVIDERS.has(st.block)) { if (SPLIT_OF[open[open.length - 1]] !== st.block) return false; }
-      else open.push(st.block);
-    }
-    return !open.length;
   }
   /** a row one up or down, past the row beside it: into a group past its end, out of it past its start. A group's own
    *  start or end moved takes a row in or leaves it out. Not where the groups would no longer close */
@@ -159,19 +111,6 @@
     e.preventDefault();
     void moveStep(s, i, e.key === 'ArrowUp' ? -1 : 1, (e.target as Element).closest('button') ?? undefined);
   }
-  /** how a message goes: sends or replies, waiting for it or not, or lost on the way */
-  const ARROWS: [string, string][] = [
-    ['->>', '→  Sends'], ['-->>', '⇠  Replies'], ['-)', '→  Sends, no wait'], ['--)', '⇠  Replies, no wait'], ['-x', '→  Lost'], ['--x', '⇠  Lost reply'],
-  ];
-  const arrowOf = (m: Message) => m.arrow ?? (m.reply ? '-->>' : '->>');
-  // an arrow written some other way (->, <<->>) stays a choice as written
-  const seqArrows = (m: Message) => (ARROWS.some(([a]) => a === arrowOf(m)) ? ARROWS : [...ARROWS, [arrowOf(m), arrowOf(m)] as [string, string]]);
-  function setArrow(m: Message, v: string) {
-    m.reply = replies(v);
-    if (v === '->>' || v === '-->>') delete m.arrow; else m.arrow = v;
-  }
-  /** a message's activation bar: the receiver's starts (+), the sender's ends (-) */
-  const BARS: [string, string][] = [['', 'No bar'], ['+', 'Bar starts'], ['-', 'Bar ends']];
   // a participant with no name yet: said so, not its inner id ("p3")
   const peopleOptions = (s: Sequence) => s.people.map((p) => [p.id, p.name.trim() || '(no name)'] as const);
 
@@ -184,9 +123,6 @@
     if (i >= 0 && i < all.length - 1) { all[i + 1].focus(); all[i + 1].select(); }
     else add();
   }
-  /** a value as the note keeps it (no negatives, under a quadrillion): the field shows the same once left */
-  const pieValue = (v: number) => (Number.isFinite(v) && v > 0 ? +Math.min(v, 1e15).toFixed(4) : 0);
-
   // ---- pie ----
   function addSlice(p: Pie) { p.slices.push({ label: `Part ${p.slices.length + 1}`, value: 10 }); void focusLast('.p-slice input.label'); }
 
@@ -198,23 +134,6 @@
     while (end < m.items.length && m.items[end].depth > depth) end++;
     m.items.splice(end, 0, { text: '', depth });
     void focusAt('.m-item input', end);
-  }
-  /** a branch gone: its own branches move up a level, under what held it (left where they were, the form showed them
-   *  indented while the drawing put them first-level) */
-  function dropBranch(m: Mindmap, i: number) {
-    const depth = m.items[i].depth;
-    m.items.splice(i, 1);
-    for (let j = i; j < m.items.length && m.items[j].depth > depth; j++) m.items[j].depth -= 1;
-  }
-  const deeper = (m: Mindmap, i: number) => i > 0 && m.items[i].depth <= m.items[i - 1].depth;
-  function indent(m: Mindmap, i: number, by: number) {
-    const it = m.items[i];
-    if (by > 0 && !deeper(m, i)) return;
-    if (by < 0 && it.depth <= 1) return;
-    // its own branches move with it
-    let j = i + 1;
-    while (j < m.items.length && m.items[j].depth > it.depth) m.items[j++].depth += by;
-    it.depth += by;
   }
   function branchKey(e: KeyboardEvent, m: Mindmap, i: number) {
     if (composing(e)) return;
@@ -233,99 +152,6 @@
     else t.periods.push({ label: '', events: [''], section: name });
     void focusAt('.t-section input', t.periods[0].section === name ? 0 : t.periods.filter((p) => p.section !== undefined).length - 1);
   }
-  /** a period one up or down: its date and events change places with the next one's, the sections staying where they
-   *  are (so past a section's start it goes into that section) */
-  function movePeriod(t: Timeline, i: number, by: -1 | 1) {
-    const a = t.periods[i], b = t.periods[i + by];
-    if (!b) return;
-    [a.label, b.label] = [b.label, a.label];
-    [a.events, b.events] = [b.events, a.events];
-  }
-
-  // ---- mind map shapes ----
-  const MIND_SHAPES: [MindShape, string][] = [['plain', 'Plain'], ['square', '▢ Square'], ['rounded', '▢ Rounded'], ['circle', '○ Circle'], ['bang', '✸ Bang'], ['cloud', '☁ Cloud'], ['hexagon', '⬡ Hexagon']];
-  const ROOT_SHAPES = MIND_SHAPES.filter(([k]) => k !== 'plain'); // the centre is always drawn in a shape
-
-  // ---- gantt ----
-  /** a start the note keeps: a whole date in a year people plan in. Typed with the keys, a date field reports every
-   *  half-typed year (0002, 0020, 0202…), each written into the note, the drawing switching over and back with it */
-  const plausible = (v: string) => /^(19|20|21)\d{2}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`));
-  const endOf = (g: Gantt) => {
-    const all = [...ganttDates(g).values()].filter((t) => /^\d{4}-\d{2}-\d{2}$/.test(t.start)); // a real date to follow
-    const last = all[all.length - 1];
-    return last ? addDays(last.start, last.days) : (starter('gantt') as Gantt).sections[0].tasks[0].start;
-  };
-  /** when a task starts: on its date, when the one before it ends, or when another (picked here) does */
-  const startOf = (t: Task) => (t.after === undefined ? 'date' : t.after === '' ? 'prev' : `after ${t.after}`);
-  function startOptions(g: Gantt, t: Task) {
-    const others = g.sections.flatMap((s) => s.tasks).map((x, k) => [x, k] as const).filter(([x]) => x !== t);
-    const opts: [string, string][] = [['date', 'On a date'], ['prev', 'After the one before'],
-      ...others.map(([x, k]) => [x.id ? `after ${x.id}` : `task ${k}`, `After “${x.name.trim() || 'Task'}”`] as [string, string])];
-    // after more than one: their names
-    if (!opts.some(([v]) => v === startOf(t))) opts.push([startOf(t), `After ${t.after!.split(' ').map((id) => `“${taskName(g, id)}”`).join(' and ')}`]);
-    return opts;
-  }
-  function setStart(g: Gantt, t: Task, v: string) {
-    const all = g.sections.flatMap((s) => s.tasks);
-    if (v === 'date') { t.start = ganttDates(g).get(t)!.start; delete t.after; return; }
-    if (v === 'prev') { t.after = ''; t.start = ''; return; }
-    const k = /^task (\d+)$/.exec(v);
-    if (k) { const x = all[+k[1]]; x.id ??= freshId('t', all.filter((y) => y.id).map((y) => ({ id: y.id! }))); v = `after ${x.id}`; }
-    t.after = v.replace(/^after /, '');
-    t.start = '';
-  }
-  /** a task's own name, or what it is said to start after */
-  const taskName = (g: Gantt, id: string) => g.sections.flatMap((s) => s.tasks).find((x) => x.id === id)?.name.trim() || id;
-  /** a task that starts when more than one ends: each picked in a choice of its own after the first */
-  function andAfterOptions(g: Gantt, t: Task) {
-    const has = new Set((t.after ?? '').split(' '));
-    const others = g.sections.flatMap((s) => s.tasks).map((x, k) => [x, k] as const).filter(([x]) => x !== t && !(x.id && has.has(x.id)));
-    return [['', '+ And after…'] as [string, string], ...others.map(([x, k]) => [x.id ?? `task ${k}`, `And “${x.name.trim() || 'Task'}”`] as [string, string])];
-  }
-  function addAfter(g: Gantt, t: Task, v: string) {
-    if (!v) return;
-    const all = g.sections.flatMap((s) => s.tasks);
-    const k = /^task (\d+)$/.exec(v);
-    if (k) { const x = all[+k[1]]; x.id ??= freshId('t', all.filter((y) => y.id).map((y) => ({ id: y.id! }))); v = x.id; }
-    t.after = `${t.after} ${v}`.trim();
-  }
-  // a critical task under way, or done, and a critical milestone: two at once, as mermaid allows
-  const TAG_OPTIONS: [string, string][] = [
-    ['', '—'], ['done', 'Done'], ['active', 'Active'], ['crit', 'Critical'], ['milestone', 'Milestone'],
-    ['active, crit', 'Active, critical'], ['done, crit', 'Done, critical'], ['crit, milestone', 'Critical milestone'],
-  ];
-  /** a milestone is a moment: 0 days, drawn as a diamond (at a day long it was a bar like any other) */
-  function setTags(t: Task, v: string) {
-    const was = t.tags?.includes('milestone');
-    if (v) t.tags = v.split(', '); else delete t.tags;
-    const is = !!t.tags?.includes('milestone');
-    if (is && !was) t.days = 0;
-    if (!is && t.days < 1) t.days = 1;
-  }
-  const tagOptions = (t: Task) => (TAG_OPTIONS.some(([v]) => v === (t.tags ?? []).join(', ')) ? TAG_OPTIONS : [...TAG_OPTIONS, [(t.tags ?? []).join(', '), (t.tags ?? []).join(', ')] as [string, string]]);
-
-  // ---- class, state and table diagrams ----
-  /** a name changed: the id with it, where the name can be one and no other has it (its lines say `Name`, not
-   *  `C1["Name"]`), and every line to it follows */
-  function rename<T extends { id: string; name: string }>(all: T[], links: { from: string; to: string }[], it: T, name: string, idOk: RegExp) {
-    it.name = name;
-    const id = name.trim();
-    if (!idOk.test(id) || all.some((x) => x !== it && x.id === id)) return;
-    for (const l of links) { if (l.from === it.id) l.from = id; if (l.to === it.id) l.to = id; }
-    it.id = id;
-  }
-  const NAME_ID = /^[\p{L}\p{N}_]+$/u, TABLE_ID = /^[\p{L}\p{N}_-]+$/u;
-  const drop = <T extends { id: string }>(all: T[], links: { from: string; to: string }[], i: number) => {
-    const id = all[i].id;
-    all.splice(i, 1);
-    for (let j = links.length - 1; j >= 0; j--) if (links[j].from === id || links[j].to === id) links.splice(j, 1);
-  };
-  const options = (all: { id: string; name: string }[]) => all.map((x) => [x.id, x.name.trim() || x.id] as [string, string]);
-  const CLASS_ARROWS: [string, string][] = [
-    ['<|--', '◁── Inheritance'], ['*--', '◆── Composition'], ['o--', '◇── Aggregation'], ['-->', '──▶ Association'],
-    ['--', '─── Link'], ['..>', '┄┄▶ Dependency'], ['..|>', '┄┄▷ Realization'], ['..', '┄┄┄ Dashed link'],
-  ];
-  const arrowOptions = (a: string) => (CLASS_ARROWS.some(([v]) => v === a) ? CLASS_ARROWS : [...CLASS_ARROWS, [a, a] as [string, string]]);
   function addClass(c: ClassDiagram) {
     const id = freshId('Class', c.classes);
     c.classes.push({ id, name: id, members: [] });
@@ -334,26 +160,6 @@
   function addClassLink(c: ClassDiagram) {
     const [a, b] = [c.classes[0]?.id, c.classes[1]?.id ?? c.classes[0]?.id];
     if (a && b) c.links.push({ from: a, to: b, arrow: '-->', label: '', fromCard: '', toCard: '' });
-  }
-  /** how deep in states of states a state is drawn */
-  const stateDepth = (s: StateDiagram, st: StateBox) => { let n = 0; for (let p = stateParent(s, st); p; p = stateParent(s, s.states.find((x) => x.id === p)!)) n++; return n; };
-  const STATE_KINDS: [string, string][] = [['state', 'State'], ['choice', '◇ Choice'], ['fork', '▬ Fork'], ['join', '▬ Join']];
-  /** the states it can be put in: not itself, nor one inside it (it would hold itself), nor a choice or a bar */
-  function insideOptions(s: StateDiagram, st: StateBox) {
-    const under = (x: StateBox): boolean => { for (let p = stateParent(s, x); p; p = stateParent(s, s.states.find((y) => y.id === p)!)) if (p === st.id) return true; return false; };
-    return [['', 'Not inside one'] as [string, string], ...s.states.filter((x) => x !== st && !x.kind && !under(x)).map((x) => [x.id, `In “${x.name.trim() || x.id}”`] as [string, string])];
-  }
-  /** a state renamed: the states in it follow it, as its lines do */
-  function renameState(s: StateDiagram, st: StateBox, name: string) {
-    const was = st.id;
-    rename(s.states, s.links, st, name, NAME_ID);
-    if (st.id !== was) for (const x of s.states) if (x.parent === was) x.parent = st.id;
-  }
-  /** a state gone: those in it are left in what held it */
-  function dropState(s: StateDiagram, i: number) {
-    const st = s.states[i];
-    for (const x of s.states) if (x.parent === st.id) { if (st.parent) x.parent = st.parent; else delete x.parent; }
-    drop(s.states, s.links, i);
   }
   function addState(s: StateDiagram) {
     const id = freshId('State', s.states);
@@ -378,8 +184,6 @@
     else if (l.from !== '[*]' && l.to !== '[*]') delete l.in;
     else if (v === '[*]') delete l.in;
   }
-  const LEFT: [string, string][] = [['||', 'Exactly one'], ['|o', 'Zero or one'], ['}|', 'One or more'], ['}o', 'Zero or more']];
-  const RIGHT: [string, string][] = [['||', 'Exactly one'], ['o|', 'Zero or one'], ['|{', 'One or more'], ['o{', 'Zero or more']];
   function addTable(e: ErDiagram) {
     const id = freshId('TABLE', e.tables);
     e.tables.push({ id, name: id, columns: [{ type: 'int', name: 'id', keys: 'PK', comment: '' }] });

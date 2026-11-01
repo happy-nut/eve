@@ -14,11 +14,13 @@
   import FlowEditor from './FlowEditor.svelte';
   import { scrollHint } from './lib/scrollHint';
   import DiagramForm from './DiagramForm.svelte';
+  import ChartEditor from './ChartEditor.svelte';
+  import { tagSpots, adders, toggles } from './lib/spots';
 
   /**
    * A ```mermaid block in the note: its drawing, and, clicked, the drawing made editable right there — a flowchart's
-   * boxes and lines on the picture itself (FlowEditor.svelte), any other chart's parts as rows under it
-   * (DiagramForm.svelte). Every change is written back into the block's code (onCode), which is what the note keeps;
+   * boxes and lines on the picture itself (FlowEditor.svelte), any other chart's parts clicked and typed in where they
+   * are drawn too (ChartEditor.svelte); all of a chart's parts as rows under it on asking (DiagramForm.svelte). Every change is written back into the block's code (onCode), which is what the note keeps;
    * an undo, a sync or the code typed by hand comes back as `code` and is read again. A diagram written with more
    * than these can show (styles, subgraphs, notes) is drawn, and edited as its code.
    */
@@ -122,6 +124,7 @@
     tick().then(() => {
       const el = canvas?.querySelector(':scope > svg');
       if (el instanceof SVGSVGElement) spreadLabels(el); // a line's label off another's (edgeLabels.ts)
+      if (d && canvas) tagSpots(d, canvas); // its parts marked, to be clicked and typed in (spots.ts)
       labelled = !list.some(foldable) || (!!el && markFolds(el, list, f));
     });
   });
@@ -198,7 +201,7 @@
       const ours = t === document.body || (root.contains(t) && !typing) || (!typing && t.closest?.('.tiptap') === root.closest('.tiptap'));
       if (!ours) return;
       // Esc lets go of what is picked in the picture first (a box, a line, a lane, Connect), then of the diagram
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (!flowEd?.escape()) leave(); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (!flowEd?.escape() && !chartEd?.escape()) leave(); }
       // ⌘A on a row's button or with the keyboard let go: the page's own select-all took in the note's text, the note
       // took that for its selection, and the next letter typed replaced the whole note
       else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && (t === document.body || root.contains(t))) { e.preventDefault(); e.stopPropagation(); }
@@ -222,7 +225,7 @@
   // field, going with it, threw)
   $effect(() => {
     if (!active) return;
-    const back = () => { if (!flowEd?.escape()) leave(); };
+    const back = () => { if (!flowEd?.escape() && !chartEd?.escape()) leave(); };
     hooks.diagramBack = back;
     return () => { if (hooks.diagramBack === back) hooks.diagramBack = undefined; };
   });
@@ -241,7 +244,7 @@
     e.preventDefault();
     if (codeShown) onCodeLeave(); // the drawing clicked under its code: the code goes, the drawing opens
     const g = (e.target as Element).closest?.('g.node');
-    pick = g ? /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null : null;
+    pick = d.kind !== 'flowchart' ? (e.target as Element).closest?.('[data-spot]')?.getAttribute('data-spot') ?? null : g ? /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null : null;
     letGo(); // the keys typed next are the diagram's, not the note's
     active = true;
   }
@@ -299,6 +302,10 @@
   const flow = $derived(active && d?.kind === 'flowchart' ? d : null);
   const kindLabel = $derived(d ? KINDS.find((k) => k.kind === d!.kind)?.label ?? '' : '');
   let flowEd = $state<ReturnType<typeof FlowEditor> | null>(null);
+  const chart = $derived(active && d && d.kind !== 'flowchart' ? d : null);
+  let chartEd = $state<ReturnType<typeof ChartEditor> | null>(null);
+  /** all of the chart's parts as rows under it, asked for (they were all there was, and editing in them was slow) */
+  let rows = $state(false);
 
   // ---- the whole screen: this same block over everything, zoomed and panned, and edited there as in the note ----
   // (a copy of its picture was shown before, which could only be looked at). Zooming sizes the drawing itself and
@@ -453,6 +460,7 @@
     </div>
   {/if}
   {#if flow && canvas && svg && !error}<FlowEditor bind:this={flowEd} {flow} host={canvas} version={svg} k={1} {pick} />{/if}
+  {#if chart && canvas && svg && !error}<ChartEditor bind:this={chartEd} d={chart} host={canvas} version={svg} {pick} />{/if}
   {#if full}
     <button class="full-close" type="button" aria-label="Back to the note" title="Back to the note (Esc)" onclick={leaveFull}>
       <svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
@@ -499,6 +507,10 @@
         </div>
         <button class="ghost" onclick={() => flowEd?.addBox()}>+ Box</button>
         <button class="ghost" onclick={() => flowEd?.addLane()}>+ Lane</button>
+      {:else if chart}
+        {#each adders(chart) as a (a.label)}<button class="ghost" onclick={() => chartEd?.open(a.run())}>{a.label}</button>{/each}
+        {#each toggles(chart) as t (t.label)}<button class="ghost" class:on={t.on} aria-pressed={t.on} onclick={() => t.set(!t.on)}>{t.on ? '✓ ' : ''}{t.label}</button>{/each}
+        <button class="ghost" class:on={rows} aria-pressed={rows} title="Every part as a row under the chart" onclick={() => (rows = !rows)}>{rows ? 'Hide list' : 'List'}</button>
       {/if}
       <span class="grow"></span>
       <!-- undo where there is no keyboard: a phone's bar with ↶ went with the keyboard as a box was picked -->
@@ -512,9 +524,12 @@
     {#if flow}
       <p class="dtip">{isMobile ? 'Tap a box to pick it; ✎ Text in its bar (or a second tap) types in it · its + adds the next step · Connect, then another box, joins them' : 'Click a box to pick it; ✎ Text, a second click or Enter types in it · its + adds the next step; drag it onto another box, or Connect, to join them · Tab adds a step, ⌫ deletes'}</p>
     {:else}
-      <DiagramForm {d} />
-      <!-- a long form: Done at its foot too, not only out of sight at its top -->
-      <div class="foot"><button class="done" onclick={leave}>Done</button></div>
+      <p class="dtip">{isMobile ? 'Tap any part to type in it · its bar adds the next one, moves or deletes it' : 'Click any part to type in it · Tab adds the next one, Enter is done · its bar sets the rest, moves or deletes it'}</p>
+      {#if rows}
+        <DiagramForm {d} />
+        <!-- a long form: Done at its foot too, not only out of sight at its top -->
+        <div class="foot"><button class="done" onclick={leave}>Done</button></div>
+      {/if}
     {/if}
   {/if}
 </div>
@@ -573,6 +588,7 @@
   .seg button { border-radius: 6px; padding: 3px 9px; }
   :global(html.mobile) .seg button { min-width: 44px; } /* a finger's width: the arrows alone were 28px */
   :global(html.mobile) .seg { gap: 4px; }
+  .tools .ghost.on { color: var(--accent-text); background: var(--accent-soft); }
   .seg button.on { background: var(--bg-pop); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
   .codebar { padding: 8px 10px 6px; }
   .codebar .say { font-size: 12.5px; color: var(--fg-dim); flex: 1 1 220px; }
