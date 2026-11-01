@@ -115,6 +115,10 @@ console.log('diagram hunt ok');
   const odd = laneSvg({ kind: 'flowchart', dir: 'TD', lanes: [{ id: 'A', label: 'A <&> "B"' }, { id: 'E', label: '' }], nodes: [{ id: 'x', label: 'x', shape: 'circle', lane: 'A' }, { id: 'y', label: 'y', shape: 'db', lane: 'A' }], edges: [{ from: 'x', to: 'y', label: '', line: 'solid' }, { from: 'y', to: 'x', label: 'again', line: 'dotted' }, { from: 'y', to: 'y', label: '', line: 'thick' }] });
   assert.ok(!/NaN|undefined/.test(odd), 'no NaN in the drawing');
   assert.match(odd, /A &#60;&#38;&#62; &#34;B&#34;/, 'a lane name is text, not markup');
+  // every line of words set on its middle by its own dy: WebKit took no dominant-baseline for a tspan with a y of its
+  // own, and drew a step's words half a line high in its box
+  assert.ok(!/dominant-baseline/.test(svg), 'no dominant-baseline for WebKit to drop');
+  assert.equal((svg.match(/<tspan /g) ?? []).length, (svg.match(/<tspan dy="0\.35em"/g) ?? []).length, 'each line on its middle');
 }
 // a line back up the chart runs round the boxes, and its label stands on it there: inside the drawing, not cut off at its
 // edge (down the page a two-line label stood half outside the right edge, its middle words gone)

@@ -244,8 +244,9 @@
     const held = Date.now() - swipe.at;
     swipe = null;
     // a swipe is quick: a finger held first is a long press choosing text, and text selected when it
-    // lifts means the drag was choosing it (or pulling a handle)
-    if (held > 600 || !getSelection()?.isCollapsed) return;
+    // lifts means the drag was choosing it (or pulling a handle). Text, not a block chosen whole: a diagram left chosen
+    // after its full screen closed is a selection with no text, and kept every swipe from bringing the list in
+    if (held > 600 || getSelection()?.toString()) return;
     if (dx > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) toList();
   }
   /** A phone's way back to the list (a swipe, back): the keyboard goes with the note, and a new note left unwritten

@@ -182,11 +182,11 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
     const [hw, hh] = LR ? [HEAD_M, span] : [span, HEAD_M];
     const name = names[i];
     const [cx, cy] = [x + hw / 2, y + hh / 2];
-    const tspans = name.map((t, k) => `<tspan x="${cx}" y="${cy + (k - (name.length - 1) / 2) * 17}">${esc(t)}</tspan>`).join('');
+    const tspans = name.map((t, k) => `<tspan dy="0.35em" x="${cx}" y="${cy + (k - (name.length - 1) / 2) * 17}">${esc(t)}</tspan>`).join('');
     svg += `<g class="lane c${i % 12}${l.id ? '' : ' none'}" data-lane="${esc(l.id)}">`
       + `<rect class="lane-bg" x="${x}" y="${y}" width="${w}" height="${h}"/>`
       + `<g class="lane-head" data-lane="${esc(l.id)}"><rect x="${x}" y="${y}" width="${hw}" height="${hh}"/>`
-      + `<text class="lane-name" text-anchor="middle" dominant-baseline="central">${tspans}</text></g>`
+      + `<text class="lane-name" text-anchor="middle">${tspans}</text></g>`
       + (i ? `<line class="lane-rule" x1="${x}" y1="${y}" x2="${LR ? W : x}" y2="${LR ? y : H}"/>` : '')
       + `</g>`;
   });
@@ -251,9 +251,9 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
     if (chip.lines.length) {
       const [m, c] = placeLabel(pts, at, chip);
       const [x, y] = xy(m, c), [w, h] = LR ? [chip.m, chip.c] : [chip.c, chip.m];
-      const tspans = chip.lines.map((l, k) => `<tspan x="${x}" y="${y + (k - (chip.lines.length - 1) / 2) * LABEL_LINE}">${esc(l)}</tspan>`).join('');
+      const tspans = chip.lines.map((l, k) => `<tspan dy="0.35em" x="${x}" y="${y + (k - (chip.lines.length - 1) / 2) * LABEL_LINE}">${esc(l)}</tspan>`).join('');
       labels.push(`<g class="edgeLabel"><g class="label" data-id="${id}-e${i}"><rect class="sl-chip" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="11"/>`
-        + `<text text-anchor="middle" dominant-baseline="central">${tspans}</text></g></g>`);
+        + `<text text-anchor="middle">${tspans}</text></g></g>`);
     }
   });
   svg += labels.join('');
@@ -271,8 +271,8 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
       case 'db': shape = `<path class="sl-shape" d="M${l},${t + 6} a${b.w / 2},6 0 0,0 ${b.w},0 a${b.w / 2},6 0 0,0 ${-b.w},0 v${b.h - 12} a${b.w / 2},6 0 0,0 ${b.w},0 v${-(b.h - 12)}"/>`; break;
       default: shape = `<rect class="sl-shape" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="12"/>`;
     }
-    const lines = b.lines.map((s, k) => `<tspan x="${x}" y="${y + (b.n.shape === 'db' ? 4 : 0) + (k - (b.lines.length - 1) / 2) * LINE}">${esc(s)}</tspan>`).join('');
-    svg += `<g class="node sl-${b.n.shape}" id="${id}-flowchart-${esc(b.n.id)}-0">${shape}<text class="sl-text" text-anchor="middle" dominant-baseline="central">${lines}</text></g>`;
+    const lines = b.lines.map((s, k) => `<tspan dy="0.35em" x="${x}" y="${y + (b.n.shape === 'db' ? 4 : 0) + (k - (b.lines.length - 1) / 2) * LINE}">${esc(s)}</tspan>`).join('');
+    svg += `<g class="node sl-${b.n.shape}" id="${id}-flowchart-${esc(b.n.id)}-0">${shape}<text class="sl-text" text-anchor="middle">${lines}</text></g>`;
   }
   return svg + '</svg>';
 }
