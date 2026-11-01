@@ -151,10 +151,14 @@
   const ADDS = new Set<Icon>(['plus', 'child', 'note', 'section']);
   function onBarKey(e: KeyboardEvent) {
     if (e.key === 'Escape' && !composing(e) && e.target !== field) { e.preventDefault(); e.stopPropagation(); escape(); }
-    // Tab past its last, ⇧Tab before its first: back to the field (it went on to Full screen, and stayed there)
+    // Tab walks its boxes and buttons itself (WebKit's own Tab passes buttons by, as a Mac does unless told), and
+    // past its last or before its first comes back to the field (it went on to Full screen, and stayed there)
     if (e.key === 'Tab' && bar) {
-      const all = [...bar.querySelectorAll<HTMLElement>('button:not(:disabled), input, textarea')];
-      if (e.target === all[e.shiftKey ? 0 : all.length - 1]) { e.preventDefault(); field?.focus({ preventScroll: true }); }
+      const all = [...bar.querySelectorAll<HTMLElement>('button:not(:disabled), input, textarea')], i = all.indexOf(e.target as HTMLElement);
+      if (i < 0) return;
+      e.preventDefault();
+      const next = all[i + (e.shiftKey ? -1 : 1)];
+      if (next) { next.focus({ preventScroll: true }); if (next instanceof HTMLInputElement) next.select(); } else field?.focus({ preventScroll: true });
     }
   }
   /** a choice made in the bar: the keyboard back in the part's field, for Enter and Tab to go on from */
