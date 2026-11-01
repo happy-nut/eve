@@ -408,3 +408,17 @@ function settles(code, kind) {
 
 // a participant named as its id is written without an alias saying it again
 assert.equal(toCode(fromCode('sequenceDiagram\n  actor Ann\n  participant Web\n  Ann->>Web: Hi')), 'sequenceDiagram\n  actor Ann\n  participant Web\n  Ann->>Web: Hi');
+
+// a state on no line is written as its id alone, which mermaid draws (`state X` with nothing after it is left out)
+{
+  const s = fromCode('stateDiagram-v2\n  [*] --> Idle');
+  s.states.push({ id: 'Paused', name: 'Paused', desc: '' });
+  assert.equal(toCode(s), 'stateDiagram-v2\n  Paused\n  [*] --> Idle');
+  assert.deepEqual(fromCode(toCode(s)).states.map((x) => x.id), ['Paused', 'Idle']);
+}
+// a task after one listed below it starts when that one ends, not on the chart's first day
+{
+  const g = fromCode('gantt\n  dateFormat YYYY-MM-DD\n  section S\n  Code :b1, after t3, 10d\n  Ship :t3, 2026-01-26, 1d');
+  assert.equal(ganttDates(g).get(g.sections[0].tasks[0]).start, '2026-01-27');
+}
+console.log('round 2 ok');

@@ -403,6 +403,49 @@ try {
   await page.close();
   console.log('ok   another part clicked takes the keyboard; Esc takes back what Tab added; each person is their own');
 
+  // ---- renamed, then a box of the bar clicked: the words go into that box (the field took the keyboard back) ----
+  page = await open('classDiagram\n  class Customer {\n    +name\n  }', false);
+  await spot(page, 'class:Customer');
+  await page.keyboard.type('Buyer');
+  await page.locator('.tiptap .layer .bar textarea').click();
+  await page.waitForTimeout(500);
+  await page.keyboard.press('End');
+  await page.keyboard.type('\n+email');
+  await page.waitForTimeout(500);
+  after = await md(page);
+  assert.match(after, /class Buyer \{\n {4}\+name\n {4}\+email\n {2}\}/, `renamed, and the member typed where it was clicked: ${after}`);
+  await page.close();
+  // Esc puts back the part's value set in its bar too, not its words only
+  page = await open('pie title Pets\n  "Dogs" : 40\n  "Cats" : 30', false);
+  await spot(page, 'slice:0');
+  await page.locator('.tiptap .layer .bar input[type=number]').fill('5');
+  await page.waitForTimeout(300);
+  assert.match(await md(page), /"Dogs" : 5/, 'the value follows its box');
+  await page.keyboard.press('Escape'); // back to the field
+  await page.keyboard.press('Escape'); // and what was done to the part put back
+  assert.match(await md(page), /"Dogs" : 40/, 'Esc puts the value back');
+  await page.close();
+  // a state added on its own is drawn, its field on it
+  page = await open('stateDiagram-v2\n  [*] --> Idle\n  Idle --> Running', false);
+  await page.locator('.tiptap .dblock.active .tools button', { hasText: '+ State' }).click();
+  await page.waitForTimeout(900);
+  await page.keyboard.type('Paused');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(900);
+  assert.equal(await page.locator('.tiptap .mermaid-view g.node[data-spot="state:Paused"]').count(), 1, 'the state added is drawn');
+  await page.close();
+  // a crowded chart: the bar folds into ⋯ rather than cover the next part, which is still clicked
+  page = await open('gantt\n  dateFormat YYYY-MM-DD\n  section A\n  One :a1, 2026-01-05, 3d\n  Two : 2d\n  Three : 2d\n  Four : 2d', false);
+  await spot(page, 'task:0:1');
+  assert.equal(await page.locator('.tiptap .layer .more').count(), 1, 'folded into ⋯');
+  await spot(page, 'task:0:0');
+  assert.equal(await page.locator('.tiptap .layer input.field').inputValue(), 'One', 'the task above is clicked');
+  await page.locator('.tiptap .layer .more').click();
+  await page.waitForTimeout(300);
+  assert.ok(await page.locator('.tiptap .layer .bar').isVisible(), '⋯ opens the bar');
+  await page.close();
+  console.log('ok   a rename then a box of the bar typed in; Esc puts back the value too; a state added is drawn; a crowded bar folds');
+
   // ---- the / menu makes each new kind, drawn and open ----
   page = await browser.newPage({ viewport: { width: 1200, height: 1000 } });
   page.on('pageerror', (e) => errors.push(e.message));

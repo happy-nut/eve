@@ -32,7 +32,10 @@
     return el?.querySelector(':scope > g.label-group, :scope > g.label.name') ?? el;
   };
   function box(el: Element): Rect {
-    const o = layer.getBoundingClientRect(), r = el.getBoundingClientRect();
+    // a part drawn as a page's box (a timeline's year, a task's name): its words, not the row it stretches over
+    let r = el.getBoundingClientRect();
+    if (el instanceof HTMLElement && el.textContent?.trim()) { const g = document.createRange(); g.selectNodeContents(el); const t = g.getBoundingClientRect(); if (t.width) r = t; }
+    const o = layer.getBoundingClientRect();
     return { x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height };
   }
   // a part just added or renamed is drawn a moment later (the chart draws again after a pause): looked for again
@@ -41,16 +44,25 @@
   /** the part just added (Tab, a +): Esc on it takes the adding back, not only what was typed */
   let fresh: string | null = null, addedIn: string | null = null;
   let field = $state<HTMLInputElement | null>(null);
+  /** the chart as it was when the part was picked: Esc puts back all of it (its value, dates, shape), not its words only */
+  let was: Record<string, unknown> | null = null;
+  /** the field takes the keyboard as its part is picked; not again when a rename gives it a new key, as a box of the
+   *  bar was clicked into (the field taken back the keyboard, and the words for that box renamed the part) */
+  let grab = false, renamed = false, deciding = false;
+  /** the bar folded into a ⋯ beside the field, where wherever it went it covered other parts; opened on a click */
+  let folded = $state(false), unfolded = $state(false);
   function measure() {
     if (!layer) return;
     clearTimeout(retry);
     const el = sel ? find(sel) : null;
-    rect = el ? box(el) : null;
+    // renamed, its new key is drawn a moment later: where it was meanwhile (hidden, the bar lost the box typed in)
+    rect = el ? box(el) : renamed ? rect : null;
+    if (el) renamed = false;
     if (sel && !el && tries++ < 40) retry = setTimeout(measure, 50);
     else tries = 0;
     // one drawn only now (an idea added past the card's edge) brought into the card as it appears: one just added is
     // looked for in the drawing after this one (its key was another part's until the chart drew again)
-    if (el && (unseen || (addedIn !== null && addedIn !== version))) { unseen = false; addedIn = null; el.scrollIntoView?.({ block: 'nearest', inline: 'center' }); }
+    if (el && (unseen || (addedIn !== null && addedIn !== version))) { unseen = false; addedIn = null; el.scrollIntoView?.({ block: 'center', inline: 'center' }); }
     tick().then(placeBar);
   }
   $effect(() => { void version; void sel; tick().then(measure); });
@@ -63,6 +75,11 @@
     const s = key ? spotOf(d, key) : null;
     if (key && !s) sel = null;
     text = before = s?.text ?? '';
+    was = sel ? $state.snapshot(d) as Record<string, unknown> : null;
+    grab = !!sel;
+    unfolded = false;
+    deciding = true;
+    hover = null;
     if (sel) {
       // its part brought into the card (the picture scrolls sideways in it)
       const el = find(sel);
@@ -77,7 +94,7 @@
     if (!s || !sel) return;
     if (s.onDone && text.trim() && text !== before) {
       const k = s.set(text.trim());
-      if (k) sel = k;
+      if (k) { renamed = k !== sel; sel = k; }
       before = text;
     }
   }
@@ -105,7 +122,11 @@
     if (bar?.contains(document.activeElement) && field) { field.focus({ preventScroll: true }); return true; }
     const s = spot;
     if (s && fresh === sel) s.acts.find((x) => x.icon === 'trash' && !x.off)?.run();
-    else if (s && !s.onDone && text !== before) s.set(before);
+    else if (was && JSON.stringify($state.snapshot(d)) !== JSON.stringify(was)) {
+      const live = d as unknown as Record<string, unknown>;
+      for (const k of Object.keys(live)) if (!(k in was)) delete live[k];
+      Object.assign(live, structuredClone(was));
+    }
     text = before; // a rename waits for the field to go (onDone): Esc is not that
     fresh = null;
     letField();
@@ -123,24 +144,33 @@
   const chose = () => tick().then(() => field?.focus({ preventScroll: true }));
   function onKey(e: KeyboardEvent) {
     if (composing(e)) return;
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); letField(); sel = null; }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      // emptied: what it said (a period drawn as "…", saved so)
+      if (!text.trim() && before.trim()) { text = before; spot?.set(before); }
+      commit(); letField(); sel = null;
+    }
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); escape(); }
     else if (e.key === 'Tab' && !e.shiftKey) {
       const a = spot?.acts.find((x) => x.tab && !x.off);
-      if (a) { e.preventDefault(); void run(a); }
+      // one just added and not yet typed in stays the one: Tab, Tab, Tab left a row of "Idea"s that one Esc did not take
+      if (a && fresh === sel && text === before) e.preventDefault();
+      else if (a) { e.preventDefault(); void run(a); }
     }
   }
 
   function onHostClick(e: MouseEvent) {
     const t = e.target as Element;
     if (layer.contains(t)) return;
-    const el = t.closest?.('[data-spot]');
-    select(el && host.contains(el) ? el.getAttribute('data-spot') : null);
+    const el = t.closest?.('[data-spot]'), key = el && host.contains(el) ? el.getAttribute('data-spot') : null;
+    // the part already picked clicked again (the click that opened the chart picked it): its field keeps the keyboard
+    if (key && key === sel) field?.focus({ preventScroll: true });
+    else select(key);
   }
   function onHostMove(e: PointerEvent) {
     if (e.pointerType !== 'mouse') return;
     const el = (e.target as Element).closest?.('[data-spot]');
-    hover = el && host.contains(el) && el.getAttribute('data-spot') !== sel ? box(el) : null;
+    hover = el && host.contains(el) && el.getAttribute('data-spot') !== sel && !layer.contains(e.target as Node) ? box(el) : null;
   }
 
   /** the bar where it covers the fewest other parts: under the field it covered the next one (a legend's next row,
@@ -161,14 +191,20 @@
       floatAt(around, size, { prefer: 'below', within, gap: 8, align: 'start' }),
       floatAt(around, size, { prefer: 'above', within, gap: 8, align: 'start' }),
     ].filter((f, i) => (i === 0 ? f.side === 'right' || f.side === 'left' : f.side !== 'inside'));
-    const others = [...host.querySelectorAll('[data-spot]')].filter((el) => el.getAttribute('data-spot') !== sel).map((el) => el.getBoundingClientRect());
+    // (and the picture's own full-screen button)
+    const others = [...host.querySelectorAll('[data-spot]'), ...(host.parentElement?.querySelectorAll('.mermaid-expand') ?? [])]
+      .filter((el) => el.getAttribute('data-spot') !== sel).map((el) => el.getBoundingClientRect());
     const covers = (f: { left: number; top: number }) => others.filter((q) => q.width && q.left < f.left + size.w && q.right > f.left && q.top < f.top + size.h && q.bottom > f.top).length;
     const best = tries.reduce<(typeof tries)[number] | null>((a, f) => (!a || covers(f) < covers(a) ? f : a), null);
+    // folded or not once, as the part is picked and drawn: not again as it is edited (a rename drew it anew, its old
+    // drawing counted as a part it covered, and the bar folded away from under the click into one of its boxes)
+    if (deciding && rect) { deciding = false; folded = !best || covers(best) > 0; }
+    if (unfolded) folded = false;
     if (best) { barAt = { left: best.left - o.left, top: best.top - o.top }; return; }
     const f = floatAt(around, size, { prefer: 'below', within, gap: 8, align: 'start' });
     barAt = f.side === 'inside' ? { left: Math.max(4, Math.min(W - bar.offsetWidth - 4, r.x)), top: r.y + r.h + 8 } : { left: f.left - o.left, top: f.top - o.top };
   }
-  $effect(() => { void spot; void rect; tick().then(placeBar); });
+  $effect(() => { void spot; void rect; void unfolded; tick().then(placeBar); });
 
   onMount(() => {
     host.addEventListener('click', onHostClick);
@@ -214,15 +250,17 @@
     <div class="ring soft" style:left={`${hover.x - 3}px`} style:top={`${hover.y - 3}px`} style:width={`${hover.w + 6}px`} style:height={`${hover.h + 6}px`}></div>
   {/if}
   {#if sel && spot}
-    {#if rect}<div class="ring" style:left={`${rect.x - 3}px`} style:top={`${rect.y - 3}px`} style:width={`${rect.w + 6}px`} style:height={`${rect.h + 6}px`}></div>{/if}
     {#key sel}<!-- a field of its own for each part: one kept from the last would not take the keyboard -->
     <input class="field" bind:this={field} style:opacity={rect ? null : 0} class:wide={wideSpot} bind:value={text} aria-label={spot.label} placeholder={spot.label} oninput={typed} onkeydown={onKey} onblur={commit}
       style:left={`${fieldLeft}px`} style:top={`${rect ? rect.y + rect.h / 2 - (isMobile ? 20 : 17) : 8}px`} style:width={`${fieldW}px`}
-      {@attach (el: HTMLInputElement) => { el.focus({ preventScroll: true }); el.select(); }} />
+      {@attach (el: HTMLInputElement) => { if (grab) { grab = false; el.focus({ preventScroll: true }); el.select(); } }} />
     {/key}
     {#if spot.fields.length || spot.acts.length}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="bar" bind:this={bar} onkeydown={onBarKey} style:visibility={rect ? null : 'hidden'} style:left={`${barAt.left}px`} style:top={`${barAt.top}px`}>
+    {#if folded && rect}
+      <button type="button" class="more" aria-label="More for this part" title="More for this part" onmousedown={(e) => e.preventDefault()} onclick={() => (unfolded = true)}
+        style:left={`${fieldLeft + fieldW + 40 <= (layer?.clientWidth ?? 0) ? fieldLeft + fieldW + 4 : Math.max(4, fieldLeft - 36)}px`} style:top={`${rect.y + rect.h / 2 - 16}px`}>⋯</button>
+    {/if}
+    <div class="bar" role="toolbar" tabindex="-1" bind:this={bar} onkeydown={onBarKey} style:visibility={rect && !folded ? null : 'hidden'} style:left={`${barAt.left}px`} style:top={`${barAt.top}px`}>
       {#if spot.fields.length}<span class="grp">
       {#each spot.fields as f (f.label)}
         <label class="f" class:top={f.kind === 'lines'}>
@@ -233,8 +271,9 @@
             <textarea value={f.value} rows={Math.min(6, Math.max(2, f.value.split('\n').length + 1))} placeholder="One per line" spellcheck="false"
               oninput={(e) => f.set(e.currentTarget.value)}></textarea>
           {:else}
-            <input type={f.kind} value={f.value} size={f.kind === 'number' ? 5 : undefined} onchange={(e) => f.set(e.currentTarget.value)}
-              oninput={(e) => { if (f.kind !== 'date') f.set(e.currentTarget.value); }}
+            <input type={f.kind} value={f.value} size={f.kind === 'number' ? 5 : undefined}
+              onchange={(e) => { f.set(e.currentTarget.value); const now = sel && spotOf(d, sel)?.fields.find((x) => x.label === f.label); if (now) e.currentTarget.value = now.value; }}
+              oninput={(e) => { if (f.kind === 'number') f.set(e.currentTarget.value); }}
               onkeydown={(e) => { if (!composing(e) && e.key === 'Enter') { e.preventDefault(); commit(); letField(); sel = null; } }} />
           {/if}
         </label>
@@ -297,6 +336,12 @@
   .f :global(button) { height: 28px; }
   :global(html.mobile) .bar { gap: 2px; padding: 3px; }
   :global(html.mobile) .grp { gap: 2px; }
+  :global(html.mobile) .f :global(button) { height: 36px; }
+  .more {
+    position: absolute; width: 32px; height: 32px; border: 0; border-radius: 9px; font: inherit; font-size: 16px; line-height: 1;
+    color: var(--fg); background: var(--bg-pop); box-shadow: var(--pop-shadow), 0 0 0 0.5px var(--line);
+  }
+  :global(html.mobile) .more { width: 40px; height: 40px; }
   :global(html.mobile) .bar button { min-width: 36px; height: 40px; padding: 0 4px; }
   :global(html.mobile) .f input { height: 36px; font-size: 16px; }
   :global(html.mobile) .f input[type='number'] { width: 64px; }

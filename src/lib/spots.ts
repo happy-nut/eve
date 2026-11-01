@@ -32,6 +32,17 @@ export interface Spot {
 }
 
 const at = (key: string) => key.split(':');
+/** a class's or a table's name as drawn, not its id */
+const nameOf = (list: { id: string; name: string }[], id: string) => list.find((x) => x.id === id)?.name.trim() || id;
+/** where a note can be: over, left or right of each one, or over two side by side */
+function noteOptions(s: Sequence, st: { note: string; who: string[] }): [string, string][] {
+  const name = (id: string) => s.people.find((p) => p.id === id)?.name.trim() || id;
+  const opts: [string, string][] = s.people.flatMap((p) => (['over', 'left of', 'right of'] as const).map((at) => [`${at}|${p.id}`, `${at[0].toUpperCase()}${at.slice(1)} ${name(p.id)}`] as [string, string]));
+  for (let i = 1; i < s.people.length; i++) opts.push([`over|${s.people[i - 1].id},${s.people[i].id}`, `Over ${name(s.people[i - 1].id)} and ${name(s.people[i].id)}`]);
+  const now = `${st.note}|${st.who.join(',')}`;
+  if (!opts.some(([v]) => v === now)) opts.unshift([now, `${st.note} ${st.who.map(name).join(', ')}`]);
+  return opts;
+}
 const move = <T>(list: T[], i: number, by: -1 | 1) => { const j = i + by; if (j < 0 || j >= list.length) return false; [list[i], list[j]] = [list[j], list[i]]; return true; };
 const title = (d: { title: string }): Spot => ({ text: d.title, label: 'Title', set: (v) => { d.title = v; }, fields: [], acts: [] });
 
@@ -190,7 +201,9 @@ function ganttSpot(d: Gantt, key: string): Spot | null {
         if (t.id) {
           const waiting = all.filter((x) => x.after?.split(' ').includes(t.id!));
           if (waiting.length) {
+            // after it by name: an id and the length alone would be read as a start date
             next.id = freshId('t', all.filter((y) => y.id).map((y) => ({ id: y.id! })));
+            next.after = t.id;
             for (const x of waiting) x.after = x.after!.split(' ').map((id) => (id === t.id ? next.id! : id)).join(' ');
           }
         }
@@ -304,7 +317,9 @@ function seqSpot(s: Sequence, key: string): Spot | null {
   };
   if ('note' in st) return {
     text: st.text, label: 'Note', set: (v) => { st.text = v; },
-    fields: [],
+    fields: [{ kind: 'select', label: 'Where', value: `${st.note}|${st.who.join(',')}`, options: noteOptions(s, st), set: (v) => {
+      const [at, who] = v.split('|'); st.note = at as typeof st.note; st.who = who.split(',');
+    } }],
     acts: [{ label: 'Add a message after it', icon: 'plus', tab: true, run: () => addMessage(s, i + 1) }, ...moves, del],
   };
   if ('block' in st && st.block !== 'end') {
@@ -329,8 +344,8 @@ function classSpot(c: ClassDiagram, key: string): Spot | null {
       text: l.label, label: 'Line label', set: (v) => { l.label = v; },
       fields: [
         { kind: 'select', label: 'Kind', value: l.arrow, options: arrowOptions(l.arrow), set: (v) => { l.arrow = v; } },
-        { kind: 'text', label: `How many “${l.from}”`, value: l.fromCard, set: (v) => { l.fromCard = v; } },
-        { kind: 'text', label: `How many “${l.to}”`, value: l.toCard, set: (v) => { l.toCard = v; } },
+        { kind: 'text', label: `How many “${nameOf(c.classes, l.from)}”`, value: l.fromCard, set: (v) => { l.fromCard = v; } },
+        { kind: 'text', label: `How many “${nameOf(c.classes, l.to)}”`, value: l.toCard, set: (v) => { l.toCard = v; } },
       ],
       acts: [{ label: 'Delete the line', icon: 'trash', run: () => { c.links.splice(i, 1); } }],
     };
@@ -387,8 +402,8 @@ function erSpot(e: ErDiagram, key: string): Spot | null {
     return {
       text: l.label, label: 'Line label', set: (v) => { l.label = v; },
       fields: [
-        { kind: 'select', label: `How many “${l.from}”`, value: l.left, options: LEFT, set: (v) => { l.left = v; } },
-        { kind: 'select', label: `How many “${l.to}”`, value: l.right, options: RIGHT, set: (v) => { l.right = v; } },
+        { kind: 'select', label: `How many “${nameOf(e.tables, l.from)}”`, value: l.left, options: LEFT, set: (v) => { l.left = v; } },
+        { kind: 'select', label: `How many “${nameOf(e.tables, l.to)}”`, value: l.right, options: RIGHT, set: (v) => { l.right = v; } },
       ],
       acts: [{ label: 'Delete the line', icon: 'trash', run: () => { e.links.splice(i, 1); } }],
     };
@@ -435,24 +450,41 @@ export function tagSpots(d: Diagram, root: Element) {
       if (id && !/^root_(start|end)$/.test(id) && !id.endsWith('_start') && !id.endsWith('_end')) g.setAttribute('data-spot', `${prefix}:${id}`);
     }
   };
-  // a line's label found by its words: the one line that says them
+  // a line's label found by its words; lines that say the same, in the order they are written and drawn
   const labels = (keyOf: (i: number) => string, said: string[]) => {
+    const seen = new Map<string, number>();
     for (const g of root.querySelectorAll('g.edgeLabel')) {
       const t = g.textContent?.trim();
-      const hits = t ? said.flatMap((x, i) => (x.trim() === t ? [i] : [])) : [];
-      if (hits.length === 1) g.setAttribute('data-spot', keyOf(hits[0]));
+      if (!t) continue;
+      const hits = said.flatMap((x, i) => (x.trim() === t ? [i] : [])), k = seen.get(t) ?? 0;
+      seen.set(t, k + 1);
+      if (hits[k] !== undefined) g.setAttribute('data-spot', keyOf(hits[k]));
+    }
+  };
+  /** drawn words matched to parts by what they say; parts that say the same, by where they are drawn (left to right,
+   *  top to bottom), as many as there are of them */
+  const byWords = (els: Element[], parts: { key: string; says: string }[], mark: (el: Element) => Element = (el) => el) => {
+    const where = (el: Element) => { const r = el.getBoundingClientRect(); return r.left * 1e-3 + r.top; };
+    const groups = new Map<string, Element[]>();
+    for (const el of els) { const t = el.textContent?.trim() ?? ''; groups.set(t, [...(groups.get(t) ?? []), el]); }
+    for (const [t, all] of groups) {
+      const same = parts.filter((p) => p.says === t);
+      if (!same.length) continue;
+      // each drawn as often (a person at the head and the foot): the n-th of each row the n-th of them
+      if (all.length % same.length) continue;
+      const sorted = same.length > 1 ? [...all].sort((a, b) => where(a) - where(b)) : all;
+      sorted.forEach((el, i) => mark(el).setAttribute('data-spot', same[i % same.length].key));
     }
   };
   if (d.kind === 'sequence') {
     // by the name each says, not by order: mermaid draws them last to first (and again along the foot)
-    for (const t of root.querySelectorAll('text.actor')) {
-      const said = t.textContent?.trim(), who = d.people.filter((p) => (p.name.trim() || p.id) === said);
-      if (who.length === 1) t.parentElement!.setAttribute('data-spot', `person:${who[0].id}`);
-    }
+    byWords([...root.querySelectorAll('text.actor')], d.people.map((p) => ({ key: `person:${p.id}`, says: p.name.trim() || p.id })), (t) => t.parentElement!);
     const steps = d.messages.map((st, i) => [st, i] as const);
     tag([...root.querySelectorAll('text.messageText')], steps.filter(([st]) => isMessage(st)).map(([, i]) => `step:${i}`));
     tag([...root.querySelectorAll('text.noteText')].map((t) => t.parentElement!), steps.filter(([st]) => 'note' in st).map(([, i]) => `step:${i}`));
-    tag([...root.querySelectorAll('text.loopText')], steps.filter(([st]) => 'block' in st && st.block !== 'end').map(([, i]) => `step:${i}`));
+    // a group's words (an alt's "[cached]", its else's, an opt's): by what they say, as some are drawn apart
+    const groups = steps.filter(([st]) => 'block' in st && st.block !== 'end').map(([st, i]) => ({ key: `step:${i}`, says: `[${('text' in st ? String(st.text) : '').trim()}]` }));
+    byWords([...root.querySelectorAll('text')].filter((t) => /^\[.*\]$/.test(t.textContent?.trim() ?? '')), groups);
   } else if (d.kind === 'class') {
     byId('classId', 'class');
     labels((i) => `clink:${i}`, d.links.map((l) => l.label));

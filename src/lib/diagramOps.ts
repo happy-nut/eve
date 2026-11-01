@@ -199,7 +199,10 @@ export const STATE_KINDS: [string, string][] = [['state', 'State'], ['choice', '
 /** the states it can be put in: not itself, nor one inside it (it would hold itself), nor a choice or a bar */
 export function insideOptions(s: StateDiagram, st: StateBox) {
   const under = (x: StateBox): boolean => { for (let p = stateParent(s, x); p; p = stateParent(s, s.states.find((y) => y.id === p)!)) if (p === st.id) return true; return false; };
-  return [['', 'Not inside one'] as [string, string], ...s.states.filter((x) => x !== st && !x.kind && !under(x)).map((x) => [x.id, `In “${x.name.trim() || x.id}”`] as [string, string])];
+  // not one it has a line with (mermaid fails on a line between a state and the one around it), nor one with a
+  // description (a state of states draws none: it was lost)
+  const joined = (x: StateBox) => s.links.some((l) => (l.from === x.id && l.to === st.id) || (l.to === x.id && l.from === st.id));
+  return [['', 'Not inside one'] as [string, string], ...s.states.filter((x) => x !== st && !x.kind && !under(x) && (x.id === st.parent || (!joined(x) && !x.desc.trim()))).map((x) => [x.id, `In “${x.name.trim() || x.id}”`] as [string, string])];
 }
 /** a state renamed: the states in it follow it, as its lines do */
 export function renameState(s: StateDiagram, st: StateBox, name: string) {

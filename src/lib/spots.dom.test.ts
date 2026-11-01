@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { fromCode, toCode, type Gantt, type Sequence } from './diagram';
 import { spotOf, tagSpots } from './spots';
-import { startOptions } from './diagramOps';
+import { insideOptions, startOptions } from './diagramOps';
+import type { StateDiagram } from './diagram';
 
 const gantt = (code: string) => fromCode(`gantt\n  dateFormat YYYY-MM-DD\n${code}`) as Gantt;
 const act = (d: Gantt, key: string, label: string) => spotOf(d, key)!.acts.find((a) => a.label === label)!.run();
@@ -42,7 +43,8 @@ describe('chart parts', () => {
     const [, added, visual] = d.sections[0].tasks;
     expect(added.id).toBeTruthy();
     expect(visual.after).toBe(added.id);
-    expect(toCode(d)).toMatch(/Visual : a2, after t\d/);
+    expect(added.after).toBe('a1'); // after it by name: an id with a length alone reads as a start date
+    expect(toCode(d)).toMatch(/Task : t\d, after a1, 2d\n {4}Visual : a2, after t\d/);
   });
 
   it('a task cannot be set to start after one that starts after it (a loop)', () => {
@@ -51,5 +53,31 @@ describe('chart parts', () => {
     expect(names).not.toContain('After “B”');
     expect(names).not.toContain('After “C”'); // after the one before it, B
     expect(names).toContain('After “D”');
+  });
+
+  it("ties a sequence's group words and lines that say the same to their own parts", () => {
+    const d = fromCode('sequenceDiagram\n  participant A\n  participant B\n  alt cached\n    A->>B: hit\n  else not cached\n    A->>B: miss\n  end\n  opt audit\n    A->>B: log\n  end') as Sequence;
+    const root = document.createElement('div');
+    root.innerHTML = '<text class="loopText">[cached]</text><text>[not cached]</text><text class="loopText">[audit]</text>';
+    tagSpots(d, root);
+    expect([...root.querySelectorAll('text')].map((t) => t.getAttribute('data-spot'))).toEqual(['step:0', 'step:2', 'step:5']);
+    const c = fromCode('classDiagram\n  A <|-- B : inherits\n  A <|-- C : inherits')!;
+    root.innerHTML = '<g class="edgeLabel">inherits</g><g class="edgeLabel">inherits</g>';
+    tagSpots(c, root);
+    expect([...root.querySelectorAll('g')].map((g) => g.getAttribute('data-spot'))).toEqual(['clink:0', 'clink:1']);
+  });
+
+  it('a state is not offered to be put in one it has a line with, or one with a description', () => {
+    const s = fromCode('stateDiagram-v2\n  Idle : waiting\n  Idle --> Running\n  Done') as StateDiagram;
+    const running = s.states.find((x) => x.id === 'Running')!;
+    expect(insideOptions(s, running).map(([v]) => v)).toEqual(['', 'Done']);
+  });
+
+  it("a note's place is set from its bar", () => {
+    const d = fromCode('sequenceDiagram\n  participant A\n  participant B\n  Note over A,B: hi') as Sequence;
+    const where = spotOf(d, 'step:0')!.fields[0];
+    expect(where.kind === 'select' && where.options.map(([v]) => v)).toContain('right of|B');
+    where.set('right of|B');
+    expect(toCode(d)).toMatch(/Note right of B: hi/);
   });
 });
