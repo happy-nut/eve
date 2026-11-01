@@ -298,7 +298,7 @@ try {
       const all = [...document.querySelectorAll(`.tiptap .mermaid-view [data-spot="${k}"]`)];
       const box = all.find((e) => e.textContent.trim()) ?? all[0];
       if (!box) return null;
-      const el = box.querySelector(':scope > g.label-group, :scope > g.label.name') ?? box; // a class's, a table's name line
+      const el = box.querySelector(':scope > g.label-group, :scope > g.label.name, :scope > text.actor-man') ?? box; // a class's, a table's name line, a figure's name
       el.scrollIntoView({ block: 'center', inline: 'center' });
       const r = el.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
@@ -475,6 +475,14 @@ try {
   await page.locator('.tiptap .dblock.active .tools button', { hasText: 'Values' }).click();
   await page.keyboard.press('Escape');
   assert.match(await md(page), /pie showData/, 'Values stays on');
+  // but the title typed meanwhile is put back
+  await spot(page, 'title');
+  await page.keyboard.type('Money');
+  await page.locator('.tiptap .dblock.active .tools button', { hasText: 'Values' }).click();
+  await page.keyboard.press('Escape');
+  after = await md(page);
+  assert.match(after, /title Pets/, 'the title put back');
+  assert.doesNotMatch(after, /showData/, 'and Values as turned');
   await page.close();
   console.log('ok   a rename then a box of the bar typed in; Esc puts back the value too; a state added is drawn; a crowded chart\'s bar goes under it; a key with nothing picked does nothing');
 

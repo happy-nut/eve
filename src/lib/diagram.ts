@@ -593,7 +593,8 @@ function ganttCode(d: Gantt) {
   if (spans.length && !(d.extra ?? []).some((x) => /^(tickInterval|axisFormat)\b/i.test(x))) {
     const from = spans.map((t) => t.start).sort()[0], to = spans.map((t) => addDays(t.start, t.days)).sort().pop()!;
     const span = (Date.parse(to) - Date.parse(from)) / 864e5;
-    lines.push(span <= 16 ? '  tickInterval 1day' : span <= 120 ? '  tickInterval 1week' : '  tickInterval 1month');
+    // (a day's ticks for a week at most: a fortnight's, its dates drawn small, ran into one another)
+    lines.push(span <= 8 ? '  tickInterval 1day' : span <= 120 ? '  tickInterval 1week' : '  tickInterval 1month');
     if (span > 120) lines.push('  axisFormat %Y-%m');
   }
   if (one(d.title)) lines.push(`  title ${ent(one(d.title), '#;')}`);

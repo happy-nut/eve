@@ -30,7 +30,8 @@
   const find = (key: string) => {
     const all = [...host.querySelectorAll(`[data-spot="${CSS.escape(key)}"]`)], el = all.find((x) => x.textContent?.trim()) ?? all[0] ?? null;
     // a class's or a table's name line, not the whole box: centred on the box, the field sat over its first member
-    return el?.querySelector(':scope > g.label-group, :scope > g.label.name') ?? el;
+    // (a person drawn as a figure: the name under it)
+    return el?.querySelector(':scope > g.label-group, :scope > g.label.name, :scope > text.actor-man') ?? el;
   };
   function box(el: Element): Rect {
     // a part drawn as a page's box (a timeline's year, a task's name): its words, not the row it stretches over
@@ -136,10 +137,13 @@
   }
   /** a setting of the whole chart turned while a part is picked (Values, Skip weekends): its own, not the part's, so
    *  Esc leaves it as set */
-  export function kept() {
+  export function kept(turn: () => void) {
+    const before = $state.snapshot(d) as Record<string, unknown>;
+    turn();
     if (!was) return;
+    // what the turn changed only (a title typed meanwhile is the part's, Esc's to put back)
     const live = $state.snapshot(d) as Record<string, unknown>;
-    for (const k of new Set([...Object.keys(live), ...Object.keys(was)])) if (typeof live[k] !== 'object' && typeof was[k] !== 'object') was[k] = live[k];
+    for (const k of new Set([...Object.keys(live), ...Object.keys(before)])) if (JSON.stringify(live[k]) !== JSON.stringify(before[k])) was[k] = structuredClone(live[k]);
   }
   /** a part typed in at once (the chart's own "+ Part") */
   export function open(key: string | null) { if (key) { const drawn = version; sel = null; tick().then(() => { select(key); fresh = key; addedIn = drawn; }); } }
@@ -228,25 +232,39 @@
       // the picture's foot, or under or over the field: of those in sight and off the field, the one covering fewest
       const seen = viewSize().h - screenInsets().bottom - o.top - size.h - 8, top0 = screenInsets().top - o.top + 4;
       const offField = (t: number) => t >= fieldTop + half * 2 + 6 || t + size.h <= fieldTop - 6;
-      const tops = [Math.min(H - (parseFloat(getComputedStyle(host).paddingBottom) || 0) + 6, seen), fieldTop + half * 2 + 8, fieldTop - size.h - 8]
+      // (and just under the picture, over its toolbar, which covers no part; on a tie, the one nearest the field: a tall
+      // chart's bar sat at the window's foot, far from it)
+      const tops = [Math.min(H - (parseFloat(getComputedStyle(host).paddingBottom) || 0) + 6, seen), fieldTop + half * 2 + 8, fieldTop - size.h - 8, Math.min(H + 4, seen)]
         .filter((t) => t >= top0 && t <= seen && offField(t));
-      const top = tops.length ? tops.reduce((a, t) => (covers({ left: o.left + fieldLeft, top: o.top + t }) < covers({ left: o.left + fieldLeft, top: o.top + a }) ? t : a)) : fieldTop - size.h - 8;
-      // (those on its rows only: a phone's Done, on a row of its own at the left, left it no room)
+      const cost = (t: number) => covers({ left: o.left + fieldLeft, top: o.top + t }) * 1e5 + Math.abs(t - fieldTop);
+      const top = tops.length ? tops.reduce((a, t) => (cost(t) < cost(a) ? t : a)) : fieldTop - size.h - 8;
+      // (those on its rows and to the right only: a phone's Done, on a row of its own at the left, left it no room)
       const stop = [...(layer.parentElement?.parentElement?.querySelectorAll('.mermaid-expand, .tools .done') ?? [])].map((b) => b.getBoundingClientRect())
-        .filter((q) => q.top < o.top + top + size.h && q.bottom > o.top + top).map((q) => q.left - o.left - 8);
+        .filter((q) => q.top < o.top + top + size.h && q.bottom > o.top + top && q.left - o.left > 200).map((q) => q.left - o.left - 8);
       barMax = Math.max(160, Math.min(W - 8, ...stop) - 4);
       const w = Math.min(size.w, barMax);
       barAt = { left: Math.max(4, Math.min(fieldLeft, 4 + barMax - w)), top };
       return;
     }
-    if (best) { barAt = { left: best.left - o.left, top: best.top - o.top }; return; }
-    const f = floatAt(around, size, { prefer: 'below', within, gap: 8, align: 'start' });
-    barAt = f.side === 'inside' ? { left: Math.max(4, Math.min(W - bar.offsetWidth - 4, r.x)), top: r.y + r.h + 8 } : { left: f.left - o.left, top: f.top - o.top };
+    const f = best ?? floatAt(around, size, { prefer: 'below', within, gap: 8, align: 'start' });
+    const at = f.side === 'inside' ? { left: r.x, top: r.y + r.h + 8 } : { left: f.left - o.left, top: f.top - o.top };
+    barAt = { left: Math.max(4, Math.min(W - size.w - 4, at.left)), top: at.top }; // never past the picture's edge
   }
   $effect(() => { void spot; void rect; tick().then(placeBar); });
 
+  /** the window shorter (a phone's keyboard up, on the whole screen too): the part brought into sight, its bar placed
+   *  anew for the room now left (the field stayed under the keyboard) */
+  function resized() {
+    const el = sel ? find(sel) : null;
+    if (el) {
+      const r = el.getBoundingClientRect(), bottom = viewSize().h - screenInsets().bottom;
+      if (r.bottom + 24 > bottom || r.top < screenInsets().top) el.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+      deciding = true;
+    }
+    measure();
+  }
   // its own size changed (a choice's longer words, a new part's boxes): placed again for it
-  const barRo = new ResizeObserver(() => placeBar());
+  const barRo = new ResizeObserver(() => requestAnimationFrame(placeBar)); // (in the next frame: in this one, a loop)
   $effect(() => { if (bar) { barRo.observe(bar); return () => bar && barRo.unobserve(bar); } });
   onMount(() => {
     host.addEventListener('click', onHostClick);
@@ -258,8 +276,8 @@
     ro.observe(host);
     // the keyboard coming up (the window shorter) or the page scrolled: the bar kept in sight
     const vv = window.visualViewport;
-    vv?.addEventListener('resize', measure);
-    window.addEventListener('resize', measure);
+    vv?.addEventListener('resize', resized);
+    window.addEventListener('resize', resized);
     document.addEventListener('scroll', measure, { passive: true, capture: true });
     // the part the click that opened the chart landed on
     untrack(() => { if (pick) tick().then(() => select(pick)); });
@@ -269,8 +287,8 @@
       host.removeEventListener('pointermove', onHostMove);
       host.removeEventListener('pointerleave', out);
       host.removeEventListener('scroll', measure);
-      vv?.removeEventListener('resize', measure);
-      window.removeEventListener('resize', measure);
+      vv?.removeEventListener('resize', resized);
+      window.removeEventListener('resize', resized);
       document.removeEventListener('scroll', measure, { capture: true });
       ro.disconnect();
       barRo.disconnect();
@@ -299,8 +317,11 @@
   let leftSet = $state(false);
   // (a drawn picture's words, centred, stay centred: a state's name jumped to its box's left)
   const wideSpot = $derived(!!rect && leftSet);
-  $effect(() => { void rect; const el = sel && find(sel); leftSet = el instanceof HTMLElement && (/^(left|start)$/.test(getComputedStyle(el).textAlign) || el.getBoundingClientRect().width + 12 >= 120); });
-  const fieldLeft = $derived(Math.max(4, Math.min((layer?.clientWidth ?? 600) - fieldW - 4, rect ? (wideSpot ? rect.x - 6 : rect.x + rect.w / 2 - fieldW / 2) : 8)));
+  $effect(() => { void rect; const el = sel && find(sel); leftSet = el instanceof HTMLElement && (/^(left|start)$/.test(getComputedStyle(el).textAlign) || el.getBoundingClientRect().width + 12 >= 120); rightSet = el instanceof HTMLElement && /^(right|end)$/.test(getComputedStyle(el).textAlign) && !leftSet; });
+  const fieldLeft0 = $derived(Math.max(4, Math.min((layer?.clientWidth ?? 600) - fieldW - 4, rect ? (wideSpot ? rect.x - 6 : rect.x + rect.w / 2 - fieldW / 2) : 8)));
+  // a page's words set from their right (a timeline's year): the field from that edge, the words staying there
+  let rightSet = $state(false);
+  const fieldLeft = $derived(rightSet && rect ? Math.max(4, rect.x + rect.w + 6 - fieldW) : fieldLeft0);
 </script>
 
 <div class="layer" bind:this={layer}>
@@ -309,7 +330,7 @@
   {/if}
   {#if sel && spot}
     {#key sel}<!-- a field of its own for each part: one kept from the last would not take the keyboard -->
-    <input class="field" bind:this={field} style:opacity={rect ? null : 0} class:wide={wideSpot} bind:value={text} aria-label={spot.label} placeholder={spot.label} oninput={typed} onkeydown={onKey} onblur={commit}
+    <input class="field" bind:this={field} style:opacity={rect ? null : 0} class:wide={wideSpot} class:right={rightSet} bind:value={text} aria-label={spot.label} placeholder={spot.label} oninput={typed} onkeydown={onKey} onblur={commit}
       style:left={`${fieldLeft}px`} style:top={`${rect ? rect.y + rect.h / 2 - (isMobile ? 20 : 17) : 8}px`} style:width={`${fieldW}px`}
       {@attach (el: HTMLInputElement) => { if (grab) { grab = false; el.focus({ preventScroll: true }); el.select(); } }} />
     {/key}
@@ -356,6 +377,7 @@
     font: inherit; font-size: 14px; color: var(--fg); background: var(--bg-pop); box-shadow: 0 0 0 2px var(--accent), 0 4px 14px rgba(0, 0, 0, 0.15); outline: none;
   }
   .field.wide { text-align: left; }
+  .field.right { text-align: right; }
   :global(html.mobile) .field { font-size: 16px; height: 40px; } /* under 16px a phone zooms the page in on focus */
   .bar {
     position: absolute; display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 12px;

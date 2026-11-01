@@ -212,10 +212,10 @@ function ganttSpot(d: Gantt, key: string): Spot | null {
       { label: 'Move up', icon: 'up', off: ti === 0, run: () => (move(s.tasks, ti, -1) ? `task:${si}:${ti - 1}` : null) },
       { label: 'Move down', icon: 'down', off: ti === s.tasks.length - 1, run: () => (move(s.tasks, ti, 1) ? `task:${si}:${ti + 1}` : null) },
       { label: 'Delete', icon: 'trash', run: () => {
-        const was = ganttDates(d);
+        const was = ganttDates(d), flat = d.sections.flatMap((y) => y.tasks), at = flat.indexOf(t);
         const [gone] = s.tasks.splice(ti, 1);
-        // the one that came next after it (no start of its own) keeps its days too: the one before it now ended sooner
-        const next = s.tasks[ti];
+        // the one that came next after it (no start of its own, in this section or the next) keeps its days too
+        const next = flat[at + 1];
         if (next?.after === '') { next.start = was.get(next)!.start; delete next.after; }
         // what started after it keeps the day it started on (it moved to the day the one deleted started)
         if (gone.id) for (const x of d.sections.flatMap((y) => y.tasks)) if (x.after?.split(' ').includes(gone.id)) { x.after = x.after.split(' ').filter((id) => id !== gone.id).join(' '); if (!x.after) { x.start = was.get(x)?.start || endOf(d); delete x.after; } }
