@@ -40,12 +40,23 @@ assert.equal(fromCode('graph TD\n  A --> B').dir, 'TD');
 for (const code of [
   'sequenceDiagram\n  box Aqua Team\n  participant A\n  end\n  A->>B: x',
   'journey\n  title Day',
-  'mindmap\n  root((R))\n    A[Square]',
-  'timeline\n  section S\n  a : b',
+  'mindmap\n  root((R))\n    A[Square]\n    ::icon(fa fa-book)',
   'gantt\n  dateFormat DD-MM-YYYY\n  a : 01-02-2026, 3d',
 ]) assert.equal(fromCode(code), null, code);
 
 console.log('diagram ok');
+
+// a mind map's shapes and a timeline's sections are the rows' own now
+{
+  const m = fromCode('mindmap\n  root)Big(\n    A[Square]\n      b((Round))\n    {{Hex}}\n    plain');
+  assert.equal(m.rootShape, 'cloud');
+  assert.deepEqual(m.items.map((b) => [b.text, b.depth, b.shape ?? 'plain']), [['Square', 1, 'square'], ['Round', 2, 'circle'], ['Hex', 1, 'hexagon'], ['plain', 1, 'plain']]);
+  assert.deepEqual(fromCode(toCode(m)), m);
+  const t = fromCode('timeline\n  title T\n  section 창업기\n    2020 : 시작\n    2021 : 첫 고객\n  section 성장기\n    2023 : 상장');
+  assert.deepEqual(t.periods.map((p) => [p.section ?? '', p.label]), [['창업기', '2020'], ['', '2021'], ['성장기', '2023']]);
+  assert.deepEqual(fromCode(toCode(t)), t);
+  console.log('shapes and sections ok');
+}
 
 // ---- found in the bug hunt ----
 // a task or a period named like a setting ("title …", "Section …") is not taken for one
@@ -121,7 +132,7 @@ console.log('swimlanes ok');
 // why a diagram opens as its code: the line the editor cannot show, or the kind it has no form for
 assert.equal(whyCode('flowchart LR\n  A --> B'), null);
 assert.equal(whyCode('sequenceDiagram\n  A->>B: hi\n  Note over A: n'), null);
-assert.deepEqual(whyCode('mindmap\n  root((R))\n    A\n    B[Square]'), { line: 'B[Square]' });
+assert.deepEqual(whyCode('mindmap\n  root((R))\n    A\n    B[Square]\n    ::icon(fa fa-book)'), { line: '::icon(fa fa-book)' });
 assert.deepEqual(whyCode('journey\n  title Day'), { kind: 'journey' });
 console.log('why code ok');
 
@@ -197,8 +208,10 @@ function settles(code, kind) {
   const out = toCode(d), again = fromCode(out);
   assert.equal(toCode(again), out, `${kind}: written, it reads and writes the same\n${out}`);
   assert.deepEqual(fromCode(toCode(again)), again, kind);
-  // the same parts, if not in the same order (one written with a line of its own comes first)
-  const parts = (x) => ({ ...x, ...Object.fromEntries(['states', 'tables', 'classes'].filter((k) => x[k]).map((k) => [k, [...x[k]].sort((a, b) => a.id.localeCompare(b.id))])) });
+  // the same parts, if not in the same order (one written with a line of its own comes first; a state diagram's lines
+  // inside a state of states, in it)
+  const parts = (x) => ({ ...x, ...Object.fromEntries(['states', 'tables', 'classes'].filter((k) => x[k]).map((k) => [k, [...x[k]].sort((a, b) => a.id.localeCompare(b.id))])),
+    ...(x.kind === 'state' ? { links: [...x.links].map((l) => JSON.stringify(l)).sort() } : {}) });
   assert.deepEqual(parts(again), parts(d), `${kind}: nothing lost`);
   return [d, out];
 }
@@ -258,7 +271,8 @@ function settles(code, kind) {
   assert.deepEqual(tasks[1], { name: '구현', start: '', days: 14, id: 'a2', tags: ['crit', 'active'], after: 'a1' });
   assert.deepEqual(tasks[2], { name: '리뷰', start: '', days: 2, after: '' });
   assert.equal(tasks[4].days, 3, 'an end date is a length');
-  assert.deepEqual(d.extra, ['excludes weekends']);
+  assert.equal(d.skipWeekends, true); assert.equal(d.extra, undefined); // a box to tick, not a kept line too
+  assert.ok(out.includes('excludes weekends'), out);
   assert.ok(out.includes('구현 : crit, active, a2, after a1, 14d'), out);
   assert.ok(out.includes('리뷰 : 2d'), out);
   // drawn where mermaid puts them: after a task when it ends, after the one before when that ends
@@ -313,11 +327,43 @@ function settles(code, kind) {
     '  end note',
     '  state 분기 <<choice>>',
   ].join('\n'), 'state');
-  assert.deepEqual(d.states.map((s) => [s.id, s.name, s.desc]), [['대기', '대기', ''], ['처리', '처리 중', '서버가 일한다'], ['검토', '검토', '']]);
-  assert.deepEqual(d.links.map((l) => [l.from, l.to, l.label]), [['[*]', '대기', ''], ['대기', '처리', '요청'], ['처리', '검토', ''], ['검토', '[*]', '']]);
-  assert.equal(d.extra.length, 3);
+  // a state of states, a choice: rows of their own; a note over lines of its own kept as written
+  assert.deepEqual(d.states.map((s) => [s.id, s.name, s.desc, s.parent ?? '', s.kind ?? '']), [['대기', '대기', '', '', ''], ['처리', '처리 중', '서버가 일한다', '', ''], ['검토', '검토', '', '', ''], ['1차', '1차', '', '검토', ''], ['분기', '분기', '', '', 'choice']]);
+  assert.deepEqual(d.links.map((l) => [l.from, l.to, l.label]), [['[*]', '대기', ''], ['대기', '처리', '요청'], ['[*]', '1차', ''], ['1차', '[*]', ''], ['처리', '검토', ''], ['검토', '[*]', '']]);
+  assert.equal(d.extra.length, 1);
   for (const kept of ['state "처리 중" as 처리', '처리 : 서버가 일한다', '  state 검토 {\n    [*] --> 1차', 'end note', 'state 분기 <<choice>>']) assert.ok(out.includes(kept), `${kept} in\n${out}`);
   console.log('pasted state ok');
+}
+{
+  // states inside states inside states, a fork and a join, a note on a line: each a row, written back in place
+  const [d, out] = settles([
+    'stateDiagram-v2',
+    '  [*] --> 주문',
+    '  state 주문 {',
+    '    [*] --> 결제',
+    '    state 결제 {',
+    '      [*] --> 카드',
+    '    }',
+    '    결제 --> [*]',
+    '  }',
+    '  state 갈래 <<fork>>',
+    '  state 모임 <<join>>',
+    '  주문 --> 갈래',
+    '  note left of 주문 : 고객이 시작',
+  ].join('\n'), 'state');
+  assert.deepEqual(d.states.map((s) => [s.id, s.parent ?? '', s.kind ?? '']), [['주문', '', ''], ['결제', '주문', ''], ['카드', '결제', ''], ['갈래', '', 'fork'], ['모임', '', 'join']]);
+  assert.deepEqual(d.states[0].note, { side: 'left', text: '고객이 시작' });
+  assert.equal(d.extra, undefined);
+  assert.match(out, /state 주문 \{\n {4}state 결제 \{\n {6}\[\*\] --> 카드\n {4}\}\n {4}\[\*\] --> 결제\n {4}결제 --> \[\*\]\n {2}\}/);
+  // a state moved out of the one it was in: its lines go with it
+  d.states[2].parent = undefined;
+  assert.match(toCode(d), /\n {2}\[\*\] --> 카드/);
+  // a state put inside itself, through another: drawn at the top, not lost
+  d.states[0].parent = '결제';
+  assert.deepEqual(fromCode(toCode(d)).states.map((s) => s.id).sort(), ['갈래', '결제', '모임', '주문', '카드'].sort());
+  // a description drawn with the state's name, not in its place
+  assert.match(toCode({ kind: 'state', v2: true, states: [{ id: '대기', name: '대기', desc: '결제 전' }], links: [] }), /state "대기" as 대기\n {2}대기 : 결제 전/);
+  console.log('nested state ok');
 }
 {
   const [d, out] = settles([

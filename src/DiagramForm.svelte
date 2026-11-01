@@ -5,8 +5,8 @@
   import { composing } from './lib/keys';
   import { sliceColor, branchColor } from './lib/mermaid';
   import {
-    starter, freshId, addDays, ganttDates, isMessage, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task,
-    type BlockKind, type ClassDiagram, type StateDiagram, type ErDiagram,
+    starter, freshId, addDays, ganttDates, isMessage, replies, type Diagram, type Message, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task,
+    type BlockKind, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type StateBox, type StateLink, stateParent,
   } from './lib/diagram';
   import Select from './Select.svelte';
 
@@ -103,6 +103,75 @@
     s.messages.push({ from: a, to: b, text: '', reply: !!last && !last.reply }); // the answer to the one above
     void focusLast('.s-step input.grow');
   }
+  /** the opening of the group whose `end` is at `i` */
+  function openerOf(s: Sequence, i: number) {
+    let depth = 0;
+    for (let j = i - 1; j >= 0; j--) {
+      const x = s.messages[j];
+      if (!('block' in x) || DIVIDERS.has(x.block)) continue;
+      if (x.block === 'end') depth++;
+      else if (depth-- === 0) return x.block;
+    }
+    return null;
+  }
+  /** what divides a group of this kind: an if's else, an at-once's and, a critical's option */
+  const SPLIT_OF: Partial<Record<BlockKind, BlockKind>> = { alt: 'else', par: 'and', critical: 'option' };
+  /** a row put in a group, just above its end (added at the bottom, it was outside every group, and there was no way in) */
+  async function addInside(s: Sequence, end: number, step: 'message' | 'group' | BlockKind) {
+    const [a, b] = [s.people[0]?.id, s.people[1]?.id ?? s.people[0]?.id];
+    if (!a || !b) return;
+    const msg = { from: a, to: b, text: '', reply: false };
+    s.messages.splice(end, 0, ...(step === 'group' ? [{ block: 'loop' as const, text: '' }, msg, { block: 'end' as const, text: '' }] : step === 'message' ? [msg] : [{ block: step, text: '' }]));
+    await tick();
+    box.querySelectorAll('.s-step')[end]?.querySelector<HTMLElement>('input.grow')?.focus();
+  }
+  /** each group closed, an else only in its own kind of group: what mermaid can draw */
+  function wellFormed(steps: Sequence['messages']) {
+    const open: BlockKind[] = [];
+    for (const st of steps) {
+      if (!('block' in st)) continue;
+      if (st.block === 'end') { if (!open.pop()) return false; }
+      else if (DIVIDERS.has(st.block)) { if (SPLIT_OF[open[open.length - 1]] !== st.block) return false; }
+      else open.push(st.block);
+    }
+    return !open.length;
+  }
+  /** a row one up or down, past the row beside it: into a group past its end, out of it past its start. A group's own
+   *  start or end moved takes a row in or leaves it out. Not where the groups would no longer close */
+  async function moveStep(s: Sequence, i: number, by: -1 | 1, from?: HTMLElement) {
+    const j = i + by;
+    if (j < 0 || j >= s.messages.length) return;
+    const next = [...s.messages];
+    [next[i], next[j]] = [next[j], next[i]];
+    if (wellFormed(s.messages) && !wellFormed(next)) return;
+    s.messages = next;
+    await tick();
+    // the keyboard goes with the row
+    const row = box.querySelectorAll('.s-step')[j];
+    const label = from?.getAttribute('aria-label');
+    (row?.querySelector<HTMLElement>(label ? `[aria-label="${label}"]` : 'input.grow') ?? row?.querySelector<HTMLElement>('button'))?.focus();
+  }
+  /** ⌥↑ / ⌥↓ (or ⌘⇧↑ / ⌘⇧↓, as Notion moves a block) in a row moves it */
+  function stepKey(e: KeyboardEvent, s: Sequence, i: number) {
+    if (composing(e) || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    if (!(e.altKey && !e.metaKey && !e.ctrlKey) && !((e.metaKey || e.ctrlKey) && e.shiftKey)) return;
+    if ((e.target as Element).closest('[aria-expanded="true"]')) return; // an open list's own arrows
+    e.preventDefault();
+    void moveStep(s, i, e.key === 'ArrowUp' ? -1 : 1, (e.target as Element).closest('button') ?? undefined);
+  }
+  /** how a message goes: sends or replies, waiting for it or not, or lost on the way */
+  const ARROWS: [string, string][] = [
+    ['->>', '→  Sends'], ['-->>', '⇠  Replies'], ['-)', '→  Sends, no wait'], ['--)', '⇠  Replies, no wait'], ['-x', '→  Lost'], ['--x', '⇠  Lost reply'],
+  ];
+  const arrowOf = (m: Message) => m.arrow ?? (m.reply ? '-->>' : '->>');
+  // an arrow written some other way (->, <<->>) stays a choice as written
+  const seqArrows = (m: Message) => (ARROWS.some(([a]) => a === arrowOf(m)) ? ARROWS : [...ARROWS, [arrowOf(m), arrowOf(m)] as [string, string]]);
+  function setArrow(m: Message, v: string) {
+    m.reply = replies(v);
+    if (v === '->>' || v === '-->>') delete m.arrow; else m.arrow = v;
+  }
+  /** a message's activation bar: the receiver's starts (+), the sender's ends (-) */
+  const BARS: [string, string][] = [['', 'No bar'], ['+', 'Bar starts'], ['-', 'Bar ends']];
   // a participant with no name yet: said so, not its inner id ("p3")
   const peopleOptions = (s: Sequence) => s.people.map((p) => [p.id, p.name.trim() || '(no name)'] as const);
 
@@ -156,6 +225,26 @@
 
   // ---- timeline ----
   function addPeriod(t: Timeline) { t.periods.push({ label: '', events: [''] }); void focusLast('.t-period input.label'); }
+  /** a section: a stretch of periods under one name, from a new period on (they could not be grouped at all) */
+  function addSection(t: Timeline) {
+    const name = `Section ${t.periods.filter((p) => p.section !== undefined).length + 1}`;
+    // the first: around the periods there are (it came only with a new period, after them all); then from a new one
+    if (t.periods.length && t.periods[0].section === undefined) t.periods[0].section = name;
+    else t.periods.push({ label: '', events: [''], section: name });
+    void focusAt('.t-section input', t.periods[0].section === name ? 0 : t.periods.filter((p) => p.section !== undefined).length - 1);
+  }
+  /** a period one up or down: its date and events change places with the next one's, the sections staying where they
+   *  are (so past a section's start it goes into that section) */
+  function movePeriod(t: Timeline, i: number, by: -1 | 1) {
+    const a = t.periods[i], b = t.periods[i + by];
+    if (!b) return;
+    [a.label, b.label] = [b.label, a.label];
+    [a.events, b.events] = [b.events, a.events];
+  }
+
+  // ---- mind map shapes ----
+  const MIND_SHAPES: [MindShape, string][] = [['plain', 'Plain'], ['square', '▢ Square'], ['rounded', '▢ Rounded'], ['circle', '○ Circle'], ['bang', '✸ Bang'], ['cloud', '☁ Cloud'], ['hexagon', '⬡ Hexagon']];
+  const ROOT_SHAPES = MIND_SHAPES.filter(([k]) => k !== 'plain'); // the centre is always drawn in a shape
 
   // ---- gantt ----
   /** a start the note keeps: a whole date in a year people plan in. Typed with the keys, a date field reports every
@@ -172,7 +261,8 @@
     const others = g.sections.flatMap((s) => s.tasks).map((x, k) => [x, k] as const).filter(([x]) => x !== t);
     const opts: [string, string][] = [['date', 'On a date'], ['prev', 'After the one before'],
       ...others.map(([x, k]) => [x.id ? `after ${x.id}` : `task ${k}`, `After “${x.name.trim() || 'Task'}”`] as [string, string])];
-    if (!opts.some(([v]) => v === startOf(t))) opts.push([startOf(t), `After ${t.after}`]); // ids naming more than one, kept
+    // after more than one: their names
+    if (!opts.some(([v]) => v === startOf(t))) opts.push([startOf(t), `After ${t.after!.split(' ').map((id) => `“${taskName(g, id)}”`).join(' and ')}`]);
     return opts;
   }
   function setStart(g: Gantt, t: Task, v: string) {
@@ -184,7 +274,34 @@
     t.after = v.replace(/^after /, '');
     t.start = '';
   }
-  const TAG_OPTIONS: [string, string][] = [['', '—'], ['done', 'Done'], ['active', 'Active'], ['crit', 'Critical'], ['milestone', 'Milestone']];
+  /** a task's own name, or what it is said to start after */
+  const taskName = (g: Gantt, id: string) => g.sections.flatMap((s) => s.tasks).find((x) => x.id === id)?.name.trim() || id;
+  /** a task that starts when more than one ends: each picked in a choice of its own after the first */
+  function andAfterOptions(g: Gantt, t: Task) {
+    const has = new Set((t.after ?? '').split(' '));
+    const others = g.sections.flatMap((s) => s.tasks).map((x, k) => [x, k] as const).filter(([x]) => x !== t && !(x.id && has.has(x.id)));
+    return [['', '+ And after…'] as [string, string], ...others.map(([x, k]) => [x.id ?? `task ${k}`, `And “${x.name.trim() || 'Task'}”`] as [string, string])];
+  }
+  function addAfter(g: Gantt, t: Task, v: string) {
+    if (!v) return;
+    const all = g.sections.flatMap((s) => s.tasks);
+    const k = /^task (\d+)$/.exec(v);
+    if (k) { const x = all[+k[1]]; x.id ??= freshId('t', all.filter((y) => y.id).map((y) => ({ id: y.id! }))); v = x.id; }
+    t.after = `${t.after} ${v}`.trim();
+  }
+  // a critical task under way, or done, and a critical milestone: two at once, as mermaid allows
+  const TAG_OPTIONS: [string, string][] = [
+    ['', '—'], ['done', 'Done'], ['active', 'Active'], ['crit', 'Critical'], ['milestone', 'Milestone'],
+    ['active, crit', 'Active, critical'], ['done, crit', 'Done, critical'], ['crit, milestone', 'Critical milestone'],
+  ];
+  /** a milestone is a moment: 0 days, drawn as a diamond (at a day long it was a bar like any other) */
+  function setTags(t: Task, v: string) {
+    const was = t.tags?.includes('milestone');
+    if (v) t.tags = v.split(', '); else delete t.tags;
+    const is = !!t.tags?.includes('milestone');
+    if (is && !was) t.days = 0;
+    if (!is && t.days < 1) t.days = 1;
+  }
   const tagOptions = (t: Task) => (TAG_OPTIONS.some(([v]) => v === (t.tags ?? []).join(', ')) ? TAG_OPTIONS : [...TAG_OPTIONS, [(t.tags ?? []).join(', '), (t.tags ?? []).join(', ')] as [string, string]]);
 
   // ---- class, state and table diagrams ----
@@ -218,6 +335,26 @@
     const [a, b] = [c.classes[0]?.id, c.classes[1]?.id ?? c.classes[0]?.id];
     if (a && b) c.links.push({ from: a, to: b, arrow: '-->', label: '', fromCard: '', toCard: '' });
   }
+  /** how deep in states of states a state is drawn */
+  const stateDepth = (s: StateDiagram, st: StateBox) => { let n = 0; for (let p = stateParent(s, st); p; p = stateParent(s, s.states.find((x) => x.id === p)!)) n++; return n; };
+  const STATE_KINDS: [string, string][] = [['state', 'State'], ['choice', '◇ Choice'], ['fork', '▬ Fork'], ['join', '▬ Join']];
+  /** the states it can be put in: not itself, nor one inside it (it would hold itself), nor a choice or a bar */
+  function insideOptions(s: StateDiagram, st: StateBox) {
+    const under = (x: StateBox): boolean => { for (let p = stateParent(s, x); p; p = stateParent(s, s.states.find((y) => y.id === p)!)) if (p === st.id) return true; return false; };
+    return [['', 'Not inside one'] as [string, string], ...s.states.filter((x) => x !== st && !x.kind && !under(x)).map((x) => [x.id, `In “${x.name.trim() || x.id}”`] as [string, string])];
+  }
+  /** a state renamed: the states in it follow it, as its lines do */
+  function renameState(s: StateDiagram, st: StateBox, name: string) {
+    const was = st.id;
+    rename(s.states, s.links, st, name, NAME_ID);
+    if (st.id !== was) for (const x of s.states) if (x.parent === was) x.parent = st.id;
+  }
+  /** a state gone: those in it are left in what held it */
+  function dropState(s: StateDiagram, i: number) {
+    const st = s.states[i];
+    for (const x of s.states) if (x.parent === st.id) { if (st.parent) x.parent = st.parent; else delete x.parent; }
+    drop(s.states, s.links, i);
+  }
   function addState(s: StateDiagram) {
     const id = freshId('State', s.states);
     s.states.push({ id, name: id, desc: '' });
@@ -228,8 +365,19 @@
     const from = last && last.to !== '[*]' ? last.to : s.states[0]?.id ?? '[*]';
     s.links.push({ from, to: s.states.find((x) => x.id !== from)?.id ?? '[*]', label: '' });
   }
-  const starts = (s: StateDiagram) => [['[*]', '● Start'] as [string, string], ...options(s.states)];
-  const ends = (s: StateDiagram) => [['[*]', '◉ End'] as [string, string], ...options(s.states)];
+  /** the chart's start and end, and each state of states' own (`[*] in`): a choice inside one had no line into it */
+  const holders = (s: StateDiagram) => s.states.filter((x) => !x.kind && s.states.some((y) => stateParent(s, y) === x.id));
+  const starts = (s: StateDiagram) => [['[*]', '● Start'] as [string, string], ...holders(s).map((x) => [`[*] ${x.id}`, `● Start in “${x.name.trim() || x.id}”`] as [string, string]), ...options(s.states)];
+  const ends = (s: StateDiagram) => [['[*]', '◉ End'] as [string, string], ...holders(s).map((x) => [`[*] ${x.id}`, `◉ End in “${x.name.trim() || x.id}”`] as [string, string]), ...options(s.states)];
+  /** a line's end as its choice shows it: a start or end inside a state of states with that state's id */
+  const endValue = (l: StateLink, at: string) => (at === '[*]' && l.in ? `[*] ${l.in}` : at);
+  function setEnd(l: StateLink, side: 'from' | 'to', v: string) {
+    const inside = /^\[\*\] (.+)$/.exec(v);
+    l[side] = inside ? '[*]' : v;
+    if (inside) l.in = inside[1];
+    else if (l.from !== '[*]' && l.to !== '[*]') delete l.in;
+    else if (v === '[*]') delete l.in;
+  }
   const LEFT: [string, string][] = [['||', 'Exactly one'], ['|o', 'Zero or one'], ['}|', 'One or more'], ['}o', 'Zero or more']];
   const RIGHT: [string, string][] = [['||', 'Exactly one'], ['o|', 'Zero or one'], ['|{', 'One or more'], ['o{', 'Zero or more']];
   function addTable(e: ErDiagram) {
@@ -268,6 +416,31 @@
   </button>
 {/snippet}
 
+{#snippet trash(run: () => void, label: string)}
+  <!-- a row and all it holds: not a second × beside its first line's own (they looked the same, and did not do the same) -->
+  <button class="x" type="button" aria-label={label} title={label} onclick={(e) => removed(e.currentTarget, run)}>
+    <svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg>
+  </button>
+{/snippet}
+
+{#snippet updown(up: (() => void) | null, down: (() => void) | null)}
+  <button class="x" type="button" aria-label="Move up" title="Move up" disabled={!up} onclick={() => up?.()}><svg viewBox="0 0 16 16"><path d="M4.5 9.5 8 6l3.5 3.5" /></svg></button>
+  <button class="x" type="button" aria-label="Move down" title="Move down" disabled={!down} onclick={() => down?.()}><svg viewBox="0 0 16 16"><path d="M4.5 6.5 8 10l3.5-3.5" /></svg></button>
+{/snippet}
+
+{#snippet addSmall(run: () => void, label: string)}
+  <button class="add small" type="button" onclick={run}><svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" /></svg>{label}</button>
+{/snippet}
+
+{#snippet moves(s: Sequence, i: number)}
+  <button class="x mv" type="button" aria-label="Move up" title="Move up (⌥↑)" disabled={i === 0} onclick={(e) => moveStep(s, i, -1, e.currentTarget)}>
+    <svg viewBox="0 0 16 16"><path d="M4.5 9.5 8 6l3.5 3.5" /></svg>
+  </button>
+  <button class="x mv" type="button" aria-label="Move down" title="Move down (⌥↓)" disabled={i === s.messages.length - 1} onclick={(e) => moveStep(s, i, 1, e.currentTarget)}>
+    <svg viewBox="0 0 16 16"><path d="M4.5 6.5 8 10l3.5-3.5" /></svg>
+  </button>
+{/snippet}
+
 {#snippet add(run: () => void, label: string)}
   <button class="add" type="button" onclick={run}><svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" /></svg>{label}</button>
 {/snippet}
@@ -303,17 +476,26 @@
       </div>
       {#each seqD.messages as st, i (i)}
         <!-- a group's steps indented under it, as the drawing boxes them -->
-        <div class="row s-step" class:s-msg={isMessage(st)} style:padding-left={`${depthAt(seqD, i) * 18}px`}>
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <div class="row s-step" class:s-msg={isMessage(st)} role="group" style:padding-left={`${depthAt(seqD, i) * 18}px`} onkeydown={(e) => stepKey(e, seqD, i)}>
           {#if 'raw' in st}
             <input class="grow code" bind:value={st.raw} spellcheck="false" aria-label="Code kept as written" />
-            {@render remove(() => dropStep(seqD, i), 'Remove line')}
+            <span class="tools">{@render moves(seqD, i)}{@render remove(() => dropStep(seqD, i), 'Remove line')}</span>
           {:else if 'block' in st}
             {#if st.block === 'end'}
               <span class="end">end</span>
+              <!-- a row put in the group, above its end -->
+              {@render addSmall(() => addInside(seqD, i, 'message'), 'Message')}
+              {#if SPLIT_OF[openerOf(seqD, i) ?? 'end']}
+                {@const split = SPLIT_OF[openerOf(seqD, i) ?? 'end']!}
+                {@render addSmall(() => addInside(seqD, i, split), SPLITS.find(([k]) => k === split)![1])}
+              {/if}
+              {@render addSmall(() => addInside(seqD, i, 'group'), 'Group')}
+              <span class="tools">{@render moves(seqD, i)}</span>
             {:else}
               <Select label="Group" value={st.block} options={DIVIDERS.has(st.block) ? SPLITS : OPENERS} onchange={(v) => (st.block = v as BlockKind)} />
               <input class="grow" bind:value={st.text} placeholder={st.block === 'rect' ? 'Colour, rgb(…)' : 'Condition'} aria-label="Group" />
-              {@render remove(() => dropStep(seqD, i), 'Remove group')}
+              <span class="tools">{@render moves(seqD, i)}{@render remove(() => dropStep(seqD, i), 'Remove group')}</span>
             {/if}
           {:else if 'note' in st}
             <Select label="Where" value={st.note} options={[['right of', 'Note right of'], ['left of', 'Note left of'], ['over', 'Note over']]} onchange={(v) => (st.note = v as typeof st.note)} />
@@ -322,13 +504,14 @@
               <Select label="And" value={st.who[1] ?? ''} options={[['', '—'], ...peopleOptions(seqD)]} onchange={(v) => (st.who = v ? [st.who[0], v] : [st.who[0]])} />
             {/if}
             <input class="grow" bind:value={st.text} placeholder="Note" aria-label="Note" />
-            {@render remove(() => dropStep(seqD, i), 'Remove note')}
+            <span class="tools">{@render moves(seqD, i)}{@render remove(() => dropStep(seqD, i), 'Remove note')}</span>
           {:else}
             <Select label="From" value={st.from} options={peopleOptions(seqD)} onchange={(v) => (st.from = v)} />
-            <Select label="Sends or replies" value={st.reply ? 'reply' : 'send'} options={[['send', '→  Sends'], ['reply', '⇠  Replies']]} onchange={(v) => (st.reply = v === 'reply')} />
+            <Select label="Sends or replies" value={arrowOf(st)} options={seqArrows(st)} onchange={(v) => setArrow(st, v)} />
             <Select label="To" value={st.to} options={peopleOptions(seqD)} onchange={(v) => (st.to = v)} />
+            <Select label="Activation" value={st.act ?? ''} options={BARS} onchange={(v) => { if (v) st.act = v as '+' | '-'; else delete st.act; }} />
             <input class="grow" bind:value={st.text} placeholder="Message" aria-label="Message" onkeydown={(e) => rowEnter(e, '.s-msg input.grow', () => addMessage(seqD))} />
-            {@render remove(() => dropStep(seqD, i), 'Remove message')}
+            <span class="tools">{@render moves(seqD, i)}{@render remove(() => dropStep(seqD, i), 'Remove message')}</span>
           {/if}
         </div>
       {/each}
@@ -364,7 +547,10 @@
   {:else if mind}
     <div class="section">
       <div class="head">Centre</div>
-      <input bind:value={mind.root} placeholder="The main idea" aria-label="Centre" />
+      <div class="row">
+        <input class="grow" bind:value={mind.root} placeholder="The main idea" aria-label="Centre" />
+        <Select label="Centre shape" value={mind.rootShape ?? 'circle'} options={ROOT_SHAPES} onchange={(v) => { if (v === 'circle') delete mind.rootShape; else mind.rootShape = v as MindShape; }} />
+      </div>
     </div>
     <div class="section">
       <div class="head">Branches <span class="tip">{isMobile ? '' : '↩ new · ⇥ deeper · ⇧⇥ back'}</span></div>
@@ -373,13 +559,16 @@
         <div class="row m-item" style:padding-left={`${(b.depth - 1) * 22}px`}>
           <span class="bullet" style:background={b.depth === 1 ? branchColor(mind.items.slice(0, i + 1).filter((x) => x.depth === 1).length - 1) : 'var(--fg-dim)'}></span>
           <input class="grow" bind:value={b.text} placeholder="Idea" aria-label="Branch" onkeydown={(e) => branchKey(e, mind, i)} />
-          <button class="x" type="button" aria-label="Back a level" title="Back a level" disabled={b.depth <= 1} onclick={() => indent(mind, i, -1)}>
+          <Select label="Shape" value={b.shape ?? 'plain'} options={MIND_SHAPES} onchange={(v) => { if (v === 'plain') delete b.shape; else b.shape = v as MindShape; }} />
+<span class="tools">
+                    <button class="x" type="button" aria-label="Back a level" title="Back a level" disabled={b.depth <= 1} onclick={() => indent(mind, i, -1)}>
             <svg viewBox="0 0 16 16"><path d="M9.5 4.5 6 8l3.5 3.5" /></svg>
           </button>
           <button class="x" type="button" aria-label="Deeper" title="Deeper" disabled={!deeper(mind, i)} onclick={() => indent(mind, i, 1)}>
             <svg viewBox="0 0 16 16"><path d="M6.5 4.5 10 8l-3.5 3.5" /></svg>
           </button>
           {@render remove(() => dropBranch(mind, i), 'Remove branch')}
+          </span>
         </div>
       {/each}
       {@render add(() => addBranch(mind), 'Add branch')}
@@ -392,7 +581,13 @@
     <div class="section">
       <div class="head">When · what</div>
       {#each time.periods as p, i (i)}
-        <div class="row t-period top" data-i={i}>
+        {#if p.section !== undefined}
+          <div class="row t-section">
+            <input class="grow phase" bind:value={p.section} placeholder="Section" aria-label="Section" />
+            {@render remove(() => { delete p.section; }, 'Remove section')}
+          </div>
+        {/if}
+        <div class="row t-period top" data-i={i} class:in-section={time.periods.slice(0, i + 1).some((x) => x.section !== undefined)}>
           <input class="label when" bind:value={p.label} placeholder="2026" aria-label="When" onkeydown={(e) => { if (e.key === 'Enter' && !composing(e)) { e.preventDefault(); void focusAt(`.t-period[data-i="${i}"] .events input`, 0); } }} />
           <div class="events grow">
             {#each p.events as _, j (j)}
@@ -406,15 +601,25 @@
               <svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" /></svg>Event
             </button>
           </div>
-          {@render remove(() => time.periods.splice(i, 1), 'Remove period')}
+          <span class="tools">
+            {@render updown(i > 0 ? () => movePeriod(time, i, -1) : null, i < time.periods.length - 1 ? () => movePeriod(time, i, 1) : null)}
+            {@render trash(() => time.periods.splice(i, 1), 'Remove period')}
+          </span>
         </div>
       {/each}
-      {@render add(() => addPeriod(time), 'Add period')}
+      <div class="adds">
+        {@render add(() => addPeriod(time), 'Add period')}
+        {@render add(() => addSection(time), 'Section')}
+      </div>
     </div>
   {:else if gantt}
     <div class="section">
       <div class="head">Title</div>
       <input bind:value={gantt.title} placeholder="Optional" aria-label="Title" />
+      <div class="settings">
+        <label class="check"><input type="checkbox" checked={!!gantt.skipWeekends} onchange={(e) => { if (e.currentTarget.checked) gantt.skipWeekends = true; else delete gantt.skipWeekends; }} />Skip weekends</label>
+        <label class="check"><input type="checkbox" checked={!gantt.noToday} onchange={(e) => { if (e.currentTarget.checked) delete gantt.noToday; else gantt.noToday = true; }} />Today line</label>
+      </div>
     </div>
     {#each gantt.sections as s, i (i)}
       <div class="section g-phase" data-i={i}>
@@ -429,8 +634,11 @@
             {#if t.after === undefined}
               <input class="date" type="date" value={t.start} aria-label="Starts" oninput={(e) => { const v = e.currentTarget.value; if (plausible(v)) t.start = v; }} onblur={(e) => (e.currentTarget.value = t.start)} />
             {/if}
-            <Select label="Status" value={(t.tags ?? []).join(', ')} options={tagOptions(t)} onchange={(v) => { if (v) t.tags = v.split(', '); else delete t.tags; }} />
-            <span class="days"><input class="num" type="number" min="1" max="3650" step="1" inputmode="numeric" value={t.days} aria-label="Days" oninput={(e) => { const n = Math.round(+e.currentTarget.value); if (n >= 1) t.days = Math.min(n, 3650); }} onblur={(e) => (e.currentTarget.value = String(t.days))} />d</span>
+            {#if t.after}
+              <Select label="And after" value="" options={andAfterOptions(gantt, t)} onchange={(v) => addAfter(gantt, t, v)} />
+            {/if}
+            <Select label="Status" value={(t.tags ?? []).join(', ')} options={tagOptions(t)} onchange={(v) => setTags(t, v)} />
+            <span class="days"><input class="num" type="number" min={t.tags?.includes('milestone') ? 0 : 1} max="3650" step="1" inputmode="numeric" value={t.days} aria-label="Days" oninput={(e) => { const n = Math.round(+e.currentTarget.value); if (n >= (t.tags?.includes('milestone') ? 0 : 1)) t.days = Math.min(n, 3650); }} onblur={(e) => (e.currentTarget.value = String(t.days))} />d</span>
             {@render remove(() => s.tasks.splice(j, 1), 'Remove task')}
           </div>
         {/each}
@@ -472,10 +680,15 @@
     <div class="section">
       <div class="head">States</div>
       {#each state.states as st, i (i)}
-        <div class="row st-state">
-          <input class="name" value={st.name} oninput={(e) => rename(state.states, state.links, st, e.currentTarget.value, NAME_ID)} placeholder="State" aria-label="State name" />
-          <input class="grow" bind:value={st.desc} placeholder="What it means (optional)" aria-label="Description" />
-          {@render remove(() => drop(state.states, state.links, i), 'Remove state')}
+        <!-- a state inside another indented under it, as the drawing boxes it -->
+        <div class="row st-state" style:padding-left={`${stateDepth(state, st) * 18}px`}>
+          <input class="name" value={st.name} oninput={(e) => renameState(state, st, e.currentTarget.value)} placeholder="State" aria-label="State name" />
+          {#if !st.kind && !state.states.some((x) => stateParent(state, x) === st.id)}<input class="grow" bind:value={st.desc} placeholder="Description" aria-label="Description" />{/if}
+          <Select label="Kind" value={st.kind ?? 'state'} options={STATE_KINDS} onchange={(v) => { if (v === 'state') delete st.kind; else st.kind = v as 'choice'; }} />
+          <Select label="Inside" value={stateParent(state, st) ?? ''} options={insideOptions(state, st)} onchange={(v) => { if (v) st.parent = v; else delete st.parent; }} />
+          <input class="grow" value={st.note?.text ?? ''} placeholder="Note" aria-label="Note"
+            oninput={(e) => { const text = e.currentTarget.value; if (text) st.note = { side: st.note?.side ?? 'right', text }; else delete st.note; }} />
+          {@render remove(() => dropState(state, i), 'Remove state')}
         </div>
       {/each}
       {@render add(() => addState(state), 'Add state')}
@@ -484,9 +697,9 @@
       <div class="head">Transitions</div>
       {#each state.links as l, i (i)}
         <div class="row st-link">
-          <Select label="From" value={l.from} options={starts(state)} onchange={(v) => (l.from = v)} />
+          <Select label="From" value={endValue(l, l.from)} options={starts(state)} onchange={(v) => setEnd(l, 'from', v)} />
           <span class="arrow">→</span>
-          <Select label="To" value={l.to} options={ends(state)} onchange={(v) => (l.to = v)} />
+          <Select label="To" value={endValue(l, l.to)} options={ends(state)} onchange={(v) => setEnd(l, 'to', v)} />
           <input class="grow" bind:value={l.label} placeholder="When" aria-label="When" />
           {@render remove(() => state.links.splice(i, 1), 'Remove transition')}
         </div>
@@ -504,7 +717,7 @@
           <div class="row e-col">
             <input class="type code" bind:value={c.type} placeholder="type" aria-label="Type" spellcheck="false" />
             <input class="grow" bind:value={c.name} placeholder="column" aria-label="Column" spellcheck="false" />
-            <input class="keys" bind:value={c.keys} placeholder="PK, FK" aria-label="Keys" spellcheck="false" />
+            <input class="pkfk" bind:value={c.keys} placeholder="PK, FK" aria-label="Keys" spellcheck="false" />
             <input class="grow" bind:value={c.comment} placeholder="Comment" aria-label="Comment" />
             {@render remove(() => t.columns.splice(j, 1), 'Remove column')}
           </div>
@@ -540,10 +753,12 @@
   .head { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--fg-dim); }
   .head .check { margin-left: auto; }
   .tip { margin-left: auto; font-weight: 400; opacity: 0.8; }
-  .row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  /* a row too full goes on to a second line: its choices cut to a few letters (Composit…, After the one be…) could
+     not be read */
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
   .row.top { align-items: flex-start; }
-  .row :global(.select) { flex: none; max-width: 150px; }
-  .grow { flex: 1; min-width: 0; }
+  .row :global(.select) { flex: none; max-width: 100%; }
+  .grow { flex: 1 1 120px; min-width: 0; }
   input:not([type='checkbox']) {
     box-sizing: border-box; font: inherit; font-size: 13px; padding: 6px 9px; border-radius: 8px;
     border: 0; background: var(--bg-input); color: var(--fg); outline: none; min-width: 0;
@@ -559,6 +774,13 @@
   .events { display: flex; flex-direction: column; }
   .phase { font-weight: 600; }
   .g-phase .g-task { padding-left: 14px; }
+  .t-period.in-section { padding-left: 14px; }
+  /* a row's buttons kept together at its end: wrapped one by one, a ▼ or a × sat alone on a line of its own, an
+     event's × between two events */
+  .tools { display: inline-flex; flex: none; align-items: center; gap: 2px; margin-left: auto; }
+  .events .row, .t-period { flex-wrap: nowrap; } /* a period's buttons by its date, not under its events, over the next section */
+  .row > .x:last-child { margin-left: auto; } /* a row's × wrapped alone: at its end, not under its first field */
+  .settings { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
   .g-phase > :global(.add) { margin-left: 14px; }
   .swatch, .bullet { flex: none; width: 10px; height: 10px; border-radius: 50%; }
   .bullet { width: 7px; height: 7px; margin: 0 2px; }
@@ -571,6 +793,10 @@
   textarea:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   input.code, textarea.code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; }
   .adds { display: flex; flex-wrap: wrap; gap: 2px; }
+  /* a row's ↑↓ while it is the one being worked on: on every row, they crowded out its words */
+  .s-step .mv { display: none; }
+  .s-step:focus-within .mv, :global(html.mobile) .s-step .mv { display: inline-flex; }
+  @media (hover: hover) { .s-step:hover .mv { display: inline-flex; } }
   .end { flex: 1; padding: 4px 9px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; color: var(--fg-dim); }
   .name { font-weight: 600; }
   .st-state .name { width: 160px; flex: none; }
@@ -581,7 +807,8 @@
   .e-table .e-col { padding-left: 14px; }
   .e-table > :global(.add) { margin-left: 14px; }
   .type { width: 90px; }
-  .keys { width: 70px; }
+  /* not .keys: a phone hides every .keys, the shortcuts shown beside a menu's items (app.css) */
+  .pkfk { width: 70px; }
 
 
   .x {
@@ -602,6 +829,11 @@
   }
   :global(html.mobile) .s-step .grow, :global(html.mobile) .c-link .grow, :global(html.mobile) .e-link .grow, :global(html.mobile) .st-link .grow { flex: 1 1 70%; }
   :global(html.mobile) .st-state .name { width: 40%; }
+  /* a period on a phone: its date and its buttons on a line, its events the whole width under them (beside them, an
+     event's box was two letters wide) */
+  :global(html.mobile) .t-period { flex-wrap: wrap; }
+  :global(html.mobile) .t-period .when { flex: 1 1 auto; }
+  :global(html.mobile) .t-period .events { flex: 1 1 100%; order: 3; }
 
   /* a task: its name a line of its own, its start and length under it (four in a row left the name a few letters) */
   :global(html.mobile) .g-task { flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }

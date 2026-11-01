@@ -53,10 +53,14 @@ export interface Sequence { kind: 'sequence'; people: Person[]; messages: Step[]
 export interface Slice { label: string; value: number }
 export interface Pie { kind: 'pie'; title: string; slices: Slice[]; showData: boolean }
 
-export interface Branch { text: string; depth: number } // depth 1: under the centre
-export interface Mindmap { kind: 'mindmap'; root: string; items: Branch[] }
+/** how mermaid draws an idea: plain words, a square, rounded, a circle, a bang, a cloud, a hexagon */
+export type MindShape = 'plain' | 'square' | 'rounded' | 'circle' | 'bang' | 'cloud' | 'hexagon';
+export interface Branch { text: string; depth: number; shape?: MindShape } // depth 1: under the centre
+/** `rootShape`: the centre's, a circle when not said */
+export interface Mindmap { kind: 'mindmap'; root: string; items: Branch[]; rootShape?: MindShape }
 
-export interface Period { label: string; events: string[] }
+/** `section`: a period that starts a section (a stretch of periods under one name) carries the section's name */
+export interface Period { label: string; events: string[]; section?: string }
 export interface Timeline { kind: 'timeline'; title: string; periods: Period[] }
 
 export interface Task {
@@ -68,7 +72,8 @@ export interface Task {
 }
 export interface Phase { name: string; tasks: Task[] }
 /** `extra`: settings the forms do not show (excludes, todayMarker, an axis format…), kept as written */
-export interface Gantt { kind: 'gantt'; title: string; sections: Phase[]; extra?: string[] }
+/** `skipWeekends`, `noToday`: the two settings the rows show as boxes to tick (excludes weekends, todayMarker off) */
+export interface Gantt { kind: 'gantt'; title: string; sections: Phase[]; extra?: string[]; skipWeekends?: true; noToday?: true }
 
 export type Dir = 'TB' | 'BT' | 'LR' | 'RL';
 /** a class diagram: `members` as written ("+String name", "+run() bool", "<<interface>>") */
@@ -79,8 +84,14 @@ export interface ClassLink { from: string; to: string; arrow: string; label: str
 export interface ClassDiagram { kind: 'class'; dir?: Dir; classes: ClassBox[]; links: ClassLink[]; extra?: string[] }
 
 /** a state diagram: `[*]` is where it starts (as a from) and ends (as a to) */
-export interface StateBox { id: string; name: string; desc: string; decl?: true }
-export interface StateLink { from: string; to: string; label: string }
+/** `kind`: a choice (◇), a fork or a join (a bar) instead of a state; `parent`: the state of states it is drawn in;
+ *  `note`: a note beside it */
+export interface StateBox {
+  id: string; name: string; desc: string; decl?: true;
+  kind?: 'choice' | 'fork' | 'join'; parent?: string; note?: { side: 'left' | 'right'; text: string };
+}
+/** `in`: the state of states a start or an end ([*]) is written in: that state's own start or end, not the chart's */
+export interface StateLink { from: string; to: string; label: string; in?: string }
 export interface StateDiagram { kind: 'state'; v2: boolean; dir?: Dir; states: StateBox[]; links: StateLink[]; extra?: string[] }
 
 /** database tables (erDiagram): a column's `keys` as written ("PK", "PK, FK") */
@@ -377,7 +388,7 @@ const NOTE = new RegExp(String.raw`^note\s+(over|left of|right of)\s+(${SID})(?:
 const BLOCK = /^(loop|alt|else|opt|par|and|critical|option|break|rect)\b\s*(.*)$/;
 const OPENS_BLOCK = new Set(['loop', 'alt', 'opt', 'par', 'critical', 'break', 'rect']);
 /** an arrow replies when it is dashed (-->>, --x, --)) */
-const replies = (arrow: string) => arrow.replace(/^<</, '').startsWith('--');
+export const replies = (arrow: string) => arrow.replace(/^<</, '').startsWith('--');
 // a name can hold what a participant line could not (`as`, spaces): it is written with an id and an alias
 function seqCode(d: Sequence) {
   const lines = ['sequenceDiagram'];
@@ -470,31 +481,49 @@ function pieRead(lines: string[], head: string): Pie | null {
 // ---- mind map ----
 // brackets in a branch's text ((, [, {) would give it a shape: written as entity codes
 const branch = (s: string) => ent(s, '()[]{}#');
-function mindCode(d: Mindmap) {
-  const lines = ['mindmap', `  root((${ent(one(d.root) || 'Idea', '()[]{}#')}))`];
-  let depth = 0;
-  for (const b of d.items) {
-    const text = one(b.text);
-    if (!text) continue;
-    depth = Math.max(1, Math.min(b.depth, depth + 1)); // one step deeper than the branch above it, at most
-    lines.push(`${'  '.repeat(depth + 1)}${branch(text)}`);
+/** each shape's brackets, the longest first: (( before ( */
+const MIND_BRACKETS: [MindShape, string, string][] = [
+  ['circle', '((', '))'], ['bang', '))', '(('], ['hexagon', '{{', '}}'], ['square', '[', ']'], ['rounded', '(', ')'], ['cloud', ')', '('],
+];
+const shaped = (shape: MindShape | undefined, id: string, text: string) => {
+  const b = MIND_BRACKETS.find(([s]) => s === shape);
+  return b ? `${id}${b[1]}${branch(text)}${b[2]}` : branch(text);
+};
+/** an idea as written: its shape from its brackets (an id before them, as mermaid writes them, dropped) */
+function readIdea(text: string): { text: string; shape: MindShape } | null {
+  for (const [shape, open, close] of MIND_BRACKETS) {
+    const m = new RegExp(String.raw`^[\p{L}\p{N}_-]*${open.replace(/./g, '\\$&')}(.*)${close.replace(/./g, '\\$&')}$`, 'u').exec(text);
+    if (m && !/[()[\]{}]/.test(m[1])) return { text: unent(m[1]), shape };
   }
+  return /[()[\]{}]/.test(text) ? null : { text: unent(text), shape: 'plain' };
+}
+function mindCode(d: Mindmap) {
+  const lines = ['mindmap', `  ${shaped(d.rootShape === 'plain' ? 'rounded' : d.rootShape ?? 'circle', 'root', one(d.root) || 'Idea')}`];
+  let depth = 0;
+  d.items.forEach((b, i) => {
+    const text = one(b.text);
+    if (!text) return;
+    depth = Math.max(1, Math.min(b.depth, depth + 1)); // one step deeper than the branch above it, at most
+    lines.push(`${'  '.repeat(depth + 1)}${shaped(b.shape, `b${i}`, text)}`);
+  });
   return lines.join('\n');
 }
 function mindRead(lines: string[]): Mindmap | null {
   const [first, ...rest] = lines;
-  const r = first && /^(\s*)root\(\((.*)\)\)$/.exec(first);
-  if (!r) return null;
+  const r = first && /^(\s*)root(.*)$/.exec(first);
+  const root = r && readIdea(`root${r[2]}`);
+  if (!r || !root || root.shape === 'plain') return null;
   const base = r[1].length;
-  const d: Mindmap = { kind: 'mindmap', root: unent(r[2]), items: [] };
+  const d: Mindmap = { kind: 'mindmap', root: root.text, items: [] };
+  if (root.shape !== 'circle') d.rootShape = root.shape;
   const indents: number[] = [base];
   for (const raw of rest) {
     const ind = raw.length - raw.trimStart().length;
-    const text = raw.trim();
-    if (ind <= base || /[()[\]{}]/.test(text) || text.startsWith('::')) return null; // a shape, a second root, a class or an icon
+    const idea = readIdea(raw.trim());
+    if (ind <= base || !idea || raw.trim().startsWith('::')) return null; // a second root, a class or an icon
     while (indents.length > 1 && ind <= indents[indents.length - 1]) indents.pop();
     indents.push(ind);
-    d.items.push({ text: unent(text), depth: indents.length - 1 });
+    d.items.push(idea.shape === 'plain' ? { text: idea.text, depth: indents.length - 1 } : { text: idea.text, depth: indents.length - 1, shape: idea.shape });
   }
   return d;
 }
@@ -504,6 +533,7 @@ function timeCode(d: Timeline) {
   const lines = ['timeline'];
   if (one(d.title)) lines.push(`  title ${ent(one(d.title), ':#')}`);
   for (const p of d.periods) {
+    if (p.section !== undefined) lines.push(`  section ${ent(one(p.section) || 'Section', ':#')}`);
     const events = p.events.map(one).filter(Boolean).map((e) => ent(e, ':#'));
     lines.push(`  ${unkeyword(ent(one(p.label) || '…', ':#'))}${events.map((e) => ` : ${e}`).join('')}`);
   }
@@ -511,15 +541,18 @@ function timeCode(d: Timeline) {
 }
 function timeRead(lines: string[]): Timeline | null {
   const d: Timeline = { kind: 'timeline', title: '', periods: [] };
+  let section: string | undefined; // the name of the section the next period starts
   for (const raw of lines) {
     const line = raw.trim();
     const t = /^title\s+(.*)$/i.exec(line);
     if (t) { d.title = unent(t[1].trim()); continue; }
-    if (/^section\s/i.test(line)) return null;
+    const sec = /^section\s+(.*)$/i.exec(line);
+    if (sec) { section = unent(sec[1].trim()); continue; }
     // events part at a colon with a space after it (or the line's end): "10:30" and a URL's "https:" stay whole
     const [label, ...events] = line.split(/\s*:(?:\s+|$)/).map((s) => unent(s.trim()));
     if (!label) { const last = d.periods[d.periods.length - 1]; if (!last) return null; last.events.push(...events); continue; }
-    d.periods.push({ label, events });
+    d.periods.push(section === undefined ? { label, events } : { label, events, section });
+    section = undefined;
   }
   return d;
 }
@@ -556,6 +589,8 @@ function ganttCode(d: Gantt) {
     if (span > 120) lines.push('  axisFormat %Y-%m');
   }
   if (one(d.title)) lines.push(`  title ${ent(one(d.title), '#;')}`);
+  if (d.skipWeekends) lines.push('  excludes weekends');
+  if (d.noToday) lines.push('  todayMarker off');
   for (const x of d.extra ?? []) lines.push(`  ${x}`);
   for (const s of d.sections) {
     lines.push(`  section ${ent(one(s.name) || 'Tasks', '#;')}`);
@@ -580,6 +615,8 @@ function ganttRead(lines: string[]): Gantt | null {
     const line = raw.trim();
     if (line === 'dateFormat YYYY-MM-DD' || /^tickInterval 1(day|week|month)$/.test(line) || line === 'axisFormat %Y-%m') continue; // written anew
     if (/^dateFormat\b/i.test(line)) return null; // its dates in another form: the date fields would misread them
+    if (/^excludes\s+weekends$/i.test(line)) { d.skipWeekends = true; continue; }
+    if (/^todayMarker\s+off$/i.test(line)) { d.noToday = true; continue; }
     if (GANTT_KEPT.test(line)) { (d.extra ??= []).push(line); continue; }
     const t = /^title\s+(.*)$/i.exec(line);
     if (t) { d.title = unent(t[1].trim()); continue; }
@@ -710,16 +747,51 @@ const STATE_NAMED = new RegExp(String.raw`^state\s+"([^"]*)"\s+as\s+(${STATE_ID}
 const STATE_BARE = new RegExp(String.raw`^state\s+(${STATE_ID})$`, 'u');
 const STATE_LINK = new RegExp(String.raw`^(${STATE_END})\s*-->\s*(${STATE_END})\s*(?::\s*(.*))?$`, 'u');
 const STATE_DESC = new RegExp(String.raw`^(${STATE_ID})\s*:\s*(.+)$`, 'u');
+const STATE_KIND = new RegExp(String.raw`^state\s+(${STATE_ID})\s+<<(choice|fork|join)>>$`, 'u');
+const STATE_INSIDE = new RegExp(String.raw`^state\s+(${STATE_ID})\s*\{$`, 'u');
+const STATE_NOTE = new RegExp(String.raw`^note\s+(left|right)\s+of\s+(${STATE_ID})\s*:\s*(.+)$`, 'iu');
+/** the state of states a state is in: none when it names no state, or one inside the state itself */
+export function stateParent(d: StateDiagram, st: StateBox): string | undefined {
+  const seen = new Set([st.id]);
+  for (let p = st.parent; p; p = d.states.find((x) => x.id === p)?.parent) {
+    if (seen.has(p) || !d.states.some((x) => x.id === p)) return undefined;
+    seen.add(p);
+  }
+  return st.parent;
+}
 function stateCode(d: StateDiagram) {
   const lines = [d.v2 ? 'stateDiagram-v2' : 'stateDiagram'];
   if (d.dir) lines.push(`  direction ${d.dir}`);
-  for (const st of d.states) {
-    if (one(st.name) && one(st.name) !== st.id) lines.push(`  state "${one(st.name).replace(/"/g, "'")}" as ${st.id}`);
-    else if (st.decl) lines.push(`  state ${st.id}`);
-    for (const x of st.desc.split('\n').map(one).filter(Boolean)) lines.push(`  ${st.id} : ${x}`);
-  }
   const ids = new Set(['[*]', ...d.states.map((x) => x.id)]);
-  for (const l of d.links) if (ids.has(l.from) && ids.has(l.to)) lines.push(`  ${l.from} --> ${l.to}${one(l.label) ? ` : ${one(l.label)}` : ''}`);
+  const parentOf = (id: string) => { const st = d.states.find((x) => x.id === id); return st && stateParent(d, st); };
+  // a line is written inside the state its ends are both in; a start or an end ([*]) is that of where its other end is
+  const home = (l: StateLink) => {
+    // a start or an end: in the state it was in while its other end still is; else the chart's (a state put inside
+    // another kept the chart's start; one taken out of it, its line with it)
+    if (l.from === '[*]' || l.to === '[*]') return l.in && parentOf(l.from === '[*]' ? l.to : l.from) === l.in ? l.in : undefined;
+    const a = parentOf(l.from);
+    return a === parentOf(l.to) ? a : undefined;
+  };
+  const write = (parent: string | undefined, pad: string) => {
+    for (const st of d.states.filter((x) => stateParent(d, x) === parent)) {
+      const kids = !st.kind && d.states.some((x) => stateParent(d, x) === st.id);
+      // a description is drawn in place of the state's name unless the name is declared too (a state of states draws
+      // neither: mermaid fails on one with a description)
+      const desc = st.kind || kids ? [] : st.desc.split('\n').map(one).filter(Boolean);
+      if (st.kind) lines.push(`${pad}state ${st.id} <<${st.kind}>>`);
+      else if (one(st.name) && (one(st.name) !== st.id || desc.length)) lines.push(`${pad}state "${one(st.name).replace(/"/g, "'")}" as ${st.id}`);
+      else if (st.decl) lines.push(`${pad}state ${st.id}`);
+      for (const x of desc) lines.push(`${pad}${st.id} : ${x}`);
+      if (kids) {
+        lines.push(`${pad}state ${st.id} {`);
+        write(st.id, `${pad}  `);
+        lines.push(`${pad}}`);
+      }
+      if (st.note && one(st.note.text)) lines.push(`${pad}note ${st.note.side} of ${st.id} : ${one(st.note.text)}`);
+    }
+    for (const l of d.links) if (home(l) === parent && ids.has(l.from) && ids.has(l.to)) lines.push(`${pad}${l.from} --> ${l.to}${one(l.label) ? ` : ${one(l.label)}` : ''}`);
+  };
+  write(undefined, '  ');
   for (const x of d.extra ?? []) lines.push(kept(x));
   return lines.join('\n');
 }
@@ -731,34 +803,60 @@ function stateRead(lines: string[], v2: boolean): StateDiagram | null {
     return st;
   };
   const all = lines.map((l) => l.trim());
-  for (let i = 0; i < all.length; i++) {
-    const line = all[i];
-    const dir = DIRECTION.exec(line);
-    if (dir) { d.dir = dir[1] as Dir; continue; }
-    const named = STATE_NAMED.exec(line);
-    if (named) { box(named[2]).name = named[1]; continue; }
-    const bare = STATE_BARE.exec(line);
-    if (bare) { box(bare[1]).decl = true; continue; }
-    const l = STATE_LINK.exec(line);
-    if (l) {
-      for (const id of [l[1], l[2]]) if (id !== '[*]') box(id);
-      d.links.push({ from: l[1], to: l[2], label: l[3]?.trim() ?? '' });
-      continue;
+  // what a state of states holds, each line one the rows show (anything else, a -- between parts at once, and the whole
+  // of it is kept as written)
+  const rowsOnly = (from: number, to: number) => all.slice(from, to).every((x) => !x || x === '}' || STATE_NAMED.test(x) || STATE_BARE.test(x)
+    || STATE_KIND.test(x) || STATE_INSIDE.test(x) || STATE_LINK.test(x) || STATE_DESC.test(x) || STATE_NOTE.test(x));
+  const read = (from: number, to: number, parent: string | undefined): boolean => {
+    const within = (st: StateBox) => { if (parent && st.parent === undefined && st.id !== parent) st.parent = parent; return st; };
+    for (let i = from; i < to; i++) {
+      const line = all[i];
+      if (!line) continue;
+      const dir = DIRECTION.exec(line);
+      if (dir && !parent) { d.dir = dir[1] as Dir; continue; }
+      const kind = STATE_KIND.exec(line);
+      if (kind) { within(box(kind[1])).kind = kind[2] as 'choice'; continue; }
+      const named = STATE_NAMED.exec(line);
+      if (named) { within(box(named[2])).name = named[1]; continue; }
+      const bare = STATE_BARE.exec(line);
+      if (bare) { within(box(bare[1])).decl = true; continue; }
+      const l = STATE_LINK.exec(line);
+      if (l) {
+        for (const id of [l[1], l[2]]) if (id !== '[*]') within(box(id));
+        const link: StateLink = { from: l[1], to: l[2], label: l[3]?.trim() ?? '' };
+        if (parent && (l[1] === '[*]' || l[2] === '[*]')) link.in = parent;
+        d.links.push(link);
+        continue;
+      }
+      const note = STATE_NOTE.exec(line);
+      if (note) { within(box(note[2])).note = { side: note[1].toLowerCase() as 'left', text: note[3].trim() }; continue; }
+      const desc = STATE_DESC.exec(line);
+      if (desc) { const st = within(box(desc[1])); st.desc = st.desc ? `${st.desc}\n${desc[2].trim()}` : desc[2].trim(); continue; }
+      const inside = STATE_INSIDE.exec(line);
+      const end = line.endsWith('{') ? blockEnd(all, i) : -1;
+      // a state of states: its states and lines rows of their own, in it
+      if (inside && rowsOnly(i + 1, end) && !d.states.some((x) => x.parent === inside[1])) {
+        within(box(inside[1]));
+        if (!read(i + 1, end, inside[1])) return false;
+        i = end;
+        continue;
+      }
+      if (parent) return false; // only the rows' lines inside one (rowsOnly said so)
+      // a note over lines of its own, or a state of states the rows cannot show: kept whole
+      if (end >= 0) { (d.extra ??= []).push(block(lines, i, end)); i = end; continue; }
+      if (/^note\s+(left|right)\s+of\s+\S+$/i.test(line)) {
+        const close = all.findIndex((x, j) => j > i && /^end\s+note$/i.test(x));
+        if (close < 0) return false;
+        (d.extra ??= []).push(block(lines, i, close));
+        i = close;
+        continue;
+      }
+      (d.extra ??= []).push(line);
     }
-    const desc = STATE_DESC.exec(line);
-    if (desc) { const st = box(desc[1]); st.desc = st.desc ? `${st.desc}\n${desc[2].trim()}` : desc[2].trim(); continue; }
-    // a state of states, or a note over lines of its own: kept whole
-    if (line.endsWith('{')) { const end = blockEnd(all, i); (d.extra ??= []).push(block(lines, i, end)); i = end; continue; }
-    if (/^note\s+(left|right)\s+of\s+\S+$/i.test(line)) {
-      const end = all.findIndex((x, j) => j > i && /^end\s+note$/i.test(x));
-      if (end < 0) return null;
-      (d.extra ??= []).push(block(lines, i, end));
-      i = end;
-      continue;
-    }
-    (d.extra ??= []).push(line);
-  }
-  for (const st of d.states) if (st.decl && st.name !== st.id) delete st.decl;
+    return true;
+  };
+  if (!read(0, all.length, undefined)) return null;
+  for (const st of d.states) if (st.decl && (st.name !== st.id || d.states.some((x) => x.parent === st.id))) delete st.decl;
   return d;
 }
 

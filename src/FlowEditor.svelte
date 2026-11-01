@@ -53,6 +53,11 @@
   /** "Connect" pressed on this box: the next box tapped gets a line from it (a phone's way to join two boxes, where
    *  dragging the + is fiddly and the + of a box being typed in was not there at all) */
   let linking = $state<string | null>(null);
+  /** a line whose end is being moved: the next box tapped is where it goes (it had to be deleted and drawn again, its
+   *  label and look with it) */
+  let moveEnd = $state<number | null>(null);
+  /** the box a line is being drawn from, or moved away from: the others are rung to be picked */
+  const picking = $derived(linking ?? (moveEnd !== null ? flow.edges[moveEnd]?.from ?? null : null));
   /** a phone's bar showing the shapes in place of its other buttons */
   let shapesOpen = $state(false);
   $effect(() => { void selId; shapesOpen = false; }); // another box picked: its bar starts over
@@ -63,6 +68,7 @@
   $effect(() => { if (sel && !editing && !laneEditing) untrack(releaseKeys); });
 
   const nodeIdOf = (g: Element) => /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null;
+  let linePts: { x: number; y: number; from: string; to: string }[] = [];
   const boxOf = (id: string | null) => boxes.find((b) => b.id === id) ?? null;
   /** the lines as written: those whose ends both exist, in order (toCode skips the rest) */
   const drawnEdges = () => flow.edges.map((e, i) => ({ e, i })).filter(({ e }) => flow.nodes.some((n) => n.id === e.from) && flow.nodes.some((n) => n.id === e.to));
@@ -84,6 +90,17 @@
     });
     // each line gets a wide clear twin to be clicked by (the drawing stays exactly as mermaid made it)
     const lines = [...host.querySelectorAll('path.flowchart-link')];
+    // points along each line, with the boxes it joins: where a + would sit over one (plusAt)
+    const ends = drawnEdges();
+    linePts = lines.flatMap((p, i) => {
+      const el = p as SVGPathElement, m = el.getScreenCTM(), L = el.getTotalLength?.() ?? 0;
+      if (!m || !L) return [];
+      const { from, to } = ends[i]?.e ?? { from: '', to: '' };
+      return Array.from({ length: Math.ceil(L / 8) + 1 }, (_, k) => {
+        const q = el.getPointAtLength(Math.min(L, k * 8));
+        return { x: q.x * m.a + q.y * m.c + m.e - o.left, y: q.x * m.b + q.y * m.d + m.f - o.top, from, to };
+      });
+    });
     lines.forEach((p, i) => {
       if (p.nextElementSibling?.classList.contains('hit')) return;
       const twin = p.cloneNode() as SVGPathElement;
@@ -95,6 +112,7 @@
       twin.dataset.index = String(i);
       p.after(twin);
     });
+    if (toReveal && boxOf(toReveal)) reveal(toReveal);
   }
   $effect(() => { void version; void k; tick().then(measure); });
   // the drawing's own size too: zoomed on the whole screen (DiagramBlock.svelte), it grows or shrinks inside a canvas
@@ -118,7 +136,9 @@
     host.addEventListener('scroll', measure, { passive: true });
     // ahead of the note's keymaps: a picked box's ⌫ and arrows are the drawing's, not the text's
     const unclaim = claimKeys('global', { '*': onKey }, { capture: true });
-    return () => { ro.disconnect(); host.removeEventListener('scroll', measure); unclaim(); };
+    // done: the picture from its start again (scrolled to the last box worked on, its first boxes and lanes' names
+    // stayed off the card's left edge)
+    return () => { ro.disconnect(); host.removeEventListener('scroll', measure); unclaim(); host.scrollLeft = 0; };
   });
 
   // ---- what the chart becomes ----
@@ -202,9 +222,13 @@
     // focused without the page scrolling to it: a box past the card's edge scrolled the whole note sideways, under the list
     tick().then(() => { const el = layer.querySelector<HTMLInputElement>('input.rename'); el?.focus({ preventScroll: true }); el?.select(); });
   }
-  /** a box scrolled out of the card brought back into it (the picture scrolls sideways inside its card) */
+  /** a box scrolled out of the card brought back into it (the picture scrolls sideways inside its card). One not drawn
+   *  yet (a step just added) is brought in once it is: drawn past the card's edge, a click on it fell beside the
+   *  diagram and closed it */
+  let toReveal: string | null = null;
   function reveal(id: string) {
     const b = boxOf(id);
+    toReveal = b ? null : id;
     if (!b || !layer) return;
     const W = layer.clientWidth, pad = 24;
     const by = b.x < pad ? b.x - pad : b.x + b.w + 80 > W ? b.x + b.w + 80 - W : 0;
@@ -214,7 +238,7 @@
   export function escape(): boolean {
     if (editing) { cancelEdit(); return true; }
     if (laneEditing) { doneTyping(); laneEditing = null; return true; }
-    if (linking || sel) { linking = null; sel = null; return true; }
+    if (linking || moveEnd !== null || sel) { linking = null; moveEnd = null; sel = null; return true; }
     return false;
   }
   function typed() {
@@ -313,6 +337,12 @@
       if (sel && 'lane' in sel && sel.lane === id) startLaneEdit(id); else { sel = { lane: id }; letGo(); }
       return;
     }
+    if (moveEnd !== null) {
+      const e = flow.edges[moveEnd], id = g ? nodeIdOf(g) : null;
+      moveEnd = null;
+      if (e && id && id !== e.from && !flow.edges.some((x) => x !== e && x.from === e.from && x.to === id)) e.to = id;
+      return;
+    }
     if (linking) {
       const from = linking, id = g ? nodeIdOf(g) : null;
       linking = null;
@@ -329,6 +359,7 @@
       if (sel && 'node' in sel && sel.node === id) startEdit(id);
       else {
         sel = { node: id };
+        reveal(id); // its + and bar inside the card: by the card's edge they were cut off, or off a phone's screen
         // the keyboard off the note's text: its keys (⌫, Enter, Tab) are the box's now, and a phone's keyboard goes down
         if (!editing) letGo();
       }
@@ -477,7 +508,7 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    if (linking && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); linking = null; return; }
+    if ((linking || moveEnd !== null) && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); linking = null; moveEnd = null; return; }
     if (editing || laneEditing || !sel) return;
     // only keys meant for this diagram: the keyboard on it, or on nothing (after a box's typing is done) — not keys
     // typed in the list or another note's page, which deleted the box behind them
@@ -542,7 +573,22 @@
   const plusAt = (b: Box) => {
     // clear of the text box while the box is typed in (at least 140 wide, centred on it)
     const w = b.id === editing ? Math.max(b.w, 140) : b.w;
-    return across(flow) ? { x: b.x + b.w / 2 + w / 2 + 14, y: b.y + b.h / 2 } : { x: b.x + b.w / 2, y: b.y + b.h + (b.id === editing ? 22 : 14) };
+    const after = across(flow) ? { x: b.x + b.w / 2 + w / 2 + 14, y: b.y + b.h / 2 } : { x: b.x + b.w / 2, y: b.y + b.h + (b.id === editing ? 22 : 14) };
+    if (b.id === editing) return after;
+    // where it reads next, unless it sits over another box or a line between others there (a phone's finger-sized +
+    // took the tap meant for the short line or the box beside it, and made a step no one wanted): then the side that
+    // is clear, or covers least
+    const r = isMobile ? 22 : 13;
+    const cost = (p: { x: number; y: number }) =>
+      boxes.reduce((n, o) => n + (o.id !== b.id && p.x + r > o.x && p.x - r < o.x + o.w && p.y + r > o.y && p.y - r < o.y + o.h ? 100 : 0), 0)
+      + linePts.reduce((n, q) => n + (q.from !== b.id && q.to !== b.id && Math.hypot(q.x - p.x, q.y - p.y) < r ? 1 : 0), 0)
+      + (p.x < r || p.x > (layer?.clientWidth ?? 1e4) - r ? 50 : 0); // half off the card
+    // a picked box's bar is over or under it, across a chart going across: the + not there, under the bar
+    const barred = across(flow) && selNode?.id === b.id ? 1000 : 0;
+    const sides = across(flow)
+      ? [[after, 0], [{ x: b.x + b.w / 2, y: b.y + b.h + 14 }, barred], [{ x: b.x + b.w / 2, y: b.y - 14 }, barred], [{ x: b.x - 14, y: b.y + b.h / 2 }, 0]] as const
+      : [[after, 0], [{ x: b.x + b.w + 14, y: b.y + b.h / 2 }, 0], [{ x: b.x - 14, y: b.y + b.h / 2 }, 0], [{ x: b.x + b.w / 2, y: b.y - 14 }, 0]] as const;
+    return sides.map(([p, extra]) => ({ p, c: cost(p) + extra })).reduce((best, x) => (x.c < best.c ? x : best)).p;
   };
   /** a text box `w` wide centred on x, kept inside the picture (at its edge it was cut off, past a phone's screen) */
   const clampX = (x: number, w: number) => Math.max(4, Math.min((layer?.clientWidth ?? 600) - w - 4, x - w / 2));
@@ -568,6 +614,9 @@
       return sum + (w > 0 && h > 0 ? w * h : 0);
     }, 0);
     const a = up.top - o.top, b = down.top - o.top;
+    // covering boxes either way (a line between boxes at the picture's top): under them all, the picture growing at
+    // its foot to hold it, as when there is no room. Over them, the boxes one came to click were under the bar
+    if (cost(a) > 0 && cost(b) > 0) return { left, top: Math.max(bottom, ...boxes.map((x) => x.y + x.h)) + 8 };
     return { left, top: up.side === down.side || cost(a) <= cost(b) ? a : b };
   }
   /** how much the picture grew at its foot to hold a bar under a box (see barAt) */
@@ -590,7 +639,8 @@
     const paths = [...host.querySelectorAll('path.flowchart-link')];
     paths.forEach((p, j) => p.classList.toggle('picked', j === at));
   });
-  const handles = $derived([...new Set([hover, selNode?.id ?? null, drag?.from ?? null].filter((x): x is string => !!x))].map(boxOf).filter((b): b is Box => !!b));
+  // (a phone has no hover: a tap's leftover one left a + over the line tapped next)
+  const handles = $derived([...new Set([isMobile ? null : hover, selNode?.id ?? null, drag?.from ?? null].filter((x): x is string => !!x))].map(boxOf).filter((b): b is Box => !!b));
 </script>
 
 <div class="layer" bind:this={layer}>
@@ -632,11 +682,11 @@
     {/if}
   {/if}
 
-  {#if linking}
-    {#each boxes.filter((b) => b.id !== linking) as b (b.id)}
+  {#if picking}
+    {#each boxes.filter((b) => b.id !== picking) as b (b.id)}
       <div class="ring target pick" style:left={`${b.x - 4}px`} style:top={`${b.y - 4}px`} style:width={`${b.w + 8}px`} style:height={`${b.h + 8}px`}></div>
     {/each}
-    <div class="pickhint">{isMobile ? 'Tap the box to connect to · tap elsewhere to cancel' : 'Click the box to connect to · Esc or a click elsewhere cancels'}</div>
+    <div class="pickhint">{isMobile ? `Tap the box to ${linking ? 'connect' : 'move the end'} to · tap elsewhere to cancel` : `Click the box to ${linking ? 'connect' : 'move the end'} to · Esc or a click elsewhere cancels`}</div>
   {/if}
 
   {#each moving ? [] : handles as b (b.id)}
@@ -702,7 +752,7 @@
   {/if}
 
   {#if selEdge && sel && 'edge' in sel && !drag}
-    {@const at = barAt(sel.x, sel.y - 6, sel.y + 6, isMobile ? 360 : 486)}
+    {@const at = barAt(sel.x, sel.y - 6, sel.y + 6, isMobile ? 360 : 518)}
     {@const i = sel.edge}
     <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
       {#each LINES as [line, label, icon] (line)}
@@ -712,6 +762,7 @@
       <!-- room for a few words, and lines: ⇧↩ breaks one (a one-line field of 110px held two words, and no break) -->
       <textarea class="edge-label" rows="1" bind:value={selEdge.label} placeholder="Label" aria-label="Line label" title="⇧↩ a new line" {@attach grow}></textarea>
       <button type="button" aria-label="Put a step in this line" title="Put a step in the middle of this line" onclick={() => splitEdge(i)}><svg viewBox="0 0 16 16"><path d="M1.5 8h3M11.5 8h3" /><rect x="4.5" y="5" width="7" height="6" rx="1.6" /></svg></button>
+      <button type="button" aria-label="Move its end" title="Move its end to another box" onclick={() => { moveEnd = i; sel = null; }}><svg viewBox="0 0 16 16"><path d="M1.5 8h7M6.5 5.5 9 8l-2.5 2.5" /><rect x="10.5" y="5" width="4" height="6" rx="1.4" stroke-dasharray="2 1.5" /></svg></button>
       <button type="button" aria-label="Reverse" title="Reverse" onclick={() => reverse(i)}><svg viewBox="0 0 16 16"><path d="M3 5.5h9.5M10.5 3l2.5 2.5L10.5 8M13 10.5H3.5M5.5 8 3 10.5 5.5 13" /></svg></button>
       <button type="button" class="danger" aria-label="Delete" title="Delete (⌫)" onclick={() => dropEdge(i)}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
     </div>

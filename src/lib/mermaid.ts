@@ -55,7 +55,11 @@ function config(mode: 'light' | 'dark') {
   c.hues.forEach((h, i) => (scale[`pie${i + 1}`] = h));
   // a git graph's branches and an XY chart's series in the same colours, their labels white on them
   c.hues.slice(0, 8).forEach((h, i) => { scale[`git${i}`] = h; scale[`gitBranchLabel${i}`] = '#ffffff'; scale[`gitInv${i}`] = h; });
-  const branches = c.hues.slice(1).concat(c.hues[0]).map((h, i) => `.section-edge-${i} { stroke: ${mix(h, c.canvas, 0.55)}; }`).join(' ');
+  const branches = c.hues.slice(1).concat(c.hues[0]).map((h, i) => `.section-edge-${i} { stroke: ${mix(h, c.canvas, 0.55)}; }`).join(' ')
+    // a circle's or a hexagon's own fill, its branch's as a box's is (mermaid's section colours reach only rects and
+    // paths: they were grey and white, the centre's circle grey too)
+    + ` .mindmap-node.section--1 > :is(circle, polygon).label-container { fill: ${scale.cScale0} !important; }`
+    + c.hues.map((_, i) => ` .mindmap-node.section-${i} > :is(circle, polygon).label-container { fill: ${scale[`cScale${i + 1}`] ?? scale.cScale1} !important; }`).join('');
   return {
     startOnLoad: false,
     securityLevel: 'strict' as const,
@@ -87,6 +91,9 @@ function config(mode: 'light' | 'dark') {
       .edgeLabel .labelBkg span, .edgeLabel .labelBkg p { background: transparent !important; } /* mermaid's own label fill: only the chip shows */
       .lineWrapper line { stroke: ${c.line}; stroke-width: 2px; } [id$='arrowhead'] path { fill: ${c.line}; }
       .actor-line { stroke-dasharray: 3 4; }
+      /* an activation bar is drawn over the words on its lifeline (a message to itself, a group's condition): see-through,
+         they read under it */
+      rect[class^='activation'] { fill-opacity: 0.35 !important; stroke-opacity: 0.5 !important; }
       /* an actor's stick figure in the text's quiet grey (in the boxes' hairline it was barely there), its lines a
          little heavier for being drawn smaller (smallActors) */
       .actor-man line, .actor-man circle { stroke: ${c.dim} !important; stroke-width: 2.5px; }
@@ -172,8 +179,9 @@ export function renderMermaid(code: string): Promise<{ svg: string } | { error: 
 /** The diagram's SVG, or the reason it could not be drawn. */
 async function draw(code: string): Promise<{ svg: string } | { error: string }> {
   if (!code.trim()) return { error: 'An empty diagram' };
-  // lanes on a phone shrink less and scroll instead: five lanes at a phone's width left boxes too small for a finger
-  const chart = chartHtml(code, isMobile ? 0.75 : 0.64); // a pie, a timeline, a Gantt chart: drawn by Eve, without loading mermaid
+  // lanes shrink little and scroll instead: at 64% eleven steps in three lanes had 7px words and 5px line labels, and
+  // still scrolled; five lanes at a phone's width left boxes too small for a finger
+  const chart = chartHtml(code, 0.9); // a pie, a timeline, a Gantt chart: drawn by Eve, without loading mermaid
   if (chart) return { svg: chart };
   try {
     const m = await load();
