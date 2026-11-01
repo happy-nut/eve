@@ -113,7 +113,7 @@ try {
     await page.waitForTimeout(400);
     // the page over the calendar (a board's card too) grows with the window: two-thirds of a wide one, not a small
     // box in its middle; in a small window as before
-    if (theme === 'light') {
+    {
       const was = page.viewportSize();
       for (const [w, h, min] of [[1920, 1200, 1200], [1104, 832, 740]]) {
         await page.setViewportSize({ width: w, height: h });
@@ -211,6 +211,16 @@ try {
     await page.waitForTimeout(500);
     const pages = await page.evaluate(() => [...document.querySelectorAll('.card-page .tiptap')].map((t) => t.textContent.slice(0, 20)));
     if (!pages.some((t) => t.includes('my card'))) say(`a board's card opened on a day's page does not show (pages: ${JSON.stringify(pages)})`);
+    // ⌘ held shows the list's numbers to jump by, but not under a floating page: they lit up behind the page, for notes
+    // a ⌘<digit> was not meant to reach from there
+    {
+      const held = async () => { await page.keyboard.down('Meta'); await page.waitForTimeout(800); const n = await page.locator('aside .num').count(); await page.keyboard.up('Meta'); return n; };
+      if (await held()) say('holding ⌘ over a floating page lights up the list\'s numbers behind it');
+      while (await page.locator('.card-page').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(200); }
+      await page.evaluate(() => [...document.querySelectorAll('aside [data-row]')].find((r) => !r.textContent.includes('Daily notes'))?.click());
+      await page.waitForSelector('main .tiptap');
+      if (!(await held())) say('holding ⌘ on a note shows no numbers in the list (this check saw nothing)');
+    }
     await page.close();
   }
 
