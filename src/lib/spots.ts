@@ -1,4 +1,4 @@
-import { freshId, ganttDates, isMessage, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type BlockKind } from './diagram';
+import { freshId, ganttDates, isMessage, linkOrder, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type BlockKind } from './diagram';
 import {
   dropStep, DIVIDERS, OPENERS, SPLITS, wellFormed, seqArrows, arrowOf, setArrow, pieValue, MIND_SHAPES, ROOT_SHAPES, movePeriod, plausible, endOf,
   startOf, startOptions, setStart, tagOptions, setTags, rename, NAME_ID, TABLE_ID, drop, options, arrowOptions, STATE_KINDS, insideOptions, renameState,
@@ -468,6 +468,25 @@ export function tagSpots(d: Diagram, root: Element) {
       if (hits[k] !== undefined) g.setAttribute('data-spot', keyOf(hits[k]));
     }
   };
+  /** each line drawn, its label with it, by the order the links are written in (mermaid draws them so): a line with
+   *  no label, or one saying what another does, could not be clicked. Each gets a wider stroke of nothing over it, to
+   *  be hit; false when the lines drawn are not as many as the links */
+  const lines = (d: ClassDiagram | StateDiagram | ErDiagram, prefix: string) => {
+    if (root.querySelector('.spot-hit')) return true; // (marked already, this drawing)
+    const drawn = [...root.querySelectorAll<SVGPathElement>('path[data-edge="true"]')], order = linkOrder(d);
+    if (!drawn.length || drawn.length !== order.length) return false;
+    drawn.forEach((p, k) => {
+      const key = `${prefix}:${order[k]}`;
+      p.setAttribute('data-spot', key);
+      const hit = p.cloneNode() as SVGPathElement;
+      for (const a of ['id', 'marker-start', 'marker-end', 'style', 'data-edge', 'data-id', 'data-points']) hit.removeAttribute(a);
+      hit.setAttribute('class', 'spot-hit');
+      hit.setAttribute('data-spot', key);
+      p.after(hit);
+      root.querySelector(`g.edgeLabel [data-id="${CSS.escape(p.dataset.id ?? '')}"]`)?.closest('g.edgeLabel')?.setAttribute('data-spot', key);
+    });
+    return true;
+  };
   /** drawn words matched to parts by what they say; parts that say the same, by where they are drawn (left to right,
    *  top to bottom), as many as there are of them */
   const byWords = (els: Element[], parts: { key: string; says: string }[], mark: (el: Element) => Element = (el) => el) => {
@@ -494,17 +513,17 @@ export function tagSpots(d: Diagram, root: Element) {
     byWords([...root.querySelectorAll('text')].filter((t) => /^\[.*\]$/.test(t.textContent?.trim() ?? '')), groups);
   } else if (d.kind === 'class') {
     byId('classId', 'class');
-    labels((i) => `clink:${i}`, d.links.map((l) => l.label));
+    lines(d, 'clink') || labels((i) => `clink:${i}`, d.links.map((l) => l.label));
   } else if (d.kind === 'state') {
     byId('state', 'state');
-    labels((i) => `slink:${i}`, d.links.map((l) => l.label));
+    lines(d, 'slink') || labels((i) => `slink:${i}`, d.links.map((l) => l.label));
   } else if (d.kind === 'er') {
     byId('entity', 'table');
     for (const g of root.querySelectorAll('g.node[data-spot^="table:"]')) {
       const id = g.getAttribute('data-spot')!.slice(6), t = d.tables.find((x) => x.id === id);
       if (t) tag([...g.querySelectorAll('g.label.attribute-name')], t.columns.map((_, j) => `col:${id}:${j}`));
     }
-    labels((i) => `rel:${i}`, d.links.map((l) => l.label));
+    lines(d, 'rel') || labels((i) => `rel:${i}`, d.links.map((l) => l.label));
   } else if (d.kind === 'gantt' && !root.querySelector('[data-spot]')) {
     // mermaid's own Gantt (weekends skipped, settings kept as written): its tasks, in order
     const keys = d.sections.flatMap((s, si) => s.tasks.map((_, ti) => `task:${si}:${ti}`));

@@ -1,6 +1,7 @@
 import { fromCode, ganttDates, type Gantt, type Pie, type Timeline } from './diagram';
 import { laneSvg } from './lanes';
 import { mindSvg } from './mindmap';
+import { huesOf } from './chartHues';
 
 /**
  * The charts Eve draws itself, from the same mermaid code: a pie as a donut with its parts listed beside it, a
@@ -34,17 +35,20 @@ function pie(d: Pie) {
   if (!total) return `<div class="chart chart-empty">${title(d.title)}<p>Nothing to show yet</p></div>`;
   // a ring of strokes on one circle: each part a dash of its share, a hair of gap between them
   const R = 70, C = 2 * Math.PI * R, gap = parts.length > 1 ? 2.2 : 0;
+  // each slice's colour by its name, not its place (chartHues.ts)
+  const hue = huesOf(d.slices.map((s) => s.label), d.slices.map((_, i) => `slice:${i}`));
+  const tone = (i: number) => `c${hue[i]}${i >= 12 ? ' deep' : ''}`;
   let at = 0;
   const arcs = parts.map((s) => {
     const len = (s.value / total) * C;
-    const arc = `<circle data-spot="slice:${d.slices.indexOf(s)}" class="c${d.slices.indexOf(s) % 12}${d.slices.indexOf(s) >= 12 ? ' deep' : ''}" r="${R}" cx="90" cy="90" stroke-dasharray="${Math.max(0.01, len - gap).toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-at).toFixed(2)}"/>`;
+    const arc = `<circle data-spot="slice:${d.slices.indexOf(s)}" class="${tone(d.slices.indexOf(s))}" r="${R}" cx="90" cy="90" stroke-dasharray="${Math.max(0.01, len - gap).toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-at).toFixed(2)}"/>`;
     at += len;
     return arc;
   }).join('');
   const top = parts.reduce((a, s) => (s.value > a.value ? s : a), parts[0]);
   const rows = d.slices.map((s, i) => {
     const pct = total && s.value > 0 ? ((s.value / total) * 100).toFixed(1) : '0.0'; // one decimal on every row (8% beside 5.7%)
-    return `<div class="row" data-spot="slice:${i}"><span class="dot c${i % 12}${i >= 12 ? ' deep' : ''}"></span><span class="lbl">${esc(s.label)}</span>`
+    return `<div class="row" data-spot="slice:${i}"><span class="dot ${tone(i)}"></span><span class="lbl">${esc(s.label)}</span>`
       + `${d.showData ? `<span class="val">${fmt(s.value)}</span>` : ''}<span class="pct">${pct}%</span></div>`;
   }).join('');
   return `<div class="chart chart-pie">${title(d.title)}<div class="pie-body">`

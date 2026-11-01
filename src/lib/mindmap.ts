@@ -83,20 +83,25 @@ function shapeOf(n: Node) {
   }
 }
 
+import { held, huesOf } from './chartHues';
+
 export function mindSvg(d: Mindmap, minScale = 0.8): string {
   // the tree as the code writes it: a branch at most one step deeper than the one above it
   const root: Node = { text: d.root.trim() || 'Idea', shape: d.rootShape ?? 'circle', depth: 0, spot: 'root', hue: 0, kids: [], lines: [], w: 0, h: 0, x: 0, y: 0, right: true };
   const stack: Node[] = [root];
-  let first = -1;
   d.items.forEach((b, i) => {
     if (!b.text.trim()) return;
     const depth = Math.max(1, Math.min(b.depth, stack.length));
     stack.length = depth;
-    if (depth === 1) first++;
-    const n: Node = { text: b.text.trim(), shape: b.shape ?? 'plain', depth, spot: `branch:${i}`, hue: (first + 1) % 12, kids: [], lines: [], w: 0, h: 0, x: 0, y: 0, right: true };
+    // (a branch's colour, its own name's at the first step, the one it hangs from below that)
+    const n: Node = { text: b.text.trim(), shape: b.shape ?? 'plain', depth, spot: `branch:${i}`, hue: depth === 1 ? 0 : stack[depth - 1].hue, kids: [], lines: [], w: 0, h: 0, x: 0, y: 0, right: true };
     stack[depth - 1].kids.push(n);
     stack.push(n);
   });
+  // the first step's colours by their names (chartHues.ts), the centre's own (0) left out; those under them follow
+  const hues = huesOf(root.kids.map((k) => k.text), root.kids.map((k) => k.spot), 11, 1);
+  const tint = (n: Node, h: number) => { n.hue = h; n.kids.forEach((k) => tint(k, h)); };
+  root.kids.forEach((k, i) => tint(k, hues[i]));
   sized(root);
   // to both sides once there are three or more, the first ones on the right, the rest on the left going round
   // clockwise (from the bottom up), split where the two sides are nearest the same height
@@ -109,7 +114,16 @@ export function mindSvg(d: Mindmap, minScale = 0.8): string {
     while (cut < kids.length - 1 && acc + span(kids[cut]) / 2 < total / 2) acc += span(kids[cut++]);
     cut = Math.max(1, cut);
   }
-  const right = kids.slice(0, cut), left = kids.slice(cut).reverse();
+  let right = kids.slice(0, cut), left = kids.slice(cut).reverse();
+  // being edited: each where it was, a new one on the lighter side (split again at each change, the others moved)
+  if (held.sides.size && kids.length >= 3) {
+    right = []; left = [];
+    for (const k of kids) {
+      const was = held.sides.get(k.text);
+      ((was ?? right.length <= left.length) ? right : left).push(k);
+    }
+    left.reverse();
+  }
   root.x = -root.w / 2; root.y = 0;
   const side = (list: Node[], isRight: boolean) => {
     const g = GAP_Y[0], H = list.reduce((a, k) => a + span(k), 0) + g * Math.max(0, list.length - 1);

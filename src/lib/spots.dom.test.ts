@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fromCode, toCode, type Gantt, type Sequence } from './diagram';
+import { fromCode, linkOrder, toCode, type Gantt, type Sequence } from './diagram';
 import { spotOf, tagSpots } from './spots';
 import { insideOptions, startOptions } from './diagramOps';
 import type { StateDiagram } from './diagram';
@@ -108,5 +108,22 @@ describe('chart parts', () => {
     const h = gantt('  section A\n  X :x1, 2026-01-05, 2d\n  Y : 3d\n  section B\n  Z : 2d');
     act(h, 'task:0:1', 'Delete');
     expect(h.sections[1].tasks[0]).toMatchObject({ name: 'Z', start: '2026-01-10' });
+  });
+
+  it('marks every line drawn, a label or none, in the order the links are written, with a wider stroke to hit', () => {
+    const s = fromCode('stateDiagram-v2\n  [*] --> Idle\n  Idle --> Running : start\n  Running --> Idle\n  state Running {\n    [*] --> Busy\n  }') as StateDiagram;
+    const order = linkOrder(s);
+    // a state's own lines are written inside it, before those around it
+    expect(toCode(s).split('\n').filter((l) => l.includes('-->')).map((l) => l.trim())).toEqual(order.map((i) => {
+      const l = s.links[i]; return `${l.from} --> ${l.to}${l.label ? ` : ${l.label}` : ''}`;
+    }));
+    const root = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    root.innerHTML = order.map((_, k) => `<path data-edge="true" data-id="edge${k}"/>`).join('') + order.map((_, k) => `<g class="edgeLabel"><g data-id="edge${k}"></g></g>`).join('');
+    tagSpots(s, root);
+    expect([...root.querySelectorAll('path[data-edge]')].map((p) => p.getAttribute('data-spot'))).toEqual(order.map((i) => `slink:${i}`));
+    expect(root.querySelectorAll('path.spot-hit').length).toBe(order.length);
+    expect([...root.querySelectorAll('g.edgeLabel')].map((g) => g.getAttribute('data-spot'))).toEqual(order.map((i) => `slink:${i}`));
+    tagSpots(s, root); // drawn once, marked once
+    expect(root.querySelectorAll('path.spot-hit').length).toBe(order.length);
   });
 });

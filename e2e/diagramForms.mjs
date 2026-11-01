@@ -484,6 +484,15 @@ try {
   assert.match(after, /title Pets/, 'the title put back');
   assert.doesNotMatch(after, /showData/, 'and Values as turned');
   await page.close();
+  // a line with no label clicked on its stroke, and given one
+  page = await open('stateDiagram-v2\n  [*] --> Idle\n  Idle --> Running : start\n  Running --> Idle', false);
+  const on = await page.evaluate(() => { const p = document.querySelector('.tiptap path.spot-hit[data-spot="slink:2"]'); const q = p.getPointAtLength(p.getTotalLength() / 2), m = p.getScreenCTM(); return { x: q.x * m.a + m.e + 3, y: q.y * m.d + m.f }; });
+  await page.mouse.click(on.x, on.y);
+  await page.waitForSelector('.tiptap .layer input.field');
+  await page.keyboard.type('resume');
+  await page.keyboard.press('Enter');
+  assert.match(await md(page), /Running --> Idle : resume/, 'an unlabelled line labelled where it is drawn');
+  await page.close();
   console.log('ok   a rename then a box of the bar typed in; Esc puts back the value too; a state added is drawn; a crowded chart\'s bar goes under it; a key with nothing picked does nothing');
 
   // ---- the / menu makes each new kind, drawn and open ----

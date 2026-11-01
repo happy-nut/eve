@@ -125,6 +125,9 @@
     tick().then(() => {
       const el = canvas?.querySelector(':scope > svg');
       if (el instanceof SVGSVGElement) spreadLabels(el); // a line's label off another's (edgeLabels.ts)
+      // on a phone, mermaid's own drawing at four fifths of its size at least, the card scrolling across: shrunk to the
+      // card's width, a sequence's or a table's words were too small to read or to hit
+      if (isMobile && el instanceof SVGSVGElement && d && /^(sequence|class|state|er)$/.test(d.kind) && el.viewBox.baseVal?.width) el.style.minWidth = `${Math.round(el.viewBox.baseVal.width * 0.8)}px`;
       if (d && canvas) tagSpots(d, canvas); // its parts marked, to be clicked and typed in (spots.ts)
       // a mind map wider than the card shown from its middle, its root, the first time (from its left edge, the root
       // was cut off on a phone)
