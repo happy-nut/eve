@@ -457,6 +457,14 @@ class NotesStore {
     this.timers.set(id, setTimeout(() => this.flush(id), 300));
   }
 
+  /** A page with the id it is given (a group made a page, groups.toPages): nothing opened, no step of its own */
+  addWithId(n: Note) {
+    this.all.push(n);
+    this.titles.set(n.id, titleOf(n));
+    void storage.write(n.id, serialize(n));
+    this.dirty++;
+  }
+
   /** write every edit still waiting on its debounce (the app is going to the background) */
   flushAll() { flushEdits(); for (const id of [...this.timers.keys()]) this.flush(id); }
 

@@ -319,10 +319,8 @@
   /** A phone's +: a new note, open, keyboard up — or, with daily notes on, the choice of that or today's. */
   function newOnPhone() {
     const write = (open: () => void) => () => { ui.focusOwner = 'editor'; open(); sidebarOpen = false; widget.keyboard(); };
-    // a group too: a phone has no row menu or "+" beside a group to make one with, so it could not make any
     ui.openMenu({ clientX: 0, clientY: 0 }, [
       { label: 'New note', run: write(newNote) },
-      { label: 'New group', run: () => groups.create('') },
       { label: "Today's daily note", run: writeToday, hide: !appearance.s.dailyNotes },
     ]);
   }
@@ -386,6 +384,9 @@
   // a board no longer on screen: what was typed in it was lost, with an error at every key. Its last keys
   // were handed over before the switch (notes.currentId flushes them), so closing it loses nothing.
   $effect(() => { void notes.currentId; untrack(() => { ui.closeDiagramView(); ui.closeCard(); }); });
+  // no groups, as in Notion: pages in pages. Any there are become pages (this device's from before, an older version's
+  // come in by sync, a folder imported, a note made in a folder from the command line)
+  $effect(() => { if (notes.loaded && groups.names.length) untrack(() => groups.toPages()); });
   // the front tab shows whatever note is opened, however it was; a tab whose note went (deleted, or a blank one left)
   // closes (tabs.svelte.ts). The list read too, so a deletion is seen when the open note stays the same.
   let lastOpen: string | null = null;

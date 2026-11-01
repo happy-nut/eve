@@ -142,10 +142,8 @@
       // from a note's row: a page under that note first (the group it sits in is the second choice)
       ...(ctxNote ? [{ label: `New page in “${titleOf(ctxNote)}”`, run: newPageIn(ctxNote) }] : []),
       { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', run: newNote(ctxGroup) },
-      // a group as deep as groups go takes no group inside: the new one goes beside it, and says so
-      { label: !ctxGroup ? 'New group' : depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : `New group in “${leafOf(parentOf(ctxGroup))}”`, run: () => groups.create(ctxGroup) },
     ];
-    if (ctxGroup) items.push({ label: 'New note at top level', run: newNote('') }, { label: 'New group at top level', run: () => groups.create('') });
+    if (ctxGroup) items.push({ label: 'New note at top level', run: newNote('') });
     if (appearance.s.dailyNotes) items.push({ label: "Today's daily note", run: () => { ui.focusOwner = 'editor'; notes.caretEnd = true; notes.openDaily(); } });
     items.push(
       { label: 'Import files…', run: importFiles, sep: true },
@@ -429,7 +427,6 @@
     const items: MenuItem[] = g
       ? [
           { label: `New note in “${leafOf(g)}”`, run: newNote(g) },
-          { label: 'New group inside', run: () => groups.create(g), hide: depthOf(g) >= MAX_DEPTH },
           { label: 'Rename', sep: true, run: () => (groups.editing = g) },
           { label: 'Change icon…', run: () => pickIcon({ group: g }) },
           { label: 'Move up', sep: true, run: () => nudgeGroup(g, 'ArrowUp'), hide: !moves.canNudgeGroup(g, 'ArrowUp') },

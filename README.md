@@ -55,7 +55,7 @@ GitHub repo with no server in between. Claude can read and write them too, with 
 
 - **Notes link to notes** — `[[` picks one; `[[Note|alias]]`, `==highlight==` and `> [!warning]` callouts as Obsidian writes them.
 - **Lists that nest like a document** — `1.` → `a.` → `i.`; bullets, numbers and to-dos mix freely.
-- **Sidebar** — groups (3 levels), emoji icons, drag to reorder, `⌘1`…`⌘9` to jump, `⌘\` to drive it from the keyboard.
+- **Sidebar** — pages in pages, as in Notion (no folders: a group from an older version becomes a page), emoji icons, drag to reorder, `⌘1`…`⌘9` to jump, `⌘\` to drive it from the keyboard.
 - **Link cards, pictures, find & replace** (`⌘F`), section outline, text size (`⌘+` `⌘-`).
 - **Present a note** — ⋯ → Present (⇧⌘↩): cut into slides by itself, at its biggest headings and wherever the screen ends,
   a slide gone on to the next under its heading and subheading again, the window on the whole screen; → walks a diagram

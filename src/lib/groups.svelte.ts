@@ -29,6 +29,14 @@ export const leafOf = (p: string) => p.split('/').pop() ?? p;
 export const depthOf = (p: string) => (p ? p.split('/').length : 0);
 const within = (p: string, root: string) => p === root || p.startsWith(root + '/');
 
+/** the page a group becomes (Groups.toPages): its id from its path, so two devices that each turn the same group into a
+ *  page make one page, which syncs as one, not two of the same name */
+export function pageIdOf(g: string) {
+  let a = 5381, b = 2166136261;
+  for (const c of g) { const k = c.codePointAt(0)!; a = ((a * 33) ^ k) >>> 0; b = Math.imul(b ^ k, 16777619) >>> 0; }
+  return 'group-' + a.toString(36) + b.toString(36);
+}
+
 class Groups {
   saved = $state<Saved>(load());
   /** group currently being renamed (inline input) */
@@ -266,6 +274,49 @@ class Groups {
   putBack(s: Pick<Saved, 'order' | 'collapsed' | 'icons'>) {
     this.saved.order = [...s.order]; this.saved.collapsed = [...s.collapsed]; this.saved.icons = { ...s.icons };
     this.persist();
+  }
+
+  /**
+   * Every group made a page, as Notion has none but pages in pages: a page of the group's name and icon where the
+   * group stood in the list, its notes pages under it, a group inside it a page under that one, a folded group a
+   * folded page. The app does this whenever there are groups: this device's from before, an older version's on another
+   * device, a folder imported. Returns whether there were any.
+   */
+  toPages(): boolean {
+    const names = [...this.names].sort((x, y) => depthOf(x) - depthOf(y)); // a page before the pages under it
+    if (!names.length) return false;
+    const was = new Set(names);
+    history.quietly(() => {
+      const now = Date.now();
+      // the top level's groups came after its notes; a group's groups before its own notes
+      const top = Math.max(-1, ...notes.visible.filter((n) => !n.group && !n.parent).map((n) => n.order)) + 1;
+      for (const g of names) {
+        const id = pageIdOf(g), up = parentOf(g);
+        const sibs = this.children(up), i = sibs.indexOf(g);
+        const order = up ? Math.min(0, ...this.notesIn(up).map((n) => n.order)) - (sibs.length - i) : top + i;
+        const parent = up ? pageIdOf(up) : undefined;
+        const page = notes.all.find((n) => n.id === id);
+        if (page) Object.assign(page, { deleted: false, group: '', parent, updatedAt: now }); // made before, on this device or another
+        else notes.addWithId({ id, body: `# ${leafOf(g)}\n`, updatedAt: now, deleted: false, group: '', ...(parent ? { parent } : {}), order, ...(this.icon(g) ? { icon: this.icon(g) } : {}) });
+        if (page) notes.flush(id);
+        if (this.isCollapsed(g) && !this.isFolded(id)) this.saved.folded = [...this.saved.folded, id];
+      }
+      // its notes, the Trash's too (restored, one would bring its group back): under its page, a sub-page staying
+      // under its own page
+      // (one only in the Trash, its group not in the list, waits: restored, its group comes back and goes the same way)
+      const groupOf = new Map(notes.all.map((n) => [n.id, n.group]));
+      for (const n of notes.all) {
+        if (!was.has(n.group)) continue;
+        const inside = !!n.parent && groupOf.get(n.parent) === n.group;
+        Object.assign(n, { parent: inside ? n.parent : pageIdOf(n.group), group: '', updatedAt: now });
+        notes.flush(n.id);
+      }
+      this.saved.order = [];
+      this.saved.collapsed = [];
+      this.saved.icons = {};
+      this.persist();
+    });
+    return true;
   }
 
   /** ensure a group (and its ancestors) are remembered in order so they survive their notes moving out */

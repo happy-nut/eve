@@ -411,9 +411,24 @@ fn describe(n: &Note, notes: &[Note]) -> String {
     s + &format!(" · updated: {})", stamp(n.updated))
 }
 
-fn in_group(n: &Note, group: &str) -> bool {
+/// In that folder or under it. The app has no folders now, only pages in pages (a folder became a page of its name):
+/// the titles of the pages a note is under, and its own, read as a folder path as well, so "Work/Projects" still finds
+/// what was in it.
+fn in_group(n: &Note, notes: &[Note], group: &str) -> bool {
     let g = group.trim().trim_matches('/');
-    g.is_empty() || n.group == g || n.group.starts_with(&format!("{g}/"))
+    let under = |p: &str| p == g || p.starts_with(&format!("{g}/"));
+    if g.is_empty() || under(&n.group) {
+        return true;
+    }
+    let mut path = vec![title_of(&n.body)];
+    let mut up = n.parent.as_deref();
+    while let Some(id) = up.filter(|_| path.len() < 64) {
+        let Some(p) = notes.iter().find(|x| x.id == id) else { break };
+        path.push(title_of(&p.body));
+        up = p.parent.as_deref();
+    }
+    path.reverse();
+    under(&path.join("/"))
 }
 
 // ---- commands: what Claude and the terminal can ask for ------------------------------------------
@@ -473,7 +488,7 @@ pub enum Effect {
     Rewrites,
 }
 
-const GROUP: Param = text("group", "Folder path such as \"Work\" or \"Work/Projects\"");
+const GROUP: Param = text("group", "Page path, the titles of the pages it is under (once folders), such as \"Work\" or \"Work/Projects\"");
 const FROM: Param = text("from", "Made or changed on/after this month or day: 2026-09 or 2026-09-05 (local time)");
 const TO: Param = text("to", "…and on/before this month or day (inclusive)");
 const ID: Param = text("id", "The note's id, from list_notes or search_notes");
@@ -501,7 +516,7 @@ pub const COMMANDS: &[Command] = &[
         help: "Finds notes whose title or text contains every word of the query (case-insensitive). Returns titles, ids and a snippet around the match; titles that match come first. Read a hit in full with read_note.",
         params: &[
             needed(bare(text("query", "Words to look for"))),
-            text("group", "Only this folder and its subfolders"),
+            text("group", "Only under this page path (once a folder), such as \"Work/Projects\""),
             FROM,
             TO,
             Param { kind: Kind::Number(1, 100), ..text("limit", "At most this many (default 20)") },
@@ -552,7 +567,7 @@ pub const COMMANDS: &[Command] = &[
         params: &[
             needed(bare(text("title", "The new note's title"))),
             text("body", "Markdown under the title"),
-            text("group", "Folder path such as \"Work\" or \"Work/Projects\" (default: no folder)"),
+            text("group", "Page path to put it under, such as \"Work\" or \"Work/Projects\": a page of each name is made where there is none (default: the top level)"),
             text("parent", "Title or id of the note to put it under, as a sub-page"),
         ],
         effect: Effect::Adds,
@@ -716,7 +731,7 @@ pub fn list_notes(notes: &[Note], args: &Value) -> Result<String, String> {
     let group = arg_str(args, "group");
     let limit = arg_limit(args, 50, 500);
     let when = period(args)?;
-    let mut hits: Vec<&Note> = notes.iter().filter(|n| in_group(n, group) && within(n, when)).collect();
+    let mut hits: Vec<&Note> = notes.iter().filter(|n| in_group(n, notes, group) && within(n, when)).collect();
     hits.sort_by(|a, b| b.updated.cmp(&a.updated).then_with(|| a.id.cmp(&b.id)));
     if hits.is_empty() {
         return Ok(if group.is_empty() && when.is_none() { "No notes yet.".into() } else { "No notes there.".into() });
@@ -764,7 +779,7 @@ pub fn search_notes(notes: &[Note], args: &Value) -> Result<String, String> {
     let when = period(args)?;
     // (query words in the title, note, snippet)
     let mut hits: Vec<(usize, &Note, String)> = Vec::new();
-    for n in notes.iter().filter(|n| in_group(n, group) && within(n, when)) {
+    for n in notes.iter().filter(|n| in_group(n, notes, group) && within(n, when)) {
         let lower = n.body.to_lowercase();
         if !words.iter().all(|w| lower.contains(w.as_str())) {
             continue;
@@ -1189,6 +1204,17 @@ mod tests {
         assert!(!out.contains("id: c") && !out.contains("id: d"), "{out}");
         let out = list_notes(&notes, &json!({ "limit": 1 })).unwrap();
         assert!(out.starts_with("4 note(s), newest first:") && out.contains("id: a") && !out.contains("id: b"));
+    }
+
+    #[test]
+    fn a_folder_is_found_as_the_pages_it_became() {
+        // groups are pages now: "Work/Alpha" is the page Work, a page Alpha under it, and the notes under that
+        let under = |mut n: Note, p: &str| { n.parent = Some(p.into()); n };
+        let notes = vec![note("w", 5, "", "# Work"), under(note("al", 4, "", "# Alpha"), "w"), under(note("x", 3, "", "# Plan"), "al"), note("h", 2, "", "# Home"), under(note("y", 1, "", "# Milk"), "h")];
+        let out = list_notes(&notes, &json!({ "group": "Work/Alpha" })).unwrap();
+        assert!(out.contains("id: al") && out.contains("id: x") && !out.contains("id: w)") && !out.contains("id: y"), "{out}");
+        let out = list_notes(&notes, &json!({ "group": "Work" })).unwrap();
+        assert!(out.starts_with("3 note(s)"), "{out}");
     }
 
     #[test]

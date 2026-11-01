@@ -84,6 +84,8 @@ for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
         ['make it wide or not', () => { const n = pick(live()); if (n) notes.setWide(n.id, pick([true, false])!); }],
         ['small text, a cover', () => { const n = pick(live()); if (n) notes.setLook(n.id, pick([{ small: true }, { small: undefined }, { cover: 'gradient:sea' }, { cover: undefined }])!); }],
         ['move a group', () => { const g = pick(groups.names); if (g) groups.move(g, pick(['', ...groups.names.filter((x) => x !== g)]) ?? '', null); }],
+        // the app turning every group into pages (App.svelte, whenever there are groups: an older device's, a folder imported)
+        ['groups to pages', () => { groups.toPages(); }],
         // ⌘Z outside the text: the newest thing done to the notes or the groups taken back (history.svelte.ts)
         ['app undo', () => { history.undo(); }],
       ];
