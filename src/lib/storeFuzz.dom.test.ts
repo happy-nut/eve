@@ -1,9 +1,9 @@
-// The notes and groups stores driven by long random runs of what a user (and sync) does to them, their rules checked
-// after every step. A rule broken by one path nobody tried (back into a deleted note, a page its own ancestor, a
-// group-delete undo that left notes behind) fails here with the seed and the steps that led to it.
+// The notes store driven by long random runs of what a user (and sync) does to it, its rules checked after every
+// step. A rule broken by one path nobody tried (back into a deleted note, a page its own ancestor, an older device's
+// group left a group) fails here with the seed and the steps that led to it.
 import { test, expect } from 'vitest';
 import { notes, type Note } from './notes.svelte';
-import { groups } from './groups.svelte';
+import { tree } from './tree.svelte';
 import { history } from './history.svelte';
 
 /** a small seeded generator: the same seed, the same run */
@@ -25,9 +25,8 @@ function broken(): string[] {
     // a page under itself, however far up: the sidebar would nest it forever
     const seen = new Set<string>();
     for (let p: Note | undefined = n; p?.parent; p = byId.get(p.parent)) { if (seen.has(p.id)) { out.push(`${n.id} is its own ancestor`); break; } seen.add(p.id); }
-    if (n.group && !groups.names.includes(n.group)) out.push(`${n.id} sits in a group that isn't there: ${n.group}`);
+    if (n.group) out.push(`${n.id} is still in the group ${n.group} after the app made the groups pages`);
   }
-  if (new Set(groups.names).size !== groups.names.length) out.push('a group is listed twice');
   // a property is never one of Eve's own keys, and none is empty (it would be a line saying nothing)
   for (const n of notes.all) for (const [k, v] of Object.entries(n.props ?? {})) if (['id', 'updated', 'deleted', 'order', 'group', 'parent', 'icon', 'wide'].includes(k) || v === '' || (Array.isArray(v) && !v.length)) out.push(`${n.id} has the property ${k}: ${JSON.stringify(v)}`);
   // the trash holds what is deleted and not deleted for good; the list and the trash share no note
@@ -54,12 +53,11 @@ for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
     notes.currentId = start.id;
     const r = rng(seed), pick = <T,>(a: T[]): T | undefined => a[Math.floor(r() * a.length)];
     const live = () => notes.visible.filter((n) => !n.deleted);
-    const undos: (() => void)[] = [];
     const removed: string[] = [];
     const log: string[] = [];
     for (let step = 0; step < 250; step++) {
       const ops: [string, () => void][] = [
-        ['create', () => { const n = notes.create(`# N${step}\n\nx`, pick(['', ...groups.names]) ?? ''); notes.touched(n.id); }],
+        ['create', () => { const n = notes.create(`# N${step}\n\nx`, pick([undefined, ...live().map((x) => x.id)])); notes.touched(n.id); }],
         ['create unwritten', () => { notes.create(); }],
         ['open', () => { const n = pick(live()); if (n) notes.currentId = n.id; }],
         ['edit', () => { const n = pick(live()); if (n) { notes.update(n.id, n.body + ' y'); notes.touched(n.id); } }],
@@ -70,10 +68,7 @@ for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
         ['restore a version', () => { const n = pick(live()); if (n) notes.restoreVersion(n.id, `# Old ${step}\n\nthen`, 'then'); }],
         ['back', () => notes.back()],
         ['forward', () => notes.forward()],
-        ['new group', () => { groups.create(pick(['', ...groups.names]) ?? ''); }],
-        ['delete group', () => { const g = pick(groups.names); if (g) undos.push(groups.remove(g)); }],
-        ['undo group delete', () => { undos.pop()?.(); }],
-        ['move to group', () => { const n = pick(live()); if (n) notes.setGroup(n.id, pick(['', ...groups.names]) ?? ''); }],
+        ['move', () => { const n = pick(live()); if (n) notes.place(n.id, pick(['', ...live().map((x) => x.id)])!, pick([null, ...live().map((x) => x.id)])!); }],
         ['nest', () => { const a = pick(live()), b = pick(live()); if (a && b && a !== b && !notes.isAncestor(a.id, b.id)) notes.setParent(a.id, b.id); }],
         ['unnest', () => { const a = pick(live()); if (a) notes.setParent(a.id, null); }],
         ['sync brings a change', () => { const n = pick(live()); if (n) notes.mergeRemote([{ ...n, body: n.body + ' z', updatedAt: Date.now() + 1000 }]); }],
@@ -83,14 +78,16 @@ for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
         ['set an icon', () => { const n = pick(live()); if (n) notes.setIcon(n.id, pick(['', '🐢', '📌'])!); }],
         ['make it wide or not', () => { const n = pick(live()); if (n) notes.setWide(n.id, pick([true, false])!); }],
         ['small text, a cover', () => { const n = pick(live()); if (n) notes.setLook(n.id, pick([{ small: true }, { small: undefined }, { cover: 'gradient:sea' }, { cover: undefined }])!); }],
-        ['move a group', () => { const g = pick(groups.names); if (g) groups.move(g, pick(['', ...groups.names.filter((x) => x !== g)]) ?? '', null); }],
-        // ⌘Z outside the text: the newest thing done to the notes or the groups taken back (history.svelte.ts)
+        // an older version on another device puts a note in a group (the app makes it a page after every step, below)
+        ['an older device puts one in a group', () => { const n = pick(live()); if (n) notes.mergeRemote([{ ...n, group: pick(['Work', 'Work/Inner', 'Home'])!, updatedAt: Date.now() + 1000 }]); }],
+        // ⌘Z outside the text: the newest thing done to the notes taken back (history.svelte.ts)
         ['app undo', () => { history.undo(); }],
       ];
       const [name, run] = pick(ops)!;
       log.push(name);
       run();
       await Promise.resolve(); // the step closes as an action's own code is done (history.svelte.ts)
+      tree.toPages(); // as App.svelte does whenever there are groups
       const bad = broken();
       if (bad.length) { expect.soft(bad, `seed ${seed}, step ${step}, after: ${log.slice(-8).join(' → ')}`).toEqual([]); return; }
     }

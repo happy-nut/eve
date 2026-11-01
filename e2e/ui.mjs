@@ -224,7 +224,7 @@ try {
     await page.close();
   }
 
-  // ---- around the note (the bounty's finds): tabs, a cover, Settings, toasts, Find, a group renamed ----
+  // ---- around the note (the bounty's finds): tabs, a cover, Settings, toasts, Find ----
   for (const [w, h] of [[1200, 850], [800, 600]]) {
     const page = await browser.newPage({ viewport: { width: w, height: h } });
     await page.goto(URL_);
@@ -377,7 +377,7 @@ try {
     await page.goto(URL_);
     await page.waitForSelector('html.mobile');
     await page.evaluate(() => document.querySelector('button.fab[aria-label="New note"]')?.click());
-    await page.locator('.sheet button', { hasText: 'New note' }).click(); // (the + offers a note, a group, the day)
+    await page.locator('.sheet button', { hasText: 'New note' }).click(); // (the + offers a note, the day)
     await page.waitForSelector('.tiptap');
     await page.evaluate(() => { window.__editor.commands.setContent('# A page title\n\nwords', true); window.__notes.setIcon(window.__notes.current.id, '😍'); });
     await page.waitForTimeout(400);
@@ -398,7 +398,7 @@ try {
     const small = (r, n = 40) => !r || r.width < n || r.height < n;
     // a note: a formula's tabs and Done a finger's size; the formatting bar's end fading where it goes on
     await page.evaluate(() => document.querySelector('button.fab[aria-label="New note"]')?.click());
-    await page.locator('.sheet button', { hasText: 'New note' }).click(); // (the + offers a note, a group, the day)
+    await page.locator('.sheet button', { hasText: 'New note' }).click(); // (the + offers a note, the day)
     await page.waitForSelector('.tiptap');
     await page.waitForTimeout(400);
     await page.evaluate(() => window.__editor.commands.setContent('# P\n\ntext here\n\n$$\nx^2\n$$\n\n| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n', true));

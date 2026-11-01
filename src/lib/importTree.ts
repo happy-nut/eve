@@ -1,5 +1,4 @@
 import { notes, titleOf, type Note } from './notes.svelte';
-import { groups, MAX_DEPTH } from './groups.svelte';
 import { TEXT_FILE, DOC_FILE, VIDEO_FILE } from './drop';
 import { dirOf, nameOf, stem, resolveLink } from './paths';
 import { attachmentCandidates, isKeepNote, keepOrder, keepToNote, type FromKeep } from './keep';
@@ -30,9 +29,10 @@ const byName = (a: Source, b: Source) => a.path.localeCompare(b.path, undefined,
 /**
  * A tree of files as notes, the shape it came in:
  *
- * - its folders become groups, under `into` (a group, '' = the top), as deep as groups go;
+ * - its folders become pages of their names, under `into` (a page's id, '' = the top), what is in them pages under
+ *   them, as Notion has a folder;
  * - a folder beside a note of its name (`Trip.md` and `Trip/`, as Notion and Obsidian export pages) is that
- *   note's sub-pages, not a group of its own;
+ *   note's sub-pages, not a page of its own;
  * - a link or a picture a file reaches by a relative path (`![](img/a.png)`, Obsidian's `![[a.png]]`) comes with
  *   it, into the note rather than as a note of its own; a link to another file of the import becomes a [[link]];
  * - Google Keep's notes (a Takeout export: a .json per note) are read as Keep notes, in Keep's order.
@@ -46,14 +46,22 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
   for (const s of all) if (!named.has(nameOf(s.path).toLowerCase())) named.set(nameOf(s.path).toLowerCase(), s);
   const made: Made[] = [];
 
-  const groupFor = (dirs: string[], loose: boolean) => {
-    if (loose && !dirs.length) return looseInto;
-    return [...(into ? into.split('/') : []), ...dirs].slice(0, MAX_DEPTH).join('/');
+  // a folder's page, made the first time something goes in it (an empty folder makes none)
+  const folders = new Map<string, string>();
+  const pageFor = (dirs: string[], loose = true): string | undefined => {
+    let up = (loose && !dirs.length ? looseInto : into) || undefined;
+    dirs.forEach((d, i) => {
+      const key = dirs.slice(0, i + 1).join('/');
+      let id = folders.get(key);
+      if (!id) folders.set(key, (id = notes.addImported(`# ${d}\n`, Date.now(), up).id));
+      up = id;
+    });
+    return up;
   };
 
   // ---- Google Keep ----
   const taken = new Set<string>();
-  const keep: (FromKeep & { group: string; source: Source })[] = [];
+  const keep: (FromKeep & { dirs: string[]; source: Source })[] = [];
   for (const s of all.filter((x) => /\.json$/i.test(x.path))) {
     let json: unknown;
     try { json = JSON.parse(await s.text()); } catch { continue; }
@@ -73,13 +81,10 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
       }
     }
     const note = keepToNote(json, copied);
-    const base = groupFor(dir ? dir.split('/') : [], true);
-    if (note) keep.push({ ...note, source: s, group: [base, note.sub].filter(Boolean).join('/').split('/').slice(0, MAX_DEPTH).join('/') });
+    // its label a page in its folder's
+    if (note) keep.push({ ...note, source: s, dirs: [...(dir ? dir.split('/') : []), ...(note.sub ? note.sub.split('/') : [])] });
   }
-  for (const k of keep.sort(keepOrder)) {
-    if (k.group) groups.remember(k.group);
-    made.push({ note: notes.addImported(k.body, k.group, k.updatedAt || Date.now()), source: k.source });
-  }
+  for (const k of keep.sort(keepOrder)) made.push({ note: notes.addImported(k.body, k.updatedAt || Date.now(), pageFor(k.dirs)), source: k.source });
 
   // ---- the rest: text files read first, so links between them know their titles ----
   const texts = all.filter((s) => !taken.has(s.path) && TEXT_FILE.test(s.path));
@@ -134,19 +139,18 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
   for (const s of rest.sort((a, b) => depth(a) - depth(b) || byName(a, b))) {
     const dirs = s.path.includes('/') ? dirOf(s.path).split('/') : [];
     const prefix = (i: number) => dirs.slice(0, i + 1).join('/');
-    // the folders up to the first that is a page's are groups; the page it sits deepest in is its parent
+    // the folders up to the first that is a page's are pages of their own; the page it sits deepest in is its parent
     let j = dirs.findIndex((_, i) => pageOf.has(prefix(i)));
     if (j < 0) j = dirs.length;
     let parent: string | undefined;
     for (let i = dirs.length - 1; i >= j && !parent; i--) parent = ids.get(pageOf.get(prefix(i)) ?? '');
-    const group = groupFor(dirs.slice(0, j), true);
+
     let body = bodies.get(s.path), embed: string | undefined;
     if (body === undefined) {
       embed = embedOf(nameOf(s.path), await copy(s));
       body = `# ${stem(nameOf(s.path))}\n\n${embed}\n`;
     }
-    if (group) groups.remember(group);
-    const note = notes.addImported(body, group, Date.now(), parent);
+    const note = notes.addImported(body, Date.now(), parent ?? pageFor(dirs.slice(0, j)));
     ids.set(s.path, note.id);
     made.push({ note, source: s, embed });
   }

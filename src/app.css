@@ -249,11 +249,6 @@ html.mobile aside .mtop .upd.failed { color: #ff453a; }
 html.mobile aside .top { padding: 6px 16px 8px; }
 html.mobile aside .top input { font-size: 15.5px; padding: 9px 12px; border-radius: 8px; background: var(--bg-input); }
 
-html.mobile aside .gname.static {
-  font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; min-height: 34px;
-  padding-top: 10px;
-}
-html.mobile aside .count { display: none; } /* Notion shows no counts; the chevron says there is more */
 html.mobile aside .chev { width: 13px; height: 13px; opacity: 0.7; }
 html.mobile aside .emoji { font-size: 16px; }
 html.mobile aside .fab {
@@ -318,33 +313,23 @@ html.mobile :is(aside, .lifted) .preview {
 html.mobile :is(aside, .lifted) .note-row > button:has(.ico-slot > :is(.emoji, .cico, .painted, .num)) .preview { padding-left: 32px; }
 /* the note last open: a soft wash, not a slab; no keyboard on a phone, so no keyboard cursor colour either */
 html.mobile aside .note-row > button.active, html.mobile aside .note-row > [data-row].active:focus { background: var(--bg-hover); }
-html.mobile aside .note-row > [data-row]:not(.active):focus, html.mobile aside .gname:focus, html.mobile aside .ghead:focus-within { background: none; }
+html.mobile aside .note-row > [data-row]:not(.active):focus { background: none; }
 html.mobile aside .note-row > button:first-child:active { background: var(--bg-active); transform: none; }
-/* a group: a quiet caption over its notes, with room above it, so the notes stay what the eye lands on */
-html.mobile :is(aside, .lifted) .ghead { padding: 0; margin-top: 12px; }
-html.mobile :is(aside, .lifted) .gname {
-  font-size: 13.5px; font-weight: 600; color: var(--fg-dim); min-height: 44px; padding: 4px 12px; gap: 8px;
-}
 html.mobile :is(aside, .lifted) .fold { width: 44px; height: 44px; }
 
-/* a row pulled sideways (swipeRow.ts): it follows the finger, the delete shows behind it, full colour past the mark.
-   A note's row and a group's alike. */
-html.mobile :is(aside, .lifted) :is(.note-row, .ghead) { position: relative; touch-action: pan-y; --sx: 0px; }
-html.mobile :is(aside, .lifted) :is(.note-row, .ghead) > :not(.swipe-act) {
+/* a row pulled sideways (swipeRow.ts): it follows the finger, the delete shows behind it, full colour past the mark */
+html.mobile :is(aside, .lifted) .note-row { position: relative; touch-action: pan-y; --sx: 0px; }
+html.mobile :is(aside, .lifted) .note-row > :not(.swipe-act) {
   position: relative; z-index: var(--z-raised); transform: translateX(var(--sx)); transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-html.mobile :is(aside, .lifted) :is(.note-row, .ghead).swiping > :not(.swipe-act) { transition: none; }
-html.mobile :is(aside, .lifted) :is(.note-row, .ghead).to-left > :not(.swipe-act) { background: var(--bg); }
-/* a group's name and its fold arrow slide as two pieces: the gap between them and their round inner corners showed the
-   red Delete behind as a sliver; filled with the page while pulled */
-html.mobile :is(aside, .lifted) .ghead.to-left > .gname { border-top-right-radius: 0; border-bottom-right-radius: 0; box-shadow: 4px 0 0 var(--bg); }
-html.mobile :is(aside, .lifted) .ghead.to-left > .fold { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+html.mobile :is(aside, .lifted) .note-row.swiping > :not(.swipe-act) { transition: none; }
+html.mobile :is(aside, .lifted) .note-row.to-left > :not(.swipe-act) { background: var(--bg); }
 html.mobile :is(aside, .lifted) .swipe-act {
   position: absolute; z-index: var(--z-flat); inset: 1px 0; display: none; align-items: center; justify-content: flex-end; padding: 0 22px;
   border-radius: 8px; background: #ff453a; font-size: 14.5px; font-weight: 600; color: #fff; opacity: 0.55; transition: opacity 0.12s;
 }
-html.mobile :is(aside, .lifted) :is(.note-row, .ghead).to-left .swipe-act { display: flex; }
-html.mobile :is(aside, .lifted) :is(.note-row, .ghead).armed .swipe-act { opacity: 1; }
+html.mobile :is(aside, .lifted) .note-row.to-left .swipe-act { display: flex; }
+html.mobile :is(aside, .lifted) .note-row.armed .swipe-act { opacity: 1; }
 /* the note: a flat bar of grey icons, and a page head sized for a phone */
 html.mobile .mhead {
   position: absolute; top: 0; left: 0; right: 0; height: 52px; z-index: var(--z-toolbar); display: flex; align-items: center;

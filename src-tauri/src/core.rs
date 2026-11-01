@@ -43,6 +43,7 @@ pub struct Note {
     pub body: String,
     pub updated: i64,
     pub deleted: bool,
+    /// the folder an older version kept it in ("Work/Projects"), until the app makes that pages
     pub group: String,
     pub parent: Option<String>,
     /// the file was bigger than MAX_FILE and only its start was read
@@ -396,9 +397,6 @@ fn touched(n: &Note, (start, end): (i64, i64)) -> bool {
 
 fn describe(n: &Note, notes: &[Note]) -> String {
     let mut s = format!("{} (id: {}", title_of(&n.body), n.id);
-    if !n.group.is_empty() {
-        s += &format!(" · group: {}", n.group);
-    }
     if let Some(p) = n.parent.as_ref().and_then(|p| notes.iter().find(|x| &x.id == p)) {
         s += &format!(" · inside: {}", title_of(&p.body));
     }
@@ -411,9 +409,24 @@ fn describe(n: &Note, notes: &[Note]) -> String {
     s + &format!(" · updated: {})", stamp(n.updated))
 }
 
-fn in_group(n: &Note, group: &str) -> bool {
-    let g = group.trim().trim_matches('/');
-    g.is_empty() || n.group == g || n.group.starts_with(&format!("{g}/"))
+/// That page or under it: the titles of the pages a note is under, and its own, read as a path, so "Work/Projects"
+/// finds the page Projects under Work and what is under it. (A note in an older version's folder, not yet made a page
+/// by the app, is found by its folder.)
+fn under_page(n: &Note, notes: &[Note], page: &str) -> bool {
+    let g = page.trim().trim_matches('/');
+    let under = |p: &str| p == g || p.starts_with(&format!("{g}/"));
+    if g.is_empty() || under(&n.group) {
+        return true;
+    }
+    let mut path = vec![title_of(&n.body)];
+    let mut up = n.parent.as_deref();
+    while let Some(id) = up.filter(|_| path.len() < 64) {
+        let Some(p) = notes.iter().find(|x| x.id == id) else { break };
+        path.push(title_of(&p.body));
+        up = p.parent.as_deref();
+    }
+    path.reverse();
+    under(&path.join("/"))
 }
 
 // ---- commands: what Claude and the terminal can ask for ------------------------------------------
@@ -473,7 +486,7 @@ pub enum Effect {
     Rewrites,
 }
 
-const GROUP: Param = text("group", "Folder path such as \"Work\" or \"Work/Projects\"");
+const PAGE: Param = text("page", "Only under this page: the titles of the pages down to it, such as \"Work\" or \"Work/Projects\"");
 const FROM: Param = text("from", "Made or changed on/after this month or day: 2026-09 or 2026-09-05 (local time)");
 const TO: Param = text("to", "…and on/before this month or day (inclusive)");
 const ID: Param = text("id", "The note's id, from list_notes or search_notes");
@@ -484,9 +497,9 @@ pub const COMMANDS: &[Command] = &[
         tool: "list_notes",
         cli: "list",
         title: "List notes",
-        help: "Lists the notes in Eve, newest first: title, id, group (folder path), when made and last changed. Narrow it to a folder (group) or to notes made or changed in a period (from / to). Read the ones you need with read_note or read_notes.",
+        help: "Lists the notes in Eve, newest first: title, id, the page it is inside, when made and last changed. Narrow it to the pages under one page (page) or to notes made or changed in a period (from / to). Read the ones you need with read_note or read_notes.",
         params: &[
-            GROUP,
+            PAGE,
             FROM,
             TO,
             Param { kind: Kind::Number(1, 500), ..text("limit", "At most this many (default 50)") },
@@ -501,7 +514,7 @@ pub const COMMANDS: &[Command] = &[
         help: "Finds notes whose title or text contains every word of the query (case-insensitive). Returns titles, ids and a snippet around the match; titles that match come first. Read a hit in full with read_note.",
         params: &[
             needed(bare(text("query", "Words to look for"))),
-            text("group", "Only this folder and its subfolders"),
+            PAGE,
             FROM,
             TO,
             Param { kind: Kind::Number(1, 100), ..text("limit", "At most this many (default 20)") },
@@ -548,11 +561,11 @@ pub const COMMANDS: &[Command] = &[
         tool: "create_note",
         cli: "create",
         title: "Create a note",
-        help: "Makes a new note in Eve with this title and markdown under it, as the user would write it: headings, lists, - [ ] to-dos, tables, [[Title]] links to other notes. Optionally in a folder (group) or under another note as its sub-page (parent: its title or id). The note the user has open stays open. Returns the new note's id.",
+        help: "Makes a new note in Eve with this title and markdown under it, as the user would write it: headings, lists, - [ ] to-dos, tables, [[Title]] links to other notes. Optionally under a page, by the titles down to it (page), or under another note by its title or id (parent). The note the user has open stays open. Returns the new note's id.",
         params: &[
             needed(bare(text("title", "The new note's title"))),
             text("body", "Markdown under the title"),
-            text("group", "Folder path such as \"Work\" or \"Work/Projects\" (default: no folder)"),
+            text("page", "The page to put it under, by the titles down to it, such as \"Work\" or \"Work/Projects\": a page of each title is made where there is none (default: the top level)"),
             text("parent", "Title or id of the note to put it under, as a sub-page"),
         ],
         effect: Effect::Adds,
@@ -708,18 +721,23 @@ fn arg_str<'a>(args: &'a Value, key: &str) -> &'a str {
     args.get(key).and_then(Value::as_str).unwrap_or("").trim()
 }
 
+/// The page path asked for: `page`, or `group` as an older client says it (Eve had folders, groups, before pages).
+fn arg_page(args: &Value) -> &str {
+    Some(arg_str(args, "page")).filter(|p| !p.is_empty()).unwrap_or_else(|| arg_str(args, "group"))
+}
+
 fn arg_limit(args: &Value, default: usize, max: usize) -> usize {
     args.get("limit").and_then(Value::as_u64).map(|n| n as usize).unwrap_or(default).clamp(1, max)
 }
 
 pub fn list_notes(notes: &[Note], args: &Value) -> Result<String, String> {
-    let group = arg_str(args, "group");
+    let page = arg_page(args);
     let limit = arg_limit(args, 50, 500);
     let when = period(args)?;
-    let mut hits: Vec<&Note> = notes.iter().filter(|n| in_group(n, group) && within(n, when)).collect();
+    let mut hits: Vec<&Note> = notes.iter().filter(|n| under_page(n, notes, page) && within(n, when)).collect();
     hits.sort_by(|a, b| b.updated.cmp(&a.updated).then_with(|| a.id.cmp(&b.id)));
     if hits.is_empty() {
-        return Ok(if group.is_empty() && when.is_none() { "No notes yet.".into() } else { "No notes there.".into() });
+        return Ok(if page.is_empty() && when.is_none() { "No notes yet.".into() } else { "No notes there.".into() });
     }
     let lines: Vec<String> = hits.iter().take(limit).map(|n| format!("- {}\n", describe(n, notes))).collect();
     Ok(budgeted(format!("{} note(s), newest first:\n", hits.len()), &lines, hits.len(), "list_notes"))
@@ -727,20 +745,20 @@ pub fn list_notes(notes: &[Note], args: &Value) -> Result<String, String> {
 
 /// `head` and as many `lines` as the budget holds, then what was left out of `total` and how to get less.
 fn budgeted(head: String, lines: &[String], total: usize, tool: &str) -> String {
+    let more = |n: usize| format!("[{n} more not shown. Call {tool} again with a page, from / to, or more words to narrow it down.]\n");
+    // counted as the whole will be (each line's own count rounds down, and a hundred of them added up came to less
+    // than the list they made), with room kept for the line saying what was left out
     let mut out = head;
-    let mut used = tokens(&out);
     let mut shown = 0;
     for line in lines {
-        let t = tokens(line);
-        if used + t > BUDGET {
+        if tokens(&format!("{out}{line}{}", more(total))) > BUDGET {
             break;
         }
-        used += t;
         out += line;
         shown += 1;
     }
     if shown < total {
-        out += &format!("[{} more not shown. Call {tool} again with a group, from / to, or more words to narrow it down.]\n", total - shown);
+        out += &more(total - shown);
     }
     out
 }
@@ -759,12 +777,12 @@ pub fn search_notes(notes: &[Note], args: &Value) -> Result<String, String> {
     if words.is_empty() {
         return Err("query is empty".into());
     }
-    let group = arg_str(args, "group");
+    let page = arg_page(args);
     let limit = arg_limit(args, 20, 100);
     let when = period(args)?;
     // (query words in the title, note, snippet)
     let mut hits: Vec<(usize, &Note, String)> = Vec::new();
-    for n in notes.iter().filter(|n| in_group(n, group) && within(n, when)) {
+    for n in notes.iter().filter(|n| under_page(n, notes, page) && within(n, when)) {
         let lower = n.body.to_lowercase();
         if !words.iter().all(|w| lower.contains(w.as_str())) {
             continue;
@@ -1035,8 +1053,8 @@ fn create_note(dir: &Path, notes: &[Note], args: &Value) -> Result<String, Strin
     };
     let body = arg_str(args, "body").trim_matches('\n');
     let text = if body.is_empty() { format!("# {title}\n") } else { format!("# {title}\n\n{body}\n") };
-    let group = arg_str(args, "group").trim().trim_matches('/');
-    ask_app(dir, serde_json::json!({ "op": "create", "body": text, "group": group, "parent": parent }))
+    let page = arg_page(args).trim_matches('/');
+    ask_app(dir, serde_json::json!({ "op": "create", "body": text, "page": page, "parent": parent }))
 }
 
 /// At most this many ids in one read_notes call.
@@ -1182,13 +1200,24 @@ mod tests {
     }
 
     #[test]
-    fn list_filters_by_group_and_limits() {
+    fn list_filters_by_page_and_limits() {
         let notes = vec![note("a", 3, "Work/Alpha", "# A"), note("b", 2, "Work", "# B"), note("c", 1, "Home", "# C"), note("d", 0, "Workshop", "# D")];
-        let out = list_notes(&notes, &json!({ "group": "Work" })).unwrap();
+        let out = list_notes(&notes, &json!({ "page": "Work" })).unwrap();
         assert!(out.contains("A (id: a") && out.contains("B (id: b"));
         assert!(!out.contains("id: c") && !out.contains("id: d"), "{out}");
         let out = list_notes(&notes, &json!({ "limit": 1 })).unwrap();
         assert!(out.starts_with("4 note(s), newest first:") && out.contains("id: a") && !out.contains("id: b"));
+    }
+
+    #[test]
+    fn a_folder_is_found_as_the_pages_it_became() {
+        // "Work/Alpha" is the page Work, a page Alpha under it, and the notes under that (asked as a group by an older client too)
+        let under = |mut n: Note, p: &str| { n.parent = Some(p.into()); n };
+        let notes = vec![note("w", 5, "", "# Work"), under(note("al", 4, "", "# Alpha"), "w"), under(note("x", 3, "", "# Plan"), "al"), note("h", 2, "", "# Home"), under(note("y", 1, "", "# Milk"), "h")];
+        let out = list_notes(&notes, &json!({ "page": "Work/Alpha" })).unwrap();
+        assert!(out.contains("id: al") && out.contains("id: x") && !out.contains("id: w)") && !out.contains("id: y"), "{out}");
+        let out = list_notes(&notes, &json!({ "group": "Work" })).unwrap();
+        assert!(out.starts_with("3 note(s)"), "{out}");
     }
 
     #[test]
@@ -1241,7 +1270,7 @@ mod tests {
         // made on the 3rd counts for the first days, though last changed on the 20th
         let early = list_notes(&notes, &json!({ "from": "2026-09-01", "to": "2026-09-05" })).unwrap();
         assert_eq!(ids(&early), ["mtktin40abc123", "daily-2026-09-02"], "{early}");
-        assert_eq!(ids(&list_notes(&notes, &json!({ "from": "2026-09", "group": "Work" })).unwrap()), ["mtktin40abc123"]);
+        assert_eq!(ids(&list_notes(&notes, &json!({ "from": "2026-09", "page": "Work" })).unwrap()), ["mtktin40abc123"]);
         assert!(list_notes(&notes, &json!({ "from": "2026-07", "to": "2026-07" })).unwrap().starts_with("No notes"));
         let listed = list_notes(&notes, &json!({ "from": "2026-08", "to": "2026-08" })).unwrap();
         assert!(listed.starts_with("1 note(s)") && listed.contains("August"), "{listed}");

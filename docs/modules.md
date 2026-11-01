@@ -1,6 +1,6 @@
 # Eve's modules
 
-Which module uses which, from their imports (`npm run map` writes this). 123 modules, 421 lines; each line says what it takes.
+Which module uses which, from their imports (`npm run map` writes this). 132 modules, 442 lines; each line says what it takes.
 
 ```mermaid
 flowchart LR
@@ -19,10 +19,11 @@ flowchart LR
     m_HistoryPanel["HistoryPanel"]
     m_Outline["Outline"]
     m_Find["Find"]
+    m_Present["Present"]
   end
   subgraph g2["노트 저장소"]
     m_notes["notes"]
-    m_groups["groups"]
+    m_tree["tree"]
     m_daily["daily"]
     m_history["history"]
     m_tabs["tabs"]
@@ -62,6 +63,7 @@ flowchart LR
     m_suggest["suggest"]
     m_markdown["markdown"]
     m_wikilink["wikilink"]
+    m_passage["passage"]
     m_hangul["hangul"]
     m_highlight["highlight"]
     m_textColor["textColor"]
@@ -90,6 +92,12 @@ flowchart LR
     m_lanes["lanes"]
     m_seqFold["seqFold"]
     m_charts["charts"]
+    m_mindmap["mindmap"]
+    m_spots["spots"]
+    m_chartHues["chartHues"]
+    m_diagramOps["diagramOps"]
+    m_diagramMotion["diagramMotion"]
+    m_slides["slides"]
     m_math["math"]
     m_mathEdit["mathEdit"]
     m_mathParts["mathParts"]
@@ -107,6 +115,7 @@ flowchart LR
   end
   subgraph g6["블록 화면"]
     m_DiagramBlock["DiagramBlock"]
+    m_ChartEditor["ChartEditor"]
     m_DiagramForm["DiagramForm"]
     m_FlowEditor["FlowEditor"]
     m_MathEdit["MathEdit"]
@@ -147,9 +156,9 @@ flowchart LR
   m_App -->|"CalendarPage"| m_CalendarPage
   m_App -->|"shortcuts, prettyKeys 외 1"| m_shortcuts
   m_App -->|"sync"| m_sync
-  m_App -->|"groups, leafOf 외 1"| m_groups
+  m_App -->|"tree"| m_tree
   m_App -->|"appearance"| m_appearance
-  m_App -->|"setGlobalHotkey, win 외 11"| m_platform
+  m_App -->|"setGlobalHotkey, win 외 13"| m_platform
   m_App -->|"Sidebar"| m_Sidebar
   m_App -->|"Editor"| m_Editor
   m_App -->|"Confirm"| m_Confirm
@@ -176,6 +185,7 @@ flowchart LR
   m_App -->|"claimKeys, handledBy 외 1"| m_keys
   m_App -->|"(lazy)"| m_Settings
   m_App -->|"(lazy)"| m_CardPage
+  m_App -->|"(lazy)"| m_Present
   m_App -->|"(lazy)"| m_PdfViewer
   m_App -->|"(lazy)"| m_TrashPanel
   m_App -->|"(lazy)"| m_HistoryPanel
@@ -201,6 +211,14 @@ flowchart LR
   m_CardPage -->|"Outline"| m_Outline
   m_CardPage -->|"TableTools"| m_TableTools
   m_CardPage -->|"composing, handledBy"| m_keys
+  m_ChartEditor -->|"spotOf"| m_spots
+  m_ChartEditor -->|"letGo"| m_focusWatch
+  m_ChartEditor -->|"composing"| m_keys
+  m_ChartEditor -->|"isMobile"| m_platform
+  m_ChartEditor -->|"floatAt, screenInsets 외 1"| m_popup
+  m_ChartEditor -->|"textW"| m_lanes
+  m_ChartEditor -->|"held"| m_chartHues
+  m_ChartEditor -->|"Select"| m_Select
   m_Confirm -->|"panelIn, scrimFade"| m_motion
   m_Confirm -->|"ui"| m_ui
   m_Confirm -->|"sheet, held"| m_popup
@@ -224,16 +242,20 @@ flowchart LR
   m_DiagramBlock -->|"renderMermaid, themeKey"| m_mermaid
   m_DiagramBlock -->|"foldSeq, foldable 외 1"| m_seqFold
   m_DiagramBlock -->|"spreadLabels"| m_edgeLabels
+  m_DiagramBlock -->|"drawIn, tokens"| m_diagramMotion
   m_DiagramBlock -->|"KINDS, across 외 4"| m_diagram
   m_DiagramBlock -->|"FlowEditor"| m_FlowEditor
   m_DiagramBlock -->|"scrollHint"| m_scrollHint
   m_DiagramBlock -->|"DiagramForm"| m_DiagramForm
+  m_DiagramBlock -->|"ChartEditor"| m_ChartEditor
+  m_DiagramBlock -->|"tagSpots, adders 외 1"| m_spots
   m_DiagramForm -->|"isMobile"| m_platform
   m_DiagramForm -->|"ui"| m_ui
   m_DiagramForm -->|"composing"| m_keys
   m_DiagramForm -->|"sliceColor, branchColor"| m_mermaid
-  m_DiagramForm -->|"starter, freshId 외 3"| m_diagram
+  m_DiagramForm -->|"starter, freshId 외 5"| m_diagram
   m_DiagramForm -->|"Select"| m_Select
+  m_DiagramForm -->|"depthAt, DIVIDERS 외 43"| m_diagramOps
   m_Editor -->|"takeBody"| m_takeBody
   m_Editor -->|"createEditor, applyKeymap 외 3"| m_editor
   m_Editor -->|"isMobile, pickImage"| m_platform
@@ -243,7 +265,6 @@ flowchart LR
   m_Editor -->|"shortcuts"| m_shortcuts
   m_Editor -->|"ui, under 외 1"| m_ui
   m_Editor -->|"Icon"| m_Icon
-  m_Editor -->|"groups, leafOf"| m_groups
   m_Editor -->|"Suggest"| m_Suggest
   m_Editor -->|"DateMenu"| m_DateMenu
   m_Editor -->|"EmojiRow"| m_EmojiRow
@@ -313,6 +334,12 @@ flowchart LR
   m_PdfViewer -->|"hwpPages"| m_hwp
   m_PdfViewer -->|"HWP_FILE, PDF_FILE"| m_drop
   m_PdfViewer -->|"viewSize"| m_popup
+  m_Present -->|"scrimFade"| m_motion
+  m_Present -->|"ui"| m_ui
+  m_Present -->|"slides, paginate 외 1"| m_slides
+  m_Present -->|"stepper"| m_diagramMotion
+  m_Present -->|"wholeScreen"| m_platform
+  m_Present -->|"appearance"| m_appearance
   m_Select -->|"popIn"| m_motion
   m_Select -->|"isMobile"| m_platform
   m_Select -->|"BottomSheet"| m_BottomSheet
@@ -323,7 +350,7 @@ flowchart LR
   m_Settings -->|"storage, autostart 외 7"| m_platform
   m_Settings -->|"normHost, webBase"| m_github
   m_Settings -->|"ui"| m_ui
-  m_Settings -->|"appearance, PASTELS 외 4"| m_appearance
+  m_Settings -->|"appearance, PASTELS 외 5"| m_appearance
   m_Settings -->|"Keys"| m_Keys
   m_Settings -->|"Select"| m_Select
   m_Settings -->|"Slider"| m_Slider
@@ -337,7 +364,7 @@ flowchart LR
   m_Sidebar -->|"updates"| m_updates
   m_Sidebar -->|"notes, nested 외 3"| m_notes
   m_Sidebar -->|"isDailyId, DAILY_TEMPLATE_ID 외 1"| m_daily
-  m_Sidebar -->|"groups, parentOf 외 3"| m_groups
+  m_Sidebar -->|"tree"| m_tree
   m_Sidebar -->|"shortcuts, prettyKeys"| m_shortcuts
   m_Sidebar -->|"typedIn"| m_hangul
   m_Sidebar -->|"sync"| m_sync
@@ -383,7 +410,7 @@ flowchart LR
   m_main -->|"App"| m_App
   m_main -->|"isMobile"| m_platform
   m_main -->|"watchFocus"| m_focusWatch
-  m_appearance -->|"setWindowSize, isMobile"| m_platform
+  m_appearance -->|"setWindowSize, isMobile 외 1"| m_platform
   m_blockHandle -->|"ui, under"| m_ui
   m_bookmark -->|"fetchUrl, openUrl"| m_platform
   m_callout -->|"ui"| m_ui
@@ -392,6 +419,8 @@ flowchart LR
   m_callout -->|"calloutKind"| m_calloutKind
   m_charts -->|"fromCode, ganttDates"| m_diagram
   m_charts -->|"laneSvg"| m_lanes
+  m_charts -->|"mindSvg"| m_mindmap
+  m_charts -->|"huesOf"| m_chartHues
   m_code -->|"ui, under"| m_ui
   m_code -->|"composing"| m_keys
   m_code -->|"isMobile"| m_platform
@@ -406,6 +435,7 @@ flowchart LR
   m_databaseNode -->|"focusBack"| m_code
   m_databaseNode -->|"defaultDb, parseDb 외 1"| m_database
   m_diagramBlock -->|"DiagramBlock"| m_DiagramBlock
+  m_diagramOps -->|"starter, freshId 외 4"| m_diagram
   m_drop -->|"saveAsset"| m_platform
   m_editor -->|"typedIn"| m_hangul
   m_editor -->|"NOTION_COPY, fromNotion"| m_notionPaste
@@ -447,10 +477,6 @@ flowchart LR
   m_editor -->|"holdEdit, dropEdit"| m_pending
   m_editor -->|"appearance"| m_appearance
   m_find -->|"chipLabel"| m_date
-  m_groups -->|"notes, nested"| m_notes
-  m_groups -->|"history, undoSource"| m_history
-  m_groups -->|"appearance"| m_appearance
-  m_groups -->|"randomIcon"| m_icons
   m_highlight -->|"ui, under"| m_ui
   m_highlight -->|"appearance"| m_appearance
   m_hints -->|"shortcuts"| m_shortcuts
@@ -460,12 +486,11 @@ flowchart LR
   m_image -->|"assetUrl, copyImage"| m_platform
   m_image -->|"MIN_WIDTH, alignOf 외 6"| m_resize
   m_importTree -->|"notes, titleOf"| m_notes
-  m_importTree -->|"groups, MAX_DEPTH"| m_groups
   m_importTree -->|"TEXT_FILE, DOC_FILE 외 1"| m_drop
   m_importTree -->|"dirOf, nameOf 외 2"| m_paths
   m_importTree -->|"attachmentCandidates, isKeepNote 외 2"| m_keep
   m_inbox -->|"notes, titleOf"| m_notes
-  m_inbox -->|"depthOf, MAX_DEPTH"| m_groups
+  m_inbox -->|"findPassage, nearestLine"| m_passage
   m_kanban -->|"ui"| m_ui
   m_kanban -->|"Board"| m_Kanban
   m_kanban -->|"focusBack"| m_code
@@ -481,9 +506,11 @@ flowchart LR
   m_mathEdit -->|"MathEdit"| m_MathEdit
   m_mermaid -->|"chartHtml"| m_charts
   m_mermaid -->|"isMobile"| m_platform
+  m_mindmap -->|"textW, wrap"| m_lanes
+  m_mindmap -->|"held, huesOf"| m_chartHues
   m_moves -->|"notes"| m_notes
   m_moves -->|"CALENDAR_NOTE_ID"| m_daily
-  m_moves -->|"groups, parentOf"| m_groups
+  m_moves -->|"tree"| m_tree
   m_noteMenu -->|"cardable, cardToLink 외 1"| m_bookmark
   m_noteMenu -->|"ui"| m_ui
   m_noteMenu -->|"openUrl, clipboardText 외 1"| m_platform
@@ -527,9 +554,10 @@ flowchart LR
   m_slash -->|"appearance"| m_appearance
   m_slash -->|"isPen, penName"| m_highlight
   m_slash -->|"COLORS, colorText"| m_textColor
+  m_spots -->|"freshId, ganttDates 외 2"| m_diagram
+  m_spots -->|"dropStep, DIVIDERS 외 29"| m_diagramOps
   m_swipeRow -->|"isMobile"| m_platform
   m_sync -->|"notes, parse 외 1"| m_notes
-  m_sync -->|"groups"| m_groups
   m_sync -->|"flushEdits"| m_pending
   m_sync -->|"assets, github 외 6"| m_platform
   m_sync -->|"Repo, FileHashes 외 5"| m_github
@@ -549,6 +577,8 @@ flowchart LR
   m_transfer -->|"commonDir, dirOf"| m_paths
   m_transfer -->|"ui"| m_ui
   m_transfer -->|"flushEdits"| m_pending
+  m_tree -->|"notes, nested"| m_notes
+  m_tree -->|"history"| m_history
   m_ui -->|"history"| m_history
   m_ui -->|"focusNote"| m_popup
   m_ui -->|"isMobile"| m_platform

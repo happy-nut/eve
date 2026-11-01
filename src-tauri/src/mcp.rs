@@ -201,7 +201,7 @@ mod tests {
             })
         };
         let call = |name: &str, args: Value| handle(&dir, &json!({ "jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": { "name": name, "arguments": args } })).unwrap();
-        let out = call("create_note", json!({ "title": "Plan", "body": "- [ ] ship\n", "group": "/Work/", "parent": "Projects" }));
+        let out = call("create_note", json!({ "title": "Plan", "body": "- [ ] ship\n", "page": "/Work/", "parent": "Projects" }));
         assert_eq!(text(&out), "Made it.");
         let out = call("edit_note", json!({ "title": "Projects", "old": "nope", "new": "x" }));
         assert_eq!(out["result"]["isError"], true);
@@ -209,7 +209,7 @@ mod tests {
         // what was asked: the note found here by its title, the title written as the note's first line
         let asked = eve.join().unwrap();
         assert_eq!(asked[0]["body"], "# Plan\n\n- [ ] ship\n");
-        assert_eq!(asked[0]["group"], "Work");
+        assert_eq!(asked[0]["page"], "Work");
         assert_eq!(asked[0]["parent"], "p");
         assert_eq!((&asked[1]["op"], &asked[1]["id"], &asked[1]["old"]), (&json!("edit"), &json!("p"), &json!("nope")));
         // refused before Eve is asked: no such note, no title, no passage

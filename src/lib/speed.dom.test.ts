@@ -3,7 +3,6 @@
 import { test, expect } from 'vitest';
 import { editorWith } from './testEditor';
 import { notes } from './notes.svelte';
-import { groups } from './groups.svelte';
 
 test("switching notes leaves the page's stylesheets alone", () => {
   // a stylesheet taken out or put in makes the engine work out the style of the whole page again, list and all
@@ -23,7 +22,6 @@ test('the lists are kept between reads, not filtered and sorted again at each', 
   expect(notes.visible).toBe(notes.visible);
   expect(notes.pages).toBe(notes.pages);
   expect(notes.daily).toBe(notes.daily);
-  expect(groups.notesIn('')).toBe(groups.notesIn(''));
   expect(notes.byTitle('kept')?.id).toBe(notes.visible.find((n) => n.body === '# Kept\n')?.id);
   // …and still follow a change
   const before = notes.visible;

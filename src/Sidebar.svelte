@@ -8,7 +8,7 @@
   import { tick, untrack } from 'svelte';
   import { notes, nested, titleOf, rankByTitle, CALENDAR, type Note } from './lib/notes.svelte';
   import { isDailyId, DAILY_TEMPLATE_ID, CALENDAR_NOTE_ID } from './lib/daily';
-  import { groups, parentOf, leafOf, depthOf, MAX_DEPTH } from './lib/groups.svelte';
+  import { tree } from './lib/tree.svelte';
   import { shortcuts, prettyKeys } from './lib/shortcuts.svelte';
   import { typedIn } from './lib/hangul';
   import { sync } from './lib/sync.svelte';
@@ -31,7 +31,7 @@
   /** ⌘ held: 1…9 badges on the notes in the order shown */
   const jumpNumbers = $derived.by(() => {
     const m = new Map<string, number>();
-    if (cmdHeld && !q) groups.visibleOrdered().slice(0, 9).forEach((n, i) => m.set(n.id, i + 1));
+    if (cmdHeld && !q) tree.visibleOrdered().slice(0, 9).forEach((n, i) => m.set(n.id, i + 1));
     return m;
   });
 
@@ -57,54 +57,35 @@
   }
 
   /**
-   * One flat, keyed list of rows (groups, notes, placeholders). A single {#each} lets
-   * animate:flip carry a row smoothly to its new place even when it changes group or nesting.
+   * One flat, keyed list of rows (pages, a placeholder). A single {#each} lets animate:flip carry a row smoothly to its
+   * new place even when it changes nesting.
    */
   type Row =
-    | { kind: 'group'; key: string; g: string; depth: number }
     | { kind: 'note'; key: string; n: Note; depth: number; kids?: boolean }
-    | { kind: 'empty'; key: string; text: string; g: string; depth: number };
+    | { kind: 'empty'; key: string; text: string; depth: number };
   const rows = $derived.by((): Row[] => {
-    if (q) return hits.length ? hits.map((n) => ({ kind: 'note', key: n.id, n, depth: 0 })) : [{ kind: 'empty', key: 'empty:search', text: 'No matches', g: '', depth: 0 }];
-    const out: Row[] = [];
-    // Notes first, above the groups (the daily notes' calendar is one of them: it moves like a note)
-    const root = nested(groups.notesIn(''), (id) => groups.isFolded(id));
-    // no heading over them: notes outside a group simply come first
-    for (const { n, depth, kids } of root) out.push({ kind: 'note', key: n.id, n, depth, kids });
-
-    const walk = (parent: string, depth: number) => {
-      for (const g of groups.children(parent)) {
-        out.push({ kind: 'group', key: 'g:' + groups.id(g), g, depth });
-        if (groups.isCollapsed(g)) continue;
-        const own = nested(groups.notesIn(g), (id) => groups.isFolded(id));
-        walk(g, depth + 1);
-        for (const { n, depth: d, kids } of own) out.push({ kind: 'note', key: n.id, n, depth: depth + 1 + d, kids });
-        // an open group with nothing in it says so, rather than looking like it failed to open
-        if (!own.length && !groups.children(g).length) out.push({ kind: 'empty', key: 'empty:' + groups.id(g), text: 'No notes', g, depth: depth + 1 });
-      }
-    };
-    walk('', 0);
-    return out;
+    if (q) return hits.length ? hits.map((n) => ({ kind: 'note', key: n.id, n, depth: 0 })) : [{ kind: 'empty', key: 'empty:search', text: 'No matches', depth: 0 }];
+    // each page followed by its sub-pages (the daily notes' calendar is one of them: it moves like a note)
+    return nested(notes.visible, (id) => tree.isFolded(id)).map(({ n, depth, kids }) => ({ kind: 'note', key: n.id, n, depth, kids }));
   });
 
-  // The open note is shown where it sits in the list. Opened by ⌘⇧↓, back, a link or a new note in a folded group,
-  // its row used to stay hidden in the folded group (or under a folded page), or scrolled out of sight. Only when
-  // another note comes up: a group folded by hand while its note is open stays folded.
+  // The open note is shown where it sits in the list. Opened by ⌘⇧↓, back, a link or a new note under a folded page,
+  // its row used to stay hidden under it, or scrolled out of sight. Only when another note comes up: a page folded by
+  // hand while its note is open stays folded.
   $effect(() => {
     const id = notes.currentId === CALENDAR ? CALENDAR_NOTE_ID : notes.currentId;
     if (!id) return;
-    untrack(() => groups.reveal(id));
+    untrack(() => tree.reveal(id));
     void tick().then(() => document.querySelector(`aside [data-note="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' }));
   });
 
   /** the list comes back (a phone's Back, the list folded and opened again) with the open note's row in sight:
    *  it started from the top, the row far below */
-  function showOpen(tree: HTMLElement) {
-    void tick().then(() => tree.querySelector('[data-row].active')?.scrollIntoView({ block: isMobile ? 'center' : 'nearest' }));
+  function showOpen(list: HTMLElement) {
+    void tick().then(() => list.querySelector('[data-row].active')?.scrollIntoView({ block: isMobile ? 'center' : 'nearest' }));
   }
 
-  // ---- "+" menu: new note / new group, relative to the focused row (the app's one menu, Menu.svelte) ----
-  let ctxGroup = $state('');
+  // ---- "+" menu: a new note, or a page under the focused row's (the app's one menu, Menu.svelte) ----
   /** the note the + was asked from (its row focused, or else the note open): a new page goes under it, as a page made
    *  from inside it does. Only a focused row counted, and + from the note being read never offered a page inside it */
   let ctxNote = $state<Note | null>(null);
@@ -115,7 +96,6 @@
     const r = (anchor ?? row ?? searchEl)?.getBoundingClientRect();
     const n = row ? notes.all.find((x) => x.id === row.dataset.note) : notes.current;
     ctxNote = n && n.id !== CALENDAR_NOTE_ID && !n.deleted ? n : null;
-    ctxGroup = row?.dataset.group ?? n?.group ?? '';
     ui.openMenu(r ? { ...under(r), clientX: Math.round(r.left + (row && !anchor ? 8 : 0)) } : { clientX: 12, clientY: 40 }, plusItems);
   };
   /** Import / export. A failed export says so instead of doing nothing at all. */
@@ -126,26 +106,23 @@
   const importFiles = () => transfer(async () => opened(await importFromFinder()));
   const importFolder = () => transfer(async () => opened(await importFromFolder()));
 
-  /** a new note in group `g`, straight into the editor (deleting keeps focus in the list); a search still narrowing
-   *  the list would hide it there, so it goes */
-  const newNote = (g: string) => async () => { ui.focusOwner = 'editor'; ui.search = ''; notes.create('', g); await tick(); focusNote(); };
-  /** a new page under `n` (in its group), straight into the editor; `n` opens to show it */
+  /** a new note, straight into the editor (deleting keeps focus in the list); a search still narrowing the list would
+   *  hide it there, so it goes */
+  const newNote = async () => { ui.focusOwner = 'editor'; ui.search = ''; notes.create(''); await tick(); focusNote(); };
+  /** a new page under `n`, straight into the editor; `n` opens to show it */
   const newPageIn = (n: Note) => async () => {
     ui.focusOwner = 'editor'; ui.search = '';
-    groups.unfold(n.id);
-    notes.create('', n.group ?? '', n.id);
+    tree.unfold(n.id);
+    notes.create('', n.id);
     await tick(); focusNote();
   };
 
   const plusItems = $derived.by(() => {
     const items: { label: string; run: () => void; sep?: boolean }[] = [
-      // from a note's row: a page under that note first (the group it sits in is the second choice)
+      // from a note's row: a page under that note first
       ...(ctxNote ? [{ label: `New page in “${titleOf(ctxNote)}”`, run: newPageIn(ctxNote) }] : []),
-      { label: ctxGroup ? `New note in “${leafOf(ctxGroup)}”` : 'New note', run: newNote(ctxGroup) },
-      // a group as deep as groups go takes no group inside: the new one goes beside it, and says so
-      { label: !ctxGroup ? 'New group' : depthOf(ctxGroup) < MAX_DEPTH ? `New group in “${leafOf(ctxGroup)}”` : `New group in “${leafOf(parentOf(ctxGroup))}”`, run: () => groups.create(ctxGroup) },
+      { label: 'New note', run: newNote },
     ];
-    if (ctxGroup) items.push({ label: 'New note at top level', run: newNote('') }, { label: 'New group at top level', run: () => groups.create('') });
     if (appearance.s.dailyNotes) items.push({ label: "Today's daily note", run: () => { ui.focusOwner = 'editor'; notes.caretEnd = true; notes.openDaily(); } });
     items.push(
       { label: 'Import files…', run: importFiles, sep: true },
@@ -153,14 +130,14 @@
     );
     return items;
   });
-  // ---- drag & drop (native HTML5): notes and whole groups ----
-  let drag = $state<{ note?: string; group?: string } | null>(null);
+  // ---- drag & drop (native HTML5) ----
+  let drag = $state<{ note: string } | null>(null);
   /**
-   * where it would land: into a group ('' = root), or before a note / a group. A note dropped on a note
-   * row also says under which page (`parent`, '' = a page of its own), as the list shows it; `afterNote`
-   * is only for the line drawn under the row it follows, when nothing comes after it.
+   * where it would land: under which page (`parent`, '' = the top level) and before which page, as the list shows it;
+   * `afterNote` is only for the line drawn under the row it follows, when nothing comes after it. `{ parent: '' }`
+   * alone: the end of the list.
    */
-  let dropAt = $state<{ into?: string; beforeNote?: string; beforeGroup?: string; parent?: string; afterNote?: string } | null>(null);
+  let dropAt = $state<{ parent: string; beforeNote?: string; afterNote?: string } | null>(null);
 
   function dragStartNote(e: DragEvent, n: Note) {
     if (q) { e.preventDefault(); return; } // search results: the rows around it there are not its neighbours in the list
@@ -168,19 +145,12 @@
     e.dataTransfer?.setData('text/plain', n.id);
     e.dataTransfer!.effectAllowed = 'move';
   }
-  function dragStartGroup(e: DragEvent, g: string) {
-    drag = { group: g };
-    e.dataTransfer?.setData('text/plain', 'group:' + g);
-    e.dataTransfer!.effectAllowed = 'move';
-    e.stopPropagation();
-  }
   function allow(e: DragEvent) { e.preventDefault(); e.stopPropagation(); e.dataTransfer!.dropEffect = 'move'; }
-  /** empty area of a group / root: drop into it */
-  function overSection(e: DragEvent, g: string) {
+  /** the list's empty space: the end of the top level */
+  function overEnd(e: DragEvent) {
     if (!drag) return;
-    if (drag.group !== undefined && !groups.canPlace(drag.group, g)) { e.stopPropagation(); return; } // don't let an ancestor accept it
     allow(e);
-    dropAt = { into: g };
+    dropAt = { parent: '' };
   }
   /**
    * Over a note row: the gap above it or below it, in the order the list shows. Above: before it, beside
@@ -191,13 +161,11 @@
     if (!drag) return;
     // over itself: nowhere to go (and not on to the list under it, which would take it to the top level)
     if (drag.note === n.id) { e.stopPropagation(); dropAt = null; return; }
-    if (drag.group !== undefined) { overSection(e, n.group); return; } // groups can't sit between notes
-    const inGroup = groups.notesIn(n.group);
-    const parentOfNote = (x: Note) => (x.parent && inGroup.some((m) => m.id === x.parent) ? x.parent : '');
-    const pagesUnder = (p: string) => inGroup.filter((x) => parentOfNote(x) === p && x.id !== drag?.note);
+    const parentOfNote = (x: Note) => (x.parent && notes.visible.some((m) => m.id === x.parent) ? x.parent : '');
+    const pagesUnder = (p: string) => notes.visible.filter((x) => parentOfNote(x) === p && x.id !== drag?.note);
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const below = e.clientY >= r.top + r.height / 2;
-    const kids = below && !groups.isFolded(n.id) ? pagesUnder(n.id) : [];
+    const kids = below && !tree.isFolded(n.id) ? pagesUnder(n.id) : [];
     let at: { parent: string; before: string | null; after?: string };
     if (!below) at = { parent: parentOfNote(n), before: n.id };
     else if (kids.length) at = { parent: n.id, before: kids[0].id };
@@ -206,21 +174,11 @@
       const next = sibs[sibs.indexOf(n) + 1];
       at = { parent: parentOfNote(n), before: next?.id ?? null, after: next ? undefined : n.id };
     }
-    const mover = drag.note!;
+    const mover = drag.note;
     // the calendar's row is never a sub-page, and a page never goes under its own sub-pages
     if (at.parent && (mover === CALENDAR_NOTE_ID || at.parent === CALENDAR_NOTE_ID || at.parent === mover || notes.isAncestor(mover, at.parent))) return;
     allow(e);
-    dropAt = { into: n.group, parent: at.parent, beforeNote: at.before ?? undefined, afterNote: at.after };
-  }
-  /** over a group header: top third = before it (sibling), else = into it */
-  function overGroup(e: DragEvent, g: string) {
-    if (!drag) return;
-    if (drag.group === g) { e.stopPropagation(); dropAt = null; return; }
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const before = drag.group !== undefined && e.clientY < r.top + r.height * 0.4;
-    if (drag.group !== undefined && !groups.canPlace(drag.group, before ? parentOf(g) : g)) { e.stopPropagation(); return; }
-    allow(e);
-    dropAt = before ? { beforeGroup: g, into: parentOf(g) } : { into: g };
+    dropAt = { parent: at.parent, beforeNote: at.before ?? undefined, afterNote: at.after };
   }
   function drop(e: DragEvent) {
     if (!drag) return; // a file dragged in from Finder belongs to the app's own drop handler
@@ -228,22 +186,17 @@
     const d = drag, at = dropAt;
     dragEnd();
     if (!d || !at) return;
-    const into = at.into ?? '';
     if (!isMobile) hints.show('sidebarMove', 'Move notes from the keyboard: open the list, then ⌥↑↓', shortcuts.keysFor('focusSidebar'));
-    if (d.note) {
-      groups.remember(into);
-      if (at.parent === undefined) notes.move(d.note, into, at.beforeNote ?? null); // into a group, at its end
-      else { if (at.parent) groups.unfold(at.parent); notes.place(d.note, into, at.parent, at.beforeNote ?? null); }
-    }
-    else if (d.group !== undefined) groups.move(d.group, into, at.beforeGroup ?? null);
+    if (at.parent) tree.unfold(at.parent);
+    notes.place(d.note, at.parent, at.beforeNote ?? null);
   }
   function dragEnd() { drag = null; dropAt = null; }
 
   /** a phone's long press (touchReorder.ts) moves rows through the same drop as a mouse drag */
   const reorder: Reorder = {
     lift(row) {
-      const n = row.dataset.note, g = row.dataset.group;
-      drag = n ? { note: n } : g !== undefined ? { group: g } : null;
+      const n = row.dataset.note;
+      drag = n ? { note: n } : null;
     },
     over(x, y) {
       // the drag handlers take the element under the finger as a drag event would carry it
@@ -254,14 +207,12 @@
       dropAt = null; // where the finger is now, never where it last was: back on its own place, it stays there
       const el = document.elementFromPoint(x, y) as HTMLElement | null;
       const noteRow = el?.closest<HTMLElement>('.note-row');
-      const gname = el?.closest<HTMLElement>('.gname');
-      const tree = el?.closest<HTMLElement>('.tree');
+      const list = el?.closest<HTMLElement>('.tree');
       if (noteRow) {
         const id = noteRow.querySelector<HTMLElement>('[data-note]')?.dataset.note;
         const n = notes.all.find((m) => m.id === id);
         if (n) overNote(as(noteRow), n);
-      } else if (gname?.dataset.group !== undefined) overGroup(as(gname), gname.dataset.group);
-      else if (tree) overSection(as(tree), '');
+      } else if (list) overEnd(as(list));
     },
     drop() {
       if (!dropAt) return false;
@@ -272,13 +223,11 @@
   };
 
   // ---- keyboard ----
-  /** The row after this one (the one before, at the end): where the keyboard goes once this one is deleted. Rows that
-   *  go with it (`goes`: a group's own subgroups) are not it: the keyboard went to one of those and was left on nothing. */
-  function neighbourOf(sel: string, goes: (r: HTMLElement) => boolean = () => false): string {
+  /** The row after this one (the one before, at the end): where the keyboard goes once this one is deleted. */
+  function neighbourOf(sel: string): string {
     const rows = rowsNow(), i = rows.findIndex((r) => r.matches(sel));
-    const stays = (r: HTMLElement) => !goes(r);
-    const nb = i < 0 ? undefined : rows.slice(i + 1).find(stays) ?? rows.slice(0, i).findLast(stays);
-    return nb?.dataset.note ? `[data-note="${nb.dataset.note}"]` : nb?.dataset.group ? groupSel(nb.dataset.group) : '[data-row]';
+    const nb = i < 0 ? undefined : rows[i + 1] ?? rows[i - 1];
+    return nb?.dataset.note ? `[data-note="${nb.dataset.note}"]` : '[data-row]';
   }
   // However asked (⌫ on the row, its menu, its ×): deleted, the keyboard goes to the row next to it when it was
   // in the list, or would be nowhere (the open note was the one deleted); writing in a note, a click on another
@@ -291,18 +240,6 @@
     if (fromList || !a || a === document.body) void focusRow(next);
   }
   const inList = () => !!document.activeElement?.closest('aside');
-  async function removeGroup(g: string) {
-    const n = groups.notesIn(g, true).length, sub = groups.subtree(g).length - 1;
-    const extra = [sub ? `${sub} subgroup${sub > 1 ? 's' : ''}` : '', n ? `${n} note${n > 1 ? 's' : ''} (moved out of the group)` : ''].filter(Boolean).join(', ');
-    // its subgroups' rows go with it; its notes stay, moved to the top level
-    const inside = (r: HTMLElement) => r.dataset.group !== undefined && (r.dataset.group === g || r.dataset.group.startsWith(g + '/'));
-    const next = neighbourOf(groupSel(g), inside), fromList = inList();
-    if (!(await ui.ask(`Delete group “${leafOf(g)}”?${extra ? ` Contains ${extra}.` : ''}`))) return;
-    const step = history.record(), undo = groups.remove(g);
-    // taken back, the keyboard is on its row again (the row it had moved to went back into the group, and was made anew)
-    ui.toast(`Deleted group “${leafOf(g)}”`, { label: 'Undo', run: () => { if (!history.undo(step)) undo(); if (fromList) void focusRow(groupSel(g)); } });
-    void afterRemove(next, fromList);
-  }
   async function removeNote(n: Note) {
     if (n.id === CALENDAR_NOTE_ID) return; // the calendar's row goes with daily notes, in Settings
     if (n.id === notes.currentId) hints.action('deleteNote', 'Delete the open note');
@@ -317,7 +254,6 @@
     await tick();
     (document.querySelector<HTMLElement>(`aside ${sel}`) ?? rowsNow()[0])?.focus();
   }
-  const groupSel = (g: string) => `[data-group="${CSS.escape(g)}"]`;
 
   // ⌥ + arrows (lib/moves.ts), then the moved row keeps the focus
   function nudgeNote(id: string, dir: 1 | -1) { if (moves.nudgeNote(id, dir)) focusRow(`[data-note="${id}"]`); }
@@ -329,14 +265,13 @@
   function nestNote(id: string, dir: 'in' | 'out') {
     if (moves.nestNote(id, dir, rowAbove(id))) focusRow(`[data-note="${id}"]`);
   }
-  function nudgeGroup(g: string, key: string) { const np = moves.nudgeGroup(g, key); if (np) focusRow(groupSel(np)); }
   function treeKey(e: KeyboardEvent) {
     if (ui.pending) return;
     const rows = rowsNow();
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-row]');
     if (!el || (e.target as HTMLElement).tagName === 'INPUT') return;
     const i = rows.indexOf(el);
-    const noteId = el.dataset.note, group = el.dataset.group;
+    const noteId = el.dataset.note;
     if (e.altKey && e.key.startsWith('Arrow')) {
       e.preventDefault(); e.stopPropagation();
       // a search's results are a flat list, not where notes sit: a move there went out of sight, under a page the
@@ -344,44 +279,36 @@
       if (q) return;
       if (noteId && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) nudgeNote(noteId, e.key === 'ArrowUp' ? -1 : 1);
       else if (noteId) nestNote(noteId, e.key === 'ArrowRight' ? 'in' : 'out');
-      else if (group) nudgeGroup(group, e.key);
       return;
     }
     switch (e.key) {
-      case ' ': if (group) groups.toggle(group); else if (noteId) groups.fold(noteId); else return; break;
+      case ' ': if (noteId) tree.fold(noteId); else return; break;
       case 'ArrowDown': rows[i + 1]?.focus(); break;
       case 'ArrowUp': if (i === 0 && q) searchEl?.focus(); else rows[i - 1]?.focus(); break;
-      // as in Finder: ← folds what is open (a group, a page showing its sub-pages); on what is folded already, or has
-      // nothing under it, it goes up to what holds it — the page it is a sub-page of, else its group
+      // as in Finder: ← folds a page showing its sub-pages; on one folded already, or with nothing under it, it goes up
+      // to the page it is a sub-page of
       case 'ArrowLeft': {
         const hasKids = !!el.closest('.note-row')?.querySelector('.fold');
-        if (group && !groups.isCollapsed(group)) groups.toggle(group);
-        else if (noteId && hasKids && !groups.isFolded(noteId)) groups.fold(noteId);
+        if (noteId && hasKids && !tree.isFolded(noteId)) tree.fold(noteId);
         else {
           const n = noteId ? notes.all.find((x) => x.id === noteId) : undefined;
-          const page = n?.parent && rows.some((r) => r.dataset.note === n.parent) ? n.parent : '';
-          const p = group ? parentOf(group) : n?.group;
-          if (page) focusRow(`[data-note="${page}"]`);
-          else if (p) focusRow(groupSel(p));
+          if (n?.parent && rows.some((r) => r.dataset.note === n.parent)) focusRow(`[data-note="${n.parent}"]`);
           else return;
         }
         break;
       }
-      // → opens what is folded (a group, a page's sub-pages); anywhere else it steps over into the note, as Escape does
+      // → opens a page's folded sub-pages; anywhere else it steps over into the note, as Escape does
       case 'ArrowRight':
-        if (group && groups.isCollapsed(group)) groups.toggle(group);
-        else if (noteId && groups.isFolded(noteId) && el.closest('.note-row')?.querySelector('.fold')) groups.fold(noteId);
+        if (noteId && tree.isFolded(noteId) && el.closest('.note-row')?.querySelector('.fold')) tree.fold(noteId);
         else focusNote();
         break;
       case 'Backspace': case 'Delete':
         if (noteId) void removeNote(notes.all.find((n) => n.id === noteId)!);
-        else if (group) void removeGroup(group);
         break;
       case 'Enter':
         if (e.altKey) { rowMenu(e, el); return; } // ⌥↩ is the right button, for people who are not holding one
-        if (group) { groups.editing = group; break; }
         return;
-      case 'i': if (group) pickIcon({ group }); else pickIcon({ note: notes.all.find((n) => n.id === noteId) }); break;
+      case 'i': { const n = notes.all.find((x) => x.id === noteId); if (n) pickIcon(n); break; }
       case 'Escape': if (ui.pdf || ui.find) return; focusNote(); break; // what floats on top closes first (App)
       default: return;
     }
@@ -391,24 +318,18 @@
 
   // ---- icons (emoji) ----
   /** A click on a row's icon changes it. Not a tap on a phone: there the icon is most of what a thumb aims at, and
-   *  opening a note (folding a group) became a full-screen picker. The tap goes on to the row; a note's icon is
-   *  changed from its page, a group's from beside its name while it is being renamed. */
-  function iconTap(e: MouseEvent, target: { note?: Note; group?: string }) {
+   *  opening a note became a full-screen picker. The tap goes on to the row; a note's icon is changed from its page. */
+  function iconTap(e: MouseEvent, n: Note) {
     if (isMobile) return;
     e.stopPropagation();
-    pickIcon(target, e.currentTarget as HTMLElement);
+    pickIcon(n, e.currentTarget as HTMLElement);
   }
-  async function pickIcon(target: { note?: Note; group?: string }, anchor?: HTMLElement) {
-    const current = target.note ? target.note.icon ?? '' : groups.icon(target.group!);
-    const el = anchor ?? document.querySelector<HTMLElement>(target.note ? `aside [data-note="${target.note.id}"]` : `aside [data-group="${CSS.escape(target.group!)}"]`);
-    const gid = target.group !== undefined ? groups.id(target.group) : '';
-    const v = await ui.pickEmoji(el ?? new DOMRect(60, 60, 0, 0), current);
-    // the group as it is called now: renamed while the picker was up (its name being typed as it opened), the old
-    // name was no group's, and the icon and the keyboard went nowhere (the list's first row)
-    const g = target.group !== undefined ? groups.names.find((n) => groups.id(n) === gid) ?? target.group : '';
-    if (v !== null) { if (target.note) notes.setIcon(target.note.id, v); else groups.setIcon(g, v); }
+  async function pickIcon(n: Note, anchor?: HTMLElement) {
+    const el = anchor ?? document.querySelector<HTMLElement>(`aside [data-note="${n.id}"]`);
+    const v = await ui.pickEmoji(el ?? new DOMRect(60, 60, 0, 0), n.icon ?? '');
+    if (v !== null) notes.setIcon(n.id, v);
     // the keyboard goes back to the row whose icon it was, picked or not
-    if (!isMobile) void focusRow(target.note ? `[data-note="${target.note.id}"]` : groupSel(g));
+    if (!isMobile) void focusRow(`[data-note="${n.id}"]`);
   }
 
   /**
@@ -422,28 +343,15 @@
     e.stopPropagation();
     row.focus();
     ui.focusOwner = 'sidebar';
-    const g = row.dataset.group;
     const n = row.dataset.note ? notes.all.find((x) => x.id === row.dataset.note) : undefined;
     // the calendar's row has nothing to offer but moving (drag, ⌥↑↓)
     if (n?.id === CALENDAR_NOTE_ID) return;
-    const items: MenuItem[] = g
-      ? [
-          { label: `New note in “${leafOf(g)}”`, run: newNote(g) },
-          { label: 'New group inside', run: () => groups.create(g), hide: depthOf(g) >= MAX_DEPTH },
-          { label: 'Rename', sep: true, run: () => (groups.editing = g) },
-          { label: 'Change icon…', run: () => pickIcon({ group: g }) },
-          { label: 'Move up', sep: true, run: () => nudgeGroup(g, 'ArrowUp'), hide: !moves.canNudgeGroup(g, 'ArrowUp') },
-          { label: 'Move down', run: () => nudgeGroup(g, 'ArrowDown'), hide: !moves.canNudgeGroup(g, 'ArrowDown') },
-          { label: 'Move out', run: () => nudgeGroup(g, 'ArrowLeft'), hide: !parentOf(g) },
-          { label: 'Nest under previous', run: () => nudgeGroup(g, 'ArrowRight'), hide: !groups.prevSibling(g) },
-          { label: 'Delete group', sep: true, danger: true, run: () => removeGroup(g) },
-        ]
-      : n
+    const items: MenuItem[] = n
         ? [
             { label: 'Open', run: () => openNote(n) },
             { label: 'Open in new tab', run: () => tabs.open(n.id), hide: isMobile || n.id === CALENDAR_NOTE_ID },
             { label: 'New page inside', run: newPageIn(n), hide: n.id === CALENDAR_NOTE_ID },
-            { label: 'Change icon…', run: () => pickIcon({ note: n }) },
+            { label: 'Change icon…', run: () => pickIcon(n) },
             // a move that would do nothing (the first row up, no page above to nest under) is left out
             // and none in search results, dragged either: the row above there is not the one above in the list
             { label: 'Move up', sep: true, run: () => nudgeNote(n.id, -1), hide: !!q || !moves.nudgeNote(n.id, -1, true) },
@@ -458,30 +366,6 @@
     const at = 'clientX' in e && e.clientX ? e : { clientX: Math.round(box.left + 12), clientY: Math.round(box.bottom) };
     if (items.length) ui.openMenu(at, items);
   }
-
-  // ---- rename ----
-  /** the name typed for a group is a sibling's already: ↩ keeps the field open and says so (a click away still drops it) */
-  let nameTaken = $state(false);
-  function renameKey(e: KeyboardEvent, g: string) {
-    const input = e.currentTarget as HTMLInputElement;
-    const leaf = input.value.trim().replace(/\//g, '-');
-    if (e.key === 'Enter' && leaf && leaf !== leafOf(g) && !groups.canPlace(g, parentOf(g), leaf)) { nameTaken = true; e.preventDefault(); e.stopPropagation(); return; }
-    if (e.key === 'Enter') input.blur();
-    if (e.key === 'Escape') { groups.editing = null; focusRow(groupSel(g)); }
-    e.stopPropagation();
-  }
-  function finishRename(g: string, value: string) {
-    nameTaken = false;
-    if (groups.editing !== g) return; // Esc already handled
-    const renamed = groups.rename(g, value);
-    // ↩ ends it with the keyboard nowhere: back to the group's row. A click elsewhere (into the note) took the
-    // keyboard there, and pulling it back to the list lost what was typed next and sent the keys to the row.
-    setTimeout(() => {
-      const a = document.activeElement;
-      if (!a || a === document.body || a.closest('aside')) void focusRow(groupSel(renamed));
-    }, 0);
-  }
-  const focusInput = (el: HTMLInputElement) => { el.focus(); el.select(); };
 
   // ---- misc ----
   function onSearchKey(e: KeyboardEvent) {
@@ -552,7 +436,7 @@
   const onCalendar = $derived(notes.currentId === CALENDAR || !!(notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID)));
   async function openNote(n: Note) {
     if (n.id === CALENDAR_NOTE_ID) return openCalendar(); // the calendar's row opens the calendar
-    const list = groups.ordered(), from = list.findIndex((x) => x.id === notes.currentId), to = list.findIndex((x) => x.id === n.id);
+    const list = tree.ordered(), from = list.findIndex((x) => x.id === notes.currentId), to = list.findIndex((x) => x.id === n.id);
     if (from >= 0 && to === from + 1) hints.action('nextNote', 'The next note is a key away');
     else if (from >= 0 && to === from - 1) hints.action('prevNote', 'The previous note is a key away');
     ui.focusOwner = 'editor';
@@ -608,25 +492,24 @@
     <ul class="tree" role="tree" use:showOpen onkeydown={treeKey} use:touchReorder={reorder}
       onmousedown={(e) => { if (!(e.target as Element).closest('button, input, a, [tabindex]')) e.preventDefault(); }}
       oncontextmenu={(e) => { if (isMobile) e.preventDefault(); else rowMenu(e); }}
-      ondragover={(e) => overSection(e, '')} ondrop={drop}>
+      ondragover={overEnd} ondrop={drop}>
       {#each rows as r (r.key)}
         <li animate:flip={{ duration: 220, easing: cubicOut }} in:fade={{ duration: 140 }} out:slide={{ duration: 180, easing: cubicOut }}
           class="row {r.kind}" style="--d: {'depth' in r ? r.depth : 0}"
-          class:over={r.kind !== 'note' && dropAt?.into === r.g && !dropAt.beforeNote && !dropAt.beforeGroup}
-          class:drop-before={(r.kind === 'note' && dropAt?.beforeNote === r.n.id) || (r.kind === 'group' && dropAt?.beforeGroup === r.g)}
+          class:drop-before={r.kind === 'note' && dropAt?.beforeNote === r.n.id}
           class:drop-after={r.kind === 'note' && dropAt?.afterNote === r.n.id}
-          class:dragging={(r.kind === 'note' && drag?.note === r.n.id) || (r.kind === 'group' && drag?.group === r.g)}>
+          class:dragging={r.kind === 'note' && drag?.note === r.n.id}>
 
           {#if r.kind === 'note'}
             {@const n = r.n}
             {@const swipe = n.id === CALENDAR_NOTE_ID ? {} : { left: () => removeNote(n), enabled: () => !drag }}
-            <div class="note-row" class:collapsed={groups.isFolded(n.id)} draggable={!isMobile && !q} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
+            <div class="note-row" class:collapsed={tree.isFolded(n.id)} draggable={!isMobile && !q} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation" use:swipeRow={swipe}>
               <button data-row data-note={n.id} class:active={n.id === CALENDAR_NOTE_ID ? onCalendar : n.id === notes.currentId}
                 class:enter={searching && !!q && n.id === hits[0]?.id} onclick={(e) => (e.metaKey && !isMobile && n.id !== CALENDAR_NOTE_ID ? tabs.open(n.id) : openNote(n))}>
                 <span class="title">
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
-                  <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => iconTap(e, { note: n })}>
+                  <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => iconTap(e, n)}>
                     {#if jumpNumbers.has(n.id)}<span class="num">{jumpNumbers.get(n.id)}</span>
                     {:else if n.icon}<Icon icon={n.icon} />{:else}
                     <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>{/if}
@@ -640,15 +523,15 @@
                   {#if p}<span class="preview">{p}</span>{/if}
                 {/if}
               </button>
-              <!-- unfolds on hover, like a group's tools; the fold chevron keeps its place at the edge -->
+              <!-- unfolds on hover; the fold chevron keeps its place at the edge -->
               {#if n.id !== CALENDAR_NOTE_ID}
               <span class="tools">
                 <button class="icon mini tip-right" data-tip="Delete note" onclick={() => removeNote(n)}>×</button>
               </span>
               {/if}
               {#if r.kids}
-                <button class="icon mini fold tip-right" aria-label={groups.isFolded(n.id) ? 'Expand' : 'Collapse'}
-                  data-tip={groups.isFolded(n.id) ? 'Expand' : 'Collapse'} onclick={() => groups.fold(n.id)}>
+                <button class="icon mini fold tip-right" aria-label={tree.isFolded(n.id) ? 'Expand' : 'Collapse'}
+                  data-tip={tree.isFolded(n.id) ? 'Expand' : 'Collapse'} onclick={() => tree.fold(n.id)}>
                   <svg class="chev" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4"/></svg>
                 </button>
               {/if}
@@ -658,51 +541,8 @@
               {/if}
             </div>
 
-          {:else if r.kind === 'group'}
-            {@const g = r.g}
-            <div class="ghead" class:collapsed={groups.isCollapsed(g)} use:swipeRow={{ left: () => removeGroup(g), enabled: () => !drag }}>
-              {#if groups.editing === g}
-                  <!-- the group's icon stays as its name is typed (on a Mac it went, and the rows moved): on a phone the one
-                       way to it (a tap on it in the list folds the group); pressed, the box keeps the keyboard until the
-                       picker takes it, and the name typed so far is kept as the box closes -->
-                  <button class="ico-slot rename-ico" aria-label="Change icon" onmousedown={(e) => e.preventDefault()} onclick={(e) => pickIcon({ group: g }, e.currentTarget)}>
-                    {#if groups.icon(g)}<Icon icon={groups.icon(g)} />{:else}
-                    <svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H2.5a1 1 0 0 0-1 1z"/></svg>{/if}
-                  </button>
-                <input class="rename" class:taken={nameTaken} aria-invalid={nameTaken} aria-describedby={nameTaken ? 'name-taken' : undefined}
-                  value={leafOf(g)} use:focusInput onkeydown={(e) => renameKey(e, g)} oninput={() => (nameTaken = false)}
-                  onblur={(e) => finishRename(g, e.currentTarget.value)} spellcheck="false" />
-                {#if nameTaken}<span class="taken-note" id="name-taken" role="alert">Name taken</span>{/if}
-              {:else}
-                <button class="gname" data-row data-group={g} draggable={!isMobile}
-                  ondragstart={(e) => dragStartGroup(e, g)} ondragend={dragEnd} ondragover={(e) => overGroup(e, g)} ondrop={drop}
-                  onclick={() => groups.toggle(g)}>
-                  <!-- svelte-ignore a11y_click_events_have_key_events -->
-                  <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => iconTap(e, { group: g })}>
-                    {#if groups.icon(g)}<Icon icon={groups.icon(g)} />{:else}
-                    <svg class="ico" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.5 3.5H2.5a1 1 0 0 0-1 1z"/></svg>{/if}
-                  </span>
-                  <!-- double-click exactly on the name renames; anywhere else on the row just folds -->
-                  <!-- svelte-ignore a11y_no_static_element_interactions -->
-                  <span class="t" ondblclick={(e) => { e.stopPropagation(); groups.editing = g; }}>{leafOf(g)}</span>
-                </button>
-                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <span class="tail" role="presentation" onclick={() => groups.toggle(g)}>
-                  <span class="count">{groups.notesIn(g, true).length}</span>
-                </span>
-                <!-- on hover the tools unfold between the count and the chevron; the chevron stays at the edge -->
-                <span class="tools">
-                  <button class="icon mini tip-side" data-tip="New note here" onclick={newNote(g)}>+</button>
-                  <button class="icon mini tip-right" data-tip="Delete group" onclick={() => removeGroup(g)}>×</button>
-                </span>
-                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <button class="icon mini fold tip-right" aria-label={groups.isCollapsed(g) ? 'Expand' : 'Collapse'} data-tip={groups.isCollapsed(g) ? 'Expand' : 'Collapse'} onclick={() => groups.toggle(g)}><svg class="chev" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4"/></svg></button>
-                {#if isMobile}<span class="swipe-act del" aria-hidden="true">Delete</span>{/if}
-              {/if}
-            </div>
-
           {:else}
-            <div class="empty" role="presentation" ondragover={(e) => overSection(e, r.g)} ondrop={drop}>{r.text}</div>
+            <div class="empty" role="presentation">{r.text}</div>
           {/if}
         </li>
       {/each}
@@ -756,7 +596,6 @@
   .tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 10px 8px; margin: 0; list-style: none; }
   .row { position: relative; padding-left: calc(var(--d) * 18px); border-radius: 6px; transition: opacity 0.15s, background 0.15s, box-shadow 0.15s; }
   .row.dragging { opacity: 0.4; }
-  .row.over { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
   .ico { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; opacity: 0.75; }
   .ico-slot { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: none; border-radius: 4px; transition: background 0.12s; }
   .ico-slot:hover { background: var(--bg-active); }
@@ -769,40 +608,17 @@
   }
   @keyframes num-in { from { opacity: 0; } }
 
-  .ghead { position: relative; display: flex; align-items: center; padding: 1px 2px 1px 0; border-radius: 6px; transition: background 0.12s; }
-  /* keyboard cursor colours the whole header row (not just the name button) */
-  .ghead:focus-within { transition: none; background: color-mix(in srgb, var(--accent) 22%, transparent); }
-  /* + and × unfold between the count and the chevron on hover; the chevron never moves */
+  /* × unfolds before the chevron on hover; the chevron never moves */
   .tools { display: flex; gap: 2px; width: 0; opacity: 0; overflow: hidden; transform: translateX(6px);
     transition: width 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.16s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
-  :global(html[data-hover]) .ghead:hover .tools, .tools:focus-within { width: 46px; opacity: 1; transform: none; }
   :global(html[data-hover]) .note-row:hover .tools, .note-row .tools:focus-within { width: 22px; opacity: 1; transform: none; }
   .tools .icon.mini, .fold { width: 22px; height: 22px; font-size: 14px; flex: none; }
   .fold { margin-left: 2px; }
-  .tail { display: flex; align-items: center; cursor: default; }
-  .gname {
-    flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px;
-    border: 0; background: none; color: var(--fg); font: inherit; font-size: 13px; font-weight: 600;
-    padding: 4px 6px; border-radius: 6px; text-align: left; white-space: nowrap; overflow: hidden;
-  }
-  .gname .t { overflow: hidden; text-overflow: ellipsis; }
-  /* disclosure chevron lives on the right, so group icons sit flush left and notes indent just one column */
+  /* disclosure chevron lives on the right, so icons sit flush left and a sub-page indents just one column */
   /* an SVG, not a "›" glyph: text glyphs sit off-centre in their box, which shows once rotated */
   .fold { display: inline-flex; align-items: center; justify-content: center; }
   .chev { display: block; width: 14px; height: 14px; fill: none; stroke: var(--fg-dim); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); transform: rotate(90deg); }
   .collapsed .chev { transform: rotate(0deg); }
-  .count { font-weight: 500; font-size: 11px; color: var(--fg-dim); padding: 0 2px 0 6px; }
-  .rename {
-    /* the row's own size, so the list does not move as a name is typed */
-    flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 3px 6px; border-radius: 4px; line-height: 1.3;
-    border: 1px solid var(--accent); background: var(--bg-input); color: var(--fg); outline: none; box-shadow: var(--glow);
-  }
-  .rename-ico { border: 0; background: none; color: inherit; padding: 0; margin: 0 5px 0 6px; }
-  :global(html.mobile) .rename-ico { margin: 0 6px 0 0; width: 38px !important; height: 38px !important; }
-  .rename.taken { border-color: #ff453a; box-shadow: none; }
-  /* a phone: a box a thumb can work in, and 16px text, below which Android zooms the page in on it */
-  :global(html.mobile) .rename { min-height: 38px; font-size: 16px; padding: 6px 10px; border-radius: 8px; }
-  .taken-note { flex: none; margin: 0 6px; font-size: 11px; color: #ff453a; white-space: nowrap; }
 
   .empty { padding: 5px 10px; font-size: 11.5px; color: var(--fg-dim); opacity: 0.7; }
 
@@ -826,12 +642,10 @@
   .note-row > button.active.enter { background: color-mix(in srgb, var(--accent) 12%, transparent); } /* (over the row's own) */
   /* Keyboard cursor: the row's own background, and it appears at once. The rows fade their background
      over 0.12s, which a held arrow key never gives them — focus moved on before the colour arrived, so
-     the list looked unmarked while scrolling through it. A group row had no focus colour at all. */
+     the list looked unmarked while scrolling through it. */
   .note-row > [data-row]:focus {
     outline: none; transition: none; background: color-mix(in srgb, var(--accent) 22%, transparent);
   }
-  /* a group's name is one colour with the rest of its header, which .ghead:focus-within paints */
-  .gname:focus { outline: none; background: transparent; }
   .note-row > button.active:focus { transition: none; background: color-mix(in srgb, var(--accent) 24%, var(--bg-active)); }
   .title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; min-width: 0; width: 100%; }
   .title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -43,23 +43,6 @@ test('Daily notes turned off: the calendar\'s tab closes (it stayed, and opened 
   expect(tabs.list.map((t) => t.id)).not.toContain(CALENDAR);
 });
 
-test('a group renamed or deleted, then taken back: the same row (its identity), so the keyboard stays on it', async () => {
-  const { groups } = await import('./groups.svelte');
-  const { history } = await import('./history.svelte');
-  const g = groups.create('');
-  const id = groups.id(g);
-  history.clear();
-  groups.rename(g, 'Renamed');
-  await Promise.resolve();
-  expect(history.undo()).toBe(true);
-  expect(groups.id(g)).toBe(id);
-  // deleted, and its Undo
-  groups.remove(g);
-  await Promise.resolve();
-  expect(history.undo()).toBe(true);
-  expect(groups.id(g)).toBe(id);
-});
-
 test('⌘Z with the keyboard nowhere (on <body>) takes nothing back from the list: it undid the ⌘N of the open note', async () => {
   const { ui } = await import('./ui.svelte');
   const { history } = await import('./history.svelte');
