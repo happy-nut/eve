@@ -46,7 +46,8 @@
   $effect(() => { if (settingsOpen) return ui.openedSettings(() => (settingsOpen = false)); });
   let searchEl = $state<HTMLInputElement | null>(null);
   let hotkeyError = $state<string | null>(null);
-  // hold ⌘: sidebar notes show 1…9, ⌘<digit> opens that note
+  // hold ⌘: sidebar notes show 1…9, ⌘<digit> opens that note. Not while anything is up over the note (a floating
+  // page, Settings, a dialog): the numbers lit up in the list behind it
   let cmdHeld = $state(false);
   let cmdTimer: ReturnType<typeof setTimeout> | undefined;
   function cmdDown() { clearTimeout(cmdTimer); cmdTimer = setTimeout(() => (cmdHeld = true), 550); }
@@ -685,7 +686,7 @@
       {/if}
     </header>
   {/if}
-  <Sidebar bind:open={sidebarOpen} bind:searchEl {cmdHeld} onSettings={() => (settingsOpen = true)} onNew={newOnPhone} />
+  <Sidebar bind:open={sidebarOpen} bind:searchEl cmdHeld={cmdHeld && !ui.layers.count} onSettings={() => (settingsOpen = true)} onNew={newOnPhone} />
   <main class:tabbed={!isMobile && tabs.list.length > 1}>
     {#if !isMobile && tabs.list.length > 1}<TabBar />{/if}
     {#if notes.loaded && notes.current}
