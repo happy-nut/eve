@@ -80,4 +80,16 @@ describe('chart parts', () => {
     where.set('right of|B');
     expect(toCode(d)).toMatch(/Note right of B: hi/);
   });
+
+  it('the first task is not offered to start after the one before it, there being none', () => {
+    const d = gantt('  section S\n  A :a1, 2026-01-05, 3d\n  B :b1, 2026-01-09, 2d');
+    expect(startOptions(d, d.sections[0].tasks[0]).map(([v]) => v)).not.toContain('prev');
+    expect(startOptions(d, d.sections[0].tasks[1]).map(([v]) => v)).toContain('prev');
+  });
+
+  it('a line is not offered again to what it goes to already', () => {
+    const s = fromCode('stateDiagram-v2\n  Running --> Done : finish\n  Idle') as StateDiagram;
+    const to = spotOf(s, 'state:Running')!.fields.find((f) => f.label === 'Draw a line to')!;
+    expect(to.kind === 'select' && to.options.map(([v]) => v)).toEqual(['', 'Idle']);
+  });
 });

@@ -126,7 +126,8 @@ function waitsFor(all: Task[], x: Task, t: Task, seen = new Set<Task>()): boolea
 export function startOptions(g: Gantt, t: Task) {
   const all = g.sections.flatMap((s) => s.tasks);
   const others = all.map((x, k) => [x, k] as const).filter(([x]) => x !== t && !waitsFor(all, x, t));
-  const opts: [string, string][] = [['date', 'On a date'], ['prev', 'After the one before'],
+  // the first has none before it (picked, it moved to the chart's first day)
+  const opts: [string, string][] = [['date', 'On a date'], ...(all[0] === t ? [] : [['prev', 'After the one before'] as [string, string]]),
     ...others.map(([x, k]) => [x.id ? `after ${x.id}` : `task ${k}`, `After “${x.name.trim() || 'Task'}”`] as [string, string])];
   // after more than one: their names
   if (!opts.some(([v]) => v === startOf(t))) opts.push([startOf(t), `After ${t.after!.split(' ').map((id) => `“${taskName(g, id)}”`).join(' and ')}`]);

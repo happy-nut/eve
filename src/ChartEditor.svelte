@@ -49,8 +49,9 @@
   /** the field takes the keyboard as its part is picked; not again when a rename gives it a new key, as a box of the
    *  bar was clicked into (the field taken back the keyboard, and the words for that box renamed the part) */
   let grab = false, renamed = false, deciding = false;
-  /** the bar folded into a ⋯ beside the field, where wherever it went it covered other parts; opened on a click */
-  let folded = $state(false), unfolded = $state(false);
+  /** the bar under the picture, over its toolbar, where wherever it went in the picture it covered other parts (they
+   *  could not be clicked; folded into a ⋯ instead, the ⋯ covered them, and opened, the bar did) */
+  let docked = $state(false);
   function measure() {
     if (!layer) return;
     clearTimeout(retry);
@@ -77,7 +78,6 @@
     text = before = s?.text ?? '';
     was = sel ? $state.snapshot(d) as Record<string, unknown> : null;
     grab = !!sel;
-    unfolded = false;
     deciding = true;
     hover = null;
     if (sel) {
@@ -141,7 +141,7 @@
     if (e.key === 'Escape' && !composing(e) && e.target !== field) { e.preventDefault(); e.stopPropagation(); escape(); }
   }
   /** a choice made in the bar: the keyboard back in the part's field, for Enter and Tab to go on from */
-  const chose = () => tick().then(() => field?.focus({ preventScroll: true }));
+  const chose = () => tick().then(() => { if (!field) return; field.focus({ preventScroll: true }); field.setSelectionRange(field.value.length, field.value.length); });
   function onKey(e: KeyboardEvent) {
     if (composing(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -151,6 +151,11 @@
       commit(); letField(); sel = null;
     }
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); escape(); }
+    // ⇧Tab: into the bar, its first box or button (it could be reached by the mouse only)
+    else if (e.key === 'Tab' && e.shiftKey) {
+      const first = bar?.querySelector<HTMLElement>('button:not(:disabled), input, textarea');
+      if (first) { e.preventDefault(); first.focus(); }
+    }
     else if (e.key === 'Tab' && !e.shiftKey) {
       const a = spot?.acts.find((x) => x.tab && !x.off);
       // one just added and not yet typed in stays the one: Tab, Tab, Tab left a row of "Idea"s that one Esc did not take
@@ -196,15 +201,17 @@
       .filter((el) => el.getAttribute('data-spot') !== sel).map((el) => el.getBoundingClientRect());
     const covers = (f: { left: number; top: number }) => others.filter((q) => q.width && q.left < f.left + size.w && q.right > f.left && q.top < f.top + size.h && q.bottom > f.top).length;
     const best = tries.reduce<(typeof tries)[number] | null>((a, f) => (!a || covers(f) < covers(a) ? f : a), null);
-    // folded or not once, as the part is picked and drawn: not again as it is edited (a rename drew it anew, its old
-    // drawing counted as a part it covered, and the bar folded away from under the click into one of its boxes)
-    if (deciding && rect) { deciding = false; folded = !best || covers(best) > 0; }
-    if (unfolded) folded = false;
+    // docked or not once, as the part is picked and drawn: not again as it is edited (a rename drew it anew, its old
+    // drawing counted as a part it covered, and the bar moved away from under the click into one of its boxes)
+    if (deciding && rect) { deciding = false; docked = !best || covers(best) > 0; }
+    // in the room kept under the drawing (the picture's foot, beside its full-screen button), over the toolbar under
+    // it if it needs more
+    if (docked) { barAt = { left: 4, top: H - (parseFloat(getComputedStyle(host).paddingBottom) || 0) + 6 }; return; }
     if (best) { barAt = { left: best.left - o.left, top: best.top - o.top }; return; }
     const f = floatAt(around, size, { prefer: 'below', within, gap: 8, align: 'start' });
     barAt = f.side === 'inside' ? { left: Math.max(4, Math.min(W - bar.offsetWidth - 4, r.x)), top: r.y + r.h + 8 } : { left: f.left - o.left, top: f.top - o.top };
   }
-  $effect(() => { void spot; void rect; void unfolded; tick().then(placeBar); });
+  $effect(() => { void spot; void rect; tick().then(placeBar); });
 
   onMount(() => {
     host.addEventListener('click', onHostClick);
@@ -237,11 +244,12 @@
     note: '<path d="M3.5 2.5h9v7l-3 3h-6z M9.5 12.5v-3h3" />',
     section: '<path d="M2.5 4.5h11M2.5 8h7M2.5 11.5h7" />',
   };
-  // the field as wide as its part, at least a few words' room, inside the picture
-  const fieldW = $derived(Math.min(Math.max((rect?.w ?? 0) + 12, 150, text.length * (isMobile ? 9 : 8) + 24), (layer?.clientWidth ?? 600) - 8));
-  /** a part wider than a field's least (a timeline's event, a task's name) has its field from its own left edge, the
+  // the field as wide as its part or its words, a little room to type, inside the picture: 150 at the least, a short
+  // word's field covered the idea, label or event beside it, which could then not be clicked
+  const fieldW = $derived(Math.min(Math.max((rect?.w ?? 0) + 12, 72, text.length * (isMobile ? 9 : 8) + 32), (layer?.clientWidth ?? 600) - 8));
+  /** a part wider than its field's least (a timeline's event, a task's name) has its field from its own left edge, the
    *  words where they were; a small one (a word on a line, an idea) has it centred on it */
-  const wideSpot = $derived(!!rect && (rect.w + 12 >= 150 || sel === 'title')); // a title's words stay where they were drawn
+  const wideSpot = $derived(!!rect && (rect.w + 12 >= 120 || sel === 'title')); // a title's words stay where they were drawn
   const fieldLeft = $derived(Math.max(4, Math.min((layer?.clientWidth ?? 600) - fieldW - 4, rect ? (wideSpot ? rect.x - 6 : rect.x + rect.w / 2 - fieldW / 2) : 8)));
 </script>
 
@@ -256,17 +264,13 @@
       {@attach (el: HTMLInputElement) => { if (grab) { grab = false; el.focus({ preventScroll: true }); el.select(); } }} />
     {/key}
     {#if spot.fields.length || spot.acts.length}
-    {#if folded && rect}
-      <button type="button" class="more" aria-label="More for this part" title="More for this part" onmousedown={(e) => e.preventDefault()} onclick={() => (unfolded = true)}
-        style:left={`${fieldLeft + fieldW + 40 <= (layer?.clientWidth ?? 0) ? fieldLeft + fieldW + 4 : Math.max(4, fieldLeft - 36)}px`} style:top={`${rect.y + rect.h / 2 - 16}px`}>⋯</button>
-    {/if}
-    <div class="bar" role="toolbar" tabindex="-1" bind:this={bar} onkeydown={onBarKey} style:visibility={rect && !folded ? null : 'hidden'} style:left={`${barAt.left}px`} style:top={`${barAt.top}px`}>
+    <div class="bar" role="toolbar" tabindex="-1" bind:this={bar} onkeydown={onBarKey} class:docked style:visibility={rect ? null : 'hidden'} style:left={`${barAt.left}px`} style:top={`${barAt.top}px`}>
       {#if spot.fields.length}<span class="grp">
       {#each spot.fields as f (f.label)}
         <label class="f" class:top={f.kind === 'lines'}>
           <span>{f.label}</span>
           {#if f.kind === 'select'}
-            <Select label={f.label} value={f.value} options={f.options} onchange={(v) => { f.set(v); chose(); }} />
+            <Select label={f.label} value={f.value} options={f.options} onchange={(v) => f.set(v)} onpicked={chose} />
           {:else if f.kind === 'lines'}
             <textarea value={f.value} rows={Math.min(6, Math.max(2, f.value.split('\n').length + 1))} placeholder="One per line" spellcheck="false"
               oninput={(e) => f.set(e.currentTarget.value)}></textarea>
@@ -337,11 +341,7 @@
   :global(html.mobile) .bar { gap: 2px; padding: 3px; }
   :global(html.mobile) .grp { gap: 2px; }
   :global(html.mobile) .f :global(button) { height: 36px; }
-  .more {
-    position: absolute; width: 32px; height: 32px; border: 0; border-radius: 9px; font: inherit; font-size: 16px; line-height: 1;
-    color: var(--fg); background: var(--bg-pop); box-shadow: var(--pop-shadow), 0 0 0 0.5px var(--line);
-  }
-  :global(html.mobile) .more { width: 40px; height: 40px; }
+  .bar.docked { max-width: calc(100% - 8px); }
   :global(html.mobile) .bar button { min-width: 36px; height: 40px; padding: 0 4px; }
   :global(html.mobile) .f input { height: 36px; font-size: 16px; }
   :global(html.mobile) .f input[type='number'] { width: 64px; }

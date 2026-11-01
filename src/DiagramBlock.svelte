@@ -215,6 +215,11 @@
       else if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y')) && t === document.body) {
         e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y');
       }
+      // a letter, ⌫ or ⌦ with no part of a chart picked: nothing (it went to the note, whose selection was the diagram
+      // itself, and the letter took its place)
+      else if (chart && t === document.body && !e.metaKey && !e.ctrlKey && !e.altKey && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete')) {
+        e.preventDefault(); e.stopPropagation();
+      }
     };
     // (ahead of the note's own keymaps: its Esc and ⌘Z are the diagram's while it is open)
     const unclaim = claimKeys('global', { '*': keys }, { capture: true });

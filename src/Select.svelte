@@ -9,10 +9,12 @@
    * A choice among a few, drawn by the app instead of the platform: a popover under the button on the
    * desktop, a sheet from the bottom on a phone. Enter / Space opens it, ↑↓ move, Enter picks, Esc closes.
    */
-  let { value, options, onchange, label = '' }: {
+  let { value, options, onchange, onpicked, label = '' }: {
     value: string;
     options: readonly (readonly [string, string])[];
     onchange: (v: string) => void;
+    /** after any pick, the one it had included (where the keyboard goes next is the caller's) */
+    onpicked?: () => void;
     label?: string;
   } = $props();
 
@@ -49,6 +51,7 @@
     const id = options[i]?.[0];
     if (id !== undefined && id !== value) onchange(id);
     btn?.focus();
+    onpicked?.();
   }
   function key(e: KeyboardEvent) {
     if (!open) {

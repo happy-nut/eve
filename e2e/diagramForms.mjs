@@ -434,17 +434,23 @@ try {
   await page.waitForTimeout(900);
   assert.equal(await page.locator('.tiptap .mermaid-view g.node[data-spot="state:Paused"]').count(), 1, 'the state added is drawn');
   await page.close();
-  // a crowded chart: the bar folds into ⋯ rather than cover the next part, which is still clicked
+  // a crowded chart: the bar goes under the drawing rather than cover the next part, which is still clicked
   page = await open('gantt\n  dateFormat YYYY-MM-DD\n  section A\n  One :a1, 2026-01-05, 3d\n  Two : 2d\n  Three : 2d\n  Four : 2d', false);
   await spot(page, 'task:0:1');
-  assert.equal(await page.locator('.tiptap .layer .more').count(), 1, 'folded into ⋯');
+  const under = await page.evaluate(() => {
+    const b = document.querySelector('.tiptap .layer .bar').getBoundingClientRect();
+    return [...document.querySelectorAll('.tiptap .mermaid-view [data-spot]')].every((p) => { const r = p.getBoundingClientRect(); return !r.width || r.bottom <= b.top || r.top >= b.bottom || r.right <= b.left || r.left >= b.right; });
+  });
+  assert.ok(under, 'the bar covers no part');
   await spot(page, 'task:0:0');
   assert.equal(await page.locator('.tiptap .layer input.field').inputValue(), 'One', 'the task above is clicked');
-  await page.locator('.tiptap .layer .more').click();
+  // a letter with nothing picked does nothing to the diagram (it replaced it)
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('x');
   await page.waitForTimeout(300);
-  assert.ok(await page.locator('.tiptap .layer .bar').isVisible(), '⋯ opens the bar');
+  assert.match(await md(page), /Four : 2d\n```\n\nThe end\./, 'the diagram is still there, nothing typed');
   await page.close();
-  console.log('ok   a rename then a box of the bar typed in; Esc puts back the value too; a state added is drawn; a crowded bar folds');
+  console.log('ok   a rename then a box of the bar typed in; Esc puts back the value too; a state added is drawn; a crowded chart\'s bar goes under it; a key with nothing picked does nothing');
 
   // ---- the / menu makes each new kind, drawn and open ----
   page = await browser.newPage({ viewport: { width: 1200, height: 1000 } });
