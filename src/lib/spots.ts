@@ -1,4 +1,4 @@
-import { freshId, isMessage, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type BlockKind } from './diagram';
+import { freshId, ganttDates, isMessage, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type BlockKind } from './diagram';
 import {
   dropStep, DIVIDERS, OPENERS, SPLITS, wellFormed, seqArrows, arrowOf, setArrow, pieValue, MIND_SHAPES, ROOT_SHAPES, movePeriod, plausible, endOf,
   startOf, startOptions, setStart, tagOptions, setTags, rename, NAME_ID, TABLE_ID, drop, options, arrowOptions, STATE_KINDS, insideOptions, renameState,
@@ -212,9 +212,10 @@ function ganttSpot(d: Gantt, key: string): Spot | null {
       { label: 'Move up', icon: 'up', off: ti === 0, run: () => (move(s.tasks, ti, -1) ? `task:${si}:${ti - 1}` : null) },
       { label: 'Move down', icon: 'down', off: ti === s.tasks.length - 1, run: () => (move(s.tasks, ti, 1) ? `task:${si}:${ti + 1}` : null) },
       { label: 'Delete', icon: 'trash', run: () => {
+        const was = ganttDates(d);
         const [gone] = s.tasks.splice(ti, 1);
-        // what started after it starts where it did instead
-        if (gone.id) for (const x of d.sections.flatMap((y) => y.tasks)) if (x.after?.split(' ').includes(gone.id)) { x.after = x.after.split(' ').filter((id) => id !== gone.id).join(' '); if (!x.after) { x.start = gone.start || endOf(d); delete x.after; } }
+        // what started after it keeps the day it started on (it moved to the day the one deleted started)
+        if (gone.id) for (const x of d.sections.flatMap((y) => y.tasks)) if (x.after?.split(' ').includes(gone.id)) { x.after = x.after.split(' ').filter((id) => id !== gone.id).join(' '); if (!x.after) { x.start = was.get(x)?.start || endOf(d); delete x.after; } }
       } },
     ],
   };
@@ -356,7 +357,7 @@ function classSpot(c: ClassDiagram, key: string): Spot | null {
     text: cl.name, label: 'Class', onDone: true, set: (v) => { rename(c.classes, c.links, cl, v, NAME_ID); return `class:${cl.id}`; },
     fields: [
       { kind: 'lines', label: 'Members', value: cl.members.join('\n'), set: (v) => { cl.members = v.split('\n').map((x) => x.trim()).filter(Boolean); } },
-      linkTo(c.classes, cl.id, c.links, (to) => c.links.push({ from: cl.id, to, arrow: '-->', label: '', fromCard: '', toCard: '' })),
+      ...linkTo(c.classes, cl.id, c.links, (to) => c.links.push({ from: cl.id, to, arrow: '-->', label: '', fromCard: '', toCard: '' })),
     ],
     acts: [
       { label: 'Add a class linked to it', icon: 'plus', tab: true, run: () => { const id = freshId('Class', c.classes); c.classes.push({ id, name: id, members: [] }); c.links.push({ from: cl.id, to: id, arrow: '-->', label: '', fromCard: '', toCard: '' }); return `class:${id}`; } },
@@ -365,11 +366,11 @@ function classSpot(c: ClassDiagram, key: string): Spot | null {
   };
 }
 /** a new line from it to another: not to one it has a line to already (a second, unlabelled, could not be clicked) */
-const linkTo = (all: { id: string; name: string }[], self: string, lines: { from: string; to: string }[], add: (to: string) => void): Field => ({
-  kind: 'select', label: 'Draw a line to', value: '',
-  options: [['', '→ Line to…'], ...options(all.filter((x) => x.id !== self && !lines.some((l) => l.from === self && l.to === x.id)))],
-  set: (v) => { if (v) add(v); },
-});
+/** (none where it has a line to each of them: a list of nothing to pick) */
+const linkTo = (all: { id: string; name: string }[], self: string, lines: { from: string; to: string }[], add: (to: string) => void): Field[] => {
+  const free = all.filter((x) => x.id !== self && !lines.some((l) => (l.from === self && l.to === x.id) || (l.to === self && l.from === x.id)));
+  return free.length ? [{ kind: 'select', label: 'Draw a line to', value: '', options: [['', '→ Line to…'], ...options(free)], set: (v) => { if (v) add(v); } }] : [];
+};
 
 function stateSpot(s: StateDiagram, key: string): Spot | null {
   const [k, n] = at(key);
@@ -384,7 +385,7 @@ function stateSpot(s: StateDiagram, key: string): Spot | null {
   if (!st.kind) fields.push({ kind: 'text', label: 'Description', value: st.desc, set: (v) => { st.desc = v; } });
   fields.push({ kind: 'select', label: 'Kind', value: st.kind ?? 'state', options: STATE_KINDS, set: (v) => { if (v === 'state') delete st.kind; else st.kind = v as 'choice'; } });
   fields.push({ kind: 'select', label: 'Inside', value: st.parent ?? '', options: insideOptions(s, st), set: (v) => { if (v) st.parent = v; else delete st.parent; } });
-  fields.push(linkTo(s.states, st.id, s.links, (to) => s.links.push({ from: st.id, to, label: '' })));
+  fields.push(...linkTo(s.states, st.id, s.links, (to) => s.links.push({ from: st.id, to, label: '' })));
   return {
     text: st.name, label: 'State', onDone: true, set: (v) => { renameState(s, st, v); return `state:${st.id}`; },
     fields,
@@ -415,7 +416,7 @@ function erSpot(e: ErDiagram, key: string): Spot | null {
   if (!t) return null;
   if (k === 'table') return {
     text: t.name, label: 'Table', onDone: true, set: (v) => { rename(e.tables, e.links, t, v, TABLE_ID); return `table:${t.id}`; },
-    fields: [linkTo(e.tables, t.id, e.links, (to) => e.links.push({ from: t.id, to, left: '||', right: 'o{', dashed: false, label: '' }))],
+    fields: [...linkTo(e.tables, t.id, e.links, (to) => e.links.push({ from: t.id, to, left: '||', right: 'o{', dashed: false, label: '' }))],
     acts: [
       { label: 'Add a column', icon: 'child', tab: true, run: () => { t.columns.push({ type: 'string', name: 'column', keys: '', comment: '' }); return `col:${t.id}:${t.columns.length - 1}`; } },
       { label: 'Add a table linked to it', icon: 'plus', run: () => { const id = freshId('TABLE', e.tables); e.tables.push({ id, name: id, columns: [{ type: 'int', name: 'id', keys: 'PK', comment: '' }] }); e.links.push({ from: t.id, to: id, left: '||', right: 'o{', dashed: false, label: '' }); return `table:${id}`; } },

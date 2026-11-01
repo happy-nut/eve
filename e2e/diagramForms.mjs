@@ -450,6 +450,25 @@ try {
   await page.waitForTimeout(300);
   assert.match(await md(page), /Four : 2d\n```\n\nThe end\./, 'the diagram is still there, nothing typed');
   await page.close();
+  // added with Tab, named, picked again: an ordinary part (Esc took it away, Tab did nothing)
+  page = await open('pie title Pets\n  "Dogs" : 40\n  "Cats" : 30', false);
+  await spot(page, 'slice:1');
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(700);
+  await page.keyboard.type('Fish');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(700);
+  await spot(page, 'slice:2');
+  await page.keyboard.press('Escape');
+  assert.match(await md(page), /"Fish" : 10/, 'Esc on it again keeps it');
+  // Tab in its bar walks the bar
+  await spot(page, 'slice:2');
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.type('42');
+  assert.match(await md(page), /"Fish" : 42/, '⇧Tab into its value, the value typed over');
+  await page.keyboard.press('Tab');
+  assert.ok(await page.evaluate(() => document.activeElement?.closest('.layer .bar') && document.activeElement.tagName === 'BUTTON'), 'Tab goes on to the bar\'s buttons');
+  await page.close();
   console.log('ok   a rename then a box of the bar typed in; Esc puts back the value too; a state added is drawn; a crowded chart\'s bar goes under it; a key with nothing picked does nothing');
 
   // ---- the / menu makes each new kind, drawn and open ----

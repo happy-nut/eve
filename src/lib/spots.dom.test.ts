@@ -91,5 +91,14 @@ describe('chart parts', () => {
     const s = fromCode('stateDiagram-v2\n  Running --> Done : finish\n  Idle') as StateDiagram;
     const to = spotOf(s, 'state:Running')!.fields.find((f) => f.label === 'Draw a line to')!;
     expect(to.kind === 'select' && to.options.map(([v]) => v)).toEqual(['', 'Idle']);
+    // a line either way counts; with each one linked, no list of nothing
+    const e = fromCode('erDiagram\n  CUSTOMER ||--o{ ORDER : places') as never;
+    expect(spotOf(e, 'table:ORDER')!.fields.some((f) => f.label === 'Draw a line to')).toBe(false);
+  });
+
+  it('a task deleted leaves what started after it on the day it started', () => {
+    const d = gantt('  section S\n  Sketch :a1, 2026-01-05, 5d\n  Review :r1, after a1, 3d');
+    act(d, 'task:0:0', 'Delete');
+    expect(d.sections[0].tasks[0]).toMatchObject({ name: 'Review', start: '2026-01-10' });
   });
 });

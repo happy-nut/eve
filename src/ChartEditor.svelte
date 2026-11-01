@@ -5,7 +5,8 @@
   import { letGo } from './lib/focusWatch';
   import { composing } from './lib/keys';
   import { isMobile } from './lib/platform';
-  import { floatAt } from './lib/popup';
+  import { floatAt, screenInsets, viewSize } from './lib/popup';
+  import { textW } from './lib/lanes';
   import Select from './Select.svelte';
 
   /**
@@ -51,7 +52,7 @@
   let grab = false, renamed = false, deciding = false;
   /** the bar under the picture, over its toolbar, where wherever it went in the picture it covered other parts (they
    *  could not be clicked; folded into a ⋯ instead, the ⋯ covered them, and opened, the bar did) */
-  let docked = $state(false);
+  let docked = $state(false), barMax = $state(0);
   function measure() {
     if (!layer) return;
     clearTimeout(retry);
@@ -86,7 +87,7 @@
       if (el) el.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
       unseen = !el;
     } else letField();
-    if (key !== fresh) fresh = null;
+    fresh = null; // set again by what added it, just after (picked again later, it is an ordinary part)
   }
   /** what was typed, kept: a name that renames what it is comes in only now (its key with it) */
   function commit() {
@@ -148,13 +149,14 @@
       e.preventDefault();
       // emptied: what it said (a period drawn as "…", saved so)
       if (!text.trim() && before.trim()) { text = before; spot?.set(before); }
+      fresh = null;
       commit(); letField(); sel = null;
     }
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); escape(); }
     // ⇧Tab: into the bar, its first box or button (it could be reached by the mouse only)
     else if (e.key === 'Tab' && e.shiftKey) {
       const first = bar?.querySelector<HTMLElement>('button:not(:disabled), input, textarea');
-      if (first) { e.preventDefault(); first.focus(); }
+      if (first) { e.preventDefault(); first.focus(); if (first instanceof HTMLInputElement) first.select(); }
     }
     else if (e.key === 'Tab' && !e.shiftKey) {
       const a = spot?.acts.find((x) => x.tab && !x.off);
@@ -206,7 +208,20 @@
     if (deciding && rect) { deciding = false; docked = !best || covers(best) > 0; }
     // in the room kept under the drawing (the picture's foot, beside its full-screen button), over the toolbar under
     // it if it needs more
-    if (docked) { barAt = { left: 4, top: H - (parseFloat(getComputedStyle(host).paddingBottom) || 0) + 6 }; return; }
+    if (docked) {
+      // short of the full-screen button and of Done, under the field's left; and in sight: a tall chart's foot was
+      // far below the window (or under a phone's keyboard)
+      const seen = viewSize().h - screenInsets().bottom - o.top - size.h - 8;
+      let top = Math.min(H - (parseFloat(getComputedStyle(host).paddingBottom) || 0) + 6, seen);
+      if (top < fieldTop + half * 2 + 6 && top + size.h > fieldTop - 6) top = fieldTop - size.h - 8; // not over its own field
+      // (those on its rows only: a phone's Done, on a row of its own at the left, left it no room)
+      const stop = [...(layer.parentElement?.parentElement?.querySelectorAll('.mermaid-expand, .tools .done') ?? [])].map((b) => b.getBoundingClientRect())
+        .filter((q) => q.top < o.top + top + size.h && q.bottom > o.top + top).map((q) => q.left - o.left - 8);
+      barMax = Math.max(160, Math.min(W - 8, ...stop) - 4);
+      const w = Math.min(size.w, barMax);
+      barAt = { left: Math.max(4, Math.min(fieldLeft, 4 + barMax - w)), top };
+      return;
+    }
     if (best) { barAt = { left: best.left - o.left, top: best.top - o.top }; return; }
     const f = floatAt(around, size, { prefer: 'below', within, gap: 8, align: 'start' });
     barAt = f.side === 'inside' ? { left: Math.max(4, Math.min(W - bar.offsetWidth - 4, r.x)), top: r.y + r.h + 8 } : { left: f.left - o.left, top: f.top - o.top };
@@ -246,10 +261,15 @@
   };
   // the field as wide as its part or its words, a little room to type, inside the picture: 150 at the least, a short
   // word's field covered the idea, label or event beside it, which could then not be clicked
-  const fieldW = $derived(Math.min(Math.max((rect?.w ?? 0) + 12, 72, text.length * (isMobile ? 9 : 8) + 32), (layer?.clientWidth ?? 600) - 8));
+  // (its words measured as they are set in it: counted, Korean and wide letters ran out of it; a long name at most a
+  // little wider than its part, scrolled in it rather than over the parts around)
+  const fieldW = $derived(Math.min(Math.max((rect?.w ?? 0) + 12, 72, Math.min(textW(text, isMobile ? 16 : 14) + 32, Math.max(320, (rect?.w ?? 0) + 12))), (layer?.clientWidth ?? 600) - 8));
   /** a part wider than its field's least (a timeline's event, a task's name) has its field from its own left edge, the
    *  words where they were; a small one (a word on a line, an idea) has it centred on it */
-  const wideSpot = $derived(!!rect && (rect.w + 12 >= 120 || sel === 'title')); // a title's words stay where they were drawn
+  // (a page's words set from their left, a title or a section's name, stay where they were drawn too)
+  let leftSet = $state(false);
+  const wideSpot = $derived(!!rect && (rect.w + 12 >= 120 || leftSet));
+  $effect(() => { void rect; const el = sel && find(sel); leftSet = el instanceof HTMLElement && /^(left|start)$/.test(getComputedStyle(el).textAlign); });
   const fieldLeft = $derived(Math.max(4, Math.min((layer?.clientWidth ?? 600) - fieldW - 4, rect ? (wideSpot ? rect.x - 6 : rect.x + rect.w / 2 - fieldW / 2) : 8)));
 </script>
 
@@ -264,7 +284,7 @@
       {@attach (el: HTMLInputElement) => { if (grab) { grab = false; el.focus({ preventScroll: true }); el.select(); } }} />
     {/key}
     {#if spot.fields.length || spot.acts.length}
-    <div class="bar" role="toolbar" tabindex="-1" bind:this={bar} onkeydown={onBarKey} class:docked style:visibility={rect ? null : 'hidden'} style:left={`${barAt.left}px`} style:top={`${barAt.top}px`}>
+    <div class="bar" role="toolbar" tabindex="-1" bind:this={bar} onkeydown={onBarKey} class:docked style:max-width={docked && barMax ? `${barMax}px` : null} style:visibility={rect ? null : 'hidden'} style:left={`${barAt.left}px`} style:top={`${barAt.top}px`}>
       {#if spot.fields.length}<span class="grp">
       {#each spot.fields as f (f.label)}
         <label class="f" class:top={f.kind === 'lines'}>
@@ -322,6 +342,7 @@
     display: inline-flex; align-items: center; justify-content: center; font: inherit; font-size: 12.5px; font-weight: 500;
   }
   .bar button:disabled { opacity: 0.35; }
+  .bar button:focus-visible, .f :global(button:focus-visible) { outline: none; box-shadow: 0 0 0 2px var(--accent); }
   @media (hover: hover) { .bar button:not(:disabled):hover { background: var(--bg-hover); color: var(--fg); } .bar button.danger:hover { color: #ff453a; } }
   .bar button .lbl { margin-left: 4px; }
   .bar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
