@@ -3,32 +3,37 @@
   import { fade } from 'svelte/transition';
   import { scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
-  import { slides, paginate, sentences } from './lib/slides';
+  import { slides } from './lib/slides';
   import { stepper } from './lib/diagramMotion';
-  import { wholeScreen } from './lib/platform';
+  import { wholeScreen, isTauri, isMobile } from './lib/platform';
   import { appearance } from './lib/appearance.svelte';
 
   /**
    * The open note a slide at a time, over everything (⋯ → Present), cut by itself (slides.ts): a slide at each of its
-   * biggest headings, and one of those longer than the screen goes on to the next, cut again as the window changes size. → (Space, ↓, a click on the right) goes on, ← (↑, a click on the left) back, Esc or a phone's
-   * back leaves. A diagram that draws itself in is walked a step at a time first, and a slide taller than the screen
-   * scrolled through, before → turns the page.
+   * biggest headings. → (Space, ↓, a click on the right) goes on, ← (↑, a click on the left) back, Esc or a phone's
+   * back leaves. A section longer than the screen is one slide, scrolled through a screen a press, not cut onto the
+   * next (a long code block went on to a slide of its own, its first lines left behind). A diagram is a slide of its
+   * own, as big as the screen holds it, and one that draws itself in is walked a step at a time first, before → turns
+   * the page. Past the last slide, a screen says it is the end. F (or its button) puts it on the whole screen and back.
    */
   // read once: the slides are the page as it was when the presentation began
-  const page = ui.present!;
+  const page = ui.present!, from = ui.presentFrom;
   // copies of the note's blocks as they are drawn now: diagrams, formulas and pictures the same, nothing to edit
   const sections = slides([...page.children]).map((blocks) => blocks.map((b) => {
     const c = b.cloneNode(true) as HTMLElement;
+    if (b === from) c.dataset.from = ''; // the block presented from: its slide comes up first
     for (const e of [c, ...c.querySelectorAll('[contenteditable]')]) e.removeAttribute('contenteditable');
-    // a diagram larger than in the note, up to three times its size, as much as the slide holds (the note sets it a width)
-    for (const svg of c.querySelectorAll<SVGSVGElement>('.mermaid-view svg')) {
-      const w = parseFloat(svg.style.width);
-      if (w) Object.assign(svg.style, { width: `min(100%, ${w * 3}px)`, maxWidth: 'none' });
-    }
+    // a diagram as big as its slide holds it (the note sets it a width, and a least one, to keep it legible there)
+    for (const svg of c.querySelectorAll<SVGSVGElement>('.mermaid-view svg')) Object.assign(svg.style, { width: '', minWidth: '', maxWidth: '' });
+    // a table laid out afresh for the slide's width: the column widths the note held it to (a narrower page's) left
+    // it squeezed into the slide's left side
+    for (const t of [c, ...c.querySelectorAll('.tableWrapper')]) t.classList.remove('held');
+    for (const cell of c.querySelectorAll<HTMLElement>('table, col, th, td')) Object.assign(cell.style, { width: '', minWidth: '' });
     return c;
   }));
-  let deck = $state.raw<Element[][]>([]);
   let at = $state(0);
+  /** gone past the last slide: the end says so */
+  let ended = $state(false);
   let box: HTMLDivElement, body: HTMLDivElement;
   /** the diagrams on the slide shown, each with the step it is at */
   /** the slide up is taller than the screen, scrolled through before the page turns */
@@ -36,18 +41,32 @@
   let walks: { svg: SVGSVGElement; walk: ReturnType<typeof stepper>; k: number }[] = [];
 
   /** the slides cut to the screen as it is now, measured on the slide itself; still on the same words after */
-  function cut() {
-    // the words up now, found again by their text: a paragraph may be cut elsewhere after
-    const here = deck[at]?.find((b) => !b.classList.contains('again'))?.textContent?.trim().slice(0, 40);
-    // the room is the screen's, not the slide's: the slide is only as tall as what is on it
-    const pad = getComputedStyle(box), room = box.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom);
-    deck = paginate(sections, (blocks) => {
-      body.replaceChildren(...blocks);
-      return !(room > 0) || body.scrollHeight <= room + 1; // (no room measured: a page with no layout, one slide a section)
-    }, (h) => { const c = h.cloneNode(true) as Element; c.classList.add('again'); return c; }, sentences);
-    const i = here ? deck.findIndex((s) => s.some((b) => !b.classList.contains('again') && b.textContent?.includes(here))) : 0;
-    void go(Math.max(0, i), false, false);
+  /** a block with a diagram in it */
+  const chart = (b: Element) => !!b.querySelector('.mermaid-view');
+  const heading = (b: Element) => /^H[1-6]$/.test(b.tagName);
+  const again = (h: Element) => { const c = h.cloneNode(true) as Element; c.classList.add('again'); return c; };
+  /** each diagram a slide of its own, under the headings it was under (as small ones, unless nothing came before it but
+   *  them): a diagram beside words was shrunk to a corner of the screen */
+  function alone(deck: Element[][]): Element[][] {
+    const out: Element[][] = [];
+    for (let s of deck) {
+      for (let i = s.findIndex(chart); i >= 0 && s.length > 1; i = s.findIndex(chart)) {
+        const before = s.slice(0, i), after = s.slice(i + 1), heads = before.filter(heading);
+        const words = before.some((b) => !heading(b));
+        if (words) out.push(before);
+        out.push([...(words ? heads.map((h) => (h.classList.contains('again') ? h : again(h))) : before), s[i]]);
+        s = after.some((b) => b.tagName !== 'HR') ? [...heads.map((h) => (h.classList.contains('again') ? h : again(h))), ...after] : [];
+      }
+      if (s.length) out.push(s);
+    }
+    return out;
   }
+
+  // a divider at a slide's edge has nothing to divide there
+  const hr = (b?: Element) => b?.tagName === 'HR' || (b?.childElementCount === 1 && b.firstElementChild!.tagName === 'HR' && !b.textContent?.trim());
+  const trim = (s: Element[]) => { s = [...s]; while (hr(s[0])) s.shift(); while (hr(s.at(-1))) s.pop(); return s; };
+  const deck = alone(sections).map(trim).filter((s) => s.length);
+  at = Math.max(0, deck.findIndex((s) => s.some((b) => b.hasAttribute('data-from') && !b.classList.contains('again'))));
 
   const EASE = 'cubic-bezier(.2, .7, .2, 1)';
   /**
@@ -89,8 +108,10 @@
     // what was up, kept to be drawn leaving
     const old = animate && body?.childElementCount ? { el: body.cloneNode(true) as HTMLElement, at: body.getBoundingClientRect(), top: body.scrollTop } : null;
     at = i;
+    ended = false;
     await tick();
     body.replaceChildren(...deck[i]);
+    body.classList.toggle('chart', deck[i].some(chart));
     // taller than the screen, measured before its lines come in: while they rise they reach below it for a moment
     tall = body.scrollHeight > body.clientHeight + 2;
     if (animate) turn(old, back);
@@ -107,8 +128,10 @@
     if (w) { w.walk.show(++w.k); w.svg.scrollIntoView?.({ block: 'nearest' }); return; }
     if (tall && body.scrollTop + body.clientHeight < body.scrollHeight - 2) return body.scrollBy({ top: body.clientHeight * 0.85, behavior: 'smooth' });
     if (at < deck.length - 1) void go(at + 1);
+    else ended = true; // past the last: the end, which stays until ← or Esc
   }
   function prev() {
+    if (ended) { ended = false; return; }
     const w = walks.findLast((w) => w.k > 0);
     if (w) { w.walk.show(--w.k); return; }
     if (body.scrollTop > 2) return body.scrollBy({ top: -body.clientHeight * 0.85, behavior: 'smooth' });
@@ -121,6 +144,7 @@
     if (k === 'Escape') ui.closePresent();
     else if (['ArrowRight', 'ArrowDown', ' ', 'PageDown', 'Enter'].includes(k)) next();
     else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(k)) prev();
+    else if (k === 'f' || k === 'F') void whole(!full);
     else if (k === 'Home') void go(0);
     else if (k === 'End') void go(deck.length - 1, true);
     else if (k !== 'Tab') return;
@@ -131,32 +155,60 @@
     (e.clientX < box.clientWidth / 3 ? prev : next)();
   }
 
+  // ---- the whole screen: the Mac's window over it all, or the page's (a browser, a phone) ----
+  const desktop = isTauri && !isMobile;
+  const canWhole = desktop || (typeof document !== 'undefined' && !!document.fullscreenEnabled);
+  let full = $state(false);
+  /** put on the whole screen or taken off it; false when nothing changed */
+  async function whole(on: boolean): Promise<boolean> {
+    try {
+      if (desktop) { const changed = await wholeScreen(on); full = on; return changed; }
+      if (on && !document.fullscreenElement) { await box.requestFullscreen(); return true; }
+      if (!on && document.fullscreenElement) { await document.exitFullscreen(); return true; }
+    } catch { /* refused (a page not allowed it): stays as it was */ }
+    return false;
+  }
+  const onFull = () => { if (!desktop) full = !!document.fullscreenElement; };
+
   onMount(() => {
     box.focus();
-    cut();
-    // cut again as the window changes size (going to the whole screen, as it starts, too)
-    let h = box.clientHeight, w = box.clientWidth, wait = 0;
-    const watch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
-      if (box.clientHeight === h && box.clientWidth === w) return;
-      h = box.clientHeight; w = box.clientWidth;
-      clearTimeout(wait);
-      wait = window.setTimeout(cut, 150);
-    });
+    void go(at, false, false);
+    // taller than the screen or not, again as the window changes size (going to the whole screen, as it starts, too)
+    const watch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => { tall = body.scrollHeight > body.clientHeight + 2; });
     watch?.observe(box);
     // the Mac's window over the whole screen while it is up, as a slideshow is (and back as it was after)
-    const screen = wholeScreen(true).catch(() => false);
-    return () => { watch?.disconnect(); clearTimeout(wait); void screen.then((changed) => changed && wholeScreen(false)); };
+    const screen = desktop ? whole(true) : Promise.resolve(false);
+    document.addEventListener('fullscreenchange', onFull);
+    return () => {
+      watch?.disconnect(); document.removeEventListener('fullscreenchange', onFull);
+      void screen.then((changed) => { if (desktop ? changed || full : true) void whole(false); });
+    };
   });
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="present" bind:this={box} role="dialog" aria-label="Presentation" tabindex="-1"
   transition:fade|global={scrimFade} onkeydown={onKey} onclick={onClick}>
-  <div class="tiptap slide" class:first={at === 0} bind:this={body}></div>
-  <div class="count" aria-live="polite">{at + 1} / {deck.length}</div>
-  <button class="done" title="End the presentation (Esc)" onclick={() => ui.closePresent()}>
-    <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-  </button>
+  <div class="tiptap slide" class:first={at === 0} class:hidden={ended} bind:this={body}></div>
+  {#if ended}
+    <!-- past the last slide: it says so, rather than a press that does nothing -->
+    <div class="end" in:fade={{ duration: 200 }}>
+      <p class="end-title">End of presentation</p>
+      <p class="end-hint">Esc to leave · ← back to the last slide</p>
+    </div>
+  {/if}
+  <div class="count" aria-live="polite">{ended ? 'End' : `${at + 1} / ${deck.length}`}</div>
+  <div class="corner">
+    {#if canWhole}
+      <button class="whole" aria-label={full ? 'Exit full screen' : 'Full screen'} title={full ? 'Exit full screen (F)' : 'Full screen (F)'} onclick={() => void whole(!full)}>
+        {#if full}<svg viewBox="0 0 16 16"><path d="M6 2.5V6H2.5M10 2.5V6h3.5M6 13.5V10H2.5M10 13.5V10h3.5"/></svg>
+        {:else}<svg viewBox="0 0 16 16"><path d="M2.5 6V2.5H6M13.5 6V2.5H10M2.5 10v3.5H6M13.5 10v3.5H10"/></svg>{/if}
+      </button>
+    {/if}
+    <button class="done" aria-label="End the presentation" title="End the presentation (Esc)" onclick={() => ui.closePresent()}>
+      <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+    </button>
+  </div>
 </div>
 
 <style>
@@ -173,11 +225,20 @@
     width: calc(100% - 2 * max(24px, 5vw)); max-height: 100%; overflow-y: auto; scrollbar-width: none;
     margin: 0; align-self: flex-start; pointer-events: none; user-select: none;
   }
-  /* the first slide, the title's, in the middle of the screen; the others from the top, each heading where the last was */
+  /* the first slide, the title's, in the middle of the screen; the others from the top, each heading where the last was.
+     Its title a cover's: well over the headings of the slides after it */
   .slide.first { align-self: center; }
+  .slide.first > :global(h1:first-child) { font-size: 2.9em; font-weight: 700; line-height: 1.12; letter-spacing: -0.025em; margin-bottom: 0.35em; }
+  .slide.hidden { visibility: hidden; }
+  /* a diagram's slide: the diagram as big as the screen holds it, under its headings */
+  .slide:global(.chart) { display: flex; flex-direction: column; height: 100%; }
+  .slide:global(.chart) > :global(.code-block) { flex: 1; min-height: 0; margin: 0; }
+  .slide:global(.chart) :global(:is(.mermaid-host, .dblock, .pic, .mermaid-view)) { height: 100%; min-height: 0; margin: 0; box-shadow: none; }
+  .slide:global(.chart) :global(.mermaid-view) { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .slide:global(.chart) :global(.mermaid-view > svg) { width: 100% !important; height: 100% !important; max-width: none !important; max-height: none; }
   /* the slide that was up, going as the next comes */
   .present > :global(.leaving) { pointer-events: none; overflow: hidden; }
-  .slide :global(.mermaid-view svg) { height: auto; max-height: 50vh; } /* room left for the headings above it */
+  .slide :global(.mermaid-expand) { display: none; }
   .slide::-webkit-scrollbar { display: none; }
   .slide > :global(:first-child) { margin-top: 0; }
   /* a heading shown again, the slide going on under it: small, up in the corner, as a breadcrumb, the room for words */
@@ -185,15 +246,26 @@
     display: inline-block; margin: 0 0 1em; font-size: 0.55em; line-height: 1.3; font-weight: 600; color: var(--fg-dim);
   }
   .slide > :global(.again + .again)::before { content: '›'; margin: 0 0.5em; font-weight: 400; }
+  /* lines further apart than in the note, as a slide is read from across a room: an inline code's chip (its tint
+     spreads past its text) reached into the line under it */
+  .slide { line-height: 1.75; }
+  .slide :global(:not(pre) > code) { box-shadow: 0 0 0 0.1em var(--code-bg); padding-block: 0.05em; }
+  /* a table the slide's width (its widths from the note are taken off its copy, above) */
+  .slide :global(.tableWrapper) { overflow: visible; }
+  .slide :global(table) { width: 100%; }
   /* paragraphs apart, as a page of prose reads */
   .slide > :global(p + p) { margin-top: 0.6em; }
   /* a copy to look at: a block's own tools have no place on a slide */
   .slide :global(:is(.tools, .codebar, .foldchips, .drag-handle, .block-handle)) { display: none !important; }
+  .end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; pointer-events: none; }
+  .end-title { margin: 0; font-size: clamp(22px, min(3vw, 5vh), 56px); font-weight: 700; letter-spacing: -0.02em; color: var(--fg); }
+  .end-hint { margin: 0; font-size: 14px; color: var(--fg-dim); }
   .count { position: absolute; right: 20px; bottom: calc(14px + var(--bottom, 0px)); color: var(--fg-dim); font-size: 12px; font-variant-numeric: tabular-nums; }
-  .done {
-    position: absolute; top: calc(12px + var(--top, 0px)); right: 14px; width: 28px; height: 28px; border: 0; border-radius: 6px;
+  .corner { position: absolute; top: calc(12px + var(--top, 0px)); right: 14px; display: flex; gap: 4px; }
+  .corner button {
+    width: 28px; height: 28px; border: 0; border-radius: 6px;
     background: none; color: var(--fg-dim); display: inline-flex; align-items: center; justify-content: center; opacity: 0.5;
   }
-  .done:hover, .done:focus-visible { opacity: 1; background: var(--bg-hover); }
-  .done svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+  .corner button:hover, .corner button:focus-visible { opacity: 1; background: var(--bg-hover); }
+  .corner svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 </style>

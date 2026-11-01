@@ -344,9 +344,12 @@ class Ui {
   /** the note whose versions are shown (HistoryPanel.svelte), or null */
   /** the open note shown a slide at a time over everything (Present.svelte): its page's blocks are what is shown */
   present = $state<HTMLElement | null>(null);
+  /** the block of the page it starts on (presented from where the caret is), else the first slide */
+  presentFrom: Element | null = null;
   private presentOff: (() => void) | undefined;
-  openPresent(page: HTMLElement) {
+  openPresent(page: HTMLElement, from: Element | null = null) {
     this.presentOff ??= this.layers.push({ id: 'present', close: () => this.closePresent(), esc: true, keys: true, modal: true, own: '.present', phone: true });
+    this.presentFrom = from;
     this.present = page;
   }
   closePresent() {
