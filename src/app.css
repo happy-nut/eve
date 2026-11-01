@@ -639,6 +639,17 @@ svg.mindmap .mm-shape.bang { stroke-width: 2 !important; stroke: var(--c) !impor
 .g-bar.active { background: repeating-linear-gradient(-45deg, var(--c) 0 6px, color-mix(in srgb, var(--c) 70%, var(--d-canvas)) 6px 12px); }
 .g-bar.mile { min-width: 0; width: 16px !important; height: 16px; top: 14px; bottom: auto; border-radius: 3px; transform: translateX(-50%) rotate(45deg); }
 .tiptap .mermaid-view { margin: 0.6em 0; cursor: pointer; transition: box-shadow 0.15s; }
+/* a chart's lines hit by a wider stroke of nothing over each (spots.ts), only while it is edited; the line under the
+   pointer drawn bolder, and any other part a little larger, so what a click picks shows before it */
+.tiptap .mermaid-view .spot-hit { fill: none; stroke: transparent; stroke-width: 14px; pointer-events: none; }
+html.mobile .tiptap .mermaid-view .spot-hit { stroke-width: 22px; }
+.tiptap .dblock.active .mermaid-view .spot-hit { pointer-events: stroke; cursor: text; }
+@media (hover: hover) {
+  .tiptap .dblock.active .mermaid-view path[data-spot]:has(+ .spot-hit:hover) { stroke: var(--accent-text) !important; stroke-width: 2.5px !important; }
+  /* (not one placed by its own transform, a mermaid box: scaled, it slid off where it was drawn; those keep the ring) */
+  .tiptap .dblock.active .mermaid-view [data-spot]:not(path):not([transform]) { transition: scale 0.12s; transform-box: fill-box; transform-origin: center; }
+  .tiptap .dblock.active .mermaid-view [data-spot]:not(path):not([transform]):hover { scale: 1.06; }
+}
 @media (hover: hover) { .tiptap .mermaid-view:hover { box-shadow: inset 0 0 0 1.5px var(--accent-soft); } }
 .tiptap .mermaid-expand { display: none; }
 .tiptap .code-block.mermaid:not(.mermaid-error) .mermaid-expand {

@@ -770,8 +770,10 @@ export function stateParent(d: StateDiagram, st: StateBox): string | undefined {
   }
   return st.parent;
 }
-function stateCode(d: StateDiagram) {
-  const lines = [d.v2 ? 'stateDiagram-v2' : 'stateDiagram'];
+function stateCode(d: StateDiagram) { return stateWritten(d).lines.join('\n'); }
+/** its lines, and the order its links are written in (a state's own ones inside it, before those around it) */
+function stateWritten(d: StateDiagram) {
+  const lines = [d.v2 ? 'stateDiagram-v2' : 'stateDiagram'], order: number[] = [];
   if (d.dir) lines.push(`  direction ${d.dir}`);
   const ids = new Set(['[*]', ...d.states.map((x) => x.id)]);
   const parentOf = (id: string) => { const st = d.states.find((x) => x.id === id); return st && stateParent(d, st); };
@@ -803,11 +805,22 @@ function stateCode(d: StateDiagram) {
       }
       if (st.note && one(st.note.text)) lines.push(`${pad}note ${st.note.side} of ${st.id} : ${one(st.note.text)}`);
     }
-    for (const l of d.links) if (home(l) === parent && ids.has(l.from) && ids.has(l.to)) lines.push(`${pad}${l.from} --> ${l.to}${one(l.label) ? ` : ${one(l.label)}` : ''}`);
+    d.links.forEach((l, i) => {
+      if (home(l) !== parent || !ids.has(l.from) || !ids.has(l.to)) return;
+      lines.push(`${pad}${l.from} --> ${l.to}${one(l.label) ? ` : ${one(l.label)}` : ''}`);
+      order.push(i);
+    });
   };
   write(undefined, '  ');
   for (const x of d.extra ?? []) lines.push(kept(x));
-  return lines.join('\n');
+  return { lines, order };
+}
+/** the links of a class, state or table chart in the order they are written, so drawn: each line mermaid draws, by its
+ *  place, the link it is */
+export function linkOrder(d: ClassDiagram | StateDiagram | ErDiagram): number[] {
+  if (d.kind === 'state') return stateWritten(d).order;
+  const ids = new Set((d.kind === 'class' ? d.classes : d.tables).map((x) => x.id));
+  return d.links.flatMap((l, i) => (ids.has(l.from) && ids.has(l.to) ? [i] : []));
 }
 function stateRead(lines: string[], v2: boolean): StateDiagram | null {
   const d: StateDiagram = { kind: 'state', v2, states: [], links: [] };

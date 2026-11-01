@@ -7,6 +7,7 @@
   import { isMobile } from './lib/platform';
   import { floatAt, screenInsets, viewSize } from './lib/popup';
   import { textW } from './lib/lanes';
+  import { held } from './lib/chartHues';
   import Select from './Select.svelte';
 
   /**
@@ -54,6 +55,7 @@
   /** the bar under the picture, over its toolbar, where wherever it went in the picture it covered other parts (they
    *  could not be clicked; folded into a ⋯ instead, the ⋯ covered them, and opened, the bar did) */
   let docked = $state(false), barMax = $state(0);
+  let tallest = 0, wide = 0;
   function measure() {
     if (!layer) return;
     clearTimeout(retry);
@@ -69,6 +71,20 @@
     tick().then(placeBar);
   }
   $effect(() => { void version; void sel; tick().then(measure); });
+  /** a mind map's first-step ideas, each on the side it is drawn on now: kept there while it is edited (chartHues.ts) */
+  function keepSides() {
+    if (d.kind !== 'mindmap') return;
+    const root = host.querySelector('[data-spot="root"]')?.getBoundingClientRect();
+    if (!root) return;
+    for (const g of host.querySelectorAll('g.mm-l1')) {
+      const r = g.getBoundingClientRect(), t = g.textContent?.trim();
+      if (t && !held.sides.has(t)) held.sides.set(t, r.left + r.width / 2 > root.left + root.width / 2);
+    }
+  }
+  $effect(() => { void version; tick().then(keepSides); });
+  $effect(() => { if (!sel) held.hues.clear(); }); // (let go however it was: Enter, Esc, a click away)
+  /** what a held part said a letter ago: renamed, it keeps its side under its new name */
+  let said = '';
 
   /** a part to type in: what was being typed is kept first */
   function select(key: string | null) {
@@ -77,8 +93,12 @@
     sel = key;
     const s = key ? spotOf(d, key) : null;
     if (key && !s) sel = null;
-    text = before = s?.text ?? '';
+    text = before = said = s?.text ?? '';
     was = sel ? $state.snapshot(d) as Record<string, unknown> : null;
+    // its colour held while it is typed in (by its name it would change at each letter), let go as another is picked
+    held.hues.clear();
+    const tone = sel && /^(slice|branch):/.test(sel) ? / c(\d+)\b/.exec(` ${find(sel)?.getAttribute('class') ?? ''} ${find(sel)?.querySelector('.dot')?.getAttribute('class') ?? ''}`) : null;
+    if (sel && tone) held.hues.set(sel, +tone[1]);
     grab = !!sel;
     deciding = true;
     hover = null;
@@ -102,6 +122,8 @@
   }
   function typed() {
     const s = spot;
+    if (held.sides.has(said.trim())) { const side = held.sides.get(said.trim())!; held.sides.delete(said.trim()); held.sides.set(text.trim(), side); }
+    said = text;
     if (s && !s.onDone) s.set(text);
   }
   /** the field lets go of the keyboard on purpose as it goes (left to vanish, the keyboard was on <body> as if lost) */
@@ -189,8 +211,21 @@
   function onHostClick(e: MouseEvent) {
     const t = e.target as Element;
     if (layer.contains(t)) return;
-    // (a person drawn as a figure of thin lines: a tap between them landed on nothing, the figure's box picks them)
-    const el = t.closest?.('[data-spot]') ?? [...host.querySelectorAll('[data-spot^="person:"]')].find((p) => { const r = p.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; });
+    // a click just beside a part, or between a figure's thin lines, picks it (a phone's small words were missed by a
+    // finger and nothing was picked): the nearest within a finger's reach, not a line by its box
+    const reach = isMobile ? 18 : 8;
+    const near = () => {
+      let best: Element | undefined, gap = reach + 1;
+      for (const p of host.querySelectorAll('[data-spot]')) {
+        if (p instanceof SVGPathElement) continue;
+        const r = p.getBoundingClientRect();
+        if (!r.width) continue;
+        const g = Math.hypot(Math.max(r.left - e.clientX, 0, e.clientX - r.right), Math.max(r.top - e.clientY, 0, e.clientY - r.bottom));
+        if (g < gap) { gap = g; best = p; }
+      }
+      return best;
+    };
+    const el = t.closest?.('[data-spot]') ?? near();
     const key = el && host.contains(el) ? el.getAttribute('data-spot') : null;
     // the part already picked clicked again (the click that opened the chart picked it): its field keeps the keyboard
     if (key && key === sel) field?.focus({ preventScroll: true });
@@ -225,6 +260,27 @@
       .filter((el) => el.getAttribute('data-spot') !== sel).map((el) => el.getBoundingClientRect());
     const covers = (f: { left: number; top: number }) => others.filter((q) => q.width && q.left < f.left + size.w && q.right > f.left && q.top < f.top + size.h && q.bottom > f.top).length;
     const best = tries.reduce<(typeof tries)[number] | null>((a, f) => (!a || covers(f) < covers(a) ? f : a), null);
+    // a phone's keyboard up: on it, the width of the card, as a phone's own bars are (anywhere in the little room left
+    // above it, it covered the parts around the field); the field scrolled up clear of it
+    // (Android shortens the page for its keyboard instead of laying it over: the window shorter than it has been, at
+    // the same width)
+    const win = viewSize();
+    if (win.w !== wide) { wide = win.w; tallest = 0; }
+    tallest = Math.max(tallest, win.h);
+    const kb = isMobile ? Math.max(screenInsets().bottom - 64, tallest - win.h) : 0;
+    if (kb > 120) {
+      docked = true;
+      barMax = W - 8;
+      const top = viewSize().h - screenInsets().bottom - o.top - size.h - 4;
+      barAt = { left: 4, top };
+      const under = fieldTop + half * 2 + 8 - top;
+      if (under > 0) {
+        let sc: HTMLElement | null = layer.parentElement;
+        while (sc && !(sc.scrollHeight > sc.clientHeight && /auto|scroll/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement;
+        if (sc) sc.scrollTop += under;
+      }
+      return;
+    }
     // docked or not once, as the part is picked and drawn: not again as it is edited (a rename drew it anew, its old
     // drawing counted as a part it covered, and the bar moved away from under the click into one of its boxes)
     if (deciding && rect) { deciding = false; docked = !best || covers(best) > 0; }
@@ -286,6 +342,8 @@
     // the part the click that opened the chart landed on
     untrack(() => { if (pick) tick().then(() => select(pick)); });
     return () => {
+      held.hues.clear();
+      held.sides.clear(); // done: the map split anew, tidily
       clearTimeout(retry);
       host.removeEventListener('click', onHostClick);
       host.removeEventListener('pointermove', onHostMove);
