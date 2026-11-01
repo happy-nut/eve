@@ -100,5 +100,9 @@ describe('chart parts', () => {
     const d = gantt('  section S\n  Sketch :a1, 2026-01-05, 5d\n  Review :r1, after a1, 3d');
     act(d, 'task:0:0', 'Delete');
     expect(d.sections[0].tasks[0]).toMatchObject({ name: 'Review', start: '2026-01-10' });
+    // and the one that just came next
+    const g = gantt('  section S\n  A :a1, 2026-01-05, 2d\n  B :b1, 2026-01-07, 3d\n  C : 2d');
+    act(g, 'task:0:1', 'Delete');
+    expect(g.sections[0].tasks[1]).toMatchObject({ name: 'C', start: '2026-01-10' });
   });
 });

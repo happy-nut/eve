@@ -19,6 +19,9 @@
   } = $props();
 
   let open = $state(false);
+  // closed however it was (a pick, Esc, a click away): the caller's next keyboard place, as after a pick
+  let wasOpen = false;
+  $effect(() => { if (wasOpen && !open) onpicked?.(); wasOpen = open; });
   let at = $state(0); // the highlighted row while open
   let btn = $state<HTMLButtonElement | null>(null);
   let pos = $state({ left: 0, top: 0, maxHeight: 0, width: 0, up: false }); // up: over the button, no room under it
@@ -51,7 +54,6 @@
     const id = options[i]?.[0];
     if (id !== undefined && id !== value) onchange(id);
     btn?.focus();
-    onpicked?.();
   }
   function key(e: KeyboardEvent) {
     if (!open) {

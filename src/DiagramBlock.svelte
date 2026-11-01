@@ -342,7 +342,8 @@
     tick().then(fit);
   }
   /** back into the note (✕, Esc, the phone's back) */
-  const leaveFull = () => ui.closeDiagramView();
+  // back in the note, the keyboard in it (left on <body>, ⌘Z there undid nothing)
+  const leaveFull = () => { ui.closeDiagramView(); if (!active) onLeave(); };
   /** the drawing's own size, before any zoom */
   function natural(): { el: HTMLElement | SVGSVGElement; w: number; h: number } | null {
     const el = canvas?.firstElementChild as HTMLElement | SVGSVGElement | null;
@@ -521,7 +522,7 @@
         <button class="ghost" onclick={() => flowEd?.addLane()}>+ Lane</button>
       {:else if chart}
         {#each adders(chart) as a (a.label)}<button class="ghost" onmousedown={(e) => e.preventDefault()} onclick={() => chartEd?.open(a.run())}>{a.label}</button>{/each}
-        {#each toggles(chart) as t (t.label)}<button class="ghost" class:on={t.on} aria-pressed={t.on} onmousedown={(e) => e.preventDefault()} onclick={() => t.set(!t.on)}>{t.on ? '✓ ' : ''}{t.label}</button>{/each}
+        {#each toggles(chart) as t (t.label)}<button class="ghost" class:on={t.on} aria-pressed={t.on} onmousedown={(e) => e.preventDefault()} onclick={() => { t.set(!t.on); chartEd?.kept(); }}>{t.on ? '✓ ' : ''}{t.label}</button>{/each}
         <button class="ghost" class:on={rows} aria-pressed={rows} title="Every part as a row under the chart" onclick={() => (rows = !rows)}>{rows ? 'Hide list' : 'List'}</button>
       {/if}
       <span class="grow"></span>

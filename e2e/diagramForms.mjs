@@ -468,6 +468,13 @@ try {
   assert.match(await md(page), /"Fish" : 42/, '⇧Tab into its value, the value typed over');
   await page.keyboard.press('Tab');
   assert.ok(await page.evaluate(() => document.activeElement?.closest('.layer .bar') && document.activeElement.tagName === 'BUTTON'), 'Tab goes on to the bar\'s buttons');
+  for (let i = 0; i < 8; i++) await page.keyboard.press('Tab');
+  assert.ok(await page.evaluate(() => document.activeElement?.closest('.layer')), 'Tab past the bar\'s end comes back round, not out to Full screen');
+  // a whole chart's setting turned meanwhile is not taken back by Esc
+  await page.locator('.tiptap .layer input.field').focus();
+  await page.locator('.tiptap .dblock.active .tools button', { hasText: 'Values' }).click();
+  await page.keyboard.press('Escape');
+  assert.match(await md(page), /pie showData/, 'Values stays on');
   await page.close();
   console.log('ok   a rename then a box of the bar typed in; Esc puts back the value too; a state added is drawn; a crowded chart\'s bar goes under it; a key with nothing picked does nothing');
 

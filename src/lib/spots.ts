@@ -214,6 +214,9 @@ function ganttSpot(d: Gantt, key: string): Spot | null {
       { label: 'Delete', icon: 'trash', run: () => {
         const was = ganttDates(d);
         const [gone] = s.tasks.splice(ti, 1);
+        // the one that came next after it (no start of its own) keeps its days too: the one before it now ended sooner
+        const next = s.tasks[ti];
+        if (next?.after === '') { next.start = was.get(next)!.start; delete next.after; }
         // what started after it keeps the day it started on (it moved to the day the one deleted started)
         if (gone.id) for (const x of d.sections.flatMap((y) => y.tasks)) if (x.after?.split(' ').includes(gone.id)) { x.after = x.after.split(' ').filter((id) => id !== gone.id).join(' '); if (!x.after) { x.start = was.get(x)?.start || endOf(d); delete x.after; } }
       } },

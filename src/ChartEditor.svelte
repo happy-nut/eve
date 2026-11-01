@@ -134,12 +134,24 @@
     sel = null;
     return true;
   }
+  /** a setting of the whole chart turned while a part is picked (Values, Skip weekends): its own, not the part's, so
+   *  Esc leaves it as set */
+  export function kept() {
+    if (!was) return;
+    const live = $state.snapshot(d) as Record<string, unknown>;
+    for (const k of new Set([...Object.keys(live), ...Object.keys(was)])) if (typeof live[k] !== 'object' && typeof was[k] !== 'object') was[k] = live[k];
+  }
   /** a part typed in at once (the chart's own "+ Part") */
   export function open(key: string | null) { if (key) { const drawn = version; sel = null; tick().then(() => { select(key); fresh = key; addedIn = drawn; }); } }
 
   const ADDS = new Set<Icon>(['plus', 'child', 'note', 'section']);
   function onBarKey(e: KeyboardEvent) {
     if (e.key === 'Escape' && !composing(e) && e.target !== field) { e.preventDefault(); e.stopPropagation(); escape(); }
+    // Tab past its last, ⇧Tab before its first: back to the field (it went on to Full screen, and stayed there)
+    if (e.key === 'Tab' && bar) {
+      const all = [...bar.querySelectorAll<HTMLElement>('button:not(:disabled), input, textarea')];
+      if (e.target === all[e.shiftKey ? 0 : all.length - 1]) { e.preventDefault(); field?.focus({ preventScroll: true }); }
+    }
   }
   /** a choice made in the bar: the keyboard back in the part's field, for Enter and Tab to go on from */
   const chose = () => tick().then(() => { if (!field) return; field.focus({ preventScroll: true }); field.setSelectionRange(field.value.length, field.value.length); });
@@ -169,7 +181,9 @@
   function onHostClick(e: MouseEvent) {
     const t = e.target as Element;
     if (layer.contains(t)) return;
-    const el = t.closest?.('[data-spot]'), key = el && host.contains(el) ? el.getAttribute('data-spot') : null;
+    // (a person drawn as a figure of thin lines: a tap between them landed on nothing, the figure's box picks them)
+    const el = t.closest?.('[data-spot]') ?? [...host.querySelectorAll('[data-spot^="person:"]')].find((p) => { const r = p.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; });
+    const key = el && host.contains(el) ? el.getAttribute('data-spot') : null;
     // the part already picked clicked again (the click that opened the chart picked it): its field keeps the keyboard
     if (key && key === sel) field?.focus({ preventScroll: true });
     else select(key);
@@ -211,9 +225,12 @@
     if (docked) {
       // short of the full-screen button and of Done, under the field's left; and in sight: a tall chart's foot was
       // far below the window (or under a phone's keyboard)
-      const seen = viewSize().h - screenInsets().bottom - o.top - size.h - 8;
-      let top = Math.min(H - (parseFloat(getComputedStyle(host).paddingBottom) || 0) + 6, seen);
-      if (top < fieldTop + half * 2 + 6 && top + size.h > fieldTop - 6) top = fieldTop - size.h - 8; // not over its own field
+      // the picture's foot, or under or over the field: of those in sight and off the field, the one covering fewest
+      const seen = viewSize().h - screenInsets().bottom - o.top - size.h - 8, top0 = screenInsets().top - o.top + 4;
+      const offField = (t: number) => t >= fieldTop + half * 2 + 6 || t + size.h <= fieldTop - 6;
+      const tops = [Math.min(H - (parseFloat(getComputedStyle(host).paddingBottom) || 0) + 6, seen), fieldTop + half * 2 + 8, fieldTop - size.h - 8]
+        .filter((t) => t >= top0 && t <= seen && offField(t));
+      const top = tops.length ? tops.reduce((a, t) => (covers({ left: o.left + fieldLeft, top: o.top + t }) < covers({ left: o.left + fieldLeft, top: o.top + a }) ? t : a)) : fieldTop - size.h - 8;
       // (those on its rows only: a phone's Done, on a row of its own at the left, left it no room)
       const stop = [...(layer.parentElement?.parentElement?.querySelectorAll('.mermaid-expand, .tools .done') ?? [])].map((b) => b.getBoundingClientRect())
         .filter((q) => q.top < o.top + top + size.h && q.bottom > o.top + top).map((q) => q.left - o.left - 8);
@@ -228,6 +245,9 @@
   }
   $effect(() => { void spot; void rect; tick().then(placeBar); });
 
+  // its own size changed (a choice's longer words, a new part's boxes): placed again for it
+  const barRo = new ResizeObserver(() => placeBar());
+  $effect(() => { if (bar) { barRo.observe(bar); return () => bar && barRo.unobserve(bar); } });
   onMount(() => {
     host.addEventListener('click', onHostClick);
     host.addEventListener('pointermove', onHostMove);
@@ -236,6 +256,11 @@
     host.addEventListener('scroll', measure, { passive: true });
     const ro = new ResizeObserver(() => measure());
     ro.observe(host);
+    // the keyboard coming up (the window shorter) or the page scrolled: the bar kept in sight
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', measure);
+    window.addEventListener('resize', measure);
+    document.addEventListener('scroll', measure, { passive: true, capture: true });
     // the part the click that opened the chart landed on
     untrack(() => { if (pick) tick().then(() => select(pick)); });
     return () => {
@@ -244,7 +269,11 @@
       host.removeEventListener('pointermove', onHostMove);
       host.removeEventListener('pointerleave', out);
       host.removeEventListener('scroll', measure);
+      vv?.removeEventListener('resize', measure);
+      window.removeEventListener('resize', measure);
+      document.removeEventListener('scroll', measure, { capture: true });
       ro.disconnect();
+      barRo.disconnect();
     };
   });
 
@@ -268,8 +297,9 @@
    *  words where they were; a small one (a word on a line, an idea) has it centred on it */
   // (a page's words set from their left, a title or a section's name, stay where they were drawn too)
   let leftSet = $state(false);
-  const wideSpot = $derived(!!rect && (rect.w + 12 >= 120 || leftSet));
-  $effect(() => { void rect; const el = sel && find(sel); leftSet = el instanceof HTMLElement && /^(left|start)$/.test(getComputedStyle(el).textAlign); });
+  // (a drawn picture's words, centred, stay centred: a state's name jumped to its box's left)
+  const wideSpot = $derived(!!rect && leftSet);
+  $effect(() => { void rect; const el = sel && find(sel); leftSet = el instanceof HTMLElement && (/^(left|start)$/.test(getComputedStyle(el).textAlign) || el.getBoundingClientRect().width + 12 >= 120); });
   const fieldLeft = $derived(Math.max(4, Math.min((layer?.clientWidth ?? 600) - fieldW - 4, rect ? (wideSpot ? rect.x - 6 : rect.x + rect.w / 2 - fieldW / 2) : 8)));
 </script>
 
@@ -292,10 +322,10 @@
           {#if f.kind === 'select'}
             <Select label={f.label} value={f.value} options={f.options} onchange={(v) => f.set(v)} onpicked={chose} />
           {:else if f.kind === 'lines'}
-            <textarea value={f.value} rows={Math.min(6, Math.max(2, f.value.split('\n').length + 1))} placeholder="One per line" spellcheck="false"
+            <textarea aria-label={f.label} value={f.value} rows={Math.min(6, Math.max(2, f.value.split('\n').length + 1))} placeholder="One per line" spellcheck="false"
               oninput={(e) => f.set(e.currentTarget.value)}></textarea>
           {:else}
-            <input type={f.kind} value={f.value} size={f.kind === 'number' ? 5 : undefined}
+            <input type={f.kind} aria-label={f.label} value={f.value} size={f.kind === 'number' ? 5 : undefined}
               onchange={(e) => { f.set(e.currentTarget.value); const now = sel && spotOf(d, sel)?.fields.find((x) => x.label === f.label); if (now) e.currentTarget.value = now.value; }}
               oninput={(e) => { if (f.kind === 'number') f.set(e.currentTarget.value); }}
               onkeydown={(e) => { if (!composing(e) && e.key === 'Enter') { e.preventDefault(); commit(); letField(); sel = null; } }} />
@@ -342,7 +372,7 @@
     display: inline-flex; align-items: center; justify-content: center; font: inherit; font-size: 12.5px; font-weight: 500;
   }
   .bar button:disabled { opacity: 0.35; }
-  .bar button:focus-visible, .f :global(button:focus-visible) { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+  .bar button:focus, .f :global(button:focus) { outline: none; box-shadow: 0 0 0 2px var(--accent); } /* (the mouse gives them none) */
   @media (hover: hover) { .bar button:not(:disabled):hover { background: var(--bg-hover); color: var(--fg); } .bar button.danger:hover { color: #ff453a; } }
   .bar button .lbl { margin-left: 4px; }
   .bar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
