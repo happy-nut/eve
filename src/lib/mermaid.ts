@@ -23,13 +23,13 @@ const dark = () => {
 const PALETTE = {
   light: {
     // dim: a label on an edge or a group (12px) reads at 4.5:1 on the canvas and a white box (#8b95a1 read at 3:1)
-    fg: '#333d4b', strong: '#191f28', dim: '#66707e', canvas: '#f9fafb', node: '#ffffff', border: '#e5e8eb', line: '#c4cad1',
-    accent: '#3182f6', head: '#f2f4f6', tint: '#e8f3ff', tintText: '#1b64da', note: '#fff8e6', noteLine: '#ffe2a6', shadow: 'rgba(0,23,51,0.06)',
+    fg: '#333d4b', strong: '#191f28', dim: '#66707e', canvas: '#f9fafb', node: '#ffffff', border: '#e5e8eb', line: '#a1aab5',
+    accent: '#3182f6', head: '#f2f4f6', tint: '#e8f3ff', tintLine: '#b8d6ff', tintText: '#1b64da', note: '#fff8e6', noteLine: '#ffe2a6', shadow: 'rgba(0,23,51,0.06)',
     hues: ['#3182f6', '#15c39a', '#ff9f2e', '#8b5cf6', '#f04452', '#f5b800', '#4cc3ff', '#5fbf4a', '#ec5fa8', '#6366f1', '#c08457', '#14b8a6'],
   },
   dark: {
-    fg: '#e5e8eb', strong: '#f9fafb', dim: '#8b95a1', canvas: '#17181d', node: '#23252b', border: '#2e3138', line: '#4e5560',
-    accent: '#4593fc', head: '#2b2e35', tint: '#1c2c45', tintText: '#9cc6ff', note: '#2e2a1d', noteLine: '#5c4f2a', shadow: 'rgba(0,0,0,0.3)',
+    fg: '#e5e8eb', strong: '#f9fafb', dim: '#8b95a1', canvas: '#17181d', node: '#23252b', border: '#2e3138', line: '#68717d',
+    accent: '#4593fc', head: '#2b2e35', tint: '#1c2c45', tintLine: '#2f4a73', tintText: '#9cc6ff', note: '#2e2a1d', noteLine: '#5c4f2a', shadow: 'rgba(0,0,0,0.3)',
     hues: ['#4593fc', '#2bd4a9', '#ffae4d', '#a07bff', '#ff6673', '#ffcd3c', '#6cd1ff', '#7ed36a', '#f47dbb', '#8187ff', '#d39a6c', '#3cc9b8'],
   },
 };
@@ -76,10 +76,14 @@ function config(mode: 'light' | 'dark') {
       .node rect.basic, .node rect.label-container, rect.actor, .cluster rect { rx: 12px; ry: 12px; }
       .node .label-container, rect.actor { stroke: ${c.border} !important; stroke-width: 1px !important; filter: drop-shadow(0 1px 1.5px ${c.shadow}); }
       g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) path { stroke: ${c.border} !important; stroke-width: 1px !important; }
-      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) path:first-child { fill: ${c.head} !important; }
-      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) .nodeLabel p { color: ${c.strong}; }
-      g.node:has(> polygon) polygon { fill: ${c.node}; stroke: ${c.border}; stroke-width: 1px; }
-      g.node:has(> circle) circle { fill: ${c.head}; stroke: ${c.border}; stroke-width: 1px; }
+      /* what a shape means, seen before it is read: a start or an end (a pill, a circle) soft blue, a question (a
+         diamond) soft amber, a step plain white */
+      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) path { stroke: ${c.tintLine} !important; }
+      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) path:first-child { fill: ${c.tint} !important; }
+      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) .nodeLabel p { color: ${c.tintText}; font-weight: 600; }
+      g.node:has(> polygon) polygon { fill: ${c.note}; stroke: ${c.noteLine}; stroke-width: 1px; }
+      g.node:has(> circle) circle { fill: ${c.tint}; stroke: ${c.tintLine}; stroke-width: 1px; }
+      g.node:has(> circle) .nodeLabel p { color: ${c.tintText}; font-weight: 600; }
       .nodeLabel, .nodeLabel p { color: ${c.fg}; }
       .cluster rect { fill: ${c.canvas} !important; stroke: ${c.border} !important; stroke-dasharray: 0; }
       .cluster-label .nodeLabel, .cluster-label .nodeLabel p { color: ${c.dim}; font-size: 12px; }
@@ -114,6 +118,12 @@ function config(mode: 'light' | 'dark') {
       g.label.attribute-name .nodeLabel p { color: ${c.fg}; }
       g.label.attribute-type .nodeLabel p, g.label.attribute-comment .nodeLabel p { color: ${c.dim}; font-size: 12.5px; }
       g.label.attribute-keys .nodeLabel p { color: ${c.tintText}; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; }
+      /* a state diagram's start a solid dot in the text's colour (grey, it read as switched off), its end the same in a ring */
+      circle.state-start { fill: ${c.fg} !important; stroke: ${c.fg} !important; }
+      g.node[id*='_end-'] > .outer-path > path + path { stroke: ${c.fg} !important; } g.node[id*='_end-'] > .outer-path > g path { fill: ${c.fg} !important; stroke: ${c.fg} !important; }
+      /* a class with no members: its two empty compartments' rules hidden, its name in the middle of its box */
+      g.node:has(> .members-group:empty):has(> .methods-group:empty) > .divider { display: none; }
+      g.node:has(> .members-group:empty):has(> .methods-group:empty) > .label-group { translate: 0 16.5px; }
       .grid .tick line { stroke: ${c.border}; } .grid path { stroke-width: 0; } .grid .tick text { fill: ${c.dim}; }`,
     themeVariables: {
       darkMode: mode === 'dark', fontFamily: FONT, fontSize: '14px', background: c.canvas,

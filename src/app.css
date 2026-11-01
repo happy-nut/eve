@@ -552,14 +552,22 @@ html.mobile .tiptap .code-lang-ask input { font-size: 16px; } /* under 16px a ph
 
 /* ---- swimlanes (lib/lanes.ts): bands side by side, each lane's name in its own tint; steps as in a flowchart ---- */
 .diagram-canvas:has(> svg.lanes) { padding: 16px; }
-svg.lanes { --d-head: light-dark(#f2f4f6, #2b2e35); --d-edge: light-dark(#c4cad1, #4e5560); font-family: inherit; }
+svg.lanes {
+  --d-head: light-dark(#f2f4f6, #2b2e35); --d-edge: light-dark(#a1aab5, #68717d); font-family: inherit; /* mermaid.ts's line */
+  --d-tint: light-dark(#e8f3ff, #1c2c45); --d-tint-line: light-dark(#b8d6ff, #2f4a73); --d-tint-text: light-dark(#1b64da, #9cc6ff);
+  --d-ask: light-dark(#fff8e6, #2e2a1d); --d-ask-line: light-dark(#ffe2a6, #5c4f2a);
+}
 svg.lanes .lane-bg { fill: color-mix(in srgb, var(--c) 5%, transparent); }
 svg.lanes .lane-head rect { fill: color-mix(in srgb, var(--c) 12%, transparent); }
 svg.lanes .lane-name { fill: color-mix(in srgb, var(--c) 75%, var(--d-strong)); font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
 svg.lanes .lane.none { --c: var(--d-dim); }
+svg.lanes .lane.none :is(.lane-bg, .lane-head rect) { fill: transparent; } /* the steps in no lane: no grey band, no empty head */
 svg.lanes .lane-rule { stroke: var(--d-line); stroke-width: 1; }
 svg.lanes .sl-shape { fill: var(--d-card); stroke: var(--d-line); stroke-width: 1; filter: drop-shadow(0 1px 2px rgba(0, 23, 51, 0.06)); }
-svg.lanes .sl-shape.pill, svg.lanes .sl-circle .sl-shape { fill: var(--d-head); }
+/* what a shape means, seen before it is read, as mermaid.ts draws a flowchart: a start or an end soft blue, a question amber */
+svg.lanes :is(.sl-pill, .sl-circle) .sl-shape { fill: var(--d-tint); stroke: var(--d-tint-line); }
+svg.lanes :is(.sl-pill, .sl-circle) .sl-text { fill: var(--d-tint-text); font-weight: 600; }
+svg.lanes .sl-diamond .sl-shape { fill: var(--d-ask); stroke: var(--d-ask-line); }
 svg.lanes .sl-text { fill: var(--d-strong); font-size: 14px; }
 svg.lanes .sl-edge { fill: none; stroke: var(--d-edge); stroke-width: 1.5; }
 svg.lanes .sl-edge.dotted { stroke-dasharray: 4 4; }
