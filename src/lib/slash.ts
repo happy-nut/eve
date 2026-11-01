@@ -528,7 +528,7 @@ export function newPage(editor: Editor, named = '') {
   editor.chain().focus().insertContent([{ type: 'wikiLink', attrs: { title } }, { type: 'text', text: ' ' }]).run();
   if (parent) notes.flush(parent.id); // creating the page navigates away from this editor
   notes.selectTitle = !named.trim();
-  const page = notes.create(`# ${title}\n\n`, parent?.group ?? '', parent?.id);
+  const page = notes.create(`# ${title}\n\n`, parent?.id);
   // the link to it is written into the page above: left as it was made, it is still that page's, not a stray ⌘N
   notes.touched(page.id);
 }

@@ -6,8 +6,8 @@ import { ui } from './ui.svelte';
 import { flushEdits } from './pending';
 
 /**
- * Import files picked in Finder, or whole folders. One file lands as a plain new note in the open note's group;
- * several keep the shape they came in (importTree.ts): folders become groups, a page's folder its sub-pages.
+ * Import files picked in Finder, or whole folders. One file lands as a plain new note beside the open note; several
+ * keep the shape they came in (importTree.ts): a folder becomes a page of its name, a page's folder its sub-pages.
  */
 export async function importPaths(paths: string[], from?: string, into = ''): Promise<Note | null> {
   const root = from ?? commonDir(paths);
@@ -17,7 +17,7 @@ export async function importPaths(paths: string[], from?: string, into = ''): Pr
     asset: () => importAsset(p), // copied next to the notes, so the note survives the original moving
   }));
   const one = paths.length === 1 && !from;
-  const made = await importTree(sources, into, one ? (notes.current?.group ?? '') : into);
+  const made = await importTree(sources, into, one ? (notes.current?.parent ?? '') : into);
   return made[0]?.note ?? null;
 }
 
@@ -29,7 +29,7 @@ export async function importFromFinder(): Promise<Note | null> {
 }
 
 /**
- * Import whole folders: everything under them becomes notes, and the folders themselves become groups.
+ * Import whole folders: everything under them becomes notes, and the folders themselves pages of their names.
  * A file panel only ever hands back files from one folder, so this is the way a tree arrives intact.
  */
 export async function importFromFolder(): Promise<Note | null> {
@@ -38,7 +38,7 @@ export async function importFromFolder(): Promise<Note | null> {
   const paths: string[] = [];
   for (const root of picked) for (const rel of await listFolder(root)) paths.push(`${root}/${rel}`);
   if (!paths.length) return null;
-  // measured from the folder's parent, so the folder itself becomes the top group
+  // measured from the folder's parent, so the folder itself becomes the page everything goes under
   return importPaths(paths, dirOf(picked[0]));
 }
 

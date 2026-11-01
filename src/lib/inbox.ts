@@ -6,7 +6,6 @@
  * The answer goes back to the server waiting on it.
  */
 import { notes, titleOf, type Note } from './notes.svelte';
-import { depthOf, MAX_DEPTH } from './groups.svelte';
 import { findPassage, nearestLine } from './passage';
 
 export interface Ask {
@@ -14,6 +13,8 @@ export interface Ask {
   op: 'create' | 'append' | 'edit' | 'delete';
   id?: string;
   body?: string;
+  /** a page path to put it under ("Work/Projects"), each page found by its title or made (an older server calls it a group) */
+  page?: string;
   group?: string;
   parent?: string;
   text?: string;
@@ -25,16 +26,24 @@ export interface Answer { ok: boolean; text: string }
 const no = (text: string): Answer => ({ ok: false, text });
 const live = (id = '') => notes.all.find((n) => n.id === id && !n.deleted);
 
+/** the page at the end of a path of titles, from the top: each found among the pages under the one before, or made */
+function pageAt(path: string[]): string | undefined {
+  let up: string | undefined;
+  for (const t of path) {
+    const found = notes.visible.find((n) => (n.parent ?? undefined) === up && titleOf(n).toLowerCase() === t.toLowerCase());
+    up = (found ?? notes.addImported(`# ${t}\n`, Date.now(), up)).id;
+  }
+  return up;
+}
+
 export function apply(a: Ask): Answer {
   if (a.op === 'create') {
     const up = a.parent ? live(a.parent) : undefined;
     if (a.parent && !up) return no('The parent note is not there any more (deleted since it was found).');
-    // a sub-page sits in its page's folder, as a database row does
-    const group = up ? up.group : (a.group ?? '');
-    if (depthOf(group) > MAX_DEPTH) return no(`Folders go ${MAX_DEPTH} deep at most; "${group}" is deeper.`);
+    const path = (a.page || a.group || '').split('/').map((t) => t.trim()).filter(Boolean);
     // made as an import is: the note the user has open stays open
-    const n = notes.addImported(a.body ?? '', group, Date.now(), up?.id);
-    const where = up ? ` under "${titleOf(up)}"` : group ? ` in ${group}` : '';
+    const n = notes.addImported(a.body ?? '', Date.now(), up?.id ?? pageAt(path));
+    const where = up ? ` under "${titleOf(up)}"` : path.length ? ` under ${path.join(' / ')}` : '';
     return { ok: true, text: `Made "${titleOf(n)}"${where} in Eve (id ${n.id}).` };
   }
   if (a.op !== 'append' && a.op !== 'edit' && a.op !== 'delete') return no(`Eve does not know "${a.op}": update Eve.`);

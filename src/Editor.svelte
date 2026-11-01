@@ -10,8 +10,7 @@
   import { shortcuts } from './lib/shortcuts.svelte';
   import { ui, under, hooks } from './lib/ui.svelte';
   import Icon from './Icon.svelte';
-  import { groups, leafOf } from './lib/groups.svelte';
-  import Suggest from './Suggest.svelte';
+    import Suggest from './Suggest.svelte';
   import DateMenu from './DateMenu.svelte';
   import EmojiRow from './EmojiRow.svelte';
   import Outline from './Outline.svelte';
@@ -177,13 +176,10 @@
     takeBody(editor, body);
   });
   /**
-   * Where the note sits, over its title: its groups, outermost first, then the pages it is under. A page opens on a
-   * click; a group is only said (the list is where groups are). Nothing for a note at the top level.
+   * Where the note sits, over its title: the pages it is under, outermost first, each opened on a click. Nothing for a
+   * note at the top level.
    */
   const crumbs = $derived.by(() => {
-    const out: { label: string; icon: string; id?: string }[] = [];
-    const parts = (note.group ?? '').split('/').filter(Boolean);
-    parts.forEach((_, i) => { const path = parts.slice(0, i + 1).join('/'); out.push({ label: leafOf(path), icon: groups.icon(path) }); });
     const pages: { label: string; icon: string; id: string }[] = [];
     const seen = new Set<string>([note.id]);
     for (let id = note.parent; id && !seen.has(id); ) {
@@ -193,7 +189,7 @@
       pages.unshift({ label: titleOf(p), icon: p.icon ?? '', id: p.id });
       id = p.parent;
     }
-    return [...out, ...pages];
+    return pages;
   });
 
   // the notes that link here (Notion's backlinks): a count over the title, a menu of them on a click
@@ -270,11 +266,7 @@
   <nav class="crumbs" aria-label="Where this note is">
     {#each crumbs as c, i (i)}
       <span class="sep">/</span>
-      {#if c.id}
-        <button class="crumb" onclick={() => (notes.currentId = c.id!)}>{#if c.icon}<Icon icon={c.icon} size={14} />{/if}<span>{c.label}</span></button>
-      {:else}
-        <span class="crumb">{#if c.icon}<Icon icon={c.icon} size={14} />{/if}<span>{c.label}</span></span>
-      {/if}
+      <button class="crumb" onclick={() => (notes.currentId = c.id)}>{#if c.icon}<Icon icon={c.icon} size={14} />{/if}<span>{c.label}</span></button>
     {/each}
     <span class="sep">/</span>
     <span class="crumb here">{#if note.icon}<Icon icon={note.icon} size={14} />{/if}<span>{titleOf(note)}</span></span>
@@ -337,7 +329,7 @@
   }
   /* a block, so a name too long is cut with an ellipsis (inline, it was cut mid-letter with none) */
   .crumb span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* each place a few letters at least: squeezed, a note three groups deep read "/ / / A really quite lo" */
+  /* each place a few letters at least: squeezed, a note three pages deep read "/ / / A really quite lo" */
   .crumb:not(.here) { min-width: 3.2em; flex-shrink: 1; }
   .crumb.here { color: var(--fg); flex-shrink: 0.2; }
   button.crumb:hover { background: var(--bg-hover); color: var(--fg); }

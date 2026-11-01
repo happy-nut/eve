@@ -107,7 +107,7 @@ Sign in from Settings → Sync on the phone too.
   down and the widget redraws. The app pushes when it leaves the screen.
 - **Opens where you left off** — the note you had open, not the list.
 - **A list made for a thumb** — each row shows the note's title, when it was edited and two lines of it. Swipe a
-  row left to delete it; long-press it to pick it up and drag it to another place or group.
+  row left to delete it; long-press it to pick it up and drag it to another place or under another page.
 - Back goes from a note to the list, and from the list out of the app.
 
 ```bash
@@ -151,7 +151,7 @@ A done to-do's reminder does not ring.
 | Scope  | Action                          | Keys              |
 | ------ | ------------------------------- | ----------------- |
 | system | Summon / dismiss Eve            | `⌘⇧E`             |
-| app    | New (note / group menu) / Search | `⌘N` `⌘P` (`⌘K` with no words chosen) |
+| app    | New (note menu) / Search | `⌘N` `⌘P` (`⌘K` with no words chosen) |
 | app    | Back / Forward / Next / previous note | `⌘[` `⌘]` `⌃⇧J` `⌃⇧K` |
 | app    | The page above / Copy its eve:// link / Dark–light | `⌘⇧U` `⌘L` `⌘⇧L` |
 | app    | Sidebar: open + focus / close   | `⌘\`              |
@@ -214,7 +214,7 @@ after connecting.
 
 The server is the app's own binary started as `eve mcp` (no window, no Tauri): it reads `notes/*.md` from disk,
 so it works while Eve is closed. It hands over the notes exactly as written. Tools: `list_notes` and `search_notes` (every word must match; title
-hits first) find notes, narrowed by group and by the dates a note was made or last changed (`from` / `to`:
+hits first) find notes, narrowed to the pages under one page and by the dates a note was made or last changed (`from` / `to`:
 `2026-09` or `2026-09-05`, local time); `read_note` returns one (by title or id, a `[[Title#Section]]` link, or
 one section) and `read_notes` several, by id, in the order given. `open_note` shows one in Eve — the running
 app comes to the front with that note open, at a section if one is named (Eve starts if it was not running):
@@ -250,7 +250,7 @@ the MCP server and the command line only translate):
 
 ```bash
 eve help                       # the commands; eve help <command> for one in full
-eve list --group Work --from 2026-09
+eve list --page Work --from 2026-09
 eve search 회의 결정 --limit 5
 eve read "Weekly plan" --section Goals
 eve read-many <id> <id>        # several, whole, in order
@@ -276,7 +276,7 @@ src/                Svelte UI
                           FlowEditor.svelte a flowchart on its picture, DiagramViewer.svelte the full-screen view)
   lib/math.ts             $…$ and $$…$$ formulas: their nodes and markdown (MathEdit.svelte edits one in place,
                           lib/mathParts.ts the row of parts, lib/mathRender.ts MathLive loaded on first use)
-  lib/importTree.ts       files and folders dropped on the list, as notes and groups
+  lib/importTree.ts       files and folders dropped on the list, a folder as a page of its name
   lib/sync.svelte.ts      sync client (notes + images <-> GitHub)
   lib/github.ts           GitHub REST sync engine (pure, tested in Node)
 src-tauri/          Rust: file/asset storage commands, window toggle, global-shortcut plugin

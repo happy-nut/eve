@@ -1,34 +1,24 @@
 // The list's finds of the second UI bounty: where notes go and stay, and the keys the app keeps for itself
 import { test, expect, beforeEach } from 'vitest';
 import { notes } from './notes.svelte';
-import { groups } from './groups.svelte';
 import { nudgeNote } from './moves';
 import { shortcuts } from './shortcuts.svelte';
 import { tabs } from './tabs.svelte';
 
-const make = (title: string, group = '', parent?: string) => { const n = notes.create(`# ${title}\n\nx`, group, parent); notes.touched(n.id); return n.id; };
+const make = (title: string, parent?: string) => { const n = notes.create(`# ${title}\n\nx`, parent); notes.touched(n.id); return n.id; };
 const at = (id: string) => notes.all.find((n) => n.id === id)!;
 
 beforeEach(() => { tabs.list = []; });
 
-test('a page moved into a group takes its sub-pages along, all the way down', () => {
-  const g = groups.create('');
-  const p = make('P'), k = make('K', '', p), gk = make('GK', '', k);
-  notes.move(p, g, null);
-  expect([at(p).group, at(k).group, at(gk).group]).toEqual([g, g, g]);
-});
-
-test('a group renamed with one of its notes in the Trash: restored, the note comes back into the renamed group', () => {
-  const g = groups.create('');
-  const n = make('In the trash', g);
-  notes.remove(n);
-  const renamed = groups.rename(g, `${g} renamed`);
-  notes.restore(n);
-  expect(at(n).group).toBe(renamed);
+test('a page moved under another takes its sub-pages along, all the way down', () => {
+  const host = make('Host'), p = make('P'), k = make('K', p), gk = make('GK', k);
+  notes.place(p, host, null);
+  expect([at(p).parent, at(k).parent, at(gk).parent]).toEqual([host, p, k]);
+  expect(notes.isAncestor(host, gk)).toBe(true);
 });
 
 test('a sub-page whose page was deleted (shown at the top level) still moves with ⌥↑ / ⌥↓', () => {
-  const a = make('Above'), p = make('Parent'), kid = make('Kid', '', p);
+  const a = make('Above'), p = make('Parent'), kid = make('Kid', p);
   notes.remove(p);
   expect(nudgeNote(kid, -1, true) || nudgeNote(kid, 1, true)).toBe(true);
   void a;

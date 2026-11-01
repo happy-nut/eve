@@ -3,7 +3,7 @@ import { test, expect } from 'vitest';
 import { notes, parse, serialize, type Note } from './notes.svelte';
 import { parseDb, serializeDb, viewRows, columnsOf, passes, withChoice, defaultDb, tagColor, type DbSchema } from './database';
 
-const note = (props?: Note['props'], order = 0): Note => ({ id: 'x' + order, body: `# R${order}\n`, updatedAt: 1, deleted: false, group: '', order, props });
+const note = (props?: Note['props'], order = 0): Note => ({ id: 'x' + order, body: `# R${order}\n`, updatedAt: 1, deleted: false, order, props });
 
 test('properties are frontmatter lines a note reads back the same, lists and odd words too; Eve\'s own keys are not one', () => {
   const n = note({ Status: 'Doing', Tags: ['a', 'b, c'], Note: '[not a list]', Spaced: ' x ', 마감: '2026-11-01' });
@@ -48,7 +48,7 @@ test('rows are made under the page, not opened; a property set, renamed, taken o
   expect(r).toMatchObject({ parent: page.id, props: { Status: 'Doing' } });
   notes.setProp(r.id, 'Due', '2026-11-01');
   notes.setProp(r.id, 'group', 'hacked');
-  expect(r.group).toBe('');
+  expect(r.group).toBeUndefined();
   notes.renameProp([r.id], 'Status', 'State');
   expect(Object.keys(r.props!)).toEqual(['State', 'Due']);
   notes.setProp(r.id, 'State', null);

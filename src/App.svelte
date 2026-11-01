@@ -8,7 +8,7 @@
   import CalendarPage from './CalendarPage.svelte';
   import { shortcuts, prettyKeys, eventToKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
-  import { groups, leafOf, parentOf } from './lib/groups.svelte';
+  import { tree } from './lib/tree.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
   import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, widget, links, inbox, saveAsset, storage, copyText } from './lib/platform';
@@ -53,7 +53,7 @@
   function cmdDown() { clearTimeout(cmdTimer); cmdTimer = setTimeout(() => (cmdHeld = true), 550); }
   function cmdUp() { clearTimeout(cmdTimer); cmdHeld = false; }
   function jumpTo(n: number) {
-    const note = groups.visibleOrdered()[n - 1];
+    const note = tree.visibleOrdered()[n - 1];
     if (!note) return;
     ui.focusOwner = 'editor';
     ui.search = ''; // the numbers are the whole list's (they are not shown on matches): the search is left behind
@@ -214,7 +214,7 @@
   }
 
   function step(delta: number) {
-    const next = stepFrom(groups.ordered(), notes.currentId, delta);
+    const next = stepFrom(tree.ordered(), notes.currentId, delta);
     if (next) notes.currentId = next.id;
   }
 
@@ -353,7 +353,7 @@
    * Where is the keyboard? The pane it just moved to (the list ↔ the note) flashes blue once. Only on a
    * move between panes made from the keyboard: typing in a note, or its caret coming back to the same
    * pane, tells the user nothing they don't know. Never on a phone (its on-screen keys count as keys).
-   * Nor into a text box (⌘K's search, a group being renamed): its own focus ring already says where the keys go.
+   * Nor into a text box (⌘K's search, a row being renamed): its own focus ring already says where the keys go.
    */
   let lastPane: Element | null = null;
   function flashPane(e: FocusEvent) {
@@ -384,9 +384,9 @@
   // a board no longer on screen: what was typed in it was lost, with an error at every key. Its last keys
   // were handed over before the switch (notes.currentId flushes them), so closing it loses nothing.
   $effect(() => { void notes.currentId; untrack(() => { ui.closeDiagramView(); ui.closeCard(); }); });
-  // no groups, as in Notion: pages in pages. Any there are become pages (this device's from before, an older version's
-  // come in by sync, a folder imported, a note made in a folder from the command line)
-  $effect(() => { if (notes.loaded && groups.names.length) untrack(() => groups.toPages()); });
+  // no folders, as in Notion: pages in pages. An older version's groups become pages (this device's from before, or
+  // another's come in by sync)
+  $effect(() => { if (notes.loaded && tree.groups.length) untrack(() => tree.toPages()); });
   // the front tab shows whatever note is opened, however it was; a tab whose note went (deleted, or a blank one left)
   // closes (tabs.svelte.ts). The list read too, so a deletion is seen when the open note stays the same.
   let lastOpen: string | null = null;
@@ -415,15 +415,11 @@
     sidebarOpen = true;
     queueMicrotask(() => (document.querySelector<HTMLElement>('aside [data-row].active') ?? foldedOver() ?? document.querySelector<HTMLElement>('aside [data-row]'))?.focus());
   }
-  /** the open note's row is folded away: the row it is folded under (a parent page, else its innermost group showing) */
+  /** the open note's row is folded away: the row of the page it is folded under */
   function foldedOver() {
     const row = (sel: string) => document.querySelector<HTMLElement>(`aside ${sel}`);
     for (let n = notes.current; n?.parent; n = notes.all.find((m) => m.id === n!.parent) ?? null) {
       const up = row(`[data-note="${CSS.escape(n.parent)}"]`);
-      if (up) return up;
-    }
-    for (let g = notes.current?.group ?? ''; g; g = parentOf(g)) {
-      const up = row(`[data-group="${CSS.escape(g)}"]`);
       if (up) return up;
     }
     return null;
@@ -445,12 +441,12 @@
   }
 
   /**
-   * A file dragged in from Finder. Every file becomes a note of its own, at the end of the group, and
+   * A file dragged in from Finder. Every file becomes a note of its own, beside the open one, and
    * leaves a mark in the note that was open: a text file links to the note it made, an attachment
    * (picture, PDF) shows up as itself. A whole folder can be dropped too — it comes in with its shape
-   * (importTree.ts: folders as groups, a page's folder as its sub-pages, its pictures in its notes, a Keep
-   * export as Keep notes) and keeps to itself instead of writing into the open note. Dropped on the list,
-   * it goes where it was let go: on a group, into it; on a note, beside it; elsewhere on the list, at the top.
+   * (importTree.ts: a folder as a page of its name, a page's folder as its sub-pages, its pictures in its notes, a
+   * Keep export as Keep notes) and keeps to itself instead of writing into the open note. Dropped on the list, it
+   * goes where it was let go: on a note, beside it; elsewhere on the list, at the top.
    * Either way the webview never gets the drop: its own pastes DOM into the editor, which then takes no
    * keystroke at all.
    */
@@ -471,16 +467,14 @@
     el?.classList.add('file-over');
     dropRow = el;
   }
-  /** where on the list a drop is: a group ('' = the top), or null when it is not over the list */
-  function listTarget(target: EventTarget | null): { group: string; row: HTMLElement | null } | null {
+  /** where on the list a drop is: the page it goes under ('' = the top), or null when it is not over the list */
+  function listTarget(target: EventTarget | null): { into: string; row: HTMLElement | null } | null {
     const el = target as HTMLElement | null;
     if (!el?.closest?.('aside')) return null;
-    const g = el.closest<HTMLElement>('[data-group]');
-    if (g) return { group: g.dataset.group!, row: g.closest('.ghead') };
     const n = el.closest<HTMLElement>('[data-note]');
     const note = n && notes.all.find((x) => x.id === n.dataset.note);
-    if (note) return { group: note.group, row: n };
-    return { group: '', row: null };
+    if (note) return { into: note.parent ?? '', row: n };
+    return { into: '', row: null };
   }
   function onDragOver(e: DragEvent) {
     if (!e.dataTransfer?.types.includes('Files')) return;
@@ -492,7 +486,8 @@
     const folder = items.some((i) => i.kind === 'file' && !i.type);
     const on = listTarget(e.target);
     markRow(on?.row ?? null);
-    dropHint = on ? (on.group ? `Import into “${leafOf(on.group)}”` : 'Import into the list')
+    const host = on?.into ? notes.all.find((x) => x.id === on.into) : undefined;
+    dropHint = on ? (host ? `Import into “${titleOf(host)}”` : 'Import into the list')
       : folder ? 'Import the folder' : asset ? 'Attach to this note' : 'Open as a new note';
     // a drag leaving the window fires nothing dependable, so the hint simply stops being refreshed
     clearTimeout(hintTimer);
@@ -513,7 +508,7 @@
       path: dir ? `${dir}/${file.name}` : file.name,
       text: () => file.text(),
       asset: () => saveAsset(file),
-    })), on?.group ?? '', on?.group ?? notes.current?.group ?? '');
+    })), on?.into ?? '', on?.into ?? notes.current?.parent ?? '');
     if (made.length) ui.focusOwner = 'editor';
     if (on) return; // put on the list: nothing written into the open note
     for (const { note, source, embed } of made) {
@@ -556,7 +551,7 @@
       return;
     }
     if (handledBy(e) === 'taken') return;
-    // ⌘Z outside the note's text (the list): the last thing done to the notes or the groups taken back
+    // ⌘Z outside the note's text (the list): the last thing done to the notes taken back
     if (ui.undoKey(e)) { e.preventDefault(); return; }
     // ⌘+ is ⌘⇧= on most keyboards (and the keypad's +): the same as ⌘= unless it is bound to something itself
     // and ⌘K that linked nothing (no words chosen, or the list has the keys) is search, as in Notion
@@ -572,7 +567,7 @@
     if (ui.card && (a.id === 'search' || a.id === 'focusSidebar')) { flushEdits(); ui.closeCard(); }
     switch (a.id) {
       case 'newNote':
-        // from the sidebar, ask what to create (note or group) via the + menu
+        // from the sidebar, ask what to create via the + menu
         if (document.activeElement?.closest('aside')) hooks.openPlus?.();
         else { ui.focusOwner = 'editor'; newNote(); }
         break;
@@ -598,7 +593,7 @@
         appearance.set({ theme: dark ? 'light' : 'dark' });
         break;
       }
-      case 'newTab': if (!isMobile) { ui.search = ''; const n = notes.create('', notes.current?.group ?? ''); tabs.open(n.id); ui.focusOwner = 'editor'; } break;
+      case 'newTab': if (!isMobile) { ui.search = ''; const n = notes.create('', notes.current?.parent); tabs.open(n.id); ui.focusOwner = 'editor'; } break;
       // the last tab: put Eve away, as Esc does (not a pinned one among others: it stays, and so does the window)
       case 'closeTab': if (!isMobile && !tabs.close() && tabs.list.length <= 1) win.hide(); break;
       case 'reopenTab': if (!isMobile) tabs.reopen(); break;

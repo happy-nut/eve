@@ -15,8 +15,9 @@ export interface Note {
   body: string; // markdown
   updatedAt: number; // ms epoch
   deleted: boolean;
-  group: string; // '' = root
-  order: number; // manual sort rank within its group (ascending)
+  /** the folder an older version kept it in ("Work/Projects"): read from its file only to be made pages (tree.toPages) */
+  group?: string;
+  order: number; // manual sort rank among the pages beside it (ascending)
   parent?: string; // id of the page this one was created inside (sub-page; sits under it in the sidebar)
   icon?: string; // emoji shown in the sidebar (Notion-style)
   wide?: boolean; // laid out across the whole pane instead of the reading width
@@ -86,7 +87,7 @@ export function parse(text: string): Note | null {
     body: m[2],
     updatedAt: Number(meta.updated) || 0,
     deleted: meta.deleted === 'true',
-    group: meta.group ?? '',
+    ...(meta.group ? { group: meta.group } : {}),
     parent: meta.parent || undefined,
     icon: meta.icon || undefined,
     wide: meta.wide === 'true' || undefined,
@@ -123,8 +124,8 @@ export function rankByTitle<T extends Pick<Note, 'body'>>(list: T[], q: string):
 }
 
 /** `list` depth-first: every page is followed by its sub-pages (`folded` hides a page's sub-pages,
- *  it still reports `kids`). A sub-page whose parent is not in `list` (deleted, or dragged into
- *  another group) shows up at the top level. */
+ *  it still reports `kids`). A sub-page whose parent is not in `list` (deleted, say) shows up at
+ *  the top level. */
 export function nested(list: readonly Note[], folded?: (id: string) => boolean): { n: Note; depth: number; kids: boolean }[] {
   const ids = new Set(list.map((n) => n.id));
   const kids = new Map<string, Note[]>();
@@ -270,11 +271,11 @@ class NotesStore {
   #visible = $derived(this.all.filter((n) => !n.deleted && !isDailyId(n.id) && !(n.parent && isDailyId(n.parent)) && n.id !== DAILY_TEMPLATE_ID && (n.id !== CALENDAR_NOTE_ID || appearance.s.dailyNotes)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt));
   #pages = $derived(this.#visible.filter((n) => n.id !== CALENDAR_NOTE_ID));
   /**
-   * The list as the sidebar stacks it: `shown` without what folded groups and pages hide, `all` with it.
-   * groups.svelte.ts fills this in (it reads the notes, so they cannot import it back); until then, rank order.
+   * The list as the sidebar stacks it: `shown` without what folded pages hide, `all` with it.
+   * tree.svelte.ts fills this in (it reads the notes, so they cannot import it back); until then, rank order.
    */
   sidebar: { shown: () => readonly Note[]; all: () => readonly Note[] } = { shown: () => this.visible, all: () => this.visible };
-  /** the list's first note, as the sidebar shows it (not one tucked away in a folded group, when there is another) */
+  /** the list's first note, as the sidebar shows it (not one tucked away under a folded page, when there is another) */
   firstPage(): Note | undefined {
     const page = (n: Note) => n.id !== CALENDAR_NOTE_ID;
     return this.sidebar.shown().find(page) ?? this.sidebar.all().find(page);
@@ -308,7 +309,7 @@ class NotesStore {
     void storage.write(n.id, serialize(n));
     this.dirty++;
   }
-  /** The calendar's row: made the first time daily notes are on, at the top of Notes (it moves like a note, groups included). */
+  /** The calendar's row: made the first time daily notes are on, at the top of Notes (it moves like a note). */
   ensureCalendar(): Note {
     let n = this.all.find((x) => x.id === CALENDAR_NOTE_ID);
     if (n && n.deleted) { // deleted (from an older Eve, or another device): the row comes back, on every device
@@ -317,8 +318,8 @@ class NotesStore {
       this.dirty++;
     }
     if (n) return n;
-    const top = this.visible.filter((x) => x.group === '').reduce((m, x) => Math.min(m, x.order), 1);
-    n = { id: CALENDAR_NOTE_ID, body: `# ${CALENDAR_NAME}\n`, updatedAt: UNWRITTEN, deleted: false, group: '', order: top - 1, icon: '🗓️' };
+    const top = this.visible.filter((x) => !x.parent).reduce((m, x) => Math.min(m, x.order), 1);
+    n = { id: CALENDAR_NOTE_ID, body: `# ${CALENDAR_NAME}\n`, updatedAt: UNWRITTEN, deleted: false, order: top - 1, icon: '🗓️' };
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
     void storage.write(n.id, serialize(n));
@@ -335,7 +336,7 @@ class NotesStore {
   templateNote(): Note {
     let n = this.all.find((x) => x.id === DAILY_TEMPLATE_ID);
     if (!n) {
-      this.all.push({ id: DAILY_TEMPLATE_ID, body: DEFAULT_TEMPLATE, updatedAt: UNWRITTEN, deleted: false, group: '', order: 0, icon: '🗓️' });
+      this.all.push({ id: DAILY_TEMPLATE_ID, body: DEFAULT_TEMPLATE, updatedAt: UNWRITTEN, deleted: false, order: 0, icon: '🗓️' });
       n = this.all.at(-1)!;
       void storage.write(n.id, serialize(n));
       this.dirty++;
@@ -366,7 +367,7 @@ class NotesStore {
       }
       Object.assign(n, { deleted: false, body, updatedAt: Date.now() });
     }
-    else { this.all.push({ id, body, updatedAt: UNWRITTEN, deleted: false, group: '', order: 0, icon: '🗓️' }); n = this.all.at(-1)!; }
+    else { this.all.push({ id, body, updatedAt: UNWRITTEN, deleted: false, order: 0, icon: '🗓️' }); n = this.all.at(-1)!; }
     this.titles.set(id, titleOf(n));
     void storage.write(id, serialize(n));
     this.dirty++;
@@ -415,10 +416,10 @@ class NotesStore {
     this.loaded = true;
   }
 
-  create(body = '', group = this.current?.group ?? '', parent?: string): Note {
+  create(body = '', parent?: string): Note {
     const step = history.record();
-    const first = this.visible.find((x) => x.group === group);
-    const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, group, parent, order: first ? first.order - 1 : 0, icon: autoIcon() };
+    const first = this.visible.find((x) => (x.parent ?? '') === (parent ?? ''));
+    const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, parent, order: first ? first.order - 1 : 0, icon: autoIcon() };
     if (step) this.madeInStep.add(n.id);
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
@@ -430,13 +431,13 @@ class NotesStore {
   }
 
   /**
-   * A note made by importing a file. It joins the end of its group (an import reads top to bottom)
+   * A note made by importing a file. It joins the end of the pages beside it (an import reads top to bottom)
    * and leaves the open note alone — the file usually links itself into the page being written.
    */
-  addImported(body: string, group = this.current?.group ?? '', updatedAt = Date.now(), parent?: string): Note {
+  addImported(body: string, updatedAt = Date.now(), parent?: string): Note {
     const step = history.record();
-    const last = this.visible.filter((x) => x.group === group).at(-1);
-    const n: Note = { id: newId(), body, updatedAt, deleted: false, group, ...(parent ? { parent } : {}), order: last ? last.order + 1 : 0, icon: autoIcon() };
+    const last = this.visible.filter((x) => (x.parent ?? '') === (parent ?? '')).at(-1);
+    const n: Note = { id: newId(), body, updatedAt, deleted: false, ...(parent ? { parent } : {}), order: last ? last.order + 1 : 0, icon: autoIcon() };
     if (step) this.madeInStep.add(n.id);
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
@@ -457,7 +458,7 @@ class NotesStore {
     this.timers.set(id, setTimeout(() => this.flush(id), 300));
   }
 
-  /** A page with the id it is given (a group made a page, groups.toPages): nothing opened, no step of its own */
+  /** A page with the id it is given (an older version's folder made a page, tree.toPages): nothing opened, no step of its own */
   addWithId(n: Note) {
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
@@ -561,67 +562,38 @@ class NotesStore {
     this.flush(id);
   }
 
-  /** A note back where it stood, exactly (a deleted group's Undo): no rank of its own worked out, no sub-pages moved. */
-  putBack(id: string, at: Pick<Note, 'group' | 'parent' | 'order'>) {
-    history.record();
-    const n = this.all.find((x) => x.id === id);
-    if (!n) return;
-    Object.assign(n, { group: at.group, parent: at.parent, order: at.order, updatedAt: Date.now() });
-    this.flush(id);
-  }
-
-  /** Change a note's group path without touching its rank (used when a group is moved/renamed). */
-  relabel(id: string, group: string) {
-    const n = this.all.find((x) => x.id === id);
-    if (!n || n.group === group) return;
-    n.group = group;
-    n.updatedAt = Date.now();
-    this.flush(id);
-  }
-
-  /** Move a note into a group ('' = root), appended at the end. */
-  setGroup(id: string, group: string) {
-    this.move(id, group, null);
-  }
-
   /**
-   * Place a note in `group` right before `beforeId` (null = at the end).
-   * Ranks are floats; midpoints are used so only the moved note is rewritten.
+   * Put a note at an exact spot: the page it belongs under ('' = the top level) and the page beside it it goes in front
+   * of (null = last). Its own sub-pages come along, under it. This is what a drag and the list's ⌥-arrow walk move
+   * with, so a page can slide into another page as a sub-page instead of only stepping past it.
    * ponytail: ranks can get arbitrarily close after thousands of moves; renormalize then.
    */
-  move(id: string, group: string, beforeId: string | null) {
+  place(id: string, parent: string, before: string | null) {
     history.record();
+    if (id === CALENDAR_NOTE_ID && parent) return; // the calendar's row is never a sub-page
+    if (parent === CALENDAR_NOTE_ID) return;
     const n = this.all.find((x) => x.id === id);
-    if (!n || id === beforeId) return;
-    const list = this.visible.filter((x) => x.group === group && x.id !== id);
+    if (!n || id === before) return;
+    if (parent && (parent === id || this.isAncestor(id, parent))) return; // never under its own sub-page
+    this.touched(id);
+    const sibs = this.visible.filter((x) => (x.parent ?? '') === parent && x.id !== id);
     let order: number;
-    if (beforeId) {
-      const i = list.findIndex((x) => x.id === beforeId);
+    if (before) {
+      const i = sibs.findIndex((x) => x.id === before);
       if (i < 0) return;
-      const prev = list[i - 1], next = list[i];
-      order = prev ? this.between(list, i) : next.order - 1;
+      const prev = sibs[i - 1], next = sibs[i];
+      order = prev ? this.between(sibs, i) : next.order - 1;
     } else {
-      const last = list.at(-1);
+      const last = sibs.at(-1);
       order = last ? last.order + 1 : 0;
     }
-    if (n.group === group && n.order === order) return;
-    this.touched(id);
-    const from = n.group;
-    n.group = group;
+    if ((n.parent ?? '') === parent && n.order === order) return;
+    n.parent = parent || undefined;
     n.order = order;
-    n.parent = undefined; // dropped by hand: it is a page of its own now, wherever it landed
     n.updatedAt = Date.now();
     this.flush(id);
-    // its own sub-pages follow it into the new group, theirs too, all the way down (they keep their rank and their
-    // parent; only its children went, and a grandchild was left behind as a stray row)
-    if (from !== group) this.followIntoGroup(id, group);
   }
 
-  /**
-   * Put a note at an exact spot: a group, the page it belongs under ('' = top level of the group) and
-   * the sibling it goes in front of (null = last). This is what the sidebar's ⌥-arrow walk moves with,
-   * so a page can slide into another page as a sub-page instead of only stepping past it.
-   */
   /**
    * A rank between list[i - 1] and list[i]. Two notes can share a rank (imported, or older files): the
    * midpoint would share it too and the move would not show, so the list is ranked 0, 1, 2… first.
@@ -633,42 +605,6 @@ class NotesStore {
     return (list[i - 1].order + list[i].order) / 2;
   }
 
-  place(id: string, group: string, parent: string, before: string | null) {
-    history.record();
-    if (id === CALENDAR_NOTE_ID && parent) return; // the calendar's row is never a sub-page
-    if (parent === CALENDAR_NOTE_ID) return;
-    const n = this.all.find((x) => x.id === id);
-    if (!n || id === before) return;
-    if (parent && (parent === id || this.isAncestor(id, parent))) return; // never under its own sub-page
-    this.touched(id);
-    const sibs = this.visible.filter((x) => x.group === group && (x.parent ?? '') === parent && x.id !== id);
-    let order: number;
-    if (before) {
-      const i = sibs.findIndex((x) => x.id === before);
-      if (i < 0) return;
-      const prev = sibs[i - 1], next = sibs[i];
-      order = prev ? this.between(sibs, i) : next.order - 1;
-    } else {
-      const last = sibs.at(-1);
-      order = last ? last.order + 1 : 0;
-    }
-    const from = n.group;
-    n.group = group;
-    n.parent = parent || undefined;
-    n.order = order;
-    n.updatedAt = Date.now();
-    this.flush(id);
-    if (from !== group) this.followIntoGroup(id, group); // its own sub-pages come along
-  }
-
-  private followIntoGroup(id: string, group: string) {
-    for (const kid of this.all) {
-      if (kid.deleted || kid.parent !== id) continue;
-      this.relabel(kid.id, group);
-      this.followIntoGroup(kid.id, group);
-    }
-  }
-
   /** Delete a note (tombstone). A toast offers it back for a few seconds: the dialog before it is easy to say yes to. */
   remove(id: string) {
     const n = this.all.find((x) => x.id === id);
@@ -676,7 +612,7 @@ class NotesStore {
     const step = history.record();
     this.untouched.delete(id); // deleted by hand: it goes the way any note does, and can come back
     // the open note deleted: the one next to it in the list comes up. The list's first by rank was opened
-    // before, often a note deep in a folded group, nowhere near where the user was.
+    // before, often a note deep under a folded page, nowhere near where the user was.
     const next = this.currentId === id ? this.neighbourOf(id) : undefined;
     n.deleted = true;
     n.updatedAt = Date.now();
@@ -771,8 +707,8 @@ class NotesStore {
   /** A new row of the database on page `parent`: a page under it, titled, with these properties. Not opened. */
   addRow(parent: string, title: string, props: Record<string, PropValue> = {}): Note {
     const up = this.all.find((x) => x.id === parent);
-    // as an import is made: at the end of its group, the open note left alone (the table stays in front)
-    const made = this.addImported(`# ${title}\n\n`, up?.group ?? '', Date.now(), parent);
+    // as an import is made: at the end of the pages under it, the open note left alone (the table stays in front)
+    const made = this.addImported(`# ${title}\n\n`, Date.now(), parent);
     const n = this.all.find((x) => x.id === made.id)!; // the store's own (the one made is a copy it was taken from)
     const clean = Object.fromEntries(Object.entries(props).filter(([k, v]) => propName(k) && !OWN_KEYS.has(propName(k)) && v !== '' && !(Array.isArray(v) && !v.length)));
     if (Object.keys(clean).length) { n.props = clean; this.flush(n.id); }
@@ -871,7 +807,7 @@ class NotesStore {
   keepConflictCopy(n: Note) {
     const [first, ...rest] = n.body.split('\n');
     const body = [`${first.trim() ? first : '# ' + titleOf(n)} (conflict copy)`, ...rest].join('\n');
-    const copy = history.quietly(() => this.addImported(body, n.group, Date.now(), n.parent));
+    const copy = history.quietly(() => this.addImported(body, Date.now(), n.parent));
     if (n.icon) { copy.icon = n.icon; void storage.write(copy.id, serialize(copy)); } // recognisable as the same note
     ui.toast(`“${titleOf(n)}” was changed on two devices at once: the other version is kept as “${titleOf(copy)}”`);
     return copy;
@@ -911,9 +847,9 @@ export const notes = new NotesStore();
 
 // What the app's undo puts back of the notes: where each sits, whether it is there, its icon and look, and which is open. A note
 // a step made since goes again; a note's text is the note's own undo, not this.
-type Spot = [id: string, deleted: boolean, group: string, parent: string, order: number, icon: string, wide: boolean, small: boolean, cover: string];
+type Spot = [id: string, deleted: boolean, parent: string, order: number, icon: string, wide: boolean, small: boolean, cover: string];
 undoSource<{ open: string | null; spots: Spot[] }>({
-  take: () => ({ open: notes.currentId, spots: notes.all.map((n) => [n.id, n.deleted, n.group ?? '', n.parent ?? '', n.order, n.icon ?? '', !!n.wide, !!n.small, n.cover ?? ''] as Spot) }),
+  take: () => ({ open: notes.currentId, spots: notes.all.map((n) => [n.id, n.deleted, n.parent ?? '', n.order, n.icon ?? '', !!n.wide, !!n.small, n.cover ?? ''] as Spot) }),
   put: ({ open, spots }) => {
     const was = new Map(spots.map((s) => [s[0], s]));
     for (const n of notes.all) {
@@ -922,9 +858,9 @@ undoSource<{ open: string | null; spots: Spot[] }>({
       if (n.deleted && n.body === '') continue;
       // made since, but by no step (a day's note, another device's, a conflict copy): not this undo's to take back
       if (!s && !notes.madeInStep.has(n.id)) continue;
-      const [deleted, group, parent, order, icon, wide, small, cover] = s ? [s[1], s[2], s[3] || undefined, s[4], s[5] || undefined, s[6] || undefined, s[7] || undefined, s[8] || undefined] : [true, n.group, n.parent, n.order, n.icon, n.wide, n.small, n.cover];
-      if (n.deleted === deleted && (n.group ?? '') === (group ?? '') && n.parent === parent && n.order === order && n.icon === icon && n.wide === wide && n.small === small && n.cover === cover) continue;
-      Object.assign(n, { deleted, group, parent, order, icon, wide, small, cover, updatedAt: Date.now() });
+      const [deleted, parent, order, icon, wide, small, cover] = s ? [s[1], s[2] || undefined, s[3], s[4] || undefined, s[5] || undefined, s[6] || undefined, s[7] || undefined] : [true, n.parent, n.order, n.icon, n.wide, n.small, n.cover];
+      if (n.deleted === deleted && n.parent === parent && n.order === order && n.icon === icon && n.wide === wide && n.small === small && n.cover === cover) continue;
+      Object.assign(n, { deleted, parent, order, icon, wide, small, cover, updatedAt: Date.now() });
       notes.flush(n.id);
     }
     const back = open && notes.all.find((n) => n.id === open && !n.deleted);

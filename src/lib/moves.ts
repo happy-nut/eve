@@ -1,35 +1,29 @@
-// Moving notes and groups one step at a time through the sidebar's outline (⌥ + arrows, the row menu).
+// Moving pages one step at a time through the sidebar's outline (⌥ + arrows, the row menu).
 import { notes, type Note } from './notes.svelte';
 import { CALENDAR_NOTE_ID } from './daily';
-import { groups, parentOf } from './groups.svelte';
+import { tree } from './tree.svelte';
 
 /**
  * Every spot the moving note could take, in the order the sidebar stacks them: before each page,
- * inside an unfolded page as a sub-page, at the end of each list, and on through the groups. ⌥↑ / ⌥↓
+ * inside an unfolded page as a sub-page, at the end of each list. ⌥↑ / ⌥↓
  * step through this list, so a page slides *into* the one above instead of hopping over it.
  */
-type NoteSlot = { group: string; parent: string; before: string | null };
+type NoteSlot = { parent: string; before: string | null };
 /** the page a note shows under in the list: its parent while that is there, else none (a sub-page whose page was
  *  deleted is shown at the top level, and ⌥↑ / ⌥↓ looked for it under the deleted page and found nothing to step to) */
 const shownParent = (n: Note) => (n.parent && notes.visible.some((p) => p.id === n.parent) ? n.parent : '');
 function noteSlots(me: Note): NoteSlot[] {
   const out: NoteSlot[] = [];
-  const pages = (group: string, parent: string) => {
+  const pages = (parent: string) => {
     for (const p of notes.visible) {
-      if (p.group !== group || shownParent(p) !== parent) continue;
+      if (shownParent(p) !== parent) continue;
       if (p.id === me.id || notes.isAncestor(me.id, p.id)) continue; // itself and its own sub-pages
-      out.push({ group, parent, before: p.id });
-      if (!groups.isFolded(p.id)) pages(group, p.id); // an open page can take it in
+      out.push({ parent, before: p.id });
+      if (!tree.isFolded(p.id)) pages(p.id); // an open page can take it in
     }
-    out.push({ group, parent, before: null });
+    out.push({ parent, before: null });
   };
-  const walk = (g: string) => {
-    for (const c of groups.children(g)) if (!groups.isCollapsed(c)) walk(c); // subgroups first, as the tree shows them
-    pages(g, '');
-  };
-  // the root's notes sit above the groups, so the slots run the same way
-  pages('', '');
-  for (const c of groups.children('')) if (!groups.isCollapsed(c)) walk(c);
+  pages('');
   return out;
 }
 
@@ -39,20 +33,20 @@ function noteSlots(me: Note): NoteSlot[] {
  */
 export const openedFromList = { id: '' };
 
-/** ⌥↑ / ⌥↓ on a note: one slot up/down — past a page, into it, or on into the next group. `dry`: only whether it could. */
+/** ⌥↑ / ⌥↓ on a note: one slot up/down — past a page, or into it. `dry`: only whether it could. */
 export function nudgeNote(id: string, dir: 1 | -1, dry = false): boolean {
   const me = notes.all.find((n) => n.id === id);
   if (!me) return false;
-  // the calendar's row is never a sub-page: it steps past pages (and between groups), never into them
+  // the calendar's row is never a sub-page: it steps past pages, never into them
   const list = noteSlots(me).filter((s) => me.id !== CALENDAR_NOTE_ID || !s.parent);
-  const sibs = notes.visible.filter((n) => n.group === me.group && shownParent(n) === shownParent(me));
+  const sibs = notes.visible.filter((n) => shownParent(n) === shownParent(me));
   const i = sibs.findIndex((n) => n.id === id);
-  const at = list.findIndex((s) => s.group === me.group && s.parent === shownParent(me) && s.before === (sibs[i + 1]?.id ?? null));
+  const at = list.findIndex((s) => s.parent === shownParent(me) && s.before === (sibs[i + 1]?.id ?? null));
   const t = list[at + dir];
   if (at < 0 || !t) return false;
   if (dry) return true;
-  if (t.parent) groups.unfold(t.parent); // show where it landed
-  notes.place(id, t.group, t.parent, t.before);
+  if (t.parent) tree.unfold(t.parent); // show where it landed
+  notes.place(id, t.parent, t.before);
   return true;
 }
 
@@ -66,49 +60,12 @@ export function nestNote(id: string, dir: 'in' | 'out', above?: string, dry = fa
     if (dry) return true;
     notes.setParent(id, parent.parent ?? null);
   } else {
-    // only a page of the same group can take it in, and never one of its own sub-pages
+    // never one of its own sub-pages
     const host = above && notes.all.find((n) => n.id === above);
-    if (!host || host.group !== me.group || host.id === me.parent || notes.isAncestor(id, host.id)) return false;
+    if (!host || host.id === me.parent || notes.isAncestor(id, host.id)) return false;
     if (dry) return true;
-    groups.unfold(host.id);
+    tree.unfold(host.id);
     notes.setParent(id, host.id);
   }
   return true;
-}
-
-/**
- * ⌥↑ / ⌥↓ walk a group through every visible slot in outline order — past siblings, out of its
- * parent, into (expanded) groups above — like dragging it one row at a time. Collapsed groups are
- * skipped as targets and the moved group keeps its own fold state. ⌥← / ⌥→ un-nest / nest directly.
- */
-type Slot = { parent: string; before: string | null };
-function slots(g: string, parent: string): Slot[] {
-  const out: Slot[] = [];
-  for (const c of groups.children(parent)) {
-    if (c === g) continue;
-    out.push({ parent, before: c });
-    if (!groups.isCollapsed(c) && groups.canPlace(g, c)) out.push(...slots(g, c));
-  }
-  out.push({ parent, before: null });
-  return out.filter((s) => groups.canPlace(g, s.parent));
-}
-/** Could ⌥↑ / ⌥↓ move the group at all (the row menu leaves out a move that would do nothing)? */
-export function canNudgeGroup(g: string, key: 'ArrowUp' | 'ArrowDown'): boolean {
-  const list = slots(g, '');
-  const i = list.findIndex((s) => s.parent === parentOf(g) && s.before === groups.nextSibling(g));
-  return i >= 0 && !!list[i + (key === 'ArrowDown' ? 1 : -1)];
-}
-/** The group's new path, or null when it could not move that way. */
-export function nudgeGroup(g: string, key: string): string | null {
-  let np: string | null = null;
-  if (key === 'ArrowUp' || key === 'ArrowDown') {
-    const list = slots(g, '');
-    const cur: Slot = { parent: parentOf(g), before: groups.nextSibling(g) };
-    const i = list.findIndex((s) => s.parent === cur.parent && s.before === cur.before);
-    const t = list[i + (key === 'ArrowDown' ? 1 : -1)];
-    if (t) np = groups.move(g, t.parent, t.before);
-  }
-  if (key === 'ArrowLeft' && parentOf(g)) { const par = parentOf(g); np = groups.move(g, parentOf(par), groups.nextSibling(par)); }
-  if (key === 'ArrowRight') { const prev = groups.prevSibling(g); if (prev) np = groups.move(g, prev, null); }
-  return np;
 }

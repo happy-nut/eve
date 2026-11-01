@@ -3,10 +3,10 @@ import { test, expect } from 'vitest';
 import { flushSync } from 'svelte';
 import { notes, rankByTitle } from './notes.svelte';
 import { holdEdit, dropEdit } from './pending';
-import { groups } from './groups.svelte';
+import { tree } from './tree.svelte';
 
 // a note written in: one left just as it was made goes once another is opened (notes.untouched)
-const written = (body: string, group?: string) => { const n = notes.create(body, group); notes.touched(n.id); return n; };
+const written = (body: string, parent?: string) => { const n = notes.create(body, parent); notes.touched(n.id); return n; };
 
 test('keys still on their way from an editor are handed over before the note switches', () => {
   const a = notes.create('# A\n');
@@ -19,27 +19,27 @@ test('keys still on their way from an editor are handed over before the note swi
   expect(seenOn).toBe(a.id); // handed over while the board was still the open note
 });
 
-test('deleting the open note opens the one next to it in the list, not one in a folded group', () => {
+test('deleting the open note opens the one next to it in the list, not one under a folded page', () => {
   for (const n of notes.all) n.deleted = true; // a list of just these
-  const g = groups.create();
-  const [a, b, c] = ['Alpha', 'Bravo', 'Charlie'].map((t, i) => Object.assign(written(`# ${t}\n`, ''), { order: 10 + i }));
-  const w = Object.assign(written('# Work\n', g), { order: -5 }); // lowest rank of all, tucked away in a folded group
-  groups.toggle(g);
+  const [a, b, c] = ['Alpha', 'Bravo', 'Charlie'].map((t, i) => Object.assign(written(`# ${t}\n`), { order: 10 + i }));
+  const box = Object.assign(written('# Box\n'), { order: -10 });
+  Object.assign(written('# Work\n', box.id), { order: -5 }); // tucked away under a folded page
+  tree.fold(box.id);
   notes.currentId = b.id;
   notes.remove(b.id);
   expect(notes.currentId).toBe(c.id); // the row below
   notes.remove(c.id);
   expect(notes.currentId).toBe(a.id); // the last one: the row above
   notes.remove(a.id);
-  expect(notes.currentId).toBe(w.id); // nothing else left but what the folded group holds
+  expect(notes.currentId).toBe(box.id); // the page, not what is folded under it
 });
 
 test("the first note is the list's first as it shows it, not the lowest rank", () => {
   for (const n of notes.all) n.deleted = true;
-  const g = groups.create();
-  const a = Object.assign(written('# Alpha\n', ''), { order: 10 });
-  Object.assign(written('# Work\n', g), { order: -5 });
-  groups.toggle(g);
+  const a = Object.assign(written('# Alpha\n'), { order: 10 });
+  const box = Object.assign(written('# Box\n'), { order: 20 });
+  Object.assign(written('# Work\n', box.id), { order: -5 }); // the lowest rank, under a folded page
+  tree.fold(box.id);
   expect(notes.firstPage()?.id).toBe(a.id);
 });
 

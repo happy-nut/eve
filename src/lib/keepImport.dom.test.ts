@@ -21,7 +21,9 @@ const { notes, titleOf } = await import('./notes.svelte');
 
 test('a Takeout Keep folder: its notes in Keep order and labels, the rest of the folder as before', async () => {
   const first = await importPaths(Object.keys(disk), '/t');
-  const made = notes.all.filter((n) => !n.deleted).map((n) => `${n.group}|${titleOf(n)}`);
+  // under the titles of the pages it sits in: the folder's, its label's
+  const pathOf = (id?: string): string => { const n = notes.all.find((x) => x.id === id); return n ? [pathOf(n.parent), titleOf(n)].filter(Boolean).join('/') : ''; };
+  const made = notes.all.filter((n) => !n.deleted && !['Keep', 'Home', 'Archive'].includes(titleOf(n))).map((n) => `${pathOf(n.parent)}|${titleOf(n)}`);
   // pinned first, then newest; the trashed one and Keep's own .html / Labels.txt / picture are no notes of their own
   expect(made).toEqual(['Keep|Pinned', 'Keep/Home|Groceries', 'Keep/Archive|Old', 'Keep|Mine']);
   expect(titleOf(first!)).toBe('Pinned');

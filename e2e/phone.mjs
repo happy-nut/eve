@@ -112,7 +112,8 @@ try {
     await page.close();
   }
   {
-    // a note in a group says where it is in the note's bar; that bar goes with the note, and so must it
+    // a note under a page (an older version's group, made one) says where it is in the note's bar; that bar goes with
+    // the note, and so must it
     const page = await phone({ a: { body: '# Groceries\n\nmilk\n', group: 'Home' }, b: '# Other' });
     await page.waitForSelector('.crumbs');
     await page.evaluate(() => document.querySelector('.mback').click());

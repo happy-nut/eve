@@ -15,16 +15,19 @@ const get = (id: string) => notes.all.find((n) => n.id === id)!;
 
 test('a note is made where asked, the open note left open', () => {
   const open = fresh();
-  const made = apply({ ask: '1', op: 'create', body: '# Plan\n\n- [ ] ship\n', group: 'Work' });
+  // under a path of pages: each found by its title, or made (an older server asks for it as a group)
+  const made = apply({ ask: '1', op: 'create', body: '# Plan\n\n- [ ] ship\n', page: 'Work/Q3' });
   expect(made.ok).toBe(true);
-  const plan = notes.visible.find((n) => titleOf(n) === 'Plan')!;
+  const plan = notes.visible.find((n) => titleOf(n) === 'Plan')!, q3 = get(plan.parent!), work = get(q3.parent!);
   expect(made.text).toContain(plan.id);
-  expect([plan.body, plan.group, notes.currentId]).toEqual(['# Plan\n\n- [ ] ship\n', 'Work', open.id]);
-  // under a page: in that page's folder, whatever folder was asked
-  const sub = apply({ ask: '2', op: 'create', body: '# Step\n', group: 'Elsewhere', parent: plan.id });
+  expect([plan.body, titleOf(q3), titleOf(work), work.parent, notes.currentId]).toEqual(['# Plan\n\n- [ ] ship\n', 'Q3', 'Work', undefined, open.id]);
+  expect(apply({ ask: '2', op: 'create', body: '# Retro\n', group: 'work / q3' }).ok).toBe(true); // the same pages, not new ones
+  expect(get(notes.visible.find((n) => titleOf(n) === 'Retro')!.id).parent).toBe(q3.id);
+  expect(notes.visible.filter((n) => titleOf(n) === 'Work')).toHaveLength(1);
+  // under a page asked by its id: there, whatever path was asked
+  const sub = apply({ ask: '3', op: 'create', body: '# Step\n', page: 'Elsewhere', parent: plan.id });
   const step = notes.visible.find((n) => titleOf(n) === 'Step')!;
-  expect([sub.ok, step.parent, step.group]).toEqual([true, plan.id, 'Work']);
-  expect(apply({ ask: '3', op: 'create', body: '# Deep\n', group: 'a/b/c/d' }).ok).toBe(false);
+  expect([sub.ok, step.parent]).toEqual([true, plan.id]);
   expect(apply({ ask: '4', op: 'create', body: '# Orphan\n', parent: 'nope' }).ok).toBe(false);
 });
 
@@ -82,7 +85,7 @@ test('a passage copied a little differently is still found, and changed as writt
 
 test('a note deleted goes to the trash, and comes back from there', () => {
   const open = fresh();
-  const other = notes.addImported('# Other\n\nwords\n', '');
+  const other = notes.addImported('# Other\n\nwords\n');
   expect(apply({ ask: '1', op: 'delete', id: other.id })).toEqual({ ok: true, text: 'Deleted "Other" (it is in Eve\'s trash, where the user can bring it back).' });
   expect([get(other.id).deleted, notes.trash.some((n) => n.id === other.id), notes.currentId]).toEqual([true, true, open.id]);
   expect(apply({ ask: '2', op: 'delete', id: other.id }).ok).toBe(false); // gone already

@@ -1,4 +1,4 @@
-// How fast Eve is with a big library, in WebKit (the Mac app's engine): 800 notes in 20 groups linking to each
+// How fast Eve is with a big library, in WebKit (the Mac app's engine): 800 notes in 20 groups (an older version's, made pages at the start) linking to each
 // other, and one long note with every kind of block. It times
 //   start   the page loaded until a note is open and editable
 //   key     one keystroke until the next frame is painted, in a short note and in the long one (median and worst)

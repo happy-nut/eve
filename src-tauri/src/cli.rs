@@ -31,6 +31,7 @@ pub fn parse_args(cmd: &Command, argv: &[String]) -> Result<Value, String> {
             Some((n, v)) => (n, Some(v.to_string())),
             None => (flag, None),
         };
+        let name = if name == "group" { "page" } else { name }; // as Eve called a page path when it had folders
         let p = cmd
             .params
             .iter()
@@ -121,7 +122,8 @@ mod tests {
     #[test]
     fn arguments_become_what_the_tool_takes() {
         let search = command("search").unwrap();
-        assert_eq!(parse_args(search, &words("회의 결정 --group Work --limit 5")).unwrap(), json!({ "query": "회의 결정", "group": "Work", "limit": 5 }));
+        assert_eq!(parse_args(search, &words("회의 결정 --page Work --limit 5")).unwrap(), json!({ "query": "회의 결정", "page": "Work", "limit": 5 }));
+        assert_eq!(parse_args(search, &words("x --group Work")).unwrap(), json!({ "query": "x", "page": "Work" })); // its older name
         assert_eq!(parse_args(search, &words("--query=plan --from 2026-09")).unwrap(), json!({ "query": "plan", "from": "2026-09" }));
         assert!(parse_args(search, &words("--group Work")).unwrap_err().contains("needs <query>"));
         assert!(parse_args(search, &words("x --limit five")).unwrap_err().contains("whole number"));
@@ -148,7 +150,7 @@ mod tests {
         assert!(all.contains("mcp") && all.contains("eve help <command>"));
         let one = core::help(Some("search")).unwrap();
         assert!(one.starts_with("eve search — Search notes\n"), "{one}");
-        assert!(one.contains("Usage: eve search <query> [--group <group>] [--from <from>] [--to <to>] [--limit <n>]"), "{one}");
+        assert!(one.contains("Usage: eve search <query> [--page <page>] [--from <from>] [--to <to>] [--limit <n>]"), "{one}");
         assert!(one.contains("<query>, --query") && one.contains("— required") && one.contains("(default 20, 1–100)"), "{one}");
         // Claude's tool names read as the commands a terminal types
         assert!(one.contains("`eve read`") && !one.contains("read_note "), "{one}");

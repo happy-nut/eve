@@ -8,12 +8,12 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const LANES = {
-  '창과 화면': 'App main Sidebar Editor CardPage CalendarPage TabBar MobileBar BottomSheet Settings TrashPanel HistoryPanel Outline Find',
-  '노트 저장소': 'notes groups daily history tabs pending moves takeBody snapshot comeBack reminder inbox handoff paths',
+  '창과 화면': 'App main Sidebar Editor CardPage CalendarPage TabBar MobileBar BottomSheet Settings TrashPanel HistoryPanel Outline Find Present',
+  '노트 저장소': 'notes tree daily history tabs pending moves takeBody snapshot comeBack reminder inbox handoff paths',
   '동기화와 가져오기': 'sync github merge3 update updates transfer importTree keep hwp html pdf notionPaste evelink platform',
-  '편집기': 'editor blocks blockHandle keys shortcuts slash suggest markdown wikilink hangul highlight textColor footnote find selectionLayer clickTarget date emoji focusWatch drop bookmark image video divider cover icons',
-  '블록 엔진': 'code grammars mermaid diagram diagramBlock edgeLabels lanes seqFold charts math mathEdit mathParts mathRender table tableHandles toggle callout calloutKind database databaseNode formula kanban board',
-  '블록 화면': 'DiagramBlock DiagramForm FlowEditor MathEdit Kanban Database TableTools PdfViewer ImageViewer',
+  '편집기': 'editor blocks blockHandle keys shortcuts slash suggest markdown wikilink passage hangul highlight textColor footnote find selectionLayer clickTarget date emoji focusWatch drop bookmark image video divider cover icons',
+  '블록 엔진': 'code grammars mermaid diagram diagramBlock edgeLabels lanes seqFold charts mindmap spots chartHues diagramOps diagramMotion slides math mathEdit mathParts mathRender table tableHandles toggle callout calloutKind database databaseNode formula kanban board',
+  '블록 화면': 'DiagramBlock ChartEditor DiagramForm FlowEditor MathEdit Kanban Database TableTools PdfViewer ImageViewer',
   'UI 기반': 'ui popup motion appearance hints scrollHint resize swipeRow touchReorder noteMenu Icon Menu Confirm Select Slider Toast Tooltip Hint Keys Suggest DateMenu EmojiPicker EmojiRow',
 };
 

@@ -58,7 +58,7 @@ const ok = (r) => r.opened && r.in && r.out && r.closed && r.focus;
 async function newNote(page, mobile) {
   await page.locator(mobile ? 'button[aria-label="New note"]:visible' : 'button[data-tip="New note"]:visible').first().click().catch(() => {});
   await page.waitForTimeout(400);
-  // a phone's + asks: a note or a group (or today's note)
+  // a phone's + asks: a note (or today's note)
   if (mobile) await page.getByRole('menuitem', { name: 'New note' }).first().click({ timeout: 2000 }).catch(() => {});
   await page.waitForTimeout(400);
   if (!(await page.locator('.tiptap').count())) { await page.keyboard.press('ControlOrMeta+n'); await page.waitForTimeout(400); }

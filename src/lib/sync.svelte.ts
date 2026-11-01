@@ -1,5 +1,4 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
-import { groups } from './groups.svelte';
 import { flushEdits } from './pending';
 import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText } from './platform';
 import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, signInError, type LocalFile, type RemoteFile } from './github';
@@ -15,7 +14,6 @@ import { merge3 } from './merge3';
  */
 const LS = 'eve.sync';
 const ASSETS = 'notes/assets/';
-const GROUPS = 'notes/groups.json';
 
 /** `host`: '' = github.com, else the GitHub Enterprise server (see github.ts normHost) */
 interface Settings { user: string; repo: string; token: string; host: string; head: string; tree: string; known: Record<string, string>; lastSynced: number }
@@ -174,13 +172,11 @@ class Sync {
   async now(): Promise<boolean> {
     if (!this.enabled || this.status === 'syncing') return false;
     this.status = 'syncing';
-    const enc = new TextEncoder(), dec = new TextDecoder();
+    const dec = new TextDecoder();
     const repo = new Repo(this.settings);
     try {
       await syncRound(repo, async () => {
         const out: LocalFile[] = await Promise.all(notes.all.map((n) => this.hashes.file(`notes/${n.id}.md`, serialize(n))));
-        // the groups' icons and order (not a .md: older versions of the app leave it alone)
-        out.push({ path: GROUPS, data: enc.encode(JSON.stringify(groups.shared(), null, 1)) });
         // images never change once written, so only unknown names need reading
         for (const name of await assets.list()) if (!(ASSETS + name in repo.s.known)) out.push({ path: ASSETS + name, data: await assets.read(name) });
         return out;
@@ -193,7 +189,6 @@ class Sync {
             try { await assets.write(f.path.slice(ASSETS.length), f.data); } catch { delete repo.s.known[f.path]; }
             continue;
           }
-          if (f.path === GROUPS) { try { groups.takeRemote(JSON.parse(dec.decode(f.data))); } catch { /* a hand-edited file that no longer parses */ } continue; }
           if (!f.path.endsWith('.md')) continue;
           const r = parse(dec.decode(f.data));
           if (!r) continue;
