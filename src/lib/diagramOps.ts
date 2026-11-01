@@ -115,8 +115,17 @@ export const endOf = (g: Gantt) => {
 };
 /** when a task starts: on its date, when the one before it ends, or when another (picked here) does */
 export const startOf = (t: Task) => (t.after === undefined ? 'date' : t.after === '' ? 'prev' : `after ${t.after}`);
+/** a task that starts, one way or another, only once `t` ends: one `t` cannot start after (a loop) */
+function waitsFor(all: Task[], x: Task, t: Task, seen = new Set<Task>()): boolean {
+  if (x === t) return true;
+  if (seen.has(x) || x.after === undefined) return false;
+  seen.add(x);
+  const before = x.after === '' ? [all[all.indexOf(x) - 1]] : x.after.split(' ').map((id) => all.find((y) => y.id === id));
+  return before.some((y) => !!y && waitsFor(all, y, t, seen));
+}
 export function startOptions(g: Gantt, t: Task) {
-  const others = g.sections.flatMap((s) => s.tasks).map((x, k) => [x, k] as const).filter(([x]) => x !== t);
+  const all = g.sections.flatMap((s) => s.tasks);
+  const others = all.map((x, k) => [x, k] as const).filter(([x]) => x !== t && !waitsFor(all, x, t));
   const opts: [string, string][] = [['date', 'On a date'], ['prev', 'After the one before'],
     ...others.map(([x, k]) => [x.id ? `after ${x.id}` : `task ${k}`, `After “${x.name.trim() || 'Task'}”`] as [string, string])];
   // after more than one: their names

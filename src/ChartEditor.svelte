@@ -26,15 +26,31 @@
   const spot = $derived(sel ? spotOf(d, sel) : null);
 
   /** a part's drawing: where it is drawn twice (a slice and its row, a task's name and its bar), the one with its words */
-  const find = (key: string) => { const all = [...host.querySelectorAll(`[data-spot="${CSS.escape(key)}"]`)]; return all.find((el) => el.textContent?.trim()) ?? all[0] ?? null; };
+  const find = (key: string) => {
+    const all = [...host.querySelectorAll(`[data-spot="${CSS.escape(key)}"]`)], el = all.find((x) => x.textContent?.trim()) ?? all[0] ?? null;
+    // a class's or a table's name line, not the whole box: centred on the box, the field sat over its first member
+    return el?.querySelector(':scope > g.label-group, :scope > g.label.name') ?? el;
+  };
   function box(el: Element): Rect {
     const o = layer.getBoundingClientRect(), r = el.getBoundingClientRect();
     return { x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height };
   }
+  // a part just added or renamed is drawn a moment later (the chart draws again after a pause): looked for again
+  // until it is, the field kept out of sight till then, not in the card's corner over other parts
+  let retry: ReturnType<typeof setTimeout> | undefined, tries = 0, unseen = false;
+  /** the part just added (Tab, a +): Esc on it takes the adding back, not only what was typed */
+  let fresh: string | null = null, addedIn: string | null = null;
+  let field = $state<HTMLInputElement | null>(null);
   function measure() {
     if (!layer) return;
+    clearTimeout(retry);
     const el = sel ? find(sel) : null;
     rect = el ? box(el) : null;
+    if (sel && !el && tries++ < 40) retry = setTimeout(measure, 50);
+    else tries = 0;
+    // one drawn only now (an idea added past the card's edge) brought into the card as it appears: one just added is
+    // looked for in the drawing after this one (its key was another part's until the chart drew again)
+    if (el && (unseen || (addedIn !== null && addedIn !== version))) { unseen = false; addedIn = null; el.scrollIntoView?.({ block: 'nearest', inline: 'center' }); }
     tick().then(placeBar);
   }
   $effect(() => { void version; void sel; tick().then(measure); });
@@ -51,7 +67,9 @@
       // its part brought into the card (the picture scrolls sideways in it)
       const el = find(sel);
       if (el) el.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+      unseen = !el;
     } else letField();
+    if (key !== fresh) fresh = null;
   }
   /** what was typed, kept: a name that renames what it is comes in only now (its key with it) */
   function commit() {
@@ -77,20 +95,32 @@
     const k = await a.run();
     letField();
     sel = null;
-    if (k) { await tick(); select(k); }
+    const drawn = version;
+    if (k) { await tick(); select(k); if (ADDS.has(a.icon)) { fresh = k; addedIn = drawn; } }
   }
   /** Esc from the note: what is being typed in let go first; true when there was something */
   export function escape(): boolean {
     if (!sel) return false;
+    // from one of the bar's own boxes: back to the part's field first, a second Esc for the rest
+    if (bar?.contains(document.activeElement) && field) { field.focus({ preventScroll: true }); return true; }
     const s = spot;
-    if (s && !s.onDone && text !== before) s.set(before);
+    if (s && fresh === sel) s.acts.find((x) => x.icon === 'trash' && !x.off)?.run();
+    else if (s && !s.onDone && text !== before) s.set(before);
+    text = before; // a rename waits for the field to go (onDone): Esc is not that
+    fresh = null;
     letField();
     sel = null;
     return true;
   }
   /** a part typed in at once (the chart's own "+ Part") */
-  export function open(key: string | null) { if (key) { sel = null; tick().then(() => select(key)); } }
+  export function open(key: string | null) { if (key) { const drawn = version; sel = null; tick().then(() => { select(key); fresh = key; addedIn = drawn; }); } }
 
+  const ADDS = new Set<Icon>(['plus', 'child', 'note', 'section']);
+  function onBarKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && !composing(e) && e.target !== field) { e.preventDefault(); e.stopPropagation(); escape(); }
+  }
+  /** a choice made in the bar: the keyboard back in the part's field, for Enter and Tab to go on from */
+  const chose = () => tick().then(() => field?.focus({ preventScroll: true }));
   function onKey(e: KeyboardEvent) {
     if (composing(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); letField(); sel = null; }
@@ -113,16 +143,29 @@
     hover = el && host.contains(el) && el.getAttribute('data-spot') !== sel ? box(el) : null;
   }
 
-  /** the bar under the part (over it near the picture's foot), inside the picture */
+  /** the bar where it covers the fewest other parts: under the field it covered the next one (a legend's next row,
+   *  the next event, column or task), which could then not be clicked. Beside the field, on its line, then under it,
+   *  then over it, on a tie; inside the picture */
   function placeBar() {
     if (!layer || !bar) return;
     const o = layer.getBoundingClientRect(), W = layer.clientWidth, H = layer.clientHeight;
     const r = rect ?? { x: 8, y: 8, w: 140, h: 32 };
     const within = { left: o.left + 4, top: o.top + 4, right: o.left + W - 4, bottom: o.top + H - 4 };
-    // under the field, which may be lower than the part's middle (a part shorter than the field)
     const half = isMobile ? 20 : 17, fieldTop = r.y + r.h / 2 - half;
-    const anchor = { left: o.left + r.x, right: o.left + r.x + r.w, top: o.top + Math.min(r.y, fieldTop), bottom: o.top + Math.max(r.y + r.h, fieldTop + half * 2) };
-    const f = floatAt(anchor, { w: bar.offsetWidth, h: bar.offsetHeight }, { prefer: 'below', within, gap: 8, align: 'start' });
+    const size = { w: bar.offsetWidth, h: bar.offsetHeight };
+    const beside = { left: o.left + fieldLeft, right: o.left + fieldLeft + fieldW, top: o.top + fieldTop - (size.h - half * 2) / 2, bottom: o.top + fieldTop + half * 2 };
+    // over or under the field, which may be lower than the part's middle (a part shorter than the field)
+    const around = { left: o.left + r.x, right: o.left + r.x + r.w, top: o.top + Math.min(r.y, fieldTop), bottom: o.top + Math.max(r.y + r.h, fieldTop + half * 2) };
+    const tries = [
+      floatAt(beside, size, { prefer: 'side', within, gap: 6 }),
+      floatAt(around, size, { prefer: 'below', within, gap: 8, align: 'start' }),
+      floatAt(around, size, { prefer: 'above', within, gap: 8, align: 'start' }),
+    ].filter((f, i) => (i === 0 ? f.side === 'right' || f.side === 'left' : f.side !== 'inside'));
+    const others = [...host.querySelectorAll('[data-spot]')].filter((el) => el.getAttribute('data-spot') !== sel).map((el) => el.getBoundingClientRect());
+    const covers = (f: { left: number; top: number }) => others.filter((q) => q.width && q.left < f.left + size.w && q.right > f.left && q.top < f.top + size.h && q.bottom > f.top).length;
+    const best = tries.reduce<(typeof tries)[number] | null>((a, f) => (!a || covers(f) < covers(a) ? f : a), null);
+    if (best) { barAt = { left: best.left - o.left, top: best.top - o.top }; return; }
+    const f = floatAt(around, size, { prefer: 'below', within, gap: 8, align: 'start' });
     barAt = f.side === 'inside' ? { left: Math.max(4, Math.min(W - bar.offsetWidth - 4, r.x)), top: r.y + r.h + 8 } : { left: f.left - o.left, top: f.top - o.top };
   }
   $effect(() => { void spot; void rect; tick().then(placeBar); });
@@ -138,6 +181,7 @@
     // the part the click that opened the chart landed on
     untrack(() => { if (pick) tick().then(() => select(pick)); });
     return () => {
+      clearTimeout(retry);
       host.removeEventListener('click', onHostClick);
       host.removeEventListener('pointermove', onHostMove);
       host.removeEventListener('pointerleave', out);
@@ -158,10 +202,10 @@
     section: '<path d="M2.5 4.5h11M2.5 8h7M2.5 11.5h7" />',
   };
   // the field as wide as its part, at least a few words' room, inside the picture
-  const fieldW = $derived(Math.min(Math.max((rect?.w ?? 0) + 12, 150), (layer?.clientWidth ?? 600) - 8));
+  const fieldW = $derived(Math.min(Math.max((rect?.w ?? 0) + 12, 150, text.length * (isMobile ? 9 : 8) + 24), (layer?.clientWidth ?? 600) - 8));
   /** a part wider than a field's least (a timeline's event, a task's name) has its field from its own left edge, the
    *  words where they were; a small one (a word on a line, an idea) has it centred on it */
-  const wideSpot = $derived(!!rect && rect.w + 12 >= 150);
+  const wideSpot = $derived(!!rect && (rect.w + 12 >= 150 || sel === 'title')); // a title's words stay where they were drawn
   const fieldLeft = $derived(Math.max(4, Math.min((layer?.clientWidth ?? 600) - fieldW - 4, rect ? (wideSpot ? rect.x - 6 : rect.x + rect.w / 2 - fieldW / 2) : 8)));
 </script>
 
@@ -171,16 +215,20 @@
   {/if}
   {#if sel && spot}
     {#if rect}<div class="ring" style:left={`${rect.x - 3}px`} style:top={`${rect.y - 3}px`} style:width={`${rect.w + 6}px`} style:height={`${rect.h + 6}px`}></div>{/if}
-    <input class="field" class:wide={wideSpot} bind:value={text} aria-label={spot.label} placeholder={spot.label} oninput={typed} onkeydown={onKey} onblur={commit}
+    {#key sel}<!-- a field of its own for each part: one kept from the last would not take the keyboard -->
+    <input class="field" bind:this={field} style:opacity={rect ? null : 0} class:wide={wideSpot} bind:value={text} aria-label={spot.label} placeholder={spot.label} oninput={typed} onkeydown={onKey} onblur={commit}
       style:left={`${fieldLeft}px`} style:top={`${rect ? rect.y + rect.h / 2 - (isMobile ? 20 : 17) : 8}px`} style:width={`${fieldW}px`}
       {@attach (el: HTMLInputElement) => { el.focus({ preventScroll: true }); el.select(); }} />
+    {/key}
     {#if spot.fields.length || spot.acts.length}
-    <div class="bar" bind:this={bar} style:left={`${barAt.left}px`} style:top={`${barAt.top}px`}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="bar" bind:this={bar} onkeydown={onBarKey} style:visibility={rect ? null : 'hidden'} style:left={`${barAt.left}px`} style:top={`${barAt.top}px`}>
+      {#if spot.fields.length}<span class="grp">
       {#each spot.fields as f (f.label)}
         <label class="f" class:top={f.kind === 'lines'}>
           <span>{f.label}</span>
           {#if f.kind === 'select'}
-            <Select label={f.label} value={f.value} options={f.options} onchange={(v) => f.set(v)} />
+            <Select label={f.label} value={f.value} options={f.options} onchange={(v) => { f.set(v); chose(); }} />
           {:else if f.kind === 'lines'}
             <textarea value={f.value} rows={Math.min(6, Math.max(2, f.value.split('\n').length + 1))} placeholder="One per line" spellcheck="false"
               oninput={(e) => f.set(e.currentTarget.value)}></textarea>
@@ -191,13 +239,15 @@
           {/if}
         </label>
       {/each}
-      {#if spot.fields.length}<span class="sep"></span>{/if}
+      </span>{/if}
+      <span class="grp acts">
       {#each spot.acts as a (a.label)}
         <button type="button" class:danger={a.icon === 'trash'} aria-label={a.label} title={a.tab ? `${a.label} (Tab)` : a.label} disabled={a.off}
           onmousedown={(e) => e.preventDefault()} onclick={() => run(a)}>
           <svg viewBox="0 0 16 16">{@html ICONS[a.icon]}</svg>{#if a.tab}<span class="lbl">{a.label.replace(/^Add (an? )?/, '').replace(/ (after|under|beside|in|from) (it|them)$/, '').replace(/^./, (c) => c.toUpperCase())}</span>{/if}
         </button>
       {/each}
+      </span>
     </div>
     {/if}
   {/if}
@@ -217,8 +267,13 @@
   .bar {
     position: absolute; display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 12px;
     background: var(--bg-pop); box-shadow: var(--pop-shadow), 0 0 0 0.5px var(--line); white-space: nowrap;
-    width: max-content; max-width: calc(100% - 8px); flex-wrap: wrap; box-sizing: border-box;
+    width: max-content; max-width: calc(100% - 8px); box-sizing: border-box; flex-wrap: wrap; row-gap: 2px;
   }
+  /* what it sets, then what it does: a row each when they don't fit one (wrapped anywhere, its last button stood
+     alone on a second row) */
+  .grp { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; } /* a phone's Gantt: its settings over rows of their own */
+  .grp.acts { flex-wrap: nowrap; }
+  .bar { column-gap: 12px; } /* between what it sets and what it does */
   .bar button {
     min-width: 30px; height: 30px; border: 0; border-radius: 8px; padding: 0 6px; background: none; color: var(--fg-dim);
     display: inline-flex; align-items: center; justify-content: center; font: inherit; font-size: 12.5px; font-weight: 500;
@@ -227,7 +282,6 @@
   @media (hover: hover) { .bar button:not(:disabled):hover { background: var(--bg-hover); color: var(--fg); } .bar button.danger:hover { color: #ff453a; } }
   .bar button .lbl { margin-left: 4px; }
   .bar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
-  .sep { width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
   .f { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--fg-dim); }
   .f input {
     height: 28px; box-sizing: border-box; border: 0; border-radius: 7px; padding: 0 7px; font: inherit; font-size: 13px;
@@ -241,7 +295,10 @@
   .f textarea:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   .f input:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   .f :global(button) { height: 28px; }
-  :global(html.mobile) .bar button { min-width: 40px; height: 40px; }
+  :global(html.mobile) .bar { gap: 2px; padding: 3px; }
+  :global(html.mobile) .grp { gap: 2px; }
+  :global(html.mobile) .bar button { min-width: 36px; height: 40px; padding: 0 4px; }
   :global(html.mobile) .f input { height: 36px; font-size: 16px; }
+  :global(html.mobile) .f input[type='number'] { width: 64px; }
   :global(.dblock.active .mermaid-view [data-spot]) { cursor: text; }
 </style>

@@ -116,6 +116,7 @@
       onError(!!error);
     }, untrack(() => svg) ? 120 : 0); // read without depending on it: each drawing is a new string, and would draw again
   });
+  let centred = false;
   /** the drawing's block labels matched to their blocks, to fold by a click on them; false: a row of them under it */
   let labelled = $state(true);
   $effect(() => {
@@ -125,6 +126,12 @@
       const el = canvas?.querySelector(':scope > svg');
       if (el instanceof SVGSVGElement) spreadLabels(el); // a line's label off another's (edgeLabels.ts)
       if (d && canvas) tagSpots(d, canvas); // its parts marked, to be clicked and typed in (spots.ts)
+      // a mind map wider than the card shown from its middle, its root, the first time (from its left edge, the root
+      // was cut off on a phone)
+      if (d?.kind === 'mindmap' && canvas && !centred && canvas.scrollWidth > canvas.clientWidth) {
+        const r = canvas.querySelector('[data-spot="root"]');
+        if (r) { centred = true; canvas.scrollLeft += r.getBoundingClientRect().left + r.getBoundingClientRect().width / 2 - canvas.getBoundingClientRect().left - canvas.clientWidth / 2; }
+      }
       labelled = !list.some(foldable) || (!!el && markFolds(el, list, f));
     });
   });

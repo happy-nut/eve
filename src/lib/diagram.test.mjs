@@ -393,3 +393,18 @@ function settles(code, kind) {
   for (const kept of ['ORDER ||--|{ LINE-ITEM : "contains many"', 'CUSTOMER }|..|{ DELIVERY-ADDRESS : uses', 'string name "고객 이름"', 'int id PK, FK', 'p["사람"] {', 'weird']) assert.ok(out.includes(kept), `${kept} in\n${out}`);
   console.log('pasted er ok');
 }
+
+// a class or a state just added (no members, no label, no line yet) is written, so it is drawn and kept
+{
+  const c = fromCode('classDiagram\n  class Animal {\n    +eat()\n  }');
+  c.classes.push({ id: 'Class2', name: 'Class2', members: [] });
+  assert.ok(fromCode(toCode(c)).classes.some((x) => x.id === 'Class2'), toCode(c));
+  const s = fromCode('stateDiagram-v2\n  [*] --> Idle');
+  s.states.push({ id: 'State2', name: 'State2', desc: '' });
+  assert.ok(fromCode(toCode(s)).states.some((x) => x.id === 'State2'), toCode(s));
+  // one on a line is written by the line alone, as before
+  assert.equal(toCode(fromCode('stateDiagram-v2\n  [*] --> Idle')), 'stateDiagram-v2\n  [*] --> Idle');
+}
+
+// a participant named as its id is written without an alias saying it again
+assert.equal(toCode(fromCode('sequenceDiagram\n  actor Ann\n  participant Web\n  Ann->>Web: Hi')), 'sequenceDiagram\n  actor Ann\n  participant Web\n  Ann->>Web: Hi');

@@ -1,4 +1,4 @@
-import { freshId, isMessage, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type BlockKind } from './diagram';
+import { freshId, isMessage, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type BlockKind } from './diagram';
 import {
   dropStep, DIVIDERS, OPENERS, SPLITS, wellFormed, seqArrows, arrowOf, setArrow, pieValue, MIND_SHAPES, ROOT_SHAPES, movePeriod, plausible, endOf,
   startOf, startOptions, setStart, tagOptions, setTags, rename, NAME_ID, TABLE_ID, drop, options, arrowOptions, STATE_KINDS, insideOptions, renameState,
@@ -161,7 +161,11 @@ function ganttSpot(d: Gantt, key: string): Spot | null {
     text: s.name, label: 'Section', set: (v) => { s.name = v; },
     fields: [],
     acts: [
-      { label: 'Add a task', icon: 'child', tab: true, run: () => { s.tasks.push({ name: 'Task', start: endOf(d), days: 2 }); return `task:${si}:${s.tasks.length - 1}`; } },
+      // a section just added comes with a task named only "Task": typed into, not left behind another
+      { label: 'Add a task', icon: 'child', tab: true, run: () => {
+        if (s.tasks.length === 1 && s.tasks[0].name === 'Task') return `task:${si}:0`;
+        s.tasks.push({ name: 'Task', start: endOf(d), days: 2 }); return `task:${si}:${s.tasks.length - 1}`;
+      } },
       { label: 'Add a section after it', icon: 'plus', run: () => { d.sections.splice(si + 1, 0, { name: 'Section', tasks: [{ name: 'Task', start: endOf(d), days: 2 }] }); return `phase:${si + 1}`; } },
       { label: 'Move up', icon: 'up', off: si === 0, run: () => (move(d.sections, si, -1) ? `phase:${si - 1}` : null) },
       { label: 'Move down', icon: 'down', off: si === d.sections.length - 1, run: () => (move(d.sections, si, 1) ? `phase:${si + 1}` : null) },
@@ -180,7 +184,18 @@ function ganttSpot(d: Gantt, key: string): Spot | null {
     fields,
     acts: [
       // the next one starts when this one ends
-      { label: 'Add a task after it', icon: 'plus', tab: true, run: () => { s.tasks.splice(ti + 1, 0, { name: 'Task', start: '', after: '', days: 2 }); return `task:${si}:${ti + 1}`; } },
+      // and what started after it starts after the new one, not at the same time
+      { label: 'Add a task after it', icon: 'plus', tab: true, run: () => {
+        const all = d.sections.flatMap((y) => y.tasks), next: Task = { name: 'Task', start: '', after: '', days: 2 };
+        if (t.id) {
+          const waiting = all.filter((x) => x.after?.split(' ').includes(t.id!));
+          if (waiting.length) {
+            next.id = freshId('t', all.filter((y) => y.id).map((y) => ({ id: y.id! })));
+            for (const x of waiting) x.after = x.after!.split(' ').map((id) => (id === t.id ? next.id! : id)).join(' ');
+          }
+        }
+        s.tasks.splice(ti + 1, 0, next); return `task:${si}:${ti + 1}`;
+      } },
       { label: 'Move up', icon: 'up', off: ti === 0, run: () => (move(s.tasks, ti, -1) ? `task:${si}:${ti - 1}` : null) },
       { label: 'Move down', icon: 'down', off: ti === s.tasks.length - 1, run: () => (move(s.tasks, ti, 1) ? `task:${si}:${ti + 1}` : null) },
       { label: 'Delete', icon: 'trash', run: () => {
@@ -429,7 +444,11 @@ export function tagSpots(d: Diagram, root: Element) {
     }
   };
   if (d.kind === 'sequence') {
-    tag([...root.querySelectorAll('text.actor')].map((t) => t.parentElement!), d.people.map((p) => `person:${p.id}`));
+    // by the name each says, not by order: mermaid draws them last to first (and again along the foot)
+    for (const t of root.querySelectorAll('text.actor')) {
+      const said = t.textContent?.trim(), who = d.people.filter((p) => (p.name.trim() || p.id) === said);
+      if (who.length === 1) t.parentElement!.setAttribute('data-spot', `person:${who[0].id}`);
+    }
     const steps = d.messages.map((st, i) => [st, i] as const);
     tag([...root.querySelectorAll('text.messageText')], steps.filter(([st]) => isMessage(st)).map(([, i]) => `step:${i}`));
     tag([...root.querySelectorAll('text.noteText')].map((t) => t.parentElement!), steps.filter(([st]) => 'note' in st).map(([, i]) => `step:${i}`));
@@ -450,7 +469,10 @@ export function tagSpots(d: Diagram, root: Element) {
   } else if (d.kind === 'gantt' && !root.querySelector('[data-spot]')) {
     // mermaid's own Gantt (weekends skipped, settings kept as written): its tasks, in order
     const keys = d.sections.flatMap((s, si) => s.tasks.map((_, ti) => `task:${si}:${ti}`));
-    tag([...root.querySelectorAll('text.taskText')], keys);
+    // a task's name drawn on its bar, or beside it when the bar is short (taskTextOutsideRight), as well as the bar
+    tag([...root.querySelectorAll('text[class*="taskText"]')], keys);
     tag([...root.querySelectorAll('rect.task')], keys);
+    tag([...root.querySelectorAll('text.titleText')], d.title.trim() ? ['title'] : []);
+    tag([...root.querySelectorAll('text.sectionTitle')], d.sections.filter((x) => x.tasks.length).map((x) => `phase:${d.sections.indexOf(x)}`));
   }
 }

@@ -393,7 +393,11 @@ export const replies = (arrow: string) => arrow.replace(/^<</, '').startsWith('-
 function seqCode(d: Sequence) {
   const lines = ['sequenceDiagram'];
   if (d.numbered) lines.push('  autonumber');
-  for (const p of d.people) lines.push(`  ${p.actor ? 'actor' : 'participant'} ${p.id} as ${ent(one(p.name) || p.id, ';#')}`);
+  for (const p of d.people) {
+    const name = ent(one(p.name) || p.id, ';#');
+    // no alias where it would only say the id again (`participant Web as Web`)
+    lines.push(`  ${p.actor ? 'actor' : 'participant'} ${p.id}${name === p.id ? '' : ` as ${name}`}`);
+  }
   const ids = new Set(d.people.map((p) => p.id));
   let depth = 1; // a group's lines indented under it
   const pad = (n: number) => '  '.repeat(Math.max(1, n));
@@ -686,7 +690,8 @@ function classCode(d: ClassDiagram) {
       lines.push(`  class ${c.id}["${one(c.name).replace(/"/g, "'")}"]`);
       for (const m of members) lines.push(`  ${c.id} : ${m}`);
     } else if (members.length) lines.push(`  class ${c.id} {`, ...members.map((m) => `    ${m}`), '  }');
-    else if (c.decl) lines.push(`  class ${c.id}`);
+    // a class with nothing else to say is written on a line of its own: unwritten, one just added was lost
+    else if (c.decl || !d.links.some((l) => l.from === c.id || l.to === c.id)) lines.push(`  class ${c.id}`);
   }
   const ids = new Set(d.classes.map((c) => c.id));
   const card = (s: string) => one(s).replace(/"/g, '');
@@ -780,7 +785,8 @@ function stateCode(d: StateDiagram) {
       const desc = st.kind || kids ? [] : st.desc.split('\n').map(one).filter(Boolean);
       if (st.kind) lines.push(`${pad}state ${st.id} <<${st.kind}>>`);
       else if (one(st.name) && (one(st.name) !== st.id || desc.length)) lines.push(`${pad}state "${one(st.name).replace(/"/g, "'")}" as ${st.id}`);
-      else if (st.decl) lines.push(`${pad}state ${st.id}`);
+      // likewise a state with nothing else to say and on no line (one just added)
+      else if (st.decl || (!desc.length && !kids && !d.links.some((l) => l.from === st.id || l.to === st.id))) lines.push(`${pad}state ${st.id}`);
       for (const x of desc) lines.push(`${pad}${st.id} : ${x}`);
       if (kids) {
         lines.push(`${pad}state ${st.id} {`);

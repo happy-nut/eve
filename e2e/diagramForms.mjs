@@ -296,8 +296,9 @@ try {
   const spot = async (page, key) => {
     const at = await page.evaluate((k) => {
       const all = [...document.querySelectorAll(`.tiptap .mermaid-view [data-spot="${k}"]`)];
-      const el = all.find((e) => e.textContent.trim()) ?? all[0];
-      if (!el) return null;
+      const box = all.find((e) => e.textContent.trim()) ?? all[0];
+      if (!box) return null;
+      const el = box.querySelector(':scope > g.label-group, :scope > g.label.name') ?? box; // a class's, a table's name line
       el.scrollIntoView({ block: 'center', inline: 'center' });
       const r = el.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
@@ -349,8 +350,58 @@ try {
   await page.keyboard.type('Puppy');
   await page.keyboard.press('Enter');
   assert.match(await md(page), /Animal <\|-- Puppy/, 'a class renamed where it is drawn, its line with it');
-  console.log('ok   every kind: a part clicked is typed in where it is drawn; Tab adds the next, Enter is done, Esc puts it back');
+  // Esc on a rename keeps the old name (the field going had renamed it anyway)
+  await spot(page, 'class:Animal');
+  await page.keyboard.type('Beast');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  assert.match(await md(page), /class Animal\b/, 'Esc on a rename keeps the name');
+  assert.doesNotMatch(await md(page), /Beast/, 'Esc on a rename keeps the name');
   await page.close();
+  // a class added with the chart's own + is kept, though nothing is in it yet
+  page = await open('classDiagram\n  class Animal {\n    +eat()\n  }', false);
+  await page.locator('.tiptap .dblock.active .tools button', { hasText: '+ Class' }).click();
+  await page.waitForTimeout(800);
+  await page.keyboard.type('Cat');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(800);
+  assert.match(await md(page), /class Cat\b/, 'a class just added is kept');
+  await page.close();
+  console.log('ok   every kind: a part clicked is typed in where it is drawn; Tab adds the next, Enter is done, Esc puts it back');
+
+  // ---- one part, then another: the keyboard goes with the field (it stayed behind, and typing went into the note) ----
+  page = await open('pie title Pets\n  "Dogs" : 40\n  "Cats" : 30', false);
+  await spot(page, 'slice:0');
+  await spot(page, 'slice:1');
+  await page.keyboard.type('Fish');
+  await page.keyboard.press('Enter');
+  let after = await md(page);
+  assert.match(after, /"Dogs" : 40\n {2}"Fish" : 30/, 'the second part clicked is the one typed in');
+  assert.match(after, /The end\./, 'nothing typed into the note');
+  await page.close();
+  // Esc right after Tab added a part takes the adding back
+  page = await open('mindmap\n  root((Plan))\n    Design\n    Build', false);
+  await spot(page, 'branch:0');
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(700);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  after = await md(page);
+  assert.match(after, /Design\n {4}Build/, 'Esc takes back the idea just added');
+  assert.doesNotMatch(after, /Idea/, 'Esc takes back the idea just added');
+  await page.close();
+  // a sequence's people are each their own (mermaid draws them last to first: a click edited the mirror one)
+  page = await open('sequenceDiagram\n  actor Ann\n  participant Web\n  participant DB\n  Ann->>Web: Hi', false);
+  for (const who of ['Ann', 'Web', 'DB']) {
+    await spot(page, `person:${who}`);
+    assert.equal(await page.locator('.tiptap .layer input.field').inputValue(), who, `${who} clicked, ${who} typed in`);
+  }
+  await page.keyboard.type('Database');
+  await page.keyboard.press('Enter');
+  assert.match(await md(page), /participant DB as Database\n/, 'the one clicked renamed');
+  assert.match(await md(page), /actor Ann\n {2}participant Web\n/, 'the others written as they were');
+  await page.close();
+  console.log('ok   another part clicked takes the keyboard; Esc takes back what Tab added; each person is their own');
 
   // ---- the / menu makes each new kind, drawn and open ----
   page = await browser.newPage({ viewport: { width: 1200, height: 1000 } });
