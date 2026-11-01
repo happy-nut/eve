@@ -256,8 +256,9 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="editor has-head" bind:this={el} {@attach paneWidth}
     onkeydown={(e) => {
-      // …but a row of a diagram's form keeps Tab: to the next row, as anywhere a form is filled in (a database's fields too)
-      if (e.key === 'Tab' && !e.defaultPrevented && !(e.target as HTMLElement).closest?.('.dblock .form, .db')) e.preventDefault();
+      // …but a row of a diagram's form keeps Tab: to the next row, as anywhere a form is filled in (a database's fields,
+      // a chart part's bar too)
+      if (e.key === 'Tab' && !e.defaultPrevented && !(e.target as HTMLElement).closest?.('.dblock .form, .dblock .layer .bar, .db')) e.preventDefault();
       // any other key (or a click, below) means the note is being written in: ⌥↑ / ⌥↓ move lines again
       if (!(e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown'))) openedFromList.id = '';
     }}

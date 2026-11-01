@@ -1,4 +1,4 @@
-import { freshId, isMessage, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type BlockKind } from './diagram';
+import { freshId, ganttDates, isMessage, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type BlockKind } from './diagram';
 import {
   dropStep, DIVIDERS, OPENERS, SPLITS, wellFormed, seqArrows, arrowOf, setArrow, pieValue, MIND_SHAPES, ROOT_SHAPES, movePeriod, plausible, endOf,
   startOf, startOptions, setStart, tagOptions, setTags, rename, NAME_ID, TABLE_ID, drop, options, arrowOptions, STATE_KINDS, insideOptions, renameState,
@@ -32,6 +32,17 @@ export interface Spot {
 }
 
 const at = (key: string) => key.split(':');
+/** a class's or a table's name as drawn, not its id */
+const nameOf = (list: { id: string; name: string }[], id: string) => list.find((x) => x.id === id)?.name.trim() || id;
+/** where a note can be: over, left or right of each one, or over two side by side */
+function noteOptions(s: Sequence, st: { note: string; who: string[] }): [string, string][] {
+  const name = (id: string) => s.people.find((p) => p.id === id)?.name.trim() || id;
+  const opts: [string, string][] = s.people.flatMap((p) => (['over', 'left of', 'right of'] as const).map((at) => [`${at}|${p.id}`, `${at[0].toUpperCase()}${at.slice(1)} ${name(p.id)}`] as [string, string]));
+  for (let i = 1; i < s.people.length; i++) opts.push([`over|${s.people[i - 1].id},${s.people[i].id}`, `Over ${name(s.people[i - 1].id)} and ${name(s.people[i].id)}`]);
+  const now = `${st.note}|${st.who.join(',')}`;
+  if (!opts.some(([v]) => v === now)) opts.unshift([now, `${st.note} ${st.who.map(name).join(', ')}`]);
+  return opts;
+}
 const move = <T>(list: T[], i: number, by: -1 | 1) => { const j = i + by; if (j < 0 || j >= list.length) return false; [list[i], list[j]] = [list[j], list[i]]; return true; };
 const title = (d: { title: string }): Spot => ({ text: d.title, label: 'Title', set: (v) => { d.title = v; }, fields: [], acts: [] });
 
@@ -161,7 +172,11 @@ function ganttSpot(d: Gantt, key: string): Spot | null {
     text: s.name, label: 'Section', set: (v) => { s.name = v; },
     fields: [],
     acts: [
-      { label: 'Add a task', icon: 'child', tab: true, run: () => { s.tasks.push({ name: 'Task', start: endOf(d), days: 2 }); return `task:${si}:${s.tasks.length - 1}`; } },
+      // a section just added comes with a task named only "Task": typed into, not left behind another
+      { label: 'Add a task', icon: 'child', tab: true, run: () => {
+        if (s.tasks.length === 1 && s.tasks[0].name === 'Task') return `task:${si}:0`;
+        s.tasks.push({ name: 'Task', start: endOf(d), days: 2 }); return `task:${si}:${s.tasks.length - 1}`;
+      } },
       { label: 'Add a section after it', icon: 'plus', run: () => { d.sections.splice(si + 1, 0, { name: 'Section', tasks: [{ name: 'Task', start: endOf(d), days: 2 }] }); return `phase:${si + 1}`; } },
       { label: 'Move up', icon: 'up', off: si === 0, run: () => (move(d.sections, si, -1) ? `phase:${si - 1}` : null) },
       { label: 'Move down', icon: 'down', off: si === d.sections.length - 1, run: () => (move(d.sections, si, 1) ? `phase:${si + 1}` : null) },
@@ -180,13 +195,30 @@ function ganttSpot(d: Gantt, key: string): Spot | null {
     fields,
     acts: [
       // the next one starts when this one ends
-      { label: 'Add a task after it', icon: 'plus', tab: true, run: () => { s.tasks.splice(ti + 1, 0, { name: 'Task', start: '', after: '', days: 2 }); return `task:${si}:${ti + 1}`; } },
+      // and what started after it starts after the new one, not at the same time
+      { label: 'Add a task after it', icon: 'plus', tab: true, run: () => {
+        const all = d.sections.flatMap((y) => y.tasks), next: Task = { name: 'Task', start: '', after: '', days: 2 };
+        if (t.id) {
+          const waiting = all.filter((x) => x.after?.split(' ').includes(t.id!));
+          if (waiting.length) {
+            // after it by name: an id and the length alone would be read as a start date
+            next.id = freshId('t', all.filter((y) => y.id).map((y) => ({ id: y.id! })));
+            next.after = t.id;
+            for (const x of waiting) x.after = x.after!.split(' ').map((id) => (id === t.id ? next.id! : id)).join(' ');
+          }
+        }
+        s.tasks.splice(ti + 1, 0, next); return `task:${si}:${ti + 1}`;
+      } },
       { label: 'Move up', icon: 'up', off: ti === 0, run: () => (move(s.tasks, ti, -1) ? `task:${si}:${ti - 1}` : null) },
       { label: 'Move down', icon: 'down', off: ti === s.tasks.length - 1, run: () => (move(s.tasks, ti, 1) ? `task:${si}:${ti + 1}` : null) },
       { label: 'Delete', icon: 'trash', run: () => {
+        const was = ganttDates(d), flat = d.sections.flatMap((y) => y.tasks), at = flat.indexOf(t);
         const [gone] = s.tasks.splice(ti, 1);
-        // what started after it starts where it did instead
-        if (gone.id) for (const x of d.sections.flatMap((y) => y.tasks)) if (x.after?.split(' ').includes(gone.id)) { x.after = x.after.split(' ').filter((id) => id !== gone.id).join(' '); if (!x.after) { x.start = gone.start || endOf(d); delete x.after; } }
+        // the one that came next after it (no start of its own, in this section or the next) keeps its days too
+        const next = flat[at + 1];
+        if (next?.after === '') { next.start = was.get(next)!.start; delete next.after; }
+        // what started after it keeps the day it started on (it moved to the day the one deleted started)
+        if (gone.id) for (const x of d.sections.flatMap((y) => y.tasks)) if (x.after?.split(' ').includes(gone.id)) { x.after = x.after.split(' ').filter((id) => id !== gone.id).join(' '); if (!x.after) { x.start = was.get(x)?.start || endOf(d); delete x.after; } }
       } },
     ],
   };
@@ -289,7 +321,9 @@ function seqSpot(s: Sequence, key: string): Spot | null {
   };
   if ('note' in st) return {
     text: st.text, label: 'Note', set: (v) => { st.text = v; },
-    fields: [],
+    fields: [{ kind: 'select', label: 'Where', value: `${st.note}|${st.who.join(',')}`, options: noteOptions(s, st), set: (v) => {
+      const [at, who] = v.split('|'); st.note = at as typeof st.note; st.who = who.split(',');
+    } }],
     acts: [{ label: 'Add a message after it', icon: 'plus', tab: true, run: () => addMessage(s, i + 1) }, ...moves, del],
   };
   if ('block' in st && st.block !== 'end') {
@@ -314,8 +348,8 @@ function classSpot(c: ClassDiagram, key: string): Spot | null {
       text: l.label, label: 'Line label', set: (v) => { l.label = v; },
       fields: [
         { kind: 'select', label: 'Kind', value: l.arrow, options: arrowOptions(l.arrow), set: (v) => { l.arrow = v; } },
-        { kind: 'text', label: `How many “${l.from}”`, value: l.fromCard, set: (v) => { l.fromCard = v; } },
-        { kind: 'text', label: `How many “${l.to}”`, value: l.toCard, set: (v) => { l.toCard = v; } },
+        { kind: 'text', label: `How many “${nameOf(c.classes, l.from)}”`, value: l.fromCard, set: (v) => { l.fromCard = v; } },
+        { kind: 'text', label: `How many “${nameOf(c.classes, l.to)}”`, value: l.toCard, set: (v) => { l.toCard = v; } },
       ],
       acts: [{ label: 'Delete the line', icon: 'trash', run: () => { c.links.splice(i, 1); } }],
     };
@@ -326,7 +360,7 @@ function classSpot(c: ClassDiagram, key: string): Spot | null {
     text: cl.name, label: 'Class', onDone: true, set: (v) => { rename(c.classes, c.links, cl, v, NAME_ID); return `class:${cl.id}`; },
     fields: [
       { kind: 'lines', label: 'Members', value: cl.members.join('\n'), set: (v) => { cl.members = v.split('\n').map((x) => x.trim()).filter(Boolean); } },
-      linkTo(c.classes, cl.id, (to) => c.links.push({ from: cl.id, to, arrow: '-->', label: '', fromCard: '', toCard: '' })),
+      ...linkTo(c.classes, cl.id, c.links, (to) => c.links.push({ from: cl.id, to, arrow: '-->', label: '', fromCard: '', toCard: '' })),
     ],
     acts: [
       { label: 'Add a class linked to it', icon: 'plus', tab: true, run: () => { const id = freshId('Class', c.classes); c.classes.push({ id, name: id, members: [] }); c.links.push({ from: cl.id, to: id, arrow: '-->', label: '', fromCard: '', toCard: '' }); return `class:${id}`; } },
@@ -334,9 +368,12 @@ function classSpot(c: ClassDiagram, key: string): Spot | null {
     ],
   };
 }
-const linkTo = (all: { id: string; name: string }[], self: string, add: (to: string) => void): Field => ({
-  kind: 'select', label: 'Draw a line to', value: '', options: [['', '→ Line to…'], ...options(all.filter((x) => x.id !== self))], set: (v) => { if (v) add(v); },
-});
+/** a new line from it to another: not to one it has a line to already (a second, unlabelled, could not be clicked) */
+/** (none where it has a line to each of them: a list of nothing to pick) */
+const linkTo = (all: { id: string; name: string }[], self: string, lines: { from: string; to: string }[], add: (to: string) => void): Field[] => {
+  const free = all.filter((x) => x.id !== self && !lines.some((l) => (l.from === self && l.to === x.id) || (l.to === self && l.from === x.id)));
+  return free.length ? [{ kind: 'select', label: 'Draw a line to', value: '', options: [['', '→ Line to…'], ...options(free)], set: (v) => { if (v) add(v); } }] : [];
+};
 
 function stateSpot(s: StateDiagram, key: string): Spot | null {
   const [k, n] = at(key);
@@ -351,7 +388,7 @@ function stateSpot(s: StateDiagram, key: string): Spot | null {
   if (!st.kind) fields.push({ kind: 'text', label: 'Description', value: st.desc, set: (v) => { st.desc = v; } });
   fields.push({ kind: 'select', label: 'Kind', value: st.kind ?? 'state', options: STATE_KINDS, set: (v) => { if (v === 'state') delete st.kind; else st.kind = v as 'choice'; } });
   fields.push({ kind: 'select', label: 'Inside', value: st.parent ?? '', options: insideOptions(s, st), set: (v) => { if (v) st.parent = v; else delete st.parent; } });
-  fields.push(linkTo(s.states, st.id, (to) => s.links.push({ from: st.id, to, label: '' })));
+  fields.push(...linkTo(s.states, st.id, s.links, (to) => s.links.push({ from: st.id, to, label: '' })));
   return {
     text: st.name, label: 'State', onDone: true, set: (v) => { renameState(s, st, v); return `state:${st.id}`; },
     fields,
@@ -372,8 +409,8 @@ function erSpot(e: ErDiagram, key: string): Spot | null {
     return {
       text: l.label, label: 'Line label', set: (v) => { l.label = v; },
       fields: [
-        { kind: 'select', label: `How many “${l.from}”`, value: l.left, options: LEFT, set: (v) => { l.left = v; } },
-        { kind: 'select', label: `How many “${l.to}”`, value: l.right, options: RIGHT, set: (v) => { l.right = v; } },
+        { kind: 'select', label: `How many “${nameOf(e.tables, l.from)}”`, value: l.left, options: LEFT, set: (v) => { l.left = v; } },
+        { kind: 'select', label: `How many “${nameOf(e.tables, l.to)}”`, value: l.right, options: RIGHT, set: (v) => { l.right = v; } },
       ],
       acts: [{ label: 'Delete the line', icon: 'trash', run: () => { e.links.splice(i, 1); } }],
     };
@@ -382,7 +419,7 @@ function erSpot(e: ErDiagram, key: string): Spot | null {
   if (!t) return null;
   if (k === 'table') return {
     text: t.name, label: 'Table', onDone: true, set: (v) => { rename(e.tables, e.links, t, v, TABLE_ID); return `table:${t.id}`; },
-    fields: [linkTo(e.tables, t.id, (to) => e.links.push({ from: t.id, to, left: '||', right: 'o{', dashed: false, label: '' }))],
+    fields: [...linkTo(e.tables, t.id, e.links, (to) => e.links.push({ from: t.id, to, left: '||', right: 'o{', dashed: false, label: '' }))],
     acts: [
       { label: 'Add a column', icon: 'child', tab: true, run: () => { t.columns.push({ type: 'string', name: 'column', keys: '', comment: '' }); return `col:${t.id}:${t.columns.length - 1}`; } },
       { label: 'Add a table linked to it', icon: 'plus', run: () => { const id = freshId('TABLE', e.tables); e.tables.push({ id, name: id, columns: [{ type: 'int', name: 'id', keys: 'PK', comment: '' }] }); e.links.push({ from: t.id, to: id, left: '||', right: 'o{', dashed: false, label: '' }); return `table:${id}`; } },
@@ -420,20 +457,41 @@ export function tagSpots(d: Diagram, root: Element) {
       if (id && !/^root_(start|end)$/.test(id) && !id.endsWith('_start') && !id.endsWith('_end')) g.setAttribute('data-spot', `${prefix}:${id}`);
     }
   };
-  // a line's label found by its words: the one line that says them
+  // a line's label found by its words; lines that say the same, in the order they are written and drawn
   const labels = (keyOf: (i: number) => string, said: string[]) => {
+    const seen = new Map<string, number>();
     for (const g of root.querySelectorAll('g.edgeLabel')) {
       const t = g.textContent?.trim();
-      const hits = t ? said.flatMap((x, i) => (x.trim() === t ? [i] : [])) : [];
-      if (hits.length === 1) g.setAttribute('data-spot', keyOf(hits[0]));
+      if (!t) continue;
+      const hits = said.flatMap((x, i) => (x.trim() === t ? [i] : [])), k = seen.get(t) ?? 0;
+      seen.set(t, k + 1);
+      if (hits[k] !== undefined) g.setAttribute('data-spot', keyOf(hits[k]));
+    }
+  };
+  /** drawn words matched to parts by what they say; parts that say the same, by where they are drawn (left to right,
+   *  top to bottom), as many as there are of them */
+  const byWords = (els: Element[], parts: { key: string; says: string }[], mark: (el: Element) => Element = (el) => el) => {
+    const where = (el: Element) => { const r = el.getBoundingClientRect(); return r.left * 1e-3 + r.top; };
+    const groups = new Map<string, Element[]>();
+    for (const el of els) { const t = el.textContent?.trim() ?? ''; groups.set(t, [...(groups.get(t) ?? []), el]); }
+    for (const [t, all] of groups) {
+      const same = parts.filter((p) => p.says === t);
+      if (!same.length) continue;
+      // each drawn as often (a person at the head and the foot): the n-th of each row the n-th of them
+      if (all.length % same.length) continue;
+      const sorted = same.length > 1 ? [...all].sort((a, b) => where(a) - where(b)) : all;
+      sorted.forEach((el, i) => mark(el).setAttribute('data-spot', same[i % same.length].key));
     }
   };
   if (d.kind === 'sequence') {
-    tag([...root.querySelectorAll('text.actor')].map((t) => t.parentElement!), d.people.map((p) => `person:${p.id}`));
+    // by the name each says, not by order: mermaid draws them last to first (and again along the foot)
+    byWords([...root.querySelectorAll('text.actor')], d.people.map((p) => ({ key: `person:${p.id}`, says: p.name.trim() || p.id })), (t) => t.parentElement!);
     const steps = d.messages.map((st, i) => [st, i] as const);
     tag([...root.querySelectorAll('text.messageText')], steps.filter(([st]) => isMessage(st)).map(([, i]) => `step:${i}`));
     tag([...root.querySelectorAll('text.noteText')].map((t) => t.parentElement!), steps.filter(([st]) => 'note' in st).map(([, i]) => `step:${i}`));
-    tag([...root.querySelectorAll('text.loopText')], steps.filter(([st]) => 'block' in st && st.block !== 'end').map(([, i]) => `step:${i}`));
+    // a group's words (an alt's "[cached]", its else's, an opt's): by what they say, as some are drawn apart
+    const groups = steps.filter(([st]) => 'block' in st && st.block !== 'end').map(([st, i]) => ({ key: `step:${i}`, says: `[${('text' in st ? String(st.text) : '').trim()}]` }));
+    byWords([...root.querySelectorAll('text')].filter((t) => /^\[.*\]$/.test(t.textContent?.trim() ?? '')), groups);
   } else if (d.kind === 'class') {
     byId('classId', 'class');
     labels((i) => `clink:${i}`, d.links.map((l) => l.label));
@@ -450,7 +508,10 @@ export function tagSpots(d: Diagram, root: Element) {
   } else if (d.kind === 'gantt' && !root.querySelector('[data-spot]')) {
     // mermaid's own Gantt (weekends skipped, settings kept as written): its tasks, in order
     const keys = d.sections.flatMap((s, si) => s.tasks.map((_, ti) => `task:${si}:${ti}`));
-    tag([...root.querySelectorAll('text.taskText')], keys);
+    // a task's name drawn on its bar, or beside it when the bar is short (taskTextOutsideRight), as well as the bar
+    tag([...root.querySelectorAll('text[class*="taskText"]')], keys);
     tag([...root.querySelectorAll('rect.task')], keys);
+    tag([...root.querySelectorAll('text.titleText')], d.title.trim() ? ['title'] : []);
+    tag([...root.querySelectorAll('text.sectionTitle')], d.sections.filter((x) => x.tasks.length).map((x) => `phase:${d.sections.indexOf(x)}`));
   }
 }

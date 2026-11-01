@@ -43,7 +43,7 @@ function pie(d: Pie) {
   }).join('');
   const top = parts.reduce((a, s) => (s.value > a.value ? s : a), parts[0]);
   const rows = d.slices.map((s, i) => {
-    const pct = total && s.value > 0 ? Math.round((s.value / total) * 1000) / 10 : 0;
+    const pct = total && s.value > 0 ? ((s.value / total) * 100).toFixed(1) : '0.0'; // one decimal on every row (8% beside 5.7%)
     return `<div class="row" data-spot="slice:${i}"><span class="dot c${i % 12}${i >= 12 ? ' deep' : ''}"></span><span class="lbl">${esc(s.label)}</span>`
       + `${d.showData ? `<span class="val">${fmt(s.value)}</span>` : ''}<span class="pct">${pct}%</span></div>`;
   }).join('');

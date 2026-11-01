@@ -137,7 +137,8 @@ export function mindSvg(d: Mindmap, minScale = 0.8): string {
   }
   const nodes = all.map((n) => {
     const l = look(n), cls = n.depth === 0 ? 'mm-root' : n.depth === 1 ? 'mm-l1' : underlined(n) ? 'mm-leaf' : 'mm-leaf shaped';
-    const top = n.y - n.h / 2 + l.py + l.line / 2;
+    // the words in the middle of the shape, however tall it is (a circle is as tall as it is wide)
+    const top = n.y - (n.lines.length * l.line) / 2 + l.line / 2;
     const cx = n.x + n.w / 2;
     const text = n.lines.map((s, i) => `<text x="${cx.toFixed(1)}" y="${(top + i * l.line).toFixed(1)}">${esc(s)}</text>`).join('');
     return `<g class="mm-node ${cls} c${n.hue}" data-spot="${n.spot}">${shapeOf(n)}${text}</g>`;

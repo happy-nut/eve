@@ -9,14 +9,19 @@
    * A choice among a few, drawn by the app instead of the platform: a popover under the button on the
    * desktop, a sheet from the bottom on a phone. Enter / Space opens it, ↑↓ move, Enter picks, Esc closes.
    */
-  let { value, options, onchange, label = '' }: {
+  let { value, options, onchange, onpicked, label = '' }: {
     value: string;
     options: readonly (readonly [string, string])[];
     onchange: (v: string) => void;
+    /** after any pick, the one it had included (where the keyboard goes next is the caller's) */
+    onpicked?: () => void;
     label?: string;
   } = $props();
 
   let open = $state(false);
+  // closed however it was (a pick, Esc, a click away): the caller's next keyboard place, as after a pick
+  let wasOpen = false;
+  $effect(() => { if (wasOpen && !open) onpicked?.(); wasOpen = open; });
   let at = $state(0); // the highlighted row while open
   let btn = $state<HTMLButtonElement | null>(null);
   let pos = $state({ left: 0, top: 0, maxHeight: 0, width: 0, up: false }); // up: over the button, no room under it

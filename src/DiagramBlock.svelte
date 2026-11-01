@@ -116,6 +116,7 @@
       onError(!!error);
     }, untrack(() => svg) ? 120 : 0); // read without depending on it: each drawing is a new string, and would draw again
   });
+  let centred = false;
   /** the drawing's block labels matched to their blocks, to fold by a click on them; false: a row of them under it */
   let labelled = $state(true);
   $effect(() => {
@@ -125,6 +126,12 @@
       const el = canvas?.querySelector(':scope > svg');
       if (el instanceof SVGSVGElement) spreadLabels(el); // a line's label off another's (edgeLabels.ts)
       if (d && canvas) tagSpots(d, canvas); // its parts marked, to be clicked and typed in (spots.ts)
+      // a mind map wider than the card shown from its middle, its root, the first time (from its left edge, the root
+      // was cut off on a phone)
+      if (d?.kind === 'mindmap' && canvas && !centred && canvas.scrollWidth > canvas.clientWidth) {
+        const r = canvas.querySelector('[data-spot="root"]');
+        if (r) { centred = true; canvas.scrollLeft += r.getBoundingClientRect().left + r.getBoundingClientRect().width / 2 - canvas.getBoundingClientRect().left - canvas.clientWidth / 2; }
+      }
       labelled = !list.some(foldable) || (!!el && markFolds(el, list, f));
     });
   });
@@ -207,6 +214,11 @@
       else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && (t === document.body || root.contains(t))) { e.preventDefault(); e.stopPropagation(); }
       else if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y')) && t === document.body) {
         e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y');
+      }
+      // a letter, ⌫ or ⌦ with no part of a chart picked: nothing (it went to the note, whose selection was the diagram
+      // itself, and the letter took its place)
+      else if (chart && t === document.body && !e.metaKey && !e.ctrlKey && !e.altKey && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete')) {
+        e.preventDefault(); e.stopPropagation();
       }
     };
     // (ahead of the note's own keymaps: its Esc and ⌘Z are the diagram's while it is open)
@@ -330,7 +342,8 @@
     tick().then(fit);
   }
   /** back into the note (✕, Esc, the phone's back) */
-  const leaveFull = () => ui.closeDiagramView();
+  // back in the note, the keyboard in it (left on <body>, ⌘Z there undid nothing)
+  const leaveFull = () => { ui.closeDiagramView(); if (!active) onLeave(); };
   /** the drawing's own size, before any zoom */
   function natural(): { el: HTMLElement | SVGSVGElement; w: number; h: number } | null {
     const el = canvas?.firstElementChild as HTMLElement | SVGSVGElement | null;
@@ -508,17 +521,18 @@
         <button class="ghost" onclick={() => flowEd?.addBox()}>+ Box</button>
         <button class="ghost" onclick={() => flowEd?.addLane()}>+ Lane</button>
       {:else if chart}
-        {#each adders(chart) as a (a.label)}<button class="ghost" onclick={() => chartEd?.open(a.run())}>{a.label}</button>{/each}
-        {#each toggles(chart) as t (t.label)}<button class="ghost" class:on={t.on} aria-pressed={t.on} onclick={() => t.set(!t.on)}>{t.on ? '✓ ' : ''}{t.label}</button>{/each}
+        {#each adders(chart) as a (a.label)}<button class="ghost" onmousedown={(e) => e.preventDefault()} onclick={() => chartEd?.open(a.run())}>{a.label}</button>{/each}
+        {#each toggles(chart) as t (t.label)}<button class="ghost" class:on={t.on} aria-pressed={t.on} onmousedown={(e) => e.preventDefault()} onclick={() => (chartEd ? chartEd.kept(() => t.set(!t.on)) : t.set(!t.on))}>{t.on ? '✓ ' : ''}{t.label}</button>{/each}
         <button class="ghost" class:on={rows} aria-pressed={rows} title="Every part as a row under the chart" onclick={() => (rows = !rows)}>{rows ? 'Hide list' : 'List'}</button>
       {/if}
       <span class="grow"></span>
+      <!-- the diagram itself deleted (⌘Z brings it back): the keys could not reach it, and its code was the only way; kept
+        away from Done, where a slip on a phone deleted it -->
+      <button class="ghost icon" aria-label="Delete diagram" title="Delete diagram" onclick={() => { flush(); active = false; onDelete(true); }}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
       <!-- undo where there is no keyboard: a phone's bar with ↶ went with the keyboard as a box was picked -->
       <button class="ghost icon" aria-label="Undo" title="Undo (⌘Z)" onclick={() => { flush(); onHistory(false); }}><svg viewBox="0 0 16 16"><path d="M5.5 4 2.5 7l3 3M2.5 7h7a4 4 0 0 1 0 8H8" /></svg></button>
       <button class="ghost icon" aria-label="Redo" title="Redo (⇧⌘Z)" onclick={() => { flush(); onHistory(true); }}><svg viewBox="0 0 16 16"><path d="M10.5 4l3 3-3 3M13.5 7h-7a4 4 0 0 0 0 8H8" /></svg></button>
       <button class="ghost" onclick={() => { active = false; onCodeEdit(); }}>Code</button>
-      <!-- the diagram itself deleted (⌘Z brings it back): the keys could not reach it, and its code was the only way -->
-      <button class="ghost icon" aria-label="Delete diagram" title="Delete diagram" onclick={() => { flush(); active = false; onDelete(true); }}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
       <button class="done" onclick={leave}>Done</button>
     </div>
     {#if flow}

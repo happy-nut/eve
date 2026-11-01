@@ -115,9 +115,19 @@ export const endOf = (g: Gantt) => {
 };
 /** when a task starts: on its date, when the one before it ends, or when another (picked here) does */
 export const startOf = (t: Task) => (t.after === undefined ? 'date' : t.after === '' ? 'prev' : `after ${t.after}`);
+/** a task that starts, one way or another, only once `t` ends: one `t` cannot start after (a loop) */
+function waitsFor(all: Task[], x: Task, t: Task, seen = new Set<Task>()): boolean {
+  if (x === t) return true;
+  if (seen.has(x) || x.after === undefined) return false;
+  seen.add(x);
+  const before = x.after === '' ? [all[all.indexOf(x) - 1]] : x.after.split(' ').map((id) => all.find((y) => y.id === id));
+  return before.some((y) => !!y && waitsFor(all, y, t, seen));
+}
 export function startOptions(g: Gantt, t: Task) {
-  const others = g.sections.flatMap((s) => s.tasks).map((x, k) => [x, k] as const).filter(([x]) => x !== t);
-  const opts: [string, string][] = [['date', 'On a date'], ['prev', 'After the one before'],
+  const all = g.sections.flatMap((s) => s.tasks);
+  const others = all.map((x, k) => [x, k] as const).filter(([x]) => x !== t && !waitsFor(all, x, t));
+  // the first has none before it (picked, it moved to the chart's first day)
+  const opts: [string, string][] = [['date', 'On a date'], ...(all[0] === t ? [] : [['prev', 'After the one before'] as [string, string]]),
     ...others.map(([x, k]) => [x.id ? `after ${x.id}` : `task ${k}`, `After “${x.name.trim() || 'Task'}”`] as [string, string])];
   // after more than one: their names
   if (!opts.some(([v]) => v === startOf(t))) opts.push([startOf(t), `After ${t.after!.split(' ').map((id) => `“${taskName(g, id)}”`).join(' and ')}`]);
@@ -190,7 +200,10 @@ export const STATE_KINDS: [string, string][] = [['state', 'State'], ['choice', '
 /** the states it can be put in: not itself, nor one inside it (it would hold itself), nor a choice or a bar */
 export function insideOptions(s: StateDiagram, st: StateBox) {
   const under = (x: StateBox): boolean => { for (let p = stateParent(s, x); p; p = stateParent(s, s.states.find((y) => y.id === p)!)) if (p === st.id) return true; return false; };
-  return [['', 'Not inside one'] as [string, string], ...s.states.filter((x) => x !== st && !x.kind && !under(x)).map((x) => [x.id, `In “${x.name.trim() || x.id}”`] as [string, string])];
+  // not one it has a line with (mermaid fails on a line between a state and the one around it), nor one with a
+  // description (a state of states draws none: it was lost)
+  const joined = (x: StateBox) => s.links.some((l) => (l.from === x.id && l.to === st.id) || (l.to === x.id && l.from === st.id));
+  return [['', 'Not inside one'] as [string, string], ...s.states.filter((x) => x !== st && !x.kind && !under(x) && (x.id === st.parent || (!joined(x) && !x.desc.trim()))).map((x) => [x.id, `In “${x.name.trim() || x.id}”`] as [string, string])];
 }
 /** a state renamed: the states in it follow it, as its lines do */
 export function renameState(s: StateDiagram, st: StateBox, name: string) {

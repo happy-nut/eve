@@ -393,7 +393,11 @@ export const replies = (arrow: string) => arrow.replace(/^<</, '').startsWith('-
 function seqCode(d: Sequence) {
   const lines = ['sequenceDiagram'];
   if (d.numbered) lines.push('  autonumber');
-  for (const p of d.people) lines.push(`  ${p.actor ? 'actor' : 'participant'} ${p.id} as ${ent(one(p.name) || p.id, ';#')}`);
+  for (const p of d.people) {
+    const name = ent(one(p.name) || p.id, ';#');
+    // no alias where it would only say the id again (`participant Web as Web`)
+    lines.push(`  ${p.actor ? 'actor' : 'participant'} ${p.id}${name === p.id ? '' : ` as ${name}`}`);
+  }
   const ids = new Set(d.people.map((p) => p.id));
   let depth = 1; // a group's lines indented under it
   const pad = (n: number) => '  '.repeat(Math.max(1, n));
@@ -567,13 +571,17 @@ export function ganttDates(d: Gantt): Map<Task, { start: string; days: number }>
   const first = all.filter((t) => t.after === undefined).map((t) => t.start).sort()[0] ?? iso(new Date());
   const byId = new Map(all.filter((t) => t.id).map((t) => [t.id!, t]));
   const end = (t: Task | undefined) => { const r = t && out.get(t); return r ? addDays(r.start, r.days) : null; };
-  let prev: Task | undefined;
-  for (const t of all) {
-    const start = t.after === undefined ? t.start
-      : t.after === '' ? end(prev) ?? first
-      : t.after.split(' ').map((id) => end(byId.get(id))).filter((x): x is string => !!x).sort().pop() ?? first;
-    out.set(t, { start, days: t.days });
-    prev = t;
+  // again until nothing moves: a task after one listed below it had only the chart's first day, read in one pass
+  for (let pass = 0; pass <= all.length; pass++) {
+    let moved = false, prev: Task | undefined;
+    for (const t of all) {
+      const start = t.after === undefined ? t.start
+        : t.after === '' ? end(prev) ?? first
+        : t.after.split(' ').map((id) => end(byId.get(id))).filter((x): x is string => !!x).sort().pop() ?? first;
+      if (out.get(t)?.start !== start) { out.set(t, { start, days: t.days }); moved = true; }
+      prev = t;
+    }
+    if (!moved) break;
   }
   return out;
 }
@@ -585,7 +593,8 @@ function ganttCode(d: Gantt) {
   if (spans.length && !(d.extra ?? []).some((x) => /^(tickInterval|axisFormat)\b/i.test(x))) {
     const from = spans.map((t) => t.start).sort()[0], to = spans.map((t) => addDays(t.start, t.days)).sort().pop()!;
     const span = (Date.parse(to) - Date.parse(from)) / 864e5;
-    lines.push(span <= 16 ? '  tickInterval 1day' : span <= 120 ? '  tickInterval 1week' : '  tickInterval 1month');
+    // (a day's ticks for a week at most: a fortnight's, its dates drawn small, ran into one another)
+    lines.push(span <= 8 ? '  tickInterval 1day' : span <= 120 ? '  tickInterval 1week' : '  tickInterval 1month');
     if (span > 120) lines.push('  axisFormat %Y-%m');
   }
   if (one(d.title)) lines.push(`  title ${ent(one(d.title), '#;')}`);
@@ -686,7 +695,8 @@ function classCode(d: ClassDiagram) {
       lines.push(`  class ${c.id}["${one(c.name).replace(/"/g, "'")}"]`);
       for (const m of members) lines.push(`  ${c.id} : ${m}`);
     } else if (members.length) lines.push(`  class ${c.id} {`, ...members.map((m) => `    ${m}`), '  }');
-    else if (c.decl) lines.push(`  class ${c.id}`);
+    // a class with nothing else to say is written on a line of its own: unwritten, one just added was lost
+    else if (c.decl || !d.links.some((l) => l.from === c.id || l.to === c.id)) lines.push(`  class ${c.id}`);
   }
   const ids = new Set(d.classes.map((c) => c.id));
   const card = (s: string) => one(s).replace(/"/g, '');
@@ -749,6 +759,7 @@ const STATE_LINK = new RegExp(String.raw`^(${STATE_END})\s*-->\s*(${STATE_END})\
 const STATE_DESC = new RegExp(String.raw`^(${STATE_ID})\s*:\s*(.+)$`, 'u');
 const STATE_KIND = new RegExp(String.raw`^state\s+(${STATE_ID})\s+<<(choice|fork|join)>>$`, 'u');
 const STATE_INSIDE = new RegExp(String.raw`^state\s+(${STATE_ID})\s*\{$`, 'u');
+const STATE_ALONE = new RegExp(String.raw`^${STATE_ID}$`, 'u');
 const STATE_NOTE = new RegExp(String.raw`^note\s+(left|right)\s+of\s+(${STATE_ID})\s*:\s*(.+)$`, 'iu');
 /** the state of states a state is in: none when it names no state, or one inside the state itself */
 export function stateParent(d: StateDiagram, st: StateBox): string | undefined {
@@ -781,6 +792,9 @@ function stateCode(d: StateDiagram) {
       if (st.kind) lines.push(`${pad}state ${st.id} <<${st.kind}>>`);
       else if (one(st.name) && (one(st.name) !== st.id || desc.length)) lines.push(`${pad}state "${one(st.name).replace(/"/g, "'")}" as ${st.id}`);
       else if (st.decl) lines.push(`${pad}state ${st.id}`);
+      // a state with nothing else to say and on no line (one just added): its id alone, which mermaid draws (it
+      // leaves out a `state X` with nothing after it)
+      else if (!desc.length && !kids && !d.links.some((l) => l.from === st.id || l.to === st.id)) lines.push(`${pad}${st.id}`);
       for (const x of desc) lines.push(`${pad}${st.id} : ${x}`);
       if (kids) {
         lines.push(`${pad}state ${st.id} {`);
@@ -806,7 +820,7 @@ function stateRead(lines: string[], v2: boolean): StateDiagram | null {
   // what a state of states holds, each line one the rows show (anything else, a -- between parts at once, and the whole
   // of it is kept as written)
   const rowsOnly = (from: number, to: number) => all.slice(from, to).every((x) => !x || x === '}' || STATE_NAMED.test(x) || STATE_BARE.test(x)
-    || STATE_KIND.test(x) || STATE_INSIDE.test(x) || STATE_LINK.test(x) || STATE_DESC.test(x) || STATE_NOTE.test(x));
+    || STATE_KIND.test(x) || STATE_INSIDE.test(x) || STATE_LINK.test(x) || STATE_DESC.test(x) || STATE_NOTE.test(x) || STATE_ALONE.test(x));
   const read = (from: number, to: number, parent: string | undefined): boolean => {
     const within = (st: StateBox) => { if (parent && st.parent === undefined && st.id !== parent) st.parent = parent; return st; };
     for (let i = from; i < to; i++) {
@@ -830,6 +844,7 @@ function stateRead(lines: string[], v2: boolean): StateDiagram | null {
       }
       const note = STATE_NOTE.exec(line);
       if (note) { within(box(note[2])).note = { side: note[1].toLowerCase() as 'left', text: note[3].trim() }; continue; }
+      if (STATE_ALONE.test(line)) { within(box(line)); continue; }
       const desc = STATE_DESC.exec(line);
       if (desc) { const st = within(box(desc[1])); st.desc = st.desc ? `${st.desc}\n${desc[2].trim()}` : desc[2].trim(); continue; }
       const inside = STATE_INSIDE.exec(line);
