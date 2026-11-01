@@ -389,6 +389,7 @@ try {
   // ---- a pie: its parts as rows under it, in the note ----
   page = await open('# Week\n\nx\n');
   await slash(page, 'pie');
+  await page.locator('.tiptap .dblock.active .tools button', { hasText: 'List' }).click(); // every part as a row
   await page.waitForSelector('.tiptap .dblock.active .p-slice');
   await page.locator('.tiptap .p-slice input.label').first().fill('Writing <b>&');
   await page.locator('.tiptap .p-slice input.num').first().fill('70');
@@ -410,6 +411,7 @@ try {
   // ---- a Gantt chart's date emptied: the last one stays ----
   page = await open('# G\n\nx\n');
   await slash(page, 'gantt');
+  await page.locator('.tiptap .dblock.active .tools button', { hasText: 'List' }).click(); // every part as a row
   await page.waitForSelector('.tiptap .dblock.active .g-task');
   await page.locator('.tiptap .g-task input.date').first().fill('');
   await page.locator('.tiptap .g-phase .add').first().click();
@@ -433,12 +435,12 @@ try {
   await page.close();
 
   // ---- written by hand: opens as its code ----
-  page = await open('# Plan\n\n```mermaid\nmindmap\n  root((R))\n    A\n    B[Square]\n```\n');
+  page = await open('# Plan\n\n```mermaid\nmindmap\n  root((R))\n    A\n    ::icon(fa fa-book)\n```\n');
   await page.waitForSelector('.tiptap .mermaid-view svg');
   await page.locator('.tiptap .mermaid-view').click();
   await page.waitForSelector('.tiptap .code-block.editing');
   assert.equal(await page.locator('.tiptap .dblock.active').count(), 0);
-  assert.match(await page.locator('.tiptap .codebar').textContent(), /B\[Square\].*can't show/s, 'it says why: the line it cannot show');
+  assert.match(await page.locator('.tiptap .codebar').textContent(), /::icon\(fa fa-book\).*can't show/s, 'it says why: the line it cannot show');
   await page.locator('.tiptap .codebar .done').click();
   await page.waitForFunction(() => !document.querySelector('.tiptap .code-block.editing'));
   console.log('ok   hand-written: opens as code, saying why; Done leaves it');

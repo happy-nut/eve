@@ -15,7 +15,7 @@ import type { Flowchart, FlowNode } from './diagram';
 const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif";
 let ctx: CanvasRenderingContext2D | null | undefined;
 /** a text's width at that size: the page's own measure, or a fair guess where there is no page (tests) */
-function textW(s: string, size: number, weight = 400): number {
+export function textW(s: string, size: number, weight = 400): number {
   if (ctx === undefined) {
     try { ctx = typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null; } catch { ctx = null; }
   }
@@ -25,7 +25,7 @@ function textW(s: string, size: number, weight = 400): number {
   return w;
 }
 /** a label in lines no wider than `max` (at spaces; a word longer than a line keeps its line) */
-function wrap(s: string, max: number, size: number, weight = 400): string[] {
+export function wrap(s: string, max: number, size: number, weight = 400): string[] {
   const words = s.trim().split(/\s+/).filter(Boolean);
   if (!words.length) return [''];
   const out: string[] = [];
