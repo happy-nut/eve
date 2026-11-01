@@ -520,12 +520,13 @@
         <button class="ghost" class:on={rows} aria-pressed={rows} title="Every part as a row under the chart" onclick={() => (rows = !rows)}>{rows ? 'Hide list' : 'List'}</button>
       {/if}
       <span class="grow"></span>
+      <!-- the diagram itself deleted (⌘Z brings it back): the keys could not reach it, and its code was the only way; kept
+        away from Done, where a slip on a phone deleted it -->
+      <button class="ghost icon" aria-label="Delete diagram" title="Delete diagram" onclick={() => { flush(); active = false; onDelete(true); }}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
       <!-- undo where there is no keyboard: a phone's bar with ↶ went with the keyboard as a box was picked -->
       <button class="ghost icon" aria-label="Undo" title="Undo (⌘Z)" onclick={() => { flush(); onHistory(false); }}><svg viewBox="0 0 16 16"><path d="M5.5 4 2.5 7l3 3M2.5 7h7a4 4 0 0 1 0 8H8" /></svg></button>
       <button class="ghost icon" aria-label="Redo" title="Redo (⇧⌘Z)" onclick={() => { flush(); onHistory(true); }}><svg viewBox="0 0 16 16"><path d="M10.5 4l3 3-3 3M13.5 7h-7a4 4 0 0 0 0 8H8" /></svg></button>
       <button class="ghost" onclick={() => { active = false; onCodeEdit(); }}>Code</button>
-      <!-- the diagram itself deleted (⌘Z brings it back): the keys could not reach it, and its code was the only way -->
-      <button class="ghost icon" aria-label="Delete diagram" title="Delete diagram" onclick={() => { flush(); active = false; onDelete(true); }}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
       <button class="done" onclick={leave}>Done</button>
     </div>
     {#if flow}
