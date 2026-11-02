@@ -38,7 +38,7 @@ try {
   assert.ok(v.box[2] - v.box[0] > 0.85 * 1280, `the slide the window's width, as a slide is (${v.box})`);
   // the cover's title a cover's size, well over a heading's on the slides after it
   const cover = await page.evaluate(() => { const s = document.querySelector('.present .slide'); return parseFloat(getComputedStyle(s.querySelector('h1')).fontSize) / parseFloat(getComputedStyle(s).fontSize); });
-  assert.ok(cover >= 2.6, `the cover's title big (${cover.toFixed(2)}× the slide's words)`);
+  assert.ok(cover >= 2 && cover <= 2.4, `the cover's title a cover's, not a shout (${cover.toFixed(2)}× the slide's words)`);
   // the whole screen, from its button or F, and back
   const full = () => page.evaluate(() => !!document.fullscreenElement);
   await page.click('.present .whole');
@@ -77,6 +77,8 @@ try {
   await press('ArrowRight');
   v = await look();
   assert.deepEqual([v.h, v.tall, v.scrolled], ['Long', true, 0], 'one slide, taller than the screen, from its top');
+  const pinned = () => page.evaluate(() => { const p = document.querySelector('.present .pinned'); return p && getComputedStyle(p).opacity !== '0' ? p.textContent.replace(/\s+/g, ' ').trim() : ''; });
+  assert.equal(await pinned(), '', 'its heading in sight: no header over it');
   const counted = await count();
   let scrolls = 0;
   for (let last = -1; scrolls < 20; scrolls++) {
@@ -86,6 +88,8 @@ try {
     if (v.scrolled === last || (await page.locator('.present .end').count())) break;
     last = v.scrolled;
     assert.equal(await count(), counted, 'still the same slide while it scrolls');
+    // its heading scrolled away, a header says which section this is, over the top of the words
+    if (v.scrolled > 200) assert.equal(await pinned(), 'Long', `scrolled ${v.scrolled}px, the section's heading pinned at the top`);
   }
   assert.ok(scrolls >= 2, `scrolled through, a screen a press (${scrolls})`);
   if (await page.locator('.present .end').count()) await press('ArrowLeft'); // (the press past its foot was the end's)
