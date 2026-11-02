@@ -1,5 +1,6 @@
 /** Theme + editor typography, applied on <html> (data-theme and CSS variables). Persisted locally. */
 import { setWindowSize, isMobile, paintGround } from './platform';
+import codeThemes from './codeThemes.json';
 const LS = 'eve.appearance';
 
 export const FONTS: { id: string; label: string; stack: string }[] = [
@@ -16,6 +17,15 @@ export type Theme = (typeof THEMES)[number][0];
 /** how a presentation turns its page (Settings → Appearance → Presenting) */
 export const SLIDE_TURNS = [['push', 'Slide'], ['fade', 'Fade'], ['zoom', 'Zoom'], ['none', 'None']] as const;
 export type SlideTurn = (typeof SLIDE_TURNS)[number][0];
+/** the colours code is written in (Settings → Appearance → Code): each a light and a dark set, all read on a code block
+ *  at 4.5:1 (contrast.test.mjs); Eve's own is app.css's --hl-* */
+export const CODE_THEMES = Object.entries(codeThemes).map(([id, t]) => [id, t.name] as const);
+const HL = ['key', 'str', 'num', 'fn', 'var'] as const;
+/** each --hl-* a theme sets on the page, both its sets so light and dark still follow; null: app.css's own (Eve's) */
+export function codeColors(id: string): Record<string, string | null> {
+  const t = (codeThemes as Record<string, { light: Record<string, string>; dark: Record<string, string> }>)[id];
+  return Object.fromEntries(HL.map((k) => [`--hl-${k}`, t && id !== 'eve' ? `light-dark(${t.light[k]}, ${t.dark[k]})` : null]));
+}
 
 interface Appearance {
   theme: Theme; font: string; custom: string; size: number; lineHeight: number; width: number;
@@ -46,6 +56,8 @@ interface Appearance {
   winW: number; winH: number;
   /** a presentation's page turn, and whether a slide's lines come in one after another as it is put up */
   slideTurn: SlideTurn; slideBuild: boolean;
+  /** a CODE_THEMES id */
+  codeTheme: string;
 }
 // the window's own defaults match tauri.conf.json, so a fresh install never resizes on launch
 // A phone starts from bigger type. Appearance lives in this device's localStorage and never syncs, so a
@@ -54,7 +66,7 @@ interface Appearance {
 export const PASTELS = ['#fff1a8', '#c9f2d4', '#cfe3ff', '#ffd6e3', '#e5d8ff'];
 /** the note's text size, px: the Size slider's range, and where ⌘+ / ⌘- stop */
 export const SIZE_MIN = 12, SIZE_MAX = 28;
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832, slideTurn: 'push', slideBuild: true };
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832, slideTurn: 'push', slideBuild: true, codeTheme: 'eve' };
 
 function load(): Appearance {
   try {
@@ -89,8 +101,8 @@ class AppearanceStore {
   }
   /** Appearance's own Reset: how notes look (theme, type, text), not what the app does (daily notes, window…) */
   reset() {
-    const { theme, font, custom, size, lineHeight, width, zoom } = DEFAULTS;
-    this.set({ theme, font, custom, size, lineHeight, width, zoom });
+    const { theme, font, custom, size, lineHeight, width, zoom, codeTheme } = DEFAULTS;
+    this.set({ theme, font, custom, size, lineHeight, width, zoom, codeTheme });
   }
   /** call once; keeps <html> in sync */
   apply() {
@@ -102,6 +114,8 @@ class AppearanceStore {
       r.setProperty('--line-height', String(this.s.lineHeight));
       r.setProperty('--editor-width', `${this.widthPx}px`);
       r.setProperty('--hl-plain', this.s.highlights[0] ?? PASTELS[0]); // the ==plain== pen (app.css, .tiptap mark)
+      // code's colours: another theme's over app.css's own (Eve's)
+      for (const [k, v] of Object.entries(codeColors(this.s.codeTheme))) { if (v) r.setProperty(k, v); else r.removeProperty(k); }
       void paintGround();
     });
     // a theme that follows the system changes with it, and the window's ground with it

@@ -76,7 +76,7 @@
     return () => { gone = true; off?.(); };
   });
 
-  if (import.meta.env.DEV) Object.assign(window as any, { __notes: notes, __sync: sync });
+  if (import.meta.env.DEV) Object.assign(window as any, { __notes: notes, __sync: sync, __appearance: appearance });
   onMount(() => {
     // launched at login so the summon hotkey is always there (toggle in Settings), as this Eve
     void autostart.keep().catch(() => {});

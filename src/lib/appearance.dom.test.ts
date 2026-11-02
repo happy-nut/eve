@@ -44,3 +44,14 @@ test('⌘+ / ⌘- make the page wider and narrower with the text, as a browser z
   appearance.set({ size: 20 });
   expect(appearance.widthPx).toBe(800);
 });
+
+test("a code colour theme gives the page its code colours, both its sets; Eve's own leaves app.css's, and Reset goes back to it", async () => {
+  const { codeColors, CODE_THEMES } = await import('./appearance.svelte');
+  expect(codeColors('github')['--hl-key']).toBe('light-dark(#cf222e, #ff7b72)');
+  expect(Object.values(codeColors('eve')).every((v) => v === null)).toBe(true);
+  expect(Object.values(codeColors('gone')).every((v) => v === null)).toBe(true); // a theme no longer there: Eve's
+  expect(CODE_THEMES.length).toBeGreaterThan(3);
+  appearance.set({ codeTheme: 'dracula' });
+  appearance.reset();
+  expect(appearance.s.codeTheme).toBe('eve');
+});
