@@ -13,7 +13,7 @@
    * what the note will show. This is a layer over the preview: it reads where mermaid put each box (its node's id
    * holds the step's id; the lines come in the order they were written) and edits the chart, which draws again.
    *   a box: a click types in it, right there, the picture following the text; a bar over it sets its shape or deletes it
-   *   its +: a click adds the next step joined to it; dragged onto another box, it joins the two
+   *   its +: a click adds the next step joined to it; it, or the box itself, dragged onto another box joins the two
    *   a line: click selects it (its look, its label, the other way round, deleting)
    *   empty space: a double-click adds a box on its own
    *   keys: Tab adds the next step, Enter is done typing (and types again), ⌫ deletes a box not being typed in, Esc lets go,
@@ -43,7 +43,7 @@
   /** each lane's whole area, where a box dragged onto it goes */
   let laneAreas = $state<Box[]>([]);
   /** a box being dragged to another lane: where it is, the lane under it */
-  let moving = $state<{ id: string; x: number; y: number; lane: string | null } | null>(null);
+  let moving = $state<{ id: string; x: number; y: number; lane: string | null; onto: string | null } | null>(null);
   /** the click that ends a box's drag is not a click on what it ended over */
   let swallowClick = false;
   let laneEditing = $state<string | null>(null), laneText = $state('');
@@ -389,15 +389,17 @@
     const g = (e.target as Element).closest?.('g.node');
     hover = g ? nodeIdOf(g) : null;
   }
-  /** a box dragged onto another lane goes into it (a mouse: any box; a finger: the box picked, as a finger on any
-   *  other scrolls the picture) */
+  /** a box dragged onto another box joins the two, as its + does (the + alone was a small target to find); in
+   *  swimlanes, let go on a lane's empty space instead, it goes into that lane (a mouse: any box; a finger: the box
+   *  picked, as a finger on any other scrolls the picture) */
   function onBoxDown(e: PointerEvent) {
-    if (!flow.lanes?.length || e.button !== 0 || linking || drag || moving) return;
+    if (e.button !== 0 || linking || drag || moving) return;
     const g = (e.target as Element).closest('g.node');
     const id = g ? nodeIdOf(g) : null;
     if (!id || editing === id) return;
     const finger = e.pointerType !== 'mouse';
     if (finger && !(sel && 'node' in sel && sel.node === id)) return;
+    if (!flow.lanes?.length) return wireFrom(e, id, finger);
     const o = layer.getBoundingClientRect();
     const x0 = e.clientX, y0 = e.clientY;
     let started = false;
@@ -406,7 +408,9 @@
       if (!started && Math.hypot(cx - x0, cy - y0) < 8) return;
       if (!started) { started = true; if (editing) commitEdit(); hover = null; }
       const x = cx - o.left, y = cy - o.top;
-      moving = { id, x, y, lane: laneAt(x, y) };
+      // over another box it is joined to that box, not moved: the lane is not lit then, the box is
+      const over = boxAt(cx, cy), onto = over && over !== id ? over : null;
+      moving = { id, x, y, lane: onto ? null : laneAt(x, y), onto };
     };
     const end = (cancelled: boolean) => {
       off();
@@ -415,6 +419,7 @@
       if (!started) return;
       swallowClick = true;
       setTimeout(() => (swallowClick = false));
+      if (!cancelled && m?.onto) return join(id, m.onto);
       const n = flow.nodes.find((x) => x.id === id);
       if (!cancelled && m?.lane && n && n.lane !== m.lane) n.lane = m.lane;
       sel = { node: id };
@@ -434,6 +439,33 @@
     window.addEventListener('pointerup', pUp);
     window.addEventListener('pointercancel', pCancel);
     if (finger) window.addEventListener('touchmove', tMove, { passive: false });
+  }
+  /** a box dragged (no lanes): once it has moved, the line drawn from it as from its + */
+  function wireFrom(e: PointerEvent, id: string, finger: boolean) {
+    const x0 = e.clientX, y0 = e.clientY;
+    const pMove = (ev: PointerEvent) => {
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) return;
+      off();
+      if (editing) commitEdit();
+      wire(id, x0, y0, finger, null);
+      swallowClick = true; // the click its letting go makes is the drag's
+    };
+    const tMove = (ev: TouchEvent) => { if (ev.cancelable) ev.preventDefault(); };
+    const off = () => {
+      window.removeEventListener('pointermove', pMove);
+      window.removeEventListener('pointerup', off);
+      window.removeEventListener('pointercancel', off);
+      window.removeEventListener('touchmove', tMove);
+    };
+    window.addEventListener('pointermove', pMove);
+    window.addEventListener('pointerup', off);
+    window.addEventListener('pointercancel', off);
+    if (finger) window.addEventListener('touchmove', tMove, { passive: false });
+  }
+  /** the box under a point of the window */
+  function boxAt(cx: number, cy: number) {
+    const under = document.elementsFromPoint(cx, cy).find((el) => host.contains(el) && el.closest('g.node'));
+    return under ? nodeIdOf(under.closest('g.node')!) : null;
   }
   $effect(() => {
     host.addEventListener('pointerdown', onBoxDown);
@@ -459,14 +491,15 @@
     e.preventDefault();
     e.stopPropagation();
     if (editing) commitEdit(); // the box being typed in has its + too: its text is kept as it is
+    wire(from, e.clientX, e.clientY, false, () => addAfter(from));
+  }
+  /** a line drawn from `from` (from the window's point x0, y0) to where the pointer goes: let go on a box, the two are
+   *  joined; a click or let go on empty space, `alone` (the +'s: a new step after it) */
+  function wire(from: string, cx0: number, cy0: number, finger: boolean, alone: (() => void) | null) {
     const o = layer.getBoundingClientRect();
-    drag = { from, x0: e.clientX - o.left, y0: e.clientY - o.top, x: e.clientX - o.left, y: e.clientY - o.top, moved: false };
-    const boxAt = (cx: number, cy: number) => {
-      const under = document.elementsFromPoint(cx, cy).find((el) => host.contains(el) && el.closest('g.node'));
-      return under ? nodeIdOf(under.closest('g.node')!) : null;
-    };
+    drag = { from, x0: cx0 - o.left, y0: cy0 - o.top, x: cx0 - o.left, y: cy0 - o.top, moved: !alone };
     const card = () => host.getBoundingClientRect();
-    let lastX = e.clientX;
+    let lastX = cx0;
     // near the card's side the picture scrolls on under the drag, to a box past its edge
     const spin = setInterval(() => {
       if (!drag) return;
@@ -490,21 +523,26 @@
       const to = boxAt(cx, cy);
       const r = card();
       const outside = cx < r.left + 6 || cx > r.right - 6 || cy < r.top || cy > r.bottom;
+      if (!alone) setTimeout(() => (swallowClick = false));
       if (d.moved && !to && outside) return; // let go past the picture: nothing (it made a stray step there)
-      if (!d.moved || !to) addAfter(d.from); // a click, or let go on empty space: a new step after it
+      if (!d.moved || !to) alone?.(); // a click, or let go on empty space: a new step after it
       else join(d.from, to);
     };
     const pMove = (ev: PointerEvent) => move(ev.clientX, ev.clientY);
     const pUp = (ev: PointerEvent) => end(ev.clientX, ev.clientY);
     const pCancel = () => end(0, 0, true); // the gesture taken away: nothing is made of it, and the drag does not stick
+    // a finger's move is the line's, not the page's scroll
+    const tMove = (ev: TouchEvent) => { if (ev.cancelable) ev.preventDefault(); };
     const off = () => {
       window.removeEventListener('pointermove', pMove);
       window.removeEventListener('pointerup', pUp);
       window.removeEventListener('pointercancel', pCancel);
+      window.removeEventListener('touchmove', tMove);
     };
     window.addEventListener('pointermove', pMove);
     window.addEventListener('pointerup', pUp);
     window.addEventListener('pointercancel', pCancel);
+    if (finger) window.addEventListener('touchmove', tMove, { passive: false });
   }
 
   function onKey(e: KeyboardEvent) {
@@ -712,6 +750,8 @@
 
   {#if moving}
     {@const area = laneAreas.find((r) => r.id === moving?.lane)}
+    {@const onto = moving.onto ? boxOf(moving.onto) : null}
+    {#if onto}<div class="ring target" style:left={`${onto.x - 4}px`} style:top={`${onto.y - 4}px`} style:width={`${onto.w + 8}px`} style:height={`${onto.h + 8}px`}></div>{/if}
     {#if area}<div class="lane-drop" style:left={`${area.x}px`} style:top={`${area.y}px`} style:width={`${area.w}px`} style:height={`${area.h}px`}></div>{/if}
     <div class="ghost" style:left={`${moving.x}px`} style:top={`${moving.y}px`}>{flow.nodes.find((n) => n.id === moving?.id)?.label ?? ''}</div>
   {/if}
@@ -845,7 +885,7 @@
     position: absolute; translate: -50% -50%; padding: 6px 12px; border-radius: 10px; pointer-events: none; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis;
     font-size: 13px; background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 2px var(--accent), 0 6px 18px rgba(0, 0, 0, 0.2); opacity: 0.92;
   }
-  /* a box dragged to another lane: its text is not selected on the way */
-  :global(.dblock.active svg.lanes g.node) { user-select: none; -webkit-user-select: none; cursor: grab; }
+  /* a box dragged to another box or lane: its text is not selected on the way */
+  :global(.dblock.active .diagram-canvas g.node) { user-select: none; -webkit-user-select: none; cursor: grab; }
   :global(.builder .preview g.node) { cursor: pointer; }
 </style>

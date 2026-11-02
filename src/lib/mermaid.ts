@@ -80,10 +80,11 @@ function config(mode: 'light' | 'dark') {
          diamond) soft amber, a step plain white */
       g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) path { stroke: ${c.tintLine} !important; }
       g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) path:first-child { fill: ${c.tint} !important; }
-      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) .nodeLabel p { color: ${c.tintText}; font-weight: 600; }
+      g.node:has(> g.outer-path):has(> g.label):not(:has(> g.label.name)) .nodeLabel p { color: ${c.tintText}; }
       g.node:has(> polygon) polygon { fill: ${c.note}; stroke: ${c.noteLine}; stroke-width: 1px; }
       g.node:has(> circle) circle { fill: ${c.tint}; stroke: ${c.tintLine}; stroke-width: 1px; }
-      g.node:has(> circle) .nodeLabel p { color: ${c.tintText}; font-weight: 600; }
+      /* the colour only, not bolder: its box was measured for the words at their weight, bolder ran past it and was cut */
+      g.node:has(> circle) .nodeLabel p { color: ${c.tintText}; }
       .nodeLabel, .nodeLabel p { color: ${c.fg}; }
       .cluster rect { fill: ${c.canvas} !important; stroke: ${c.border} !important; stroke-dasharray: 0; }
       .cluster-label .nodeLabel, .cluster-label .nodeLabel p { color: ${c.dim}; font-size: 12px; }

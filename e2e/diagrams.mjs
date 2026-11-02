@@ -1,5 +1,5 @@
 // Diagrams edited in the note itself (DiagramBlock.svelte): `/flowchart` puts one in and opens it; a box is typed in
-// where it is drawn, its + adds a step or, dragged onto another box, joins them; a line's bar styles it; a click
+// where it is drawn, its + adds a step or, dragged onto another box, joins them (the box itself dragged too); a line's bar styles it; a click
 // elsewhere is done, and the note keeps mermaid code; ⌘Z undoes into the drawing. A pie's parts are rows under it.
 // A diagram written by hand with more than these show opens as its code. ⤢ puts the block on the whole screen, where
 // it zooms, pans and is edited as in the note.
@@ -77,6 +77,19 @@ try {
   assert.ok(field.width >= 140 && field.height >= 34, `the label's field has room for words and its second line (${Math.round(field.width)}×${Math.round(field.height)})`);
   await page.keyboard.press('Enter');
   await settle(page);
+  // the box itself dragged onto another joins them too: the + was a small thing to find and hold
+  {
+    const from = await boxAt(page, 'Draft'), to = await boxAt(page, 'Done');
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 10 });
+    assert.equal(await page.locator('.layer svg.wire').count(), 1, 'a line follows the box dragged');
+    await page.mouse.up();
+    await page.waitForSelector('.layer .bar .edge-label');
+    await settle(page);
+    assert.match(await md(page), /n1 --> n3\n/, 'the box dragged onto Done is joined to it');
+    assert.equal(await page.locator('.tiptap input.rename').count(), 0, 'letting go types in nothing');
+  }
   at = await boxAt(page, 'Write');
   await page.mouse.click(at.x, at.y);
   await page.locator('.layer .bar button[aria-label="Database"]').click();
@@ -369,7 +382,8 @@ try {
   await page.mouse.move(at.x, at.y);
   await page.mouse.down();
   await page.mouse.move(at.x + 20, at.y + 10, { steps: 3 });
-  await page.mouse.move(lane1.x + lane1.width / 2, lane1.y + lane1.height - 20, { steps: 8 });
+  // over a box in it the box would be joined to that one (below): let go on the lane's empty side
+  await page.mouse.move(lane1.x + 14, lane1.y + lane1.height / 2, { steps: 8 });
   assert.equal(await page.locator('.layer .lane-drop').count(), 1, 'the lane under it shown');
   await page.mouse.up();
   await settle(page);
@@ -383,7 +397,22 @@ try {
   await page.keyboard.press('ArrowDown');
   const now = await picked();
   assert.ok(now && now !== was, `↓ picks another box (${was} → ${now})`);
-  console.log('ok   swimlanes: a box dragged onto another lane; the arrows go from box to box');
+  // let go on another box, it is joined to it and stays in its lane
+  {
+    const a = await laneBox('Pack'), b = await laneBox('Order');
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(a.x + 20, a.y + 10, { steps: 3 });
+    await page.mouse.move(b.x, b.y, { steps: 8 });
+    assert.equal(await page.locator('.layer .lane-drop').count(), 0, 'over a box, no lane lit');
+    assert.equal(await page.locator('.layer .ring.target').count(), 1, 'the box it goes to is ringed');
+    await page.mouse.up();
+    await settle(page);
+    text = await md(page);
+    assert.match(text, /n4 --> n1\n/, 'Pack dragged onto Order: joined');
+    assert.match(laneOf(text, 'L3'), /n4\("Pack"\)/, 'and still in Delivery');
+  }
+  console.log('ok   swimlanes: a box dragged onto another lane, or onto a box to join them; the arrows go from box to box');
   await page.close();
 
   // ---- a pie: its parts as rows under it, in the note ----

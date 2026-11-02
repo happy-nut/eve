@@ -11,7 +11,7 @@ const server = process.env.EVE_URL ? null : await (await import('vite')).createS
 const URL_ = process.env.EVE_URL ?? server.resolvedUrls.local[0];
 const browser = await webkit.launch();
 const problems = [];
-const BODY = '# Blocks\n\nA plain line of text.\n\n## A heading\n\n- a bullet\n- another\n\n1. one\n\n- [ ] to do\n\n> [!tip] A callout\n> its body\n\n| quote | it |\n| --- | --- |\n| a | b |\n\n```js\nlet a = 1\n```\n\nabove the rule\n\n---\n\n```mermaid\nflowchart LR\n  A[Start] --> B[End]\n```\n\nlast line\n';
+const BODY = '# Blocks\n\nA plain line of text.\n\n## A heading\n\n- a bullet\n- another\n\n1. one\n\n- [ ] to do\n\n> [!tip] A callout\n> its body\n\n| quote | it |\n| --- | --- |\n| a | b |\n\n```js\nlet a = 1\n```\n\nabove the rule\n\n---\n\n```mermaid\nflowchart LR\n  A([admin fe deploy]) --> B[End]\n```\n\nlast line\n';
 
 /** every top-level block in `scope` but the title, hovered, its handle measured against it */
 async function sweep(page, surface, scope) {
@@ -128,6 +128,28 @@ try {
     await page.evaluate((b) => { const pm = document.querySelector('.card-page .tiptap'); pm.editor.commands.setContent(b, true); }, BODY.replace('# Blocks', '# A day'));
     await page.waitForTimeout(500);
     await sweep(page, `${theme} day page`, '.card-page');
+    // a diagram on the whole screen from a day's page (a board's card the same): the window's, not the card's box
+    // pushed down and right, the half past the window's edge cut off
+    {
+      const chart = page.locator('.card-page .code-block.mermaid').first();
+      await chart.scrollIntoViewIfNeeded();
+      // a start's words (drawn bolder than they were measured) ran past their pill and were cut at its edge
+      const cut = await page.evaluate(() => [...document.querySelectorAll('.card-page .mermaid-view foreignObject')].filter((f) => { const p = f.querySelector('p, span'), r = document.createRange(); if (!p) return false; r.selectNodeContents(p); return r.getBoundingClientRect().width > f.getBoundingClientRect().width + 0.5; }).map((f) => f.textContent));
+      if (cut.length) problems.push(`${theme}: a diagram's words cut at their box's edge: ${JSON.stringify(cut)}`);
+      const card = await page.locator('.card-page').boundingBox();
+      await chart.hover();
+      await page.locator('.card-page .mermaid-expand').first().click({ force: true });
+      await page.waitForSelector('.dblock.full');
+      await page.waitForTimeout(300);
+      const r = await page.locator('.dblock.full').boundingBox(), v = page.viewportSize();
+      const moved = await page.locator('.card-page').boundingBox();
+      if (Math.abs(moved.x - card.x) > 1 || Math.abs(moved.y - card.y) > 1) problems.push(`${theme}: the day's page moves from ${Math.round(card.x)},${Math.round(card.y)} to ${Math.round(moved.x)},${Math.round(moved.y)} under a diagram on the whole screen`);
+      if (Math.abs(r.x) > 1 || Math.abs(r.y) > 1 || Math.abs(r.width - v.width) > 1 || Math.abs(r.height - v.height) > 1)
+        problems.push(`${theme}: a diagram on the whole screen from a day's page is at ${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}×${Math.round(r.height)}, not the window's ${v.width}×${v.height}`);
+      else console.log('ok   a diagram on the whole screen from a day\'s page fills the window');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+    }
     await page.keyboard.press('Escape');
     await page.close();
   }

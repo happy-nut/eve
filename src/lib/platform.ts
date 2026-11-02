@@ -35,7 +35,7 @@ export const storage = {
 };
 
 /** The Android home-screen widget, through `window.EveAndroid` (MainActivity.kt). A no-op anywhere else. */
-type Bridge = { takeIntent(): string; notesChanged(): void; showKeyboard(): void; account(repo: string, token: string, host: string): void; export(kind: string, title: string, body: string): void; pinWidget(noteId: string): boolean; widgetTop(): string; setReminder?(on: boolean, at: string, template: string): void; askNotify?(): void; widgetDaily?(on: boolean): void; installUpdate(url: string): void };
+type Bridge = { takeIntent(): string; notesChanged(): void; showKeyboard(): void; account(repo: string, token: string, host: string): void; export(kind: string, title: string, body: string): void; pinWidget(noteId: string): boolean; widgetTop(): string; setReminder?(on: boolean, at: string, template: string): void; askNotify?(): void; widgetDaily?(on: boolean): void; installUpdate(url: string): void; immersive?(on: boolean): void };
 // looked up on every call: on a cold start the activity can inject it after this module has run
 const android = () => (globalThis as { EveAndroid?: Bridge }).EveAndroid;
 let widgetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -456,7 +456,13 @@ export async function setWindowSize(width: number, height: number): Promise<void
 
 /** The Mac's window over the whole screen (a presentation), or back. True when it changed: one already on the whole
  *  screen is left there, and stays there after. */
+let immersed = false;
+/** the app's own whole screen (the Mac's window, a phone's bars hidden), where there is one */
+export const ownWholeScreen = () => desktop || !!android()?.immersive;
 export async function wholeScreen(on: boolean): Promise<boolean> {
+  // a phone: its status and navigation bars hidden (its webview has no fullscreen of its own: the page's was refused)
+  const a = android();
+  if (a?.immersive) { if (immersed === on) return false; a.immersive(on); immersed = on; return true; }
   if (!desktop) return false;
   const { getCurrentWindow } = await import('@tauri-apps/api/window');
   const w = getCurrentWindow();

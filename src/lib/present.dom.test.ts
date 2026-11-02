@@ -6,6 +6,7 @@ Element.prototype.animate ??= (() => ({ finished: Promise.resolve(), cancel() {}
 (SVGElement.prototype as any).getTotalLength ??= () => 100;
 import Present from '../Present.svelte';
 import { ui } from './ui.svelte';
+import { allowFocusLoss } from './focusWatch';
 
 const settle = async () => { for (let i = 0; i < 4; i++) { await new Promise((r) => setTimeout(r, 0)); flushSync(); await tick(); } };
 let app: ReturnType<typeof mount> | null = null;
@@ -62,4 +63,21 @@ test('→ walks the diagram a step at a time, then turns the page; ← goes back
   expect(ui.layers.count).toBe(0);
   await settle();
   expect(document.activeElement).toBe(page);
+});
+
+test('a phone: its status and navigation bars hidden while it is up (its webview has no fullscreen), shown again after', async () => {
+  const calls: boolean[] = [];
+  (globalThis as { EveAndroid?: unknown }).EveAndroid = { immersive: (on: boolean) => calls.push(on) };
+  try {
+    document.body.innerHTML = `<main><div class="tiptap" tabindex="0"><h1>Talk</h1><p>intro</p></div></main>`;
+    ui.openPresent(document.querySelector<HTMLElement>('.tiptap')!);
+    app = mount(Present, { target: document.body });
+    await settle();
+    expect(calls).toEqual([true]);
+    expect(document.querySelector('.present .whole')?.getAttribute('aria-label')).toBe('Exit full screen');
+    allowFocusLoss(); // taken down on its own here, with no note for the keyboard to go back to
+    unmount(app); app = null;
+    await settle();
+    expect(calls).toEqual([true, false]);
+  } finally { delete (globalThis as { EveAndroid?: unknown }).EveAndroid; }
 });
