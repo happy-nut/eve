@@ -46,8 +46,10 @@ test('→ walks the diagram a step at a time, then turns the page; ← goes back
   await press('ArrowRight');
   expect(slide().querySelector('h2')?.textContent).toBe('Next');
   expect(box.querySelector('.count')?.textContent).toBe('2 / 2');
-  await press('ArrowRight'); // the last slide: nothing after it
-  expect(box.querySelector('.count')?.textContent).toBe('2 / 2');
+  await press('ArrowRight'); // past the last slide: the end says so
+  expect([box.querySelector('.count')?.textContent, !!box.querySelector('.end')]).toEqual(['End', true]);
+  await press('ArrowLeft'); // back on the last one
+  expect([box.querySelector('.count')?.textContent, !!box.querySelector('.end')]).toEqual(['2 / 2', false]);
 
   await press('ArrowLeft');
   expect(slide().querySelector('h1')?.textContent).toBe('Talk');
