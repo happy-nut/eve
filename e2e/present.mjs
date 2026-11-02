@@ -1,6 +1,5 @@
 // A note presented (⋯ → Present), in WebKit: a slide at each of its biggest headings, one longer than the screen
-// cut onto the next under its heading again (and cut again as the window changes size), no slide scrolled, the text a size up and clear of
-// the window's edges; a flowchart that draws itself walked a box a press, the lines into a box with it, before → turns
+// scrolled through a screen a press (not cut onto the next), the text a size up and clear of the window's edges; a flowchart that draws itself walked a box a press, the lines into a box with it, before → turns
 // the page; ← the same way back; a divider no place to cut; Esc gives the note back.
 // Run: npm run e2e:present (starts its own dev server, or uses EVE_URL)
 import assert from 'node:assert/strict';
@@ -33,10 +32,22 @@ try {
   let v = await look();
   const total = () => count().then((c) => Number(c.split(' / ')[1]));
   assert.equal(v.h, 'Talk'); assert.equal(await count(), `1 / ${await total()}`);
-  assert.ok(await total() >= 5, `the long section cut onto slides of its own (${await count()})`);
+  assert.equal(await total(), 3, `a slide a section, the long one too (${await count()})`);
   assert.ok(v.size > 22, `the text a size up (${v.size}px)`);
   assert.ok(v.box[0] > 0 && v.box[1] > 0 && v.box[2] < 1280 && v.box[3] < 800, `the slide inside the window (${v.box})`);
   assert.ok(v.box[2] - v.box[0] > 0.85 * 1280, `the slide the window's width, as a slide is (${v.box})`);
+  // the cover's title a cover's size, well over a heading's on the slides after it
+  const cover = await page.evaluate(() => { const s = document.querySelector('.present .slide'); return parseFloat(getComputedStyle(s.querySelector('h1')).fontSize) / parseFloat(getComputedStyle(s).fontSize); });
+  assert.ok(cover >= 2.6, `the cover's title big (${cover.toFixed(2)}× the slide's words)`);
+  // the whole screen, from its button or F, and back
+  const full = () => page.evaluate(() => !!document.fullscreenElement);
+  await page.click('.present .whole');
+  await page.waitForTimeout(400);
+  assert.equal(await full(), true, 'its button puts it on the whole screen');
+  assert.equal(await page.getAttribute('.present .whole', 'aria-label'), 'Exit full screen');
+  await press('f');
+  assert.equal(await full(), false, 'F takes it off the whole screen');
+  assert.equal(await page.locator('.present').count(), 1, 'and the presentation goes on');
   await page.screenshot({ path: 'e2e/out/present-1.png' });
 
   // the page turns: the slide leaving drawn going while the next comes in, then gone, the new one still and whole
@@ -56,36 +67,42 @@ try {
   v = await look();
   assert.deepEqual([v.nodes, v.lines], [2, 1], 'the next box, with the line into it');
   await page.screenshot({ path: 'e2e/out/present-2.png' });
-  const big = await page.evaluate(() => document.querySelector('.present .slide svg').getBoundingClientRect().width);
-  assert.ok(big > 700, `the diagram larger than in the note (${big}px wide)`);
+  const big = await page.evaluate(() => { const r = document.querySelector('.present .slide svg').getBoundingClientRect(); return [r.width, r.height]; });
+  assert.ok(big[0] > 0.85 * 1280 || big[1] > 0.55 * 800, `the diagram as big as its slide holds it (${big.map(Math.round)})`);
   await press('Space');
   v = await look();
   assert.deepEqual([v.h, v.nodes, v.lines], ['The flow', 3, 2]);
 
-  // the long section: slide after slide, each under its heading, none scrolled, the divider not a cut
-  const seen = [];
-  for (let i = 0; i < 12 && !(await page.textContent('.present .slide')).includes('The end.'); i++) {
+  // the long section: one slide, → scrolling it a screen at a time, its heading at the top first; then the last line
+  await press('ArrowRight');
+  v = await look();
+  assert.deepEqual([v.h, v.tall, v.scrolled], ['Long', true, 0], 'one slide, taller than the screen, from its top');
+  const counted = await count();
+  let scrolls = 0;
+  for (let last = -1; scrolls < 20; scrolls++) {
     await press('ArrowRight');
+    await page.waitForTimeout(300); // (a smooth scroll)
     v = await look();
-    assert.equal(v.h, 'Long'); assert.ok(!v.tall, `slide ${await count()} fits the screen`);
-    seen.push(await page.evaluate(() => [...document.querySelectorAll('.present .slide p')].map((p) => p.textContent)));
+    if (v.scrolled === last || (await page.locator('.present .end').count())) break;
+    last = v.scrolled;
+    assert.equal(await count(), counted, 'still the same slide while it scrolls');
   }
+  assert.ok(scrolls >= 2, `scrolled through, a screen a press (${scrolls})`);
+  if (await page.locator('.present .end').count()) await press('ArrowLeft'); // (the press past its foot was the end's)
   assert.equal(await count(), `${await total()} / ${await total()}`);
-  assert.ok(seen.at(-1).includes('Line 39') || seen.at(-1)[0] === 'The end.', 'the end with the lines before it, or right after them');
-  assert.deepEqual(seen.flat().filter((t) => t.startsWith('Line')), Array.from({ length: 40 }, (_, i) => `Line ${i}`), 'every line once, in order');
+  assert.equal(await page.locator('.present .end').count(), 0, 'the last slide is still a slide');
+  assert.ok(await page.evaluate(() => { const s = document.querySelector('.present .slide'); const r = [...s.querySelectorAll('p')].find((p) => p.textContent === 'The end.').getBoundingClientRect(); return r.bottom <= s.getBoundingClientRect().bottom + 1; }), 'scrolled to its last line');
   await page.screenshot({ path: 'e2e/out/present-3.png' });
-
-  // a narrower window, its words smaller: cut again, and still on the words that were up
+  // past the last: a screen that says it is the end, not a press that does nothing; ← back to the last slide
+  await press('ArrowRight');
+  assert.equal(await page.locator('.present .end').count(), 1, 'past the last slide, the end says so');
+  assert.match(await page.textContent('.present .end'), /End/);
+  await page.screenshot({ path: 'e2e/out/present-end.png' });
+  await press('ArrowRight');
+  assert.equal(await page.locator('.present').count(), 1, 'another press at the end does not leave by itself');
   await press('ArrowLeft');
-  const first = await page.textContent('.present .slide p');
-  const before = await total();
-  await page.setViewportSize({ width: 700, height: 800 });
-  await page.waitForTimeout(800);
-  assert.ok((await total()) !== before, `cut again for a narrower window (${before} → ${await total()})`);
-  assert.ok((await page.textContent('.present .slide')).includes(first), `still on "${first}"`);
-  assert.ok(!(await look()).tall);
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await page.waitForTimeout(800);
+  assert.equal(await page.locator('.present .end').count(), 0, '← from the end, back to the last slide');
+  assert.equal(await count(), `${await total()} / ${await total()}`);
 
   await press('Home');
   await press('ArrowRight');
@@ -109,7 +126,45 @@ try {
   assert.equal(await count(), `1 / ${await total()}`, 'from the first slide');
   await press('Escape');
   assert.equal(await page.locator('.present').count(), 0);
-  console.log('ok   a note presented: slides at its headings, a long section cut to the screen (and again for a smaller window), a flowchart a step a press, back into the note; ⇧⌘↩ presents it');
+  console.log('ok   a note presented: slides at its headings, a long one scrolled through, the end said, the whole screen and back, a flowchart a step a press, back into the note; ⇧⌘↩ presents it');
+
+  // ---- a diagram beside words: a slide of its own; a table the slide's width; inline code clear of the next line;
+  // ⌥⌘↩ from the caret's slide ----
+  {
+    const NOTE = '# Deck\n\nCover words.\n\n## Mixed\n\nWords before it.\n\n```mermaid\nflowchart LR\n  A[One] --> B[Two]\n```\n\nWords after it.\n\n## Table\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\n' +
+      Array.from({ length: 3 }, () => 'Some `inline code` in a line long enough to wrap onto the next line, and `more code` there, and on and on until it wraps once more.').join(' ') + '\n\n## Last\n\nThe last words.\n';
+    const p2 = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await p2.addInitScript((b) => { localStorage.clear(); localStorage.setItem('eve.notes.p', `---\nid: p\nupdated: 1\ndeleted: false\norder: 0\n---\n${b}`); }, NOTE);
+    await p2.goto(URL_);
+    await p2.waitForSelector('.tiptap .mermaid-view svg');
+    await p2.waitForTimeout(1500);
+    await p2.locator('.tiptap p', { hasText: 'Some' }).click();
+    await p2.keyboard.press('Meta+Alt+Enter');
+    await p2.waitForSelector('.present .slide');
+    await p2.waitForTimeout(700);
+    assert.equal(await p2.locator('.present .slide table').count(), 1, '⌥⌘↩ starts on the slide the caret is on');
+    const t = await p2.evaluate(() => { const s = document.querySelector('.present .slide'); return [document.querySelector('.present .slide table').getBoundingClientRect().width, s.getBoundingClientRect().width]; });
+    assert.ok(t[0] > 0.9 * t[1], `the table the slide's width (${t.map(Math.round)})`);
+    const gap = await p2.evaluate(() => {
+      // each inline code's tinted chip against the line under it: they must not meet
+      const codes = [...document.querySelectorAll('.present .slide p code')].map((c) => c.getBoundingClientRect());
+      const lh = parseFloat(getComputedStyle(document.querySelector('.present .slide p')).lineHeight), fs = parseFloat(getComputedStyle(document.querySelector('.present .slide p')).fontSize);
+      return { ratio: lh / fs, tall: Math.max(...codes.map((r) => r.height)) / lh };
+    });
+    assert.ok(gap.ratio >= 1.7 && gap.tall < 0.85, `lines apart, an inline code's chip clear of the next line (${JSON.stringify(gap)})`);
+    await p2.screenshot({ path: 'e2e/out/present-table.png' });
+    await p2.keyboard.press('Home');
+    await p2.waitForTimeout(500);
+    const kinds = [];
+    for (let i = 0; i < 8 && !(await p2.locator('.present .end').count()); i++) {
+      kinds.push(await p2.evaluate(() => { const s = document.querySelector('.present .slide'); return s.querySelector('svg[aria-roledescription], .mermaid-view svg') ? 'chart' : s.textContent.trim().slice(0, 12); }));
+      await p2.keyboard.press('ArrowRight'); await p2.waitForTimeout(450);
+      while (await p2.evaluate(() => document.querySelector('.present .slide .mermaid-view svg g.node[style*="opacity: 0"]'))) { await p2.keyboard.press('ArrowRight'); await p2.waitForTimeout(300); }
+    }
+    assert.deepEqual(kinds.slice(0, 4), ['DeckCover wo', 'MixedWords b', 'chart', 'MixedWords a'], `the diagram a slide of its own, the words before and after it on theirs (${kinds})`);
+    await p2.close();
+  }
+  console.log('ok   a diagram a slide of its own, as big as it goes; a table the slide\'s width; inline code clear of the next line; ⌥⌘↩ from the caret');
 } finally {
   await browser.close();
   await server?.close();

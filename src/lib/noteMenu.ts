@@ -74,6 +74,8 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
     { label: 'Select all', sep: true, keys: 'Mod-a', hide: !empty, run: () => editor.chain().focus().selectAll().run() },
     { label: 'Find & replace…', keys: keys('find'), hide: !empty, run: () => ui.openFind() },
     { label: 'Present', keys: keys('present'), hide: !empty, run: () => ui.openPresent(editor.view.dom) },
+    // from the block the right click was on
+    { label: 'Present from here', keys: keys('presentHere'), hide: !empty, run: () => { const d = editor.view.domAtPos(editor.state.selection.from).node; let b: Node | null = d; while (b && b.parentNode !== editor.view.dom) b = b.parentNode; ui.openPresent(editor.view.dom, b as Element | null); } },
     { label: 'Export as Markdown…', sep: true, keys: keys('exportMd'), hide: !empty, run: () => void exportCurrent('md') },
     { label: 'Export as PDF…', keys: keys('exportPdf'), hide: !empty, run: () => void exportCurrent('pdf') },
     { label: 'Export as image…', keys: keys('exportPng'), hide: !empty, run: () => void exportCurrent('png') },

@@ -45,6 +45,8 @@ export const DEFAULTS: Action[] = [
   { id: 'exportPng', label: 'Export note as an image…', scope: 'app', keys: 'Mod-Alt-p' },
   // PowerPoint's play-from-the-start key
   { id: 'present', label: 'Present this note', scope: 'app', keys: 'Mod-Shift-Enter' },
+  // …and from the slide the caret is on, as PowerPoint plays from the slide open (its own ⌘↩ is a to-do's here)
+  { id: 'presentHere', label: 'Present from here', scope: 'app', keys: 'Mod-Alt-Enter' },
   { id: 'settings', label: 'Settings', scope: 'app', keys: 'Mod-,' },
   // the note's text only: the list, menus and bars keep their size, so nothing around the note moves
   { id: 'textBigger', label: 'Larger text', scope: 'app', keys: 'Mod-=' },
