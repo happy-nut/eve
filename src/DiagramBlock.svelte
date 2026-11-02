@@ -539,7 +539,7 @@
       <button class="done" onclick={leave}>Done</button>
     </div>
     {#if flow}
-      <p class="dtip">{isMobile ? 'Tap a box to pick it; ✎ Text in its bar (or a second tap) types in it · its + adds the next step · Connect, then another box, joins them' : 'Click a box to pick it; ✎ Text, a second click or Enter types in it · its + adds the next step; drag it onto another box, or Connect, to join them · Tab adds a step, ⌫ deletes'}</p>
+      <p class="dtip">{isMobile ? 'Tap a box to pick it; ✎ Text in its bar (or a second tap) types in it · its + adds the next step · drag the box picked onto another, or Connect, to join them' : 'Click a box to pick it; ✎ Text, a second click or Enter types in it · its + adds the next step; drag a box (or its +) onto another, or Connect, to join them · Tab adds a step, ⌫ deletes'}</p>
     {:else}
       <p class="dtip">{isMobile ? 'Tap any part to type in it · its bar adds the next one, moves or deletes it' : 'Click any part to type in it · Tab adds the next one, Enter is done · its bar sets the rest, moves or deletes it'}</p>
       {#if rows}

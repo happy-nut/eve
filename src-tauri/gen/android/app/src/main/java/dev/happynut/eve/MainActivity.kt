@@ -4,7 +4,9 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import android.webkit.JavascriptInterface
 import android.view.inputmethod.InputMethodManager
 import android.webkit.WebView
@@ -89,6 +91,14 @@ class MainActivity : TauriActivity() {
   inner class Bridge {
     @JavascriptInterface
     fun takeIntent(): String = pending.also { pending = "" }
+
+    /** A presentation on the whole screen: the status and navigation bars hidden (a swipe from an edge shows them a moment). */
+    @JavascriptInterface
+    fun immersive(on: Boolean) = runOnUiThread {
+      val bars = WindowCompat.getInsetsController(window, window.decorView)
+      bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+      if (on) bars.hide(WindowInsetsCompat.Type.systemBars()) else bars.show(WindowInsetsCompat.Type.systemBars())
+    }
 
     /**
      * Put the caret in the note and bring the keyboard up — a script alone can do neither while the

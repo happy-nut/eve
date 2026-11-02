@@ -5,7 +5,7 @@
   import { ui } from './lib/ui.svelte';
   import { slides, alone, path } from './lib/slides';
   import { stepper } from './lib/diagramMotion';
-  import { wholeScreen, isTauri, isMobile } from './lib/platform';
+  import { wholeScreen, ownWholeScreen } from './lib/platform';
   import { appearance } from './lib/appearance.svelte';
 
   /**
@@ -15,6 +15,7 @@
    * next (a long code block went on to a slide of its own, its first lines left behind). A diagram is a slide of its
    * own, as big as the screen holds it, and one that draws itself in is walked a step at a time first, before → turns
    * the page. Past the last slide, a screen says it is the end. F (or its button) puts it on the whole screen and back.
+   * A click on a diagram's drawing looks at it close up there: dragged to look around it, a click (or Esc) back.
    */
   // read once: the slides are the page as it was when the presentation began
   const page = ui.present!, from = ui.presentFrom;
@@ -36,9 +37,13 @@
   let pinned = $state<{ heads: string[]; at: string }>({ heads: [], at: '' });
   function pin() {
     const r = body.getBoundingClientRect(), rb = box.getBoundingClientRect();
-    const gone = body.scrollTop > 4 ? [...body.children].filter((b) => b.getBoundingClientRect().bottom <= r.top + 4) : [];
+    const cs = getComputedStyle(body), pad = parseFloat(cs.paddingTop);
+    const top = r.top + pad; // where the words start, under the crumbs' room
+    const gone = body.scrollTop > 4 ? [...body.children].filter((b) => b.getBoundingClientRect().bottom <= top + 4) : [];
     const heads = path(gone).slice(0, 2).map((h) => h.textContent?.trim() ?? '');
-    pinned = { heads, at: `top: ${r.top - rb.top}px; left: ${r.left - rb.left}px; width: ${r.width}px` };
+    // its words where a slide's own crumbs are (raised into its room over the words, by the styles below), its ground
+    // from the slide's top, so no line scrolled up into that room shows over it
+    pinned = { heads, at: `top: ${r.top - rb.top}px; padding-top: ${Math.max(0, pad - 0.6 * parseFloat(cs.fontSize))}px; left: ${r.left - rb.left}px; width: ${r.width}px` };
   }
   /** gone past the last slide: the end says so */
   let ended = $state(false);
@@ -92,8 +97,62 @@
       b.animate([{ opacity: 0, transform: 'translateY(.6em)' }, {}], { duration: 380, delay: (f && !same ? 120 : 0) + n * 55, easing: EASE, fill: 'backwards' }));
   }
 
+  // ---- a diagram close up: zoomed about the point clicked, dragged to look around it ----
+  let zoomed: { svg: SVGSVGElement; s: number; x: number; y: number } | null = null;
+  /** the click that ends a drag around a diagram is not a click on it */
+  let dragged = false;
+  function zoomTo(svg: SVGSVGElement, s: number, cx: number, cy: number, ease = true) {
+    // the point of the drawing under the pointer stays there (its box as laid out: where it is drawn, less the move)
+    const r = svg.getBoundingClientRect(), z = zoomed ?? { s: 1, x: 0, y: 0 };
+    const px = cx - (r.left - z.x), py = cy - (r.top - z.y);
+    s = Math.min(8, Math.max(1, s));
+    zoomed = { svg, s, x: px - ((px - z.x) / z.s) * s, y: py - ((py - z.y) / z.s) * s };
+    draw(ease);
+  }
+  function draw(ease: boolean) {
+    const z = zoomed;
+    if (!z) return;
+    Object.assign(z.svg.style, { transformOrigin: '0 0', transition: ease ? `transform 0.25s ${EASE}` : 'none', transform: `translate(${z.x}px, ${z.y}px) scale(${z.s})` });
+    z.svg.parentElement!.classList.add('zoomed');
+  }
+  /** back to the whole diagram; false when it was not zoomed */
+  function unzoom() {
+    if (!zoomed) return false;
+    const { svg } = zoomed;
+    zoomed = null;
+    Object.assign(svg.style, { transform: '', transition: `transform 0.25s ${EASE}` });
+    svg.parentElement!.classList.remove('zoomed');
+    return true;
+  }
+  function onDown(e: PointerEvent) {
+    const z = zoomed;
+    if (!z || e.button !== 0) return;
+    const x0 = e.clientX, y0 = e.clientY, zx = z.x, zy = z.y;
+    dragged = false;
+    const move = (m: PointerEvent) => {
+      if (!dragged && Math.hypot(m.clientX - x0, m.clientY - y0) < 5) return;
+      dragged = true;
+      z.x = zx + m.clientX - x0; z.y = zy + m.clientY - y0;
+      draw(false);
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+  /** close up, a trackpad's two fingers move around it and a pinch (or ⌘ / ctrl and the wheel) zooms */
+  function onWheel(e: WheelEvent) {
+    const z = zoomed;
+    if (!z) return;
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) { zoomTo(z.svg, z.s * Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY, false); if (zoomed!.s <= 1) unzoom(); return; }
+    z.x -= e.deltaX; z.y -= e.deltaY;
+    draw(false);
+  }
+
   /** slide `i` put up, its diagrams at their first step (come to going forward) or whole (going back) */
   async function go(i: number, back = false, animate = true) {
+    unzoom();
     // what was up, kept to be drawn leaving
     const old = animate && body?.childElementCount ? { el: body.cloneNode(true) as HTMLElement, at: body.getBoundingClientRect(), top: body.scrollTop } : null;
     at = i;
@@ -117,6 +176,7 @@
     }).filter((w) => w.walk.count);
   }
   function next() {
+    if (unzoom()) return;
     const w = walks.find((w) => w.k < w.walk.count - 1);
     if (w) { w.walk.show(++w.k); w.svg.scrollIntoView?.({ block: 'nearest' }); return; }
     if (tall && body.scrollTop + body.clientHeight < body.scrollHeight - 2) return body.scrollBy({ top: body.clientHeight * 0.85, behavior: 'smooth' });
@@ -125,6 +185,7 @@
   }
   function prev() {
     if (ended) { ended = false; return; }
+    if (unzoom()) return;
     const w = walks.findLast((w) => w.k > 0);
     if (w) { w.walk.show(--w.k); return; }
     if (body.scrollTop > 2) return body.scrollBy({ top: -body.clientHeight * 0.85, behavior: 'smooth' });
@@ -134,7 +195,7 @@
   function onKey(e: KeyboardEvent) {
     e.stopPropagation(); // nothing behind it acts on a key while it is up
     const k = e.key;
-    if (k === 'Escape') ui.closePresent();
+    if (k === 'Escape') { if (!unzoom()) ui.closePresent(); }
     else if (['ArrowRight', 'ArrowDown', ' ', 'PageDown', 'Enter'].includes(k)) next();
     else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(k)) prev();
     else if (k === 'f' || k === 'F') void whole(!full);
@@ -144,24 +205,30 @@
     e.preventDefault();
   }
   function onClick(e: MouseEvent) {
-    if ((e.target as HTMLElement).closest('a, button')) return;
+    const t = e.target as Element;
+    if (t.closest('a, button')) return;
+    if (dragged) { dragged = false; return; }
+    if (unzoom()) return; // close up, a click anywhere is back to the whole
+    // on the drawing itself (a box, a line, a word of it), not the room around it, which turns the page as before
+    const svg = t.closest('svg') !== t ? t.closest<SVGSVGElement>('.slide.chart .mermaid-view > svg') : null;
+    if (svg) return zoomTo(svg, 2.5, e.clientX, e.clientY);
     (e.clientX < box.clientWidth / 3 ? prev : next)();
   }
 
-  // ---- the whole screen: the Mac's window over it all, or the page's (a browser, a phone) ----
-  const desktop = isTauri && !isMobile;
-  const canWhole = desktop || (typeof document !== 'undefined' && !!document.fullscreenEnabled);
+  // ---- the whole screen: the Mac's window over it all, a phone's bars hidden, or the page's (a browser) ----
+  const own = ownWholeScreen();
+  const canWhole = own || (typeof document !== 'undefined' && !!document.fullscreenEnabled);
   let full = $state(false);
   /** put on the whole screen or taken off it; false when nothing changed */
   async function whole(on: boolean): Promise<boolean> {
     try {
-      if (desktop) { const changed = await wholeScreen(on); full = on; return changed; }
+      if (own) { const changed = await wholeScreen(on); full = on; return changed; }
       if (on && !document.fullscreenElement) { await box.requestFullscreen(); return true; }
       if (!on && document.fullscreenElement) { await document.exitFullscreen(); return true; }
     } catch { /* refused (a page not allowed it): stays as it was */ }
     return false;
   }
-  const onFull = () => { if (!desktop) full = !!document.fullscreenElement; };
+  const onFull = () => { if (!own) full = !!document.fullscreenElement; };
 
   onMount(() => {
     box.focus();
@@ -169,19 +236,19 @@
     // taller than the screen or not, again as the window changes size (going to the whole screen, as it starts, too)
     const watch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => { tall = body.scrollHeight > body.clientHeight + 2; });
     watch?.observe(box);
-    // the Mac's window over the whole screen while it is up, as a slideshow is (and back as it was after)
-    const screen = desktop ? whole(true) : Promise.resolve(false);
+    // the whole screen while it is up, as a slideshow is (and back as it was after)
+    const screen = own ? whole(true) : Promise.resolve(false);
     document.addEventListener('fullscreenchange', onFull);
     return () => {
       watch?.disconnect(); document.removeEventListener('fullscreenchange', onFull);
-      void screen.then((changed) => { if (desktop ? changed || full : true) void whole(false); });
+      void screen.then((changed) => { if (own ? changed || full : true) void whole(false); });
     };
   });
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="present" bind:this={box} role="dialog" aria-label="Presentation" tabindex="-1"
-  transition:fade|global={scrimFade} onkeydown={onKey} onclick={onClick}>
+  transition:fade|global={scrimFade} onkeydown={onKey} onclick={onClick} onpointerdown={onDown} onwheel={onWheel}>
   <div class="tiptap slide" class:first={at === 0} class:hidden={ended} bind:this={body} onscroll={pin}></div>
   {#if pinned.heads.length && !ended}
     <!-- the section a long slide is in, its headings scrolled away: said over the top of its words, as a page's header -->
@@ -229,6 +296,13 @@
   .slide.first { align-self: center; }
   .slide.first > :global(h1:first-child) { font-size: 2.2em; font-weight: 700; line-height: 1.12; letter-spacing: -0.025em; margin-bottom: 0.35em; }
   .slide.hidden { visibility: hidden; }
+  /* room over the words for the crumbs, taken out of the screen's top margin: they sit higher, the words where they were */
+  .slide:not(.first) { padding-top: 1em; margin-top: -1em; }
+  .slide > :global(:is(.again, .crumbs)) { position: relative; top: calc(var(--font-size) * -0.6); }
+  /* a diagram's drawing looked at close up (a click on it) */
+  .slide:global(.chart) :global(.mermaid-view > svg) { pointer-events: auto; cursor: zoom-in; }
+  .slide:global(.chart) :global(.mermaid-view.zoomed) { overflow: hidden; touch-action: none; }
+  .slide:global(.chart) :global(.mermaid-view.zoomed > svg) { cursor: grab; }
   /* a diagram's slide: the diagram as big as the screen holds it, under its headings */
   .slide:global(.chart) { display: flex; flex-direction: column; height: 100%; }
   .slide:global(.chart) > :global(.code-block) { flex: 1; min-height: 0; margin: 0; }
@@ -259,7 +333,7 @@
   .pinned {
     position: absolute; z-index: var(--z-raised); display: flex; gap: 0.5em; padding: 0 0 0.7em;
     font-size: calc(clamp(17px, min(2vw, 3.4vh), 48px) * 0.55); line-height: 1.3; font-weight: 600; color: var(--fg-dim); /* the slide's crumbs' size */
-    background: linear-gradient(var(--bg) 70%, transparent); pointer-events: none;
+    background: linear-gradient(var(--bg) 75%, transparent); pointer-events: none;
   }
   .pinned .sep { font-weight: 400; }
   .end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; pointer-events: none; }

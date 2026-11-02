@@ -72,6 +72,32 @@ try {
   await press('Space');
   v = await look();
   assert.deepEqual([v.h, v.nodes, v.lines], ['The flow', 3, 2]);
+  // a click on the drawing looks at it close up, about the point clicked; a drag moves around it; Esc back to the whole
+  {
+    const tf = () => page.evaluate(() => getComputedStyle(document.querySelector('.present .slide .mermaid-view > svg')).transform);
+    const box = await page.locator('.present .slide g.node', { hasText: 'Sync' }).boundingBox();
+    const was = await count();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(400);
+    const z = await tf();
+    assert.match(z, /^matrix\(2\.5, 0, 0, 2\.5,/, `a click on the diagram zooms it (${z})`);
+    assert.equal(await count(), was, 'and turns no page');
+    const after = await page.locator('.present .slide g.node', { hasText: 'Sync' }).boundingBox();
+    assert.ok(Math.abs(after.x + after.width / 2 - (box.x + box.width / 2)) < 4, 'the box clicked stays under the pointer');
+    await page.mouse.move(640, 400);
+    await page.mouse.down();
+    await page.mouse.move(540, 350, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+    const moved = await tf();
+    assert.notEqual(moved, z, 'a drag moves around it');
+    assert.match(moved, /^matrix\(2\.5,/, 'and lets go still close up');
+    await page.screenshot({ path: 'e2e/out/present-zoom.png' });
+    await press('Escape');
+    assert.equal(await tf(), 'none', 'Esc: the whole diagram again');
+    assert.equal(await page.locator('.present').count(), 1, 'the presentation still up');
+    console.log('ok   a diagram clicked, close up; dragged around; Esc the whole again');
+  }
 
   // the long section: one slide, → scrolling it a screen at a time, its heading at the top first; then the last line
   await press('ArrowRight');
@@ -89,7 +115,12 @@ try {
     last = v.scrolled;
     assert.equal(await count(), counted, 'still the same slide while it scrolls');
     // its heading scrolled away, a header says which section this is, over the top of the words
-    if (v.scrolled > 200) assert.equal(await pinned(), 'Long', `scrolled ${v.scrolled}px, the section's heading pinned at the top`);
+    if (v.scrolled > 200) {
+      assert.equal(await pinned(), 'Long', `scrolled ${v.scrolled}px, the section's heading pinned at the top`);
+      // its words up in the room over the slide's words, where a slide's own crumbs are, not on their first line
+      const [pt, wt] = await page.evaluate(() => { const s = document.querySelector('.present .slide'), r = document.createRange(); r.selectNodeContents(document.querySelector('.present .pinned span')); return [r.getBoundingClientRect().bottom, s.getBoundingClientRect().top + parseFloat(getComputedStyle(s).paddingTop)]; });
+      assert.ok(pt <= wt + 4, `the header's words over the slide's, not on them (${Math.round(pt)} > ${Math.round(wt)})`);
+    }
   }
   assert.ok(scrolls >= 2, `scrolled through, a screen a press (${scrolls})`);
   if (await page.locator('.present .end').count()) await press('ArrowLeft'); // (the press past its foot was the end's)
