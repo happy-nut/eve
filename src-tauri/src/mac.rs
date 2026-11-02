@@ -65,6 +65,23 @@ pub(crate) fn keep_page_awake(app: &AppHandle) {
     let _ = app;
 }
 
+/// The process drawing the page ended, so that a page loaded again gets a new one: one that is stuck (not gone) loads
+/// nothing, and the window stayed white.
+pub(crate) fn end_page(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.with_webview(|platform| unsafe {
+            use objc2::{runtime::NSObjectProtocol, sel};
+            let webview: &objc2_web_kit::WKWebView = &*(platform.inner() as *mut objc2_web_kit::WKWebView);
+            if webview.respondsToSelector(sel!(_killWebContentProcessAndResetState)) {
+                let _: () = objc2::msg_send![webview, _killWebContentProcessAndResetState];
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+}
+
 /// The window seen or not, while it stays shown (and so drawn into): its alpha. Shown with alpha 0, WebKit takes the
 /// page as on screen and draws it (its own check of whether the window is covered is off, `keep_page_awake`); nothing
 /// white is seen meanwhile. `then` hears, before the window is seen, whether macOS took it as on screen.
