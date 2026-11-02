@@ -3,7 +3,7 @@
   import { fade } from 'svelte/transition';
   import { scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
-  import { slides } from './lib/slides';
+  import { slides, alone, path } from './lib/slides';
   import { stepper } from './lib/diagramMotion';
   import { wholeScreen, isTauri, isMobile } from './lib/platform';
   import { appearance } from './lib/appearance.svelte';
@@ -32,6 +32,14 @@
     return c;
   }));
   let at = $state(0);
+  /** a long slide scrolled past its headings: the section's two outermost, said in a bar over its top */
+  let pinned = $state<{ heads: string[]; at: string }>({ heads: [], at: '' });
+  function pin() {
+    const r = body.getBoundingClientRect(), rb = box.getBoundingClientRect();
+    const gone = body.scrollTop > 4 ? [...body.children].filter((b) => b.getBoundingClientRect().bottom <= r.top + 4) : [];
+    const heads = path(gone).slice(0, 2).map((h) => h.textContent?.trim() ?? '');
+    pinned = { heads, at: `top: ${r.top - rb.top}px; left: ${r.left - rb.left}px; width: ${r.width}px` };
+  }
   /** gone past the last slide: the end says so */
   let ended = $state(false);
   let box: HTMLDivElement, body: HTMLDivElement;
@@ -40,32 +48,13 @@
   let tall = false;
   let walks: { svg: SVGSVGElement; walk: ReturnType<typeof stepper>; k: number }[] = [];
 
-  /** the slides cut to the screen as it is now, measured on the slide itself; still on the same words after */
   /** a block with a diagram in it */
   const chart = (b: Element) => !!b.querySelector('.mermaid-view');
-  const heading = (b: Element) => /^H[1-6]$/.test(b.tagName);
   const again = (h: Element) => { const c = h.cloneNode(true) as Element; c.classList.add('again'); return c; };
-  /** each diagram a slide of its own, under the headings it was under (as small ones, unless nothing came before it but
-   *  them): a diagram beside words was shrunk to a corner of the screen */
-  function alone(deck: Element[][]): Element[][] {
-    const out: Element[][] = [];
-    for (let s of deck) {
-      for (let i = s.findIndex(chart); i >= 0 && s.length > 1; i = s.findIndex(chart)) {
-        const before = s.slice(0, i), after = s.slice(i + 1), heads = before.filter(heading);
-        const words = before.some((b) => !heading(b));
-        if (words) out.push(before);
-        out.push([...(words ? heads.map((h) => (h.classList.contains('again') ? h : again(h))) : before), s[i]]);
-        s = after.some((b) => b.tagName !== 'HR') ? [...heads.map((h) => (h.classList.contains('again') ? h : again(h))), ...after] : [];
-      }
-      if (s.length) out.push(s);
-    }
-    return out;
-  }
-
   // a divider at a slide's edge has nothing to divide there
   const hr = (b?: Element) => b?.tagName === 'HR' || (b?.childElementCount === 1 && b.firstElementChild!.tagName === 'HR' && !b.textContent?.trim());
   const trim = (s: Element[]) => { s = [...s]; while (hr(s[0])) s.shift(); while (hr(s.at(-1))) s.pop(); return s; };
-  const deck = alone(sections).map(trim).filter((s) => s.length);
+  const deck = alone(sections, chart, again).map(trim).filter((s) => s.length);
   at = Math.max(0, deck.findIndex((s) => s.some((b) => b.hasAttribute('data-from') && !b.classList.contains('again'))));
 
   const EASE = 'cubic-bezier(.2, .7, .2, 1)';
@@ -112,10 +101,14 @@
     await tick();
     body.replaceChildren(...deck[i]);
     body.classList.toggle('chart', deck[i].some(chart));
+    // a diagram's slide is a column (the diagram takes what is left of it): its headings one row of crumbs at its top
+    const crumbs = [...body.children].filter((b) => b.classList.contains('again'));
+    if (crumbs.length && body.classList.contains('chart')) { const row = document.createElement('div'); row.className = 'crumbs'; body.prepend(row); row.append(...crumbs); }
     // taller than the screen, measured before its lines come in: while they rise they reach below it for a moment
     tall = body.scrollHeight > body.clientHeight + 2;
     if (animate) turn(old, back);
     body.scrollTop = back ? body.scrollHeight : 0;
+    pin();
     walks = [...body.querySelectorAll<SVGSVGElement>('svg[aria-roledescription]')].map((svg) => {
       const walk = stepper(svg);
       const k = back ? walk.count - 1 : 0;
@@ -189,7 +182,13 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="present" bind:this={box} role="dialog" aria-label="Presentation" tabindex="-1"
   transition:fade|global={scrimFade} onkeydown={onKey} onclick={onClick}>
-  <div class="tiptap slide" class:first={at === 0} class:hidden={ended} bind:this={body}></div>
+  <div class="tiptap slide" class:first={at === 0} class:hidden={ended} bind:this={body} onscroll={pin}></div>
+  {#if pinned.heads.length && !ended}
+    <!-- the section a long slide is in, its headings scrolled away: said over the top of its words, as a page's header -->
+    <div class="pinned" style={pinned.at} transition:fade={{ duration: 120 }}>
+      {#each pinned.heads as h, i (i)}{#if i}<span class="sep">›</span>{/if}<span>{h}</span>{/each}
+    </div>
+  {/if}
   {#if ended}
     <!-- past the last slide: it says so, rather than a press that does nothing -->
     <div class="end" in:fade={{ duration: 200 }}>
@@ -228,7 +227,7 @@
   /* the first slide, the title's, in the middle of the screen; the others from the top, each heading where the last was.
      Its title a cover's: well over the headings of the slides after it */
   .slide.first { align-self: center; }
-  .slide.first > :global(h1:first-child) { font-size: 2.9em; font-weight: 700; line-height: 1.12; letter-spacing: -0.025em; margin-bottom: 0.35em; }
+  .slide.first > :global(h1:first-child) { font-size: 2.2em; font-weight: 700; line-height: 1.12; letter-spacing: -0.025em; margin-bottom: 0.35em; }
   .slide.hidden { visibility: hidden; }
   /* a diagram's slide: the diagram as big as the screen holds it, under its headings */
   .slide:global(.chart) { display: flex; flex-direction: column; height: 100%; }
@@ -242,10 +241,10 @@
   .slide::-webkit-scrollbar { display: none; }
   .slide > :global(:first-child) { margin-top: 0; }
   /* a heading shown again, the slide going on under it: small, up in the corner, as a breadcrumb, the room for words */
-  .slide > :global(.again) {
+  .slide :global(.again) {
     display: inline-block; margin: 0 0 1em; font-size: 0.55em; line-height: 1.3; font-weight: 600; color: var(--fg-dim);
   }
-  .slide > :global(.again + .again)::before { content: '›'; margin: 0 0.5em; font-weight: 400; }
+  .slide :global(.again + .again)::before { content: '›'; margin: 0 0.5em; font-weight: 400; }
   /* lines further apart than in the note, as a slide is read from across a room: an inline code's chip (its tint
      spreads past its text) reached into the line under it */
   .slide { line-height: 1.75; }
@@ -257,6 +256,12 @@
   .slide > :global(p + p) { margin-top: 0.6em; }
   /* a copy to look at: a block's own tools have no place on a slide */
   .slide :global(:is(.tools, .codebar, .foldchips, .drag-handle, .block-handle)) { display: none !important; }
+  .pinned {
+    position: absolute; z-index: var(--z-raised); display: flex; gap: 0.5em; padding: 0 0 0.7em;
+    font-size: calc(clamp(17px, min(2vw, 3.4vh), 48px) * 0.55); line-height: 1.3; font-weight: 600; color: var(--fg-dim); /* the slide's crumbs' size */
+    background: linear-gradient(var(--bg) 70%, transparent); pointer-events: none;
+  }
+  .pinned .sep { font-weight: 400; }
   .end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; pointer-events: none; }
   .end-title { margin: 0; font-size: clamp(22px, min(3vw, 5vh), 56px); font-weight: 700; letter-spacing: -0.02em; color: var(--fg); }
   .end-hint { margin: 0; font-size: 14px; color: var(--fg-dim); }
