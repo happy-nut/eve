@@ -74,6 +74,17 @@ for (const theme of ['light', 'dark']) {
 }
 assert.deepEqual(low, [], 'text that does not stand out enough from what it sits on (app.css :root)');
 
+// ---- each code colour theme (Settings → Appearance → Code), its colours on a code block in both themes, and Eve's own
+// the same as app.css's ----
+const themes = JSON.parse(readFileSync(join(SRC, 'lib/codeThemes.json'), 'utf8'));
+const lowCode = [];
+for (const [id, t] of Object.entries(themes)) for (const theme of ['light', 'dark']) for (const [k, c] of Object.entries(t[theme])) {
+  const g = ground('--code-bg', theme), r = ratio(over(rgba(c), g), g);
+  if (r < TEXT) lowCode.push(`${id} ${theme} ${k} ${c} reads at ${r.toFixed(2)}:1`);
+}
+assert.deepEqual(lowCode, [], 'a code colour theme hard to read (lib/codeThemes.json)');
+for (const k of ['key', 'str', 'num', 'fn', 'var']) assert.equal(`light-dark(${themes.eve.light[k]}, ${themes.eve.dark[k]})`, raw[`--hl-${k}`], `Eve's own --hl-${k} as app.css has it`);
+
 // ---- the accent drawn as words or an icon: --accent-text ----
 const files = (dir) => readdirSync(dir).flatMap((n) => { const p = join(dir, n); return statSync(p).isDirectory() ? files(p) : [p]; });
 const asText = [];

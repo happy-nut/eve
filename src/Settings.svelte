@@ -7,7 +7,7 @@
   import { storage, autostart, dock, defaultApp, mcp, isTauri, isMobile, copyText, openUrl, type McpClient } from './lib/platform';
   import { normHost, webBase } from './lib/github';
   import { ui } from './lib/ui.svelte';
-  import { appearance, PASTELS, SIZE_MIN, SIZE_MAX, FONTS, THEMES, SLIDE_TURNS, type Theme, type SlideTurn } from './lib/appearance.svelte';
+  import { appearance, PASTELS, SIZE_MIN, SIZE_MAX, FONTS, THEMES, SLIDE_TURNS, CODE_THEMES, type Theme, type SlideTurn } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
   import Select from './Select.svelte';
   import Slider from './Slider.svelte';
@@ -328,6 +328,19 @@
           </label>
         {/if}
       </div>
+      <h3>Code</h3>
+      <div class="card">
+        <div class="row">
+          <span class="label">Colors <span class="sub">how code blocks are highlighted, in both themes</span></span>
+          <Select label="Code colors" value={appearance.s.codeTheme} options={CODE_THEMES} onchange={(v) => appearance.set({ codeTheme: v })} />
+        </div>
+      </div>
+      <!-- the colours as they are: a few lines of code, coloured as a code block colours them -->
+      <div class="tiptap code-sample"><pre><code><span class="hljs-comment">// greet everyone on the list</span>
+<span class="hljs-keyword">function</span> <span class="hljs-title function_">greet</span>(<span class="hljs-params">names</span>) {'{'}
+  <span class="hljs-keyword">const</span> <span class="hljs-variable">count</span> = names.<span class="hljs-property">length</span> + <span class="hljs-number">1</span>;
+  <span class="hljs-keyword">return</span> <span class="hljs-string">`Hello, ${'{'}names.join(<span class="hljs-string">', '</span>){'}'}!`</span>;
+{'}'}</code></pre></div>
       <h3>Text</h3>
       <div class="card">
         <label class="row"><span class="label">Size <span class="sub">{appearance.s.size}px</span></span>
@@ -652,5 +665,7 @@
   }
   .time:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   :global(html.mobile) .time { font-size: 16px; padding: 8px 10px; background: var(--bg-input); box-shadow: none; }
+  .code-sample { margin: 12px 0 0; font-size: 13px; user-select: none; }
+  .code-sample pre { margin: 0; }
   .sample { margin: 12px 0 0; padding: 14px 16px; border-radius: 10px; background: var(--bg-input); color: var(--fg); }
 </style>

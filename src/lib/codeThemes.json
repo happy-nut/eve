@@ -1,0 +1,8 @@
+{
+  "eve": { "name": "Eve", "light": { "key": "#0b6bcb", "str": "#0f766e", "num": "#6d4bd3", "fn": "#1b44b8", "var": "#a84b1f" }, "dark": { "key": "#6cc4ff", "str": "#4fd1b8", "num": "#b39dff", "fn": "#9fb9ff", "var": "#e5a06b" } },
+  "github": { "name": "GitHub", "light": { "key": "#cf222e", "str": "#0a3069", "num": "#0550ae", "fn": "#8250df", "var": "#953800" }, "dark": { "key": "#ff7b72", "str": "#a5d6ff", "num": "#79c0ff", "fn": "#d2a8ff", "var": "#ffa657" } },
+  "one": { "name": "One", "light": { "key": "#a626a4", "str": "#3c7a3b", "num": "#8a5d00", "fn": "#3567d6", "var": "#c8394a" }, "dark": { "key": "#c678dd", "str": "#98c379", "num": "#d19a66", "fn": "#61afef", "var": "#e06c75" } },
+  "dracula": { "name": "Dracula", "light": { "key": "#b4237a", "str": "#7a6a00", "num": "#6b45c4", "fn": "#16803a", "var": "#a85400" }, "dark": { "key": "#ff79c6", "str": "#f1fa8c", "num": "#bd93f9", "fn": "#50fa7b", "var": "#ffb86c" } },
+  "nord": { "name": "Nord", "light": { "key": "#4c6a8f", "str": "#4f7038", "num": "#8c5a7f", "fn": "#2e6a80", "var": "#9a5236" }, "dark": { "key": "#81a1c1", "str": "#a3be8c", "num": "#b48ead", "fn": "#88c0d0", "var": "#d08770" } },
+  "mono": { "name": "Monochrome", "light": { "key": "#1d1f24", "str": "#4d5361", "num": "#1d1f24", "fn": "#1d1f24", "var": "#4d5361" }, "dark": { "key": "#f2f3f5", "str": "#b4b9c3", "num": "#f2f3f5", "fn": "#f2f3f5", "var": "#b4b9c3" } }
+}
