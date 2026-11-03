@@ -415,7 +415,7 @@
   }
   /** dragging the empty canvas with the mouse pans it; a drag on a box or a line is the editor's */
   function onPanDown(e: PointerEvent) {
-    if (!full || !canvas || e.pointerType !== 'mouse' || e.button !== 0) return;
+    if (!full || !canvas || e.pointerType !== 'mouse' || e.button !== 0 || e.shiftKey) return; // Shift: boxes picked by dragging (FlowEditor.svelte)
     if ((e.target as Element).closest('g.node, .edgeLabel, path, button, input, textarea, select, a')) return;
     const c = canvas, x0 = e.clientX, y0 = e.clientY, sl = c.scrollLeft, st = c.scrollTop;
     let moved = false;
@@ -539,7 +539,7 @@
       <button class="done" onclick={leave}>Done</button>
     </div>
     {#if flow}
-      <p class="dtip">{isMobile ? 'Tap a box to pick it; ✎ Text in its bar (or a second tap) types in it · its + adds the next step · drag the box picked onto another, or Connect, to join them' : 'Click a box to pick it; ✎ Text, a second click or Enter types in it · its + adds the next step; drag a box (or its +) onto another, or Connect, to join them · Tab adds a step, ⌫ deletes'}</p>
+      <p class="dtip">{isMobile ? 'Tap a box to pick it; ✎ Text in its bar (or a second tap) types in it · its + adds the next step · drag the box picked onto another, or Connect, to join them' : `Click a box to pick it; ✎ Text, a second click or Enter types in it · its + adds the next step; drag a box (or its +) onto another, or Connect, to join them · ${full ? '⇧ and drag' : 'drag'} across empty space to pick several · Tab adds a step, ⌫ deletes`}</p>
     {:else}
       <p class="dtip">{isMobile ? 'Tap any part to type in it · its bar adds the next one, moves or deletes it' : 'Click any part to type in it · Tab adds the next one, Enter is done · its bar sets the rest, moves or deletes it'}</p>
       {#if rows}

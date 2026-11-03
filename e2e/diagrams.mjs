@@ -223,6 +223,46 @@ try {
   assert.ok((await md(page)).includes('"Remote"'), 'what came from elsewhere is not written over');
   console.log('ok   keys and clicks elsewhere, Esc, ⌘Z, a sync meanwhile');
 
+  // ---- empty space dragged across: the boxes it covers picked together, ⌫ (or the bar's Delete) deletes them all ----
+  page = await open('# Many\n\n```mermaid\nflowchart LR\n  n1("One")\n  n2("Two")\n  n3("Three")\n  n4("Four")\n  n1 --> n2\n  n2 --> n3\n  n3 --> n4\n```\n\nText after.\n');
+  await page.waitForSelector('.tiptap .mermaid-view svg');
+  await page.locator('.tiptap .mermaid-view').click();
+  await page.waitForSelector('.tiptap .dblock.active');
+  {
+    const two = await page.locator('.tiptap .mermaid-view g.node', { hasText: 'Two' }).boundingBox();
+    const three = await page.locator('.tiptap .mermaid-view g.node', { hasText: 'Three' }).boundingBox();
+    await page.mouse.move(two.x - 6, two.y - 14);
+    await page.mouse.down();
+    await page.mouse.move(three.x + three.width / 2, three.y + three.height + 10, { steps: 8 });
+    assert.equal(await page.locator('.layer .marquee').count(), 1, 'a box drawn as it is dragged');
+    await page.mouse.up();
+    assert.equal(await page.locator('.layer .ring').count(), 2, 'the two boxes it touched are picked');
+    await page.keyboard.press('Backspace');
+    await settle(page);
+    const left = await md(page);
+    assert.doesNotMatch(left, /Two|Three/, 'both deleted at once');
+    assert.match(left, /n1\("One"\)[\s\S]*n4\("Four"\)/, 'the others stay');
+    assert.match(left, /Text after\./, '⌫ was the drawing\'s, not the note\'s');
+    await page.locator('.tiptap p').last().click();
+    await page.keyboard.press('ControlOrMeta+z');
+    await settle(page);
+    assert.match(await md(page), /"Two"[\s\S]*"Three"/, 'one ⌘Z brings both back');
+    // the bar's Delete does it too
+    await page.locator('.tiptap .mermaid-view').click({ position: { x: 4, y: 4 } });
+    await page.waitForSelector('.tiptap .dblock.active');
+    const one = await page.locator('.tiptap .mermaid-view g.node', { hasText: 'One' }).boundingBox();
+    const four = await page.locator('.tiptap .mermaid-view g.node', { hasText: 'Four' }).boundingBox();
+    await page.mouse.move(one.x - 6, one.y - 14);
+    await page.mouse.down();
+    await page.mouse.move(four.x + four.width + 6, four.y + four.height + 10, { steps: 8 });
+    await page.mouse.up();
+    assert.equal(await page.locator('.layer .ring').count(), 4, 'all four picked');
+    await page.locator('.layer .bar button[aria-label="Delete the 4 steps"]').click();
+    await settle(page);
+    assert.doesNotMatch(await md(page), /"One"|"Four"/, 'the bar deletes them all');
+  }
+  console.log('ok   flowchart: boxes picked by dragging across them, deleted together, one ⌘Z');
+
   // ---- a line: picked and deleted with ⌫ (not the note's text); a step put in it; that step deleted, rejoined ----
   page = await open('# Line\n\n```mermaid\nflowchart LR\n  n1("One")\n  n2("Two")\n  n1 --> n2\n```\n\nText after.\n');
   await page.waitForSelector('.tiptap .mermaid-view svg');
