@@ -21,15 +21,19 @@ const isHangul = (ch: string) => /[가-힣ㄱ-ㆎ]/.test(ch);
 
 /**
  * `q` found in `text`, the last syllable of `q` counting as however far it has been typed: 회의록 is found by 호, 횡
- * and 회으 as well as by 회의 (a list cut down as a title is typed went empty at each of those, and back).
+ * and 회으 as well as by 회의 (a list cut down as a title is typed went empty at each of those, and back). `start`:
+ * found only where `text` begins.
  */
-export function typedIn(text: string, q: string): boolean {
-  if (text.includes(q)) return true;
+export function typedIn(text: string, q: string, start = false): boolean {
+  const at0 = (t: string) => (start ? t.startsWith(q) : t.includes(q));
+  if (at0(text)) return true;
+  // the first consonants alone, as Korean is often searched: ㅌㅇㅂ finds 테이블
+  if (q.length > 1 && [...q].every((c) => LEAD.includes(c)) && at0([...text].map((c) => keys(c)[0]).join(''))) return true;
   const last = q.at(-1);
   if (!last || !isHangul(last)) return false;
   const head = q.slice(0, -1), tail = keys(last);
   // the syllable being typed, and the one after it (where a final consonant may yet go)
-  for (let at = text.indexOf(head); at >= 0 && at < text.length; at = text.indexOf(head, at + 1)) {
+  for (let at = text.indexOf(head); at >= 0 && at < text.length && !(start && at > 0); at = text.indexOf(head, at + 1)) {
     const next = text.slice(at + head.length, at + head.length + 2);
     if ([...next].map(keys).join('').startsWith(tail)) return true;
   }
