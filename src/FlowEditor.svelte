@@ -19,6 +19,8 @@
    *   keys: Tab adds the next step, Enter is done typing (and types again), ⌫ deletes a box not being typed in, Esc lets go,
    *         the arrows go from box to box
    *   in swimlanes: a box dragged onto another lane goes into it (a finger drags the box picked)
+   *   empty space dragged across (a mouse; Shift on the whole screen, where a drag pans): the boxes it touches are
+   *         picked together, ⌫ or their bar deletes them all
    */
   let { flow, host, version, k, pick = null }: {
     flow: Flowchart; host: HTMLElement; version: string; k: number;
@@ -37,7 +39,7 @@
     return () => el.removeEventListener('input', fit);
   };
   let boxes = $state<Box[]>([]);
-  let sel = $state<{ node: string } | { edge: number; x: number; y: number } | { lane: string } | null>(untrack(() => (pick ? { node: pick } : null)));
+  let sel = $state<{ node: string } | { nodes: string[] } | { edge: number; x: number; y: number } | { lane: string } | null>(untrack(() => (pick ? { node: pick } : null)));
   /** where each swimlane's name is drawn (lanes.ts), to be clicked, renamed and moved */
   let laneHeads = $state<Box[]>([]);
   /** each lane's whole area, where a box dragged onto it goes */
@@ -208,6 +210,7 @@
     editing = null;
     startEdit(id);
   }
+  const dropNodes = (ids: string[]) => ids.forEach(dropNode);
   const dropEdge = (i: number) => { flow.edges.splice(i, 1); sel = null; };
   function reverse(i: number) { const e = flow.edges[i]; [e.from, e.to] = [e.to, e.from]; }
 
@@ -462,6 +465,36 @@
     window.addEventListener('pointercancel', off);
     if (finger) window.addEventListener('touchmove', tMove, { passive: false });
   }
+  /** a mouse dragged across empty space: the boxes the box drawn touches are picked together */
+  let marquee = $state<{ x0: number; y0: number; x: number; y: number } | null>(null);
+  function onSpaceDown(e: PointerEvent) {
+    if (e.button !== 0 || e.pointerType !== 'mouse' || linking || moveEnd !== null || drag || moving) return;
+    if ((e.target as Element).closest('g.node, path.hit, g.edgeLabel, g.lane-head')) return;
+    if (host.closest('.dblock.full') && !e.shiftKey) return; // there a plain drag pans the picture (DiagramBlock.svelte)
+    const o = layer.getBoundingClientRect(), x0 = e.clientX - o.left, y0 = e.clientY - o.top;
+    const pMove = (ev: PointerEvent) => {
+      const x = ev.clientX - o.left, y = ev.clientY - o.top;
+      if (!marquee && Math.hypot(x - x0, y - y0) < 6) return;
+      if (!marquee) { if (editing) commitEdit(); sel = null; } // the box picked before let go: its bar sat over the drag
+      marquee = { x0, y0, x, y };
+    };
+    const pUp = () => {
+      off();
+      const m = marquee;
+      marquee = null;
+      if (!m) return; // a click: onHostClick's
+      swallowClick = true;
+      setTimeout(() => (swallowClick = false));
+      const [l, r, t, b] = [Math.min(m.x0, m.x), Math.max(m.x0, m.x), Math.min(m.y0, m.y), Math.max(m.y0, m.y)];
+      const ids = boxes.filter((x) => x.x < r && x.x + x.w > l && x.y < b && x.y + x.h > t).map((x) => x.id);
+      sel = ids.length > 1 ? { nodes: ids } : ids.length ? { node: ids[0] } : null;
+      if (sel) letGo(); // ⌫ the drawing's, not the note's text
+    };
+    const off = () => { window.removeEventListener('pointermove', pMove); window.removeEventListener('pointerup', pUp); window.removeEventListener('pointercancel', pUp); };
+    window.addEventListener('pointermove', pMove);
+    window.addEventListener('pointerup', pUp);
+    window.addEventListener('pointercancel', pUp);
+  }
   /** the box under a point of the window */
   function boxAt(cx: number, cy: number) {
     const under = document.elementsFromPoint(cx, cy).find((el) => host.contains(el) && el.closest('g.node'));
@@ -469,7 +502,8 @@
   }
   $effect(() => {
     host.addEventListener('pointerdown', onBoxDown);
-    return () => host.removeEventListener('pointerdown', onBoxDown);
+    host.addEventListener('pointerdown', onSpaceDown);
+    return () => { host.removeEventListener('pointerdown', onBoxDown); host.removeEventListener('pointerdown', onSpaceDown); };
   });
   $effect(() => {
     host.addEventListener('click', onHostClick);
@@ -561,6 +595,7 @@
     }
     if (typing) return;
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sel = null; }
+    else if ('nodes' in sel) { if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); e.stopPropagation(); dropNodes(sel.nodes); } }
     else if ('lane' in sel && (e.key === 'Backspace' || e.key === 'Delete')) { e.preventDefault(); e.stopPropagation(); void dropLane(sel.lane); }
     else if ('lane' in sel) { if (e.key === 'Enter') { e.preventDefault(); startLaneEdit(sel.lane); } }
     else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); e.stopPropagation(); if ('node' in sel) dropNode(sel.node); else dropEdge(sel.edge); }
@@ -684,6 +719,22 @@
 <div class="layer" bind:this={layer}>
   {#if sel && 'node' in sel && selBox}
     <div class="ring" style:left={`${selBox.x - 4}px`} style:top={`${selBox.y - 4}px`} style:width={`${selBox.w + 8}px`} style:height={`${selBox.h + 8}px`}></div>
+  {/if}
+  {#if sel && 'nodes' in sel}
+    {@const picked = sel.nodes.map(boxOf).filter((b): b is Box => !!b)}
+    {#each picked as b (b.id)}
+      <div class="ring" style:left={`${b.x - 4}px`} style:top={`${b.y - 4}px`} style:width={`${b.w + 8}px`} style:height={`${b.h + 8}px`}></div>
+    {/each}
+    {#if picked.length}
+      {@const ids = sel.nodes}
+      {@const at = barAt((Math.min(...picked.map((b) => b.x)) + Math.max(...picked.map((b) => b.x + b.w))) / 2, Math.min(...picked.map((b) => b.y)), Math.max(...picked.map((b) => b.y + b.h)), 150)}
+      <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
+        <button type="button" class="danger" aria-label={`Delete the ${ids.length} steps`} title="Delete them (⌫)" onclick={() => dropNodes(ids)}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg><span class="lbl">Delete {ids.length}</span></button>
+      </div>
+    {/if}
+  {/if}
+  {#if marquee}
+    <div class="marquee" style:left={`${Math.min(marquee.x0, marquee.x)}px`} style:top={`${Math.min(marquee.y0, marquee.y)}px`} style:width={`${Math.abs(marquee.x - marquee.x0)}px`} style:height={`${Math.abs(marquee.y - marquee.y0)}px`}></div>
   {/if}
   {#if hover && boxOf(hover) && drag && hover !== drag.from}
     {@const b = boxOf(hover)!}
@@ -880,6 +931,7 @@
   /* the boxes, the +, the bars and the rings stay inside the card: drawn past its edge they sat over the page, where a
      click closed the diagram */
   .layer { overflow: hidden; }
+  .marquee { position: absolute; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); opacity: 0.7; pointer-events: none; }
   .lane-drop { position: absolute; border-radius: 6px; box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); opacity: 0.6; pointer-events: none; }
   .ghost {
     position: absolute; translate: -50% -50%; padding: 6px 12px; border-radius: 10px; pointer-events: none; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis;
