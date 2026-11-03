@@ -20,6 +20,8 @@ export interface FlowEdge {
   from: string; to: string; label: string; line: Line;
   /** the arrow as written when it is not one the forms make (---, --o, --x, <-->, --->): kept while its line is left alone */
   arrow?: string;
+  /** drawn moving, its dashes running the way it goes (mermaid's `e1@-->` and `e1@{ animate: true }`) */
+  animate?: boolean;
 }
 export interface Flowchart {
   kind: 'flowchart'; dir: 'LR' | 'TD' | 'RL' | 'BT'; nodes: FlowNode[]; edges: FlowEdge[]; lanes?: Lane[];
@@ -235,11 +237,18 @@ function flowCode(d: Flowchart) {
   }
   for (const n of d.nodes) if (!lanes.some((l) => l.id === n.lane)) lines.push(nodeLine(n, '  '));
   const ids = new Set(d.nodes.map((n) => n.id));
+  // a moving line needs an id to be told so by: e1, e2… in order, past any box's id
+  const moving: string[] = [];
+  let k = 1;
+  const nextId = () => { while (ids.has(`e${k}`)) k++; return `e${k++}`; };
   for (const e of d.edges) {
     if (!ids.has(e.from) || !ids.has(e.to)) continue;
     const arrow = e.arrow && lineOf(e.arrow) === e.line ? e.arrow : ARROWS[e.line];
-    lines.push(`  ${e.from} ${arrow}${one(e.label) ? `|${brQuoted(e.label)}|` : ''} ${e.to}`);
+    const id = e.animate ? nextId() : '';
+    if (id) moving.push(id);
+    lines.push(`  ${e.from} ${id ? `${id}@` : ''}${arrow}${one(e.label) ? `|${brQuoted(e.label)}|` : ''} ${e.to}`);
   }
+  for (const id of moving) lines.push(`  ${id}@{ animate: true }`);
   for (const x of d.extra ?? []) lines.push(`  ${x}`);
   return lines.join('\n');
 }
@@ -291,7 +300,10 @@ function readNodes(s: string): { nodes: NonNullable<ReturnType<typeof readNode>>
 }
 /** an arrow at the start of `s`, and its label: -->, ---, -.->, ==>, --o, --x, <-->, --->, with |a label| after it, or
  *  written inside it (-- a label -->, -. a label .->, == a label ==>) */
-function readArrow(s: string): { arrow: string; label: string; rest: string } | null {
+function readArrow(s: string): { arrow: string; label: string; rest: string; id?: string } | null {
+  // a line's own id before it (A e1@--> B), for a setting said of it after
+  const named = /^([\p{L}\p{N}_]+)@(?=[<ox]?[-=])/u.exec(s);
+  if (named) { const a = readArrow(s.slice(named[0].length)); return a && { ...a, id: named[1] }; }
   const inside = /^([<ox]?)(--|-\.|==)\s+(.*?)\s+(-{2,}|\.+-|={2,})([>ox]?)(?![-=.])/u.exec(s);
   if (inside && !/^[-=.]/.test(inside[3])) {
     const close = inside[4] + inside[5];
@@ -337,6 +349,7 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
     return have;
   };
   const keep = (x: string) => (d.extra ??= []).push(x);
+  const edgeIds = new Map<string, FlowEdge>(), told: [string, boolean][] = [];
   for (const raw of lines) {
     const whole = raw.trim();
     if (KEPT.test(whole)) { keep(whole); continue; }
@@ -355,6 +368,9 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
         continue;
       }
       if (line === 'end') { if (!lane) return null; lane = null; continue; }
+      // a line told to move (e1@{ animate: true }); any other setting of one is more than the forms show
+      const set = /^([\p{L}\p{N}_]+)@\{\s*animate:\s*(true|false)\s*\}$/u.exec(line);
+      if (set) { told.push([set[1], set[2] === 'true']); continue; }
       if (/^direction\s+(LR|RL|TB|TD|BT)$/.test(line)) { if (!lane) return null; continue; } // written anew with the chart's
       // boxes, and the arrows between them: A --> B, A --> B --> C, A & B --> C & D
       let group = readNodes(line);
@@ -368,13 +384,18 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
         if (!group) return null;
         const to = group.nodes.map(node);
         const line_ = lineOf(arrow.arrow);
-        for (const a of from) for (const b of to) d.edges.push({ from: a.id, to: b.id, label: unlines(arrow.label), line: line_, ...(arrow.arrow !== ARROWS[line_] ? { arrow: arrow.arrow } : {}) });
+        for (const a of from) for (const b of to) {
+          const e: FlowEdge = { from: a.id, to: b.id, label: unlines(arrow.label), line: line_, ...(arrow.arrow !== ARROWS[line_] ? { arrow: arrow.arrow } : {}) };
+          if (arrow.id) { if (edgeIds.has(arrow.id) || seen.has(arrow.id)) return null; edgeIds.set(arrow.id, e); }
+          d.edges.push(e);
+        }
         from = to;
         rest = group.rest;
       }
     }
   }
   if (lane) return null; // a lane never closed
+  for (const [id, on] of told) { const e = edgeIds.get(id); if (!e) return null; if (on) e.animate = true; else delete e.animate; }
   return d;
 }
 

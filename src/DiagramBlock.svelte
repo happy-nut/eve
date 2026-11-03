@@ -538,10 +538,8 @@
       <button class="ghost" onclick={() => { active = false; onCodeEdit(); }}>Code</button>
       <button class="done" onclick={leave}>Done</button>
     </div>
-    {#if flow}
-      <p class="dtip">{isMobile ? 'Tap a box to pick it; ✎ Text in its bar (or a second tap) types in it · its + adds the next step · drag the box picked onto another, or Connect, to join them' : `Click a box to pick it; ✎ Text, a second click or Enter types in it · its + adds the next step; drag a box (or its +) onto another, or Connect, to join them · ${full ? '⇧ and drag' : 'drag'} across empty space to pick several · Tab adds a step, ⌫ deletes`}</p>
-    {:else}
-      <p class="dtip">{isMobile ? 'Tap any part to type in it · its bar adds the next one, moves or deletes it' : 'Click any part to type in it · Tab adds the next one, Enter is done · its bar sets the rest, moves or deletes it'}</p>
+    <!-- no line of tips under it: the bars and the buttons' own titles say what they do (the tips looked cluttered) -->
+    {#if !flow}
       {#if rows}
         <DiagramForm {d} />
         <!-- a long form: Done at its foot too, not only out of sight at its top -->
@@ -610,7 +608,6 @@
   .codebar { padding: 8px 10px 6px; }
   .codebar .say { font-size: 12.5px; color: var(--fg-dim); flex: 1 1 220px; }
   .codebar .say code { font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--bg-input); }
-  .dtip { margin: 2px 12px 0; font-size: 12px; color: var(--fg-dim); user-select: none; -webkit-user-select: none; }
   .dblock :global(.form) { padding: 4px 12px 0; }
 
   /* the whole screen: the picture fills it and scrolls; the tools along the top; a chart's rows beside it (under it on
@@ -625,7 +622,6 @@
      them, its name hidden), as the app's own toolbar is */
   :global(html:not(.mobile)) .dblock.full > :is(.tools, .codebar) { padding-left: 86px; }
   :global(html:not(.mobile)) .dblock.full .foldchips { left: 86px; }
-  .dblock.full > .dtip { grid-column: 1 / -1; grid-row: 2; margin: 0; padding: 2px 12px 6px; background: var(--bg); }
   .dblock.full > .pic { grid-column: 1; grid-row: 3 / 5; min-height: 0; }
   .dblock.full > :global(.form) { grid-column: 2; grid-row: 3; width: min(380px, 40vw); overflow: auto; padding: 12px; background: var(--bg); border-left: 1px solid var(--border, var(--bg-hover)); }
   .dblock.full > .foot { grid-column: 2; grid-row: 4; padding: 8px 12px; background: var(--bg); border-left: 1px solid var(--border, var(--bg-hover)); }

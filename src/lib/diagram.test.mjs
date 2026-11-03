@@ -426,3 +426,26 @@ assert.equal(toCode(fromCode('sequenceDiagram\n  actor Ann\n  participant Web\n 
   assert.equal(ganttDates(g).get(g.sections[0].tasks[0]).start, '2026-01-27');
 }
 console.log('round 2 ok');
+
+// a line that moves (mermaid's `e1@-->` and `e1@{ animate: true }`): read, written back the same, the others still
+{
+  const code = ['flowchart LR', '  A("a")', '  B("b")', '  C("c")', '  A e1@-->|"go"| B', '  B --> C', '  e1@{ animate: true }'].join('\n');
+  const d = fromCode(code);
+  assert.ok(d, 'read');
+  assert.deepEqual(d.edges.map((e) => !!e.animate), [true, false]);
+  assert.equal(d.edges[0].label, 'go');
+  assert.equal(toCode(d), code, 'written back the same');
+  d.edges[1].animate = true;
+  assert.deepEqual(fromCode(toCode(d)).edges.map((e) => !!e.animate), [true, true], 'one more made to move');
+  d.edges[0].animate = false;
+  assert.doesNotMatch(toCode({ ...d, edges: [d.edges[0]] }), /@/, 'still again: no id left on it');
+  // an id that names no line, or a setting the forms do not show: edited as code
+  assert.equal(fromCode('flowchart LR\n  A --> B\n  e9@{ animate: true }'), null);
+  assert.equal(fromCode('flowchart LR\n  A e1@--> B\n  e1@{ curve: linear }'), null);
+  // an edge id that is also a box's: another one written
+  const clash = { kind: 'flowchart', dir: 'LR', nodes: [{ id: 'e1', label: 'x', shape: 'round' }, { id: 'n2', label: 'y', shape: 'round' }], edges: [{ from: 'e1', to: 'n2', label: '', line: 'solid', animate: true }] };
+  assert.deepEqual(fromCode(toCode(clash)), clash);
+}
+
+// a moving line in swimlanes (drawn by lanes.ts, not mermaid): moving there too
+assert.match(laneSvg({ kind: 'flowchart', dir: 'LR', lanes: [{ id: 'A', label: 'A' }], nodes: [{ id: 'x', label: 'x', shape: 'round', lane: 'A' }, { id: 'y', label: 'y', shape: 'round', lane: 'A' }], edges: [{ from: 'x', to: 'y', label: '', line: 'solid', animate: true }] }), /sl-edge solid moving/);

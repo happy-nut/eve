@@ -84,7 +84,7 @@ const overlaps = (page, i) => page.evaluate((i) => {
   if (down && down.top < r.bottom - 1) out.push(`over the text below by ${(r.bottom - down.top).toFixed(1)}px`);
   // open for editing: its bars clear of the drawing
   const canvas = block.querySelector('.mermaid-view').getBoundingClientRect();
-  block.querySelectorAll('.dblock > .tools, .dblock > .dtip, .dblock > .foot').forEach((t) => {
+  block.querySelectorAll('.dblock > .tools, .dblock > .foot').forEach((t) => {
     const tr = t.getBoundingClientRect();
     if (tr.height && cross(tr, canvas) > 1) out.push(`${t.className} over the drawing`);
   });
