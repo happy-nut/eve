@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
-  import { across, freshId, type Flowchart, type Line, type Shape } from './lib/diagram';
+  import { across, freshId, type Flowchart, type FlowEdge, type Line, type Shape } from './lib/diagram';
   import { ui, under } from './lib/ui.svelte';
   import { letGo } from './lib/focusWatch';
   import { claimKeys, composing } from './lib/keys';
@@ -12,9 +12,11 @@
    * right where they are drawn, with no mermaid to write. Mermaid still lays the picture out, so what is drawn here is
    * what the note will show. This is a layer over the preview: it reads where mermaid put each box (its node's id
    * holds the step's id; the lines come in the order they were written) and edits the chart, which draws again.
-   *   a box: a click types in it, right there, the picture following the text; a bar over it sets its shape or deletes it
+   *   a box: a click picks it, and a key typed then types over its name (a mouse's: its field holds the keyboard, hidden,
+   *         its words chosen, so a word put together in 한글 goes in too); a bar over it sets its shape or deletes it
    *   its +: a click adds the next step joined to it; it, or the box itself, dragged onto another box joins the two
-   *   a line: click selects it (its look, moving or not, its label, the other way round, deleting)
+   *   a line: click selects it (its look, moving or not, its label, the other way round, deleting); a key typed then
+   *         types over its label, Tab tries its next look (arrow, dotted, bold), ⌫ before typing deletes it
    *   empty space: a double-click adds a box on its own
    *   keys: Tab adds the next step, Enter is done typing (and types again), ⌫ deletes a box not being typed in, Esc lets go,
    *         the arrows go from box to box
@@ -68,6 +70,32 @@
    *  lane picked left it in the note, and ⌫ deleted the note's last letter instead of the line */
   const releaseKeys = () => { const a = document.activeElement as HTMLElement | null; if (a && a !== document.body && !layer?.contains(a)) letGo(a); };
   $effect(() => { if (sel && !editing && !laneEditing) untrack(releaseKeys); });
+  /** a box or a lane picked with a mouse: its name's field there already, unseen, holding the keyboard with its words
+   *  chosen, so the first key typed types over them (Enter or a second click first was a step more). A field made only
+   *  then would miss that key, and a 한글 word being put together. Not a phone's: its keyboard came up at every tap */
+  const armed = $derived(!isMobile && !editing && !laneEditing && !drag && !moving && !linking && moveEnd === null && sel && ('node' in sel || 'lane' in sel) ? sel : null);
+  let armedFor = '';
+  $effect(() => {
+    const a = armed;
+    untrack(() => {
+      const k = !a ? '' : 'node' in a ? `n:${a.node}` : `l:${a.lane}`;
+      const fresh = k !== armedFor;
+      if (fresh && a) {
+        if ('node' in a) editText = before = flow.nodes.find((n) => n.id === a.node)?.label ?? '';
+        else laneText = flow.lanes?.find((l) => l.id === a.lane)?.label ?? '';
+      }
+      armedFor = k;
+      // (each time it is picked again, too: a drag of the box left the keyboard in the note's text)
+      if (a) tick().then(() => { const el = layer?.querySelector<HTMLInputElement>('input.armed'); if (el && (fresh || document.activeElement !== el)) { el.focus({ preventScroll: true }); el.select(); } });
+    });
+  });
+  // let go before it goes: taken off the page with the keyboard in it, the keyboard was on <body> as if lost
+  $effect.pre(() => { if (!armed && !editing && !laneEditing) untrack(() => { const a = document.activeElement; if (a instanceof HTMLInputElement && a.classList.contains('armed')) letGo(a); }); });
+  /** a picked line's label field holds the keyboard; until a word is typed in it, ⌫ deletes the line */
+  let labelFresh = false;
+  const holdLabel = () => { if (isMobile) return; labelFresh = true; tick().then(() => { const t = layer?.querySelector<HTMLTextAreaElement>('textarea.edge-label'); t?.focus({ preventScroll: true }); t?.select(); }); };
+  /** the next look of a line, round again after the last */
+  const nextLine = (e: FlowEdge) => { e.line = LINES[(LINES.findIndex(([l]) => l === e.line) + 1) % LINES.length][0]; };
 
   const nodeIdOf = (g: Element) => /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null;
   let linePts: { x: number; y: number; from: string; to: string }[] = [];
@@ -327,6 +355,16 @@
     ]);
   }
 
+  /** the boxes picked together, all into one lane */
+  function pickLanes(e: MouseEvent, ids: string[]) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const ns = flow.nodes.filter((n) => ids.includes(n.id));
+    ui.openMenu(under(r), [
+      { label: 'Move to lane', disabled: true },
+      ...(flow.lanes ?? []).map((l) => ({ label: l.label, checked: ns.every((n) => n.lane === l.id), run: () => { for (const n of ns) n.lane = l.id; } })),
+    ]);
+  }
+
   // ---- the picture's own clicks ----
   function onHostClick(e: MouseEvent) {
     if (drag || swallowClick) return;
@@ -375,7 +413,7 @@
     if (at >= 0) {
       const i = drawnEdges()[at]?.i;
       const o = layer.getBoundingClientRect();
-      if (i !== undefined) sel = { edge: i, x: e.clientX - o.left, y: e.clientY - o.top };
+      if (i !== undefined) { sel = { edge: i, x: e.clientX - o.left, y: e.clientY - o.top }; holdLabel(); }
       return;
     }
     sel = null;
@@ -586,11 +624,14 @@
     // typed in the list or another note's page, which deleted the box behind them
     const t = e.target as Element;
     if (t !== document.body && !layer.closest('.dblock')?.contains(t) && t !== layer.closest('.tiptap')) return;
-    const typing = (e.target as HTMLElement).matches?.('input, textarea, [contenteditable="true"]');
+    const typing = (e.target as HTMLElement).matches?.('input:not(.armed), textarea, [contenteditable="true"]');
     // in a line's label: Esc or Enter is done with it (Esc closed the whole builder), the rest is typing (a word still
     // being put together there is the IME's, and its keys never get here: keys.ts)
     if (typing && layer.contains(e.target as Node)) {
-      if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); e.stopPropagation(); sel = null; }
+      const label = (e.target as Element).matches('textarea.edge-label') && 'edge' in sel ? flow.edges[sel.edge] : null;
+      if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); e.stopPropagation(); doneTyping(); sel = null; }
+      else if (label && e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); nextLine(label); }
+      else if (label && labelFresh && (e.key === 'Backspace' || e.key === 'Delete')) { e.preventDefault(); e.stopPropagation(); doneTyping(); dropEdge((sel as { edge: number }).edge); }
       return;
     }
     if (typing) return;
@@ -727,8 +768,11 @@
     {/each}
     {#if picked.length}
       {@const ids = sel.nodes}
-      {@const at = barAt((Math.min(...picked.map((b) => b.x)) + Math.max(...picked.map((b) => b.x + b.w))) / 2, Math.min(...picked.map((b) => b.y)), Math.max(...picked.map((b) => b.y + b.h)), 150)}
+      {@const at = barAt((Math.min(...picked.map((b) => b.x)) + Math.max(...picked.map((b) => b.x + b.w))) / 2, Math.min(...picked.map((b) => b.y)), Math.max(...picked.map((b) => b.y + b.h)), flow.lanes?.length ? 230 : 150)}
       <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
+        {#if flow.lanes?.length}
+          <button type="button" aria-label="Lane" title="Move them to another lane" onclick={(e) => pickLanes(e, ids)}><svg viewBox="0 0 16 16"><path d="M2 4.5h12M2 8h12M2 11.5h12" /></svg><span class="lbl">Lane</span></button>
+        {/if}
         <button type="button" class="danger" aria-label={`Delete the ${ids.length} steps`} title="Delete them (⌫)" onclick={() => dropNodes(ids)}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg><span class="lbl">Delete {ids.length}</span></button>
       </div>
     {/if}
@@ -747,14 +791,16 @@
     {@const i = (flow.lanes ?? []).findIndex((l) => l.id === lid)}
     {#if hb && i >= 0}
       <div class="ring" style:left={`${hb.x - 2}px`} style:top={`${hb.y - 2}px`} style:width={`${hb.w + 4}px`} style:height={`${hb.h + 4}px`}></div>
-      {#if laneEditing === lid}
+      {#if laneEditing === lid || (armed && 'lane' in armed)}
         <!-- the keyboard in it as it appears: it comes only once the new lane is drawn and measured, after "+ Lane" was
-             pressed, and the keys typed went to that button (Enter made another lane) -->
-        <input class="lane-name" bind:value={laneText} aria-label="Lane name" placeholder="Lane" {@attach (el: HTMLInputElement) => { el.focus(); el.select(); }}
-          style:left={`${clampX(hb.x + hb.w / 2, 140)}px`} style:top={`${hb.y + hb.h / 2 - 16}px`}
-          onkeydown={(e) => { if (composing(e)) return; if (e.key === 'Enter') { e.preventDefault(); commitLane(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); doneTyping(); laneEditing = null; } }}
-          onblur={commitLane} />
-      {:else}
+             pressed, and the keys typed went to that button (Enter made another lane). Picked only, it is there unseen:
+             a key typed types over the lane's name -->
+        <input class={laneEditing === lid ? 'lane-name' : 'armed'} bind:value={laneText} aria-label="Lane name" placeholder="Lane" {@attach (el: HTMLInputElement) => { el.focus({ preventScroll: true }); el.select(); }}
+          style:left={`${clampX(hb.x + hb.w / 2, 140)}px`} style:top={`${hb.y + hb.h / 2 - 16}px`} oninput={() => { if (!laneEditing) laneEditing = lid; }}
+          onkeydown={(e) => { if (composing(e) || !laneEditing) return; if (e.key === 'Enter') { e.preventDefault(); commitLane(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); doneTyping(); laneEditing = null; } }}
+          onblur={() => { if (laneEditing) commitLane(); }} />
+      {/if}
+      {#if laneEditing !== lid}
         <!-- over the lane's own name (picked, it is ringed): above or under it, the bar covered the next lane's name and
              boxes, and a click meant for them deleted the lane -->
         {@const at = { left: clampX(hb.x + hb.w / 2, 240), top: Math.max(4, hb.y + hb.h / 2 - 21) }}
@@ -791,12 +837,13 @@
     <svg class="wire" aria-hidden="true"><line x1={drag.x0} y1={drag.y0} x2={drag.x} y2={drag.y} /><circle cx={drag.x} cy={drag.y} r="4" /></svg>
   {/if}
 
-  {#if editing}
-    {@const b = boxOf(editing) ?? { id: editing, x: pendingAt.x - 70, y: pendingAt.y - 16, w: 140, h: 32 }}
-    <input class="rename" bind:value={editText} aria-label="Step name" oninput={typed}
+  {#if editing || (armed && 'node' in armed)}
+    {@const at = editing ?? (armed as { node: string }).node}
+    {@const b = boxOf(at) ?? { id: at, x: pendingAt.x - 70, y: pendingAt.y - 16, w: 140, h: 32 }}
+    <input class={editing ? 'rename' : 'armed'} bind:value={editText} aria-label="Step name" oninput={() => { if (!editing) editing = at; typed(); }}
       style:left={`${clampX(b.x + b.w / 2, Math.min(Math.max(b.w, 140), (layer?.clientWidth ?? 600) - 8))}px`} style:top={`${b.y + b.h / 2 - 16}px`} style:width={`${Math.min(Math.max(b.w, 140), (layer?.clientWidth ?? 600) - 8)}px`}
-      onkeydown={(e) => { if (composing(e)) return; if (e.key === 'Enter') { e.preventDefault(); commitEdit(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelEdit(); } else if (e.key === 'Tab') { e.preventDefault(); const from = editing; commitEdit(); if (from) addAfter(from); } }}
-      onblur={commitEdit} />
+      onkeydown={(e) => { if (composing(e) || !editing) return; if (e.key === 'Enter') { e.preventDefault(); commitEdit(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelEdit(); } else if (e.key === 'Tab') { e.preventDefault(); const from = editing; commitEdit(); if (from) addAfter(from); } }}
+      onblur={() => { if (editing) commitEdit(); }} />
   {/if}
 
   {#if moving}
@@ -853,7 +900,7 @@
         onclick={() => { if (selEdge.animate) delete selEdge.animate; else selEdge.animate = true; }}><svg viewBox="0 0 16 16"><path d="M2 8h2.5M6.5 8H9M11 8h1" /><path d="M9.5 5.5 12 8l-2.5 2.5" /><path d="M3 4.5h4M3 11.5h4" stroke-opacity=".5" /></svg></button>
       <span class="sep"></span>
       <!-- room for a few words, and lines: ⇧↩ breaks one (a one-line field of 110px held two words, and no break) -->
-      <textarea class="edge-label" rows="1" bind:value={selEdge.label} placeholder="Label" aria-label="Line label" title="⇧↩ a new line" {@attach grow}></textarea>
+      <textarea class="edge-label" rows="1" bind:value={selEdge.label} placeholder="Label" aria-label="Line label" title="⇧↩ a new line · Tab its next look" oninput={() => (labelFresh = false)} {@attach grow}></textarea>
       <button type="button" aria-label="Put a step in this line" title="Put a step in the middle of this line" onclick={() => splitEdge(i)}><svg viewBox="0 0 16 16"><path d="M1.5 8h3M11.5 8h3" /><rect x="4.5" y="5" width="7" height="6" rx="1.6" /></svg></button>
       <button type="button" aria-label="Move its end" title="Move its end to another box" onclick={() => { moveEnd = i; sel = null; }}><svg viewBox="0 0 16 16"><path d="M1.5 8h7M6.5 5.5 9 8l-2.5 2.5" /><rect x="10.5" y="5" width="4" height="6" rx="1.4" stroke-dasharray="2 1.5" /></svg></button>
       <button type="button" aria-label="Reverse" title="Reverse" onclick={() => reverse(i)}><svg viewBox="0 0 16 16"><path d="M3 5.5h9.5M10.5 3l2.5 2.5L10.5 8M13 10.5H3.5M5.5 8 3 10.5 5.5 13" /></svg></button>
@@ -894,6 +941,8 @@
     position: absolute; width: 140px; height: 32px; box-sizing: border-box; padding: 0 10px; border: 0; border-radius: 10px; text-align: center;
     font: inherit; font-size: 13px; font-weight: 600; color: var(--fg); background: var(--bg-pop); box-shadow: 0 0 0 2px var(--accent), 0 4px 14px rgba(0, 0, 0, 0.15); outline: none;
   }
+  /* a picked box's or lane's field, holding the keyboard unseen until a key is typed */
+  .armed { position: absolute; width: 140px; height: 32px; opacity: 0; pointer-events: none; }
   .bar button:disabled { opacity: 0.35; }
   .bar button .lbl { max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
   .rename {
