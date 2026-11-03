@@ -73,3 +73,26 @@ test('a build run from the code takes no summon key: only the app answers it', a
   await setGlobalHotkey('Mod-Shift-e', false);
   expect(keys).toEqual(['CmdOrCtrl+Shift+E']);
 });
+
+// summoned, the note's pane stayed white (the crumbs over it, a click or a scroll changing nothing) until another note
+// was opened and this one again: the page had been loaded again while Eve was away, and its fade in, begun unseen, was
+// kept at its first frame
+test('a note opened unseen does not fade in, and what was part way into a fade is shown whole when Eve comes back', async () => {
+  const { seenFade, endFades } = await import('./platform');
+  const focused = vi.spyOn(document, 'hasFocus');
+  focused.mockReturnValue(false);
+  expect(seenFade(160).duration).toBe(0); // Eve away: no fade to be stuck in
+  focused.mockReturnValue(true);
+  expect(seenFade(160).duration).toBe(160); // a note opened while writing still fades in
+  focused.mockRestore();
+  document.body.innerHTML = '<main><div class="page"></div></main><aside><li></li></aside><p></p>';
+  const finished: string[] = [];
+  const anim = (name: string, endless = false) => ({ finish: () => { if (endless) throw new DOMException('endless', 'InvalidStateError'); finished.push(name); } });
+  const [page, row, other] = ['.page', 'li', 'p'].map((s) => document.querySelector(s)!) as HTMLElement[];
+  Object.assign(page, { getAnimations: () => [anim('page'), anim('spinner', true)] });
+  Object.assign(row, { getAnimations: () => [anim('row')] });
+  Object.assign(other, { getAnimations: () => [anim('other')] });
+  endFades();
+  expect(finished).toEqual(['page', 'row']); // a popup's own transition is left to run
+  document.body.innerHTML = '';
+});

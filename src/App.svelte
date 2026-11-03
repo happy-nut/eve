@@ -11,7 +11,7 @@
   import { tree } from './lib/tree.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
-  import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, widget, links, inbox, saveAsset, storage, copyText } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, seenFade, endFades, widget, links, inbox, saveAsset, storage, copyText } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Confirm from './Confirm.svelte';
@@ -208,6 +208,7 @@
    * not a page with a diagram on the whole screen, which a transform around it would shrink to the page's size.
    */
   function redrawPanes() {
+    endFades();
     const panes = [...document.querySelectorAll<HTMLElement>('main .tiptap, .card-page .tiptap, aside')].filter((el) => !el.querySelector('.dblock.full'));
     for (const el of panes) el.style.transform = 'translateZ(0)';
     requestAnimationFrame(() => requestAnimationFrame(() => { for (const el of panes) el.style.transform = ''; }));
@@ -692,7 +693,7 @@
     {#if !isMobile && tabs.list.length > 1}<TabBar />{/if}
     {#if notes.loaded && notes.current}
       {#key notes.currentId}
-        <div class="page" in:fade={{ duration: 160 }}>
+        <div class="page" in:fade={seenFade(160)}>
           <Editor note={notes.current} />
         </div>
       {/key}
@@ -703,7 +704,7 @@
         </button>
       {/if}
     {:else if notes.loaded && notes.currentId === CALENDAR}
-      <div class="page" in:fade={{ duration: 160 }}><CalendarPage onpick={openDay} ontemplate={openTemplate} /></div>
+      <div class="page" in:fade={seenFade(160)}><CalendarPage onpick={openDay} ontemplate={openTemplate} /></div>
     {/if}
   </main>
 </div>

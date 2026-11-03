@@ -414,6 +414,18 @@ async function show() {
   // is not dependable here — the webview may already hold focus while the app was hidden)
   window.dispatchEvent(new Event('eve-summon'));
 }
+/**
+ * A note's page fading in, not when no one is looking: begun in a window hidden or behind another app (the page loaded
+ * again while Eve was away, a note opened from elsewhere), WebKit kept it at its first frame, and the note stayed a
+ * white page under the crumbs (a scroll or a click did not bring it) until another note was opened and this one again.
+ */
+export const seenFade = (duration: number) => ({ duration: document.hidden || !document.hasFocus() ? 0 : duration });
+/** Back in sight: a page or a list's row still part way into its fade (begun while Eve was away) is shown whole. */
+export function endFades() {
+  for (const el of document.querySelectorAll<HTMLElement>('main .page, aside li')) {
+    for (const a of el.getAnimations?.() ?? []) try { a.finish(); } catch { /* an endless one: not a fade */ }
+  }
+}
 /** Summon `n` is seen once two frames are drawn after it (Rust sees it anyway after a while, so a page that cannot
  *  draw never leaves it invisible). */
 export async function revealWhenDrawn(n: number) {
