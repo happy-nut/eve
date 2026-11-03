@@ -283,6 +283,17 @@ try {
   await page.keyboard.press('ControlOrMeta+z');
   await settle(page);
   assert.ok((await md(page)).includes('n1 --> n2'), 'undo brings the line back');
+  // Moving in its bar: its dashes run (mermaid's animate), the note says so; pressed again, still
+  m = await mid();
+  await page.mouse.click(m.x, m.y);
+  await page.locator('.layer .bar button[aria-label="Moving"]').click();
+  await settle(page);
+  assert.match(await md(page), /n1 e1@--> n2[\s\S]*e1@\{ animate: true \}/, 'the note keeps it moving');
+  assert.equal(await page.locator('.tiptap .mermaid-view path.flowchart-link[class*="edge-animation"]').count(), 1, 'drawn moving');
+  await page.locator('.layer .bar button[aria-label="Moving"]').click();
+  await settle(page);
+  assert.doesNotMatch(await md(page), /@/, 'still again');
+  await page.keyboard.press('Escape');
   m = await mid();
   await page.mouse.click(m.x, m.y);
   await page.locator('.layer .bar button[aria-label="Put a step in this line"]').click();

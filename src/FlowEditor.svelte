@@ -14,7 +14,7 @@
    * holds the step's id; the lines come in the order they were written) and edits the chart, which draws again.
    *   a box: a click types in it, right there, the picture following the text; a bar over it sets its shape or deletes it
    *   its +: a click adds the next step joined to it; it, or the box itself, dragged onto another box joins the two
-   *   a line: click selects it (its look, its label, the other way round, deleting)
+   *   a line: click selects it (its look, moving or not, its label, the other way round, deleting)
    *   empty space: a double-click adds a box on its own
    *   keys: Tab adds the next step, Enter is done typing (and types again), ⌫ deletes a box not being typed in, Esc lets go,
    *         the arrows go from box to box
@@ -843,12 +843,14 @@
   {/if}
 
   {#if selEdge && sel && 'edge' in sel && !drag}
-    {@const at = barAt(sel.x, sel.y - 6, sel.y + 6, isMobile ? 360 : 518)}
+    {@const at = barAt(sel.x, sel.y - 6, sel.y + 6, isMobile ? 360 : 550)}
     {@const i = sel.edge}
     <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
       {#each LINES as [line, label, icon] (line)}
         <button type="button" class:on={selEdge.line === line} aria-label={label} title={label} onclick={() => (selEdge.line = line)}><svg viewBox="0 0 16 16">{@html icon}</svg></button>
       {/each}
+      <button type="button" class:on={!!selEdge.animate} aria-label="Moving" aria-pressed={!!selEdge.animate} title="Moving: its dashes run the way it goes"
+        onclick={() => { if (selEdge.animate) delete selEdge.animate; else selEdge.animate = true; }}><svg viewBox="0 0 16 16"><path d="M2 8h2.5M6.5 8H9M11 8h1" /><path d="M9.5 5.5 12 8l-2.5 2.5" /><path d="M3 4.5h4M3 11.5h4" stroke-opacity=".5" /></svg></button>
       <span class="sep"></span>
       <!-- room for a few words, and lines: ⇧↩ breaks one (a one-line field of 110px held two words, and no break) -->
       <textarea class="edge-label" rows="1" bind:value={selEdge.label} placeholder="Label" aria-label="Line label" title="⇧↩ a new line" {@attach grow}></textarea>

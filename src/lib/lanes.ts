@@ -246,7 +246,7 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
       at = [(a.m + b.m) / 2, low];
     }
     const p = pts.map(([m, c]) => xy(m, c));
-    svg += `<path class="flowchart-link sl-edge ${e.line}" data-id="${id}-e${i}" d="${rounded(p)}" marker-end="url(#${id}-arrow)"/>`;
+    svg += `<path class="flowchart-link sl-edge ${e.line}${e.animate ? ' moving' : ''}" data-id="${id}-e${i}" d="${rounded(p)}" marker-end="url(#${id}-arrow)"/>`;
     const chip = chips[i];
     if (chip.lines.length) {
       const [m, c] = placeLabel(pts, at, chip);
