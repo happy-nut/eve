@@ -357,20 +357,45 @@ export function slashItems(query: string): SuggestItem[] {
   const from = turn ? [TEXT, ...SLASH.filter((i) => TURNS.has(i.label))] : [TEXT, ...all];
   // a word with a space in it ("할 일", "하위 페이지") found typed without it: the / menu ends at a space
   const has = (w: string | undefined) => !!w && (typedIn(w.toLowerCase(), q) || typedIn(w.toLowerCase().replace(/\s+/g, ''), q));
-  const finds = (i: SuggestItem) => [i.label, i.hint, i.keywords].some(has);
+  const finds = (i: SuggestItem) => [i.label, i.hint, i.keywords, koreanOf(i)].some(has);
   // a kind found by its group's name is found too ("/diagram" lists every diagram); not by the group's hint, which
   // names a few kinds ("/flow" is Flowchart alone)
-  const named = (i: SuggestItem) => [i.label, i.keywords].some(has);
+  const named = (i: SuggestItem) => [i.label, i.keywords, koreanOf(i)].some(has);
   const found = from.flatMap((i) => (i.sections ? (named(i) ? i.sections : i.sections.filter(finds)) : finds(i) ? [i] : []));
   // the closest first, as ↩ takes the first: the name itself, then a name that starts so, then a keyword that is the
   // word, then the rest as they come ("/table" took Database, "/red" a bulleted list for the "red" in "unordered")
-  const words = (i: SuggestItem) => (i.keywords ?? '').toLowerCase().split(/\s+/);
+  const words = (i: SuggestItem) => `${i.keywords ?? ''} ${koreanOf(i)}`.toLowerCase().split(/\s+/);
+  // a Korean word half typed starts it too: "/ㅌ" and "/테" put 테이블 before a word with a ㅌ further in
+  const starts = (w: string) => typedIn(w.toLowerCase(), q, true);
   const rank = (i: SuggestItem) => {
     const name = i.label.toLowerCase();
-    return name === q ? 0 : name.startsWith(q) ? 1 : words(i).includes(q) ? 2 : words(i).some((w) => w.startsWith(q)) ? 3 : 4;
+    // its Korean name first said as its name ("/테이" is Table before Database tables, which has 테이블 further in)
+    return name === q ? 0 : name.startsWith(q) || starts(koreanOf(i).split(' ')[0]) ? 1 : words(i).includes(q) ? 2 : words(i).some(starts) ? 3 : 4;
   };
   return found.map((i, n) => ({ i, n, r: rank(i) })).sort((a, b) => a.r - b.r || a.n - b.n).map((x) => x.i);
 }
+
+/**
+ * Every / item's name in Korean, as it is said (테이블) and as it is meant (표): typed on a Korean keyboard, "/ㅌ"
+ * finds Table as "/t" does. A label not here is looked up by its first word (Heading 2 as Heading, Red background as
+ * Red); `slashKorean.dom.test.ts` fails on an item with no Korean name.
+ */
+export const KOREAN: Record<string, string> = {
+  Text: '텍스트 글 본문', 'New page': '새 페이지 페이지', Heading: '헤딩 제목', 'Bulleted list': '글머리 기호 목록 불릿 리스트',
+  'Numbered list': '번호 목록 넘버 리스트', 'To-do list': '할 일 투두 체크리스트 체크박스', Quote: '인용 쿼트 인용문',
+  Callout: '콜아웃 강조 상자 박스', Toggle: '토글 접기', 'Code block': '코드 블록', Divider: '구분선 디바이더 줄',
+  Kanban: '칸반 보드', Database: '데이터베이스 디비', Diagram: '다이어그램 머메이드 차트 도표',
+  Flowchart: '플로차트 플로우차트 순서도 흐름도', Swimlanes: '스윔레인 레인 수영 레인', 'Sequence diagram': '시퀀스 다이어그램 순서',
+  'Pie chart': '파이 차트 원 그래프', 'Mind map': '마인드맵 마인드 맵', Timeline: '타임라인 연표', 'Gantt chart': '간트 차트 일정',
+  'Class diagram': '클래스 다이어그램', 'State diagram': '상태 다이어그램 스테이트', 'Database tables': '데이터베이스 테이블 이알 관계도',
+  Equation: '수식 방정식 이퀘이션 수학', 'Inline equation': '인라인 수식 방정식', Table: '테이블 표', Image: '이미지 그림 사진',
+  Video: '비디오 동영상 영상', Footnote: '각주 풋노트 주석', 'Link to note': '링크 노트 연결 문서', 'Table of contents': '목차 차례 테이블 오브 콘텐츠',
+  Duplicate: '복제 복사 듀플리케이트', 'Move to': '옮기기 이동 무브', Delete: '삭제 지우기 딜리트', Emoji: '이모지 이모티콘',
+  Color: '색 색깔 컬러 글자색', Default: '기본 기본색 디폴트', Gray: '회색 그레이', Grey: '회색 그레이', Brown: '갈색 브라운',
+  Orange: '주황 주황색 오렌지', Yellow: '노랑 노란색 옐로', Green: '초록 초록색 녹색 그린', Teal: '청록 청록색 틸', Blue: '파랑 파란색 블루',
+  Purple: '보라 보라색 퍼플', Pink: '분홍 분홍색 핑크', Red: '빨강 빨간색 레드', White: '흰색 하양 화이트', Black: '검정 검은색 블랙',
+};
+export const koreanOf = (i: SuggestItem) => KOREAN[i.label] ?? KOREAN[i.label.split(' ')[0]] ?? '';
 
 /** the kinds of line "/turn" offers, by label */
 const TURNS = new Set(['Heading', 'Bulleted list', 'Numbered list', 'To-do list', 'Quote', 'Callout', 'Toggle', 'Code block']);

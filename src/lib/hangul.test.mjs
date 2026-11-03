@@ -20,4 +20,10 @@ assert.equal(typedIn('호의', '회ㅇ'), false);
 assert.ok(typedIn('meeting notes', 'notes'));
 assert.equal(typedIn('meeting notes', 'notez'), false);
 assert.ok(typedIn('anything', ''));
+// the first consonants alone find a word, as Korean is often searched
+for (const q of ['ㅌㅇㅂ', 'ㅇㅂ', 'ㅎㅇㄹ']) assert.ok(typedIn('테이블 회의록', q), `"${q}" finds by first consonants`);
+assert.equal(typedIn('테이블', 'ㅌㅂ'), false, 'the consonants in a row, as the word has them');
+// from the start only
+for (const q of ['테', '테ㅇ', 'ㅌㅇ', '테이블']) assert.ok(typedIn('테이블', q, true), `"${q}" starts 테이블`);
+for (const q of ['테이', 'ㅌㅇ', '이']) assert.equal(typedIn('스테이트', q, true), false, `"${q}" is not where 스테이트 starts`);
 console.log('ok   hangul: half-typed syllables find their word');
