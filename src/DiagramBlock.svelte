@@ -188,7 +188,8 @@
       const t = e.target as Element;
       // a list open in a row (Select): its keys are its own — heard here first, its Esc closed the whole diagram
       if (t.closest?.('[aria-expanded="true"]')) return;
-      const typing = t instanceof HTMLElement && t.matches('input, textarea, select');
+      // (a picked box's field, holding the keyboard unseen until a key is typed, is not typing: FlowEditor.svelte)
+      const typing = t instanceof HTMLElement && t.matches('input:not(.armed), textarea, select');
       // on the whole screen: + − 0 zoom, and Esc with nothing being edited puts it back in the note
       // ⌘Z on the whole screen, open for editing or not: the note's undo (the note itself has no keyboard there)
       if (full && !typing && root.contains(t) || full && t === document.body) {

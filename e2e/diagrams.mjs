@@ -263,6 +263,69 @@ try {
   }
   console.log('ok   flowchart: boxes picked by dragging across them, deleted together, one ⌘Z');
 
+  // ---- fewer steps: a box picked and typed over at once; a line's Tab tries its next look, a key types its label;
+  // ---- boxes picked together moved to a lane; a lane picked and typed over ----
+  page = await open('# Fast\n\n```mermaid\nflowchart LR\n  subgraph A["Front"]\n    direction LR\n    n1("One")\n    n2("Two")\n  end\n  subgraph B["Back"]\n    direction LR\n    n3("Three")\n  end\n  n1 --> n2\n  n2 --> n3\n```\n\nText after.\n');
+  await page.waitForSelector('.tiptap .mermaid-view svg');
+  await page.locator('.tiptap .mermaid-view').click({ position: { x: 4, y: 4 } });
+  await page.waitForSelector('.tiptap .dblock.active');
+  {
+    const laneNode = (t) => page.locator('.tiptap svg.lanes g.node', { hasText: t }).first().boundingBox();
+    let b = await laneNode('One');
+    await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+    assert.equal(await page.locator('.tiptap input.rename').count(), 0, 'picked, not yet typed in');
+    await page.keyboard.type('Uno');
+    await page.waitForSelector('.tiptap input.rename');
+    await page.keyboard.press('Enter');
+    await settle(page);
+    assert.match(await md(page), /n1\("Uno"\)/, 'the first key typed over its name, no Enter or second click first');
+    assert.match(await md(page), /Text after\./);
+    // a line: Tab, its next look; a key, its label (the box let go first: its bar sat over the line)
+    await page.keyboard.press('Escape');
+    const mid = await page.evaluate(() => {
+      const p = document.querySelector('.tiptap .dblock.active path.hit');
+      const m = p.getPointAtLength(p.getTotalLength() * 0.75), c = p.getScreenCTM(); // past the + by the box hovered
+      return { x: m.x * c.a + m.y * c.c + c.e, y: m.x * c.b + m.y * c.d + c.f };
+    });
+    await page.mouse.click(mid.x, mid.y);
+    await page.keyboard.press('Tab');
+    await settle(page);
+    assert.match(await md(page), /n1 -\.-> n2/, 'Tab: dotted');
+    await page.keyboard.press('Tab');
+    await settle(page);
+    assert.match(await md(page), /n1 ==> n2/, 'Tab again: bold');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('next');
+    await page.keyboard.press('Enter');
+    await settle(page);
+    assert.match(await md(page), /n1 -->\|"next"\| n2/, 'round to the arrow, and a key typed its label');
+    // two boxes picked together, into the other lane at once
+    const one = await laneNode('Uno'), two = await laneNode('Two');
+    await page.mouse.move(one.x - 4, one.y - 10);
+    await page.mouse.down();
+    await page.mouse.move(two.x + two.width + 4, two.y + two.height + 6, { steps: 8 });
+    await page.mouse.up();
+    assert.equal(await page.locator('.layer .ring').count(), 2, 'both picked');
+    await page.locator('.layer .bar button[aria-label="Lane"]').click();
+    await page.locator('.menu button[role="menuitem"]', { hasText: 'Back' }).click();
+    await settle(page);
+    assert.match(await md(page), /subgraph B\["Back"\][^]*n1\("Uno"\)[^]*n2\("Two"\)[^]*end/, 'both moved to Back');
+    // a lane's name typed over once it is picked
+    const head = await page.locator('.tiptap svg.lanes g.lane-head').first().boundingBox();
+    await page.mouse.click(head.x + head.width / 2, head.y + head.height / 2);
+    await page.keyboard.type('Ops');
+    await page.keyboard.press('Enter');
+    await settle(page);
+    assert.match(await md(page), /\["Ops"\]/, 'the lane typed over');
+    // a picked box: ⌫ still deletes it, not its name
+    b = await laneNode('Three');
+    await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+    await page.keyboard.press('Backspace');
+    await settle(page);
+    assert.doesNotMatch(await md(page), /Three/, '⌫ deletes the box picked');
+  }
+  console.log('ok   flowchart: typed over at once, Tab a line\'s look, lanes for many, a lane typed over');
+
   // ---- a line: picked and deleted with ⌫ (not the note's text); a step put in it; that step deleted, rejoined ----
   page = await open('# Line\n\n```mermaid\nflowchart LR\n  n1("One")\n  n2("Two")\n  n1 --> n2\n```\n\nText after.\n');
   await page.waitForSelector('.tiptap .mermaid-view svg');

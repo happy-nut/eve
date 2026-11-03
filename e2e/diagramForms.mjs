@@ -493,6 +493,17 @@ try {
   await page.keyboard.press('Enter');
   assert.match(await md(page), /Running --> Idle : resume/, 'an unlabelled line labelled where it is drawn');
   await page.close();
+  // a line between classes picked: Tab tries its next kind (nothing to add after a line), the bar's list not opened
+  page = await open('classDiagram\n  class Animal\n  class Dog\n  Animal <|-- Dog', false);
+  const ln = await page.evaluate(() => { const p = document.querySelector('.tiptap path.spot-hit[data-spot="clink:0"]'); const q = p.getPointAtLength(p.getTotalLength() / 2), m = p.getScreenCTM(); return { x: q.x * m.a + m.e + 3, y: q.y * m.d + m.f }; });
+  await page.mouse.click(ln.x, ln.y);
+  await page.waitForSelector('.tiptap .layer input.field');
+  const kindBefore = (await md(page)).match(/Animal (\S+) Dog/)[1];
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(400);
+  const kindAfter = (await md(page)).match(/Animal (\S+) Dog/)?.[1];
+  assert.ok(kindAfter && kindAfter !== kindBefore, `Tab: another kind of line (${kindBefore} → ${kindAfter})`);
+  await page.close();
   console.log('ok   a rename then a box of the bar typed in; Esc puts back the value too; a state added is drawn; a crowded chart\'s bar goes under it; a key with nothing picked does nothing');
 
   // ---- the / menu makes each new kind, drawn and open ----

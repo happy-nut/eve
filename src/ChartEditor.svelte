@@ -16,7 +16,8 @@
    * dates, arrow, shape) and what can be done from it (the next one, moving it, deleting it). What each part is and
    * does is spots.ts's; the drawing marks its parts with their keys (`data-spot`). The chart draws again as it is
    * typed in, and the field follows its part.
-   *   keys while typing: Enter is done, Tab adds the next one (the bar's first +) and types in it, Esc puts it back
+   *   keys while typing: Enter is done, Tab adds the next one (the bar's first +) and types in it (a line, with none to
+   *   add: Tab tries its next kind), Esc puts it back
    */
   let { d, host, version, pick = null }: { d: Diagram; host: HTMLElement; version: string; pick?: string | null } = $props();
 
@@ -202,6 +203,15 @@
     }
     else if (e.key === 'Tab' && !e.shiftKey) {
       const a = spot?.acts.find((x) => x.tab && !x.off);
+      // a part with nothing to add after it (a line between two classes, tables, states): Tab tries its next kind, as a
+      // flowchart's line does (the bar's list was a click, a look and a click away)
+      const kind = !a ? spot?.fields.find((f) => f.kind === 'select') : null;
+      if (kind && kind.kind === 'select' && kind.options.length > 1) {
+        e.preventDefault();
+        const i = kind.options.findIndex(([v]) => v === kind.value);
+        kind.set(kind.options[(i + 1) % kind.options.length][0]);
+        return;
+      }
       // one just added and not yet typed in stays the one: Tab, Tab, Tab left a row of "Idea"s that one Esc did not take
       if (a && fresh === sel && text === before) e.preventDefault();
       else if (a) { e.preventDefault(); void run(a); }
