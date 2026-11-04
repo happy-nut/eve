@@ -66,8 +66,9 @@ interface Appearance {
 export const PASTELS = ['#fff1a8', '#c9f2d4', '#cfe3ff', '#ffd6e3', '#e5d8ff'];
 /** the note's text size, px: the Size slider's range, and where ⌘+ / ⌘- stop */
 export const SIZE_MIN = 12, SIZE_MAX = 28;
-/** ⌘+ / ⌘-'s steps, a browser's */
-const ZOOMS = [0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+/** ⌘+ / ⌘-'s steps, each a quarter or more on the last (a browser's tenths still hardly showed), and how far they go:
+ *  further than the Size slider, as a browser zooms past any font size a page sets */
+const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 2.5, 3], ZOOM_MIN = 9, ZOOM_MAX = 48;
 const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832, slideTurn: 'push', slideBuild: true, codeTheme: 'eve' };
 
 function load(): Appearance {
@@ -87,20 +88,19 @@ class AppearanceStore {
   get stack() { return (this.s.font === 'custom' ? this.s.custom.trim() : FONTS.find((f) => f.id === this.s.font)?.stack) || FONTS[0].stack; }
   set(patch: Partial<Appearance>) { Object.assign(this.s, patch); localStorage.setItem(LS, JSON.stringify(this.s)); }
   /** the note's text size as shown: the Settings size and the ⌘+ / ⌘- steps on it */
-  get textPx() { return Math.min(SIZE_MAX, Math.max(SIZE_MIN, this.s.size + this.s.zoom)); }
+  get textPx() { return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, this.s.size + this.s.zoom)); }
   /** the page's width as shown: Settings' width, wider or narrower with the ⌘+ / ⌘- steps as a browser zooms (the text
    *  grew in a page that did not, and each step left fewer words a line) */
   get widthPx() { return Math.round((this.s.width * this.textPx) / Math.min(SIZE_MAX, Math.max(SIZE_MIN, this.s.size))); }
   /**
-   * ⌘+ / ⌘- / ⌘0: the note's text a step larger or smaller, or back to the size Settings has. A step is a browser's
-   * (110%, 125%, 150%… of that size, within the Size slider's range): it was 1px, and 15 to 16 hardly showed. The steps
-   * are the keys' own, on top of that size: ⌘0 set Settings' size to the default, and the size chosen there was lost to
+   * ⌘+ / ⌘- / ⌘0: the note's text a step larger or smaller, or back to the size Settings has. A step is one that shows
+   * (125%, 150%, 200%… of that size): it was 1px, and 15 to 16 hardly showed. The steps are the keys' own, on top of that size: ⌘0 set Settings' size to the default, and the size chosen there was lost to
    * a key pressed to read something small.
    */
   textSize(step: 1 | -1 | 0): number {
     const sizes = ZOOMS.map((f) => Math.round(Math.min(SIZE_MAX, Math.max(SIZE_MIN, this.s.size)) * f));
     const next = step > 0 ? sizes.find((p) => p > this.textPx) : sizes.reverse().find((p) => p < this.textPx);
-    const px = step ? Math.min(SIZE_MAX, Math.max(SIZE_MIN, next ?? this.textPx)) : this.s.size;
+    const px = step ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next ?? this.textPx)) : this.s.size;
     this.set({ zoom: px - this.s.size });
     return this.textPx;
   }
