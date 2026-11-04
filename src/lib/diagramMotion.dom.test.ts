@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { levels, stepper, timeline } from './diagramMotion';
+import { levels, numbered, stepper, timeline } from './diagramMotion';
 
 const svgOf = (html: string) => {
   const d = document.createElement('div');
@@ -67,5 +67,19 @@ describe('a diagram drawing itself in', () => {
       vi.advanceTimersByTime(1000);
       expect(line.style.markerEnd).toMatch(/^url\("?#head"?\)$/);
     } finally { vi.useRealTimers(); }
+  });
+
+  it("a box numbered (class stepN) comes up at its number, the rest in the arrows' order, no press left empty", () => {
+    const g = (cls = '') => Object.assign(document.createElement('g'), { className: `node ${cls}` });
+    const nodes = new Map([['A', g()], ['B', g()], ['C', g('step1')], ['D', g('step5')]]);
+    // A → B → C → D: C first with A, then B, then D (its 5 closed up to the next press)
+    expect(Object.fromEntries(numbered(new Map([['A', 0], ['B', 1], ['C', 2], ['D', 3]]), nodes))).toEqual({ A: 0, C: 0, B: 1, D: 2 });
+    const svg = svgOf(`<svg id="m3" aria-roledescription="flowchart-v2" xmlns="http://www.w3.org/2000/svg">
+      <path class="flowchart-link" data-id="L_a_b_0" d="M0,0L10,0"/><path class="flowchart-link" data-id="L_b_c_0" d="M0,0L10,0"/>
+      <g class="node default step2" id="m3-flowchart-a-0"></g><g class="node default" id="m3-flowchart-b-1"></g><g class="node default step1" id="m3-flowchart-c-2"></g></svg>`);
+    const stage = (sel: string) => timeline(svg).find((s) => s.el === svg.querySelector(sel))!.stage;
+    // c, numbered 1, before a (2), and b (no number, one past a by its arrow) with a
+    expect([stage('#m3-flowchart-c-2'), stage('#m3-flowchart-a-0'), stage('#m3-flowchart-b-1')]).toEqual([0, 1, 1]);
+    expect(stepper(svg).count).toBe(2);
   });
 });

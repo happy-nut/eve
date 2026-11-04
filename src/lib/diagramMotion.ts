@@ -41,7 +41,7 @@ export function timeline(svg: SVGSVGElement): Step[] {
     return null;
   };
   const lines = [...svg.querySelectorAll<SVGPathElement>('path.flowchart-link[data-id]')].map((p) => ({ p, ends: ends(p.dataset.id!) }));
-  const level = levels(ids, lines.flatMap((l) => (l.ends ? [l.ends] : [])));
+  const level = numbered(levels(ids, lines.flatMap((l) => (l.ends ? [l.ends] : []))), nodes);
   const u = Math.min(UNIT, MAX / (Math.max(0, ...level.values()) + 1));
   const steps: Step[] = [...nodes].map(([id, el]) => ({ el, at: level.get(id)! * u, stage: level.get(id)! }));
   const labels = new Map([...svg.querySelectorAll<SVGGElement>('g.edgeLabel > g.label[data-id]')].map((g) => [g.dataset.id!, g.parentElement!]));
@@ -75,6 +75,17 @@ export function levels(ids: string[], pairs: [string, string][]): Map<string, nu
     if (!queue.length) { const left = ids.find((i) => !level.has(i)); if (left) { level.set(left, Math.max(...level.values()) + 1); queue = [left]; } }
   }
   return level;
+}
+
+/** a box given its step (`class A step2`, its node drawn with the class) comes up at it, the others at their level;
+ *  the levels no box is at are closed up, so numbering one box 5 does not leave four presses with nothing */
+export function numbered(level: Map<string, number>, nodes: Map<string, Element>): Map<string, number> {
+  for (const [id, el] of nodes) {
+    const k = /(?:^|\s)step([1-9]\d*)(?:\s|$)/.exec(el.getAttribute('class') ?? '');
+    if (k) level.set(id, +k[1] - 1);
+  }
+  const used = [...new Set(level.values())].sort((a, b) => a - b);
+  return new Map([...level].map(([id, l]) => [id, used.indexOf(l)]));
 }
 
 // by its tag: a page without SVG's classes (jsdom) has no SVGPathElement to ask

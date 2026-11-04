@@ -356,6 +356,14 @@
   }
 
   /** the boxes picked together, all into one lane */
+  /** the press of → in a presentation that brings these boxes up (0: in the arrows' order, as before) */
+  function setStep(ids: string[], k: number) {
+    for (const n of flow.nodes) if (ids.includes(n.id)) { if (k) n.step = k; else delete n.step; }
+  }
+  /** the step the boxes share, -1 when they differ */
+  const stepOf = (ids: string[]) => { const s = new Set(flow.nodes.filter((n) => ids.includes(n.id)).map((n) => n.step ?? 0)); return s.size === 1 ? [...s][0] : -1; };
+  /** the presses there are to choose from: one a box, and one past the last given */
+  const stepChoices = $derived(Array.from({ length: Math.max(flow.nodes.length, ...flow.nodes.map((n) => (n.step ?? 0) + 1)) }, (_, i) => i + 1));
   function pickLanes(e: MouseEvent, ids: string[]) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const ns = flow.nodes.filter((n) => ids.includes(n.id));
@@ -624,7 +632,7 @@
     // typed in the list or another note's page, which deleted the box behind them
     const t = e.target as Element;
     if (t !== document.body && !layer.closest('.dblock')?.contains(t) && t !== layer.closest('.tiptap')) return;
-    const typing = (e.target as HTMLElement).matches?.('input:not(.armed), textarea, [contenteditable="true"]');
+    const typing = (e.target as HTMLElement).matches?.('input:not(.armed), textarea, select, [contenteditable="true"]');
     // in a line's label: Esc or Enter is done with it (Esc closed the whole builder), the rest is typing (a word still
     // being put together there is the IME's, and its keys never get here: keys.ts)
     if (typing && layer.contains(e.target as Node)) {
@@ -757,6 +765,17 @@
   const handles = $derived([...new Set([isMobile ? null : hover, selNode?.id ?? null, drag?.from ?? null].filter((x): x is string => !!x))].map(boxOf).filter((b): b is Box => !!b));
 </script>
 
+{#snippet order(ids: string[], at: number)}
+  <!-- which press of → in a presentation brings them up; -1: picked boxes that differ -->
+  <select class="order" class:on={at > 0} class:small={isMobile} aria-label="Order in a presentation" title="Order: which press of → in a presentation brings it up"
+    value={String(at)} onchange={(e) => setStep(ids, +e.currentTarget.value)}>
+    <!-- short on a phone: in full, the box's bar ran onto a second row over the picture -->
+    {#if at < 0}<option value="-1" disabled>{isMobile ? '#' : 'Order: mixed'}</option>{/if}
+    <option value="0">{isMobile ? '#' : 'Order: auto'}</option>
+    {#each stepChoices as k (k)}<option value={String(k)}>{isMobile ? `#${k}` : `Order ${k}`}</option>{/each}
+  </select>
+{/snippet}
+
 <div class="layer" bind:this={layer}>
   {#if sel && 'node' in sel && selBox}
     <div class="ring" style:left={`${selBox.x - 4}px`} style:top={`${selBox.y - 4}px`} style:width={`${selBox.w + 8}px`} style:height={`${selBox.h + 8}px`}></div>
@@ -768,11 +787,12 @@
     {/each}
     {#if picked.length}
       {@const ids = sel.nodes}
-      {@const at = barAt((Math.min(...picked.map((b) => b.x)) + Math.max(...picked.map((b) => b.x + b.w))) / 2, Math.min(...picked.map((b) => b.y)), Math.max(...picked.map((b) => b.y + b.h)), flow.lanes?.length ? 230 : 150)}
+      {@const at = barAt((Math.min(...picked.map((b) => b.x)) + Math.max(...picked.map((b) => b.x + b.w))) / 2, Math.min(...picked.map((b) => b.y)), Math.max(...picked.map((b) => b.y + b.h)), flow.lanes?.length ? 350 : 270)}
       <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
         {#if flow.lanes?.length}
           <button type="button" aria-label="Lane" title="Move them to another lane" onclick={(e) => pickLanes(e, ids)}><svg viewBox="0 0 16 16"><path d="M2 4.5h12M2 8h12M2 11.5h12" /></svg><span class="lbl">Lane</span></button>
         {/if}
+        {@render order(ids, stepOf(ids))}
         <button type="button" class="danger" aria-label={`Delete the ${ids.length} steps`} title="Delete them (⌫)" onclick={() => dropNodes(ids)}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg><span class="lbl">Delete {ids.length}</span></button>
       </div>
     {/if}
@@ -858,7 +878,7 @@
     <!-- under the box (one near the top) it goes below the + too: it sat over the + there, and a press on the + changed
          the box's shape instead. On a phone the shapes fold into one button: all six in a row ran off its narrow picture -->
     {@const compact = isMobile && !shapesOpen}
-    {@const at = barAt(selBox.x + selBox.w / 2, selBox.y, selBox.y + selBox.h + (across(flow) ? 0 : isMobile ? 34 : 26), compact ? 290 : isMobile ? 290 : 480, selNode.id)}
+    {@const at = barAt(selBox.x + selBox.w / 2, selBox.y, selBox.y + selBox.h + (across(flow) ? 0 : isMobile ? 34 : 26), compact ? 290 : isMobile ? 290 : 580, selNode.id)}
     {@const current = SHAPES.find(([sh]) => sh === selNode.shape) ?? SHAPES[0]}
     <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
       {#if isMobile && shapesOpen}
@@ -882,6 +902,7 @@
         {#if flow.lanes?.length}
           <button type="button" aria-label="Lane" title="Move to another lane" onmousedown={(e) => e.preventDefault()} onclick={(e) => { if (editing) commitEdit(); pickLane(e, selNode.id); }}><svg viewBox="0 0 16 16"><path d="M2 4.5h12M2 8h12M2 11.5h12" /></svg><span class="lbl">{isMobile ? 'Lane' : flow.lanes.find((l) => l.id === selNode.lane)?.label ?? 'Lane'}</span></button>
         {/if}
+        {@render order([selNode.id], selNode.step ?? 0)}
         <button type="button" class:on={linking === selNode.id} aria-label="Connect to another box" title="Connect: then tap the box to connect to" onmousedown={(e) => e.preventDefault()}
           onclick={() => { if (editing) commitEdit(); linking = selNode.id; }}><svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="2" /><path d="M5.5 8h7M10.5 5.5 13 8l-2.5 2.5" /></svg>{#if isMobile}<span class="lbl">Connect</span>{/if}</button>
         <button type="button" class="danger" aria-label="Delete" title="Delete" onmousedown={(e) => e.preventDefault()} onclick={() => { editing = null; dropNode(selNode.id); }}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
@@ -907,6 +928,11 @@
       <button type="button" class="danger" aria-label="Delete" title="Delete (⌫)" onclick={() => dropEdge(i)}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
     </div>
   {/if}
+  <!-- each box's order in a presentation, over its ring and its field -->
+  {#each flow.nodes as n (n.id)}
+    {@const b = n.step ? boxOf(n.id) : null}
+    {#if b}<div class="stepno" style:left={`${b.x - 7}px`} style:top={`${b.y - 7}px`}>{n.step}</div>{/if}
+  {/each}
 </div>
 
 <style>
@@ -965,6 +991,16 @@
   .bar button.text { width: auto; gap: 4px; padding: 0 9px 0 7px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent-text); }
   .bar button.danger:hover { color: #ff453a; }
   .bar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+  .bar .order {
+    height: 30px; border: 0; border-radius: 8px; padding: 0 6px; background: none; color: var(--fg-dim); font: inherit; font-size: 12.5px; font-weight: 500;
+  }
+  .bar .order.small { appearance: none; -webkit-appearance: none; min-width: 30px; padding: 0 7px; text-align: center; font-weight: 600; }
+  .bar .order.on { background: var(--accent-soft); color: var(--accent-text); }
+  /* a box's order in a presentation, on its corner */
+  .stepno {
+    position: absolute; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; pointer-events: none;
+    font-size: 10.5px; font-weight: 700; line-height: 16px; text-align: center; color: var(--on-accent); background: var(--accent); box-shadow: 0 0 0 2px var(--bg-pop);
+  }
   .sep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; }
   .edge-label {
     width: 230px; min-height: 30px; max-height: 92px; box-sizing: border-box; border: 0; border-radius: 8px; padding: 6px 9px; font: inherit;

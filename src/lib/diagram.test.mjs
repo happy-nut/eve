@@ -452,3 +452,18 @@ console.log('round 2 ok');
 
 // a moving line in swimlanes (drawn by lanes.ts, not mermaid): moving there too
 assert.match(laneSvg({ kind: 'flowchart', dir: 'LR', lanes: [{ id: 'A', label: 'A' }], nodes: [{ id: 'x', label: 'x', shape: 'round', lane: 'A' }, { id: 'y', label: 'y', shape: 'round', lane: 'A' }], edges: [{ from: 'x', to: 'y', label: '', line: 'solid', animate: true }] }), /sl-edge solid moving/);
+
+// a box's order in a presentation (`class A,C step2`): read onto the boxes, written back the same; one for a box
+// there is not, or a second for the same box, kept as written
+{
+  const code = 'flowchart TD\n  A["a"]\n  B["b"]\n  C["c"]\n  A --> B\n  B --> C\n  class B step1\n  class A,C step2';
+  const d = fromCode(code);
+  assert.deepEqual(d.nodes.map((n) => n.step), [2, 1, 2]);
+  assert.equal(d.extra, undefined);
+  assert.equal(toCode(d), code);
+  delete d.nodes[1].step;
+  assert.equal(toCode(d), 'flowchart TD\n  A["a"]\n  B["b"]\n  C["c"]\n  A --> B\n  B --> C\n  class A,C step2');
+  const odd = fromCode('flowchart TD\n  A --> B\n  class Z step1\n  class A step1\n  class A step3');
+  assert.deepEqual(odd.nodes.map((n) => n.step), [1, undefined]);
+  assert.deepEqual(odd.extra, ['class Z step1', 'class A step3']);
+}
