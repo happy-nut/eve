@@ -89,13 +89,20 @@ function enter({ el, line }: Step, delay: number): Animation {
   if (!line) return el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' });
   const n = len(line);
   // the dash is the keyframes' own, so a dotted line goes back to its dots when it is drawn
-  // and its arrowhead only once it has got there (drawn at its end from the start, it was there before the line)
-  const head = getComputedStyle(line).markerEnd, arrow = head && head !== 'none' ? { markerEnd: 'none' } : {};
-  return line.animate([
-    { strokeDasharray: `${n}`, strokeDashoffset: `${n}`, ...arrow },
-    { strokeDasharray: `${n}`, strokeDashoffset: '0', ...arrow, offset: 0.99 },
+  const a = line.animate([
+    { strokeDasharray: `${n}`, strokeDashoffset: `${n}` },
     { strokeDasharray: `${n}`, strokeDashoffset: '0' },
   ], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' });
+  // and its arrowhead only once it has got there (drawn at its end from the start, it was there before the line); put
+  // back by a timer, not by the animation's keyframes: an animation stalled while Eve was away left the line headless
+  const head = getComputedStyle(line).markerEnd;
+  if (head && head !== 'none') {
+    const own = line.style.markerEnd, back = () => { line.style.markerEnd = own; };
+    line.style.markerEnd = 'none';
+    setTimeout(back, delay + FADE);
+    a.addEventListener?.('cancel', back);
+  }
+  return a;
 }
 
 /**

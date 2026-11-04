@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { levels, timeline } from './diagramMotion';
+import { describe, expect, it, vi } from 'vitest';
+import { levels, stepper, timeline } from './diagramMotion';
 
 const svgOf = (html: string) => {
   const d = document.createElement('div');
@@ -47,5 +47,25 @@ describe('a diagram drawing itself in', () => {
 
   it('nothing for a kind it does not know: drawn as it is', () => {
     expect(timeline(svgOf('<svg aria-roledescription="pie" xmlns="http://www.w3.org/2000/svg"><path/></svg>'))).toEqual([]);
+  });
+
+  it('a line drawn in gets its arrowhead back even when its animation never ends (stalled while Eve was away)', () => {
+    vi.useFakeTimers();
+    try {
+      const svg = svgOf(`<svg id="m2" aria-roledescription="flowchart-v2" xmlns="http://www.w3.org/2000/svg">
+        <path class="flowchart-link" data-id="L_a_b_0" d="M0,0L10,0" style="marker-end: url(#head)"/>
+        <g class="node" id="m2-flowchart-a-0"></g><g class="node" id="m2-flowchart-b-1"></g></svg>`);
+      const line = svg.querySelector('path')!;
+      // an animation that is started and then never plays on: no finish, no cancel
+      const stalled = () => Object.assign(new EventTarget(), { finished: new Promise(() => {}), cancel() {} });
+      for (const el of svg.querySelectorAll('path, g')) Object.assign(el, { animate: stalled });
+      Object.assign(line, { getTotalLength: () => 10 });
+      const walk = stepper(svg);
+      walk.show(0);
+      walk.show(1);
+      expect(line.style.markerEnd).toBe('none'); // not ahead of the line while it draws
+      vi.advanceTimersByTime(1000);
+      expect(line.style.markerEnd).toMatch(/^url\("?#head"?\)$/);
+    } finally { vi.useRealTimers(); }
   });
 });
