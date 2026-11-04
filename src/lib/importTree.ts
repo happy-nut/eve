@@ -25,6 +25,8 @@ export interface Made {
 export const IMPORTABLE = /\.(md|markdown|mdx|txt|pdf|xlsx?|hwpx?|png|jpe?g|gif|webp|svg|heic|mp4|mov|m4v|webm)$/i;
 const embedOf = (name: string, src: string) => (DOC_FILE.test(name) || VIDEO_FILE.test(name) ? `[${name.replace(/[[\]]/g, '')}](${src})` : `![](${src})`);
 const byName = (a: Source, b: Source) => a.path.localeCompare(b.path, undefined, { numeric: true });
+/** a file's or a folder's name as a title: Notion's export puts the page's id after it (`Trip 1a2b…`), left off */
+const titled = (name: string) => name.replace(/ [0-9a-f]{32}$/, '');
 
 /**
  * A tree of files as notes, the shape it came in:
@@ -53,7 +55,7 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
     dirs.forEach((d, i) => {
       const key = dirs.slice(0, i + 1).join('/');
       let id = folders.get(key);
-      if (!id) folders.set(key, (id = notes.addImported(`# ${d}\n`, Date.now(), up).id));
+      if (!id) folders.set(key, (id = notes.addImported(`# ${titled(d)}\n`, Date.now(), up).id));
       up = id;
     });
     return up;
@@ -91,7 +93,9 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
   const bodies = new Map<string, string>();
   for (const s of texts) {
     const text = (await s.text()).replace(/^﻿/, '').replace(/\r\n?/g, '\n');
-    bodies.set(s.path, /^\s*#\s/.test(text) ? text : `# ${stem(nameOf(s.path))}\n\n${text}`);
+    // the file's name is the title, as it is in Finder; a heading that says something else stays, under it
+    const name = titled(stem(nameOf(s.path)));
+    bodies.set(s.path, titleOf({ body: text }) === name ? text : `# ${name}\n\n${text}`);
   }
   const title = (path: string) => titleOf({ body: bodies.get(path)! });
 
@@ -148,7 +152,7 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
     let body = bodies.get(s.path), embed: string | undefined;
     if (body === undefined) {
       embed = embedOf(nameOf(s.path), await copy(s));
-      body = `# ${stem(nameOf(s.path))}\n\n${embed}\n`;
+      body = `# ${titled(stem(nameOf(s.path)))}\n\n${embed}\n`;
     }
     const note = notes.addImported(body, Date.now(), parent ?? pageFor(dirs.slice(0, j)));
     ids.set(s.path, note.id);

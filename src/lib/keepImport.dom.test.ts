@@ -25,7 +25,7 @@ test('a Takeout Keep folder: its notes in Keep order and labels, the rest of the
   const pathOf = (id?: string): string => { const n = notes.all.find((x) => x.id === id); return n ? [pathOf(n.parent), titleOf(n)].filter(Boolean).join('/') : ''; };
   const made = notes.all.filter((n) => !n.deleted && !['Keep', 'Home', 'Archive'].includes(titleOf(n))).map((n) => `${pathOf(n.parent)}|${titleOf(n)}`);
   // pinned first, then newest; the trashed one and Keep's own .html / Labels.txt / picture are no notes of their own
-  expect(made).toEqual(['Keep|Pinned', 'Keep/Home|Groceries', 'Keep/Archive|Old', 'Keep|Mine']);
+  expect(made).toEqual(['Keep|Pinned', 'Keep/Home|Groceries', 'Keep/Archive|Old', 'Keep|readme']);
   expect(titleOf(first!)).toBe('Pinned');
   expect(notes.all.find((n) => titleOf(n) === 'Pinned')!.body).toContain('![](assets/pic.jpg)');
   expect(notes.all.find((n) => titleOf(n) === 'Groceries')!.updatedAt).toBe(3e12);

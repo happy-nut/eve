@@ -41,3 +41,19 @@ test('into a page: the tree under it, loose files beside it', async () => {
   expect(pathOf(byTitle('In').id)).toBe('Home/Box');
   expect(pathOf(byTitle('Loose').id)).toBe('Home');
 });
+
+test('a file’s name is its note’s title, a heading of another name kept under it', async () => {
+  await importTree(tree({
+    'Drop/회의록.md': '# 3월 회의\n\n안건',
+    'Drop/Same.md': '# Same\n\nbody',
+    'Drop/plain.txt': 'just text',
+    // Notion's export puts the page's id after its name: the name alone is the title
+    'Drop/Trip 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d.md': '# Trip',
+    'Drop/Trip 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d/Plan.md': '# Plan',
+  }));
+  const minutes = byTitle('회의록');
+  expect(minutes.body).toBe('# 회의록\n\n# 3월 회의\n\n안건');
+  expect(byTitle('Same').body).toBe('# Same\n\nbody'); // not said twice
+  expect(byTitle('plain').body).toBe('# plain\n\njust text');
+  expect(byTitle('Plan').parent).toBe(byTitle('Trip').id);
+});
