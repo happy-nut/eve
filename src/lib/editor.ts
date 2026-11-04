@@ -15,7 +15,7 @@ import { keydownHandler } from '@tiptap/pm/keymap';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { NOTION_COPY, fromNotion } from './notionPaste';
 import { canJoin, findWrapping, liftTarget } from '@tiptap/pm/transform';
-import { DOMParser, Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
+import { DOMParser, Fragment, Slice, type Node as PMNode, type Schema, type ResolvedPos } from '@tiptap/pm/model';
 import { CellSelection } from '@tiptap/pm/tables';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
@@ -458,6 +458,9 @@ function pasteMarkdown(view: EditorView, html: string, lead = '', trail = ''): T
     slice.content.forEach((p) => items.push(item.type.create(fresh, p)));
     slice = new Slice(Fragment.from(items), slice.openStart + 1, slice.openEnd + 1);
   }
+  // in a cell: lines it can hold (a list cut the table in two)
+  const fitted = inCell($from) ? cellLines(schema, slice.content, $from) : null;
+  if (fitted) slice = new Slice(fitted, Math.min(slice.openStart, 1), Math.min(slice.openEnd, 1));
   const only = slice.content.childCount === 1 ? slice.content.firstChild! : null;
   if (item && only && LISTS.test(only.type.name) && only.type !== $from.node(-2).type) slice = new Slice(Fragment.from(asList(only, $from.node(-2), item)), slice.openStart, slice.openEnd);
   const tr = state.tr;
@@ -1050,6 +1053,40 @@ const codeEdges = Extension.create({
   },
 });
 
+/** what is pasted in a table's cell, as it can hold it (`null`: it holds it already): one line, its lines a line break
+ *  apart (the note's `<br>`), a list's items each with its bullet, number or box at the front; a heading's, a quote's,
+ *  a toggle's lines their words; code a line a line; a picture between them its own */
+function cellLines(schema: Schema, content: Fragment, $at: ResolvedPos): Fragment | null {
+  const { paragraph, image, hardBreak } = schema.nodes;
+  let fits = true;
+  content.forEach((n) => { if (!n.isInline && n.type !== paragraph && n.type !== image) fits = false; });
+  if (fits) return null;
+  const out: PMNode[] = [];
+  // on lines of their own, words in the cell before or after the caret kept apart from them
+  let words: PMNode[] = [], lines = $at.parentOffset > 0 ? 1 : 0;
+  const line = (front: string, inline: Fragment) => {
+    if (lines++) words.push(hardBreak.create());
+    if (front) words.push(schema.text(front));
+    inline.forEach((n) => { words.push(n); });
+  };
+  const close = () => { if (words.length) out.push(paragraph.create(null, words)); words = []; lines = 0; };
+  const walk = (n: PMNode, front: string) => {
+    if (n.type === image) { close(); out.push(n); }
+    else if (n.type.spec.code) n.textContent.split('\n').forEach((l, i) => line(i ? '' : front, l ? Fragment.from(schema.text(l)) : Fragment.empty));
+    else if (n.isTextblock) line(front, n.content);
+    else if (LISTS.test(n.type.name)) {
+      n.forEach((item, _o, i) => {
+        const mark = n.type.name === 'orderedList' ? `${(n.attrs.start ?? 1) + i}. ` : n.type.name === 'taskList' ? (item.attrs.checked ? '☑ ' : '☐ ') : '• ';
+        item.forEach((child, _o2, j) => walk(child, j ? '' : mark));
+      });
+    } else n.forEach((child, _o, i) => walk(child, i ? '' : front));
+  };
+  content.forEach((n) => walk(n, ''));
+  if (words.length && $at.parentOffset < $at.parent.content.size) words.push(hardBreak.create());
+  close();
+  return Fragment.from(out);
+}
+
 export function createEditor(opts: {
   element: HTMLElement;
   content: string;
@@ -1167,6 +1204,13 @@ export function createEditor(opts: {
         // the cells.)
         if (content.firstChild?.type.name === 'tableRow' && !inCell(view.state.selection.$from)) {
           return new Slice(Fragment.from(view.state.schema.nodes.table.create(null, content)), 0, 0);
+        }
+        // a cell holds lines and pictures only: a list pasted in one could not fit, and the table was cut in two there,
+        // the list between its halves and the rest of the row's cells lost. Its lines go in the cell, each with its
+        // bullet, number or box as written
+        if (inCell($here) && inCell(view.state.selection.$to) && content.firstChild?.type.name !== 'tableRow') {
+          const fitted = cellLines(view.state.schema, content, $here);
+          if (fitted) return new Slice(fitted, Math.min(openStart, 1), Math.min(openEnd, 1));
         }
         while (openStart >= 2 && content.childCount === 1 && content.firstChild!.type.name === 'details' && content.firstChild!.firstChild?.type.name === 'detailsContent') {
           content = content.firstChild!.firstChild!.content;

@@ -3,7 +3,7 @@ import { TextSelection } from '@tiptap/pm/state';
 import { CellSelection, TableMap } from '@tiptap/pm/tables';
 import type { Editor } from '@tiptap/core';
 import { runEditorCommand } from './editor';
-import { editorWith, md, posOf, press, type } from './testEditor';
+import { editorWith, md, posOf, press, type, paste } from './testEditor';
 
 afterEach(() => { document.body.innerHTML = ''; });
 
@@ -267,4 +267,28 @@ test('"$$ " or /equation in a cell keeps the table whole (a block formula cut it
   expect(tables).toBe(1);
   expect(md(editorWith(md(ed)))).toBe(md(ed));
   document.body.innerHTML = ''; // (the formula's editor loads MathLive after this; jsdom can't run it)
+});
+
+// bullet lines copied into a cell cut the table in two there, the list between its halves and the row's other cells lost
+describe('lines of a list pasted in a cell stay in the cell, the table whole', () => {
+  const table = '# T\n\n| a | b |\n| --- | --- |\n| x | y |\n';
+  const cases: [string, string, string, string][] = [
+    ['bullets', '- one\n- two', '<ul data-pm-slice="0 0 []"><li><p>one</p></li><li><p>two</p></li></ul>', '• one'],
+    ['numbers', '1. one\n2. two', '<ol data-pm-slice="0 0 []"><li><p>one</p></li><li><p>two</p></li></ol>', '1. one'],
+    ['to-dos', '- [ ] one\n- [x] two', '<ul data-type="taskList" data-pm-slice="0 0 []"><li data-type="taskItem" data-checked="false"><p>one</p></li><li data-type="taskItem" data-checked="true"><p>two</p></li></ul>', '☐ one'],
+    ['bullets as markdown', '- one\n- two', '', '• one'],
+  ];
+  test.each(cases)('%s', (_n, text, html, first) => {
+    const ed = editorWith(table);
+    ed.commands.setTextSelection(posOf(ed, 'x', true));
+    paste(ed, text, html);
+    let tables = 0, cells: string[] = [];
+    ed.state.doc.descendants((n) => { if (n.type.name === 'table') tables++; if (n.type.name === 'tableCell') { cells.push(n.textContent); return false; } return true; });
+    expect(tables).toBe(1);
+    expect(cells.at(-1)).toBe('y'); // the row's next cell kept
+    expect(cells.at(-2)).toContain(first);
+    expect(cells.at(-2)).toContain('two');
+    const saved = md(ed);
+    expect(md(editorWith(saved))).toBe(saved); // saved and read back the same
+  });
 });
