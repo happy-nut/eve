@@ -224,6 +224,38 @@ try {
   await page.waitForTimeout(400);
   assert.equal(await page.locator('.tiptap .mermaid-view').first().evaluate((h) => h.scrollLeft), 0, 'done, the picture from its start');
   console.log('ok   a flowchart: a new step past the edge is brought into view, a line\'s bar covers no box, its end moves');
+  await page.close();
+
+  // ---- a flowchart's order in a presentation: boxes picked with Shift, ⌥ and a digit, and the bar's own menu ----
+  page = await open('flowchart TD\n  A[Ask] --> B[Brew] --> C[Cup]', false);
+  const node = (label) => page.locator('.tiptap .dblock.active g.node').filter({ hasText: label }).first();
+  await node('Ask').click();
+  await node('Cup').click({ modifiers: ['Shift'] });
+  assert.equal(await page.locator('.tiptap .dblock.active .ring').count(), 2, 'Shift-click picks a second box beside the first');
+  await page.keyboard.press('Alt+Digit2');
+  assert.match(await md(page), /\n {2}class A,C step2\n/, `⌥2 gives both picked boxes the second press\n${await md(page)}`);
+  await node('Cup').click({ modifiers: ['Shift'] });
+  assert.equal(await page.locator('.tiptap .dblock.active .ring').count(), 1, 'Shift-click on a picked box lets go of it');
+  await page.keyboard.press('Alt+Digit0');
+  const back = await md(page);
+  assert.match(back, /\n {2}class C step2\n/, `⌥0 puts Ask back in the arrows' order, Cup keeps its own\n${back}`);
+  assert.doesNotMatch(back, /class A/, 'Ask has no order of its own');
+  // the bar's Order is the app's own menu, not the system's select
+  assert.equal(await page.locator('.tiptap .dblock.active .bar select').count(), 0, 'no system select in the bar');
+  await node('Brew').click();
+  await page.getByRole('button', { name: 'Order in a presentation' }).click();
+  await page.locator('.menu [role=menuitem]', { hasText: 'Order 1' }).first().click();
+  has(await md(page), ['  class B step1']);
+  assert.equal(await page.getByRole('button', { name: 'Order in a presentation' }).textContent().then((t) => t.trim()), 'Order 1', 'the bar says the order chosen');
+  // the menu closed with Esc, the keys are the boxes' still: they went to the note, and ⌥3 did nothing
+  await node('Ask').click({ modifiers: ['Shift'] });
+  await page.getByRole('button', { name: 'Order in a presentation' }).click();
+  await page.waitForSelector('.menu');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  await page.keyboard.press('Alt+Digit3');
+  has(await md(page), ['  class A,B step3']);
+  console.log('ok   a flowchart\'s order: Shift-click picks boxes, ⌥1…⌥9 and ⌥0 set it, the bar\'s own menu too');
 
   // ---- on a phone, a picked box's + is where a finger can take it: not under the box's bar, not over a line ----
   {

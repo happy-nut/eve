@@ -22,7 +22,8 @@
    *         the arrows go from box to box
    *   in swimlanes: a box dragged onto another lane goes into it (a finger drags the box picked)
    *   empty space dragged across (a mouse; Shift on the whole screen, where a drag pans): the boxes it touches are
-   *         picked together, ⌫ or their bar deletes them all
+   *         picked together, ⌫ or their bar deletes them all; a box Shift-clicked joins those picked, or leaves them
+   *   ⌥1…⌥9: the boxes picked come up at that press of → in a presentation, ⌥0 in the arrows' order again
    */
   let { flow, host, version, k, pick = null }: {
     flow: Flowchart; host: HTMLElement; version: string; k: number;
@@ -344,12 +345,19 @@
     sel = null;
     laneEditing = null;
   }
+  /** where a bar's menu opens, the keyboard first put where it is to come back to as the menu closes: the picked box's
+   *  hidden field, or the button. WebKit gives a clicked button none, so it came back to the note, and ⌫ or ⌥2 after
+   *  the menu was the note's, not the boxes' */
+  function menuAt(e: MouseEvent) {
+    const b = e.currentTarget as HTMLElement;
+    (layer.querySelector<HTMLElement>('input.armed') ?? b).focus({ preventScroll: true });
+    return under(b);
+  }
   /** the picked box into another lane, from a menu of them */
   function pickLane(e: MouseEvent, nodeId: string) {
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const n = flow.nodes.find((x) => x.id === nodeId);
     if (!n) return;
-    ui.openMenu(under(r), [
+    ui.openMenu(menuAt(e), [
       { label: 'Move to lane', disabled: true }, // a phone's sheet said nothing of what its names were for
       ...(flow.lanes ?? []).map((l) => ({ label: l.label, checked: n.lane === l.id, run: () => { n.lane = l.id; } })),
     ]);
@@ -364,10 +372,18 @@
   const stepOf = (ids: string[]) => { const s = new Set(flow.nodes.filter((n) => ids.includes(n.id)).map((n) => n.step ?? 0)); return s.size === 1 ? [...s][0] : -1; };
   /** the presses there are to choose from: one a box, and one past the last given */
   const stepChoices = $derived(Array.from({ length: Math.max(flow.nodes.length, ...flow.nodes.map((n) => (n.step ?? 0) + 1)) }, (_, i) => i + 1));
+  /** the app's own menu of them, as a lane's is: the system's select popped up a list in another look */
+  function pickStep(e: MouseEvent, ids: string[]) {
+    const at = stepOf(ids), key = (k: number) => (k < 10 ? `Alt-${k}` : undefined);
+    ui.openMenu(menuAt(e), [
+      { label: 'Order in a presentation', disabled: true },
+      { label: 'Auto (the arrows’ order)', keys: 'Alt-0', checked: at === 0, run: () => setStep(ids, 0) },
+      ...stepChoices.map((k) => ({ label: `Order ${k}`, keys: key(k), checked: at === k, run: () => setStep(ids, k) })),
+    ]);
+  }
   function pickLanes(e: MouseEvent, ids: string[]) {
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const ns = flow.nodes.filter((n) => ids.includes(n.id));
-    ui.openMenu(under(r), [
+    ui.openMenu(menuAt(e), [
       { label: 'Move to lane', disabled: true },
       ...(flow.lanes ?? []).map((l) => ({ label: l.label, checked: ns.every((n) => n.lane === l.id), run: () => { for (const n of ns) n.lane = l.id; } })),
     ]);
@@ -405,6 +421,14 @@
       const id = nodeIdOf(g);
       if (!id) return;
       if (editing && editing !== id) commitEdit();
+      // with Shift it joins the boxes picked, or leaves them (one left is picked alone)
+      if (e.shiftKey && sel && ('node' in sel || 'nodes' in sel)) {
+        const was = 'node' in sel ? [sel.node] : sel.nodes;
+        const now = was.includes(id) ? was.filter((x) => x !== id) : [...was, id];
+        sel = now.length > 1 ? { nodes: now } : now.length ? { node: now[0] } : null;
+        if (!editing) letGo();
+        return;
+      }
       if (sel && 'node' in sel && sel.node === id) startEdit(id);
       else {
         sel = { node: id };
@@ -632,7 +656,7 @@
     // typed in the list or another note's page, which deleted the box behind them
     const t = e.target as Element;
     if (t !== document.body && !layer.closest('.dblock')?.contains(t) && t !== layer.closest('.tiptap')) return;
-    const typing = (e.target as HTMLElement).matches?.('input:not(.armed), textarea, select, [contenteditable="true"]');
+    const typing = (e.target as HTMLElement).matches?.('input:not(.armed), textarea, [contenteditable="true"]');
     // in a line's label: Esc or Enter is done with it (Esc closed the whole builder), the rest is typing (a word still
     // being put together there is the IME's, and its keys never get here: keys.ts)
     if (typing && layer.contains(e.target as Node)) {
@@ -643,6 +667,9 @@
       return;
     }
     if (typing) return;
+    // ⌥ and a digit, by the key (⌥1 is "¡" on a Mac): the boxes picked come up at that press, ⌥0 as the arrows go
+    const digit = e.altKey && !e.metaKey && !e.ctrlKey && /^Digit(\d)$/.exec(e.code);
+    if (digit && ('node' in sel || 'nodes' in sel)) { e.preventDefault(); e.stopPropagation(); setStep('node' in sel ? [sel.node] : sel.nodes, +digit[1]); return; }
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); sel = null; }
     else if ('nodes' in sel) { if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); e.stopPropagation(); dropNodes(sel.nodes); } }
     else if ('lane' in sel && (e.key === 'Backspace' || e.key === 'Delete')) { e.preventDefault(); e.stopPropagation(); void dropLane(sel.lane); }
@@ -767,13 +794,12 @@
 
 {#snippet order(ids: string[], at: number)}
   <!-- which press of → in a presentation brings them up; -1: picked boxes that differ -->
-  <select class="order" class:on={at > 0} class:small={isMobile} aria-label="Order in a presentation" title="Order: which press of → in a presentation brings it up"
-    value={String(at)} onchange={(e) => setStep(ids, +e.currentTarget.value)}>
-    <!-- short on a phone: in full, the box's bar ran onto a second row over the picture -->
-    {#if at < 0}<option value="-1" disabled>{isMobile ? '#' : 'Order: mixed'}</option>{/if}
-    <option value="0">{isMobile ? '#' : 'Order: auto'}</option>
-    {#each stepChoices as k (k)}<option value={String(k)}>{isMobile ? `#${k}` : `Order ${k}`}</option>{/each}
-  </select>
+  <!-- short on a phone: in full, the box's bar ran onto a second row over the picture -->
+  <button type="button" class="order" class:on={at > 0} class:small={isMobile} aria-label="Order in a presentation" aria-haspopup="menu"
+    title="Order: which press of → in a presentation brings it up (⌥1…⌥9)" onclick={(e) => pickStep(e, ids)}>
+    <span>{isMobile ? (at > 0 ? `#${at}` : '#') : at < 0 ? 'Order: mixed' : at ? `Order ${at}` : 'Order: auto'}</span>
+    <svg class="chev" viewBox="0 0 16 16"><path d="M4.5 6.5L8 10l3.5-3.5" /></svg>
+  </button>
 {/snippet}
 
 <div class="layer" bind:this={layer}>
@@ -991,10 +1017,9 @@
   .bar button.text { width: auto; gap: 4px; padding: 0 9px 0 7px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent-text); }
   .bar button.danger:hover { color: #ff453a; }
   .bar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
-  .bar .order {
-    height: 30px; border: 0; border-radius: 8px; padding: 0 6px; background: none; color: var(--fg-dim); font: inherit; font-size: 12.5px; font-weight: 500;
-  }
-  .bar .order.small { appearance: none; -webkit-appearance: none; min-width: 30px; padding: 0 7px; text-align: center; font-weight: 600; }
+  .bar button.order { width: auto; gap: 2px; padding: 0 5px 0 9px; color: var(--fg-dim); font: inherit; font-size: 12.5px; font-weight: 500; }
+  .bar button.order .chev { width: 12px; height: 12px; }
+  .bar button.order.small { min-width: 30px; padding: 0 5px 0 7px; font-weight: 600; }
   .bar .order.on { background: var(--accent-soft); color: var(--accent-text); }
   /* a box's order in a presentation, on its corner */
   .stepno {
@@ -1014,7 +1039,7 @@
   :global(.diagram-canvas path.flowchart-link.picked) { stroke: var(--accent-text) !important; stroke-width: 2.5px !important; }
   /* a phone's finger: every button in a bar a finger's size */
   :global(html.mobile) .bar button { width: 40px; height: 40px; }
-  :global(html.mobile) .bar button.text, :global(html.mobile) .bar button:has(.lbl) { width: auto; }
+  :global(html.mobile) .bar button.text, :global(html.mobile) .bar button:has(.lbl), :global(html.mobile) .bar button.order { width: auto; }
   /* the boxes, the +, the bars and the rings stay inside the card: drawn past its edge they sat over the page, where a
      click closed the diagram */
   .layer { overflow: hidden; }

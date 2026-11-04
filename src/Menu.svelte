@@ -105,7 +105,7 @@
     <li role="none" class:sep={it.sep}>
       <button role="menuitem" class:danger={it.danger} class:on={it.checked} disabled={it.disabled}
         onmousedown={hold} onmouseenter={(e) => e.currentTarget.focus()} onclick={() => pick(it)}>
-        <span class="label">{#if it.swatch}<span class="swatch" style:background={it.swatch}></span>{/if}{it.label}</span>{#if it.keys}<kbd>{prettyKeys(it.keys)}</kbd>{:else if it.checked}{@render check()}{/if}
+        <span class="label">{#if it.swatch}<span class="swatch" style:background={it.swatch}></span>{/if}{it.label}</span>{#if it.checked}{@render check()}{/if}{#if it.keys}<kbd>{prettyKeys(it.keys)}</kbd>{/if}
       </button>
     </li>
   {/each}
