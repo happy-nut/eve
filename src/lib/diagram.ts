@@ -338,7 +338,11 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
   if (pre.length) d.pre = pre;
   const seen = new Map<string, FlowNode>();
   let lane: Lane | null = null; // the subgraph being read
+  // a line to or from a lane itself (Lane1 -.-> Lane2): mermaid joins the two groups, the lanes cannot (it was drawn
+  // as two boxes named Lane1 and Lane2); the chart is mermaid's to draw
+  let toLane = false;
   const node = (n: { id: string; label?: string; shape?: Shape; raw?: FlowNode['raw']; cls?: string }) => {
+    if (d.lanes?.some((l) => l.id === n.id)) toLane = true;
     let have = seen.get(n.id);
     if (!have) { have = { id: n.id, label: n.label ?? n.id, shape: n.shape ?? 'box' }; seen.set(n.id, have); d.nodes.push(have); }
     else if (n.label !== undefined) { have.label = n.label; have.shape = n.shape!; delete have.raw; }
@@ -394,7 +398,7 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
       }
     }
   }
-  if (lane) return null; // a lane never closed
+  if (lane || toLane) return null; // a lane never closed
   for (const [id, on] of told) { const e = edgeIds.get(id); if (!e) return null; if (on) e.animate = true; else delete e.animate; }
   return d;
 }

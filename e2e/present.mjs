@@ -38,7 +38,7 @@ try {
   assert.ok(v.box[2] - v.box[0] > 0.85 * 1280, `the slide the window's width, as a slide is (${v.box})`);
   // the cover's title a cover's size, well over a heading's on the slides after it
   const cover = await page.evaluate(() => { const s = document.querySelector('.present .slide'); return parseFloat(getComputedStyle(s.querySelector('h1')).fontSize) / parseFloat(getComputedStyle(s).fontSize); });
-  assert.ok(cover >= 2 && cover <= 2.4, `the cover's title a cover's, not a shout (${cover.toFixed(2)}× the slide's words)`);
+  assert.ok(cover >= 2.5 && cover <= 2.7, `the cover's title a cover's, neither lost on the screen nor a shout (${cover.toFixed(2)}× the slide's words)`);
   // the whole screen, from its button or F, and back
   const full = () => page.evaluate(() => !!document.fullscreenElement);
   await page.click('.present .whole');

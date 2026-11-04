@@ -25,7 +25,7 @@ test('every node and mark the editor knows has a sample here', () => {
   const all = [...Object.keys(schema.nodes).filter((n) => n !== 'doc' && n !== 'text'), ...Object.keys(schema.marks).map((m) => 'mark:' + m)];
   const covered = new Set(Object.values(SAMPLES).flatMap((s) => [...kinds(s)]));
   expect(all.filter((k) => !covered.has(k))).toEqual([]);
-});
+}, 30_000); // the file's first editor, which pays for loading the editor: past 5 s on a busy machine (the whole suite at once)
 
 test.each(Object.entries(SAMPLES))('%s: saved as it was read, and again', (_k, note) => {
   const once = md(editorWith(note));

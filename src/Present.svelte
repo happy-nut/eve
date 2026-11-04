@@ -292,9 +292,10 @@
     margin: 0; align-self: flex-start; pointer-events: none; user-select: none;
   }
   /* the first slide, the title's, in the middle of the screen; the others from the top, each heading where the last was.
-     Its title a cover's: well over the headings of the slides after it */
+     Its title a cover's: well over the headings of the slides after it (2.9× the words was a shout, 2.2× lost on the
+     screen) */
   .slide.first { align-self: center; }
-  .slide.first > :global(h1:first-child) { font-size: 2.2em; font-weight: 700; line-height: 1.12; letter-spacing: -0.025em; margin-bottom: 0.35em; }
+  .slide.first > :global(h1:first-child) { font-size: 2.6em; font-weight: 700; line-height: 1.12; letter-spacing: -0.025em; margin-bottom: 0.35em; }
   .slide.hidden { visibility: hidden; }
   /* room over the words for the crumbs, taken out of the screen's top margin: they sit higher, the words where they were */
   .slide:not(.first) { padding-top: 1em; margin-top: -1em; }

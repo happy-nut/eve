@@ -104,6 +104,9 @@ console.log('diagram hunt ok');
   // more than lanes: kept as code
   assert.equal(fromCode('flowchart LR\n  subgraph a\n    subgraph b\n      x\n    end\n  end'), null, 'a lane in a lane');
   assert.equal(fromCode('flowchart LR\n  subgraph a\n    x'), null, 'a lane never closed');
+  // a line from one lane to another is mermaid's to draw: read as lanes it was two boxes named after them
+  assert.equal(fromCode('flowchart TB\n  subgraph Lane1["A"]\n    x --> y\n  end\n  subgraph Lane2["B"]\n    z\n  end\n  Lane1 -.->|meta| Lane2'), null, 'a line between lanes');
+  assert.equal(fromCode('flowchart TB\n  subgraph Lane1["A"]\n    x\n  end\n  x --> Lane1'), null, 'a line into a lane');
   assert.equal(fromCode('flowchart LR\n  x\n  end'), null, 'an end with no lane');
   assert.equal(fromCode('flowchart LR\n  direction TB\n  x'), null, 'a direction outside a lane');
   // drawn: a lane per subgraph (and one for the boxes in none), every box, every line, in the chart's order
