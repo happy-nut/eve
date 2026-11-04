@@ -19,7 +19,8 @@ function noteSlots(me: Note): NoteSlot[] {
       if (shownParent(p) !== parent) continue;
       if (p.id === me.id || notes.isAncestor(me.id, p.id)) continue; // itself and its own sub-pages
       out.push({ parent, before: p.id });
-      if (!tree.isFolded(p.id)) pages(p.id); // an open page can take it in
+      // an open page can take it in; never the daily notes' row, which holds no page (⌥↓ stopped above it)
+      if (p.id !== CALENDAR_NOTE_ID && !tree.isFolded(p.id)) pages(p.id);
     }
     out.push({ parent, before: null });
   };
@@ -62,7 +63,7 @@ export function nestNote(id: string, dir: 'in' | 'out', above?: string, dry = fa
   } else {
     // never one of its own sub-pages
     const host = above && notes.all.find((n) => n.id === above);
-    if (!host || host.id === me.parent || notes.isAncestor(id, host.id)) return false;
+    if (!host || host.id === CALENDAR_NOTE_ID || host.id === me.parent || notes.isAncestor(id, host.id)) return false;
     if (dry) return true;
     tree.unfold(host.id);
     notes.setParent(id, host.id);

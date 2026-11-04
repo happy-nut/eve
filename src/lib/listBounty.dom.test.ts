@@ -1,7 +1,9 @@
 // The list's finds of the second UI bounty: where notes go and stay, and the keys the app keeps for itself
 import { test, expect, beforeEach } from 'vitest';
 import { notes } from './notes.svelte';
-import { nudgeNote } from './moves';
+import { nudgeNote, nestNote } from './moves';
+import { appearance } from './appearance.svelte';
+import { CALENDAR_NOTE_ID } from './daily';
 import { shortcuts } from './shortcuts.svelte';
 import { tabs } from './tabs.svelte';
 
@@ -37,4 +39,23 @@ test('the note in a tab deleted: the tab shows the note opened next, in its plac
   notes.remove(a); // the next note opens
   tabs.follow(a);
   expect(tabs.list.findIndex((t) => t.id === notes.currentId)).toBe(0);
+});
+
+// a note above the daily notes' row could not be brought below it: ⌥↓'s next spot was "inside the calendar", which no
+// note can be, so the key did nothing there, every time
+test('⌥↓ takes a note above the daily notes\' row past it, ⌥↑ back; ⌥→ never tucks a note into it', () => {
+  appearance.s.dailyNotes = true;
+  const top = make('Above the diary');
+  const cal = notes.ensureCalendar();
+  notes.place(top, '', CALENDAR_NOTE_ID);
+  const order = () => notes.visible.filter((n) => !n.parent).map((n) => n.id);
+  const at = (id: string) => order().indexOf(id);
+  expect(at(top)).toBe(at(cal.id) - 1);
+  expect(nudgeNote(top, 1)).toBe(true);
+  expect(at(top)).toBe(at(cal.id) + 1);
+  expect(nudgeNote(top, -1)).toBe(true);
+  expect(at(top)).toBe(at(cal.id) - 1);
+  notes.place(top, '', order()[at(cal.id) + 1] ?? null);
+  expect(nestNote(top, 'in', cal.id, true)).toBe(false);
+  appearance.s.dailyNotes = false;
 });
