@@ -458,9 +458,9 @@ function pasteMarkdown(view: EditorView, html: string, lead = '', trail = ''): T
     slice.content.forEach((p) => items.push(item.type.create(fresh, p)));
     slice = new Slice(Fragment.from(items), slice.openStart + 1, slice.openEnd + 1);
   }
-  // in a cell: lines it can hold (a list cut the table in two)
-  const fitted = inCell($from) ? cellLines(schema, slice.content, $from) : null;
-  if (fitted) slice = new Slice(fitted, Math.min(slice.openStart, 1), Math.min(slice.openEnd, 1));
+  // in a cell: lines it can hold (a list cut the table in two), open at a line of words to join the cell's own
+  const fitted = inCell($from) ? cellLines(view, slice.content, $from) : null;
+  if (fitted) slice = new Slice(fitted, fitted.firstChild?.isTextblock ? 1 : 0, fitted.lastChild?.isTextblock ? 1 : 0);
   const only = slice.content.childCount === 1 ? slice.content.firstChild! : null;
   if (item && only && LISTS.test(only.type.name) && only.type !== $from.node(-2).type) slice = new Slice(Fragment.from(asList(only, $from.node(-2), item)), slice.openStart, slice.openEnd);
   const tr = state.tr;
@@ -1056,7 +1056,10 @@ const codeEdges = Extension.create({
 /** what is pasted in a table's cell, as it can hold it (`null`: it holds it already): one line, its lines a line break
  *  apart (the note's `<br>`), a list's items each with its bullet, number or box at the front; a heading's, a quote's,
  *  a toggle's lines their words; code a line a line; a picture between them its own */
-function cellLines(schema: Schema, content: Fragment, $at: ResolvedPos): Fragment | null {
+function cellLines(view: EditorView, content: Fragment, $at: ResolvedPos): Fragment | null {
+  const schema = view.state.schema;
+  // a block as the note writes it (the editor is on its view's element: tiptap puts it there)
+  const written = (b: PMNode) => ((view.dom as any).editor?.storage.markdown.serializer.serialize(schema.nodes.doc.create(null, b)) as string | undefined ?? b.textContent).trim();
   const { paragraph, image, hardBreak } = schema.nodes;
   let fits = true;
   content.forEach((n) => { if (!n.isInline && n.type !== paragraph && n.type !== image) fits = false; });
@@ -1074,6 +1077,14 @@ function cellLines(schema: Schema, content: Fragment, $at: ResolvedPos): Fragmen
     if (n.type === image) { close(); out.push(n); }
     else if (n.type.spec.code) n.textContent.split('\n').forEach((l, i) => line(i ? '' : front, l ? Fragment.from(schema.text(l)) : Fragment.empty));
     else if (n.isTextblock) line(front, n.content);
+    // a block that is one thing (a formula, a file, a link's card, a database): what a cell can hold of it, where it
+    // went before without a word: the formula as one in the line, a file or a card its link, the rest as written
+    else if (n.isAtom) {
+      const src = n.attrs.src || n.attrs.href;
+      if (n.type.name === 'mathBlock' && schema.nodes.mathInline) line(front, Fragment.from(schema.nodes.mathInline.create({ latex: n.attrs.latex })));
+      else if (src && schema.marks.link) line(front, Fragment.from(schema.text(n.attrs.name || src, [schema.marks.link.create({ href: src })])));
+      else written(n).split('\n').forEach((l, i) => line(i ? '' : front, l.trim() ? Fragment.from(schema.text(l)) : Fragment.empty));
+    }
     else if (LISTS.test(n.type.name)) {
       n.forEach((item, _o, i) => {
         const mark = n.type.name === 'orderedList' ? `${(n.attrs.start ?? 1) + i}. ` : n.type.name === 'taskList' ? (item.attrs.checked ? '☑ ' : '☐ ') : '• ';
@@ -1209,8 +1220,10 @@ export function createEditor(opts: {
         // the list between its halves and the rest of the row's cells lost. Its lines go in the cell, each with its
         // bullet, number or box as written
         if (inCell($here) && inCell(view.state.selection.$to) && content.firstChild?.type.name !== 'tableRow') {
-          const fitted = cellLines(view.state.schema, content, $here);
-          if (fitted) return new Slice(fitted, Math.min(openStart, 1), Math.min(openEnd, 1));
+          const fitted = cellLines(view, content, $here);
+          // open at a line of words, so it joins the cell's own: closed (a list copied whole), it went in as a line of
+          // its own, an empty one above it, and the cell came back otherwise once the note was read again
+          if (fitted) return new Slice(fitted, fitted.firstChild?.isTextblock ? 1 : 0, fitted.lastChild?.isTextblock ? 1 : 0);
         }
         while (openStart >= 2 && content.childCount === 1 && content.firstChild!.type.name === 'details' && content.firstChild!.firstChild?.type.name === 'detailsContent') {
           content = content.firstChild!.firstChild!.content;

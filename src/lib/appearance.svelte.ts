@@ -89,6 +89,9 @@ class AppearanceStore {
   set(patch: Partial<Appearance>) { Object.assign(this.s, patch); localStorage.setItem(LS, JSON.stringify(this.s)); }
   /** the note's text size as shown: the Settings size and the ⌘+ / ⌘- steps on it */
   get textPx() { return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, this.s.size + this.s.zoom)); }
+  /** a note set to small text: a step under the rest, zoomed out too (held at the slider's 12px, it came out larger
+   *  than the other notes once ⌘- took them under it) */
+  get smallPx() { return Math.max(ZOOM_MIN, Math.round(this.textPx * 0.875)); }
   /** the page's width as shown: Settings' width, wider or narrower with the ⌘+ / ⌘- steps as a browser zooms (the text
    *  grew in a page that did not, and each step left fewer words a line) */
   get widthPx() { return Math.round((this.s.width * this.textPx) / Math.min(SIZE_MAX, Math.max(SIZE_MIN, this.s.size))); }
@@ -99,15 +102,20 @@ class AppearanceStore {
    */
   textSize(step: 1 | -1 | 0): number {
     const sizes = ZOOMS.map((f) => Math.round(Math.min(SIZE_MAX, Math.max(SIZE_MIN, this.s.size)) * f));
-    const next = step > 0 ? sizes.find((p) => p > this.textPx) : sizes.reverse().find((p) => p < this.textPx);
+    // a step a tenth away at least: zoomed and then given another size in Settings, the text sits between two steps,
+    // and the nearest was a pixel off
+    const next = step > 0 ? sizes.find((p) => p >= this.textPx * 1.1) : sizes.reverse().find((p) => p <= this.textPx / 1.1);
     const px = step ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next ?? this.textPx)) : this.s.size;
     this.set({ zoom: px - this.s.size });
     return this.textPx;
   }
-  /** Appearance's own Reset: how notes look (theme, type, text), not what the app does (daily notes, window…) */
-  reset() {
-    const { theme, font, custom, size, lineHeight, width, zoom, codeTheme } = DEFAULTS;
-    this.set({ theme, font, custom, size, lineHeight, width, zoom, codeTheme });
+  /** Appearance's own Reset: how notes look (theme, type, text), not what the app does (daily notes, window…). What
+   *  it was is returned, for its Undo: the Undo put back six of the eight, and the code colours and ⌘+ stayed reset */
+  reset(): Partial<Appearance> {
+    const keys = ['theme', 'font', 'custom', 'size', 'lineHeight', 'width', 'zoom', 'codeTheme'] as const;
+    const was = Object.fromEntries(keys.map((k) => [k, this.s[k]])) as Partial<Appearance>;
+    this.set(Object.fromEntries(keys.map((k) => [k, DEFAULTS[k]])) as Partial<Appearance>);
+    return was;
   }
   /** call once; keeps <html> in sync */
   apply() {

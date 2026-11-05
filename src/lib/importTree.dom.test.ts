@@ -57,3 +57,36 @@ test('a file’s name is its note’s title, a heading of another name kept unde
   expect(byTitle('plain').body).toBe('# plain\n\njust text');
   expect(byTitle('Plan').parent).toBe(byTitle('Trip').id);
 });
+
+test('two files of one name (README in two folders, or a page here already called so): each its own title, the links each to its own', async () => {
+  notes.create('# Meeting\n\nold');
+  await importTree(tree({
+    'Index.md': '[w](Work/README.md) and [h](Home/README.md)',
+    'Work/README.md': '# Work stuff',
+    'Home/README.md': '# Home stuff',
+    'Meeting.md': '# Standup',
+  }));
+  const index = byTitle('Index');
+  const linked = [...index.body.matchAll(/\[\[([^|\]]+)/g)].map((m) => m[1]);
+  expect(new Set(linked).size).toBe(2); // not both to one README
+  expect(linked.map((t) => byTitle(t).body)).toEqual([expect.stringContaining('Work stuff'), expect.stringContaining('Home stuff')]);
+  expect(notes.visible.filter((n) => titleOf(n) === 'Meeting')).toHaveLength(1); // the new one is Meeting 2, as Finder names a copy
+  expect(byTitle('Meeting 2').body).toContain('Standup');
+});
+
+test('a file name with what markdown reads as markup is the title as it is in Finder', async () => {
+  const names = ['_old_', '- todo', '2*3*4', '1. first', '[draft] Plan', 'A <b> B'];
+  await importTree(tree(Object.fromEntries(names.map((n) => [`Odd/${n}.md`, 'x']))));
+  for (const n of names) expect(byTitle(n), n).toBeTruthy();
+});
+
+test("a file's front matter is its page's properties, not lines in it; a link to a section keeps its section", async () => {
+  await importTree(tree({
+    'Fm/Trip notes.md': '---\ntags:\n  - trip\n  - 2024\nstatus: done\nid: x1\n---\n\nBody',
+    'Fm/From.md': '[goals](Trip%20notes.md#Goals)',
+  }));
+  const trip = byTitle('Trip notes');
+  expect(trip.body).toBe('# Trip notes\n\nBody');
+  expect(trip.props).toEqual({ tags: ['trip', '2024'], status: 'done' }); // Eve's own keys (id) are not taken
+  expect(byTitle('From').body).toContain('[[Trip notes#Goals|goals]]');
+});

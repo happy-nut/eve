@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import { commonDir, groupFor } from './paths.ts';
+import { commonDir, dirOf, groupFor } from './paths.ts';
+
+// a name alone is in no folder (it was read as in one called the name less its last letter)
+assert.equal(dirOf('Index.md'), '');
+assert.equal(dirOf('a/b.md'), 'a');
+assert.equal(dirOf('/x.md'), '');
 
 // one file: no structure to keep
 assert.equal(commonDir(['/a/b/note.md']), '/a/b');

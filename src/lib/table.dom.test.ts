@@ -292,3 +292,27 @@ describe('lines of a list pasted in a cell stay in the cell, the table whole', (
     expect(md(editorWith(saved))).toBe(saved); // saved and read back the same
   });
 });
+
+describe('what else is pasted in a cell goes in it too, and the cell is the same when the note is read back', () => {
+  const cellOf = (ed: ReturnType<typeof editorWith>) => { let c: any = null; ed.state.doc.descendants((n) => { if (n.type.name === 'tableCell' && n.textContent.startsWith('x')) c = n; return !c; }); return c; };
+  test('a list copied in Eve, pasted mid-word: one line of the cell, as typed, not an empty line above it', () => {
+    const ed = editorWith('# T\n\n| a | b |\n| --- | --- |\n| xword | y |\n');
+    ed.commands.setTextSelection(posOf(ed, 'xw', true));
+    paste(ed, '- one\n- two', '<ul data-pm-slice="0 0 []"><li><p>one</p></li><li><p>two</p></li></ul>');
+    const cell = cellOf(ed);
+    expect(cell.childCount).toBe(1); // one paragraph, its lines a line break apart
+    expect(cellOf(editorWith(md(ed))).toJSON()).toEqual(cell.toJSON());
+  });
+  test.each([
+    ['a formula on its own', '$$\nx+1\n$$', ['x+1']],
+    ['a list and a formula', '- a\n\n$$\nx+1\n$$', ['• a', 'x+1']],
+    ['a list and a PDF', '- a\n\n[plan.pdf](assets/plan.pdf)', ['• a', 'plan.pdf']],
+  ])('%s: none of it dropped', (_n, text, kept) => {
+    const ed = editorWith('# T\n\n| a | b |\n| --- | --- |\n| x | y |\n');
+    ed.commands.setTextSelection(posOf(ed, 'x', true));
+    paste(ed, text, '');
+    const saved = md(ed);
+    for (const k of kept) expect(saved.split('\n').find((l) => l.startsWith('| x'))).toContain(k);
+    expect(md(editorWith(saved))).toBe(saved);
+  });
+});

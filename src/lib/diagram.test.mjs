@@ -467,3 +467,13 @@ assert.match(laneSvg({ kind: 'flowchart', dir: 'LR', lanes: [{ id: 'A', label: '
   assert.deepEqual(odd.nodes.map((n) => n.step), [1, undefined]);
   assert.deepEqual(odd.extra, ['class Z step1', 'class A step3']);
 }
+
+// a step after a `;` is read as one (mermaid draws it); a class of that name the chart styles itself is its colour
+{
+  const semi = fromCode('flowchart TD\n  A --> B; class A step2');
+  assert.equal(semi.nodes[0].step, 2);
+  assert.equal(semi.extra, undefined);
+  const styled = fromCode('flowchart TD\n  A --> B\n  classDef step1 fill:#f96\n  class A step1');
+  assert.equal(styled.nodes[0].step, undefined);
+  assert.match(toCode(styled), /class A step1/);
+}

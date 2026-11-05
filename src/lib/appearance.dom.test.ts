@@ -70,3 +70,26 @@ test("a code colour theme gives the page its code colours, both its sets; Eve's 
   appearance.reset();
   expect(appearance.s.codeTheme).toBe('eve');
 });
+
+test('a small-text note stays under the rest as ⌘- takes them small; a size set while zoomed still steps a step', () => {
+  appearance.set({ size: 15, zoom: 0 });
+  for (let i = 0; i < 3; i++) { appearance.textSize(-1); expect(appearance.smallPx).toBeLessThanOrEqual(appearance.textPx); }
+  appearance.textSize(0);
+  expect(appearance.smallPx).toBeLessThan(appearance.textPx);
+  // at 200%, the slider moved: the text between two steps, and ⌘- took a pixel off it
+  appearance.textSize(1); appearance.textSize(1); appearance.textSize(1);
+  appearance.set({ size: 28 });
+  const at = appearance.textPx;
+  expect(at / appearance.textSize(-1)).toBeGreaterThanOrEqual(1.1);
+  appearance.textSize(0);
+});
+
+test("Reset's Undo puts back all it reset: the code colours and the ⌘+ steps too", () => {
+  appearance.set({ size: 18, zoom: 0, codeTheme: 'github', font: 'serif' });
+  appearance.textSize(1);
+  const before = { ...appearance.s };
+  const was = appearance.reset();
+  expect(appearance.s.codeTheme).not.toBe('github');
+  appearance.set(was);
+  expect(appearance.s).toEqual(before);
+});

@@ -40,7 +40,24 @@ export function timeline(svg: SVGSVGElement): Step[] {
     for (const s of ids) if (dataId.startsWith(`L_${s}_`)) for (const d of ids) if (new RegExp(`^L_${esc(s)}_${esc(d)}_\\d+$`).test(dataId)) return [s, d];
     return null;
   };
-  const lines = [...svg.querySelectorAll<SVGPathElement>('path.flowchart-link[data-id]')].map((p) => ({ p, ends: ends(p.dataset.id!) }));
+  // a line given a name of its own (`e1@-->`, a Moving one) has it for its id: its ends are the boxes nearest where it
+  // starts and stops (read as nothing, it came up first, and the box only it reaches with it)
+  const centre = new Map([...nodes].map(([id, g]) => {
+    const m = /translate\(\s*(-?[\d.]+)[\s,]+(-?[\d.]+)/.exec(g.getAttribute('transform') ?? '');
+    return [id, m ? [+m[1], +m[2]] : null] as const;
+  }));
+  const nearest = (x: number, y: number) => {
+    let best = '', d = Infinity;
+    for (const [id, c] of centre) if (c && Math.hypot(c[0] - x, c[1] - y) < d) { d = Math.hypot(c[0] - x, c[1] - y); best = id; }
+    return best;
+  };
+  const drawnEnds = (p: SVGPathElement): [string, string] | null => {
+    const n = (p.getAttribute('d') ?? '').match(/-?\d*\.?\d+/g)?.map(Number) ?? [];
+    if (n.length < 4) return null;
+    const s = nearest(n[0], n[1]), d = nearest(n[n.length - 2], n[n.length - 1]);
+    return s && d && s !== d ? [s, d] : null;
+  };
+  const lines = [...svg.querySelectorAll<SVGPathElement>('path.flowchart-link[data-id]')].map((p) => ({ p, ends: ends(p.dataset.id!) ?? drawnEnds(p) }));
   const level = numbered(levels(ids, lines.flatMap((l) => (l.ends ? [l.ends] : []))), nodes);
   const u = Math.min(UNIT, MAX / (Math.max(0, ...level.values()) + 1));
   const steps: Step[] = [...nodes].map(([id, el]) => ({ el, at: level.get(id)! * u, stage: level.get(id)! }));
@@ -95,6 +112,9 @@ const len = (l: SVGPathElement | SVGLineElement) => {
   return Math.hypot(x2.baseVal.value - x1.baseVal.value, y2.baseVal.value - y1.baseVal.value);
 };
 
+/** the lines whose heads are hidden while they draw in: the head each had, and the timer that puts it back */
+const heads = new WeakMap<Element, { own: string; timer: ReturnType<typeof setTimeout> }>();
+
 /** one element coming up: a line drawn from its start, anything else faded in */
 function enter({ el, line }: Step, delay: number): Animation {
   if (!line) return el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' });
@@ -105,12 +125,17 @@ function enter({ el, line }: Step, delay: number): Animation {
     { strokeDasharray: `${n}`, strokeDashoffset: '0' },
   ], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' });
   // and its arrowhead only once it has got there (drawn at its end from the start, it was there before the line); put
-  // back by a timer, not by the animation's keyframes: an animation stalled while Eve was away left the line headless
+  // back by a timer, not by the animation's keyframes: an animation stalled while Eve was away left the line headless.
+  // Hidden already (drawn in again before it was back, or a copy Present took while it drew in), the head it had is
+  // the one kept, not the 'none' it is hidden by: that was put back, and the line stayed headless
+  const was = heads.get(line);
   const head = getComputedStyle(line).markerEnd;
-  if (head && head !== 'none') {
-    const own = line.style.markerEnd, back = () => { line.style.markerEnd = own; };
+  if (was || line.style.markerEnd === 'none' || (head && head !== 'none')) {
+    clearTimeout(was?.timer);
+    const own = was ? was.own : line.style.markerEnd === 'none' ? '' : line.style.markerEnd;
+    const back = () => { if (heads.get(line)?.own === own) { clearTimeout(heads.get(line)!.timer); heads.delete(line); } line.style.markerEnd = own; };
     line.style.markerEnd = 'none';
-    setTimeout(back, delay + FADE);
+    heads.set(line, { own, timer: setTimeout(back, delay + FADE) });
     a.addEventListener?.('cancel', back);
   }
   return a;

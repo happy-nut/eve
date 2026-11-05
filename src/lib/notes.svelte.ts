@@ -36,7 +36,7 @@ export const OWN_KEYS = new Set(['id', 'updated', 'deleted', 'order', 'group', '
 export const propName = (name: string) => name.replace(/[:\n\r]/g, ' ').trim().replace(/^-{3,}\s*/, '');
 /** a value as one frontmatter line: a list (and a word that would read as one) as JSON, anything else as it is */
 const propLine = (v: PropValue) => (Array.isArray(v) || /^[["]/.test(v) || v !== v.trim() ? JSON.stringify(v) : v.replace(/[\n\r]+/g, ' '));
-function readProp(v: string): PropValue {
+export function readProp(v: string): PropValue {
   if (/^[["]/.test(v)) {
     try {
       const x = JSON.parse(v);
@@ -434,10 +434,10 @@ class NotesStore {
    * A note made by importing a file. It joins the end of the pages beside it (an import reads top to bottom)
    * and leaves the open note alone — the file usually links itself into the page being written.
    */
-  addImported(body: string, updatedAt = Date.now(), parent?: string): Note {
+  addImported(body: string, updatedAt = Date.now(), parent?: string, props?: Note['props']): Note {
     const step = history.record();
     const last = this.visible.filter((x) => (x.parent ?? '') === (parent ?? '')).at(-1);
-    const n: Note = { id: newId(), body, updatedAt, deleted: false, ...(parent ? { parent } : {}), order: last ? last.order + 1 : 0, icon: autoIcon() };
+    const n: Note = { id: newId(), body, updatedAt, deleted: false, ...(parent ? { parent } : {}), ...(props && Object.keys(props).length ? { props } : {}), order: last ? last.order + 1 : 0, icon: autoIcon() };
     if (step) this.madeInStep.add(n.id);
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
@@ -568,6 +568,11 @@ class NotesStore {
    * with, so a page can slide into another page as a sub-page instead of only stepping past it.
    * ponytail: ranks can get arbitrarily close after thousands of moves; renormalize then.
    */
+  /** the page a note shows under in the list: its parent while that is there, else none (a sub-page whose page was
+   *  deleted is shown at the top level) */
+  shownParent(n: Note): string {
+    return n.parent && this.visible.some((p) => p.id === n.parent) ? n.parent : '';
+  }
   place(id: string, parent: string, before: string | null) {
     history.record();
     if (id === CALENDAR_NOTE_ID && parent) return; // the calendar's row is never a sub-page
@@ -576,7 +581,9 @@ class NotesStore {
     if (!n || id === before) return;
     if (parent && (parent === id || this.isAncestor(id, parent))) return; // never under its own sub-page
     this.touched(id);
-    const sibs = this.visible.filter((x) => (x.parent ?? '') === parent && x.id !== id);
+    // the pages beside it as the list shows them: a sub-page whose page was deleted is among the top level's (looked
+    // for under the deleted page, the move found no place and did nothing, while ⌥↑ said it had)
+    const sibs = this.visible.filter((x) => this.shownParent(x) === parent && x.id !== id);
     let order: number;
     if (before) {
       const i = sibs.findIndex((x) => x.id === before);

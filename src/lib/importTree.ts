@@ -1,4 +1,5 @@
-import { notes, titleOf, type Note } from './notes.svelte';
+import { notes, titleOf, readProp, propName, OWN_KEYS, type Note, type PropValue } from './notes.svelte';
+import { escapeTitle } from './markdown';
 import { TEXT_FILE, DOC_FILE, VIDEO_FILE } from './drop';
 import { dirOf, nameOf, stem, resolveLink } from './paths';
 import { attachmentCandidates, isKeepNote, keepOrder, keepToNote, type FromKeep } from './keep';
@@ -26,7 +27,30 @@ export const IMPORTABLE = /\.(md|markdown|mdx|txt|pdf|xlsx?|hwpx?|png|jpe?g|gif|
 const embedOf = (name: string, src: string) => (DOC_FILE.test(name) || VIDEO_FILE.test(name) ? `[${name.replace(/[[\]]/g, '')}](${src})` : `![](${src})`);
 const byName = (a: Source, b: Source) => a.path.localeCompare(b.path, undefined, { numeric: true });
 /** a file's or a folder's name as a title: Notion's export puts the page's id after it (`Trip 1a2b…`), left off */
-const titled = (name: string) => name.replace(/ [0-9a-f]{32}$/, '');
+const titled = (name: string) => name.replace(/ [0-9a-f]{32}$/, '').trim();
+/** a title as a `# ` line that reads back as it is: what markdown takes for markup in it (`_old_`, `2*3*4`, a leading
+ *  `- ` or `1. `) escaped, and the name came out otherwise */
+const heading = (t: string) => `# ${escapeTitle(t).replace(/^([-+>])/, '\\$1').replace(/^(\d+)([.)])/, '$1\\$2')}`;
+
+/** a file's front matter (Obsidian's, a static site's): `key: value` lines, a list as `- item` lines under its key or
+ *  `[a, b]`. Eve's own keys are not taken from it */
+function frontMatter(yaml: string): Record<string, PropValue> {
+  const out: Record<string, PropValue> = {};
+  let list: string | null = null;
+  for (const line of yaml.split('\n')) {
+    const item = /^\s+-\s+(.*)$/.exec(line);
+    if (item && list) { (out[list] as string[]).push(item[1].trim().replace(/^(["'])(.*)\1$/, '$2')); continue; }
+    const kv = /^([^:#\s][^:]*):\s*(.*)$/.exec(line);
+    if (!kv) continue;
+    const k = propName(kv[1]), v = kv[2].trim();
+    list = null;
+    if (!k || OWN_KEYS.has(k)) continue;
+    if (!v) { out[k] = []; list = k; }
+    else if (/^\[.*\]$/.test(v) && !Array.isArray(readProp(v))) out[k] = v.slice(1, -1).split(',').map((x) => x.trim().replace(/^(["'])(.*)\1$/, '$2')).filter(Boolean);
+    else out[k] = readProp(v.replace(/^'(.*)'$/, '$1'));
+  }
+  return out;
+}
 
 /**
  * A tree of files as notes, the shape it came in:
@@ -55,7 +79,7 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
     dirs.forEach((d, i) => {
       const key = dirs.slice(0, i + 1).join('/');
       let id = folders.get(key);
-      if (!id) folders.set(key, (id = notes.addImported(`# ${titled(d)}\n`, Date.now(), up).id));
+      if (!id) folders.set(key, (id = notes.addImported(`${heading(titled(d))}\n`, Date.now(), up).id));
       up = id;
     });
     return up;
@@ -90,12 +114,24 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
 
   // ---- the rest: text files read first, so links between them know their titles ----
   const texts = all.filter((s) => !taken.has(s.path) && TEXT_FILE.test(s.path));
-  const bodies = new Map<string, string>();
+  const bodies = new Map<string, string>(), props = new Map<string, Record<string, PropValue>>();
+  // a title another page has (README in two folders, a Meeting there already) is given a number, as Finder names a
+  // copy: the [[links]] to the two went to one of them
+  const used = new Set<string>();
+  const free = (t: string) => {
+    let out = t;
+    for (let k = 2; used.has(out.toLowerCase()) || notes.byTitle(out); k++) out = `${t} ${k}`;
+    used.add(out.toLowerCase());
+    return out;
+  };
   for (const s of texts) {
-    const text = (await s.text()).replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+    let text = (await s.text()).replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+    // front matter is the page's properties: under the title, its `---` read as a divider and its last line a heading
+    const fm = /^---\n([\s\S]*?)\n---[ \t]*(?:\n|$)/.exec(text);
+    if (fm) { props.set(s.path, frontMatter(fm[1])); text = text.slice(fm[0].length).replace(/^\n+/, ''); }
     // the file's name is the title, as it is in Finder; a heading that says something else stays, under it
-    const name = titled(stem(nameOf(s.path)));
-    bodies.set(s.path, titleOf({ body: text }) === name ? text : `# ${name}\n\n${text}`);
+    const name = free(titled(stem(nameOf(s.path))));
+    bodies.set(s.path, titleOf({ body: text }) === name ? text : `${heading(name)}\n\n${text}`);
   }
   const title = (path: string) => titleOf({ body: bodies.get(path)! });
 
@@ -116,7 +152,10 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
       const file = path && (at.get(path) ?? [...at.values()].find((s) => s.path.toLowerCase() === path.toLowerCase()));
       if (!file || taken.has(file.path)) continue;
       if (bodies.has(file.path)) {
-        const t = title(file.path);
+        // to a section of it (`Plan.md#goals`): to that section still
+        let sec = /#(.+)$/.exec(target)?.[1] ?? '';
+        try { sec = decodeURIComponent(sec); } catch { /* as written */ }
+        const t = title(file.path) + (sec ? `#${sec}` : '');
         jobs.push(Promise.resolve([whole, label && label !== t ? `[[${t}|${label}]]` : `[[${t}]]`]));
       } else if (IMPORTABLE.test(file.path)) {
         inside.add(file.path);
@@ -152,9 +191,9 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
     let body = bodies.get(s.path), embed: string | undefined;
     if (body === undefined) {
       embed = embedOf(nameOf(s.path), await copy(s));
-      body = `# ${titled(stem(nameOf(s.path)))}\n\n${embed}\n`;
+      body = `${heading(titled(stem(nameOf(s.path))))}\n\n${embed}\n`;
     }
-    const note = notes.addImported(body, Date.now(), parent ?? pageFor(dirs.slice(0, j)));
+    const note = notes.addImported(body, Date.now(), parent ?? pageFor(dirs.slice(0, j)), props.get(s.path));
     ids.set(s.path, note.id);
     made.push({ note, source: s, embed });
   }

@@ -88,7 +88,7 @@ export function splitLink(link: string, isTitle?: (title: string) => boolean): [
  */
 export const cardDoc = (title: string, body: string) => `# ${escapeTitle(title)}\n\n${body}`;
 /** a card's title is plain text: what markdown would read as markup in it (`2*3*4` italic, `<b>` a tag) stays as typed */
-const escapeTitle = (t: string) => t.replace(/[\\`*_[\]<>&~=$|#!]/g, '\\$&');
+export const escapeTitle = (t: string) => t.replace(/[\\`*_[\]<>&~=$|#!]/g, '\\$&');
 
 export function splitCard(md: string): { title: string; body: string } {
   const nl = md.indexOf('\n');

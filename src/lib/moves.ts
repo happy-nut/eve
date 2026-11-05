@@ -9,9 +9,9 @@ import { tree } from './tree.svelte';
  * step through this list, so a page slides *into* the one above instead of hopping over it.
  */
 type NoteSlot = { parent: string; before: string | null };
-/** the page a note shows under in the list: its parent while that is there, else none (a sub-page whose page was
- *  deleted is shown at the top level, and ⌥↑ / ⌥↓ looked for it under the deleted page and found nothing to step to) */
-const shownParent = (n: Note) => (n.parent && notes.visible.some((p) => p.id === n.parent) ? n.parent : '');
+/** the page a note shows under in the list (a sub-page whose page was deleted: the top level, and ⌥↑ / ⌥↓ looked for
+ *  it under the deleted page and found nothing to step to) */
+const shownParent = (n: Note) => notes.shownParent(n);
 function noteSlots(me: Note): NoteSlot[] {
   const out: NoteSlot[] = [];
   const pages = (parent: string) => {
@@ -56,7 +56,9 @@ export function nestNote(id: string, dir: 'in' | 'out', above?: string, dry = fa
   const me = notes.all.find((n) => n.id === id);
   if (!me) return false;
   if (dir === 'out') {
-    const parent = me.parent ? notes.all.find((n) => n.id === me.parent) : null;
+    // out of the page it shows under: one deleted is none, and Move out took it into the deleted page's own page
+    const up = shownParent(me);
+    const parent = up ? notes.all.find((n) => n.id === up) : null;
     if (!parent) return false;
     if (dry) return true;
     notes.setParent(id, parent.parent ?? null);

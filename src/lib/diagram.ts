@@ -333,6 +333,8 @@ function statements(line: string): string[] {
   return out.map((x) => x.trim()).filter(Boolean);
 }
 /** a line the forms do not show, kept as written: styles, classes, a link's style, a click, a comment, accessibility */
+/** a box's Order in a presentation: `class A,C step2` */
+const STEP = /^class\s+([\p{L}\p{N}_]+(?:\s*,\s*[\p{L}\p{N}_]+)*)\s+step([1-9]\d*)\s*;?$/u;
 const KEPT = /^(%%|style\s|classDef\s|class\s|linkStyle\s|click\s|accTitle\b|accDescr\b)/;
 
 function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart | null {
@@ -360,10 +362,13 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
   const edgeIds = new Map<string, FlowEdge>(), told: [string, boolean][] = [], steps: [string[], number, string][] = [];
   for (const raw of lines) {
     const whole = raw.trim();
-    const step = /^class\s+([\p{L}\p{N}_]+(?:\s*,\s*[\p{L}\p{N}_]+)*)\s+step([1-9]\d*)\s*;?$/u.exec(whole);
+    const step = STEP.exec(whole);
     if (step) { steps.push([step[1].split(/\s*,\s*/), +step[2], whole]); continue; }
     if (KEPT.test(whole)) { keep(whole); continue; }
     for (const line of statements(whole)) {
+      // after a `;` too (`A --> B; class A step2`): kept as written, the editor showed no Order mermaid drew by
+      const st = STEP.exec(line);
+      if (st) { steps.push([st[1].split(/\s*,\s*/), +st[2], line]); continue; }
       if (KEPT.test(line)) { keep(line); continue; }
       // a swimlane: `subgraph id["Label"]` (or id[Label], or a bare id, or a title of words) … `end`; one inside
       // another is more than lanes
@@ -406,10 +411,12 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
   }
   if (lane || toLane) return null; // a lane never closed
   for (const [id, on] of told) { const e = edgeIds.get(id); if (!e) return null; if (on) e.animate = true; else delete e.animate; }
-  // a step given to a box there is not, or a second one to the same box, is kept as written
+  // a step given to a box there is not, or a second one to the same box, is kept as written; so is a class of that
+  // name the chart styles itself (`classDef step1 fill:#f96`): its colour, not an Order, and Auto took it away
+  const styled = new Set((d.extra ?? []).flatMap((x) => /^classDef\s+(?:[\w-]+\s*,\s*)*step([1-9]\d*)\b/.exec(x)?.[1] ?? []).map(Number));
   for (const [ids, k, line] of steps) {
     const ns = ids.map((i) => seen.get(i));
-    if (ns.every((n) => n && !n.step)) for (const n of ns) n!.step = k;
+    if (!styled.has(k) && ns.every((n) => n && !n.step)) for (const n of ns) n!.step = k;
     else keep(line);
   }
   return d;

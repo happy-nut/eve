@@ -1,6 +1,8 @@
 /** File-path helpers for importing: pure, so they can be tested in Node (paths.test.mjs). */
 
-export const dirOf = (p: string) => p.slice(0, p.lastIndexOf('/'));
+/** the folder a path is in, '' for a name alone (sliced to -1 it was the name less its last letter, and the links in
+ *  a file dropped on its own were looked for in a folder called that) */
+export const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
 export const nameOf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 /** File name without its extension — the title a file gives its note. */
 export const stem = (name: string) => name.replace(/\.[^.]+$/, '');

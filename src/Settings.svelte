@@ -142,11 +142,10 @@
     return claimKeys('global', { '*': (e) => { onKey(e); e.stopPropagation(); return true; } }, { capture: true, whileTop: 'settings', priority: PRIORITY.record, composing: true });
   });
 
-  // five settings at once from one small link, right under the sample: an Undo puts them all back
+  // several settings at once from one small link, right under the sample: an Undo puts them all back
   function resetLook() {
-    const { theme, font, custom, size, lineHeight, width } = appearance.s;
-    appearance.reset();
-    ui.toast('Appearance reset to defaults', { label: 'Undo', run: () => appearance.set({ theme, font, custom, size, lineHeight, width }) });
+    const was = appearance.reset();
+    ui.toast('Appearance reset to defaults', { label: 'Undo', run: () => appearance.set(was) });
   }
 </script>
 
