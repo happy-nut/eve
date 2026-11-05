@@ -11,7 +11,7 @@
   import { tree } from './lib/tree.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
-  import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, seenFade, endFades, widget, links, inbox, saveAsset, storage, copyText } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, seenFade, redrawPanes, widget, links, inbox, saveAsset, storage, copyText } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Confirm from './Confirm.svelte';
@@ -201,19 +201,6 @@
     restoreFocus();
     hooks.caretIntoView?.();
   }
-  /**
-   * The note's pane drawn again as the window comes back. WebKit at times shows a window brought back from hidden with
-   * what scrolls in it undrawn: the crumbs over it there, the note a white page under them, until something made it
-   * draw (a scroll, a click). The note's page (and the list) is given a layer of its own for a frame, and drawn anew;
-   * not a page with a diagram on the whole screen, which a transform around it would shrink to the page's size.
-   */
-  function redrawPanes() {
-    endFades();
-    const panes = [...document.querySelectorAll<HTMLElement>('main .tiptap, .card-page .tiptap, aside')].filter((el) => !el.querySelector('.dblock.full'));
-    for (const el of panes) el.style.transform = 'translateZ(0)';
-    requestAnimationFrame(() => requestAnimationFrame(() => { for (const el of panes) el.style.transform = ''; }));
-  }
-
   function step(delta: number) {
     const next = stepFrom(tree.ordered(), notes.currentId, delta);
     if (next) notes.currentId = next.id;

@@ -36,7 +36,7 @@ test('summoned, the window is seen only after the page has drawn in it: never a 
   calls.length = 0;
   await revealWhenDrawn(7);
   window.requestAnimationFrame = raf;
-  expect(calls).toEqual(['frame 1', 'frame 2', 'reveal_window {"n":7}']);
+  expect(calls).toEqual(['frame 1', 'frame 2', 'reveal_window {"n":7}', 'frame 3']); // and drawn again once seen
 });
 
 test("the window's own ground is the page's: what shows before the page draws is the theme's colour, not white", async () => {
@@ -94,5 +94,27 @@ test('a note opened unseen does not fade in, and what was part way into a fade i
   Object.assign(other, { getAnimations: () => [anim('other')] });
   endFades();
   expect(finished).toEqual(['page', 'row']); // a popup's own transition is left to run
+  document.body.innerHTML = '';
+});
+
+// summoned, the note's pane was white under the crumbs until it was scrolled: WebKit had not drawn what the scroller
+// holds, and a layer of its own for the page's text did not make it. The scrollers are moved by a pixel and back, as
+// the user's scroll did, and by what they moved: the caret brought into sight meanwhile stays in sight
+test('summoned or back, each scroller is scrolled a pixel and back, so WebKit draws what it holds', async () => {
+  const { redrawPanes } = await import('./platform');
+  document.body.innerHTML = '<main><div class="scroll"><div class="tiptap"></div></div></main><aside><ul class="tree"></ul></aside><div class="scroll" id="short"></div>';
+  const [note, list, short] = ['main .scroll', '.tree', '#short'].map((s) => document.querySelector<HTMLElement>(s)!);
+  const room = (el: HTMLElement, h: number) => Object.defineProperties(el, { scrollHeight: { value: h }, clientHeight: { value: 100 } });
+  room(note, 1000); room(list, 1000); room(short, 100);
+  note.scrollTop = 300; list.scrollTop = 0;
+  const raf = window.requestAnimationFrame;
+  const frames: FrameRequestCallback[] = [];
+  window.requestAnimationFrame = (cb) => { frames.push(cb); return frames.length; };
+  redrawPanes();
+  expect([note.scrollTop, list.scrollTop, short.scrollTop]).toEqual([299, 1, 0]); // at the top it goes down, a short one stays
+  note.scrollTop += 40; // the caret brought into sight in the same frame
+  while (frames.length) frames.shift()!(0);
+  window.requestAnimationFrame = raf;
+  expect([note.scrollTop, list.scrollTop]).toEqual([340, 0]);
   document.body.innerHTML = '';
 });

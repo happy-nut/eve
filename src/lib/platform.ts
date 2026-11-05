@@ -426,11 +426,32 @@ export function endFades() {
     for (const a of el.getAnimations?.() ?? []) try { a.finish(); } catch { /* an endless one: not a fade */ }
   }
 }
+/**
+ * The note's pane drawn again as the window comes back. WebKit at times shows a window brought back from hidden with
+ * what scrolls in it undrawn: the crumbs over it there, the note a white page under them, until it was scrolled. A
+ * layer of its own for the page's text for a frame did not always do it; a scroll does, so each scroller is moved by a
+ * pixel and, a frame later, back by as much (not to where it was: the caret brought into sight meanwhile stays there).
+ * Not a page with a diagram on the whole screen, which a transform around it would shrink to the page's size.
+ */
+export function redrawPanes() {
+  endFades();
+  const panes = [...document.querySelectorAll<HTMLElement>('main .tiptap, .card-page .tiptap, aside')].filter((el) => !el.querySelector('.dblock.full'));
+  for (const el of panes) el.style.transform = 'translateZ(0)';
+  const moved = [...document.querySelectorAll<HTMLElement>('.scroll, .card-scroll, aside .tree')]
+    .filter((el) => el.scrollHeight > el.clientHeight)
+    .map((el) => { const d = el.scrollTop > 0 ? -1 : 1; el.scrollTop += d; return [el, d] as const; });
+  requestAnimationFrame(() => {
+    for (const [el, d] of moved) el.scrollTop -= d;
+    requestAnimationFrame(() => { for (const el of panes) el.style.transform = ''; });
+  });
+}
 /** Summon `n` is seen once two frames are drawn after it (Rust sees it anyway after a while, so a page that cannot
- *  draw never leaves it invisible). */
+ *  draw never leaves it invisible), and its panes drawn again once it is. */
 export async function revealWhenDrawn(n: number) {
   await new Promise((drawn) => requestAnimationFrame(() => requestAnimationFrame(drawn)));
   await invoke<void>('reveal_window', { n });
+  // and once more now that it is seen: the white page stayed past this, until it was scrolled
+  requestAnimationFrame(redrawPanes);
 }
 if (desktop) void import('@tauri-apps/api/event').then(({ listen }) => listen<number>('eve-reveal', (e) => void revealWhenDrawn(e.payload)));
 let ground = '';
