@@ -112,8 +112,13 @@ const len = (l: SVGPathElement | SVGLineElement) => {
   return Math.hypot(x2.baseVal.value - x1.baseVal.value, y2.baseVal.value - y1.baseVal.value);
 };
 
-/** the lines whose heads are hidden while they draw in: the head each had, and the timer that puts it back */
-const heads = new WeakMap<Element, { own: string; timer: ReturnType<typeof setTimeout> }>();
+/** a line drawing in has its head hidden by a class, not by its own marker-end changed and remembered: a value kept to
+ *  be put back was the wrong one after quick turns or in a copy taken mid-way, and the line stayed headless. A class
+ *  holds nothing to get wrong; at rest no line has it, and a copy's is taken off when the copy is walked */
+export const DRAWING = 'eve-drawing';
+const heads = new WeakMap<Element, ReturnType<typeof setTimeout>>();
+/** every line of `svg` with its head again (a copy taken while lines drew in, or a walk begun anew) */
+const settle = (svg: SVGSVGElement) => { for (const l of svg.querySelectorAll(`.${DRAWING}`)) { clearTimeout(heads.get(l)); heads.delete(l); l.classList.remove(DRAWING); } };
 
 /** one element coming up: a line drawn from its start, anything else faded in */
 function enter({ el, line }: Step, delay: number): Animation {
@@ -125,19 +130,12 @@ function enter({ el, line }: Step, delay: number): Animation {
     { strokeDasharray: `${n}`, strokeDashoffset: '0' },
   ], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' });
   // and its arrowhead only once it has got there (drawn at its end from the start, it was there before the line); put
-  // back by a timer, not by the animation's keyframes: an animation stalled while Eve was away left the line headless.
-  // Hidden already (drawn in again before it was back, or a copy Present took while it drew in), the head it had is
-  // the one kept, not the 'none' it is hidden by: that was put back, and the line stayed headless
-  const was = heads.get(line);
-  const head = getComputedStyle(line).markerEnd;
-  if (was || line.style.markerEnd === 'none' || (head && head !== 'none')) {
-    clearTimeout(was?.timer);
-    const own = was ? was.own : line.style.markerEnd === 'none' ? '' : line.style.markerEnd;
-    const back = () => { if (heads.get(line)?.own === own) { clearTimeout(heads.get(line)!.timer); heads.delete(line); } line.style.markerEnd = own; };
-    line.style.markerEnd = 'none';
-    heads.set(line, { own, timer: setTimeout(back, delay + FADE) });
-    a.addEventListener?.('cancel', back);
-  }
+  // back by a timer, not by the animation's end: an animation stalled while Eve was away left the line headless
+  clearTimeout(heads.get(line));
+  line.classList.add(DRAWING);
+  const back = () => { clearTimeout(heads.get(line)); heads.delete(line); line.classList.remove(DRAWING); };
+  heads.set(line, setTimeout(back, delay + FADE));
+  a.addEventListener?.('cancel', back);
   return a;
 }
 
@@ -146,6 +144,7 @@ function enter({ el, line }: Step, delay: number): Animation {
  * `show(k)` puts up steps 0…k, the one just reached coming in as it does when the diagram draws itself.
  */
 export function stepper(svg: SVGSVGElement): { count: number; show(k: number): void } {
+  settle(svg);
   const steps = timeline(svg);
   const count = steps.length ? Math.max(...steps.map((s) => s.stage)) + 1 : 0;
   let shown = count - 1;
@@ -164,6 +163,7 @@ export function stepper(svg: SVGSVGElement): { count: number; show(k: number): v
 /** the diagram drawn in, once it is well in sight; the returned function stops it (drawn again, put away) */
 export function drawIn(svg: SVGSVGElement): () => void {
   if (reduced() || typeof IntersectionObserver === 'undefined' || !svg.animate) return () => {};
+  settle(svg);
   const steps = timeline(svg);
   if (!steps.length) return () => {};
   const running: Animation[] = [];

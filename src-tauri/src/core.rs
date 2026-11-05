@@ -558,6 +558,15 @@ pub const COMMANDS: &[Command] = &[
         run: |_, notes, args| open_note(notes, args).and_then(|(url, said)| launch(&url, false).map(|_| said)),
     },
     Command {
+        tool: "diagram_images",
+        cli: "pictures",
+        title: "See a note's diagrams",
+        help: "Returns the diagrams in a note (its ```mermaid blocks: flowcharts, swimlanes, sequences, pies, timelines, Gantt charts, mind maps…) as pictures, drawn by Eve exactly as the user sees them, each with its mermaid code. Give the note's title (as in a [[wiki link]]) or its id, and number to get one diagram (1 is the first in the note); without it, the first 6. Eve draws them, so it is started in the background if it was not running. Changes nothing.",
+        params: &[TITLE, ID, Param { kind: Kind::Number(1, 50), ..text("number", "Which diagram, counting from the top of the note: 1 is the first") }],
+        effect: Effect::Reads,
+        run: diagram_images,
+    },
+    Command {
         tool: "create_note",
         cli: "create",
         title: "Create a note",
@@ -1002,7 +1011,13 @@ const ANSWER_WITHIN: std::time::Duration = std::time::Duration::from_secs(20);
 /// Mac's own programs can write; the `eve://inbox` link only tells Eve to look there (a web page can
 /// hand macOS that link too, so the link itself carries nothing). Eve applies it through its notes store
 /// and writes `<id>.reply`: what was done, or why not.
-pub fn ask_app(dir: &Path, mut ask: Value) -> Result<String, String> {
+pub fn ask_app(dir: &Path, ask: Value) -> Result<String, String> {
+    let v = ask_app_for(dir, ask)?;
+    Ok(v.get("text").and_then(Value::as_str).unwrap_or("").to_string())
+}
+
+/// `ask_app`, its whole answer: what Eve sends back besides words (a diagram's pictures)
+pub fn ask_app_for(dir: &Path, mut ask: Value) -> Result<Value, String> {
     use std::sync::atomic::{AtomicU32, Ordering};
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let inbox = inbox(dir);
@@ -1026,7 +1041,7 @@ pub fn ask_app(dir: &Path, mut ask: Value) -> Result<String, String> {
             let _ = std::fs::remove_file(&reply);
             let v: Value = serde_json::from_str(&text).map_err(|e| format!("Eve's answer could not be read ({e})."))?;
             let said = v.get("text").and_then(Value::as_str).unwrap_or("").to_string();
-            return if v.get("ok").and_then(Value::as_bool) == Some(true) { Ok(said) } else { Err(said) };
+            return if v.get("ok").and_then(Value::as_bool) == Some(true) { Ok(v) } else { Err(said) };
         }
         std::thread::sleep(std::time::Duration::from_millis(40));
     }
@@ -1055,6 +1070,49 @@ fn create_note(dir: &Path, notes: &[Note], args: &Value) -> Result<String, Strin
     let text = if body.is_empty() { format!("# {title}\n") } else { format!("# {title}\n\n{body}\n") };
     let page = arg_page(args).trim_matches('/');
     ask_app(dir, serde_json::json!({ "op": "create", "body": text, "page": page, "parent": parent }))
+}
+
+/// A line of a command's answer naming a picture it made: the MCP server sends the picture itself in its place.
+pub const PICTURE: &str = "Picture: ";
+/// At most this many pictures in one diagram_images answer (each is a few thousand tokens to Claude).
+const MAX_PICTURES: usize = 6;
+
+/// `diagram_images`: the note's diagrams drawn by Eve, which alone can draw them (mermaid, and Eve's own charts, run
+/// in its page), as `PICTURE` lines naming the PNG files kept beside the notes, each with its code.
+fn diagram_images(dir: &Path, notes: &[Note], args: &Value) -> Result<String, String> {
+    use base64::Engine;
+    let (note, _, _) = pick(notes, args)?;
+    let title = title_of(&note.body);
+    let count = note.body.lines().filter(|l| { let l = l.trim_start(); l.starts_with("```mermaid") || l.starts_with("~~~mermaid") }).count();
+    if count == 0 {
+        return Err(format!("\"{title}\" has no diagrams (```mermaid blocks)."));
+    }
+    let number = args.get("number").and_then(Value::as_u64).map(|n| n as usize);
+    if let Some(n) = number.filter(|&n| n > count) {
+        return Err(format!("\"{title}\" has {count} diagram{}; there is no diagram {n}.", if count == 1 { "" } else { "s" }));
+    }
+    let v = ask_app_for(dir, serde_json::json!({ "op": "picture", "id": note.id, "number": number, "most": MAX_PICTURES }))?;
+    let shelf = dir.parent().unwrap_or(dir).join("pictures");
+    std::fs::create_dir_all(&shelf).map_err(|e| format!("Could not keep the pictures at {} ({e}).", shelf.display()))?;
+    let mut out = String::new();
+    for p in v.get("pictures").and_then(Value::as_array).into_iter().flatten() {
+        let n = p.get("number").and_then(Value::as_u64).unwrap_or(0);
+        let code = p.get("code").and_then(Value::as_str).unwrap_or("");
+        out += &format!("Diagram {n} of {count} in \"{title}\":\n");
+        match p.get("png").and_then(Value::as_str).map(|b| base64::engine::general_purpose::STANDARD.decode(b)) {
+            Some(Ok(png)) => {
+                let path = shelf.join(format!("{}-{n}.png", note.id));
+                std::fs::write(&path, png).map_err(|e| format!("Could not keep the picture ({e})."))?;
+                out += &format!("{PICTURE}{}\n", path.display());
+            }
+            _ => out += &format!("(Eve could not draw it: {})\n", p.get("error").and_then(Value::as_str).unwrap_or("no picture")),
+        }
+        out += &format!("```mermaid\n{}\n```\n\n", code.trim_end());
+    }
+    if number.is_none() && count > MAX_PICTURES {
+        out += &format!("{} more diagrams in the note: ask for one by number ({}–{count}).\n", count - MAX_PICTURES, MAX_PICTURES + 1);
+    }
+    Ok(out.trim_end().to_string())
 }
 
 /// At most this many ids in one read_notes call.

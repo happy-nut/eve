@@ -1145,3 +1145,6 @@ html.mobile .tiptap [data-type='details'] > button::after { content: ''; positio
 @keyframes code-caret { 50% { opacity: 0; } }
 /* a dot running along a diagram's line while it is hovered (diagramMotion.ts) */
 .diagram-canvas .eve-token { fill: var(--accent-text); pointer-events: none; }
+/* a line drawing in (lib/diagramMotion.ts): its head comes once the line has got there; over mermaid's attribute and
+   any style a line has, so nothing of its own is changed and so none is left changed */
+svg .eve-drawing { marker-end: none !important; }

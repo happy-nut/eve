@@ -93,9 +93,9 @@ test('a note deleted goes to the trash, and comes back from there', () => {
   expect(get(other.id).body).toBe('# Other\n\nwords\n');
 });
 
-test('every change is answered, a broken one too', () => {
+test('every change is answered, a broken one too', async () => {
   const open = fresh();
   const answers: [string, Answer][] = [];
-  applyAll(['not json', JSON.stringify({ ask: '7', op: 'append', id: open.id, text: 'x' }), JSON.stringify({ ask: '8', op: 'shred', id: open.id })], (a, r) => answers.push([a, r]));
+  await applyAll(['not json', JSON.stringify({ ask: '7', op: 'append', id: open.id, text: 'x' }), JSON.stringify({ ask: '8', op: 'shred', id: open.id })], (a, r) => answers.push([a, r]));
   expect(answers.map(([a, r]) => [a, r.ok])).toEqual([['7', true], ['8', false]]);
 });

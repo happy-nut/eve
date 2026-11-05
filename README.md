@@ -220,6 +220,11 @@ one section) and `read_notes` several, by id, in the order given. `open_note` sh
 app comes to the front with that note open, at a section if one is named (Eve starts if it was not running):
 "find last week's meeting notes and open them". It hands macOS an `eve://open?id=…&section=…` link, which Eve
 registers; such a link only ever shows a note, an unknown id is ignored, and nothing is created or changed.
+`diagram_images` returns a note's diagrams (its ```mermaid blocks: flowcharts, swimlanes, sequences, pies, timelines,
+Gantt charts, mind maps…) as pictures Claude sees, drawn by Eve as the note draws them in the user's theme, each with
+its mermaid code: one by its number, or the first six. Only the app can draw them, so the server asks it through the
+inbox as the writes below do (starting it in the background); the PNGs are kept in `pictures/` beside `notes/`, and
+`eve pictures <title>` names them there.
 `create_note` makes a note (a title, markdown under it, a folder, or a page to put it under as a sub-page),
 `append_note` adds to the end of one, `edit_note` replaces one passage found in it only once (like an editor's
 find-and-replace, it refuses a passage that is missing or there twice; what copying from read_note changes — an escape
@@ -255,6 +260,7 @@ eve search 회의 결정 --limit 5
 eve read "Weekly plan" --section Goals
 eve read-many <id> <id>        # several, whole, in order
 eve open "Weekly plan"         # show it in the running Eve
+eve pictures "Weekly plan"     # its diagrams as PNG files, drawn by Eve
 ```
 
 Homebrew links `eve` onto the PATH (the cask's `binary`); otherwise it is `/Applications/Eve.app/Contents/MacOS/eve`.

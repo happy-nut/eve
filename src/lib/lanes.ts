@@ -45,6 +45,7 @@ const LABEL_MAX = 150, LABEL_LINE = 15, LABEL_AIR = 8; // a line's label: its wi
 const PAD = 20; // before the first step and after the last
 const SLOT_GAP = 26; // between two steps side by side in a lane
 const LANE_PAD = 14;
+const LOOP = 20; // how far a line back into its own step stands out from it (its label's middle, clear of the box)
 let uid = 0;
 
 interface Box { n: FlowNode; lines: string[]; w: number; h: number; rank: number; lane: number; slot: number; m: number; c: number }
@@ -121,22 +122,50 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   const main = (b: Box) => (LR ? b.w : b.h), cross = (b: Box) => (LR ? b.h : b.w);
   const colM = Array.from({ length: ranks }, (_, r) => Math.max(40, ...[...boxes.values()].filter((b) => b.rank === r).map(main)));
   const laneSlots = lanes.map((_, i) => Math.max(1, ...[...cells.entries()].filter(([k]) => +k.split(':')[0] === i).map(([, v]) => v.length)));
-  const slotC = lanes.map((_, i) => Math.max(LR ? 44 : 96, ...[...boxes.values()].filter((b) => b.lane === i).map(cross)) + SLOT_GAP);
-  // down the page, each name wrapped to its column; the head as tall as the longest (a fixed 40 cut a long name's lines)
-  const HEAD = LR
-    ? Math.max(84, Math.min(140, Math.ceil(Math.max(...lanes.map((l) => textW(l.label, 13, 600)))) + 28))
-    : 40;
-  const laneC = lanes.map((_, i) => laneSlots[i] * slotC[i] + LANE_PAD * 2 - SLOT_GAP);
-  const names = lanes.map((l, i) => wrap(l.label, LR ? HEAD - 20 : laneC[i] - 20, 13, 600));
-  const HEAD_M = LR ? HEAD : Math.max(40, Math.max(...names.map((n) => n.length)) * 17 + 22);
-  const laneAt = lanes.map((_, i) => laneC.slice(0, i).reduce((a, b) => a + b, 0));
-  for (const b of boxes.values()) b.c = laneAt[b.lane] + LANE_PAD + b.slot * slotC[b.lane] + (slotC[b.lane] - SLOT_GAP) / 2;
   // each line's label, wrapped, and its size across the flow (m) and along a lane (c)
   const chips = edges.map((e) => {
     const lines = e.label.trim() ? wrap(e.label, LABEL_MAX, 12) : [];
     const w = lines.length ? Math.ceil(Math.max(...lines.map((l) => textW(l, 12)))) + 14 : 0, h = 22 + (lines.length - 1) * LABEL_LINE;
     return { lines, m: LR ? w : h, c: LR ? h : w };
   });
+  // a labelled line between two steps of one column stands its label between them: room for it there, between two
+  // in a lane and between two lanes side by side (with 26 there, the label lay over both steps)
+  const room = (i: number) => chips[i].c + 8;
+  const beside = lanes.map(() => 0), pre = lanes.map(() => 0), stacked = new Map<string, number>();
+  const loopsOn = new Map<Box, number>(), loopOff: number[] = [];
+  // a line back into its own step loops out before it, its label on the loop: room for both before the step, in its
+  // lane or after the step before it in the lane (it went past the drawing's edge, into the lane before, or through
+  // the step beside it). Down the page the label lies along the lane: the loop stands out by half of it
+  const loopOut = (i: number) => (chips[i].lines.length ? Math.max(LOOP, chips[i].c / 2 + 7) : LOOP);
+  edges.forEach((e, i) => {
+    const a = boxes.get(e.from)!, b = boxes.get(e.to)!;
+    if (a === b) {
+      // (a second loop on one step stands out past the first and its label: drawn on it, the two were one)
+      const off = loopsOn.get(a) ?? 0;
+      loopOff[i] = off;
+      const need = off + loopOut(i) + (chips[i].lines.length ? chips[i].c / 2 + 3 : 2);
+      loopsOn.set(a, need + 4);
+      if (a.slot) beside[a.lane] = Math.max(beside[a.lane], need - SLOT_GAP);
+      else pre[a.lane] = Math.max(pre[a.lane], need - LANE_PAD);
+      return;
+    }
+    if (a.rank !== b.rank || !chips[i].lines.length) return;
+    // (two lines there, both labelled: room for both, one after the other)
+    const k = `${Math.min(a.lane, b.lane)}:${Math.max(a.lane, b.lane)}:${a.rank}`;
+    stacked.set(k, (stacked.get(k) ?? 0) + room(i));
+    if (a.lane === b.lane) beside[a.lane] = Math.max(beside[a.lane], stacked.get(k)! - SLOT_GAP);
+    else if (Math.abs(a.lane - b.lane) === 1) { const l = Math.max(a.lane, b.lane); pre[l] = Math.max(pre[l], stacked.get(k)! - LANE_PAD * 2); }
+  });
+  const slotC = lanes.map((_, i) => Math.max(LR ? 44 : 96, ...[...boxes.values()].filter((b) => b.lane === i).map(cross)) + SLOT_GAP + beside[i]);
+  // down the page, each name wrapped to its column; the head as tall as the longest (a fixed 40 cut a long name's lines)
+  const HEAD = LR
+    ? Math.max(84, Math.min(140, Math.ceil(Math.max(...lanes.map((l) => textW(l.label, 13, 600)))) + 28))
+    : 40;
+  const laneC = lanes.map((_, i) => pre[i] + laneSlots[i] * slotC[i] + LANE_PAD * 2 - SLOT_GAP - beside[i]);
+  const names = lanes.map((l, i) => wrap(l.label, LR ? HEAD - 20 : laneC[i] - 20, 13, 600));
+  const HEAD_M = LR ? HEAD : Math.max(40, Math.max(...names.map((n) => n.length)) * 17 + 22);
+  const laneAt = lanes.map((_, i) => laneC.slice(0, i).reduce((a, b) => a + b, 0));
+  for (const b of boxes.values()) b.c = laneAt[b.lane] + pre[b.lane] + LANE_PAD + b.slot * slotC[b.lane] + (slotC[b.lane] - SLOT_GAP - beside[b.lane]) / 2;
   // a line to a later step turns (and its label stands) in the gap just after the step it leaves. Labels that would
   // stand at the same height there go side by side, each line turning in a track of its own, the gap as wide as its
   // tracks. At 40 wide, one track, the labels of a busy chart stood on one another and over the boxes either side
@@ -160,14 +189,66 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   const colAt = colM.map((_, r) => HEAD_M + PAD + colM.slice(0, r).reduce((a, b) => a + b, 0) + gapsTo(r));
   for (const b of boxes.values()) b.m = colAt[b.rank] + colM[b.rank] / 2;
   const M = HEAD_M + PAD * 2 + colM.reduce((a, b) => a + b, 0) + gapsTo(ranks - 1);
-  // a line back to an earlier step runs under the boxes: room for it (and its label) past the last lane's edge
-  let C = Math.max(1, laneC.reduce((a, b) => a + b, 0));
-  // (the whole of its label, which stands on it there: half of one as wide as 150, down the page, fell past the edge)
-  edges.forEach((e, i) => {
+  // ---- each line's way: out of a step's far side into the next one's near side, turning in the gap between them.
+  // Each kind of line has its ways, tried in turn against the steps they pass; the first through none is taken, or
+  // the one through fewest (a line back up the chart, or one past a step, ran straight through the steps between) ----
+  type Pt = [number, number];
+  type Way = { pts: Pt[]; at: Pt };
+  const near = (r: number) => colAt[r] - (r ? gapW[r - 1] : PAD) / 2; // the middle of the gap before a column
+  const far = (r: number) => colAt[r] + colM[r] + (r < ranks - 1 ? gapW[r] : PAD) / 2; // and after it
+  const bottom = (x: Box) => x.c + cross(x) / 2;
+  const cuts = (w: Way, a: Box, b: Box) => [...boxes.values()].filter((x) => x !== a && x !== b && w.pts.slice(1).some((q, k) => {
+    const p = w.pts[k];
+    return Math.min(p[0], q[0]) < x.m + main(x) / 2 - 1 && Math.max(p[0], q[0]) > x.m - main(x) / 2 + 1
+      && Math.min(p[1], q[1]) < x.c + cross(x) / 2 - 1 && Math.max(p[1], q[1]) > x.c - cross(x) / 2 + 1;
+  })).length;
+  const ways: Way[] = edges.map((e, i) => {
     const a = boxes.get(e.from)!, b = boxes.get(e.to)!;
-    if (b.rank >= a.rank || a === b) return;
-    C = Math.max(C, Math.max(a.c + cross(a) / 2, b.c + cross(b) / 2) + 14 + (chips[i].lines.length ? chips[i].c / 2 + 4 : 4));
+    const tries: Way[] = [];
+    if (a === b) {
+      const s0 = a.m + main(a) / 4, top = a.c - cross(a) / 2, o = loopOff[i] + loopOut(i);
+      return { pts: [[s0, top], [s0, top - o], [a.m - main(a) / 4, top - o], [a.m - main(a) / 4, top]], at: [a.m, top - o] };
+    }
+    if (b.rank > a.rank) {
+      const s: Pt = [a.m + main(a) / 2, a.c], t: Pt = [b.m - main(b) / 2, b.c];
+      const start = colAt[a.rank] + colM[a.rank], t0 = track.get(i);
+      const mid = t0 ? start + tracksW[a.rank].slice(0, t0.k).reduce((p, q) => p + q, 0) + tracksW[a.rank][t0.k] / 2 : start + gapW[a.rank] / 2;
+      tries.push(s[1] === t[1] ? { pts: [s, t], at: [mid, s[1]] } : { pts: [s, [mid, s[1]], [mid, t[1]], t], at: [mid, (s[1] + t[1]) / 2] });
+      // past a step on its way: round the steps between by their edge, back in just before the end
+      const between = [...boxes.values()].filter((x) => x.rank > a.rank && x.rank < b.rank);
+      const hit = (c: number) => between.find((x) => Math.abs(x.c - c) < cross(x) / 2 + 6);
+      let up = t[1], dn = t[1];
+      for (let h = hit(up); h; h = hit(up)) up = h.c - cross(h) / 2 - 7;
+      for (let h = hit(dn); h; h = hit(dn)) dn = h.c + cross(h) / 2 + 7;
+      const half = (s[1] + t[1]) / 2;
+      for (const run of Math.abs(up - half) <= Math.abs(dn - half) ? [up, dn] : [dn, up])
+        tries.push({ pts: [s, [mid, s[1]], [mid, run], [near(b.rank), run], [near(b.rank), t[1]], t], at: [mid, run] });
+    } else if (b.rank === a.rank) {
+      const down = b.c > a.c ? 1 : -1;
+      const [c0, c1] = [a.c + (down * cross(a)) / 2, b.c - (down * cross(b)) / 2];
+      tries.push({ pts: [[a.m, c0], [b.m, c1]], at: [a.m, (c0 + c1) / 2] });
+      // a step between them in the column: round it through the gap after them
+      const g = far(a.rank);
+      tries.push({ pts: [[a.m + main(a) / 2, a.c], [g, a.c], [g, b.c], [b.m + main(b) / 2, b.c]], at: [g, (a.c + b.c) / 2] });
+    } else {
+      // back to an earlier step: under (or beside) both, then up into it
+      // (its label, standing on the run, clear of them too)
+      const clear = 14 + (chips[i].lines.length ? chips[i].c / 2 + 4 : 0);
+      const low = Math.max(bottom(a), bottom(b)) + clear;
+      tries.push({ pts: [[a.m, bottom(a)], [a.m, low], [b.m, low], [b.m, bottom(b)]], at: [(a.m + b.m) / 2, low] });
+      // steps under them or between: out through the gap after it, under every step on the way, into it from before
+      const under = Math.max(...[...boxes.values()].filter((x) => x.rank >= b.rank && x.rank <= a.rank).map(bottom)) + clear;
+      const [g0, g1] = [far(a.rank), near(b.rank)];
+      tries.push({ pts: [[a.m + main(a) / 2, a.c], [g0, a.c], [g0, under], [g1, under], [g1, b.c], [b.m - main(b) / 2, b.c]], at: [(g0 + g1) / 2, under] });
+    }
+    let best = tries[0], fewest = Infinity;
+    for (const w of tries) { const n = cuts(w, a, b); if (n < fewest) { fewest = n; best = w; } if (!n) break; }
+    return best;
   });
+  // room for every line, and for its label standing anywhere on it (half of one as wide as 150, down the page, fell
+  // past the edge)
+  let C = Math.max(1, laneC.reduce((a, b) => a + b, 0), ...chips.map((ch) => ch.c + 8));
+  ways.forEach((w, i) => { for (const [, c] of w.pts) C = Math.max(C, c + (chips[i].lines.length ? chips[i].c / 2 + 4 : 4)); });
   const W = Math.ceil(LR ? M : C), H = Math.ceil(LR ? C : M);
   const xy = (m: number, c: number): [number, number] => (LR ? [m, c] : [c, m]);
 
@@ -199,6 +280,7 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   type R = { m0: number; m1: number; c0: number; c1: number };
   const taken: R[] = [...boxes.values()].map((b) => ({ m0: b.m - main(b) / 2 - 4, m1: b.m + main(b) / 2 + 4, c0: b.c - cross(b) / 2 - 4, c1: b.c + cross(b) / 2 + 4 }));
   taken.push({ m0: -Infinity, m1: HEAD_M + 4, c0: -Infinity, c1: Infinity }); // the lane names
+  const fixed = taken.length; // the steps and the names; the labels placed come after
   const over = (a: R, b: R) => Math.max(0, Math.min(a.m1, b.m1) - Math.max(a.m0, b.m0)) * Math.max(0, Math.min(a.c1, b.c1) - Math.max(a.c0, b.c0));
   const ALONG = [0.5, 0.35, 0.65, 0.2, 0.8, 0.08, 0.92];
   function placeLabel(pts: [number, number][], at: [number, number], chip: { m: number; c: number }): [number, number] {
@@ -209,44 +291,37 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
     const order = home < 0 ? segs : [segs[home], ...segs.filter((_, k) => k !== home)];
     const spots: [number, number][] = [at];
     for (const [p, q] of order) for (const f of ALONG) spots.push([p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f]);
+    // each spot held inside the drawing: a long label at a line near its edge stood past it
+    const hold = (v: number, half: number, max: number) => Math.min(Math.max(v, half + 3), max - half - 3);
+    for (const sp of spots) { sp[0] = hold(sp[0], chip.m / 2, M); sp[1] = hold(sp[1], chip.c / 2, C); }
     let best = spots[0], least = Infinity;
     for (const s of spots) {
       const r = rect(s);
-      if (r.c0 < 0) continue;
       const cover = taken.reduce((n, t) => n + over(r, t), 0);
       if (cover < least) { least = cover; best = s; }
       if (!cover) break;
+    }
+    // nowhere on the line clear (a loop or a line between two steps stacked close, a long label): the nearest clear
+    // place beside it, a step at a time outward from where it would stand
+    // (clear of everything, or else at least of the steps and the lane names: a label on another is read, one on a
+    // step hides it)
+    const from = best, solid = taken.length > fixed ? [taken.slice(0, fixed)] : [];
+    for (const among of [taken, ...solid]) {
+      for (let k = 1; least > 0 && k <= 40; k++) {
+        for (const [dm, dc] of [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+          const s: [number, number] = [hold(from[0] + dm * k * 6, chip.m / 2, M), hold(from[1] + dc * k * 6, chip.c / 2, C)];
+          if (!among.reduce((n, t) => n + over(rect(s), t), 0)) { least = 0; best = s; break; }
+        }
+      }
     }
     taken.push(rect(best));
     return best;
   }
 
-  // ---- the lines: out of a step's far side into the next one's near side, turning in the gap between them ----
+  // ---- the lines ----
   const labels: string[] = [];
   edges.forEach((e, i) => {
-    const a = boxes.get(e.from)!, b = boxes.get(e.to)!;
-    let pts: [number, number][];
-    let at: [number, number];
-    if (a === b) {
-      const s0 = a.m + main(a) / 4, top = a.c - cross(a) / 2;
-      pts = [[s0, top], [s0, top - 16], [a.m - main(a) / 4, top - 16], [a.m - main(a) / 4, top]];
-      at = [a.m, top - 16];
-    } else if (b.rank > a.rank) {
-      const s: [number, number] = [a.m + main(a) / 2, a.c], t: [number, number] = [b.m - main(b) / 2, b.c];
-      const start = colAt[a.rank] + colM[a.rank], t0 = track.get(i);
-      const mid = t0 ? start + tracksW[a.rank].slice(0, t0.k).reduce((p, q) => p + q, 0) + tracksW[a.rank][t0.k] / 2 : start + gapW[a.rank] / 2;
-      pts = s[1] === t[1] ? [s, t] : [s, [mid, s[1]], [mid, t[1]], t];
-      at = s[1] === t[1] ? [mid, s[1]] : [mid, (s[1] + t[1]) / 2];
-    } else if (b.rank === a.rank) {
-      const down = b.c > a.c ? 1 : -1;
-      pts = [[a.m, a.c + (down * cross(a)) / 2], [b.m, b.c - (down * cross(b)) / 2]];
-      at = [a.m, (a.c + b.c) / 2];
-    } else {
-      // back to an earlier step: under (or beside) both, then up into it
-      const low = Math.max(a.c + cross(a) / 2, b.c + cross(b) / 2) + 14;
-      pts = [[a.m, a.c + cross(a) / 2], [a.m, low], [b.m, low], [b.m, b.c + cross(b) / 2]];
-      at = [(a.m + b.m) / 2, low];
-    }
+    const { pts, at } = ways[i];
     const p = pts.map(([m, c]) => xy(m, c));
     svg += `<path class="flowchart-link sl-edge ${e.line}${e.animate ? ' moving' : ''}" data-id="${esc(`L_${e.from}_${e.to}_${i}`)}" d="${rounded(p)}" marker-end="url(#${id}-arrow)"/>`;
     const chip = chips[i];

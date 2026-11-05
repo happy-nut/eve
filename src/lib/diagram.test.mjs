@@ -134,6 +134,25 @@ for (const dir of ['LR', 'TD']) {
   for (const [, x, y, w, h] of svg.matchAll(/class="sl-chip" x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)"/g))
     assert.ok(+x >= 0 && +y >= 0 && +x + +w <= W && +y + +h <= H, `${dir}: a label at ${x},${y} ${w}×${h} inside the ${W}×${H} drawing`);
 }
+// a line back into its own step, in the first lane, loops inside the drawing with its label whole (it went 16 past the
+// top edge, its label cut off); and a line past the next step goes round it, not through it
+for (const dir of ['LR', 'TD']) {
+  const svg = laneSvg({ kind: 'flowchart', dir, lanes: [{ id: 'A', label: 'A' }, { id: 'B', label: 'B' }],
+    nodes: [{ id: 'a', label: 'Start', shape: 'rect', lane: 'A' }, { id: 'b', label: 'Middle', shape: 'rect', lane: 'A' }, { id: 'c', label: 'End', shape: 'rect', lane: 'A' }, { id: 'z', label: 'Other', shape: 'rect', lane: 'B' }],
+    edges: [{ from: 'a', to: 'a', label: 'retry', line: 'solid' }, { from: 'a', to: 'b', label: '', line: 'solid' }, { from: 'b', to: 'c', label: '', line: 'solid' }, { from: 'a', to: 'c', label: 'skip', line: 'dotted' }, { from: 'c', to: 'z', label: '', line: 'solid' }] });
+  const [, , W, H] = /viewBox="([\d. ]+)"/.exec(svg)[1].split(' ').map(Number);
+  const pts = (id) => [...new RegExp(`data-id="L_${id}" d="([^"]+)"`).exec(svg)[1].matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((m) => [+m[1], +m[2]]);
+  for (const [x, y] of pts('a_a_0')) assert.ok(x >= 0 && y >= 0 && x <= W && y <= H, `${dir}: the loop at ${x},${y} inside the ${W}×${H} drawing`);
+  for (const [, x, y, w, h] of svg.matchAll(/class="sl-chip" x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)"/g))
+    assert.ok(+x >= 0 && +y >= 0 && +x + +w <= W && +y + +h <= H, `${dir}: a label at ${x},${y} inside the drawing`);
+  const [, bx, by, bw, bh] = /-flowchart-b-0"><rect class="sl-shape" x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)"/.exec(svg).map(Number);
+  const p = pts('a_c_3');
+  for (let k = 1; k < p.length; k++) {
+    const [[x0, y0], [x1, y1]] = [p[k - 1], p[k]];
+    const cuts = Math.min(x0, x1) < bx + bw && Math.max(x0, x1) > bx && Math.min(y0, y1) < by + bh && Math.max(y0, y1) > by;
+    assert.ok(!cuts, `${dir}: the line past Middle runs through it (${x0},${y0} → ${x1},${y1})`);
+  }
+}
 console.log('swimlanes ok');
 
 // why a diagram opens as its code: the line the editor cannot show, or the kind it has no form for

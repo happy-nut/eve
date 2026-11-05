@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { levels, numbered, stepper, timeline } from './diagramMotion';
+import { DRAWING, levels, numbered, stepper, timeline } from './diagramMotion';
 import { fromCode, type Flowchart } from './diagram';
 import { laneSvg } from './lanes';
 
@@ -65,8 +65,9 @@ describe('a diagram drawing itself in', () => {
       const walk = stepper(svg);
       walk.show(0);
       walk.show(1);
-      expect(line.style.markerEnd).toBe('none'); // not ahead of the line while it draws
+      expect(line.classList.contains(DRAWING)).toBe(true); // not ahead of the line while it draws
       vi.advanceTimersByTime(1000);
+      expect(line.classList.contains(DRAWING)).toBe(false);
       expect(line.style.markerEnd).toMatch(/^url\("?#head"?\)$/);
     } finally { vi.useRealTimers(); }
   });
@@ -83,7 +84,7 @@ describe('a diagram drawing itself in', () => {
         Object.assign(svg.querySelector('path')!, { getTotalLength: () => 10 });
         return svg;
       };
-      const head = (svg: SVGSVGElement) => svg.querySelector('path')!.style.markerEnd;
+      const head = (svg: SVGSVGElement) => { const p = svg.querySelector('path')!; return p.classList.contains(DRAWING) ? 'hidden' : p.style.markerEnd; };
       // the second turn read the first one's hidden head as the line's own, and put that back
       const svg = ready(make()), walk = stepper(svg);
       walk.show(0); walk.show(1); walk.show(0); walk.show(1);
@@ -92,7 +93,7 @@ describe('a diagram drawing itself in', () => {
       // Present copies the note's blocks as they are: a line still drawing in came with its head hidden (mermaid's own
       // head is an attribute, which the hidden one is over)
       const drawing = svgOf(`<svg id="m6" aria-roledescription="flowchart-v2" xmlns="http://www.w3.org/2000/svg">
-        <path class="flowchart-link" data-id="L_a_b_0" d="M0,0L10,0" marker-end="url(#head)" style="marker-end: none"/>
+        <path class="flowchart-link ${DRAWING}" data-id="L_a_b_0" d="M0,0L10,0" marker-end="url(#head)"/>
         <g class="node" id="m6-flowchart-a-0"></g><g class="node" id="m6-flowchart-b-1"></g></svg>`);
       const copy = ready(drawing.cloneNode(true) as SVGSVGElement), step = stepper(copy);
       step.show(0); step.show(1);

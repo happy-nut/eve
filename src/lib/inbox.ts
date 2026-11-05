@@ -1,5 +1,6 @@
 /**
- * Changes Claude makes through the MCP server (`eve mcp`: create_note, append_note, edit_note, delete_note). Each comes as a
+ * Changes Claude makes through the MCP server (`eve mcp`: create_note, append_note, edit_note, delete_note), and its asks
+ * for a note's diagrams as pictures (diagram_images: pictures.ts, which only the app can draw). Each comes as a
  * file in the app's inbox (src-tauri/src/core.rs ask_app), taken once (files.rs take_inbox), and is done here
  * through the notes store as if it were typed: the store stays the only writer, the change is saved and synced as
  * any edit, and a note the user has open shows it at once (Editor.svelte's takeBody, the caret kept by its text).
@@ -7,10 +8,11 @@
  */
 import { notes, titleOf, type Note } from './notes.svelte';
 import { findPassage, nearestLine } from './passage';
+import { pictures, type Picture } from './pictures';
 
 export interface Ask {
   ask: string;
-  op: 'create' | 'append' | 'edit' | 'delete';
+  op: 'create' | 'append' | 'edit' | 'delete' | 'picture';
   id?: string;
   body?: string;
   /** a page path to put it under ("Work/Projects"), each page found by its title or made (an older server calls it a group) */
@@ -20,8 +22,11 @@ export interface Ask {
   text?: string;
   old?: string;
   new?: string;
+  /** a picture: which diagram (1 is the first), or the first `most` */
+  number?: number;
+  most?: number;
 }
-export interface Answer { ok: boolean; text: string }
+export interface Answer { ok: boolean; text: string; pictures?: Picture[] }
 
 const no = (text: string): Answer => ({ ok: false, text });
 const live = (id = '') => notes.all.find((n) => n.id === id && !n.deleted);
@@ -77,13 +82,23 @@ export function apply(a: Ask): Answer {
   return { ok: true, text: a.op === 'append' ? `Added to "${title}".` : `Changed "${titleOf(n)}".` };
 }
 
-/** Each change, done in the order asked; one that throws is answered, the rest still done. */
-export function applyAll(texts: string[], answer: (ask: string, a: Answer) => void) {
+/** A note's diagrams drawn, for Claude to see: nothing in the notes changes */
+async function picture(a: Ask): Promise<Answer> {
+  const n = live(a.id);
+  if (!n) return no(`No note with id "${a.id}" (deleted since it was found?).`);
+  notes.flush(n.id); // drawn as it is on the screen, the last keys in
+  const got = await pictures((live(a.id) as Note).body, a.number, a.most);
+  if (!got.length) return no(`"${titleOf(n)}" has no diagram${a.number ? ` ${a.number}` : 's'}.`);
+  return { ok: true, text: '', pictures: got };
+}
+
+/** Each ask, done in the order asked; one that throws is answered, the rest still done. */
+export async function applyAll(texts: string[], answer: (ask: string, a: Answer) => void) {
   for (const t of texts) {
     let a: Ask;
     try { a = JSON.parse(t); } catch { continue; } // no ask to answer: the server gives up on its own
     let out: Answer;
-    try { out = apply(a); } catch (e) { out = no(`Eve could not do it: ${e}`); }
+    try { out = a.op === 'picture' ? await picture(a) : apply(a); } catch (e) { out = no(`Eve could not do it: ${e}`); }
     answer(a.ask, out);
   }
 }

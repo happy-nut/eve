@@ -344,7 +344,7 @@ export const links = {
 
 /** Changes the MCP server left in the app's inbox (inbox.ts): taken now, once the notes are in, and at each eve://inbox. */
 export const inbox = {
-  async onAsk(cb: (texts: string[], answer: (ask: string, reply: { ok: boolean; text: string }) => void) => void) {
+  async onAsk(cb: (texts: string[], answer: (ask: string, reply: { ok: boolean; text: string }) => void) => void | Promise<void>) {
     if (!desktop) return;
     const { listen } = await import('@tauri-apps/api/event');
     const answer = (ask: string, reply: { ok: boolean; text: string }) => void invoke('answer_inbox', { ask, reply: JSON.stringify(reply) });
