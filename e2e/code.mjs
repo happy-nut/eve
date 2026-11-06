@@ -281,13 +281,19 @@ try {
     const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
     const body = '# M\n\n```mermaid\nflowchart LR\n  A[Write] -->|save| B{Synced?}\n  B --> C[Done]\n```\n';
     await page.addInitScript((body) => { localStorage.clear(); localStorage.setItem('eve.notes.a', `---\nid: a\nupdated: 1\ndeleted: false\norder: 0\n---\n${body}`); }, body);
+    // (when each drawing came and each animation started, to say why if it never drew itself in)
+    await page.addInitScript(() => {
+      const log = (window.__motion = []), t0 = performance.now(), anim = Element.prototype.animate;
+      Element.prototype.animate = function (...a) { if (this.closest?.('.mermaid-view')) log.push(`a${Math.round(performance.now() - t0)}`); return anim.apply(this, a); };
+      new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeName === 'svg') log.push(`svg${Math.round(performance.now() - t0)}`); }).observe(document, { childList: true, subtree: true });
+    });
     await page.goto(URL_);
     await page.waitForSelector('.tiptap .mermaid-view svg');
     const anims = () => page.evaluate(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).length);
     // (drawn by Eve, at once: the intro starts as it is first seen, a moment later)
     assert.ok(await page.waitForFunction(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).length >= 5, null, { timeout: 3000 }).then(() => true, () => false), 'its boxes, lines and label are drawn in: ' + JSON.stringify(await page.evaluate(() => {
       const s = document.querySelector('.tiptap .mermaid-view svg'), r = s.getBoundingClientRect();
-      return { reduced: matchMedia('(prefers-reduced-motion: reduce)').matches, cls: s.getAttribute('class'), r: [r.x, r.y, r.width, r.height], vh: innerHeight, anims: s.getAnimations({ subtree: true }).length, active: !!s.closest('.dblock.active') };
+      return { reduced: matchMedia('(prefers-reduced-motion: reduce)').matches, cls: s.getAttribute('class'), r: [r.x, r.y, r.width, r.height], vh: innerHeight, anims: s.getAnimations({ subtree: true }).length, active: !!s.closest('.dblock.active'), motion: [...new Set(window.__motion)].slice(0, 30).join(' ') };
     })));
     await page.waitForFunction(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).length === 0, null, { timeout: 5000 });
     const b = await page.locator('.tiptap .mermaid-view svg').boundingBox();
