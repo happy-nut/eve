@@ -330,7 +330,13 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   const fixed = taken.length; // the steps and the names; the labels placed come after
   const over = (a: R, b: R) => Math.max(0, Math.min(a.m1, b.m1) - Math.max(a.m0, b.m0)) * Math.max(0, Math.min(a.c1, b.c1) - Math.max(a.c0, b.c0));
   const ALONG = [0.5, 0.35, 0.65, 0.2, 0.8, 0.08, 0.92];
-  function placeLabel(pts: [number, number][], at: [number, number], chip: { m: number; c: number }): [number, number] {
+  // the other lines, as thin strips: of two spots on its own line clear of the boxes and labels, a label takes the one
+  // over fewer of them (it stood over another line's run, the words crossed out)
+  const strips = ways.map((w) => w.pts.slice(1).map((q, k) => {
+    const p = w.pts[k];
+    return { m0: Math.min(p[0], q[0]) - 1, m1: Math.max(p[0], q[0]) + 1, c0: Math.min(p[1], q[1]) - 1, c1: Math.max(p[1], q[1]) + 1 };
+  }));
+  function placeLabel(pts: [number, number][], at: [number, number], chip: { m: number; c: number }, own: number): [number, number] {
     const rect = ([m, c]: [number, number]): R => ({ m0: m - chip.m / 2 - 3, m1: m + chip.m / 2 + 3, c0: c - chip.c / 2 - 3, c1: c + chip.c / 2 + 3 });
     // the segment holding the bend first, then the rest of the line
     const segs = pts.slice(1).map((q, k) => [pts[k], q] as const);
@@ -341,12 +347,13 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
     // each spot held inside the drawing: a long label at a line near its edge stood past it
     const hold = (v: number, half: number, max: number) => Math.min(Math.max(v, half + 3), max - half - 3);
     for (const sp of spots) { sp[0] = hold(sp[0], chip.m / 2, M); sp[1] = hold(sp[1], chip.c / 2, C); }
-    let best = spots[0], least = Infinity;
+    let best = spots[0], least = Infinity, crossed = Infinity;
     for (const s of spots) {
       const r = rect(s);
       const cover = taken.reduce((n, t) => n + over(r, t), 0);
-      if (cover < least) { least = cover; best = s; }
-      if (!cover) break;
+      const lines = strips.reduce((n, st, j) => (j === own ? n : n + st.reduce((m, t) => m + over(r, t), 0)), 0);
+      if (cover < least || (cover === least && lines < crossed)) { least = cover; crossed = lines; best = s; }
+      if (!cover && !lines) break;
     }
     // nowhere on the line clear (a loop or a line between two steps stacked close, a long label): the nearest clear
     // place beside it, a step at a time outward from where it would stand
@@ -373,7 +380,7 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
     svg += `<path class="flowchart-link sl-edge ${e.line}${e.animate ? ' moving' : ''}" data-id="${esc(`L_${e.from}_${e.to}_${i}`)}" d="${rounded(p)}" marker-end="url(#${id}-arrow)"/>`;
     const chip = chips[i];
     if (chip.lines.length) {
-      const [m, c] = placeLabel(pts, at, chip);
+      const [m, c] = placeLabel(pts, at, chip, i);
       const [x, y] = xy(m, c), [w, h] = LR ? [chip.m, chip.c] : [chip.c, chip.m];
       const tspans = chip.lines.map((l, k) => `<tspan dy="0.35em" x="${x}" y="${y + (k - (chip.lines.length - 1) / 2) * LABEL_LINE}">${esc(l)}</tspan>`).join('');
       labels.push(`<g class="edgeLabel"><g class="label" data-id="${esc(`L_${e.from}_${e.to}_${i}`)}"><rect class="sl-chip" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="11"/>`
