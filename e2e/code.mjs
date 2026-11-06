@@ -284,7 +284,8 @@ try {
     await page.goto(URL_);
     await page.waitForSelector('.tiptap .mermaid-view svg');
     const anims = () => page.evaluate(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).length);
-    assert.ok((await anims()) >= 5, 'its boxes, lines and label are drawn in');
+    // (drawn by Eve, at once: the intro starts as it is first seen, a moment later)
+    assert.ok(await page.waitForFunction(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).length >= 5, null, { timeout: 3000 }).then(() => true, () => false), 'its boxes, lines and label are drawn in');
     await page.waitForFunction(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).length === 0, null, { timeout: 5000 });
     const b = await page.locator('.tiptap .mermaid-view svg').boundingBox();
     await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
