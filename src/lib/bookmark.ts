@@ -154,7 +154,8 @@ export const Bookmark = Node.create({
           },
         },
       }),
-      // a bare address too long for its line is cut short with an ellipsis; with the caret in it, it shows whole
+      // a bare address too long for its line is cut short with an ellipsis; with the caret in it, it shows whole.
+      // Not in code: code is read (and copied by eye) character by character
       new Plugin({
         props: {
           decorations: (state) => {
@@ -164,7 +165,7 @@ export const Bookmark = Node.create({
               if (!node.isText) return true;
               const href = type.isInSet(node.marks)?.attrs.href;
               const end = pos + node.nodeSize;
-              if (href && node.text === href && href.length > LONG && (to < pos || from > end)) cut.push(Decoration.inline(pos, end, { class: 'long-link' }));
+              if (href && node.text === href && href.length > LONG && (to < pos || from > end) && !node.marks.some((m) => m.type.spec.code)) cut.push(Decoration.inline(pos, end, { class: 'long-link' }));
               return false;
             });
             return cut.length ? DecorationSet.create(state.doc, cut) : null;

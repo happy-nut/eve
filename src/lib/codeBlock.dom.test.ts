@@ -434,3 +434,15 @@ describe("the language chip's menu: what is typed narrows it", () => {
     unmount(app);
   });
 });
+
+// a long bare address is shown cut short in prose (bookmark.ts), but code is read character by character: an address
+// in code, linked (typed in backticks, autolink makes it a link) or not, shows whole
+test('a long address in code is never cut short', () => {
+  const U = 'https://example.com/a/very/long/path/that/goes/on/and/on/for/a/while?x=1';
+  for (const body of [`# T\n\n[\`${U}\`](${U})`, `# T\n\nsee [${U}](${U})`, `# T\n\n\`\`\`bash\ncurl ${U}\n\`\`\``]) {
+    const ed = editorWith(body);
+    ed.commands.setTextSelection(1);
+    const cut = [...ed.view.dom.querySelectorAll('.long-link')].map((e) => !!e.closest('code'));
+    expect(cut).toEqual(body.includes('see') ? [false] : []); // in prose it is still cut, as before
+  }
+});
