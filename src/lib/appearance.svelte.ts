@@ -54,6 +54,8 @@ interface Appearance {
   zoom: number;
   /** the size the window opens at; changing it resizes the window there and then, as a preview of itself */
   winW: number; winH: number;
+  /** the system-wide hotkey brings Eve up from any app. Off, Eve is an app like any other: in the Dock and ⌘Tab */
+  summon: boolean;
   /** a presentation's page turn, and whether a slide's lines come in one after another as it is put up */
   slideTurn: SlideTurn; slideBuild: boolean;
   /** a CODE_THEMES id */
@@ -69,7 +71,7 @@ export const SIZE_MIN = 12, SIZE_MAX = 28;
 /** ⌘+ / ⌘-'s steps, each a quarter or more on the last (a browser's tenths still hardly showed), and how far they go:
  *  further than the Size slider, as a browser zooms past any font size a page sets */
 const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 2.5, 3], ZOOM_MIN = 9, ZOOM_MAX = 48;
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832, slideTurn: 'push', slideBuild: true, codeTheme: 'eve' };
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832, summon: true, slideTurn: 'push', slideBuild: true, codeTheme: 'eve' };
 
 function load(): Appearance {
   try {

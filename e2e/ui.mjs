@@ -238,6 +238,13 @@ try {
     {
       const held = async () => { await page.keyboard.down('Meta'); await page.waitForTimeout(800); const n = await page.locator('aside .num').count(); await page.keyboard.up('Meta'); return n; };
       if (await held()) say('holding ⌘ over a floating page lights up the list\'s numbers behind it');
+      // ⌘, over a floating page: the pages put away and Settings up, not Settings under (or not at all past) the page
+      await page.evaluate(() => document.querySelector('.card-page:last-of-type .tiptap')?.editor?.commands.focus('end'));
+      await page.keyboard.press('Meta+Comma');
+      await page.waitForTimeout(400);
+      const after = await page.evaluate(() => ({ pages: document.querySelectorAll('.card-page').length, settings: !!document.querySelector('[role="dialog"][aria-label="Settings"]') }));
+      if (after.pages || !after.settings) say(`⌘, over a floating page: ${after.pages} page(s) still up, Settings ${after.settings ? 'open' : 'not open'}`);
+      if (after.settings) { await page.keyboard.press('Meta+Comma'); await page.waitForTimeout(300); }
       while (await page.locator('.card-page').count()) { await page.keyboard.press('Escape'); await page.waitForTimeout(200); }
       await page.evaluate(() => [...document.querySelectorAll('aside [data-row]')].find((r) => !r.textContent.includes('Daily notes'))?.click());
       await page.waitForSelector('main .tiptap');

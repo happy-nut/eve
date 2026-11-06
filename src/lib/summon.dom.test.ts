@@ -118,3 +118,10 @@ test('summoned or back, each scroller is scrolled a pixel and back, so WebKit dr
   expect([note.scrollTop, list.scrollTop]).toEqual([340, 0]);
   document.body.innerHTML = '';
 });
+
+
+test('summoning turned off takes no system-wide key from the other apps', async () => {
+  keys.length = 0;
+  expect(await setGlobalHotkey('', false)).toBeNull();
+  expect(keys).toEqual([]);
+});

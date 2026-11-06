@@ -529,6 +529,7 @@ export async function setGlobalHotkey(keys: string, dev = import.meta.env.DEV): 
   if (!desktop || dev) return null;
   const gs = await import('@tauri-apps/plugin-global-shortcut');
   await gs.unregisterAll();
+  if (!keys) return null; // summoning turned off (Settings): no key taken from the other apps
   try {
     await gs.register(toTauriAccelerator(keys), (e) => {
       if (e.state === 'Pressed') win.toggle();

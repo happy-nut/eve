@@ -25,6 +25,13 @@
   let tab = $state<'general' | 'appearance' | 'sync' | 'shortcuts'>('general');
   let notesPath = $state('');
   let launchAtLogin = $state(false);
+  let dockHidden = $state(dock.hidden);
+  /** no hotkey, so Eve must be reachable as any app is: back in the Dock and ⌘Tab (on again, it stays there until
+   *  hidden again here) */
+  function setSummon(on: boolean) {
+    appearance.set({ summon: on });
+    if (!on && dock.hidden) { dockHidden = false; void dock.set(false); }
+  }
   let opensMarkdown = $state(false);
   let defaultAppError = $state<string | null>(null);
   /** the newest phone release, shown beside the QR (a phone on 0.7.2 or later offers it itself once opened) */
@@ -253,8 +260,12 @@
             onchange={(e) => appearance.set({ closeSidebarOnWrite: e.currentTarget.checked })} />
         </label>
         <label class="row">
-          <span class="label">Hide from Dock and ⌘Tab <span class="sub">like Raycast: only the hotkey and Finder open it</span></span>
-          <input type="checkbox" class="switch" checked={dock.hidden} disabled={!isTauri} onchange={(e) => dock.set(e.currentTarget.checked)} />
+          <span class="label">Summon with a hotkey <span class="sub">{prettyKeys(shortcuts.keysFor('toggleWindow'))} brings Eve up from any app; off, Eve is in the Dock and ⌘Tab like any app</span></span>
+          <input type="checkbox" class="switch" checked={appearance.s.summon} onchange={(e) => setSummon(e.currentTarget.checked)} />
+        </label>
+        <label class="row">
+          <span class="label">Hide from Dock and ⌘Tab <span class="sub">{appearance.s.summon ? 'like Raycast: only the hotkey and Finder open it' : 'needs the hotkey: without it nothing would bring Eve up'}</span></span>
+          <input type="checkbox" class="switch" checked={dockHidden && appearance.s.summon} disabled={!isTauri || !appearance.s.summon} onchange={(e) => { dockHidden = e.currentTarget.checked; void dock.set(dockHidden); }} />
         </label>
         <label class="row"><span class="label">Opening width <span class="sub">{appearance.s.winW}px</span></span>
           <Slider label="Opening width" min={640} max={1800} step={16} value={appearance.s.winW} oninput={(v) => appearance.set({ winW: v })} /></label>
