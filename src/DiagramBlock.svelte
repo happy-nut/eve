@@ -147,8 +147,9 @@
     tick().then(() => {
       const el = canvas?.querySelector(':scope > svg');
       if (!(el instanceof SVGSVGElement)) return;
-      const intro = introduced ? () => {} : drawIn(el), dots = tokens(el);
-      introduced = true;
+      // (introduced once it has played: a drawing replaced before it was seen, as Eve's own come at once and again
+      // as the note settles, left the next one without its intro)
+      const intro = introduced ? () => {} : drawIn(el, () => (introduced = true)), dots = tokens(el);
       stop = () => { intro(); dots(); };
     });
     return () => stop();

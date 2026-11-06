@@ -161,13 +161,14 @@ export function stepper(svg: SVGSVGElement): { count: number; show(k: number): v
 }
 
 /** the diagram drawn in, once it is well in sight; the returned function stops it (drawn again, put away) */
-export function drawIn(svg: SVGSVGElement): () => void {
+/** `played`: told once the intro starts (a drawing put away or drawn again before it was seen has not had one) */
+export function drawIn(svg: SVGSVGElement, played?: () => void): () => void {
   if (reduced() || typeof IntersectionObserver === 'undefined' || !svg.animate) return () => {};
   settle(svg);
   const steps = timeline(svg);
   if (!steps.length) return () => {};
   const running: Animation[] = [];
-  const play = () => { for (const s of steps) running.push(enter(s, s.at * 1000)); };
+  const play = () => { played?.(); for (const s of steps) running.push(enter(s, s.at * 1000)); };
   const io = new IntersectionObserver(([e]) => { if (e?.isIntersecting) { io.disconnect(); play(); } }, { threshold: 0.3 });
   io.observe(svg);
   return () => { io.disconnect(); for (const a of running) a.cancel(); };

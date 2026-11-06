@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DRAWING, levels, numbered, stepper, timeline } from './diagramMotion';
+import { DRAWING, drawIn, levels, numbered, stepper, timeline } from './diagramMotion';
 import { fromCode, type Flowchart } from './diagram';
 import { laneSvg } from './lanes';
 
@@ -11,6 +11,25 @@ const svgOf = (html: string) => {
 const at = (svg: SVGSVGElement, sel: string) => timeline(svg).find((s) => s.el === svg.querySelector(sel))?.at;
 
 describe('a diagram drawing itself in', () => {
+  it('says it has played only once it is seen: one put away unseen has not', () => {
+    let seen: ((e: { isIntersecting: boolean }[]) => void) | undefined;
+    vi.stubGlobal('IntersectionObserver', class { constructor(f: typeof seen) { seen = f; } observe() {} disconnect() {} });
+    try {
+      const d = document.createElement('div');
+      d.innerHTML = laneSvg({ kind: 'flowchart', dir: 'TD', nodes: [{ id: 'A', label: 'A', shape: 'round' }, { id: 'B', label: 'B', shape: 'round' }], edges: [{ from: 'A', to: 'B', label: '', line: 'solid' }] });
+      const svg = d.firstElementChild as SVGSVGElement;
+      for (const el of svg.querySelectorAll('path, g')) Object.assign(el, { animate: () => Object.assign(new EventTarget(), { finished: new Promise(() => {}), cancel() {} }) });
+      Object.assign(svg, { animate: () => ({}) });
+      for (const p of svg.querySelectorAll('path.flowchart-link')) Object.assign(p, { getTotalLength: () => 100 });
+      const played = vi.fn();
+      drawIn(svg, played)();
+      expect(played).not.toHaveBeenCalled();
+      drawIn(svg, played);
+      seen!([{ isIntersecting: true }]);
+      expect(played).toHaveBeenCalledTimes(1);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('levels go breadth first from the boxes nothing points to; a circle of its own comes after', () => {
     const l = levels(['A', 'B', 'C', 'D', 'X', 'Y'], [['A', 'B'], ['B', 'C'], ['A', 'D'], ['C', 'A'], ['X', 'Y'], ['Y', 'X']]);
     expect(Object.fromEntries(l)).toEqual({ A: 0, B: 1, D: 1, C: 2, X: 3, Y: 4 });
