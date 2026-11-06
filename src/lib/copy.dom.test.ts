@@ -147,6 +147,22 @@ describe('pasted', () => {
     expect(pasted('x', after('x'), '- a\n- b')).toBe('x\n\n- a\n- b');
   });
 
+  test('a table on an empty item of a list takes that item\'s place, the list on either side of it', () => {
+    const T = '| a | b |\n| --- | --- |\n| 1 | 2 |';
+    const out = '- one\n\n' + T + '\n\n- three';
+    // as markdown text, and as a table copied in the editor (its HTML): it went in under an empty bullet that
+    // could not be deleted, and read back the note had no such bullet
+    expect(pasted('- one\n- three', newLine('one'), T)).toBe(out);
+    const ed = editorWith('- one\n- three');
+    newLine('one')(ed);
+    paste(ed, T, '<table><tbody><tr><th><p>a</p></th><th><p>b</p></th></tr><tr><td><p>1</p></td><td><p>2</p></td></tr></tbody></table>');
+    expect(md(ed)).toBe(out);
+    // a sublist's empty item: the table is under the item above, where the sublist was
+    expect(pasted('- one\n  - two', newLine('two'), T)).toBe('- one\n\n  - two\n\n  ' + T.replace(/\n/g, '\n  ') + '\n');
+    // after an item's text it is under that item, as it was
+    expect(pasted('- one\n- three', after('one'), T)).toBe('- one\n\n  ' + T.replace(/\n/g, '\n  ') + '\n\n- three');
+  });
+
   test('a heading into a heading stays in it; after a line, it is a heading of its own', () => {
     expect(pasted('# Title', (ed) => { ed.commands.setTextSelection(posOf(ed, 'Title') + 2); }, '# H')).toBe('# TiHtle');
     expect(pasted('para', after('para'), '# H')).toBe('para\n\n# H');

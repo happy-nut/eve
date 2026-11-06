@@ -280,3 +280,15 @@ test.each([['text', 'Text'], ['table', 'Table'], ['red', 'Red'], ['표', 'Table'
   '"/%s" offers %s first, as ↩ takes the first', (q, first) => {
     expect(slashItems(q)[0]?.label).toBe(first);
   });
+
+test('a table made or pasted on an empty list line takes that line\'s place, the list on either side', () => {
+  const T = '| a | b |\n| --- | --- |\n| 1 | 2 |';
+  const made = at('- one\n- three', 'one', true);
+  press(made, 'Enter');
+  slashItems('table')[0].run!(made);
+  expect(kinds(made)).toEqual(['bulletList', 'table', 'bulletList', 'paragraph']);
+  const pasted = at('- one\n- three', 'one', true);
+  press(pasted, 'Enter');
+  paste(pasted, T);
+  expect(saved(pasted)).toBe('- one\n\n' + T + '\n\n- three');
+});

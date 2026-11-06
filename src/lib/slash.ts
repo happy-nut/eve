@@ -15,7 +15,7 @@ import { isCustom } from './icons';
 import { pickImage, pickVideo } from './platform';
 import { hints } from './hints.svelte';
 import type { EmojiEntry } from './emoji';
-import { runEditorCommand } from './editor';
+import { outOfEmptyItem, runEditorCommand } from './editor';
 import { composing } from './keys';
 import { typedIn } from './hangul';
 import { appearance } from './appearance.svelte';
@@ -467,7 +467,7 @@ export const SLASH: SuggestItem[] = [
   },
   { label: 'Equation', hint: '∑ formula, its own line ($$)', icon: ICONS.math, run: (e) => insertMath(e, true) },
   { label: 'Inline equation', hint: 'x² formula, in the line ($)', icon: ICONS.mathInline, run: (e) => insertMath(e, false) },
-  { label: 'Table', hint: '3×3, with a header row', keywords: '표 grid', icon: ICONS.table, run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+  { label: 'Table', hint: '3×3, with a header row', keywords: '표 grid', icon: ICONS.table, run: (e) => e.chain().focus().command(({ tr }) => { outOfEmptyItem(tr, e.schema.nodes.table.createAndFill()); return true; }).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   { label: 'Image', hint: 'Pick a file', keywords: '이미지 그림 사진 picture photo', icon: ICONS.image, run: tip('image', (e) => { pickImage().then((src) => src && insertImage(e, src)); }) },
   { label: 'Video', hint: 'Pick a file', icon: ICONS.video, run: (e) => { pickVideo().then((src) => src && e.chain().focus().insertContent({ type: 'video', attrs: { src, name: src.split('/').pop() } }).run()); } },
   { label: 'Footnote', hint: '[^1] a note at the end', keywords: 'reference cite 각주 주석', icon: ICONS.text, run: insertFootnote },

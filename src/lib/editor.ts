@@ -437,6 +437,20 @@ function asList(pasted: PMNode, list: PMNode, item: PMNode): PMNode {
 }
 
 /**
+ * A block (a table, code, a heading) put on an empty item of a list takes that item's place, the list split around
+ * it (in a sublist: under the item above). Left in the item, it sat under an empty bullet that would not go, and
+ * read back the bullet was gone, the block out of the list.
+ */
+export function outOfEmptyItem(tr: Transaction, block: PMNode | null | undefined) {
+  if (!block || !block.isBlock || /^(paragraph|listItem|taskItem)$/.test(block.type.name) || LISTS.test(block.type.name) || !tr.selection.empty) return;
+  const $at = tr.selection.$from;
+  if ($at.depth < 2 || $at.parent.type.name !== 'paragraph' || $at.parent.content.size || !/^(listItem|taskItem)$/.test($at.node(-1).type.name) || $at.node(-1).childCount !== 1) return;
+  const range = $at.blockRange();
+  const target = range && liftTarget(range);
+  if (range && target != null) tr.lift(range, target);
+}
+
+/**
  * Markdown (as HTML) pasted where the caret is, fitted in as any paste is: the first line runs on in the caret's line,
  * the last one takes the rest of it. Put in with insertContent it was a document of its own, every newline and space
  * of it kept: a list pasted into a list came in as a loose sublist under an empty item, a to-do's text began with a
@@ -464,6 +478,7 @@ function pasteMarkdown(view: EditorView, html: string, lead = '', trail = ''): T
   const only = slice.content.childCount === 1 ? slice.content.firstChild! : null;
   if (item && only && LISTS.test(only.type.name) && only.type !== $from.node(-2).type) slice = new Slice(Fragment.from(asList(only, $from.node(-2), item)), slice.openStart, slice.openEnd);
   const tr = state.tr;
+  outOfEmptyItem(tr, slice.content.firstChild);
   if (lead) tr.replaceSelectionWith(schema.text(lead), false);
   // a list (a heading, a quote) pasted at the start or the end of a line goes before or after that line, a list in a
   // list as items of it. Run into the line, "- a" pasted after "one" gave "onea", its sublist one level in.
@@ -1253,7 +1268,7 @@ export function createEditor(opts: {
         }
         return content === slice.content ? slice : new Slice(content, openStart, openEnd);
       },
-      handlePaste: (view, event): boolean => {
+      handlePaste: (view, event, slice): boolean => {
         if (insertFiles(editor, event.clipboardData?.files)) return true;
         clearForPaste(view);
         // text pasted in inline code (over it, or with the caret in it) is code too, as typed there: it came in
@@ -1320,6 +1335,13 @@ export function createEditor(opts: {
           const indent = (ws: string) => ws.replace(/ /g, '&#32;').replace(/\t/g, '&#9;');
           const md = lines.map((l) => (l.trim() ? l.replace(/^[ \t]+/, indent) : BLANK)).join('\n\n');
           view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse(md)));
+          return true;
+        }
+        // a table (a block) copied in the editor, on an empty item of a list: in that item's place
+        const tr = state.tr;
+        outOfEmptyItem(tr, slice.content.firstChild);
+        if (tr.docChanged) {
+          view.dispatch(tr.replaceSelection(slice).setMeta('paste', true).setMeta('uiEvent', 'paste').scrollIntoView());
           return true;
         }
         return false;
