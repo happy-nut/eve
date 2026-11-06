@@ -285,7 +285,10 @@ try {
     await page.waitForSelector('.tiptap .mermaid-view svg');
     const anims = () => page.evaluate(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).length);
     // (drawn by Eve, at once: the intro starts as it is first seen, a moment later)
-    assert.ok(await page.waitForFunction(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).length >= 5, null, { timeout: 3000 }).then(() => true, () => false), 'its boxes, lines and label are drawn in');
+    assert.ok(await page.waitForFunction(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).length >= 5, null, { timeout: 3000 }).then(() => true, () => false), 'its boxes, lines and label are drawn in: ' + JSON.stringify(await page.evaluate(() => {
+      const s = document.querySelector('.tiptap .mermaid-view svg'), r = s.getBoundingClientRect();
+      return { reduced: matchMedia('(prefers-reduced-motion: reduce)').matches, cls: s.getAttribute('class'), r: [r.x, r.y, r.width, r.height], vh: innerHeight, anims: s.getAnimations({ subtree: true }).length, active: !!s.closest('.dblock.active') };
+    })));
     await page.waitForFunction(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).length === 0, null, { timeout: 5000 });
     const b = await page.locator('.tiptap .mermaid-view svg').boundingBox();
     await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
