@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Flowchart, FlowNode } from './diagram';
 import { laneSvg } from './lanes';
 import { DRAWING, drawIn, stepper } from './diagramMotion';
+import { chartHtml } from './charts';
 
 function rng(seed: number) {
   let s = seed >>> 0;
@@ -26,6 +27,13 @@ function chart(r: () => number): Flowchart {
   for (let i = 1; i < nodes.length; i++) if (r() < 0.8) edges.push({ from: nodes[Math.floor(r() * i)].id, to: nodes[i].id, label: pick(LABELS), line: pick(['solid', 'dotted', 'thick']) });
   for (let k = Math.floor(r() * 3); k > 0; k--) edges.push({ from: pick(nodes).id, to: pick(nodes).id, label: pick(LABELS), line: 'solid' });
   return { kind: 'flowchart', dir: r() < 0.5 ? 'LR' : 'TD', lanes, nodes, edges };
+}
+/** the same, without lanes: a plain flowchart, drawn by Eve too */
+function plainChart(r: () => number): Flowchart {
+  const d = chart(r);
+  delete d.lanes;
+  for (const n of d.nodes) delete n.lane;
+  return d;
 }
 
 const svgOf = (html: string) => {
@@ -98,6 +106,77 @@ describe('every chart in lanes is drawn whole', () => {
       if (bad.length) fails.push(`seed ${seed} (${d.dir}): ${bad.join('; ')}`);
     }
     expect(fails.slice(0, 15)).toEqual([]);
+  });
+});
+
+describe('a flowchart without lanes is drawn whole, and a line drawn in moves only what it must', () => {
+  it('random charts, across and down: inside the drawing, no line through another step, no label over one', () => {
+    const fails: string[] = [];
+    for (let seed = 1; seed <= 400; seed++) {
+      const d = plainChart(rng(seed));
+      const bad = wrong(d, svgOf(laneSvg(d)));
+      if (bad.length) fails.push(`seed ${seed} (${d.dir}): ${bad.join('; ')}`);
+    }
+    expect(fails.slice(0, 15)).toEqual([]);
+  });
+
+  const at = (d: Flowchart) => {
+    const o: Record<string, string> = {};
+    for (const g of svgOf(laneSvg(d)).querySelectorAll('g.node')) { const b = boxRect(g); o[/-flowchart-(.+)-0$/.exec(g.id)![1]] = `${b.x0},${b.y0}`; }
+    return o;
+  };
+  // moved against the rest: the whole drawing shifted (room made at its start) is no step moved
+  const moved = (a: Record<string, string>, b: Record<string, string>) => {
+    const by = (k: string) => { const [p, q] = [a[k].split(',').map(Number), b[k].split(',').map(Number)]; return `${q[0] - p[0]},${q[1] - p[1]}`; };
+    const n = new Map<string, number>();
+    for (const k of Object.keys(a)) n.set(by(k), (n.get(by(k)) ?? 0) + 1);
+    const most = [...n.entries()].sort((x, y) => y[1] - x[1] || (x[0] === '0,0' ? -1 : 1))[0][0];
+    return Object.keys(a).filter((k) => by(k) !== most).sort();
+  };
+
+  it('a line between two steps already in their order (or back up the chart) moves no step (mermaid moved all of them)', () => {
+    const fails: string[] = [];
+    for (let seed = 1; seed <= 300; seed++) {
+      const r = rng(seed);
+      const d = plainChart(r);
+      const before = at(d);
+      const ids = d.nodes.map((n) => n.id);
+      // a line from a step to one later in the chart's order of steps, which each step's lines in already lead to it
+      // from before: it pushes none down; or one back
+      // (a line back into its own step stands out from it: room is made for it there)
+      const a = ids[Math.floor(r() * ids.length)], b = ids.filter((x) => x !== a)[Math.floor(r() * (ids.length - 1))];
+      const after = { ...d, edges: [...d.edges, { from: a, to: b, label: '', line: 'solid' as const }] };
+      const svg = svgOf(laneSvg(after));
+      const col = (id: string) => { const g = [...svg.querySelectorAll('g.node')].find((x) => x.id.endsWith(`-flowchart-${id}-0`))!; const q = boxRect(g); return d.dir === 'LR' ? q.x0 : q.y0; };
+      const colBefore = (id: string) => { const q = before[id].split(',').map(Number); return d.dir === 'LR' ? q[0] : q[1]; };
+      if (col(b) !== colBefore(b)) continue; // it pushed its step on: the next case's
+      const m = moved(before, at(after));
+      if (m.length) fails.push(`seed ${seed} (${d.dir}) ${a}→${b}: ${m.join(', ')} moved`);
+    }
+    expect(fails.slice(0, 10)).toEqual([]);
+  });
+
+  it('a line that puts a step after another moves that step and what follows it, nothing before them', () => {
+    const d: Flowchart = { kind: 'flowchart', dir: 'TD', nodes: ['A', 'B', 'C', 'D', 'E', 'F'].map((id) => ({ id, label: id, shape: 'round' as const })),
+      edges: [['A', 'B'], ['B', 'C'], ['A', 'D'], ['D', 'E'], ['C', 'F']].map(([from, to]) => ({ from, to, label: '', line: 'solid' as const })) };
+    const before = at(d);
+    const line = (from: string, to: string) => ({ ...d, edges: [...d.edges, { from, to, label: '', line: 'solid' as const }] });
+    expect(moved(before, at(line('E', 'C')))).toEqual(['C', 'F']);
+    // (B gone from beside D, D and what follows it stand under A, as a step alone under one does)
+    expect(moved(before, at(line('E', 'B')))).toEqual(['A', 'D', 'E']);
+    const pushed = at(line('E', 'B'));
+    expect(pushed.A.split(',')[0]).toBe(pushed.D.split(',')[0]);
+    expect(moved(before, at(line('F', 'A')))).toEqual([]);
+    expect(moved(before, at(line('B', 'E')))).toEqual([]);
+  });
+
+  it('a plain flowchart is drawn by Eve; one with what only mermaid draws (a style, an arrow of its own, a shape) is left to it', () => {
+    expect(chartHtml('flowchart TD\n  A[Start] --> B[End]')).toContain('-flowchart-A-0');
+    expect(chartHtml('flowchart LR\n  A[Start] --> B[End]')).toContain('-flowchart-B-0');
+    expect(chartHtml('flowchart TD\n  A[Start] --> B[End]\n  style A fill:#f9f')).toBeNull();
+    expect(chartHtml('flowchart TD\n  A[Start] --o B[End]')).toBeNull();
+    expect(chartHtml('flowchart TD\n  A[/Start/] --> B[End]')).toBeNull();
+    expect(chartHtml('flowchart RL\n  A[Start] --> B[End]')).toBeNull();
   });
 });
 

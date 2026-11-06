@@ -352,7 +352,7 @@ try {
   await page.locator('.layer .bar button[aria-label="Moving"]').click();
   await settle(page);
   assert.match(await md(page), /n1 e1@--> n2[\s\S]*e1@\{ animate: true \}/, 'the note keeps it moving');
-  assert.equal(await page.locator('.tiptap .mermaid-view path.flowchart-link[class*="edge-animation"]').count(), 1, 'drawn moving');
+  assert.equal(await page.locator('.tiptap .mermaid-view path.flowchart-link:is([class*="edge-animation"], .moving)').count(), 1, 'drawn moving'); // mermaid's, or Eve's (lanes.ts)
   await page.locator('.layer .bar button[aria-label="Moving"]').click();
   await settle(page);
   assert.doesNotMatch(await md(page), /@/, 'still again');

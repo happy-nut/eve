@@ -68,6 +68,8 @@ function rounded(pts: [number, number][], r = 10): string {
 export function laneSvg(d: Flowchart, minScale = 0.8): string {
   const LR = d.dir === 'LR' || d.dir === 'RL'; // (across, as diagram.ts's: a value import here would not load in node's tests)
   const id = `sl${++uid}`;
+  // a flowchart without lanes (charts.ts draws one here when mermaid would draw it no differently): one band, unseen
+  const plain = !d.lanes?.length;
   const lanes = [...(d.lanes ?? [])];
   const laneIx = new Map(lanes.map((l, i) => [l.id, i]));
   if (d.nodes.some((n) => !laneIx.has(n.lane ?? ''))) lanes.push({ id: '', label: '' }); // the boxes in no lane
@@ -158,14 +160,59 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   });
   const slotC = lanes.map((_, i) => Math.max(LR ? 44 : 96, ...[...boxes.values()].filter((b) => b.lane === i).map(cross)) + SLOT_GAP + beside[i]);
   // down the page, each name wrapped to its column; the head as tall as the longest (a fixed 40 cut a long name's lines)
-  const HEAD = LR
+  const HEAD = plain ? 0 : LR
     ? Math.max(84, Math.min(140, Math.ceil(Math.max(...lanes.map((l) => textW(l.label, 13, 600)))) + 28))
     : 40;
   const laneC = lanes.map((_, i) => pre[i] + laneSlots[i] * slotC[i] + LANE_PAD * 2 - SLOT_GAP - beside[i]);
   const names = lanes.map((l, i) => wrap(l.label, LR ? HEAD - 20 : laneC[i] - 20, 13, 600));
-  const HEAD_M = LR ? HEAD : Math.max(40, Math.max(...names.map((n) => n.length)) * 17 + 22);
+  const HEAD_M = plain ? 0 : LR ? HEAD : Math.max(40, Math.max(...names.map((n) => n.length)) * 17 + 22);
   const laneAt = lanes.map((_, i) => laneC.slice(0, i).reduce((a, b) => a + b, 0));
   for (const b of boxes.values()) b.c = laneAt[b.lane] + pre[b.lane] + LANE_PAD + b.slot * slotC[b.lane] + (slotC[b.lane] - SLOT_GAP - beside[b.lane]) / 2;
+  if (plain) laneC[0] = place();
+
+  /** Without lanes, each step stands across from the one its first line in comes from (a first step at the start), the
+   *  steps of a column side by side in that order, each as near its place as there is room. So a line drawn in later
+   *  moves only what it must: the step it leads to, if it now comes later, and what follows that. (Mermaid weighed
+   *  every line in every step's place, and one more line moved all of them.) Returns how wide the drawing is across. */
+  function place(): number {
+    const first = new Map<Box, Box>();
+    for (const e of fwd) { const b = boxes.get(e.to)!; if (!first.has(b)) first.set(b, boxes.get(e.from)!); }
+    const order = [...boxes.values()];
+    // room before a step for the loops on it (they stand out on that side), and between two side by side for a
+    // labelled line between them
+    const loopRoom = (b: Box) => (loopsOn.get(b) ?? 0);
+    for (let r = 0; r < ranks; r++) {
+      const col = order.filter((b) => b.rank === r);
+      const want = (b: Box) => first.get(b)?.c ?? 0;
+      col.sort((p, q) => want(p) - want(q) || order.indexOf(p) - order.indexOf(q));
+      // where each would stand packed from 0, then as near its place as the ones before and after it let it: the
+      // packed run cut where it may move apart, each part centred on the places its steps want (pool adjacent violators)
+      const off: number[] = [];
+      col.forEach((b, k) => {
+        if (!k) { off.push(0); return; }
+        const a = col[k - 1];
+        const label = edges.reduce((n, e, i) => {
+          const [x, y] = [boxes.get(e.from), boxes.get(e.to)];
+          return n + ((x === a && y === b) || (x === b && y === a) ? (chips[i].lines.length ? room(i) : 0) : 0);
+        }, 0);
+        off.push(off[k - 1] + cross(a) / 2 + SLOT_GAP + Math.max(label, loopRoom(b)) + cross(b) / 2);
+      });
+      const pools: { sum: number; n: number }[] = [];
+      col.forEach((b, k) => {
+        pools.push({ sum: want(b) - off[k], n: 1 });
+        while (pools.length > 1 && pools[pools.length - 2].sum / pools[pools.length - 2].n > pools[pools.length - 1].sum / pools[pools.length - 1].n) {
+          const t = pools.pop()!;
+          pools[pools.length - 1].sum += t.sum; pools[pools.length - 1].n += t.n;
+        }
+      });
+      let k = 0;
+      for (const pl of pools) for (let j = 0; j < pl.n; j++, k++) col[k].c = pl.sum / pl.n + off[k];
+    }
+    // all of it moved to start just after the edge, a loop's room before the first steps too
+    const start = Math.min(...order.map((b) => b.c - cross(b) / 2 - loopRoom(b)));
+    for (const b of order) b.c += LANE_PAD - start;
+    return Math.max(...order.map((b) => b.c + cross(b) / 2)) + LANE_PAD;
+  }
   // a line to a later step turns (and its label stands) in the gap just after the step it leaves. Labels that would
   // stand at the same height there go side by side, each line turning in a track of its own, the gap as wide as its
   // tracks. At 40 wide, one track, the labels of a busy chart stood on one another and over the boxes either side
@@ -255,7 +302,7 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   // ---- the lanes ----
   // named and marked as mermaid's flowchart is, its boxes `<id>-flowchart-<box>-0` and its lines `L_<from>_<to>_<n>`:
   // drawn in, and a step at a time in a presentation (boxes given an Order too), as a chart without lanes is
-  let svg = `<svg class="lanes" id="${id}" aria-roledescription="flowchart-v2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width: ${W}px; min-width: ${Math.round(W * minScale)}px;" role="img" aria-label="Swimlanes">`;
+  let svg = `<svg class="lanes" id="${id}" aria-roledescription="flowchart-v2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width: ${W}px; min-width: ${Math.round(W * minScale)}px;" role="img" aria-label="${plain ? 'Flowchart' : 'Swimlanes'}">`;
   svg += `<defs><marker id="${id}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sl-head" d="M0,1.5 L9,5 L0,8.5 z"/></marker></defs>`;
   lanes.forEach((l, i) => {
     const [x, y] = xy(0, laneAt[i]);

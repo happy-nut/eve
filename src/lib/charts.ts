@@ -16,6 +16,11 @@ export function chartHtml(code: string, laneMin = 0.64): string | null {
   const d = fromCode(code);
   if (!d) return null;
   if (d.kind === 'flowchart' && d.lanes?.length) return laneSvg(d, laneMin); // swimlanes (lanes.ts)
+  // a plain flowchart too, by the same drawing: mermaid placed every step again for each line drawn in. Left to mermaid
+  // is one with what this drawing has no look for (a style, a class's colours, an arrow or a shape of its own, a
+  // chart drawn right to left or upwards)
+  if (d.kind === 'flowchart' && d.nodes.length && (d.dir === 'TD' || d.dir === 'LR') && !d.extra?.length && !d.pre?.length
+    && !d.nodes.some((n) => n.raw || n.cls) && !d.edges.some((e) => e.arrow)) return laneSvg(d, laneMin);
   // a sequence with no one in it: mermaid drew an empty card, with nothing to say what it was
   if (d.kind === 'sequence' && !d.people.length) return `<div class="chart chart-empty"><p>Nothing to show yet</p></div>`;
   if (d.kind === 'mindmap') return mindSvg(d, laneMin);
