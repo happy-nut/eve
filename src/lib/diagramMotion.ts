@@ -161,14 +161,18 @@ export function stepper(svg: SVGSVGElement): { count: number; show(k: number): v
 }
 
 /** the diagram drawn in, once it is well in sight; the returned function stops it (drawn again, put away) */
-/** `played`: told once the intro starts (a drawing put away or drawn again before it was seen has not had one) */
+/** `played`: told once the intro has run to its end (a drawing put away, or drawn again, before then has not had one:
+ *  a block drawn again mid-way, as one Eve draws at once can be as the note settles, was left with no intro at all) */
 export function drawIn(svg: SVGSVGElement, played?: () => void): () => void {
   if (reduced() || typeof IntersectionObserver === 'undefined' || !svg.animate) return () => {};
   settle(svg);
   const steps = timeline(svg);
   if (!steps.length) return () => {};
   const running: Animation[] = [];
-  const play = () => { played?.(); for (const s of steps) running.push(enter(s, s.at * 1000)); };
+  const play = () => {
+    for (const s of steps) running.push(enter(s, s.at * 1000));
+    Promise.all(running.map((a) => a.finished)).then(() => played?.(), () => {}); // (cancelled: not played)
+  };
   const io = new IntersectionObserver(([e]) => { if (e?.isIntersecting) { io.disconnect(); play(); } }, { threshold: 0.3 });
   io.observe(svg);
   return () => { io.disconnect(); for (const a of running) a.cancel(); };

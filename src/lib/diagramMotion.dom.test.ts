@@ -11,21 +11,31 @@ const svgOf = (html: string) => {
 const at = (svg: SVGSVGElement, sel: string) => timeline(svg).find((s) => s.el === svg.querySelector(sel))?.at;
 
 describe('a diagram drawing itself in', () => {
-  it('says it has played only once it is seen: one put away unseen has not', () => {
+  it('says it has played only once it has run to its end: one put away unseen, or mid-way, has not', async () => {
     let seen: ((e: { isIntersecting: boolean }[]) => void) | undefined;
     vi.stubGlobal('IntersectionObserver', class { constructor(f: typeof seen) { seen = f; } observe() {} disconnect() {} });
     try {
       const d = document.createElement('div');
       d.innerHTML = laneSvg({ kind: 'flowchart', dir: 'TD', nodes: [{ id: 'A', label: 'A', shape: 'round' }, { id: 'B', label: 'B', shape: 'round' }], edges: [{ from: 'A', to: 'B', label: '', line: 'solid' }] });
       const svg = d.firstElementChild as SVGSVGElement;
-      for (const el of svg.querySelectorAll('path, g')) Object.assign(el, { animate: () => Object.assign(new EventTarget(), { finished: new Promise(() => {}), cancel() {} }) });
+      let end = () => {};
+      const ends = new Promise<void>((r) => (end = r));
+      for (const el of svg.querySelectorAll('path, g')) Object.assign(el, { animate: () => { let no = () => {}; const f = Promise.race([ends, new Promise<void>((_, j) => (no = () => j(new Error('cancelled'))))]); return { finished: f, cancel: () => no() }; } });
       Object.assign(svg, { animate: () => ({}) });
       for (const p of svg.querySelectorAll('path.flowchart-link')) Object.assign(p, { getTotalLength: () => 100 });
       const played = vi.fn();
       drawIn(svg, played)();
+      const stop = drawIn(svg, played);
+      seen!([{ isIntersecting: true }]);
+      stop(); // put away mid-way
+      await new Promise((r) => setTimeout(r));
       expect(played).not.toHaveBeenCalled();
       drawIn(svg, played);
       seen!([{ isIntersecting: true }]);
+      await new Promise((r) => setTimeout(r));
+      expect(played).not.toHaveBeenCalled();
+      end();
+      await new Promise((r) => setTimeout(r));
       expect(played).toHaveBeenCalledTimes(1);
     } finally { vi.unstubAllGlobals(); }
   });
@@ -99,7 +109,9 @@ describe('a diagram drawing itself in', () => {
         <path class="flowchart-link" data-id="L_a_b_0" d="M0,0L10,0" style="marker-end: url(#head)"/>
         <g class="node" id="m4-flowchart-a-0"></g><g class="node" id="m4-flowchart-b-1"></g></svg>`);
       const ready = (svg: SVGSVGElement) => {
-        for (const el of svg.querySelectorAll('path, g')) Object.assign(el, { animate: () => Object.assign(new EventTarget(), { finished: new Promise(() => {}), cancel() {} }) });
+        let end = () => {};
+      const ends = new Promise<void>((r) => (end = r));
+      for (const el of svg.querySelectorAll('path, g')) Object.assign(el, { animate: () => { let no = () => {}; const f = Promise.race([ends, new Promise<void>((_, j) => (no = () => j(new Error('cancelled'))))]); return { finished: f, cancel: () => no() }; } });
         Object.assign(svg.querySelector('path')!, { getTotalLength: () => 10 });
         return svg;
       };
