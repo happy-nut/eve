@@ -4,6 +4,7 @@
   import { isMobile } from './lib/platform';
   import BottomSheet from './BottomSheet.svelte';
   import { floatAt } from './lib/popup';
+  import { claimKeys, PRIORITY } from './lib/keys';
 
   /**
    * A choice among a few, drawn by the app instead of the platform: a popover under the button on the
@@ -23,6 +24,11 @@
   let wasOpen = false;
   $effect(() => { if (wasOpen && !open) onpicked?.(); wasOpen = open; });
   let at = $state(0); // the highlighted row while open
+  // open, Esc closes the list first, wherever the keyboard is (gone from its button, the Esc closed what it sits in)
+  $effect(() => {
+    if (!open || isMobile) return;
+    return claimKeys('global', { Escape: (e) => { e.stopPropagation(); open = false; btn?.focus(); return true; } }, { capture: true, priority: PRIORITY.top, composing: true });
+  });
   let btn = $state<HTMLButtonElement | null>(null);
   let pos = $state({ left: 0, top: 0, maxHeight: 0, width: 0, up: false }); // up: over the button, no room under it
 

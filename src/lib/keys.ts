@@ -40,6 +40,9 @@ export interface ClaimOptions {
 export const PRIORITY = {
   /** looks at every key and takes none (the keyboard/pointer switch, a tooltip going away) */
   watch: 1000,
+  /** a popup on top with nothing inside it to step out of first (a menu, a list): its Esc is its own, ahead of the
+   *  note, a diagram's keys and the app's, wherever the keyboard is */
+  top: 500,
   /** takes every key while it lasts (a shortcut being recorded) */
   record: 100,
   /** the app's shortcuts: the last to hear a key, after whatever is open over the app has had its say */

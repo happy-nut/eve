@@ -7,6 +7,7 @@
   import { hints } from './lib/hints.svelte';
   import { popIn } from './lib/motion';
   import { floatAt, held } from './lib/popup';
+  import { claimKeys, PRIORITY } from './lib/keys';
 
   // every menu in the app (a right click, the list's "+", a code block's language): App renders it, anyone opens
   // it through ui.openMenu. Keyboard-reachable — the mouse moves the highlight.
@@ -25,6 +26,12 @@
     return [...hits.filter(starts), ...hits.filter((it) => !starts(it))].map((it) => ({ ...it, sep: false }));
   });
   let x = $state(0), y = $state(0), maxH = $state<number | null>(null);
+  // Esc closes it, wherever the keyboard is: opened by ⌘⇧H the keyboard stays in the note, and the menu's Esc was
+  // left to the app's keys, the last to hear it — what heard it before (the note, a diagram in it) kept the menu up
+  $effect(() => {
+    if (!ui.menu) return;
+    return claimKeys('global', { Escape: (e) => { e.stopPropagation(); ui.closeMenu(); return true; } }, { capture: true, whileTop: 'menu', priority: PRIORITY.top, composing: true });
+  });
 
   // placed at the pointer, then, once its size is known, pulled back inside the window across and over the pointer
   // when there is no room under it (its own size: offsetWidth, not the rect, which is scaled while it pops in)
