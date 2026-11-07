@@ -53,7 +53,9 @@ function spansOf(node: PMNode) {
         const to = at + (n.value?.length ?? 0);
         if (classes.length) got!.push([at, to, classes.join(' ')]);
         at = to;
-      } else walk(n.children, [...classes, ...(n.properties?.className ?? [])]);
+      // a part inside another in its own colour, not both parts' classes: in app.css the outer one's came later and
+      // won (a parameter's type in the parameters' colour, `${id}` in a string the grey of a comment)
+      } else walk(n.children, n.properties?.className?.length ? n.properties.className : classes);
     }
   };
   if (tree) walk(tree.children, []);

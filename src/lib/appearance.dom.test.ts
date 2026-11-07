@@ -93,3 +93,13 @@ test("Reset's Undo puts back all it reset: the code colours and the ⌘+ steps t
   appearance.set(was);
   expect(appearance.s).toEqual(before);
 });
+
+test("code's own light or dark is kept, and Reset (and its Undo) take it with the rest", () => {
+  appearance.set({ theme: 'light', codeShade: 'dark' });
+  expect(JSON.parse(localStorage.getItem('eve.appearance')!).codeShade).toBe('dark');
+  const was = appearance.reset();
+  expect(appearance.s.codeShade).toBe('auto');
+  appearance.set(was);
+  expect(appearance.s.codeShade).toBe('dark');
+  appearance.reset();
+});

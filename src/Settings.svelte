@@ -7,7 +7,7 @@
   import { storage, autostart, dock, defaultApp, mcp, isTauri, isMobile, copyText, openUrl, type McpClient } from './lib/platform';
   import { normHost, webBase } from './lib/github';
   import { ui } from './lib/ui.svelte';
-  import { appearance, PASTELS, SIZE_MIN, SIZE_MAX, FONTS, THEMES, SLIDE_TURNS, CODE_THEMES, type Theme, type SlideTurn } from './lib/appearance.svelte';
+  import { appearance, PASTELS, SIZE_MIN, SIZE_MAX, FONTS, THEMES, SLIDE_TURNS, CODE_THEMES, CODE_SHADES, type Theme, type CodeShade, type SlideTurn } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
   import Select from './Select.svelte';
   import Slider from './Slider.svelte';
@@ -343,6 +343,10 @@
         <div class="row">
           <span class="label">Colors <span class="sub">how code blocks are highlighted, in both themes</span></span>
           <Select label="Code colors" value={appearance.s.codeTheme} options={CODE_THEMES} onchange={(v) => appearance.set({ codeTheme: v })} />
+        </div>
+        <div class="row">
+          <span class="label">Background <span class="sub">dark code on a light page, or light on a dark one</span></span>
+          <Select label="Code background" value={appearance.s.codeShade} options={CODE_SHADES} onchange={(v) => appearance.set({ codeShade: v as CodeShade })} />
         </div>
       </div>
       <!-- the colours as they are: a few lines of code, coloured as a code block colours them -->

@@ -228,6 +228,16 @@ describe('highlighting', () => {
     expect(ed.view.dom.querySelectorAll('pre')[2].querySelector('[class*="hljs-"]')).toBeNull();
   });
 
+  test('a part inside another is drawn in its own colour: a type among the parameters, code inside a string', async () => {
+    // a parameter's type took the parameters' colour, and `${id}` in a template string went the grey of a comment:
+    // the outer part's class came after the inner one's in app.css, so it won
+    const ed = editorWith('# T\n\n```kotlin\nfun go(x: Int) = 1\n```\n\n```typescript\nconst s = `a${id}b`\n```');
+    await grammars(ed);
+    const cls = (i: number, text: string) => [...ed.view.dom.querySelectorAll('pre')[i].querySelectorAll('[class*="hljs-"]')].find((e) => e.textContent === text)?.className;
+    expect(cls(0, 'Int')).toBe('hljs-type');
+    expect(cls(1, '${id}')).toBe('hljs-subst');
+  });
+
   test('a Dockerfile (and the other languages past the common ones) is highlighted, and offered by name', async () => {
     const ed = editorWith('# T\n\n```dockerfile\nFROM node:22\nRUN npm ci\n```\n\n```powershell\nGet-ChildItem\n```');
     await grammars(ed);

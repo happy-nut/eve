@@ -57,7 +57,8 @@ const PAIRS = [
   ...['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'].map((c) => [`--ink-${c}`, ['--bg', '--bg-pop', '--bg-hover'], TEXT]),
   // the text in a callout of each colour, a code chip in one, and a tag in a database row
   ...['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red', 'cyan'].map((c) => ['--fg', [`--tint-${c}`, `--code-bg@--tint-${c}`], TEXT]),
-  ['--fg-dim', ['--tint-gray'], TEXT],
+  ['--fg-dim', ['--tint-gray', '--code-solid'], TEXT],
+  ['--fg', ['--code-solid'], TEXT],
   ...['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'].map((c) => ['--fg', [`--tag-${c}`, `--tag-${c}@--bg-pop`], TEXT]),
   // a button's label on the accent: short, bold words, read as a label (Turtle and Toss keep white on their blue too)
   ['--on-accent', ['--accent'], ICON],
@@ -79,8 +80,11 @@ assert.deepEqual(low, [], 'text that does not stand out enough from what it sits
 const themes = JSON.parse(readFileSync(join(SRC, 'lib/codeThemes.json'), 'utf8'));
 const lowCode = [];
 for (const [id, t] of Object.entries(themes)) for (const theme of ['light', 'dark']) for (const [k, c] of Object.entries(t[theme])) {
-  const g = ground('--code-bg', theme), r = ratio(over(rgba(c), g), g);
-  if (r < TEXT) lowCode.push(`${id} ${theme} ${k} ${c} reads at ${r.toFixed(2)}:1`);
+  // on a block in the page's theme, and on one drawn in that theme whatever the page's (--code-solid)
+  for (const ground_ of ['--code-bg', '--code-solid']) {
+    const g = ground(ground_, theme), r = ratio(over(rgba(c), g), g);
+    if (r < TEXT) lowCode.push(`${id} ${theme} ${k} ${c} on ${ground_} reads at ${r.toFixed(2)}:1`);
+  }
 }
 assert.deepEqual(lowCode, [], 'a code colour theme hard to read (lib/codeThemes.json)');
 for (const k of ['key', 'str', 'num', 'fn', 'var']) assert.equal(`light-dark(${themes.eve.light[k]}, ${themes.eve.dark[k]})`, raw[`--hl-${k}`], `Eve's own --hl-${k} as app.css has it`);

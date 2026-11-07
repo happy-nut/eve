@@ -21,6 +21,7 @@
   --sel: light-dark(#b3d7ff, #2c5c7d);
   --glow: 0 0 14px light-dark(transparent, rgba(63, 193, 255, 0.35));
   --code-bg: light-dark(rgba(17, 19, 24, 0.05), rgba(255, 255, 255, 0.07));
+  --code-solid: light-dark(#f3f3f4, #1c1d21); /* --code-bg as it shows on the page: the ground of code with its own light or dark */
   /* syntax colours: the eye blue plus four muted hues, tuned to stay legible on --code-bg in both themes */
   --hl-key: light-dark(#0b6bcb, #6cc4ff); /* keywords, types, tags */
   --hl-str: light-dark(#0f766e, #4fd1b8); /* strings, regexes */
@@ -471,6 +472,14 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
 .tiptap pre code { background: none; padding: 0; margin: 0; box-shadow: none; font-size: 0.85em; }
 /* the chip sits on the wrapper, not the <pre>: inside a scrolling <pre> it would slide away with long lines */
 .tiptap .code-block { position: relative; }
+/* code drawn light or dark whatever the page is (Settings → Appearance → Code → Background): the block takes that
+   scheme, so every light-dark() colour in it (the code colours, the chip) is read in it, on a ground that is not
+   see-through. A diagram keeps the page's; paper always gets the page's. */
+@media screen {
+  :root[data-code='light'] :is(.tiptap .code-block:not(.mermaid), .code-sample) { color-scheme: light; }
+  :root[data-code='dark'] :is(.tiptap .code-block:not(.mermaid), .code-sample) { color-scheme: dark; }
+  :root:is([data-code='light'], [data-code='dark']) :is(.tiptap .code-block:not(.mermaid), .code-sample) pre { background: var(--code-solid); color: var(--fg); }
+}
 /* How far a block may reach, as Notion has it (its page grid: margins | a text column of 720px | margins). Code,
    diagrams, pictures, embeds keep to the text column, a long line or a wide diagram scrolling inside it. A table, a
    board and a database start where the text does and may run on to the right, into the page's room past the column,
@@ -682,7 +691,8 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { pa
 .tiptap .hljs-section { color: var(--hl-fn); font-weight: 600; }
 .tiptap .hljs-attr, .tiptap .hljs-attribute, .tiptap .hljs-property,
 .tiptap .hljs-variable, .tiptap .hljs-template-variable, .tiptap .hljs-params { color: var(--hl-var); }
-.tiptap .hljs-meta, .tiptap .hljs-punctuation, .tiptap .hljs-operator, .tiptap .hljs-subst { color: var(--fg-dim); }
+.tiptap .hljs-meta, .tiptap .hljs-punctuation, .tiptap .hljs-operator { color: var(--fg-dim); }
+.tiptap .hljs-subst { color: var(--fg); } /* code inside a string (`${id}`) reads as code */
 .tiptap .hljs-deletion { color: light-dark(#b3261e, #ff8b82); }
 .tiptap .hljs-emphasis { font-style: italic; }
 .tiptap .hljs-strong { font-weight: 700; }

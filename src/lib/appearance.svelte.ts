@@ -15,6 +15,10 @@ export const THEMES = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark'
 export type Theme = (typeof THEMES)[number][0];
 
 /** how a presentation turns its page (Settings → Appearance → Presenting) */
+/** the ground code is drawn on (Settings → Appearance → Code): the page's theme, or its own light or dark (app.css) */
+export const CODE_SHADES = [['auto', 'Follow theme'], ['light', 'Light'], ['dark', 'Dark']] as const;
+export type CodeShade = (typeof CODE_SHADES)[number][0];
+
 export const SLIDE_TURNS = [['push', 'Slide'], ['fade', 'Fade'], ['zoom', 'Zoom'], ['none', 'None']] as const;
 export type SlideTurn = (typeof SLIDE_TURNS)[number][0];
 /** the colours code is written in (Settings → Appearance → Code): each a light and a dark set, all read on a code block
@@ -60,6 +64,8 @@ interface Appearance {
   slideTurn: SlideTurn; slideBuild: boolean;
   /** a CODE_THEMES id */
   codeTheme: string;
+  /** code drawn light or dark whatever the page is: a light page with dark code */
+  codeShade: CodeShade;
 }
 // the window's own defaults match tauri.conf.json, so a fresh install never resizes on launch
 // A phone starts from bigger type. Appearance lives in this device's localStorage and never syncs, so a
@@ -71,7 +77,7 @@ export const SIZE_MIN = 12, SIZE_MAX = 28;
 /** ⌘+ / ⌘-'s steps, each a quarter or more on the last (a browser's tenths still hardly showed), and how far they go:
  *  further than the Size slider, as a browser zooms past any font size a page sets */
 const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 2.5, 3], ZOOM_MIN = 9, ZOOM_MAX = 48;
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832, summon: true, slideTurn: 'push', slideBuild: true, codeTheme: 'eve' };
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832, summon: true, slideTurn: 'push', slideBuild: true, codeTheme: 'eve', codeShade: 'auto' };
 
 function load(): Appearance {
   try {
@@ -114,7 +120,7 @@ class AppearanceStore {
   /** Appearance's own Reset: how notes look (theme, type, text), not what the app does (daily notes, window…). What
    *  it was is returned, for its Undo: the Undo put back six of the eight, and the code colours and ⌘+ stayed reset */
   reset(): Partial<Appearance> {
-    const keys = ['theme', 'font', 'custom', 'size', 'lineHeight', 'width', 'zoom', 'codeTheme'] as const;
+    const keys = ['theme', 'font', 'custom', 'size', 'lineHeight', 'width', 'zoom', 'codeTheme', 'codeShade'] as const;
     const was = Object.fromEntries(keys.map((k) => [k, this.s[k]])) as Partial<Appearance>;
     this.set(Object.fromEntries(keys.map((k) => [k, DEFAULTS[k]])) as Partial<Appearance>);
     return was;
@@ -123,6 +129,7 @@ class AppearanceStore {
   apply() {
     $effect(() => {
       document.documentElement.dataset.theme = this.s.theme; // app.css pins color-scheme for light/dark
+      document.documentElement.dataset.code = this.s.codeShade; // and a code block's, when it has its own
       const r = document.documentElement.style;
       r.setProperty('--font-editor', this.stack);
       r.setProperty('--font-size', `${this.textPx}px`);
