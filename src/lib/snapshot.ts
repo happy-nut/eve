@@ -54,7 +54,7 @@ export function drawnCopy(el: Element): Element {
   el.classList.remove('eve-still');
   if (focused) el.classList.add('eve-focus');
   copy.classList.remove('eve-still');
-  for (const dot of copy.querySelectorAll('.eve-token, .eve-flow')) dot.remove(); // the dot, and the lines' flow (diagramMotion.ts)
+  for (const f of copy.querySelectorAll('.eve-flow')) f.remove(); // the light along the lines (diagramMotion.ts)
   // a line's label is HTML in a foreignObject, its chip a background and shadows round its words: in a picture
   // (the drawing inside the picture's own foreignObject) WebKit drew half of the chip. The chip drawn instead as the
   // drawing's own rectangles behind the words, the words left as they are

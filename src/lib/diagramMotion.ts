@@ -1,12 +1,12 @@
 // A diagram that draws itself in, after pele-animate (github.com/dkdev24/pele-animate, MIT), on mermaid's own SVG: a
 // flowchart's boxes come up level by level from the ones nothing points to, each line drawing from its source once that
-// is up and its label fading in with it; a sequence diagram's people, then its messages in order. Hovered, a dot runs
-// along each line in the same order, over and over. Nothing is hidden at rest: the finished picture is what is drawn,
-// and the motion only plays over it (none with the system's Reduce motion).
+// is up and its label fading in with it; a sequence diagram's people, then its messages in order. Then light flows
+// along its lines, a box pointed at lights the way through it, and ▶ tells it a step at a time. Nothing is hidden at
+// rest: the finished picture is what is drawn, and the motion only plays over it (none with the system's Reduce motion).
 
 const UNIT = 0.6; // seconds a level (or a message) takes
 const MAX = 2.4; // a long diagram's levels are squeezed so the whole of it is drawn in about this long
-const FADE = 400, POP = 520, TOKEN = 0.5;
+const FADE = 400, POP = 520;
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** `stage`: which press of → in a presentation brings it up (a flowchart's level, a sequence's message) */
@@ -194,36 +194,6 @@ export function drawIn(svg: SVGSVGElement, played?: () => void): () => void {
   return () => { io.disconnect(); for (const a of running) a.cancel(); };
 }
 
-/** hovered: a dot along each line, in the order they were drawn, then a pause, and again; the returned function stops it */
-export function tokens(svg: SVGSVGElement): () => void {
-  if (!svg.animate) return () => {};
-  const lines = timeline(svg).filter((s): s is Step & { line: SVGPathElement | SVGLineElement } => !!s.line);
-  if (!lines.length) return () => {};
-  const cycle = Math.max(...lines.map((l) => l.at)) + TOKEN + 0.8;
-  let dots: SVGCircleElement[] = [];
-  const play = () => {
-    if (reduced() || dots.length) return;
-    dots = lines.map(({ line, at }) => {
-      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      dot.setAttribute('r', '3');
-      dot.setAttribute('class', 'eve-token');
-      dot.style.offsetPath = `path("${line instanceof SVGPathElement ? line.getAttribute('d') : `M${line.x1.baseVal.value},${line.y1.baseVal.value}L${line.x2.baseVal.value},${line.y2.baseVal.value}`}")`;
-      dot.style.offsetRotate = '0deg';
-      line.after(dot);
-      const a = at / cycle, b = (at + TOKEN) / cycle, e = 0.001;
-      dot.animate([
-        { offset: 0, opacity: 0, offsetDistance: '0%' }, { offset: a, opacity: 0, offsetDistance: '0%' },
-        { offset: a + e, opacity: 1, offsetDistance: '0%' }, { offset: b, opacity: 1, offsetDistance: '100%' },
-        { offset: Math.min(b + e, 1), opacity: 0, offsetDistance: '100%' }, { offset: 1, opacity: 0, offsetDistance: '100%' },
-      ], { duration: cycle * 1000, iterations: Infinity });
-      return dot;
-    });
-  };
-  const stop = () => { for (const d of dots) d.remove(); dots = []; };
-  svg.addEventListener('pointerenter', play);
-  svg.addEventListener('pointerleave', stop);
-  return () => { stop(); svg.removeEventListener('pointerenter', play); svg.removeEventListener('pointerleave', stop); };
-}
 
 /**
  * A box pointed at lights the whole way through it: every box and line that leads to it from the start, and on from

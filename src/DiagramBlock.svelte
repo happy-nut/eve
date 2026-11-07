@@ -9,7 +9,7 @@
   import { renderMermaid, themeKey } from './lib/mermaid';
   import { foldSeq, foldable, markFolds, type SeqBlock } from './lib/seqFold';
   import { spreadLabels } from './lib/edgeLabels';
-  import { drawIn, tokens, flow as flowLines, focus, play, timeline } from './lib/diagramMotion';
+  import { drawIn, flow as flowLines, focus, play, timeline } from './lib/diagramMotion';
   import { KINDS, across, fromCode, isEmpty, toCode, whyCode, type Diagram } from './lib/diagram';
   import FlowEditor from './FlowEditor.svelte';
   import { scrollHint } from './lib/scrollHint';
@@ -160,9 +160,9 @@
       // its lines flow once it has drawn itself in (flowing at once, a line drawing in was already lit end to end)
       let flowing = introduced ? flowLines(el) : () => {};
       const intro = introduced ? () => {} : drawIn(el, () => { introduced = true; flowing = flowLines(el); });
-      const dots = tokens(el), lit = focus(el);
+      const lit = focus(el);
       playable = new Set(timeline(el).map((t) => t.stage)).size > 1;
-      stop = () => { intro(); dots(); lit(); flowing(); playing?.(); };
+      stop = () => { intro(); lit(); flowing(); playing?.(); };
     });
     return () => stop();
   });

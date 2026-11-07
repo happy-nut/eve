@@ -5,7 +5,7 @@ describe('a diagram copied as a picture', () => {
   it('is taken as it ends, not half drawn in, and without the dot running its lines', () => {
     const d = document.createElement('div');
     d.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40"><g class="node" style="opacity: 0.3"></g>
-      <path class="flowchart-link" d="M0,0L10,0" style="stroke-dashoffset: 80"/><circle class="eve-token" r="3"/></svg>`;
+      <path class="flowchart-link" d="M0,0L10,0" style="stroke-dashoffset: 80"/><path class="eve-flow" d="M0,0L10,0"/></svg>`;
     const svg = d.firstElementChild as SVGSVGElement;
     const [box, line] = [svg.querySelector('g')!, svg.querySelector('path')!];
     // an animation part way: its end is the drawing at rest (here, as jsdom plays none, the styles it would end on)
@@ -17,7 +17,7 @@ describe('a diagram copied as a picture', () => {
     expect(dot.finish).not.toHaveBeenCalled();
     expect((copy.querySelector('g') as SVGElement).style.opacity).not.toBe('0.3');
     expect((copy.querySelector('path') as SVGElement).style.strokeDashoffset).not.toBe('80');
-    expect(copy.querySelector('.eve-token')).toBeNull();
+    expect(copy.querySelector('.eve-flow')).toBeNull();
   });
 
   it("draws a line's label chip as the drawing's own rectangles: as a shadow round HTML, WebKit drew half of it", () => {
