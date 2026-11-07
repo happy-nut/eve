@@ -301,9 +301,10 @@ function settles(code, kind) {
   assert.ok(out.includes('excludes weekends'), out);
   assert.ok(out.includes('구현 : crit, active, a2, after a1, 14d'), out);
   assert.ok(out.includes('리뷰 : 2d'), out);
-  // drawn where mermaid puts them: after a task when it ends, after the one before when that ends
+  // drawn where mermaid puts them: after a task when it ends, after the one before when that ends; weekends skipped, a
+  // task's days are weekdays (two weeks from Thursday the 8th are 14 weekdays, to the 27th)
   const at = [...ganttDates(d).values()].map((x) => x.start);
-  assert.deepEqual(at.slice(0, 4), ['2026-01-05', '2026-01-08', '2026-01-22', '2026-01-22']);
+  assert.deepEqual(at.slice(0, 4), ['2026-01-05', '2026-01-08', '2026-01-28', '2026-01-28']);
   console.log('pasted gantt ok');
 }
 {

@@ -56,13 +56,16 @@
   /** the bar under the picture, over its toolbar, where wherever it went in the picture it covered other parts (they
    *  could not be clicked; folded into a ⋯ instead, the ⋯ covered them, and opened, the bar did) */
   let docked = $state(false), barMax = $state(0);
-  let tallest = 0, wide = 0;
+  let tallest = 0, wide = 0, measured: string | null = null;
   function measure() {
     if (!layer) return;
     clearTimeout(retry);
     const el = sel ? find(sel) : null;
-    // renamed, its new key is drawn a moment later: where it was meanwhile (hidden, the bar lost the box typed in)
-    rect = el ? box(el) : renamed ? rect : null;
+    // renamed, its new key is drawn a moment later; or drawn again as it is typed in (a member's line, a column): where
+    // it was meanwhile. Hidden, the bar lost the box typed in (WebKit lets go of a field it cannot see), and the next
+    // words went into the note
+    rect = el ? box(el) : renamed || (rect && sel === measured) ? rect : null;
+    measured = sel;
     if (el) renamed = false;
     if (sel && !el && tries++ < 40) retry = setTimeout(measure, 50);
     else tries = 0;
@@ -415,7 +418,9 @@
           {#if f.kind === 'select'}
             <Select label={f.label} value={f.value} options={f.options} onchange={(v) => f.set(v)} onpicked={chose} />
           {:else if f.kind === 'lines'}
-            <textarea aria-label={f.label} value={f.value} rows={Math.min(6, Math.max(2, f.value.split('\n').length + 1))} placeholder="One per line" spellcheck="false"
+            <!-- its value written in only while it is not typed in: what the chart keeps of it (a line's end space and an
+                 empty line dropped) written back at each key took the words typed after them -->
+            <textarea aria-label={f.label} {@attach (el: HTMLTextAreaElement) => { const v = f.value; if (document.activeElement !== el) el.value = v; }} rows={Math.min(6, Math.max(2, f.value.split('\n').length + 1))} placeholder="One per line" spellcheck="false"
               oninput={(e) => f.set(e.currentTarget.value)}></textarea>
           {:else}
             <input type={f.kind} aria-label={f.label} value={f.value} size={f.kind === 'number' ? 5 : undefined}

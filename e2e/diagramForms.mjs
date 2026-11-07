@@ -398,6 +398,17 @@ try {
   await page.keyboard.press('Enter');
   await page.waitForTimeout(800);
   assert.match(await md(page), /class Cat\b/, 'a class just added is kept');
+  // its members typed at a person's pace, a line at a time: every word kept (the box was written back as it was typed,
+  // a space at a line's end and a new empty line taken out, and the words after them were lost)
+  {
+    await spot(page, 'class:Cat');
+    await page.locator('.bar textarea[aria-label="Members"]').click();
+    await page.keyboard.type('+String name\n+int lives\n+meow()', { delay: 60 });
+    await page.locator('.tiptap input.field').click();
+    await page.keyboard.press('Enter');
+    const cat = await md(page);
+    has(cat, ['+String name', '+int lives', '+meow()']);
+  }
   await page.close();
   console.log('ok   every kind: a part clicked is typed in where it is drawn; Tab adds the next, Enter is done, Esc puts it back');
 

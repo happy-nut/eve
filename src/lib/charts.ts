@@ -26,7 +26,7 @@ export function chartHtml(code: string, laneMin = 0.64): string | null {
   if (d.kind === 'mindmap') return mindSvg(d, laneMin);
   if (d.kind === 'pie') return pie(d);
   if (d.kind === 'timeline') return timeline(d);
-  if (d.kind === 'gantt') return d.extra?.length || d.skipWeekends ? null : gantt(d);
+  if (d.kind === 'gantt') return d.extra?.length ? null : gantt(d);
   return null;
 }
 
@@ -109,11 +109,12 @@ function gantt(d: Gantt) {
   const rows = d.sections.map((s, si) => {
     const head = `<div class="g-sec" data-spot="phase:${si}">${esc(s.name) || '&#8203;'}</div><div class="g-track g-sec-track">${grid}</div>`;
     const bars = s.tasks.map((t, ti) => {
-      const a = dayNum(dates.get(t)!.start), days = Math.max(1, t.days), key = `task:${si}:${ti}`;
+      // (on the calendar: weekends skipped, three days from a Friday reach the Tuesday)
+      const a = dayNum(dates.get(t)!.start), days = Math.max(1, dates.get(t)!.days), key = `task:${si}:${ti}`;
       // done: quiet grey; under way: striped; critical: red; a milestone: a diamond on its day
       const tags = t.tags ?? [], mile = tags.includes('milestone');
       const cls = `g-bar c${tags.includes('crit') ? 4 : si % 12}${tags.includes('done') ? ' done' : ''}${tags.includes('active') ? ' active' : ''}${mile ? ' mile' : ''}`;
-      const when = mile ? md(a) : `${md(a)} – ${md(a + days - 1)} · ${days}d`;
+      const when = mile ? md(a) : `${md(a)} – ${md(a + days - 1)} · ${Math.max(1, t.days)}d`;
       return `<div class="g-name" data-spot="${key}"><span>${esc(t.name) || '&#8203;'}</span><small>${when}</small></div>`
         + `<div class="g-track">${grid}<div class="${cls}" data-spot="${key}" style="left:${pct(a)};width:${mile ? '0' : ((days / span) * 100).toFixed(3)}%"></div></div>`;
     }).join('');

@@ -625,6 +625,16 @@ function timeRead(lines: string[]): Timeline | null {
 const TAGS = new Set(['done', 'active', 'crit', 'milestone']);
 /** each task's start and length as drawn: a task after others starts when the last of them ends, one after the one
  *  before it when that ends (one after ids that name none, on the chart's first day) */
+const weekend = (day: string) => [0, 6].includes(new Date(`${day}T00:00:00Z`).getUTCDay());
+/** a start moved off a weekend, and how many calendar days `n` weekdays from it take */
+function onWeekdays(start: string, n: number): [string, number] {
+  let at = start;
+  while (weekend(at)) at = addDays(at, 1);
+  let days = 0;
+  for (let left = Math.max(1, n); left > 0; days++) if (!weekend(addDays(at, days))) left--;
+  return [at, days];
+}
+/** each task's first day and how many days it takes on the calendar (a task after another starts where that one ends) */
 export function ganttDates(d: Gantt): Map<Task, { start: string; days: number }> {
   const out = new Map<Task, { start: string; days: number }>();
   const all = d.sections.flatMap((s) => s.tasks);
@@ -638,7 +648,9 @@ export function ganttDates(d: Gantt): Map<Task, { start: string; days: number }>
       const start = t.after === undefined ? t.start
         : t.after === '' ? end(prev) ?? first
         : t.after.split(' ').map((id) => end(byId.get(id))).filter((x): x is string => !!x).sort().pop() ?? first;
-      if (out.get(t)?.start !== start) { out.set(t, { start, days: t.days }); moved = true; }
+      // weekends skipped: it starts on a weekday, and its days are weekdays (the days it takes on the calendar, given)
+      const [at, days] = d.skipWeekends ? onWeekdays(start, t.days) : [start, t.days];
+      if (out.get(t)?.start !== at || out.get(t)?.days !== days) { out.set(t, { start: at, days }); moved = true; }
       prev = t;
     }
     if (!moved) break;

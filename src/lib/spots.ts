@@ -44,6 +44,9 @@ function noteOptions(s: Sequence, st: { note: string; who: string[] }): [string,
   return opts;
 }
 const move = <T>(list: T[], i: number, by: -1 | 1) => { const j = i + by; if (j < 0 || j >= list.length) return false; [list[i], list[j]] = [list[j], list[i]]; return true; };
+/** a new part's word: in Korean when the chart is written in it (an English "Idea" in 한글 was one more to type over) */
+const KO_NEW: Record<string, string> = { Part: '항목', Title: '제목', When: '시기', Section: '구간', Task: '작업', Idea: '아이디어', Event: '할 일', Person: '참여자', Message: '메시지', Note: '메모' };
+const w = (d: Diagram, en: string) => (/[\uac00-\ud7a3]/.test(JSON.stringify(d)) ? KO_NEW[en] : en);
 const title = (d: { title: string }): Spot => ({ text: d.title, label: 'Title', set: (v) => { d.title = v; }, fields: [], acts: [] });
 
 export function spotOf(d: Diagram, key: string): Spot | null {
@@ -64,20 +67,20 @@ export function spotOf(d: Diagram, key: string): Spot | null {
 export function adders(d: Diagram): { label: string; run: () => string | null }[] {
   switch (d.kind) {
     case 'pie': return [
-      { label: '+ Part', run: () => { d.slices.push({ label: 'Part', value: 10 }); return `slice:${d.slices.length - 1}`; } },
-      ...(d.title.trim() ? [] : [{ label: '+ Title', run: () => { d.title = 'Title'; return 'title'; } }]),
+      { label: '+ Part', run: () => { d.slices.push({ label: w(d, 'Part'), value: 10 }); return `slice:${d.slices.length - 1}`; } },
+      ...(d.title.trim() ? [] : [{ label: '+ Title', run: () => { d.title = w(d, 'Title'); return 'title'; } }]),
     ];
     case 'timeline': return [
-      { label: '+ Period', run: () => { d.periods.push({ label: 'When', events: [''] }); return `period:${d.periods.length - 1}`; } },
-      ...(d.title.trim() ? [] : [{ label: '+ Title', run: () => { d.title = 'Title'; return 'title'; } }]),
+      { label: '+ Period', run: () => { d.periods.push({ label: w(d, 'When'), events: [''] }); return `period:${d.periods.length - 1}`; } },
+      ...(d.title.trim() ? [] : [{ label: '+ Title', run: () => { d.title = w(d, 'Title'); return 'title'; } }]),
     ];
     case 'gantt': return [
-      { label: '+ Section', run: () => { d.sections.push({ name: 'Section', tasks: [{ name: 'Task', start: endOf(d), days: 2 }] }); return `phase:${d.sections.length - 1}`; } },
-      ...(d.title.trim() ? [] : [{ label: '+ Title', run: () => { d.title = 'Title'; return 'title'; } }]),
+      { label: '+ Section', run: () => { d.sections.push({ name: w(d, 'Section'), tasks: [{ name: w(d, 'Task'), start: endOf(d), days: 2 }] }); return `phase:${d.sections.length - 1}`; } },
+      ...(d.title.trim() ? [] : [{ label: '+ Title', run: () => { d.title = w(d, 'Title'); return 'title'; } }]),
     ];
-    case 'mindmap': return [{ label: '+ Branch', run: () => { d.items.push({ text: 'Idea', depth: 1 }); return `branch:${d.items.length - 1}`; } }];
+    case 'mindmap': return [{ label: '+ Branch', run: () => { d.items.push({ text: w(d, 'Idea'), depth: 1 }); return `branch:${d.items.length - 1}`; } }];
     case 'sequence': return [
-      { label: '+ Person', run: () => { const id = freshId('p', d.people); d.people.push({ id, name: `Person ${d.people.length + 1}`, actor: false }); return `person:${id}`; } },
+      { label: '+ Person', run: () => { const id = freshId('p', d.people); d.people.push({ id, name: `${w(d, 'Person')} ${d.people.length + 1}`, actor: false }); return `person:${id}`; } },
       ...(d.people.length ? [{ label: '+ Message', run: () => addMessage(d, d.messages.length) }] : []),
     ];
     case 'class': return [{ label: '+ Class', run: () => { const id = freshId('Class', d.classes); d.classes.push({ id, name: id, members: [] }); return `class:${id}`; } }];
@@ -107,7 +110,7 @@ function pieSpot(d: Pie, key: string): Spot | null {
     text: s.label, label: 'Part name', set: (v) => { s.label = v; },
     fields: [{ kind: 'number', label: 'Value', value: String(s.value), set: (v) => { s.value = pieValue(+v); } }],
     acts: [
-      { label: 'Add a part after it', icon: 'plus', tab: true, run: () => { d.slices.splice(i + 1, 0, { label: 'Part', value: 10 }); return `slice:${i + 1}`; } },
+      { label: 'Add a part after it', icon: 'plus', tab: true, run: () => { d.slices.splice(i + 1, 0, { label: w(d, 'Part'), value: 10 }); return `slice:${i + 1}`; } },
       { label: 'Move up', icon: 'up', off: i === 0, run: () => (move(d.slices, i, -1) ? `slice:${i - 1}` : null) },
       { label: 'Move down', icon: 'down', off: i === d.slices.length - 1, run: () => (move(d.slices, i, 1) ? `slice:${i + 1}` : null) },
       { label: 'Delete', icon: 'trash', run: () => { d.slices.splice(i, 1); } },
@@ -122,8 +125,8 @@ function timeSpot(d: Timeline, key: string): Spot | null {
   if (!p) return null;
   const addEvent = (j: number) => {
     // a period's lone empty event is where the first one goes ("—" in the drawing)
-    if (p.events.every((e) => !e.trim())) { p.events = ['Event']; return `event:${i}:0`; }
-    p.events.splice(j, 0, 'Event');
+    if (p.events.every((e) => !e.trim())) { p.events = [w(d, 'Event')]; return `event:${i}:0`; }
+    p.events.splice(j, 0, w(d, 'Event'));
     return `event:${i}:${j}`;
   };
   if (k === 'period') return {
@@ -131,8 +134,8 @@ function timeSpot(d: Timeline, key: string): Spot | null {
     fields: [],
     acts: [
       { label: 'Add an event', icon: 'child', tab: true, run: () => addEvent(p.events.length) },
-      { label: 'Add a period after it', icon: 'plus', run: () => { d.periods.splice(i + 1, 0, { label: 'When', events: [''] }); return `period:${i + 1}`; } },
-      { label: 'Start a section here', icon: 'section', off: p.section !== undefined, run: () => { p.section = 'Section'; return `section:${i}`; } },
+      { label: 'Add a period after it', icon: 'plus', run: () => { d.periods.splice(i + 1, 0, { label: w(d, 'When'), events: [''] }); return `period:${i + 1}`; } },
+      { label: 'Start a section here', icon: 'section', off: p.section !== undefined, run: () => { p.section = w(d, 'Section'); return `section:${i}`; } },
       { label: 'Move up', icon: 'up', off: i === 0, run: () => { movePeriod(d, i, -1); return `period:${i - 1}`; } },
       { label: 'Move down', icon: 'down', off: i === d.periods.length - 1, run: () => { movePeriod(d, i, 1); return `period:${i + 1}`; } },
       { label: 'Delete', icon: 'trash', run: () => {
@@ -174,10 +177,10 @@ function ganttSpot(d: Gantt, key: string): Spot | null {
     acts: [
       // a section just added comes with a task named only "Task": typed into, not left behind another
       { label: 'Add a task', icon: 'child', tab: true, run: () => {
-        if (s.tasks.length === 1 && s.tasks[0].name === 'Task') return `task:${si}:0`;
-        s.tasks.push({ name: 'Task', start: endOf(d), days: 2 }); return `task:${si}:${s.tasks.length - 1}`;
+        if (s.tasks.length === 1 && s.tasks[0].name === w(d, 'Task')) return `task:${si}:0`;
+        s.tasks.push({ name: w(d, 'Task'), start: endOf(d), days: 2 }); return `task:${si}:${s.tasks.length - 1}`;
       } },
-      { label: 'Add a section after it', icon: 'plus', run: () => { d.sections.splice(si + 1, 0, { name: 'Section', tasks: [{ name: 'Task', start: endOf(d), days: 2 }] }); return `phase:${si + 1}`; } },
+      { label: 'Add a section after it', icon: 'plus', run: () => { d.sections.splice(si + 1, 0, { name: w(d, 'Section'), tasks: [{ name: w(d, 'Task'), start: endOf(d), days: 2 }] }); return `phase:${si + 1}`; } },
       { label: 'Move up', icon: 'up', off: si === 0, run: () => (move(d.sections, si, -1) ? `phase:${si - 1}` : null) },
       { label: 'Move down', icon: 'down', off: si === d.sections.length - 1, run: () => (move(d.sections, si, 1) ? `phase:${si + 1}` : null) },
       { label: 'Delete the section and its tasks', icon: 'trash', run: () => { d.sections.splice(si, 1); } },
@@ -197,7 +200,7 @@ function ganttSpot(d: Gantt, key: string): Spot | null {
       // the next one starts when this one ends
       // and what started after it starts after the new one, not at the same time
       { label: 'Add a task after it', icon: 'plus', tab: true, run: () => {
-        const all = d.sections.flatMap((y) => y.tasks), next: Task = { name: 'Task', start: '', after: '', days: 2 };
+        const all = d.sections.flatMap((y) => y.tasks), next: Task = { name: w(d, 'Task'), start: '', after: '', days: 2 };
         if (t.id) {
           const waiting = all.filter((x) => x.after?.split(' ').includes(t.id!));
           if (waiting.length) {
@@ -232,7 +235,7 @@ function mindSpot(m: Mindmap, key: string): Spot | null {
   if (key === 'root') return {
     text: m.root, label: 'Centre', set: (v) => { m.root = v; },
     fields: [shape(m.rootShape ?? 'circle', (v) => { if (v === 'circle') delete m.rootShape; else m.rootShape = v; }, ROOT_SHAPES)],
-    acts: [{ label: 'Add a branch', icon: 'child', tab: true, run: () => { m.items.push({ text: 'Idea', depth: 1 }); return `branch:${m.items.length - 1}`; } }],
+    acts: [{ label: 'Add a branch', icon: 'child', tab: true, run: () => { m.items.push({ text: w(m, 'Idea'), depth: 1 }); return `branch:${m.items.length - 1}`; } }],
   };
   const [k, n] = at(key), i = +n, b = m.items[i];
   if (k !== 'branch' || !b) return null;
@@ -252,8 +255,8 @@ function mindSpot(m: Mindmap, key: string): Spot | null {
     text: b.text, label: 'Idea', set: (v) => { b.text = v; },
     fields: [shape(b.shape ?? 'plain', (v) => { if (v === 'plain') delete b.shape; else b.shape = v; }, MIND_SHAPES)],
     acts: [
-      { label: 'Add an idea under it', icon: 'child', tab: true, run: () => { const e = subtreeEnd(m, i); m.items.splice(e, 0, { text: 'Idea', depth: b.depth + 1 }); return `branch:${e}`; } },
-      { label: 'Add an idea beside it', icon: 'plus', run: () => { const e = subtreeEnd(m, i); m.items.splice(e, 0, { text: 'Idea', depth: b.depth }); return `branch:${e}`; } },
+      { label: 'Add an idea under it', icon: 'child', tab: true, run: () => { const e = subtreeEnd(m, i); m.items.splice(e, 0, { text: w(m, 'Idea'), depth: b.depth + 1 }); return `branch:${e}`; } },
+      { label: 'Add an idea beside it', icon: 'plus', run: () => { const e = subtreeEnd(m, i); m.items.splice(e, 0, { text: w(m, 'Idea'), depth: b.depth }); return `branch:${e}`; } },
       { label: 'Move up', icon: 'up', off: sibling(-1) < 0, run: () => { const j = sibling(-1); return j < 0 ? null : `branch:${swap(j)}`; } },
       { label: 'Move down', icon: 'down', off: sibling(1) < 0, run: () => { const j = sibling(1); return j < 0 ? null : `branch:${swap(j)}`; } },
       { label: 'Delete it and the ideas under it', icon: 'trash', run: () => { m.items.splice(i, subtreeEnd(m, i) - i); } },
@@ -268,7 +271,7 @@ function addMessage(s: Sequence, at: number, from?: string): string | null {
   const pi = from ? s.people.findIndex((p) => p.id === from) : -1;
   const [a, b] = from ? [from, s.people[(pi + 1) % s.people.length]?.id ?? from] : before ? [before.to, before.from] : [s.people[0]?.id, s.people[1]?.id ?? s.people[0]?.id];
   if (!a || !b) return null;
-  s.messages.splice(at, 0, { from: a, to: b, text: 'Message', reply: !from && !!before && !before.reply });
+  s.messages.splice(at, 0, { from: a, to: b, text: w(s, 'Message'), reply: !from && !!before && !before.reply });
   return `step:${at}`;
 }
 function seqSpot(s: Sequence, key: string): Spot | null {
@@ -281,7 +284,7 @@ function seqSpot(s: Sequence, key: string): Spot | null {
       fields: [{ kind: 'select', label: 'Drawn as', value: p.actor ? 'actor' : 'box', options: [['box', 'System'], ['actor', 'Person']], set: (v) => { p.actor = v === 'actor'; } }],
       acts: [
         { label: 'Add a message from them', icon: 'child', run: () => addMessage(s, s.messages.length, p.id) },
-        { label: 'Add a participant after them', icon: 'plus', tab: true, run: () => { const id = freshId('p', s.people); s.people.splice(i + 1, 0, { id, name: `Person ${s.people.length + 1}`, actor: false }); return `person:${id}`; } },
+        { label: 'Add a participant after them', icon: 'plus', tab: true, run: () => { const id = freshId('p', s.people); s.people.splice(i + 1, 0, { id, name: `${w(s, 'Person')} ${s.people.length + 1}`, actor: false }); return `person:${id}`; } },
         { label: 'Move left', icon: 'left', off: i === 0, run: () => { move(s.people, i, -1); return key; } },
         { label: 'Move right', icon: 'right', off: i === s.people.length - 1, run: () => { move(s.people, i, 1); return key; } },
         { label: 'Delete them and their messages', icon: 'trash', run: () => {
@@ -315,7 +318,7 @@ function seqSpot(s: Sequence, key: string): Spot | null {
     ],
     acts: [
       { label: 'Add a message after it', icon: 'plus', tab: true, run: () => addMessage(s, i + 1) },
-      { label: 'Add a note after it', icon: 'note', run: () => { s.messages.splice(i + 1, 0, { note: 'over', who: st.from === st.to ? [st.from] : [st.from, st.to], text: 'Note' }); return `step:${i + 1}`; } },
+      { label: 'Add a note after it', icon: 'note', run: () => { s.messages.splice(i + 1, 0, { note: 'over', who: st.from === st.to ? [st.from] : [st.from, st.to], text: w(s, 'Note') }); return `step:${i + 1}`; } },
       ...moves, del,
     ],
   };

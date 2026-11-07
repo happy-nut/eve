@@ -173,13 +173,18 @@
   });
 
   // ---- what the chart becomes ----
-  function addAfter(from: string | null, inLane?: string) {
+  /** `into`: Tab while writing steps one after another — a step with one way out gets the new one put into that line
+   *  (it went off to one side, and the line it was meant to continue ran on past it); + and a step with more ways out
+   *  start a new way */
+  function addAfter(from: string | null, inLane?: string, into = false) {
     const id = freshId('n', flow.nodes);
     // in the lane of the step it follows, or the lane asked for (picked, or double-clicked in), or the first
     const lanes = flow.lanes ?? [];
     const lane = lanes.length ? (flow.nodes.find((n) => n.id === from)?.lane ?? inLane ?? (sel && 'lane' in sel ? sel.lane : lanes[0].id)) : undefined;
     flow.nodes.push(lane ? { id, label: newStep(), shape: 'round', lane } : { id, label: newStep(), shape: 'round' });
-    if (from) flow.edges.push({ from, to: id, label: '', line: 'solid' });
+    const out = from ? flow.edges.filter((e) => e.from === from && e.to !== from) : [];
+    if (into && out.length === 1) { const next = out[0].to; out[0].to = id; flow.edges.push({ from: id, to: next, label: '', line: 'solid' }); }
+    else if (from) flow.edges.push({ from, to: id, label: '', line: 'solid' });
     sel = { node: id };
     // typed in at once: until the new box is drawn its text box sits by the one it grew from, so no key is lost
     const b = boxOf(from);
@@ -681,7 +686,7 @@
     else if ('lane' in sel) { if (e.key === 'Enter') { e.preventDefault(); startLaneEdit(sel.lane); } }
     else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); e.stopPropagation(); if ('node' in sel) dropNode(sel.node); else dropEdge(sel.edge); }
     else if ('node' in sel && e.key === 'Enter' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); startEdit(sel.node); }
-    else if ('node' in sel && e.key === 'Tab') { e.preventDefault(); addAfter(sel.node); }
+    else if ('node' in sel && e.key === 'Tab') { e.preventDefault(); addAfter(sel.node, undefined, true); }
     else if ('node' in sel && e.key.startsWith('Arrow') && !e.metaKey && !e.ctrlKey && !e.altKey) {
       // the arrows go from box to box: the nearest one that way
       e.preventDefault();
@@ -897,7 +902,7 @@
     {@const b = boxOf(at) ?? { id: at, x: pendingAt.x - 70, y: pendingAt.y - 16, w: 140, h: 32 }}
     <input class={editing ? 'rename' : 'armed'} bind:value={editText} aria-label="Step name" oninput={() => { if (!editing) editing = at; typed(); }}
       style:left={`${clampX(b.x + b.w / 2, Math.min(Math.max(b.w, 140), (layer?.clientWidth ?? 600) - 8))}px`} style:top={`${b.y + b.h / 2 - 16}px`} style:width={`${Math.min(Math.max(b.w, 140), (layer?.clientWidth ?? 600) - 8)}px`}
-      onkeydown={(e) => { if (composing(e) || !editing) return; if (e.key === 'Enter') { e.preventDefault(); commitEdit(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelEdit(); } else if (e.key === 'Tab') { e.preventDefault(); const from = editing; commitEdit(); if (from) addAfter(from); } }}
+      onkeydown={(e) => { if (composing(e) || !editing) return; if (e.key === 'Enter') { e.preventDefault(); commitEdit(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelEdit(); } else if (e.key === 'Tab') { e.preventDefault(); const from = editing; commitEdit(); if (from) addAfter(from, undefined, true); } }}
       onblur={() => { if (editing) commitEdit(); }} />
   {/if}
 

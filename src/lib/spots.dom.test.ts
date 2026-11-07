@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fromCode, linkOrder, toCode, type Gantt, type Sequence } from './diagram';
-import { spotOf, tagSpots } from './spots';
+import { adders, spotOf, tagSpots } from './spots';
 import { insideOptions, startOptions } from './diagramOps';
 import type { StateDiagram } from './diagram';
 
@@ -125,5 +125,30 @@ describe('chart parts', () => {
     expect([...root.querySelectorAll('g.edgeLabel')].map((g) => g.getAttribute('data-spot'))).toEqual(order.map((i) => `slink:${i}`));
     tagSpots(s, root); // drawn once, marked once
     expect(root.querySelectorAll('path.spot-hit').length).toBe(order.length);
+  });
+});
+
+// a new part of a chart written in Korean is named in Korean, as a new flowchart step is ("새 단계"): an "Idea" or a
+// "Task" in the middle of 한글 was one more word to type over
+describe('a new part in a Korean chart', () => {
+  it('is named in Korean, by the chart’s +, the bar’s + and Tab', () => {
+    const m = fromCode('mindmap\n  root((출시))\n    마케팅') as import('./diagram').Mindmap;
+    adders(m)[0].run();
+    expect(m.items.at(-1)!.text).toBe('아이디어');
+    spotOf(m, 'branch:0')!.acts.find((a) => a.label === 'Add an idea under it')!.run();
+    expect(m.items.some((b) => b.text === 'Idea')).toBe(false);
+    const g = gantt('  section 기획\n  조사 : 2026-01-05, 3d');
+    act(g, 'task:0:0', 'Add a task after it');
+    expect(g.sections[0].tasks[1].name).toBe('작업');
+    const s = fromCode('sequenceDiagram\n  participant 앱\n  participant 서버\n  앱->>서버: 요청') as Sequence;
+    adders(s)[0].run();
+    expect(s.people.at(-1)!.name).toBe('참여자 3');
+    spotOf(s, 'step:0')!.acts.find((a) => a.tab)!.run();
+    expect(s.messages[1]).toMatchObject({ text: '메시지' });
+  });
+  it('an English one keeps English words', () => {
+    const m = fromCode('mindmap\n  root((Launch))\n    Ads') as import('./diagram').Mindmap;
+    adders(m)[0].run();
+    expect(m.items.at(-1)!.text).toBe('Idea');
   });
 });

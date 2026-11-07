@@ -278,6 +278,37 @@ try {
   }
   console.log('ok   flowchart: boxes picked by dragging across them, deleted together, one ⌘Z');
 
+  // ---- Tab while naming a step in the middle of a line: the next step goes into that line, not off to one side ----
+  page = await open('# Mid\n\n```mermaid\nflowchart TD\n  a("Pick") -->|"yes"| b("Ship")\n  b --> c("Done")\n  b --> d("Bill")\n```\n');
+  await page.waitForSelector('.tiptap .mermaid-view svg');
+  await page.locator('.tiptap .mermaid-view').click({ position: { x: 4, y: 4 } });
+  await page.waitForSelector('.tiptap .dblock.active');
+  {
+    let at = await boxAt(page, 'Pick');
+    await page.mouse.click(at.x, at.y);
+    await page.keyboard.type('Pick');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('Check');
+    await page.keyboard.press('Enter');
+    await settle(page);
+    const code = await md(page);
+    assert.match(code, /a -->\|"yes"\| (n\d+)\n[\s\S]*\1 --> b/, `Pick → Check → Ship, the line's label kept on its first part:\n${code}`);
+    assert.doesNotMatch(code, /a -->\|"yes"\| b|a --> b/, 'no line left from Pick straight to Ship');
+    // a step with two ways out (Ship): Tab adds a third way, as + does — which line it would go into is not plain
+    at = await boxAt(page, 'Ship');
+    await page.mouse.click(at.x, at.y);
+    await page.keyboard.type('Ship');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('Track');
+    await page.keyboard.press('Enter');
+    await settle(page);
+    const two = await md(page);
+    assert.match(two, /b --> c/);
+    assert.match(two, /b --> d/);
+    assert.match(two, /b --> n\d+/);
+  }
+  console.log('ok   flowchart: Tab in the middle of a line puts the next step into it');
+
   // ---- fewer steps: a box picked and typed over at once; a line's Tab tries its next look, a key types its label;
   // ---- boxes picked together moved to a lane; a lane picked and typed over ----
   page = await open('# Fast\n\n```mermaid\nflowchart LR\n  subgraph A["Front"]\n    direction LR\n    n1("One")\n    n2("Two")\n  end\n  subgraph B["Back"]\n    direction LR\n    n3("Three")\n  end\n  n1 --> n2\n  n2 --> n3\n```\n\nText after.\n');
