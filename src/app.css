@@ -671,9 +671,11 @@ html.mobile .tiptap .mermaid-view .spot-hit { stroke-width: 22px; }
 .tiptap .dblock.active .mermaid-view .spot-hit { pointer-events: stroke; cursor: text; }
 @media (hover: hover) {
   .tiptap .dblock.active .mermaid-view path[data-spot]:has(+ .spot-hit:hover) { stroke: var(--accent-text) !important; stroke-width: 2.5px !important; }
-  /* (not one placed by its own transform, a mermaid box: scaled, it slid off where it was drawn; those keep the ring) */
-  .tiptap .dblock.active .mermaid-view [data-spot]:not(path):not([transform]) { transition: scale 0.12s; transform-box: fill-box; transform-origin: center; }
-  .tiptap .dblock.active .mermaid-view [data-spot]:not(path):not([transform]):hover { scale: 1.06; }
+  /* (not one placed by its own transform, a mermaid box: scaled, it slid off where it was drawn; those keep the ring;
+     nor a line of words, a sequence's message: scaled in WebKit, the click on it landed on the drawing behind and picked
+     nothing, the words typed next going into the note) */
+  .tiptap .dblock.active .mermaid-view [data-spot]:not(path):not(text):not([transform]) { transition: scale 0.12s; transform-box: fill-box; transform-origin: center; }
+  .tiptap .dblock.active .mermaid-view [data-spot]:not(path):not(text):not([transform]):hover { scale: 1.06; }
 }
 @media (hover: hover) { .tiptap .mermaid-view:hover { box-shadow: inset 0 0 0 1.5px var(--accent-soft); } }
 .tiptap :is(.mermaid-expand, .mermaid-play) { display: none; }

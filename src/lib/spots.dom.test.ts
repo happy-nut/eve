@@ -152,3 +152,24 @@ describe('a new part in a Korean chart', () => {
     expect(m.items.at(-1)!.text).toBe('Idea');
   });
 });
+
+// a new message is taken for the answer to the one before it (dashed); pointed elsewhere with From or To, it is a
+// message of its own, drawn solid — every one sent on had to be turned back from "Replies" by hand
+describe('a new message pointed elsewhere', () => {
+  const field = (s: Sequence, i: number, label: string) => spotOf(s, `step:${i}`)!.fields.find((f) => f.label === label)!;
+  it('is sent, not a reply, unless it goes back the way the one before it came', () => {
+    const s = fromCode('sequenceDiagram\n  participant A\n  participant B\n  participant C\n  A->>B: ask') as Sequence;
+    spotOf(s, 'step:0')!.acts.find((a) => a.tab)!.run();
+    expect(s.messages[1]).toMatchObject({ from: 'B', to: 'A', reply: true });
+    field(s, 1, 'To').set('C');
+    expect(s.messages[1]).toMatchObject({ from: 'B', to: 'C', reply: false });
+    field(s, 1, 'To').set('A');
+    expect(s.messages[1]).toMatchObject({ reply: true });
+  });
+  it('one whose arrow was chosen keeps it', () => {
+    const s = fromCode('sequenceDiagram\n  participant A\n  participant B\n  participant C\n  A->>B: ask\n  B-->>A: told') as Sequence;
+    field(s, 1, 'How').set('-->>');
+    field(s, 1, 'To').set('C');
+    expect(s.messages[1]).toMatchObject({ to: 'C', reply: true });
+  });
+});

@@ -117,6 +117,13 @@
     }, untrack(() => svg) ? 120 : 0); // read without depending on it: each drawing is a new string, and would draw again
   });
   let centred = false;
+  function centreRoot() {
+    const r = canvas?.querySelector('[data-spot="root"]');
+    if (!canvas || !r) return;
+    centred = true;
+    const a = r.getBoundingClientRect(), c = canvas.getBoundingClientRect();
+    canvas.scrollLeft += a.left + a.width / 2 - c.left - canvas.clientWidth / 2;
+  }
   /** the drawing's block labels matched to their blocks, to fold by a click on them; false: a row of them under it */
   let labelled = $state(true);
   $effect(() => {
@@ -131,12 +138,17 @@
       if (d && canvas) tagSpots(d, canvas); // its parts marked, to be clicked and typed in (spots.ts)
       // a mind map wider than the card shown from its middle, its root, the first time (from its left edge, the root
       // was cut off on a phone)
-      if (d?.kind === 'mindmap' && canvas && !centred && canvas.scrollWidth > canvas.clientWidth) {
-        const r = canvas.querySelector('[data-spot="root"]');
-        if (r) { centred = true; canvas.scrollLeft += r.getBoundingClientRect().left + r.getBoundingClientRect().width / 2 - canvas.getBoundingClientRect().left - canvas.clientWidth / 2; }
-      }
+      if (d?.kind === 'mindmap' && canvas && !centred && canvas.scrollWidth > canvas.clientWidth) centreRoot();
       labelled = !list.some(foldable) || (!!el && markFolds(el, list, f));
     });
+  });
+  // done with it: a drawing wider than its card, scrolled across as it was edited, shown again from where it starts (it
+  // stayed on its far side, the card an empty stretch with the edges of two tables); a mind map from its root
+  let wasActive = false;
+  $effect(() => {
+    const now = active;
+    if (wasActive && !now && canvas && canvas.scrollWidth > canvas.clientWidth) { canvas.scrollLeft = 0; if (d?.kind === 'mindmap') centreRoot(); }
+    wasActive = now;
   });
   // drawn in once, the first time it is seen in the note: not again as it is edited, folded or drawn in the other theme
   let introduced = false;

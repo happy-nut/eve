@@ -271,7 +271,7 @@ function addMessage(s: Sequence, at: number, from?: string): string | null {
   const pi = from ? s.people.findIndex((p) => p.id === from) : -1;
   const [a, b] = from ? [from, s.people[(pi + 1) % s.people.length]?.id ?? from] : before ? [before.to, before.from] : [s.people[0]?.id, s.people[1]?.id ?? s.people[0]?.id];
   if (!a || !b) return null;
-  s.messages.splice(at, 0, { from: a, to: b, text: w(s, 'Message'), reply: !from && !!before && !before.reply });
+  s.messages.splice(at, 0, { from: a, to: b, text: w(s, 'Message'), reply: !from && !!before && !before.reply, guessed: true });
   return `step:${at}`;
 }
 function seqSpot(s: Sequence, key: string): Spot | null {
@@ -309,12 +309,18 @@ function seqSpot(s: Sequence, key: string): Spot | null {
   }));
   const del: Act = { label: 'Delete', icon: 'trash', run: () => { dropStep(s, i); } };
   const people = s.people.map((p) => [p.id, p.name.trim() || '(no name)'] as const);
+  // a message just added replies only when it goes back the way the one before it came
+  const guess = () => {
+    if (!isMessage(st) || !st.guessed || st.arrow) return;
+    const prev = s.messages.slice(0, i).filter(isMessage).pop();
+    st.reply = !!prev && !prev.reply && st.from === prev.to && st.to === prev.from;
+  };
   if (isMessage(st)) return {
     text: st.text, label: 'Message', set: (v) => { st.text = v; },
     fields: [
-      { kind: 'select', label: 'From', value: st.from, options: people, set: (v) => { st.from = v; } },
-      { kind: 'select', label: 'How', value: arrowOf(st), options: seqArrows(st), set: (v) => setArrow(st, v) },
-      { kind: 'select', label: 'To', value: st.to, options: people, set: (v) => { st.to = v; } },
+      { kind: 'select', label: 'From', value: st.from, options: people, set: (v) => { st.from = v; guess(); } },
+      { kind: 'select', label: 'How', value: arrowOf(st), options: seqArrows(st), set: (v) => { delete st.guessed; setArrow(st, v); } },
+      { kind: 'select', label: 'To', value: st.to, options: people, set: (v) => { st.to = v; guess(); } },
     ],
     acts: [
       { label: 'Add a message after it', icon: 'plus', tab: true, run: () => addMessage(s, i + 1) },

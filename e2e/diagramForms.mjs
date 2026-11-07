@@ -572,6 +572,22 @@ try {
   const made = await md(page);
   has(made, ['classDiagram', 'stateDiagram-v2', 'erDiagram']);
   console.log('ok   the / menu makes a class, a state and a table diagram, drawn and open to edit');
+
+  // ---- a drawing wider than its card, scrolled across while it was edited: Done shows it from where it starts ----
+  // (it stayed scrolled to its far side, the card showing an empty stretch with the edges of two tables)
+  page = await open('erDiagram\n' + ['A', 'B', 'C', 'D', 'E', 'F'].map((t) => `  ${t}TABLE {\n    int id PK\n    string a_long_column_name\n  }`).join('\n')
+    + '\n  ATABLE ||--o{ BTABLE : x\n  ATABLE ||--o{ CTABLE : x\n  ATABLE ||--o{ DTABLE : x\n  ATABLE ||--o{ ETABLE : x\n  ATABLE ||--o{ FTABLE : x', false);
+  await page.setViewportSize({ width: 700, height: 900 });
+  await page.waitForTimeout(500);
+  {
+    const wide = await page.evaluate(() => { const c = document.querySelector('.tiptap .mermaid-view'); c.scrollLeft = c.scrollWidth; return c.scrollWidth > c.clientWidth && c.scrollLeft > 0; });
+    assert.ok(wide, 'wider than its card, scrolled to its far side');
+    await page.locator('.tiptap .dblock.active .tools button', { hasText: 'Done' }).click();
+    await page.waitForTimeout(500);
+    assert.equal(await page.evaluate(() => document.querySelector('.tiptap .mermaid-view').scrollLeft), 0, 'Done: from its start');
+  }
+  await page.close();
+  console.log('ok   a wide drawing scrolled across as it was edited is shown from its start once done');
   assert.deepEqual(errors, [], 'no errors in the page');
 } finally {
   await browser.close();

@@ -37,6 +37,9 @@ export const across = (d: Pick<Flowchart, 'dir'>) => d.dir === 'LR' || d.dir ===
 export interface Person { id: string; name: string; actor: boolean }
 export interface Message {
   from: string; to: string; text: string; reply: boolean;
+  /** just added: whether it replies is a guess (the answer to the one before), made again as From and To are chosen;
+   *  not written in the code */
+  guessed?: true;
   /** the arrow as written when it is not one the forms make (->, -x, -), <<->>): kept while it sends or replies as it did */
   arrow?: string;
   /** `+`: the receiver's activation bar starts; `-`: the sender's ends */
