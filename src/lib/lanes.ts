@@ -181,9 +181,19 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
     // room before a step for the loops on it (they stand out on that side), and between two side by side for a
     // labelled line between them
     const loopRoom = (b: Box) => (loopsOn.get(b) ?? 0);
+    // the steps a step leads to first, each where it would stand beside the others under it, whichever column it lands
+    // in: one pushed further down by a line drawn in later keeps its side, and the others stay where they were (they
+    // went to the middle under it, and the chart's main way went round them)
+    const side = new Map<Box, number>();
+    for (const p of order) {
+      const kids = order.filter((b) => first.get(b) === p);
+      const off = kids.map((_, k) => kids.slice(0, k + 1).reduce((s, b, j) => s + (j ? cross(kids[j - 1]) / 2 + SLOT_GAP + cross(b) / 2 : 0), 0));
+      const mid = off.reduce((s, x) => s + x, 0) / (off.length || 1);
+      kids.forEach((b, k) => side.set(b, off[k] - mid));
+    }
     for (let r = 0; r < ranks; r++) {
       const col = order.filter((b) => b.rank === r);
-      const want = (b: Box) => first.get(b)?.c ?? 0;
+      const want = (b: Box) => (first.get(b)?.c ?? 0) + (side.get(b) ?? 0);
       col.sort((p, q) => want(p) - want(q) || order.indexOf(p) - order.indexOf(q));
       // where each would stand packed from 0, then as near its place as the ones before and after it let it: the
       // packed run cut where it may move apart, each part centred on the places its steps want (pool adjacent violators)

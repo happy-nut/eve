@@ -66,6 +66,12 @@ try {
     assert.equal(await page.locator('.layer .plus').count(), 1, 'one + while another box is pointed at');
     const p = await page.locator('.layer .plus').boundingBox();
     assert.ok(Math.abs(p.y + p.height / 2 - other.y) < 40, 'and it is the box pointed at');
+    // on the way from the box to its +, over the gap between them, the + stays (it went to the picked box, and the
+    // click meant for it picked the line under it)
+    await page.mouse.move(p.x + p.width / 2, p.y - 2);
+    await page.waitForTimeout(150);
+    const q = await page.locator('.layer .plus').boundingBox();
+    assert.ok(q && Math.abs(q.y - p.y) < 2 && Math.abs(q.x - p.x) < 2, 'the + stays while the pointer goes over to it');
   }
   at = await boxAt(page, 'Write');
   await page.mouse.move(at.x, at.y);

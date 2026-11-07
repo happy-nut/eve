@@ -460,7 +460,12 @@
   function onHostMove(e: PointerEvent) {
     if (e.pointerType !== 'mouse') return; // a finger has no hover: it left a + on a box nothing was picked on
     const g = (e.target as Element).closest?.('g.node');
-    hover = g ? nodeIdOf(g) : null;
+    if (g) { hover = nodeIdOf(g); return; }
+    // just off the box, on the way to its + (which sits a few points out): still that box's, or its + went over to the
+    // picked box and the click meant for it picked the line under it
+    const b = boxOf(hover), o = layer?.getBoundingClientRect();
+    const x = e.clientX - (o?.left ?? 0), y = e.clientY - (o?.top ?? 0), pad = 30;
+    if (!b || x < b.x - pad || x > b.x + b.w + pad || y < b.y - pad || y > b.y + b.h + pad) hover = null;
   }
   /** a box dragged onto another box joins the two, as its + does (the + alone was a small target to find); in
    *  swimlanes, let go on a lane's empty space instead, it goes into that lane (a mouse: any box; a finger: the box

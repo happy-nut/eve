@@ -162,10 +162,11 @@ describe('a flowchart without lanes is drawn whole, and a line drawn in moves on
     const before = at(d);
     const line = (from: string, to: string) => ({ ...d, edges: [...d.edges, { from, to, label: '', line: 'solid' as const }] });
     expect(moved(before, at(line('E', 'C')))).toEqual(['C', 'F']);
-    // (B gone from beside D, D and what follows it stand under A, as a step alone under one does)
-    expect(moved(before, at(line('E', 'B')))).toEqual(['A', 'D', 'E']);
+    // B pushed down below E keeps its side: D and E stay beside where it was, not taken into the middle under A
+    // (they were, and the line from A to B went round them, the chart's main way now off to one side)
+    expect(moved(before, at(line('E', 'B')))).toEqual(['B', 'C', 'F']);
     const pushed = at(line('E', 'B'));
-    expect(pushed.A.split(',')[0]).toBe(pushed.D.split(',')[0]);
+    expect(pushed.B.split(',')[0]).toBe(before.B.split(',')[0]);
     expect(moved(before, at(line('F', 'A')))).toEqual([]);
     expect(moved(before, at(line('B', 'E')))).toEqual([]);
   });
