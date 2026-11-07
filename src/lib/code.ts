@@ -17,7 +17,7 @@ import { fenceFor } from './markdown';
  * then every waiting editor repaints once.
  */
 type Hast = { type: string; value?: string; properties?: { className?: string[] }; children?: Hast[] };
-type Lowlight = { highlight(lang: string, code: string): Hast; registered(lang: string): boolean };
+type Lowlight = { highlight(lang: string, code: string): Hast & { data?: { relevance?: number } }; registered(lang: string): boolean };
 let lowlight: Lowlight | null = null;
 let loading: Promise<void> | null = null;
 const waiting = new Set<Editor>();
@@ -26,7 +26,10 @@ const HIGHLIGHT = new PluginKey<DecorationSet>('highlight');
 function withGrammars(editor: Editor) {
   if (lowlight) return;
   waiting.add(editor);
-  loading ??= import('./grammars').then((m) => {
+  grammars();
+}
+function grammars() {
+  return loading ??= import('./grammars').then((m) => {
     lowlight = m.lowlight;
     for (const e of waiting) if (!e.isDestroyed) e.view.dispatch(e.state.tr.setMeta(HIGHLIGHT, true));
     waiting.clear();
@@ -107,6 +110,85 @@ const highlighter = new Plugin<DecorationSet>({
     },
   },
 });
+
+/** commands a line of a shell session starts with (after `$ ` or `sudo `) */
+const COMMAND = /^(?:\.{0,2}\/[\w./-]+|git|gh|npm|npx|yarn|pnpm|bun|deno|node|cd|ls|curl|wget|docker|docker-compose|kubectl|helm|brew|apt|apt-get|yum|pip|pip3|python|python3|java|javac|gradle|mvn|make|cargo|rustup|go|export|echo|mkdir|rm|cp|mv|cat|touch|chmod|chown|ln|ssh|scp|grep|tail|head|tar|unzip|source|which|open|aws|gcloud|terraform|psql|mysql|redis-cli|xcodebuild|xcrun|sed|awk|find|kill|ps|env|sh|bash|zsh)$/;
+/** a picture drawn in text: box lines, arrows, shapes */
+const DRAWING = /[←-⇿─-╿■-◿]/;
+/** languages read alike, the one not taken no rival to the one that is */
+const KIN = [['javascript', 'typescript'], ['c', 'cpp'], ['css', 'scss']];
+/**
+ * The language of code pasted with none named, where it is plain which: JSON and HTML as they are, a shell session by
+ * its commands, else the grammar that alone fits it well (highlight.js's own guess was often wrong: shell read as
+ * Ruby, Java as C#, a drawing in text as SCSS). null: none, the block is left Plain text.
+ */
+export function guessLanguage(code: string, ll: Lowlight | null): string | null {
+  const text = code.trim();
+  if (!text || DRAWING.test(text)) return null;
+  if (/^[[{]/.test(text)) { try { JSON.parse(text); return 'json'; } catch { /* not JSON */ } }
+  if (/^<[a-z!?]/i.test(text) && /<\/?[a-z][^>]*>$/i.test(text)) return 'xml';
+  const lines = text.split('\n'), commands: string[] = [];
+  lines.forEach((line, i) => {
+    const l = line.trim();
+    if (l && !l.startsWith('#') && !lines[i - 1]?.trimEnd().endsWith('\\')) commands.push(l.replace(/^\$\s+/, '').replace(/^sudo\s+/, ''));
+  });
+  if (commands.length && commands.every((l) => COMMAND.test(l.split(/\s/)[0]))) return 'bash';
+  if (!ll) return null;
+  const kin = (a: string, b: string) => a === b || KIN.some((k) => k.includes(a) && k.includes(b));
+  const scores = LANGUAGES.map(([v]) => v).filter((v) => v && v !== 'mermaid' && v !== 'markdown' && ll.registered(v))
+    .map((v) => [v, ll.highlight(v, text).data?.relevance ?? 0] as const).sort((a, b) => b[1] - a[1]);
+  const [best, rival] = [scores[0], scores.find(([v]) => !kin(v, scores[0][0]))];
+  if (!best || best[1] < 7 || best[1] - (rival?.[1] ?? 0) < 4) return null;
+  return best[0] === 'c' && text.includes('::') ? 'cpp' : best[0];
+}
+
+/** code pasted into a block with no language (or as a fence with none) is given the one it plainly is, on the chip and
+ *  in the note; a note read in is left as it was written. The grammars come with the first code block; code pasted
+ *  before they are in is looked at again once they are. */
+let pasting = false;
+const guessing = new Plugin({
+  props: {
+    handleDOMEvents: {
+      paste: () => { pasting = true; setTimeout(() => { pasting = false; }); return false; },
+    },
+  },
+  view(view) {
+    return {
+      update() {
+        if (lowlight || !unsure.size) return;
+        void grammars().then(() => {
+          if (view.isDestroyed) return;
+          const tr = view.state.tr;
+          view.state.doc.descendants((n, pos) => {
+            if (!unsure.has(n)) return n.type.name !== 'codeBlock';
+            const lang = guessLanguage(n.textContent, lowlight);
+            if (lang) tr.setNodeMarkup(pos, undefined, { ...n.attrs, language: lang });
+            return false;
+          });
+          unsure.clear();
+          if (tr.docChanged) view.dispatch(tr);
+        });
+      },
+    };
+  },
+  appendTransaction(trs, old, state) {
+    if (!pasting && !trs.some((tr) => tr.getMeta('paste') || tr.getMeta('uiEvent') === 'paste')) return null;
+    if (!trs.some((tr) => tr.docChanged)) return null;
+    const before = new Set<PMNode>();
+    old.doc.descendants((n) => { if (n.type.name === 'codeBlock') before.add(n); return !n.isTextblock; });
+    const tr = state.tr;
+    state.doc.descendants((n, pos) => {
+      if (n.type.name !== 'codeBlock') return !n.isTextblock;
+      if (n.attrs.language || before.has(n) || !n.textContent.trim()) return false;
+      const lang = guessLanguage(n.textContent, lowlight);
+      if (lang) tr.setNodeMarkup(pos, undefined, { ...n.attrs, language: lang });
+      else if (!lowlight) unsure.add(n); // looked at again once the grammars are in
+      return false;
+    });
+    return tr.docChanged ? tr : null;
+  },
+});
+const unsure = new Set<PMNode>();
 
 /** Languages offered by the chip, in menu order. Anything lowlight knows still highlights. */
 const LANGUAGES: [value: string, label: string][] = [
@@ -336,7 +418,7 @@ const typeBelow = new Plugin({
 export const CodeBlock = CodeBlockBase.extend({
   // ahead of a list's own keys: Tab in code inside a list indents the code, not the whole list item
   priority: 1000,
-  addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, editingDiagram, caretInSight, typeBelow]; },
+  addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, guessing, editingDiagram, caretInSight, typeBelow]; },
   // ↓ from the line above a diagram (↑ from the line under it) goes onto it, selected, and ↵ opens it; one shown as
   // code goes into its code. Its code hidden, the caret went past the diagram, and the keyboard could not reach it
   addKeyboardShortcuts() {

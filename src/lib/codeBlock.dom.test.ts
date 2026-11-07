@@ -1,7 +1,8 @@
 import { describe, test, expect, afterEach } from 'vitest';
 import { editorWith, md, posOf, type, press, paste } from './testEditor';
 import { runEditorCommand } from './editor';
-import { matchLanguage } from './code';
+import { matchLanguage, guessLanguage } from './code';
+import { lowlight } from './grammars';
 import { takeBody } from './takeBody';
 
 afterEach(() => { document.body.innerHTML = ''; });
@@ -455,4 +456,42 @@ test('a long address in code is never cut short', () => {
     const cut = [...ed.view.dom.querySelectorAll('.long-link')].map((e) => !!e.closest('code'));
     expect(cut).toEqual(body.includes('see') ? [false] : []); // in prose it is still cut, as before
   }
+});
+
+/** code pasted with no language named: one picked where it is plain which, and shown on the chip (left alone otherwise) */
+describe('a language picked for pasted code', () => {
+  test('what is plain from the code itself: JSON, HTML, shell commands, and code a grammar alone fits well', () => {
+    expect(guessLanguage('{\n  "name": "eve",\n  "version": 3\n}', lowlight)).toBe('json');
+    expect(guessLanguage('<div class="a">\n  <p>Hello</p>\n</div>', lowlight)).toBe('xml');
+    expect(guessLanguage('./gradlew clean test', lowlight)).toBe('bash');
+    expect(guessLanguage('# 터미널 1\n$ git clone https://github.com/a/b.git\ncd b && npm install', lowlight)).toBe('bash');
+    expect(guessLanguage('curl -i -X POST http://localhost:8080/transfers \\\n  -H "Content-Type: application/json" \\\n  -d \'{"a": 1}\'', lowlight)).toBe('bash');
+    expect(guessLanguage('def add(a, b):\n    """sum"""\n    return a + b\n\nif __name__ == "__main__":\n    print(add(1, 2))', lowlight)).toBe('python');
+    expect(guessLanguage('interface Note { id: string; title?: string }\nexport function load(id: string): Promise<Note> {\n  return fetch(`/n/${id}`).then((r) => r.json());\n}', lowlight)).toBe('typescript');
+    expect(guessLanguage('data class User(val name: String)\nfun main() {\n    val u = User("a")\n    println(u.name)\n}', lowlight)).toBe('kotlin');
+  });
+
+  test('a drawing in text, prose, or code two languages fit as well: no language, as before', () => {
+    expect(guessLanguage('호출자 ──▶ transfer-app ──▶ mock-bank', lowlight)).toBeNull();
+    expect(guessLanguage('S3 버킷\n├── a/\n└── b/', lowlight)).toBeNull();
+    expect(guessLanguage('적용 비율 = 현재 벤더 누적 계수 ÷ 파일에 기록된 누적 계수', lowlight)).toBeNull();
+    expect(guessLanguage('public class Main {\n    public static void main(String[] args) {\n        System.out.println("hi");\n    }\n}', lowlight)).toBeNull(); // C# fits as well
+    expect(guessLanguage('', lowlight)).toBeNull();
+  });
+
+  test('pasted into a block with no language, or as a fence with none: the block takes the one picked; one with a language keeps it', async () => {
+    const ed = editorWith('# T\n\n```\n\n```\n\n```ruby\n\n```');
+    ed.commands.setTextSelection(posOf(ed, 'T') + 3);
+    paste(ed, '{\n  "a": 1\n}');
+    expect(md(ed)).toContain('```json\n{\n  "a": 1\n}\n```');
+    // a block that says its language keeps it, whatever is pasted in
+    let ruby = -1;
+    ed.state.doc.forEach((n, p) => { if (n.attrs.language === 'ruby') ruby = p; });
+    ed.commands.setTextSelection(ruby + 1);
+    paste(ed, '{"b": 2}');
+    expect(md(ed)).toContain('```ruby\n{"b": 2}\n```');
+    // a note read in is left as it was written: only what is pasted is given a language
+    const read = editorWith('# T\n\n```\n{"c": 3}\n```');
+    expect(md(read)).toBe('# T\n\n```\n{"c": 3}\n```');
+  });
 });
