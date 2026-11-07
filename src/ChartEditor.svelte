@@ -30,7 +30,9 @@
 
   /** a part's drawing: where it is drawn twice (a slice and its row, a task's name and its bar), the one with its words */
   const find = (key: string) => {
-    const all = [...host.querySelectorAll(`[data-spot="${CSS.escape(key)}"]`)], el = all.find((x) => x.textContent?.trim()) ?? all[0] ?? null;
+    // (a column's type and key are its too, but the field goes on its name)
+    const all = [...host.querySelectorAll(`[data-spot="${CSS.escape(key)}"]`)].sort((a, b) => +a.hasAttribute('data-field') - +b.hasAttribute('data-field'));
+    const el = all.find((x) => x.textContent?.trim()) ?? all[0] ?? null;
     // a class's or a table's name line, not the whole box: centred on the box, the field sat over its first member
     // (a person drawn as a figure: the name under it)
     return el?.querySelector(':scope > g.label-group, :scope > g.label.name, :scope > text.actor-man') ?? el;
@@ -243,6 +245,12 @@
     // the part already picked clicked again (the click that opened the chart picked it): its field keeps the keyboard
     if (key && key === sel) field?.focus({ preventScroll: true });
     else select(key);
+    // a part of it with a box of its own in the bar (a column's type, its key): that box, typed in or opened
+    const want = el?.getAttribute('data-field');
+    if (key && want) tick().then(() => tick()).then(() => {
+      const c = bar?.querySelector<HTMLElement>(`[aria-label="${CSS.escape(want)}"]`);
+      if (c instanceof HTMLInputElement) { c.focus({ preventScroll: true }); c.select(); } else c?.click();
+    });
   }
   function onHostMove(e: PointerEvent) {
     if (e.pointerType !== 'mouse') return;

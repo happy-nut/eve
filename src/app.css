@@ -546,8 +546,9 @@ html.mobile .tiptap .code-lang-ask input { font-size: 16px; } /* under 16px a ph
 
 /* ---- swimlanes (lib/lanes.ts): bands side by side, each lane's name in its own tint; steps as in a flowchart ---- */
 .diagram-canvas:has(> svg.lanes) { padding: 16px; }
-svg.lanes {
-  --d-head: light-dark(#f2f4f6, #2b2e35); --d-edge: light-dark(#a1aab5, #68717d); font-family: inherit; /* mermaid.ts's line */
+svg.lanes { font-family: inherit; }
+:is(svg.lanes, svg.mindmap) {
+  --d-head: light-dark(#f2f4f6, #2b2e35); --d-edge: light-dark(#a1aab5, #68717d); /* mermaid.ts's line */
   --d-tint: light-dark(#e8f3ff, #1c2c45); --d-tint-line: light-dark(#b8d6ff, #2f4a73); --d-tint-text: light-dark(#1b64da, #9cc6ff);
   --d-ask: light-dark(#fff8e6, #2e2a1d); --d-ask-line: light-dark(#ffe2a6, #5c4f2a);
   --d-shadow: light-dark(rgba(0, 23, 51, 0.045), rgba(0, 0, 0, 0.3));
@@ -596,20 +597,26 @@ svg.lanes .edgeLabel text { fill: var(--d-dim); font-size: 12px; }
 
 /* ---- a mind map (lib/mindmap.ts): a solid pill in the middle, tinted chips for its branches, plain words further out
    on a line of their branch's colour, soft curves between ---- */
+/* a mind map in the flowchart's pastels: the idea in the middle a soft blue card lit from above, each first branch a
+   pastel card of its own with dark words, the ideas further out plain words, and the lines between them quiet, only
+   tinted by their branch (saturated rainbow lines, a solid blue pill and underlined words in every colour looked loud) */
 svg.mindmap { font-family: inherit; overflow: visible; }
 svg.mindmap text { text-anchor: middle; dominant-baseline: central; }
-svg.mindmap .mm-link { fill: none; stroke: color-mix(in srgb, var(--c) 55%, var(--d-canvas)); stroke-width: 1.6; stroke-linecap: round; }
-svg.mindmap .mm-link.trunk { stroke-width: 2.6; }
-svg.mindmap .mm-root .mm-shape { fill: var(--c0); filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--c0) 35%, transparent)); }
-svg.mindmap .mm-root text { fill: #fff; font-size: 16px; font-weight: 650; letter-spacing: -0.02em; }
-svg.mindmap .mm-l1 .mm-shape { fill: color-mix(in srgb, var(--c) 13%, var(--d-card)); stroke: color-mix(in srgb, var(--c) 32%, transparent); stroke-width: 1; }
-svg.mindmap .mm-l1 text { fill: color-mix(in srgb, var(--c) 62%, var(--d-strong)); font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+svg.mindmap :is(.c0, .c6) { --pf: var(--p0); --pr: var(--p0-rim); } svg.mindmap :is(.c1, .c7) { --pf: var(--p1); --pr: var(--p1-rim); }
+svg.mindmap :is(.c2, .c8) { --pf: var(--p2); --pr: var(--p2-rim); } svg.mindmap :is(.c3, .c9) { --pf: var(--p3); --pr: var(--p3-rim); }
+svg.mindmap :is(.c4, .c10) { --pf: var(--p4); --pr: var(--p4-rim); } svg.mindmap :is(.c5, .c11) { --pf: var(--p5); --pr: var(--p5-rim); }
+svg.mindmap .mm-link { fill: none; stroke: color-mix(in srgb, var(--pr) 55%, var(--d-edge)); stroke-width: 1.3; stroke-linecap: round; }
+svg.mindmap .mm-link.trunk { stroke-width: 1.8; }
+svg.mindmap .mm-root .mm-shape { fill: url(#mm-lit); stroke: var(--d-tint-line); stroke-width: 1; filter: drop-shadow(0 2px 10px color-mix(in srgb, var(--c0) 16%, transparent)); }
+svg.mindmap .mm-lit0 { stop-color: light-dark(#f5f9ff, #24314a); } svg.mindmap .mm-lit1 { stop-color: var(--d-tint); }
+svg.mindmap .mm-root text { fill: var(--d-tint-text); font-size: 16px; font-weight: 650; letter-spacing: -0.02em; }
+svg.mindmap .mm-l1 .mm-shape { fill: var(--pf); stroke: var(--pr); stroke-width: 1; filter: drop-shadow(0 1px 1px var(--d-shadow)) drop-shadow(0 6px 14px var(--d-shadow)); }
+svg.mindmap .mm-l1 text { fill: var(--d-strong); font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
 svg.mindmap .mm-leaf text { fill: var(--d-fg); font-size: 13.5px; font-weight: 450; }
-svg.mindmap .mm-leaf .mm-under { stroke: color-mix(in srgb, var(--c) 55%, var(--d-canvas)); stroke-width: 1.6; stroke-linecap: round; }
 svg.mindmap .mm-hit { fill: transparent; }
-svg.mindmap .mm-leaf.shaped .mm-shape { fill: var(--d-card); stroke: color-mix(in srgb, var(--c) 40%, transparent); stroke-width: 1; }
+svg.mindmap .mm-leaf.shaped .mm-shape { fill: var(--d-card); stroke: var(--pr); stroke-width: 1; }
 svg.mindmap .mm-shape.cloud { stroke-dasharray: 4 3; }
-svg.mindmap .mm-shape.bang { stroke-width: 2 !important; stroke: var(--c) !important; }
+svg.mindmap .mm-shape.bang { stroke-width: 2 !important; stroke: color-mix(in srgb, var(--pr) 40%, var(--d-edge)) !important; }
 
 /* ---- the charts Eve draws (lib/charts.ts) ---- */
 .chart { width: 100%; }

@@ -327,7 +327,8 @@ try {
   // back what was there; the field sits on its part ----
   const spot = async (page, key) => {
     const at = await page.evaluate((k) => {
-      const all = [...document.querySelectorAll(`.tiptap .mermaid-view [data-spot="${k}"]`)];
+      // (a column's name, not its type or key, which open their own boxes)
+      const all = [...document.querySelectorAll(`.tiptap .mermaid-view [data-spot="${k}"]:not([data-field])`)];
       const box = all.find((e) => e.textContent.trim()) ?? all[0];
       if (!box) return null;
       const el = box.querySelector(':scope > g.label-group, :scope > g.label.name, :scope > text.actor-man') ?? box; // a class's, a table's name line, a figure's name
@@ -588,6 +589,28 @@ try {
   }
   await page.close();
   console.log('ok   a wide drawing scrolled across as it was edited is shown from its start once done');
+
+  // ---- a table's column: its type and its key clicked in the drawing open those, not only its name ----
+  page = await open('erDiagram\n  CUSTOMER {\n    int id PK\n    string name\n  }', false);
+  {
+    const at = (t, cls) => page.evaluate(([t, cls]) => { const g = [...document.querySelectorAll(`.tiptap g.label.${cls}`)].find((x) => x.textContent.trim() === t); const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }, [t, cls]);
+    await page.mouse.click(...await at('int', 'attribute-type'));
+    await page.waitForTimeout(500);
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Type', 'the type clicked: its box takes the keyboard');
+    await page.keyboard.press('Meta+A');
+    await page.keyboard.type('bigint');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(400);
+    assert.match(await md(page), /bigint id PK/, 'typed in, the type changed');
+    await page.mouse.click(...await at('PK', 'attribute-keys'));
+    await page.waitForTimeout(500);
+    assert.equal(await page.locator('[role="listbox"] [role="option"]', { hasText: 'FK' }).count() > 0, true, 'the key clicked: its list open');
+    await page.locator('[role="listbox"] [role="option"]', { hasText: 'UK' }).first().click();
+    await page.waitForTimeout(400);
+    assert.match(await md(page), /bigint id UK/, 'a key picked from it');
+  }
+  await page.close();
+  console.log('ok   a table column’s type and key are clicked in the drawing to change them');
   assert.deepEqual(errors, [], 'no errors in the page');
 } finally {
   await browser.close();

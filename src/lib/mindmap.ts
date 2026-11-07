@@ -2,9 +2,8 @@ import type { Mindmap, MindShape } from './diagram';
 import { textW, wrap } from './lanes';
 
 /**
- * A mind map, drawn by Eve: the idea in the middle as a solid pill, its branches out to both sides on soft curves,
- * each first branch a tinted chip in a colour of its own that every idea under it shares, the ideas further out plain
- * words on a line of that colour. Mermaid's own drawing set every idea in a box of its own on straight spokes around
+ * A mind map, drawn by Eve: the idea in the middle as a soft card, its branches out to both sides on soft curves,
+ * each first branch a pastel card of its own whose tint the lines under it share, the ideas further out plain words. Mermaid's own drawing set every idea in a box of its own on straight spokes around
  * the middle, crowded and lopsided. Every idea is a g.mm-node with data-spot ("root", "branch:<i>", i its place in
  * d.items) for the editor to find it by (ChartEditor.svelte); colours are CSS variables (app.css), so the light and
  * dark themes need no drawing again.
@@ -53,22 +52,21 @@ function place(n: Node, x: number, top: number, right: boolean) {
   for (const k of n.kids) { place(k, nx, y, right); y += span(k) + GAP_Y[Math.min(n.depth, 2)]; }
 }
 
-/** an idea's words drawn under a line (further out, plain): its line is where the lines in and out of it meet */
-const underlined = (n: Node) => n.depth >= 2 && n.shape === 'plain';
+/** an idea further out with no shape: plain words, the lines meeting them at their middle (once drawn on a coloured line
+ *  under them, every word underlined in its branch's colour) */
+const plainWords = (n: Node) => n.depth >= 2 && n.shape === 'plain';
 /** where a line leaves an idea, outwards */
 function outPt(n: Node) {
-  if (underlined(n)) return { x: n.right ? n.x + n.w : n.x, y: n.y + n.h / 2 };
   if (n.depth === 0) return { x: n.x + n.w / 2, y: n.y }; // from the middle of the centre: the curves fan out of it
   return { x: n.right ? n.x + n.w : n.x, y: n.y };
 }
 function inPt(n: Node) {
-  if (underlined(n)) return { x: n.right ? n.x : n.x + n.w, y: n.y + n.h / 2 };
   return { x: n.right ? n.x : n.x + n.w, y: n.y };
 }
 
 function shapeOf(n: Node) {
   const x = n.x, y = n.y - n.h / 2, { w, h } = n;
-  if (underlined(n)) return `<rect class="mm-hit" x="${x}" y="${y}" width="${w}" height="${h}" rx="6"/><path class="mm-under" d="M${x} ${y + h}H${x + w}"/>`;
+  if (plainWords(n)) return `<rect class="mm-hit" x="${x}" y="${y}" width="${w}" height="${h}" rx="6"/>`;
   switch (n.depth === 0 && n.shape === 'circle' ? 'pill' : n.shape) {
     case 'square': return `<rect class="mm-shape" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/>`;
     case 'circle': return `<circle class="mm-shape" cx="${x + w / 2}" cy="${n.y}" r="${w / 2}"/>`;
@@ -98,8 +96,9 @@ export function mindSvg(d: Mindmap, minScale = 0.8): string {
     stack[depth - 1].kids.push(n);
     stack.push(n);
   });
-  // the first step's colours by their names (chartHues.ts), the centre's own (0) left out; those under them follow
-  const hues = huesOf(root.kids.map((k) => k.text), root.kids.map((k) => k.spot), 11, 1);
+  // the first step's colours by their names (chartHues.ts), one of the five pastels besides the centre's blue (of
+  // twelve, two of five branches came out the same pastel); those under them follow
+  const hues = huesOf(root.kids.map((k) => k.text), root.kids.map((k) => k.spot), 5, 1);
   const tint = (n: Node, h: number) => { n.hue = h; n.kids.forEach((k) => tint(k, h)); };
   root.kids.forEach((k, i) => tint(k, hues[i]));
   sized(root);
@@ -150,7 +149,7 @@ export function mindSvg(d: Mindmap, minScale = 0.8): string {
     links.push(`<path class="mm-link c${k.hue}${p.depth === 0 ? ' trunk' : ''}" d="M${from.x.toFixed(1)} ${from.y.toFixed(1)}C${c1.x.toFixed(1)} ${c1.y.toFixed(1)} ${mx.toFixed(1)} ${b.y.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}"/>`);
   }
   const nodes = all.map((n) => {
-    const l = look(n), cls = n.depth === 0 ? 'mm-root' : n.depth === 1 ? 'mm-l1' : underlined(n) ? 'mm-leaf' : 'mm-leaf shaped';
+    const l = look(n), cls = n.depth === 0 ? 'mm-root' : n.depth === 1 ? 'mm-l1' : plainWords(n) ? 'mm-leaf' : 'mm-leaf shaped';
     // the words in the middle of the shape, however tall it is (a circle is as tall as it is wide)
     const top = n.y - (n.lines.length * l.line) / 2 + l.line / 2;
     const cx = n.x + n.w / 2;
@@ -158,5 +157,6 @@ export function mindSvg(d: Mindmap, minScale = 0.8): string {
     return `<g class="mm-node ${cls} c${n.hue}" data-spot="${n.spot}">${shapeOf(n)}${text}</g>`;
   });
   return `<svg class="mindmap" xmlns="http://www.w3.org/2000/svg" viewBox="${minX.toFixed(1)} ${minY.toFixed(1)} ${W} ${H}" width="100%" style="max-width: ${W}px; min-width: ${Math.round(W * minScale)}px;" role="img" aria-label="Mind map">`
+    + '<defs><linearGradient id="mm-lit" x1="0" y1="0" x2="0" y2="1"><stop class="mm-lit0" offset="0"/><stop class="mm-lit1" offset="1"/></linearGradient></defs>'
     + `<g class="mm-links">${links.join('')}</g>${nodes.join('')}</svg>`;
 }

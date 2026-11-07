@@ -530,7 +530,16 @@ export function tagSpots(d: Diagram, root: Element) {
     byId('entity', 'table');
     for (const g of root.querySelectorAll('g.node[data-spot^="table:"]')) {
       const id = g.getAttribute('data-spot')!.slice(6), t = d.tables.find((x) => x.id === id);
-      if (t) tag([...g.querySelectorAll('g.label.attribute-name')], t.columns.map((_, j) => `col:${id}:${j}`));
+      if (!t) continue;
+      const cols = t.columns.map((_, j) => `col:${id}:${j}`);
+      tag([...g.querySelectorAll('g.label.attribute-name')], cols);
+      // its type and its key are the column's too, each opening its own box of the bar (ChartEditor.svelte): they
+      // could be changed from the bar only, a click on the name and another on the box
+      for (const [cls, field] of [['attribute-type', 'Type'], ['attribute-keys', 'Key']] as const) {
+        const els = [...g.querySelectorAll(`g.label.${cls}`)];
+        tag(els, cols);
+        if (els.length === cols.length) els.forEach((el) => el.setAttribute('data-field', field));
+      }
     }
     lines(d, 'rel') || labels((i) => `rel:${i}`, d.links.map((l) => l.label));
   } else if (d.kind === 'gantt' && !root.querySelector('[data-spot]')) {
