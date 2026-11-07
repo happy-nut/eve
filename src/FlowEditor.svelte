@@ -178,7 +178,7 @@
     // in the lane of the step it follows, or the lane asked for (picked, or double-clicked in), or the first
     const lanes = flow.lanes ?? [];
     const lane = lanes.length ? (flow.nodes.find((n) => n.id === from)?.lane ?? inLane ?? (sel && 'lane' in sel ? sel.lane : lanes[0].id)) : undefined;
-    flow.nodes.push(lane ? { id, label: 'New step', shape: 'round', lane } : { id, label: 'New step', shape: 'round' });
+    flow.nodes.push(lane ? { id, label: newStep(), shape: 'round', lane } : { id, label: newStep(), shape: 'round' });
     if (from) flow.edges.push({ from, to: id, label: '', line: 'solid' });
     sel = { node: id };
     // typed in at once: until the new box is drawn its text box sits by the one it grew from, so no key is lost
@@ -231,7 +231,7 @@
     if (!e) return;
     const id = freshId('n', flow.nodes);
     const lane = flow.lanes?.length ? (flow.nodes.find((n) => n.id === e.to)?.lane ?? flow.nodes.find((n) => n.id === e.from)?.lane) : undefined;
-    flow.nodes.push(lane ? { id, label: 'New step', shape: 'round', lane } : { id, label: 'New step', shape: 'round' });
+    flow.nodes.push(lane ? { id, label: newStep(), shape: 'round', lane } : { id, label: newStep(), shape: 'round' });
     flow.edges.splice(i, 1, { from: e.from, to: id, label: e.label, line: e.line }, { from: id, to: e.to, label: '', line: e.line });
     sel = { node: id };
     const a = boxOf(e.from), b = boxOf(e.to);
@@ -789,7 +789,11 @@
     paths.forEach((p, j) => p.classList.toggle('picked', j === at));
   });
   // (a phone has no hover: a tap's leftover one left a + over the line tapped next)
-  const handles = $derived([...new Set([isMobile ? null : hover, selNode?.id ?? null, drag?.from ?? null].filter((x): x is string => !!x))].map(boxOf).filter((b): b is Box => !!b));
+  /** a new box's name, in the chart's own words (a Korean chart's "New step" was English to rename) */
+  const newStep = () => (flow.nodes.some((n) => /[\uac00-\ud7a3]/.test(n.label)) ? '새 단계' : 'New step');
+  // one + at a time: the box under the pointer's, else the picked one's (two at once, the picked box's and the hovered
+  // one's, left it unclear which a click would add to); and the one a line is being dragged from
+  const handles = $derived([...new Set([(isMobile ? null : hover) ?? selNode?.id ?? null, drag?.from ?? null].filter((x): x is string => !!x))].map(boxOf).filter((b): b is Box => !!b));
 </script>
 
 {#snippet order(ids: string[], at: number)}
@@ -999,7 +1003,8 @@
   .bar button .lbl { max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
   .rename {
     position: absolute; height: 32px; box-sizing: border-box; padding: 0 10px; border: 0; border-radius: 10px; text-align: center;
-    font: inherit; font-size: 14px; color: var(--fg); background: var(--bg-pop); box-shadow: 0 0 0 2px var(--accent), 0 4px 14px rgba(0, 0, 0, 0.15); outline: none;
+    font: inherit; font-size: 14px; color: var(--fg); background: var(--bg-pop); outline: none;
+    border-radius: 16px; box-shadow: 0 0 0 1.5px var(--accent), 0 0 0 5px var(--accent-soft); /* the box being named, ringed softly */
   }
   .bar {
     position: absolute; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 12px;

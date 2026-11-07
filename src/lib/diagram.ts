@@ -199,6 +199,22 @@ export function starter(kind: Kind, today = iso(new Date())): Diagram {
   }
 }
 
+/** a starter's words in Korean, for a note written in it: its example is there to be renamed, and renaming every box of
+ *  an English one in a Korean note was work. Only the words shown: a class's, a table's or a state's name is code. */
+const KO: Record<string, string> = {
+  Start: '시작', 'Ready?': '준비됐나요?', Done: '완료', yes: '예', no: '아니오', Me: '나', App: '앱', Ask: '요청', Answer: '응답',
+  Idea: '아이디어', One: '첫째', Detail: '세부', Two: '둘째', Three: '셋째', Spring: '봄', Summer: '여름', Fall: '가을',
+  Plan: '계획', Build: '개발', Test: '테스트', Launch: '출시', Research: '조사', 'Make it': '만들기',
+  Customer: '고객', Store: '매장', Delivery: '배송', Order: '주문', Receive: '수령', 'Check payment': '결제 확인',
+  'In stock?': '재고 있음?', Pack: '포장', Ship: '발송',
+};
+export function inKorean(d: Diagram): Diagram {
+  if (d.kind === 'class' || d.kind === 'state' || d.kind === 'er') return d;
+  const ko = (v: unknown): unknown => (typeof v === 'string' ? KO[v] ?? v : Array.isArray(v) ? v.map(ko)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, k === 'id' || k === 'from' || k === 'to' || k === 'lane' ? x : ko(x)])) : v);
+  return ko(d) as Diagram;
+}
+
 // ---- text inside the code ----
 // mermaid reads entity codes (#quot; #58;) in labels: what would end a label is written as one
 const ent = (s: string, chars: string) => [...s].map((c) => (chars.includes(c) ? `#${c.charCodeAt(0)};` : c)).join('');

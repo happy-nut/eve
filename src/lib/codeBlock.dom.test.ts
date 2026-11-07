@@ -1,7 +1,8 @@
 import { describe, test, expect, afterEach } from 'vitest';
 import { editorWith, md, posOf, type, press, paste } from './testEditor';
 import { runEditorCommand } from './editor';
-import { matchLanguage, guessLanguage } from './code';
+import { matchLanguage, guessLanguage, starterCode } from './code';
+import { swimlaneStarter } from './diagram';
 import { lowlight } from './grammars';
 import { takeBody } from './takeBody';
 
@@ -493,5 +494,23 @@ describe('a language picked for pasted code', () => {
     // a note read in is left as it was written: only what is pasted is given a language
     const read = editorWith('# T\n\n```\n{"c": 3}\n```');
     expect(md(read)).toBe('# T\n\n```\n{"c": 3}\n```');
+  });
+});
+
+/** a new diagram's example in the words the note is written in: Start / Ready? / Done in a Korean note was English to rename */
+describe("a new diagram in the note's own language", () => {
+  test('a Korean note: the flowchart, the lanes, the sequence and the mind map start in Korean', () => {
+    const flow = starterCode('flowchart', '주문 주문이 들어와서 나가기까지.');
+    for (const w of ['"시작"', '"준비됐나요?"', '"완료"', '|"예"|', '|"아니오"|']) expect(flow).toContain(w);
+    expect(flow).not.toContain('Start');
+    const lanes = starterCode(swimlaneStarter(), '주문');
+    for (const w of ['고객', '매장', '재고 있음?']) expect(lanes).toContain(w);
+    expect(starterCode('sequence', '로그인')).toContain('요청');
+    expect(starterCode('mindmap', '생각')).toContain('아이디어');
+  });
+  test('an English note, and code names (a class, a table, a state): as they were', () => {
+    expect(starterCode('flowchart', 'Plan How it ships.')).toContain('"Start"');
+    expect(starterCode('class', '설계')).toContain('Animal');
+    expect(starterCode('er', '테이블')).toContain('CUSTOMER');
   });
 });

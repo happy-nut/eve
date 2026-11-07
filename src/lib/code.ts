@@ -6,7 +6,7 @@ import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import { ui, under } from './ui.svelte';
 import { composing } from './keys';
 import { isMobile } from './platform';
-import { starter, toCode, type Diagram, type Kind } from './diagram';
+import { inKorean, starter, toCode, type Diagram, type Kind } from './diagram';
 import { mountDiagram } from './diagramBlock.svelte';
 import { blockBeside } from './blocks';
 import { fenceFor } from './markdown';
@@ -764,8 +764,13 @@ export const CodeBlock = CodeBlockBase.extend({
 let startNext: string | null = null;
 
 /** the / menu's diagrams: a small example of the kind, put in at the caret and opened for editing there */
+/** a new diagram's code: its example in the note's own words (a note with Korean in it gets a Korean one) */
+export function starterCode(kind: Kind | Diagram, noteText: string): string {
+  const d = typeof kind === 'string' ? starter(kind) : kind;
+  return toCode(/[\uac00-\ud7a3]/.test(noteText) ? inKorean(d) : d);
+}
 export function insertDiagram(editor: Editor, kind: Kind | Diagram) {
-  const code = toCode(typeof kind === 'string' ? starter(kind) : kind);
+  const code = starterCode(kind, editor.state.doc.textContent);
   startNext = code;
   const { from } = editor.state.selection;
   const c = isMobile ? editor.chain() : editor.chain().focus();

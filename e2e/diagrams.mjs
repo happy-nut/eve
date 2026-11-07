@@ -58,6 +58,15 @@ try {
   await page.keyboard.type('Write');
   await page.keyboard.press('Enter');
   await settle(page);
+  // one + at a time: pointed at another box, the + is that box's alone, not the picked one's beside it as well
+  {
+    const other = await boxAt(page, 'Draft');
+    await page.mouse.move(other.x, other.y);
+    await page.waitForTimeout(150);
+    assert.equal(await page.locator('.layer .plus').count(), 1, 'one + while another box is pointed at');
+    const p = await page.locator('.layer .plus').boundingBox();
+    assert.ok(Math.abs(p.y + p.height / 2 - other.y) < 40, 'and it is the box pointed at');
+  }
   at = await boxAt(page, 'Write');
   await page.mouse.move(at.x, at.y);
   const plus = await page.locator('.layer .plus').last().boundingBox();
