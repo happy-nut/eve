@@ -6,7 +6,7 @@
 
 const UNIT = 0.6; // seconds a level (or a message) takes
 const MAX = 2.4; // a long diagram's levels are squeezed so the whole of it is drawn in about this long
-const FADE = 400, TOKEN = 0.5;
+const FADE = 400, POP = 520, TOKEN = 0.5;
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** `stage`: which press of → in a presentation brings it up (a flowchart's level, a sequence's message) */
@@ -30,7 +30,28 @@ export function timeline(svg: SVGSVGElement): Step[] {
     });
     return steps;
   }
-  if (kind !== 'flowchart-v2') return [];
+  const parts = flowParts(svg);
+  if (!parts) return [];
+  const { nodes, lines, labels } = parts;
+  const level = numbered(levels([...nodes.keys()], lines.flatMap((l) => (l.ends ? [l.ends] : []))), nodes);
+  const u = Math.min(UNIT, MAX / (Math.max(0, ...level.values()) + 1));
+  const steps: Step[] = [...nodes].map(([id, el]) => ({ el, at: level.get(id)! * u, stage: level.get(id)! }));
+  for (const { p, ends } of lines) {
+    const [s, d] = ends ?? ['', ''];
+    // from its source once that is up, landing about when its target comes up (a line back up the chart: when it is due)
+    const at = Math.max((level.get(s) ?? 0) * u + 0.25 * (u / UNIT), (level.get(d) ?? 0) * u - 0.4 * (u / UNIT));
+    // a step at a time it comes with its target (a line back up the chart: with its source, the later of the two)
+    const stage = Math.max(level.get(s) ?? 0, level.get(d) ?? 0);
+    steps.push({ el: p, at, stage, line: p });
+    const label = labels.get(p.dataset.id!);
+    if (label) steps.push({ el: label, at: at + 0.15, stage });
+  }
+  return steps;
+}
+
+/** a flowchart's boxes by name, its lines with the boxes at their ends, and their labels; null: not a flowchart */
+function flowParts(svg: SVGSVGElement) {
+  if (svg.getAttribute('aria-roledescription') !== 'flowchart-v2') return null;
   const prefix = `${svg.id}-flowchart-`;
   const nodes = new Map<string, Element>();
   for (const g of svg.querySelectorAll('g.node')) if (g.id.startsWith(prefix)) nodes.set(g.id.slice(prefix.length).replace(/-\d+$/, ''), g);
@@ -58,21 +79,8 @@ export function timeline(svg: SVGSVGElement): Step[] {
     return s && d && s !== d ? [s, d] : null;
   };
   const lines = [...svg.querySelectorAll<SVGPathElement>('path.flowchart-link[data-id]')].map((p) => ({ p, ends: ends(p.dataset.id!) ?? drawnEnds(p) }));
-  const level = numbered(levels(ids, lines.flatMap((l) => (l.ends ? [l.ends] : []))), nodes);
-  const u = Math.min(UNIT, MAX / (Math.max(0, ...level.values()) + 1));
-  const steps: Step[] = [...nodes].map(([id, el]) => ({ el, at: level.get(id)! * u, stage: level.get(id)! }));
   const labels = new Map([...svg.querySelectorAll<SVGGElement>('g.edgeLabel > g.label[data-id]')].map((g) => [g.dataset.id!, g.parentElement!]));
-  for (const { p, ends } of lines) {
-    const [s, d] = ends ?? ['', ''];
-    // from its source once that is up, landing about when its target comes up (a line back up the chart: when it is due)
-    const at = Math.max((level.get(s) ?? 0) * u + 0.25 * (u / UNIT), (level.get(d) ?? 0) * u - 0.4 * (u / UNIT));
-    // a step at a time it comes with its target (a line back up the chart: with its source, the later of the two)
-    const stage = Math.max(level.get(s) ?? 0, level.get(d) ?? 0);
-    steps.push({ el: p, at, stage, line: p });
-    const label = labels.get(p.dataset.id!);
-    if (label) steps.push({ el: label, at: at + 0.15, stage });
-  }
-  return steps;
+  return { nodes, lines, labels };
 }
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -122,6 +130,12 @@ const settle = (svg: SVGSVGElement) => { for (const l of svg.querySelectorAll(`.
 
 /** one element coming up: a line drawn from its start, anything else faded in */
 function enter({ el, line }: Step, delay: number): Animation {
+  // a box springs up into its place, a little past its size and back (app.css scales it from its own middle); anything
+  // else fades in
+  if (!line && el.matches('g.node, rect.actor, g.actor-man')) {
+    return el.animate([{ opacity: 0, scale: '0.82' }, { opacity: 1, scale: '1.04', offset: 0.6 }, { opacity: 1, scale: '1' }],
+      { duration: POP, delay, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
+  }
   if (!line) return el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' });
   const n = len(line);
   // the dash is the keyframes' own, so a dotted line goes back to its dots when it is drawn
@@ -153,6 +167,8 @@ export function stepper(svg: SVGSVGElement): { count: number; show(k: number): v
     show(k) {
       for (const s of steps) {
         (s.el as SVGElement).style.opacity = s.stage > k ? '0' : '';
+        const f = s.line?.nextElementSibling; // its flow (flow()) hidden and shown with it
+        if (f?.classList.contains(FLOW)) (f as SVGElement).style.opacity = s.stage > k ? '0' : '';
         if (s.stage === k && k > shown && 'animate' in s.el && !reduced()) enter(s, 0);
       }
       shown = k;
@@ -207,4 +223,59 @@ export function tokens(svg: SVGSVGElement): () => void {
   svg.addEventListener('pointerenter', play);
   svg.addEventListener('pointerleave', stop);
   return () => { stop(); svg.removeEventListener('pointerenter', play); svg.removeEventListener('pointerleave', stop); };
+}
+
+/**
+ * A box pointed at stands out with what it is joined to: its lines, their labels and the boxes at their other ends; the
+ * rest of the chart steps back (app.css, `.eve-focus`), so a busy chart's one path reads. The returned function stops it.
+ */
+export function focus(svg: SVGSVGElement): () => void {
+  const parts = flowParts(svg);
+  if (!parts) return () => {};
+  const { nodes, lines, labels } = parts;
+  const ids = new Map([...nodes].map(([id, el]) => [el, id]));
+  const clear = () => { svg.classList.remove('eve-focus'); for (const el of svg.querySelectorAll('.eve-lit')) el.classList.remove('eve-lit'); };
+  const over = (e: Event) => {
+    const box = (e.target as Element).closest?.('g.node');
+    const id = box && ids.get(box);
+    clear();
+    if (!id) return;
+    const lit: Element[] = [box];
+    for (const { p, ends } of lines) {
+      if (!ends?.includes(id)) continue;
+      lit.push(p, nodes.get(ends[0] === id ? ends[1] : ends[0])!);
+      const label = labels.get(p.dataset.id!), f = p.nextElementSibling;
+      if (label) lit.push(label);
+      if (f?.classList.contains(FLOW)) lit.push(f);
+    }
+    for (const el of lit) el?.classList.add('eve-lit');
+    svg.classList.add('eve-focus');
+  };
+  svg.addEventListener('pointerover', over);
+  svg.addEventListener('pointerleave', clear);
+  return () => { clear(); svg.removeEventListener('pointerover', over); svg.removeEventListener('pointerleave', clear); };
+}
+
+/** a line's flowing copy (flow()): a picture of the drawing leaves it out (snapshot.ts) */
+export const FLOW = 'eve-flow';
+/**
+ * Each drawn line of a flowchart (and a sequence's messages) with light running along it the way it goes, over it as
+ * a copy (app.css draws the copy as short moving dashes): only while the diagram is in sight, none with Reduce motion.
+ * Dotted lines, and ones that already move, are left as they are. The returned function takes the copies away.
+ */
+export function flow(svg: SVGSVGElement): () => void {
+  if (reduced()) return () => {};
+  const lines = svg.querySelectorAll<SVGPathElement | SVGLineElement>(
+    'path.flowchart-link:not(.dotted, .moving, .edge-pattern-dotted, .edge-pattern-dashed, [class*="edge-animation"]), line.messageLine0, path.messageLine0');
+  const copies = [...lines].map((l) => {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    c.setAttribute('d', l.tagName === 'path' ? l.getAttribute('d') ?? '' : `M${l.getAttribute('x1')},${l.getAttribute('y1')}L${l.getAttribute('x2')},${l.getAttribute('y2')}`);
+    c.setAttribute('class', `${FLOW} ${[...l.classList].filter((k) => /^c\d+$/.test(k)).join(' ')}`.trim());
+    l.after(c);
+    return c;
+  });
+  const io = typeof IntersectionObserver === 'undefined' ? null
+    : new IntersectionObserver(([e]) => svg.classList.toggle('eve-flowing', !!e?.isIntersecting));
+  io?.observe(svg);
+  return () => { io?.disconnect(); svg.classList.remove('eve-flowing'); for (const c of copies) c.remove(); };
 }

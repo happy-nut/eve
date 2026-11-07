@@ -303,7 +303,12 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   // named and marked as mermaid's flowchart is, its boxes `<id>-flowchart-<box>-0` and its lines `L_<from>_<to>_<n>`:
   // drawn in, and a step at a time in a presentation (boxes given an Order too), as a chart without lanes is
   let svg = `<svg class="lanes" id="${id}" aria-roledescription="flowchart-v2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width: ${W}px; min-width: ${Math.round(W * minScale)}px;" role="img" aria-label="${plain ? 'Flowchart' : 'Swimlanes'}">`;
-  svg += `<defs><marker id="${id}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sl-head" d="M0,1.5 L9,5 L0,8.5 z"/></marker></defs>`;
+  // the start and the end (a pill, a circle) in a soft fall of the accent, lit from above (app.css colours its stops)
+  svg += `<defs><marker id="${id}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sl-head" d="M0,1.5 L9,5 L0,8.5 z"/></marker>`
+    + `<linearGradient id="${id}-lit" x1="0" y1="0" x2="0" y2="1"><stop class="sl-lit0" offset="0"/><stop class="sl-lit1" offset="1"/></linearGradient></defs>`;
+  // each step in a colour of its own, read at a glance: a lane's steps in their lane's, a chart without lanes a colour
+  // a level down the page; each line in the colour of the step it leaves
+  const hue = (b: Box) => `c${(plain ? b.rank : b.lane) % 12}`;
   lanes.forEach((l, i) => {
     const [x, y] = xy(0, laneAt[i]);
     const last = i === lanes.length - 1;
@@ -377,7 +382,7 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   edges.forEach((e, i) => {
     const { pts, at } = ways[i];
     const p = pts.map(([m, c]) => xy(m, c));
-    svg += `<path class="flowchart-link sl-edge ${e.line}${e.animate ? ' moving' : ''}" data-id="${esc(`L_${e.from}_${e.to}_${i}`)}" d="${rounded(p)}" marker-end="url(#${id}-arrow)"/>`;
+    svg += `<path class="flowchart-link sl-edge ${e.line}${e.animate ? ' moving' : ''} ${hue(boxes.get(e.from)!)}" data-id="${esc(`L_${e.from}_${e.to}_${i}`)}" d="${rounded(p)}" marker-end="url(#${id}-arrow)"/>`;
     const chip = chips[i];
     if (chip.lines.length) {
       const [m, c] = placeLabel(pts, at, chip, i);
@@ -396,14 +401,14 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
     let shape: string;
     switch (b.n.shape) {
       case 'diamond': shape = `<path class="sl-shape" d="M${x},${t} L${l + b.w},${y} L${x},${t + b.h} L${l},${y} Z"/>`; break;
-      case 'circle': shape = `<circle class="sl-shape" cx="${x}" cy="${y}" r="${b.w / 2}"/>`; break;
-      case 'pill': shape = `<rect class="sl-shape pill" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="${Math.min(b.h / 2, 22)}"/>`; break; // a tall one: rounded ends, not a blob
-      case 'box': shape = `<rect class="sl-shape" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="3"/>`; break;
+      case 'circle': shape = `<circle class="sl-shape" cx="${x}" cy="${y}" r="${b.w / 2}" fill="url(#${id}-lit)"/>`; break;
+      case 'pill': shape = `<rect class="sl-shape pill" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="${Math.min(b.h / 2, 22)}" fill="url(#${id}-lit)"/>`; break; // a tall one: rounded ends, not a blob
+      case 'box': shape = `<rect class="sl-shape" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="7"/>`; break;
       case 'db': shape = `<path class="sl-shape" d="M${l},${t + 6} a${b.w / 2},6 0 0,0 ${b.w},0 a${b.w / 2},6 0 0,0 ${-b.w},0 v${b.h - 12} a${b.w / 2},6 0 0,0 ${b.w},0 v${-(b.h - 12)}"/>`; break;
       default: shape = `<rect class="sl-shape" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="12"/>`;
     }
     const lines = b.lines.map((s, k) => `<tspan dy="0.35em" x="${x}" y="${y + (b.n.shape === 'db' ? 4 : 0) + (k - (b.lines.length - 1) / 2) * LINE}">${esc(s)}</tspan>`).join('');
-    svg += `<g class="node sl-${b.n.shape}${b.n.step ? ` step${b.n.step}` : ''}" id="${id}-flowchart-${esc(b.n.id)}-0">${shape}<text class="sl-text" text-anchor="middle">${lines}</text></g>`;
+    svg += `<g class="node sl-${b.n.shape} ${hue(b)}${b.n.step ? ` step${b.n.step}` : ''}" id="${id}-flowchart-${esc(b.n.id)}-0">${shape}<text class="sl-text" text-anchor="middle">${lines}</text></g>`;
   }
   return svg + '</svg>';
 }

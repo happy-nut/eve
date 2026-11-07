@@ -45,9 +45,16 @@ export async function pictureOf(el: Element, background: string): Promise<Blob> 
  *  that runs along the lines under the pointer is left out */
 export function drawnCopy(el: Element): Element {
   for (const a of el.getAnimations?.({ subtree: true }) ?? []) if (a.effect?.getTiming().iterations !== Infinity) a.finish();
+  // copied as it is at rest: not with one box pointed at and the rest stepped back, nor part way back from that
+  const focused = el.classList.contains('eve-focus');
+  el.classList.remove('eve-focus');
+  el.classList.add('eve-still');
   const copy = el.cloneNode(true) as Element;
   styled(el, copy);
-  for (const dot of copy.querySelectorAll('.eve-token')) dot.remove();
+  el.classList.remove('eve-still');
+  if (focused) el.classList.add('eve-focus');
+  copy.classList.remove('eve-still');
+  for (const dot of copy.querySelectorAll('.eve-token, .eve-flow')) dot.remove(); // the dot, and the lines' flow (diagramMotion.ts)
   // a line's label is HTML in a foreignObject, its chip a background and shadows round its words: in a picture
   // (the drawing inside the picture's own foreignObject) WebKit drew half of the chip. The chip drawn instead as the
   // drawing's own rectangles behind the words, the words left as they are

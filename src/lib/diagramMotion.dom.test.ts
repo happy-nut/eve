@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DRAWING, drawIn, levels, numbered, stepper, timeline } from './diagramMotion';
+import { DRAWING, drawIn, flow, focus, levels, numbered, stepper, timeline } from './diagramMotion';
+import { drawnCopy } from './snapshot';
 import { fromCode, type Flowchart } from './diagram';
 import { laneSvg } from './lanes';
 
@@ -166,5 +167,72 @@ describe('a diagram drawing itself in', () => {
     expect([stage('c'), stage('a'), stage('b')]).toEqual([0, 0, 1]);
     // the line from a to b comes with b
     expect(timeline(svg).find((s) => s.line?.dataset.id === 'L_a_b_0')?.stage).toBe(1);
+  });
+});
+
+describe('a diagram that answers the pointer, and lines that flow', () => {
+  const chart = () => {
+    const d = document.createElement('div');
+    d.innerHTML = laneSvg({ kind: 'flowchart', dir: 'TD', nodes: ['A', 'B', 'C', 'D'].map((id) => ({ id, label: id, shape: 'round' as const })),
+      edges: [{ from: 'A', to: 'B', label: 'yes', line: 'solid' }, { from: 'B', to: 'C', label: '', line: 'solid' }, { from: 'C', to: 'D', label: '', line: 'dotted' }] });
+    document.body.append(d);
+    return d.firstElementChild as SVGSVGElement;
+  };
+  const node = (svg: SVGSVGElement, id: string) => svg.querySelector(`g.node[id$="-flowchart-${id}-0"]`)!;
+  const lit = (svg: SVGSVGElement) => [...svg.querySelectorAll('.eve-lit')].map((e) => e.getAttribute('data-id') ?? e.querySelector('[data-id]')?.getAttribute('data-id') ?? e.id.replace(/^.*-flowchart-|-0$/g, '') ?? e.getAttribute('class'));
+
+  it('a box pointed at lights up with its lines, their labels and the boxes at their other ends; the rest steps back', () => {
+    const svg = chart();
+    const stop = focus(svg);
+    node(svg, 'B').dispatchEvent(new Event('pointerover', { bubbles: true }));
+    expect(svg.classList.contains('eve-focus')).toBe(true);
+    expect(lit(svg).sort()).toEqual(['A', 'B', 'C', 'L_A_B_0', 'L_A_B_0', 'L_B_C_1'].sort()); // the label is lit with its line
+    expect(node(svg, 'D').classList.contains('eve-lit')).toBe(false);
+    // a picture taken meanwhile (its copy button is a click away) is the chart at rest; the chart stays as pointed at
+    expect(drawnCopy(svg).classList.contains('eve-focus')).toBe(false);
+    expect(svg.classList.contains('eve-focus')).toBe(true);
+    svg.dispatchEvent(new Event('pointerleave'));
+    expect(svg.classList.contains('eve-focus')).toBe(false);
+    expect(svg.querySelector('.eve-lit')).toBeNull();
+    stop();
+    node(svg, 'B').dispatchEvent(new Event('pointerover', { bubbles: true }));
+    expect(svg.classList.contains('eve-focus')).toBe(false);
+  });
+
+  it('each drawn line has a flowing copy over it (a dotted one is left as it is); a picture of it leaves them out, and stopping takes them away', () => {
+    const svg = chart();
+    const stop = flow(svg);
+    const copies = [...svg.querySelectorAll('path.eve-flow')];
+    expect(copies.map((c) => c.getAttribute('d'))).toEqual([...svg.querySelectorAll('path.flowchart-link.solid')].map((l) => l.getAttribute('d')));
+    expect(copies.every((c) => !c.hasAttribute('marker-end') && !c.classList.contains('flowchart-link'))).toBe(true);
+    expect(drawnCopy(svg).querySelector('.eve-flow')).toBeNull();
+    expect(timeline(svg).filter((s) => s.line).length).toBe(3); // not taken for lines of their own
+    stop();
+    expect(svg.querySelector('.eve-flow')).toBeNull();
+  });
+
+  it("a step hidden in a presentation hides its line's flow too", () => {
+    const svg = chart();
+    flow(svg);
+    const steps = stepper(svg);
+    steps.show(0);
+    const first = svg.querySelector('path.flowchart-link')!;
+    expect((first as SVGElement).style.opacity).toBe('0');
+    expect((first.nextElementSibling as SVGElement).classList.contains('eve-flow')).toBe(true);
+    expect((first.nextElementSibling as SVGElement).style.opacity).toBe('0');
+  });
+
+  it("each box in a colour of its own (a lane's in its lane's), each line in its source's", () => {
+    const svg = chart();
+    const hue = (el: Element) => [...el.classList].find((c) => /^c\d+$/.test(c));
+    const boxes = ['A', 'B', 'C', 'D'].map((id) => hue(node(svg, id)));
+    expect(boxes.every(Boolean)).toBe(true);
+    expect(new Set(boxes).size).toBeGreaterThan(1);
+    expect(hue(svg.querySelector('[data-id="L_A_B_0"]')!)).toBe(boxes[0]);
+    const d = document.createElement('div');
+    d.innerHTML = laneSvg({ kind: 'flowchart', dir: 'TD', lanes: [{ id: 'x', label: 'X' }, { id: 'y', label: 'Y' }],
+      nodes: [{ id: 'A', label: 'A', shape: 'round', lane: 'y' }, { id: 'B', label: 'B', shape: 'round', lane: 'y' }], edges: [] } as unknown as Flowchart);
+    const lanes = d.firstElementChild as SVGSVGElement;
+    expect(hue(node(lanes, 'A'))).toBe(hue(lanes.querySelector('g.lane[data-lane="y"]')!));
   });
 });
