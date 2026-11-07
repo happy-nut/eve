@@ -222,13 +222,13 @@ describe('a diagram that answers the pointer, and lines that flow', () => {
     expect((first.nextElementSibling as SVGElement).style.opacity).toBe('0');
   });
 
-  it("each box in a colour of its own (a lane's in its lane's), each line in its source's", () => {
+  it("each box in a colour of its own (a lane's in its lane's); the lines stay grey", () => {
     const svg = chart();
     const hue = (el: Element) => [...el.classList].find((c) => /^c\d+$/.test(c));
     const boxes = ['A', 'B', 'C', 'D'].map((id) => hue(node(svg, id)));
     expect(boxes.every(Boolean)).toBe(true);
     expect(new Set(boxes).size).toBeGreaterThan(1);
-    expect(hue(svg.querySelector('[data-id="L_A_B_0"]')!)).toBe(boxes[0]);
+    expect(hue(svg.querySelector('[data-id="L_A_B_0"]')!)).toBeUndefined();
     const d = document.createElement('div');
     d.innerHTML = laneSvg({ kind: 'flowchart', dir: 'TD', lanes: [{ id: 'x', label: 'X' }, { id: 'y', label: 'Y' }],
       nodes: [{ id: 'A', label: 'A', shape: 'round', lane: 'y' }, { id: 'B', label: 'B', shape: 'round', lane: 'y' }], edges: [] } as unknown as Flowchart);

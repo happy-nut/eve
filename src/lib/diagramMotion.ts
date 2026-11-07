@@ -133,7 +133,7 @@ function enter({ el, line }: Step, delay: number): Animation {
   // a box springs up into its place, a little past its size and back (app.css scales it from its own middle); anything
   // else fades in
   if (!line && el.matches('g.node, rect.actor, g.actor-man')) {
-    return el.animate([{ opacity: 0, scale: '0.82' }, { opacity: 1, scale: '1.04', offset: 0.6 }, { opacity: 1, scale: '1' }],
+    return el.animate([{ opacity: 0, scale: '0.92' }, { opacity: 1, scale: '1.015', offset: 0.6 }, { opacity: 1, scale: '1' }],
       { duration: POP, delay, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
   }
   if (!line) return el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' });
@@ -270,7 +270,7 @@ export function flow(svg: SVGSVGElement): () => void {
   const copies = [...lines].map((l) => {
     const c = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     c.setAttribute('d', l.tagName === 'path' ? l.getAttribute('d') ?? '' : `M${l.getAttribute('x1')},${l.getAttribute('y1')}L${l.getAttribute('x2')},${l.getAttribute('y2')}`);
-    c.setAttribute('class', `${FLOW} ${[...l.classList].filter((k) => /^c\d+$/.test(k)).join(' ')}`.trim());
+    c.setAttribute('class', FLOW);
     l.after(c);
     return c;
   });

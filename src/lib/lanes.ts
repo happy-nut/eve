@@ -303,11 +303,11 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   // named and marked as mermaid's flowchart is, its boxes `<id>-flowchart-<box>-0` and its lines `L_<from>_<to>_<n>`:
   // drawn in, and a step at a time in a presentation (boxes given an Order too), as a chart without lanes is
   let svg = `<svg class="lanes" id="${id}" aria-roledescription="flowchart-v2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width: ${W}px; min-width: ${Math.round(W * minScale)}px;" role="img" aria-label="${plain ? 'Flowchart' : 'Swimlanes'}">`;
-  // the start and the end (a pill, a circle) in a soft fall of the accent, lit from above (app.css colours its stops)
+  // the start and the end (a pill, a circle) in a soft blue, lit from above (app.css colours its stops)
   svg += `<defs><marker id="${id}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sl-head" d="M0,1.5 L9,5 L0,8.5 z"/></marker>`
     + `<linearGradient id="${id}-lit" x1="0" y1="0" x2="0" y2="1"><stop class="sl-lit0" offset="0"/><stop class="sl-lit1" offset="1"/></linearGradient></defs>`;
-  // each step in a colour of its own, read at a glance: a lane's steps in their lane's, a chart without lanes a colour
-  // a level down the page; each line in the colour of the step it leaves
+  // each step in a pastel of its own, read at a glance: a lane's steps in their lane's, a chart without lanes a colour
+  // a level down the page (app.css)
   const hue = (b: Box) => `c${(plain ? b.rank : b.lane) % 12}`;
   lanes.forEach((l, i) => {
     const [x, y] = xy(0, laneAt[i]);
@@ -382,7 +382,7 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   edges.forEach((e, i) => {
     const { pts, at } = ways[i];
     const p = pts.map(([m, c]) => xy(m, c));
-    svg += `<path class="flowchart-link sl-edge ${e.line}${e.animate ? ' moving' : ''} ${hue(boxes.get(e.from)!)}" data-id="${esc(`L_${e.from}_${e.to}_${i}`)}" d="${rounded(p)}" marker-end="url(#${id}-arrow)"/>`;
+    svg += `<path class="flowchart-link sl-edge ${e.line}${e.animate ? ' moving' : ''}" data-id="${esc(`L_${e.from}_${e.to}_${i}`)}" d="${rounded(p)}" marker-end="url(#${id}-arrow)"/>`;
     const chip = chips[i];
     if (chip.lines.length) {
       const [m, c] = placeLabel(pts, at, chip, i);
