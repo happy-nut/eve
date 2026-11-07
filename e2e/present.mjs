@@ -23,7 +23,7 @@ try {
   const count = () => page.textContent('.present .count');
   const press = async (k) => { await page.keyboard.press(k); await page.waitForTimeout(500); };
   const look = () => page.evaluate(async () => {
-    await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))); // its lines all in
+    await Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))); // its lines all in (the light along them runs on for good)
     const s = document.querySelector('.present .slide'), r = s.getBoundingClientRect();
     const on = (sel) => [...s.querySelectorAll(sel)].filter((e) => getComputedStyle(e).opacity !== '0').length;
     return { h: s.querySelector('h1, h2')?.textContent, size: parseFloat(getComputedStyle(s).fontSize), box: [r.left, r.top, r.right, r.bottom], nodes: on('g.node'), lines: on('path.flowchart-link'), scrolled: s.scrollTop, tall: s.scrollHeight > s.clientHeight };

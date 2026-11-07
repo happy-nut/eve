@@ -291,7 +291,9 @@ try {
     await page.waitForSelector('.tiptap .mermaid-view svg');
     const started = () => page.evaluate(() => window.__motion.length);
     assert.ok(await page.waitForFunction(() => window.__motion.length >= 5, null, { timeout: 5000 }).then(() => true, () => false), 'its boxes, lines and label are drawn in');
-    await page.waitForFunction(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).length === 0, null, { timeout: 5000 });
+    // drawn in: no animation left that ends (the light along its lines runs on for good)
+    await page.waitForFunction(() => document.querySelector('.tiptap .mermaid-view svg').getAnimations({ subtree: true }).every((a) => a.effect?.getTiming().iterations === Infinity), null, { timeout: 5000 });
+    assert.equal(await page.locator('.tiptap .mermaid-view .eve-flow').count(), 2, 'then light flows along each line');
     const b = await page.locator('.tiptap .mermaid-view svg').boundingBox();
     await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
     await page.waitForTimeout(200);
