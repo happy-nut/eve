@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DRAWING, drawIn, flow, focus, levels, numbered, stepper, timeline } from './diagramMotion';
+import { DRAWING, drawIn, flow, focus, levels, numbered, play, stepper, timeline } from './diagramMotion';
 import { drawnCopy } from './snapshot';
 import { fromCode, type Flowchart } from './diagram';
 import { laneSvg } from './lanes';
@@ -181,13 +181,13 @@ describe('a diagram that answers the pointer, and lines that flow', () => {
   const node = (svg: SVGSVGElement, id: string) => svg.querySelector(`g.node[id$="-flowchart-${id}-0"]`)!;
   const lit = (svg: SVGSVGElement) => [...svg.querySelectorAll('.eve-lit')].map((e) => e.getAttribute('data-id') ?? e.querySelector('[data-id]')?.getAttribute('data-id') ?? e.id.replace(/^.*-flowchart-|-0$/g, '') ?? e.getAttribute('class'));
 
-  it('a box pointed at lights up with its lines, their labels and the boxes at their other ends; the rest steps back', () => {
+  it('a box pointed at lights up with its lines and their labels; the rest steps back', () => {
     const svg = chart();
     const stop = focus(svg);
     node(svg, 'B').dispatchEvent(new Event('pointerover', { bubbles: true }));
     expect(svg.classList.contains('eve-focus')).toBe(true);
-    expect(lit(svg).sort()).toEqual(['A', 'B', 'C', 'L_A_B_0', 'L_A_B_0', 'L_B_C_1'].sort()); // the label is lit with its line
-    expect(node(svg, 'D').classList.contains('eve-lit')).toBe(false);
+    // the way on from it too (C → D), and the label lit with its line
+    expect(lit(svg).sort()).toEqual(['A', 'B', 'C', 'D', 'L_A_B_0', 'L_A_B_0', 'L_B_C_1', 'L_C_D_2'].sort());
     // a picture taken meanwhile (its copy button is a click away) is the chart at rest; the chart stays as pointed at
     expect(drawnCopy(svg).classList.contains('eve-focus')).toBe(false);
     expect(svg.classList.contains('eve-focus')).toBe(true);
@@ -234,5 +234,50 @@ describe('a diagram that answers the pointer, and lines that flow', () => {
       nodes: [{ id: 'A', label: 'A', shape: 'round', lane: 'y' }, { id: 'B', label: 'B', shape: 'round', lane: 'y' }], edges: [] } as unknown as Flowchart);
     const lanes = d.firstElementChild as SVGSVGElement;
     expect(hue(node(lanes, 'A'))).toBe(hue(lanes.querySelector('g.lane[data-lane="y"]')!));
+  });
+});
+
+describe('a path traced, and a diagram played', () => {
+  const chart = () => {
+    const d = document.createElement('div');
+    // A → B → C → D, and X → C beside: pointed at B, the path through it is A, B, C, D, not X
+    d.innerHTML = laneSvg({ kind: 'flowchart', dir: 'TD', nodes: ['A', 'B', 'C', 'D', 'X'].map((id) => ({ id, label: id, shape: 'round' as const })),
+      edges: [['A', 'B'], ['B', 'C'], ['C', 'D'], ['X', 'C']].map(([from, to]) => ({ from, to, label: '', line: 'solid' as const })) });
+    document.body.append(d);
+    return d.firstElementChild as SVGSVGElement;
+  };
+  const node = (svg: SVGSVGElement, id: string) => svg.querySelector(`g.node[id$="-flowchart-${id}-0"]`)!;
+  const on = (svg: SVGSVGElement, cls: string) => [...svg.querySelectorAll(`.${cls}`)].map((e) => e.getAttribute('data-id') ?? e.id.replace(/^.*-flowchart-|-0$/g, '')).sort();
+
+  it('a box pointed at lights the whole way through it: what leads to it from the start, and on from it to the end', () => {
+    const svg = chart();
+    focus(svg);
+    node(svg, 'B').dispatchEvent(new Event('pointerover', { bubbles: true }));
+    expect(on(svg, 'eve-lit').filter((x) => !x.startsWith('L_'))).toEqual(['A', 'B', 'C', 'D']);
+    expect(on(svg, 'eve-lit').filter((x) => x.startsWith('L_'))).toEqual(['L_A_B_0', 'L_B_C_1', 'L_C_D_2']);
+    // the box itself stands out from its path
+    expect(on(svg, 'eve-here')).toEqual(['B']);
+  });
+
+  it('played: a step at a time, the one just reached marked, and the whole back at the end; stopped, the whole at once', () => {
+    vi.useFakeTimers();
+    try {
+      const svg = chart();
+      const done = vi.fn();
+      play(svg, done);
+      expect(svg.classList.contains('eve-playing')).toBe(true);
+      expect((node(svg, 'B') as SVGElement).style.opacity).toBe('0');
+      expect(on(svg, 'eve-now')).toEqual(['A', 'X']);
+      vi.advanceTimersByTime(60_000);
+      expect(done).toHaveBeenCalledTimes(1);
+      expect(svg.classList.contains('eve-playing')).toBe(false);
+      expect(svg.querySelector('.eve-now')).toBeNull();
+      expect([...svg.querySelectorAll<SVGElement>('g.node')].every((n) => n.style.opacity === '')).toBe(true);
+      const stop = play(svg, done);
+      vi.advanceTimersByTime(10);
+      stop();
+      expect([...svg.querySelectorAll<SVGElement>('g.node')].every((n) => n.style.opacity === '')).toBe(true);
+      expect(svg.classList.contains('eve-playing')).toBe(false);
+    } finally { vi.useRealTimers(); }
   });
 });

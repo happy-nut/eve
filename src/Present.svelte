@@ -312,7 +312,7 @@
   .slide:global(.chart) :global(.mermaid-view > svg) { width: 100% !important; height: 100% !important; max-width: none !important; max-height: none; }
   /* the slide that was up, going as the next comes */
   .present > :global(.leaving) { pointer-events: none; overflow: hidden; }
-  .slide :global(.mermaid-expand) { display: none; }
+  .slide :global(:is(.mermaid-expand, .mermaid-play)) { display: none; }
   .slide::-webkit-scrollbar { display: none; }
   .slide > :global(:first-child) { margin-top: 0; }
   /* a heading shown again, the slide going on under it: small, up in the corner, as a breadcrumb, the room for words */

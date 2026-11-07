@@ -9,7 +9,7 @@
   import { renderMermaid, themeKey } from './lib/mermaid';
   import { foldSeq, foldable, markFolds, type SeqBlock } from './lib/seqFold';
   import { spreadLabels } from './lib/edgeLabels';
-  import { drawIn, tokens, flow as flowLines, focus } from './lib/diagramMotion';
+  import { drawIn, tokens, flow as flowLines, focus, play, timeline } from './lib/diagramMotion';
   import { KINDS, across, fromCode, isEmpty, toCode, whyCode, type Diagram } from './lib/diagram';
   import FlowEditor from './FlowEditor.svelte';
   import { scrollHint } from './lib/scrollHint';
@@ -140,8 +140,16 @@
   });
   // drawn in once, the first time it is seen in the note: not again as it is edited, folded or drawn in the other theme
   let introduced = false;
+  /** told a step at a time (▶): what stops it, while it plays; `playable`, a drawing with steps to tell */
+  let playing = $state<(() => void) | null>(null), playable = $state(false);
+  function togglePlay() {
+    const el = canvas?.querySelector(':scope > svg');
+    if (playing) { playing(); return; }
+    if (el instanceof SVGSVGElement) playing = play(el, () => (playing = null));
+  }
   $effect(() => {
     void svg;
+    playable = false;
     if (active || full) return;
     let stop = () => {};
     tick().then(() => {
@@ -153,7 +161,8 @@
       let flowing = introduced ? flowLines(el) : () => {};
       const intro = introduced ? () => {} : drawIn(el, () => { introduced = true; flowing = flowLines(el); });
       const dots = tokens(el), lit = focus(el);
-      stop = () => { intro(); dots(); lit(); flowing(); };
+      playable = new Set(timeline(el).map((t) => t.stage)).size > 1;
+      stop = () => { intro(); dots(); lit(); flowing(); playing?.(); };
     });
     return () => stop();
   });
@@ -492,6 +501,13 @@
       <button aria-label="Zoom in" title="Zoom in (+)" onclick={() => zoomBy(1.25)}><svg viewBox="0 0 16 16"><path d="M8 4v8M4 8h8" /></svg></button>
     </div>
   {:else if !error && svg}
+    {#if playable && !active}
+      <button class="mermaid-play" class:on={!!playing} type="button" aria-label={playing ? 'Stop' : 'Play'}
+        data-tip={playing ? 'Stop' : 'Play it a step at a time'} onclick={(e) => { e.stopPropagation(); togglePlay(); }}>
+        {#if playing}<svg viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.5" /></svg>
+        {:else}<svg viewBox="0 0 16 16"><path d="M5.5 3.8v8.4a.6.6 0 0 0 .9.5l6.6-4.2a.6.6 0 0 0 0-1L6.4 3.3a.6.6 0 0 0-.9.5z" /></svg>{/if}
+      </button>
+    {/if}
     <button class="mermaid-expand" type="button" aria-label="Full screen" data-tip="Full screen: zoom in and edit"
       onclick={(e) => { e.stopPropagation(); if (canvas?.firstElementChild) enterFull(); }}>
       <svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9" /></svg>

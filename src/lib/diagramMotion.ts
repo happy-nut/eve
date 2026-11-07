@@ -226,34 +226,100 @@ export function tokens(svg: SVGSVGElement): () => void {
 }
 
 /**
- * A box pointed at stands out with what it is joined to: its lines, their labels and the boxes at their other ends; the
- * rest of the chart steps back (app.css, `.eve-focus`), so a busy chart's one path reads. The returned function stops it.
+ * A box pointed at lights the whole way through it: every box and line that leads to it from the start, and on from
+ * it to the end, with the lines into and out of it (one back up the chart too) and their labels; the rest of the chart
+ * steps back (app.css, `.eve-focus`), so "how does it get here, and where does it go" reads at a glance. The returned
+ * function stops it.
  */
 export function focus(svg: SVGSVGElement): () => void {
   const parts = flowParts(svg);
   if (!parts) return () => {};
   const { nodes, lines, labels } = parts;
   const ids = new Map([...nodes].map(([id, el]) => [el, id]));
-  const clear = () => { svg.classList.remove('eve-focus'); for (const el of svg.querySelectorAll('.eve-lit')) el.classList.remove('eve-lit'); };
+  // the lines that go on through the chart: one back to a box already on its way (a loop) is a way round, not through
+  const back = new Set<(typeof lines)[number]>(), seen = new Set<string>(), stack = new Set<string>();
+  const walk = (at: string) => {
+    seen.add(at); stack.add(at);
+    for (const l of lines) if (l.ends?.[0] === at) {
+      if (stack.has(l.ends[1])) back.add(l);
+      else if (!seen.has(l.ends[1])) walk(l.ends[1]);
+    }
+    stack.delete(at);
+  };
+  const pointed = new Set(lines.map((l) => l.ends?.[1]));
+  for (const id of [...nodes.keys()].sort((a, b) => +pointed.has(a) - +pointed.has(b))) if (!seen.has(id)) walk(id);
+  const on = lines.filter((l) => l.ends && !back.has(l));
+  const reach = (from: string, way: 0 | 1) => {
+    const got = new Set([from]);
+    for (let todo = [from]; todo.length;) {
+      const at = todo.pop()!;
+      for (const { ends } of on) if (ends![1 - way] === at && !got.has(ends![way])) { got.add(ends![way]); todo.push(ends![way]); }
+    }
+    return got;
+  };
+  const clear = () => { svg.classList.remove('eve-focus'); for (const el of svg.querySelectorAll('.eve-lit, .eve-here')) el.classList.remove('eve-lit', 'eve-here'); };
   const over = (e: Event) => {
     const box = (e.target as Element).closest?.('g.node');
     const id = box && ids.get(box);
     clear();
     if (!id) return;
-    const lit: Element[] = [box];
-    for (const { p, ends } of lines) {
-      if (!ends?.includes(id)) continue;
-      lit.push(p, nodes.get(ends[0] === id ? ends[1] : ends[0])!);
-      const label = labels.get(p.dataset.id!), f = p.nextElementSibling;
+    const up = reach(id, 0), down = reach(id, 1);
+    const path = new Set([...up, ...down]);
+    const lit: Element[] = [];
+    for (const l of lines) {
+      if (!l.ends) continue;
+      const [s, d] = l.ends;
+      const through = on.includes(l) && ((up.has(s) && up.has(d)) || (down.has(s) && down.has(d)));
+      if (!through && s !== id && d !== id) continue;
+      path.add(s); path.add(d);
+      const label = labels.get(l.p.dataset.id!), f = l.p.nextElementSibling;
+      lit.push(l.p);
       if (label) lit.push(label);
       if (f?.classList.contains(FLOW)) lit.push(f);
     }
+    for (const p of path) lit.push(nodes.get(p)!);
     for (const el of lit) el?.classList.add('eve-lit');
+    box.classList.add('eve-here');
     svg.classList.add('eve-focus');
   };
   svg.addEventListener('pointerover', over);
   svg.addEventListener('pointerleave', clear);
   return () => { clear(); svg.removeEventListener('pointerover', over); svg.removeEventListener('pointerleave', clear); };
+}
+
+/** how long a played diagram stays on each step */
+const BEAT = 900;
+/**
+ * The diagram told a step at a time where it stands in the note (▶ on it): its first boxes, then each level (a
+ * sequence: each message) coming in after the last, the one just reached marked (app.css, `.eve-now`), and the whole
+ * back once it has been told. `done` is told when it ends; the returned function ends it at once.
+ */
+export function play(svg: SVGSVGElement, done: () => void): () => void {
+  const s = stepper(svg), steps = timeline(svg);
+  if (!s.count) { done(); return () => {}; }
+  let k = 0, over = false;
+  const mark = () => {
+    for (const el of svg.querySelectorAll('.eve-now')) el.classList.remove('eve-now');
+    for (const st of steps) if (st.stage === k) st.el.classList.add('eve-now');
+  };
+  svg.classList.add('eve-playing');
+  s.show(0);
+  mark();
+  const end = () => {
+    if (over) return;
+    over = true;
+    clearInterval(t);
+    s.show(s.count - 1);
+    for (const el of svg.querySelectorAll('.eve-now')) el.classList.remove('eve-now');
+    svg.classList.remove('eve-playing');
+    done();
+  };
+  const t = setInterval(() => {
+    if (++k >= s.count) return end();
+    s.show(k);
+    mark();
+  }, BEAT);
+  return end;
 }
 
 /** a line's flowing copy (flow()): a picture of the drawing leaves it out (snapshot.ts) */

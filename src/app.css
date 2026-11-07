@@ -676,16 +676,21 @@ html.mobile .tiptap .mermaid-view .spot-hit { stroke-width: 22px; }
   .tiptap .dblock.active .mermaid-view [data-spot]:not(path):not([transform]):hover { scale: 1.06; }
 }
 @media (hover: hover) { .tiptap .mermaid-view:hover { box-shadow: inset 0 0 0 1.5px var(--accent-soft); } }
-.tiptap .mermaid-expand { display: none; }
-.tiptap .code-block.mermaid:not(.mermaid-error) .mermaid-expand {
+.tiptap :is(.mermaid-expand, .mermaid-play) { display: none; }
+.tiptap .code-block.mermaid:not(.mermaid-error) :is(.mermaid-expand, .mermaid-play) {
   display: inline-flex; align-items: center; justify-content: center; position: absolute; right: 10px; bottom: calc(0.6em + 10px);
   width: 30px; height: 30px; border: 0; border-radius: 9px; padding: 0; color: var(--fg-dim);
   background: light-dark(rgba(255, 255, 255, 0.92), rgba(35, 37, 43, 0.92)); box-shadow: 0 1px 4px light-dark(rgba(0, 23, 51, 0.12), rgba(0, 0, 0, 0.4));
   opacity: 0; transition: opacity 0.15s;
 }
-.tiptap .mermaid-expand svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-@media (hover: hover) { .tiptap .code-block.mermaid:hover .mermaid-expand { opacity: 1; } .tiptap .mermaid-expand:hover { color: var(--fg); } }
-html.mobile .tiptap .code-block.mermaid .mermaid-expand { opacity: 0.9; width: 40px; height: 40px; border-radius: 11px; } /* no hover on a phone: always there, a finger's size */
+.tiptap :is(.mermaid-expand, .mermaid-play) svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+@media (hover: hover) { .tiptap .code-block.mermaid:hover :is(.mermaid-expand, .mermaid-play) { opacity: 1; } .tiptap :is(.mermaid-expand, .mermaid-play):hover { color: var(--fg); } }
+html.mobile .tiptap .code-block.mermaid :is(.mermaid-expand, .mermaid-play) { opacity: 0.9; width: 40px; height: 40px; border-radius: 11px; } /* no hover on a phone: always there, a finger's size */
+/* ▶ beside it: tells the diagram a step at a time (diagramMotion.ts's play); while it plays it stays, the accent's */
+.tiptap .code-block.mermaid:not(.mermaid-error) .mermaid-play { right: 46px; }
+html.mobile .tiptap .code-block.mermaid .mermaid-play { right: 58px; }
+.tiptap .mermaid-play svg :is(path, rect) { fill: currentColor; stroke: none; }
+.tiptap .code-block.mermaid .mermaid-play.on { opacity: 1; color: var(--accent-text); }
 /* …and so the drawing leaves it a corner of its own: on top of a chart's last row it hid a value or a bar (a Gantt's
    last bar, a timeline's last event: on the Mac too, under the pointer that came to press it) */
 .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { padding-bottom: 52px; }
@@ -1184,6 +1189,12 @@ svg .eve-drawing { marker-end: none !important; }
 .diagram-canvas svg.eve-focus :is(g.node, .flowchart-link, .edgeLabel, .eve-flow):not(.eve-lit) { opacity: 0.38; }
 .diagram-canvas svg.eve-focus .flowchart-link.eve-lit { stroke: var(--d-dim); }
 .diagram-canvas svg.eve-still * { transition: none !important; } /* a picture being taken: as it is at rest, at once */
+/* the box pointed at, lifted from the way through it */
+.diagram-canvas svg.eve-focus g.node.eve-here { scale: 1.04; transition: scale 0.25s cubic-bezier(0.2, 0, 0, 1), opacity 0.28s; }
+.diagram-canvas svg g.node { transition: scale 0.25s cubic-bezier(0.2, 0, 0, 1), opacity 0.28s cubic-bezier(0.2, 0, 0, 1); }
+/* played (▶): the step just reached rings softly in the accent, a line just drawn in it too */
+.diagram-canvas svg.eve-playing g.node.eve-now { filter: drop-shadow(0 0 0.5px var(--accent)) drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 35%, transparent)); }
+.diagram-canvas svg.eve-playing :is(.flowchart-link, [class^='messageLine']).eve-now { stroke: var(--accent-text); }
 /* light running along each line the way it goes, while the diagram is in sight (diagramMotion.ts's flow) */
 .diagram-canvas .eve-flow {
   /* a soft blue glint now and then along the grey: there to see if looked for, not to watch */
