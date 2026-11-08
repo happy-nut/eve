@@ -21,12 +21,17 @@ async function open(code, rows = true) {
   await page.waitForTimeout(300);
   assert.equal(await page.locator('.tiptap .code-block.mermaid-error').count(), 0, 'drawn');
   await page.locator('.tiptap .mermaid-view').first().click({ position: { x: 6, y: 6 } });
-  await page.waitForSelector('.tiptap .dblock.active .tools', { timeout: 5000 });
+  await page.waitForSelector('.tiptap .dblock.active .dock', { timeout: 5000 });
   if (!rows) return page;
-  await page.locator('.tiptap .dblock.active .tools button', { hasText: 'List' }).click(); // every part as a row
+  await dockMenu(page, 'More', 'List'); // every part as a row
   await page.waitForSelector('.tiptap .dblock.active .form', { timeout: 5000 });
   return page;
 }
+const dockMenu = async (page, which, item) => {
+  await page.locator(`.tiptap .dblock.active .dock button[aria-label="${which}"]`).click();
+  await page.locator('[role="menu"] [role="menuitem"]', { hasText: item }).first().click(); // a popup, or a phone's sheet
+};
+const done = async (page) => { for (let i = 0; i < 4 && await page.locator('.tiptap .dblock.active').count(); i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(100); } };
 const md = async (page) => { await page.waitForTimeout(450); return page.evaluate(() => window.__editor.storage.markdown.getMarkdown()); };
 const has = (text, lines) => { for (const l of lines) assert.ok(text.includes(l), `"${l}" in\n${text}`); };
 
@@ -220,7 +225,7 @@ try {
   const moved = await md(page);
   assert.match(moved, /a[^\n]*go[^\n]*e\b|a -->\|go\| e/, `the line from One now ends at Five\n${moved}`);
   await page.locator('.tiptap .dblock.active .mermaid-view').evaluate((h) => { h.scrollLeft = h.scrollWidth; });
-  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await done(page);
   await page.waitForTimeout(400);
   assert.equal(await page.locator('.tiptap .mermaid-view').first().evaluate((h) => h.scrollLeft), 0, 'done, the picture from its start');
   console.log('ok   a flowchart: a new step past the edge is brought into view, a line\'s bar covers no box, its end moves');
@@ -301,7 +306,7 @@ try {
     await ph.evaluate((md) => window.__editor.commands.setContent(md, true), `# T\n\n${F}mermaid\ntimeline\n  2021 : 정식 출시\n  2023 : 해외 진출\n${F}\n`);
     await ph.waitForSelector('.tiptap .mermaid-view .chart', { timeout: 30000 });
     await ph.locator('.tiptap .mermaid-view').first().click({ position: { x: 6, y: 6 } });
-    await ph.locator('.tiptap .dblock.active .tools button', { hasText: 'List' }).click();
+    await dockMenu(ph, 'More', 'List');
     await ph.waitForSelector('.tiptap .dblock.active .form');
     const w = (await ph.locator('.form input[aria-label="Event"]').first().boundingBox()).width;
     assert.ok(w >= 150, `an event's box is ${Math.round(w)}px wide on a phone`);
@@ -393,7 +398,7 @@ try {
   await page.close();
   // a class added with the chart's own + is kept, though nothing is in it yet
   page = await open('classDiagram\n  class Animal {\n    +eat()\n  }', false);
-  await page.locator('.tiptap .dblock.active .tools button', { hasText: '+ Class' }).click();
+  await dockMenu(page, 'Add', 'Class');
   await page.waitForTimeout(800);
   await page.keyboard.type('Cat');
   await page.keyboard.press('Enter');
@@ -471,7 +476,7 @@ try {
   await page.close();
   // a state added on its own is drawn, its field on it
   page = await open('stateDiagram-v2\n  [*] --> Idle\n  Idle --> Running', false);
-  await page.locator('.tiptap .dblock.active .tools button', { hasText: '+ State' }).click();
+  await dockMenu(page, 'Add', 'State');
   await page.waitForTimeout(900);
   await page.keyboard.type('Paused');
   await page.keyboard.press('Enter');
@@ -516,13 +521,13 @@ try {
   assert.ok(await page.evaluate(() => document.activeElement?.closest('.layer')), 'Tab past the bar\'s end comes back round, not out to Full screen');
   // a whole chart's setting turned meanwhile is not taken back by Esc
   await page.locator('.tiptap .layer input.field').focus();
-  await page.locator('.tiptap .dblock.active .tools button', { hasText: 'Values' }).click();
+  await dockMenu(page, 'More', 'Values');
   await page.keyboard.press('Escape');
   assert.match(await md(page), /pie showData/, 'Values stays on');
   // but the title typed meanwhile is put back
   await spot(page, 'title');
   await page.keyboard.type('Money');
-  await page.locator('.tiptap .dblock.active .tools button', { hasText: 'Values' }).click();
+  await dockMenu(page, 'More', 'Values');
   await page.keyboard.press('Escape');
   after = await md(page);
   assert.match(after, /title Pets/, 'the title put back');
@@ -564,10 +569,10 @@ try {
     await page.waitForTimeout(300);
     if (down) await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
-    await page.waitForSelector('.tiptap .dblock.active .tools', { timeout: 15000 });
+    await page.waitForSelector('.tiptap .dblock.active .dock', { timeout: 15000 });
     await page.waitForSelector('.tiptap .dblock.active .mermaid-view svg', { timeout: 30000 });
     assert.equal(await page.locator('.tiptap .code-block.mermaid-error').count(), 0, `${item} drawn`);
-    await page.locator('.tiptap .dblock.active .tools button.done').click();
+    await done(page);
     await page.waitForTimeout(300);
   }
   const made = await md(page);
@@ -583,7 +588,7 @@ try {
   {
     const wide = await page.evaluate(() => { const c = document.querySelector('.tiptap .mermaid-view'); c.scrollLeft = c.scrollWidth; return c.scrollWidth > c.clientWidth && c.scrollLeft > 0; });
     assert.ok(wide, 'wider than its card, scrolled to its far side');
-    await page.locator('.tiptap .dblock.active .tools button', { hasText: 'Done' }).click();
+    await done(page);
     await page.waitForTimeout(500);
     assert.equal(await page.evaluate(() => document.querySelector('.tiptap .mermaid-view').scrollLeft), 0, 'Done: from its start');
   }
@@ -608,9 +613,45 @@ try {
     await page.locator('[role="listbox"] [role="option"]', { hasText: 'UK' }).first().click();
     await page.waitForTimeout(400);
     assert.match(await md(page), /bigint id UK/, 'a key picked from it');
+    // a column with no key: where its key goes is clicked as well, to give it one
+    const empty = await page.evaluate(() => { const g = document.querySelectorAll('.tiptap g.label.attribute-keys')[1]; const r = g.querySelector('.spot-cell').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
+    await page.mouse.click(...empty);
+    await page.waitForTimeout(500);
+    await page.locator('[role="listbox"] [role="option"]', { hasText: 'FK' }).first().click();
+    await page.waitForTimeout(400);
+    assert.match(await md(page), /string name FK/, 'a key given to a column that had none');
+    // and with the diagram closed, the click that opens it on a type: that box at once, not the column's name
+    await done(page);
+    await page.mouse.click(...await at('string', 'attribute-type'));
+    await page.waitForTimeout(700);
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Type', 'opened on a type: its box');
   }
   await page.close();
   console.log('ok   a table column’s type and key are clicked in the drawing to change them');
+
+  // ---- the dock's ↶ then ↷ in a long note: the note stays where it is, so ↷ is still under the pointer ----
+  // (↶ scrolled the note to where the change was, the dock went off the top, and ↷ was pressed on nothing)
+  page = await open('pie title Pets\n  "Dogs" : 40\n  "Cats" : 30', false);
+  {
+    await page.evaluate(() => { const ed = window.__editor; ed.commands.insertContentAt(ed.state.doc.content.size, Array.from({ length: 40 }, (_, i) => ({ type: 'paragraph', content: [{ type: 'text', text: `Line ${i}` }] }))); });
+    await page.waitForTimeout(300);
+    await page.locator('.tiptap .mermaid-view').first().evaluate((v) => v.scrollIntoView({ block: 'center' }));
+    await page.locator('.tiptap .mermaid-view').first().click({ position: { x: 6, y: 6 } });
+    await page.waitForSelector('.tiptap .dblock.active .dock');
+    await dockMenu(page, 'More', 'Values');
+    await page.waitForTimeout(400);
+    const y0 = (await page.locator('.dblock.active .dock button[aria-label="Undo"]').boundingBox()).y;
+    await page.locator('.dblock.active .dock button[aria-label="Undo"]').click();
+    await page.waitForTimeout(500);
+    assert.doesNotMatch(await md(page), /pie showData/, '↶ took Values back');
+    const y1 = (await page.locator('.dblock.active .dock button[aria-label="Redo"]').boundingBox()).y;
+    assert.ok(Math.abs(y1 - y0) < 3, `the dock stays where it was (${Math.round(y0)} → ${Math.round(y1)})`);
+    await page.locator('.dblock.active .dock button[aria-label="Redo"]').click();
+    await page.waitForTimeout(500);
+    assert.match(await md(page), /pie showData/, '↷ brought it back');
+  }
+  await page.close();
+  console.log('ok   the dock’s ↶ and ↷ keep the note where it is');
   assert.deepEqual(errors, [], 'no errors in the page');
 } finally {
   await browser.close();

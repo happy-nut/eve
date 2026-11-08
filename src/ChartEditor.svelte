@@ -19,7 +19,7 @@
    *   keys while typing: Enter is done, Tab adds the next one (the bar's first +) and types in it (a line, with none to
    *   add: Tab tries its next kind), Esc puts it back
    */
-  let { d, host, version, pick = null }: { d: Diagram; host: HTMLElement; version: string; pick?: string | null } = $props();
+  let { d, host, version, pick = null, pickField = null }: { d: Diagram; host: HTMLElement; version: string; pick?: string | null; pickField?: string | null } = $props();
 
   type Rect = { x: number; y: number; w: number; h: number };
   let layer = $state<HTMLDivElement>(null!);
@@ -245,9 +245,12 @@
     // the part already picked clicked again (the click that opened the chart picked it): its field keeps the keyboard
     if (key && key === sel) field?.focus({ preventScroll: true });
     else select(key);
-    // a part of it with a box of its own in the bar (a column's type, its key): that box, typed in or opened
     const want = el?.getAttribute('data-field');
-    if (key && want) tick().then(() => tick()).then(() => {
+    if (key && want) openField(want);
+  }
+  /** a part of it with a box of its own in the bar (a column's type, its key) clicked: that box, typed in or opened */
+  function openField(want: string) {
+    tick().then(() => tick()).then(() => {
       const c = bar?.querySelector<HTMLElement>(`[aria-label="${CSS.escape(want)}"]`);
       if (c instanceof HTMLInputElement) { c.focus({ preventScroll: true }); c.select(); } else c?.click();
     });
@@ -277,7 +280,7 @@
       floatAt(around, size, { prefer: 'above', within, gap: 8, align: 'start' }),
     ].filter((f, i) => (i === 0 ? f.side === 'right' || f.side === 'left' : f.side !== 'inside'));
     // (and the picture's own full-screen button)
-    const others = [...host.querySelectorAll('[data-spot]'), ...(host.parentElement?.querySelectorAll('.mermaid-expand, .mermaid-play') ?? [])]
+    const others = [...host.querySelectorAll('[data-spot]'), ...(host.parentElement?.querySelectorAll('.mermaid-expand, .mermaid-play, .dock') ?? [])]
       .filter((el) => el.getAttribute('data-spot') !== sel).map((el) => el.getBoundingClientRect());
     const covers = (f: { left: number; top: number }) => others.filter((q) => q.width && q.left < f.left + size.w && q.right > f.left && q.top < f.top + size.h && q.bottom > f.top).length;
     const best = tries.reduce<(typeof tries)[number] | null>((a, f) => (!a || covers(f) < covers(a) ? f : a), null);
@@ -320,7 +323,7 @@
       const cost = (t: number) => covers({ left: o.left + fieldLeft, top: o.top + t }) * 1e5 + Math.abs(t - fieldTop);
       const top = tops.length ? tops.reduce((a, t) => (cost(t) < cost(a) ? t : a)) : fieldTop - size.h - 8;
       // (those on its rows and to the right only: a phone's Done, on a row of its own at the left, left it no room)
-      const stop = [...(layer.parentElement?.parentElement?.querySelectorAll('.mermaid-expand, .mermaid-play, .tools .done') ?? [])].map((b) => b.getBoundingClientRect())
+      const stop = [...(layer.parentElement?.parentElement?.querySelectorAll('.mermaid-expand, .mermaid-play, .dock') ?? [])].map((b) => b.getBoundingClientRect())
         .filter((q) => q.top < o.top + top + size.h && q.bottom > o.top + top && q.left - o.left > 200).map((q) => q.left - o.left - 8);
       barMax = Math.max(160, Math.min(W - 8, ...stop) - 4);
       const w = Math.min(size.w, barMax);
@@ -361,7 +364,8 @@
     window.addEventListener('resize', resized);
     document.addEventListener('scroll', measure, { passive: true, capture: true });
     // the part the click that opened the chart landed on
-    untrack(() => { if (pick) tick().then(() => select(pick)); });
+    // (the click that opened it on a column's type or key: that box, as a click on it once open does)
+    untrack(() => { if (pick) tick().then(() => { select(pick); if (pickField) openField(pickField); }); });
     return () => {
       held.hues.clear();
       held.sides.clear(); // done: the map split anew, tidily

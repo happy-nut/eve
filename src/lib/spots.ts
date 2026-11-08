@@ -538,7 +538,16 @@ export function tagSpots(d: Diagram, root: Element) {
       for (const [cls, field] of [['attribute-type', 'Type'], ['attribute-keys', 'Key']] as const) {
         const els = [...g.querySelectorAll(`g.label.${cls}`)];
         tag(els, cols);
-        if (els.length === cols.length) els.forEach((el) => el.setAttribute('data-field', field));
+        if (els.length !== cols.length) continue;
+        els.forEach((el) => el.setAttribute('data-field', field));
+        // a column with no key: nothing drawn where its key goes, so nothing to click to give it one; a cell there
+        if (field === 'Key') for (const el of els) {
+          if (el.textContent?.trim() || el.querySelector('.spot-cell')) continue;
+          const cell = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          cell.setAttribute('class', 'spot-cell');
+          for (const [k, v] of [['x', '-4'], ['y', '-1'], ['width', '30'], ['height', '22'], ['rx', '6']]) cell.setAttribute(k, v);
+          el.append(cell);
+        }
       }
     }
     lines(d, 'rel') || labels((i) => `rel:${i}`, d.links.map((l) => l.label));

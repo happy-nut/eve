@@ -676,6 +676,10 @@ svg.mindmap .mm-shape.bang { stroke-width: 2 !important; stroke: color-mix(in sr
 .tiptap .mermaid-view .spot-hit { fill: none; stroke: transparent; stroke-width: 14px; pointer-events: none; }
 html.mobile .tiptap .mermaid-view .spot-hit { stroke-width: 22px; }
 .tiptap .dblock.active .mermaid-view .spot-hit { pointer-events: stroke; cursor: text; }
+/* where a table's column with no key would show one (spots.ts): clickable, a faint "+" chip as the pointer comes */
+.tiptap .mermaid-view .spot-cell { fill: transparent; pointer-events: none; }
+.tiptap .dblock.active .mermaid-view .spot-cell { pointer-events: all; cursor: pointer; stroke: transparent; stroke-dasharray: 3 2; transition: fill 0.12s, stroke 0.12s; }
+@media (hover: hover) { .tiptap .dblock.active .mermaid-view .spot-cell:hover { fill: var(--accent-soft); stroke: color-mix(in srgb, var(--accent-text) 45%, transparent); } }
 @media (hover: hover) {
   .tiptap .dblock.active .mermaid-view path[data-spot]:has(+ .spot-hit:hover) { stroke: var(--accent-text) !important; stroke-width: 2.5px !important; }
   /* (not one placed by its own transform, a mermaid box: scaled, it slid off where it was drawn; those keep the ring;
@@ -685,25 +689,10 @@ html.mobile .tiptap .mermaid-view .spot-hit { stroke-width: 22px; }
   .tiptap .dblock.active .mermaid-view [data-spot]:not(path):not(text):not([transform]):hover { scale: 1.06; }
 }
 @media (hover: hover) { .tiptap .mermaid-view:hover { box-shadow: inset 0 0 0 1.5px var(--accent-soft); } }
-.tiptap :is(.mermaid-expand, .mermaid-play) { display: none; }
-.tiptap .code-block.mermaid:not(.mermaid-error) :is(.mermaid-expand, .mermaid-play) {
-  display: inline-flex; align-items: center; justify-content: center; position: absolute; right: 10px; bottom: calc(0.6em + 10px);
-  width: 30px; height: 30px; border: 0; border-radius: 9px; padding: 0; color: var(--fg-dim);
-  background: light-dark(rgba(255, 255, 255, 0.92), rgba(35, 37, 43, 0.92)); box-shadow: 0 1px 4px light-dark(rgba(0, 23, 51, 0.12), rgba(0, 0, 0, 0.4));
-  opacity: 0; transition: opacity 0.15s;
-}
-.tiptap :is(.mermaid-expand, .mermaid-play) svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-@media (hover: hover) { .tiptap .code-block.mermaid:hover :is(.mermaid-expand, .mermaid-play) { opacity: 1; } .tiptap :is(.mermaid-expand, .mermaid-play):hover { color: var(--fg); } }
-html.mobile .tiptap .code-block.mermaid :is(.mermaid-expand, .mermaid-play) { opacity: 0.9; width: 40px; height: 40px; border-radius: 11px; } /* no hover on a phone: always there, a finger's size */
-/* ▶ beside it: tells the diagram a step at a time (diagramMotion.ts's play); while it plays it stays, the accent's */
-.tiptap .code-block.mermaid:not(.mermaid-error) .mermaid-play { right: 46px; }
-html.mobile .tiptap .code-block.mermaid .mermaid-play { right: 58px; }
-.tiptap .mermaid-play svg :is(path, rect) { fill: currentColor; stroke: none; }
-.tiptap .code-block.mermaid .mermaid-play.on { opacity: 1; color: var(--accent-text); }
-/* …and so the drawing leaves it a corner of its own: on top of a chart's last row it hid a value or a bar (a Gantt's
-   last bar, a timeline's last event: on the Mac too, under the pointer that came to press it) */
-.tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { padding-bottom: 52px; }
-html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .diagram-canvas { padding-bottom: 60px; }
+/* the dock over its top-right corner (DiagramBlock.svelte): the drawing leaves it a strip of its own there (over the
+   drawing it covered a box at its corner; under it, before, a chart's last row) */
+.tiptap .code-block.mermaid:not(.mermaid-error) .dblock:not(.full) .diagram-canvas { padding-top: 46px; padding-bottom: 30px; }
+html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .dblock:not(.full) .diagram-canvas { padding-top: 54px; }
 /* a diagram selected as a whole (⌫ under it, ↑ onto it, Done): outlined as a picture is (open, it has its own ring) */
 .tiptap .code-block.mermaid.ProseMirror-selectednode:not(.mermaid-error):not(:has(.dblock.active)) .mermaid-view { outline: 2px solid var(--accent); box-shadow: var(--glow); }
 .tiptap .code-block.mermaid.editing .mermaid-view { margin-top: -0.2em; cursor: default; }

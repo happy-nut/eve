@@ -767,10 +767,13 @@
     // it (fitBars). Above, the picture's top cut it off; grown at the top, the picture moved under the finger
     if (up.side === 'inside') return { left, top: bottom + 8 };
     // above or under, whichever covers less of the other boxes (it sat over the box one wanted to tap next)
-    const cost = (t: number) => boxes.reduce((sum, b) => {
-      if (b.id === own) return sum;
+    // (and the dock over the picture's top-right corner: a bar beside it took the clicks meant for its ↶ ↷)
+    const dk = host.parentElement?.querySelector('.dock')?.getBoundingClientRect();
+    const dock = dk && dk.width ? [{ id: '', x: dk.left - o.left, y: dk.top - o.top, w: dk.width, h: dk.height, big: 100 }] : [];
+    const cost = (t: number) => [...boxes.map((b) => ({ ...b, big: 1 })), ...dock].reduce((sum, b) => {
+      if (b.id && b.id === own) return sum;
       const w = Math.min(left + width, b.x + b.w) - Math.max(left, b.x), h = Math.min(t + tall, b.y + b.h) - Math.max(t, b.y);
-      return sum + (w > 0 && h > 0 ? w * h : 0);
+      return sum + (w > 0 && h > 0 ? w * h * b.big : 0);
     }, 0);
     const a = up.top - o.top, b = down.top - o.top;
     // covering boxes either way (a line between boxes at the picture's top): under them all, the picture growing at
@@ -851,15 +854,16 @@
     {@const i = (flow.lanes ?? []).findIndex((l) => l.id === lid)}
     {#if hb && i >= 0}
       <div class="ring" style:left={`${hb.x - 2}px`} style:top={`${hb.y - 2}px`} style:width={`${hb.w + 4}px`} style:height={`${hb.h + 4}px`}></div>
-      {#if laneEditing === lid || (armed && 'lane' in armed)}
+      {#key lid}{#if laneEditing === lid || (armed && 'lane' in armed)}
         <!-- the keyboard in it as it appears: it comes only once the new lane is drawn and measured, after "+ Lane" was
              pressed, and the keys typed went to that button (Enter made another lane). Picked only, it is there unseen:
-             a key typed types over the lane's name -->
+             a key typed types over the lane's name. A box of its own for each lane; one taken away (the lane picked
+             before, as a new lane was added) ends no naming as it goes: it ended the new lane's -->
         <input class={laneEditing === lid ? 'lane-name' : 'armed'} bind:value={laneText} aria-label="Lane name" placeholder="Lane" {@attach (el: HTMLInputElement) => { el.focus({ preventScroll: true }); el.select(); }}
           style:left={`${clampX(hb.x + hb.w / 2, 140)}px`} style:top={`${hb.y + hb.h / 2 - 16}px`} oninput={() => { if (!laneEditing) laneEditing = lid; }}
           onkeydown={(e) => { if (composing(e) || !laneEditing) return; if (e.key === 'Enter') { e.preventDefault(); commitLane(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); doneTyping(); laneEditing = null; } }}
-          onblur={() => { if (laneEditing) commitLane(); }} />
-      {/if}
+          onblur={(e) => { const el = e.currentTarget; queueMicrotask(() => { if (el.isConnected && laneEditing === lid) commitLane(); }); }} />
+      {/if}{/key}
       {#if laneEditing !== lid}
         <!-- over the lane's own name (picked, it is ringed): above or under it, the bar covered the next lane's name and
              boxes, and a click meant for them deleted the lane -->

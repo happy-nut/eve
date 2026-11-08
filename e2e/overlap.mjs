@@ -84,9 +84,13 @@ const overlaps = (page, i) => page.evaluate((i) => {
   if (down && down.top < r.bottom - 1) out.push(`over the text below by ${(r.bottom - down.top).toFixed(1)}px`);
   // open for editing: its bars clear of the drawing
   const canvas = block.querySelector('.mermaid-view').getBoundingClientRect();
-  block.querySelectorAll('.dblock > .tools, .dblock > .foot').forEach((t) => {
+  // (the dock over its corner, clear of the drawing itself: it stands in a strip the canvas leaves it)
+  const drawn = block.querySelector('.mermaid-view > :is(svg, .chart)')?.getBoundingClientRect();
+  block.querySelectorAll('.dock').forEach((t) => {
     const tr = t.getBoundingClientRect();
-    if (tr.height && cross(tr, canvas) > 1) out.push(`${t.className} over the drawing`);
+    if (drawn && tr.height && cross(tr, drawn) > 1) out.push('the dock over the drawing');
+    // a picked box's bar beside it took the clicks meant for its ↶ ↷
+    block.querySelectorAll('.layer .bar').forEach((b) => { if (cross(b.getBoundingClientRect(), tr) > 1) out.push('a bar over the dock'); });
   });
   return out;
 }, i);
@@ -129,8 +133,8 @@ try {
     // …and on the whole screen: its bar clear of a Mac window's traffic lights (x 0–78, y 0–40), which stay over it
     if (!opts.isMobile) {
       await page.locator('.tiptap .dblock.active .mermaid-expand').click({ force: true });
-      await page.waitForSelector('.dblock.full.active .tools');
-      const under = await page.evaluate(() => [...document.querySelectorAll('.dblock.full :is(.tools, .codebar, .foldchips) > *')]
+      await page.waitForSelector('.dblock.full.active .dock');
+      const under = await page.evaluate(() => [...document.querySelectorAll('.dblock.full :is(.dock, .foldchips) > *')]
         .map((el) => [el.textContent.trim().slice(0, 20), el.getBoundingClientRect()]).filter(([, r]) => r.width && r.left < 78 && r.top < 40).map(([t]) => t));
       if (under.length) failed.push(`${where}, on the whole screen, under the traffic lights: ${under.join(', ')}`);
       else console.log(`ok   ${where}: on the whole screen, its bar clear of the traffic lights`);

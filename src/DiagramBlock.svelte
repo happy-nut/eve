@@ -3,14 +3,14 @@
   import { isMobile, copyPng, copyText } from './lib/platform';
   import { pictureOf } from './lib/snapshot';
   import { fenced } from './lib/markdown';
-  import { ui, hooks } from './lib/ui.svelte';
+  import { ui, hooks, under, type MenuItem } from './lib/ui.svelte';
   import { letGo } from './lib/focusWatch';
   import { claimKeys } from './lib/keys';
   import { renderMermaid, themeKey } from './lib/mermaid';
   import { foldSeq, foldable, markFolds, type SeqBlock } from './lib/seqFold';
   import { spreadLabels } from './lib/edgeLabels';
   import { drawIn, flow as flowLines, focus, play, timeline } from './lib/diagramMotion';
-  import { KINDS, across, fromCode, isEmpty, toCode, whyCode, type Diagram } from './lib/diagram';
+  import { across, fromCode, isEmpty, toCode, whyCode, type Diagram } from './lib/diagram';
   import FlowEditor from './FlowEditor.svelte';
   import { scrollHint } from './lib/scrollHint';
   import DiagramForm from './DiagramForm.svelte';
@@ -275,7 +275,7 @@
   $effect(() => { if (codeShown && full) untrack(leaveFull); });
 
   /** the box the opening click landed on, picked as the editor comes up */
-  let pick = $state<string | null>(null);
+  let pick = $state<string | null>(null), pickField = $state<string | null>(null);
   function open(e: MouseEvent) {
     // a sequence diagram's block label: folded or unfolded, not opened
     const fold = (e.target as Element).closest?.('[data-fold]');
@@ -285,7 +285,9 @@
     e.preventDefault();
     if (codeShown) onCodeLeave(); // the drawing clicked under its code: the code goes, the drawing opens
     const g = (e.target as Element).closest?.('g.node');
-    pick = d.kind !== 'flowchart' ? (e.target as Element).closest?.('[data-spot]')?.getAttribute('data-spot') ?? null : g ? /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null : null;
+    const spot = (e.target as Element).closest?.('[data-spot]');
+    pick = d.kind !== 'flowchart' ? spot?.getAttribute('data-spot') ?? null : g ? /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null : null;
+    pickField = d.kind !== 'flowchart' ? spot?.getAttribute('data-field') ?? null : null;
     letGo(); // the keys typed next are the diagram's, not the note's
     active = true;
   }
@@ -296,7 +298,7 @@
   export function edit(): boolean {
     if (active || error) return false;
     if (!d) { onCodeEdit(); return true; }
-    pick = null;
+    pick = null; pickField = null;
     letGo();
     active = true;
     return true;
@@ -334,14 +336,47 @@
   /** the code shown: to its drawing (the caret out of the code, the drawing open) */
   function toDrawing() {
     onCodeLeave();
-    pick = null;
+    pick = null; pickField = null;
     letGo();
     active = true;
   }
   /** why a hand-written diagram is edited as code (it opened as code and said nothing of why) */
   const why = $derived(codeShown && !d && !error ? whyCode(code) : null);
   const flow = $derived(active && d?.kind === 'flowchart' ? d : null);
-  const kindLabel = $derived(d ? KINDS.find((k) => k.kind === d!.kind)?.label ?? '' : '');
+  /** the dock's + : what the chart adds (a box, a lane; a part, a title, a branch…), each typed in at once */
+  function addItems(): MenuItem[] {
+    if (flow) return [{ label: 'Box', run: () => flowEd?.addBox() }, { label: 'Lane', run: () => flowEd?.addLane() }];
+    if (chart) return adders(chart).map((a) => ({ label: a.label.replace(/^\+ /, ''), run: () => chartEd?.open(a.run()) }));
+    return [];
+  }
+  /** the dock's ⋯ : its layout and settings, its rows, its code */
+  function moreItems(): MenuItem[] {
+    const f = flow, c = chart;
+    return [
+      ...(f ? [{ label: 'Across', checked: across(f), run: () => { f.dir = 'LR'; } }, { label: 'Down', checked: !across(f), run: () => { f.dir = 'TD'; } }] : []),
+      ...(c ? toggles(c).map((t) => ({ label: t.label, checked: t.on, run: () => (chartEd ? chartEd.kept(() => t.set(!t.on)) : t.set(!t.on)) })) : []),
+      ...(c ? [{ label: 'List', checked: rows, run: () => { rows = !rows; } }] : []),
+      { label: 'Edit code', sep: true, run: () => { active = false; onCodeEdit(); } },
+    ];
+  }
+  /** the note kept where it is while the dock's ↶ ↷ run: the note scrolled to where the change was, the dock went with
+   *  it off the screen, and the ↷ pressed next landed on nothing */
+  function stayPut(run: () => void) {
+    const sc = root.closest<HTMLElement>('.scroll') ?? (document.scrollingElement as HTMLElement | null);
+    const top = sc?.scrollTop ?? 0;
+    run();
+    if (!sc) return;
+    // (the undo runs a moment later, and the drawing is drawn again after it)
+    let n = 0;
+    const hold = () => { sc.scrollTop = top; if (++n < 12) requestAnimationFrame(hold); };
+    requestAnimationFrame(hold);
+  }
+  function menuFrom(e: MouseEvent, items: MenuItem[]) {
+    e.stopPropagation();
+    // each run once the menu has gone and given the keyboard back to its button: run at once, the field it opened (a
+    // new lane's name, a new part's) lost the keyboard to that button and closed
+    ui.openMenu(under(e.currentTarget as HTMLElement), items.map((it) => ({ ...it, run: it.run && (() => requestAnimationFrame(() => it.run!())) })));
+  }
   let flowEd = $state<ReturnType<typeof FlowEditor> | null>(null);
   const chart = $derived(active && d && d.kind !== 'flowchart' ? d : null);
   let chartEd = $state<ReturnType<typeof ChartEditor> | null>(null);
@@ -502,7 +537,55 @@
     </div>
   {/if}
   {#if flow && canvas && svg && !error}<FlowEditor bind:this={flowEd} {flow} host={canvas} version={svg} k={1} {pick} />{/if}
-  {#if chart && canvas && svg && !error}<ChartEditor bind:this={chartEd} d={chart} host={canvas} version={svg} {pick} />{/if}
+  {#if chart && canvas && svg && !error}<ChartEditor bind:this={chartEd} d={chart} host={canvas} version={svg} {pick} {pickField} />{/if}
+  {#if !error && svg}
+    <!-- its tools, over its top-right corner as the pointer comes over it (and while it is edited): no bar under it to
+         reach for — a click away or Esc is done, + adds, ⋯ holds its layout, its rows and its code -->
+    <div class="dock" class:on={active || codeShown} role="toolbar" aria-label="Diagram tools">
+      {#if active && d}
+        {#if addItems().length}
+          <button type="button" style="--i: 0" aria-label="Add" data-tip="Add" onmousedown={(e) => e.preventDefault()} onclick={(e) => menuFrom(e, addItems())}>
+            <svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" /></svg>
+          </button>
+        {/if}
+        <button type="button" style="--i: 1" aria-label="More" data-tip="Layout, list and code" onmousedown={(e) => e.preventDefault()} onclick={(e) => menuFrom(e, moreItems())}>
+          <svg viewBox="0 0 16 16"><circle cx="3.6" cy="8" r="1.1" /><circle cx="8" cy="8" r="1.1" /><circle cx="12.4" cy="8" r="1.1" /></svg>
+        </button>
+        <i class="sep"></i>
+      {:else if codeShown && d}
+        <button type="button" style="--i: 1" aria-label="Edit as drawing" data-tip="Edit as a drawing (⌘↵)" onmousedown={(e) => e.preventDefault()} onclick={toDrawing}>
+          <svg viewBox="0 0 16 16"><rect x="2.5" y="3" width="5" height="4" rx="1.2" /><rect x="8.5" y="9" width="5" height="4" rx="1.2" /><path d="M5 7v2.5a1.5 1.5 0 0 0 1.5 1.5h2" /></svg>
+        </button>
+        <i class="sep"></i>
+      {/if}
+      {#if playable && !active}
+        <!-- ▶ tells the diagram a step at a time (diagramMotion.ts's play); while it plays, the dock stays -->
+        <button type="button" class="mermaid-play" class:on={!!playing} style="--i: 1" aria-label={playing ? 'Stop' : 'Play'} data-tip={playing ? 'Stop' : 'Play it a step at a time'}
+          onclick={(e) => { e.stopPropagation(); togglePlay(); }}>
+          {#if playing}<svg viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.5" /></svg>
+          {:else}<svg viewBox="0 0 16 16"><path d="M5.5 3.8v8.4a.6.6 0 0 0 .9.5l6.6-4.2a.6.6 0 0 0 0-1L6.4 3.3a.6.6 0 0 0-.9.5z" /></svg>{/if}
+        </button>
+      {/if}
+      {#if !full}
+        <button type="button" class="mermaid-expand" style="--i: 2" aria-label="Full screen" data-tip="Full screen: zoom in and edit"
+          onclick={(e) => { e.stopPropagation(); if (canvas?.firstElementChild) enterFull(); }}>
+          <svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9" /></svg>
+        </button>
+      {/if}
+      <i class="sep edit"></i>
+      <!-- undo where there is no keyboard (a phone's bar with ↶ went with the keyboard as a box was picked) -->
+      <button type="button" class="edit" style="--i: 3" aria-label="Undo" data-tip="Undo (⌘Z)" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); stayPut(() => onHistory(false)); }}>
+        <svg viewBox="0 0 16 16"><path d="M5.5 4 2.5 7l3 3M2.5 7h7a4 4 0 0 1 0 8H8" /></svg>
+      </button>
+      <button type="button" class="edit" style="--i: 4" aria-label="Redo" data-tip="Redo (⇧⌘Z)" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); stayPut(() => onHistory(true)); }}>
+        <svg viewBox="0 0 16 16"><path d="M10.5 4l3 3-3 3M13.5 7h-7a4 4 0 0 0 0 8H8" /></svg>
+      </button>
+      <!-- the diagram itself deleted (⌘Z brings it back) -->
+      <button type="button" class="danger edit" style="--i: 5" aria-label="Delete diagram" data-tip="Delete diagram" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); active = false; onDelete(true); }}>
+        <svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg>
+      </button>
+    </div>
+  {/if}
   {#if full}
     <button class="full-close" type="button" aria-label="Back to the note" title="Back to the note (Esc)" onclick={leaveFull}>
       <svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
@@ -512,71 +595,22 @@
       <button class="pct" aria-label="Fit to screen" title="Fit to screen (0)" onclick={fit}>{Math.round(zoom * 100)}%</button>
       <button aria-label="Zoom in" title="Zoom in (+)" onclick={() => zoomBy(1.25)}><svg viewBox="0 0 16 16"><path d="M8 4v8M4 8h8" /></svg></button>
     </div>
-  {:else if !error && svg}
-    {#if playable && !active}
-      <button class="mermaid-play" class:on={!!playing} type="button" aria-label={playing ? 'Stop' : 'Play'}
-        data-tip={playing ? 'Stop' : 'Play it a step at a time'} onclick={(e) => { e.stopPropagation(); togglePlay(); }}>
-        {#if playing}<svg viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.5" /></svg>
-        {:else}<svg viewBox="0 0 16 16"><path d="M5.5 3.8v8.4a.6.6 0 0 0 .9.5l6.6-4.2a.6.6 0 0 0 0-1L6.4 3.3a.6.6 0 0 0-.9.5z" /></svg>{/if}
-      </button>
-    {/if}
-    <button class="mermaid-expand" type="button" aria-label="Full screen" data-tip="Full screen: zoom in and edit"
-      onclick={(e) => { e.stopPropagation(); if (canvas?.firstElementChild) enterFull(); }}>
-      <svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9" /></svg>
-    </button>
   {/if}
   </div>
 
-  {#if codeShown && !active && !error}
-    <!-- its code shown: the way back to the drawing, and, written by hand, why it is edited as code -->
-    <div class="tools codebar">
-      {#if d}
-        <span class="say">Editing the code</span>
-        <span class="grow"></span>
-        <button class="ghost" onmousedown={(e) => e.preventDefault()} onclick={toDrawing} title="Edit as a drawing (⌘↵)">Edit as drawing</button>
-      {:else if why}
-        <span class="say">
-          {#if 'kind' in why}This kind of diagram ({why.kind}) is edited as its code.
-          {:else if 'line' in why}Written by hand with <code>{why.line.length > 48 ? why.line.slice(0, 47) + '…' : why.line}</code>, which the drawing editor can't show, so it is edited as code. It still draws as written.
-          {:else}Written by hand with more than the drawing editor shows, so it is edited as code. It still draws as written.{/if}
-        </span>
-        <span class="grow"></span>
-      {/if}
-      <button class="done" onmousedown={(e) => e.preventDefault()} onclick={onCodeLeave}>Done</button>
-    </div>
+  {#if codeShown && !active && !error && !d && why}
+    <!-- written by hand: why it is edited as its code (the way back to the drawing, for one that has one, is the dock's) -->
+    <p class="why">
+      {#if 'kind' in why}This kind of diagram ({why.kind}) is edited as its code.
+      {:else if 'line' in why}Written by hand with <code>{why.line.length > 48 ? why.line.slice(0, 47) + '…' : why.line}</code>, which the drawing editor can't show, so it is edited as code. It still draws as written.
+      {:else}Written by hand with more than the drawing editor shows, so it is edited as code. It still draws as written.{/if}
+    </p>
   {/if}
   {#if active && d}
-    <div class="tools">
-      <span class="kind">{kindLabel}</span>
-      {#if flow}
-        <div class="seg">
-          <!-- a phone's row has room for the arrows alone: with their words, Done went onto a line of its own -->
-          <button class:on={across(flow)} aria-label="Across" title="Across" onclick={() => (flow.dir = 'LR')}>{isMobile ? '→' : '→ Across'}</button>
-          <button class:on={!across(flow)} aria-label="Down" title="Down" onclick={() => (flow.dir = 'TD')}>{isMobile ? '↓' : '↓ Down'}</button>
-        </div>
-        <button class="ghost" onclick={() => flowEd?.addBox()}>+ Box</button>
-        <button class="ghost" onclick={() => flowEd?.addLane()}>+ Lane</button>
-      {:else if chart}
-        {#each adders(chart) as a (a.label)}<button class="ghost" onmousedown={(e) => e.preventDefault()} onclick={() => chartEd?.open(a.run())}>{a.label}</button>{/each}
-        {#each toggles(chart) as t (t.label)}<button class="ghost" class:on={t.on} aria-pressed={t.on} onmousedown={(e) => e.preventDefault()} onclick={() => (chartEd ? chartEd.kept(() => t.set(!t.on)) : t.set(!t.on))}>{t.on ? '✓ ' : ''}{t.label}</button>{/each}
-        <button class="ghost" class:on={rows} aria-pressed={rows} title="Every part as a row under the chart" onclick={() => (rows = !rows)}>{rows ? 'Hide list' : 'List'}</button>
-      {/if}
-      <span class="grow"></span>
-      <!-- the diagram itself deleted (⌘Z brings it back): the keys could not reach it, and its code was the only way; kept
-        away from Done, where a slip on a phone deleted it -->
-      <button class="ghost icon" aria-label="Delete diagram" title="Delete diagram" onclick={() => { flush(); active = false; onDelete(true); }}><svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg></button>
-      <!-- undo where there is no keyboard: a phone's bar with ↶ went with the keyboard as a box was picked -->
-      <button class="ghost icon" aria-label="Undo" title="Undo (⌘Z)" onclick={() => { flush(); onHistory(false); }}><svg viewBox="0 0 16 16"><path d="M5.5 4 2.5 7l3 3M2.5 7h7a4 4 0 0 1 0 8H8" /></svg></button>
-      <button class="ghost icon" aria-label="Redo" title="Redo (⇧⌘Z)" onclick={() => { flush(); onHistory(true); }}><svg viewBox="0 0 16 16"><path d="M10.5 4l3 3-3 3M13.5 7h-7a4 4 0 0 0 0 8H8" /></svg></button>
-      <button class="ghost" onclick={() => { active = false; onCodeEdit(); }}>Code</button>
-      <button class="done" onclick={leave}>Done</button>
-    </div>
     <!-- no line of tips under it: the bars and the buttons' own titles say what they do (the tips looked cluttered) -->
     {#if !flow}
       {#if rows}
         <DiagramForm {d} />
-        <!-- a long form: Done at its foot too, not only out of sight at its top -->
-        <div class="foot"><button class="done" onclick={leave}>Done</button></div>
       {/if}
     {/if}
   {/if}
@@ -585,7 +619,7 @@
 <style>
   .dblock { border-radius: 16px; }
   .pic { position: relative; }
-  .dblock.active { box-shadow: 0 0 0 2px var(--accent-soft); padding-bottom: 10px; background: var(--bg); }
+  .dblock.active { box-shadow: 0 0 0 2px var(--accent-soft); background: var(--bg); }
   .dblock.active :global(.mermaid-view) { cursor: default; }
   /* a sequence diagram's block labels fold it (seqFold.ts): a ▾ beside each on a hover (always on a phone, which
      has none), a ▸ beside a folded one always, so it is seen to be folded */
@@ -612,35 +646,41 @@
   .foldchips button.on { color: var(--fg); }
   :global(html.mobile) .foldchips button { min-height: 36px; }
   .dblock.full .foldchips { position: absolute; top: 10px; left: 12px; right: 60px; z-index: var(--z-block-ui-over); }
-  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 10px 4px; font-size: 13px; user-select: none; -webkit-user-select: none; }
-  .kind { font-weight: 600; color: var(--fg-dim); font-size: 12px; margin-right: 4px; }
-  .grow { flex: 1; }
-  .tools button {
-    border: 0; border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 12.5px; font-weight: 500; background: none; color: var(--fg-dim);
-    white-space: nowrap;
+  /* the dock: a small frosted pill over the top-right corner, coming in as the pointer comes over the diagram, its
+     buttons one after another */
+  .dock {
+    position: absolute; top: 10px; right: 10px; z-index: var(--z-block-ui-over); display: flex; align-items: center; gap: 1px; padding: 3px;
+    border-radius: 12px; background: color-mix(in srgb, var(--bg-pop) 82%, transparent); box-shadow: var(--pop-shadow);
+    backdrop-filter: blur(14px) saturate(1.5); -webkit-backdrop-filter: blur(14px) saturate(1.5);
+    opacity: 0; transform: translateY(-4px) scale(0.97); transform-origin: top right; pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.26s cubic-bezier(0.2, 0.9, 0.25, 1.15);
   }
-  :global(html.mobile) .tools .kind { display: none; } /* a phone's row has room for the buttons only */
-  @media (hover: hover) { .tools button:hover { background: var(--bg-hover); color: var(--fg); } }
-  .tools .done, .foot .done { background: var(--accent); color: var(--on-accent); }
-  /* white on the dark theme's light blue read poorly: a deeper blue under it */
-  .tools .done, .foot .done { background: light-dark(var(--accent), color-mix(in srgb, var(--accent) 70%, #00264f)); }
-  .foot { display: flex; justify-content: flex-end; padding: 6px 10px 0; }
-  .foot button { border: 0; border-radius: 8px; padding: 5px 14px; font: inherit; font-size: 12.5px; font-weight: 500; }
-  .tools .icon { padding: 5px 6px; display: inline-flex; }
-  .tools .icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-  /* a finger's size on a phone */
-  :global(html.mobile) .tools button, :global(html.mobile) .foot button { min-height: 40px; }
-  :global(html.mobile) .tools .icon { min-width: 40px; justify-content: center; }
-  @media (hover: hover) { .tools .done:hover { background: color-mix(in srgb, var(--accent) 88%, #000); color: #fff; } }
-  .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--bg-input); }
-  .seg button { border-radius: 6px; padding: 3px 9px; }
-  :global(html.mobile) .seg button { min-width: 44px; } /* a finger's width: the arrows alone were 28px */
-  :global(html.mobile) .seg { gap: 4px; }
-  .tools .ghost.on { color: var(--accent-text); background: var(--accent-soft); }
-  .seg button.on { background: var(--bg-pop); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
-  .codebar { padding: 8px 10px 6px; }
-  .codebar .say { font-size: 12.5px; color: var(--fg-dim); flex: 1 1 220px; }
-  .codebar .say code { font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--bg-input); }
+  .dock button {
+    width: 30px; height: 28px; border: 0; border-radius: 9px; padding: 0; background: none; color: var(--fg-dim);
+    display: inline-flex; align-items: center; justify-content: center;
+    opacity: 0; transform: translateY(-3px); transition: opacity 0.2s ease calc(var(--i, 0) * 25ms), transform 0.28s cubic-bezier(0.2, 0.9, 0.25, 1.2) calc(var(--i, 0) * 25ms), background 0.12s, color 0.12s;
+  }
+  .dock svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .dock button[aria-label='More'] svg { fill: currentColor; stroke: none; }
+  .dock .sep { width: 1px; height: 16px; margin: 0 3px; background: var(--line, var(--bg-hover)); }
+  .dock.on, .dblock:hover .dock, .dock:focus-within, .dock:has(.mermaid-play.on) { opacity: 1; transform: none; pointer-events: auto; }
+  :is(.dock.on, .dblock:hover .dock, .dock:focus-within, .dock:has(.mermaid-play.on)) button { opacity: 1; transform: none; }
+  .dock .mermaid-play svg :is(path, rect) { fill: currentColor; stroke: none; }
+  .dock .mermaid-play.on { color: var(--accent-text); }
+  @media (hover: hover) {
+    .dock button:hover { background: var(--bg-hover); color: var(--fg); }
+    .dock button.danger:hover { color: #ff453a; }
+  }
+  .dock button:active { transform: scale(0.92); }
+  :global(html.mobile) .dock button { width: 40px; height: 38px; }
+  /* a phone has no pointer to come over it: there, always, and its undo and delete while it is edited only */
+  :global(html.mobile) .dock { opacity: 1; transform: none; pointer-events: auto; }
+  :global(html.mobile) .dock button { opacity: 1; transform: none; }
+  :global(html.mobile) .dblock:not(.active) .dock:not(.on) .edit { display: none; }
+  .dblock.full .dock { position: fixed; top: calc(10px + env(safe-area-inset-top)); right: 60px; }
+  @media (prefers-reduced-motion: reduce) { .dock, .dock button { transition: none; } }
+  .why { margin: 6px 4px 0; font-size: 12.5px; color: var(--fg-dim); }
+  .why code { font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--bg-input); }
   .dblock :global(.form) { padding: 4px 12px 0; }
 
   /* the whole screen: the picture fills it and scrolls; the tools along the top; a chart's rows beside it (under it on
@@ -650,19 +690,14 @@
     background: light-dark(#f9fafb, #17181d); display: grid; grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: auto auto minmax(0, 1fr) auto; outline: none;
   }
-  .dblock.full > .tools, .dblock.full > .codebar { grid-column: 1 / -1; grid-row: 1; background: var(--bg); padding-right: 60px; }
-  /* clear of a Mac window's traffic lights, which stay over the top-left corner of the whole screen (its bar was under
-     them, its name hidden), as the app's own toolbar is */
-  :global(html:not(.mobile)) .dblock.full > :is(.tools, .codebar) { padding-left: 86px; }
+  /* clear of a Mac window's traffic lights, which stay over the top-left corner of the whole screen */
   :global(html:not(.mobile)) .dblock.full .foldchips { left: 86px; }
   .dblock.full > .pic { grid-column: 1; grid-row: 3 / 5; min-height: 0; }
   .dblock.full > :global(.form) { grid-column: 2; grid-row: 3; width: min(380px, 40vw); overflow: auto; padding: 12px; background: var(--bg); border-left: 1px solid var(--border, var(--bg-hover)); }
-  .dblock.full > .foot { grid-column: 2; grid-row: 4; padding: 8px 12px; background: var(--bg); border-left: 1px solid var(--border, var(--bg-hover)); }
   @media (max-width: 700px) {
     .dblock.full { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto; }
     .dblock.full > .pic { grid-row: 3; }
     .dblock.full > :global(.form) { grid-column: 1; grid-row: 4; width: auto; max-height: 45vh; border-left: 0; border-top: 1px solid var(--border, var(--bg-hover)); }
-    .dblock.full > .foot { grid-column: 1; grid-row: 5; border-left: 0; }
   }
   .dblock.full .pic { height: 100%; }
   .dblock.full :global(.diagram-canvas) {
@@ -677,7 +712,7 @@
     position: absolute; top: 10px; right: 12px; z-index: var(--z-block-ui-over); width: 36px; height: 36px; border: 0; border-radius: 50%; color: var(--fg);
     display: inline-flex; align-items: center; justify-content: center; background: var(--bg-pop); box-shadow: var(--pop-shadow);
   }
-  .dblock.full.active .full-close, .dblock.full:has(> .codebar) .full-close { position: fixed; top: calc(6px + env(safe-area-inset-top)); }
+  .dblock.full .full-close { position: fixed; top: calc(6px + env(safe-area-inset-top)); }
   .zoombar {
     position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: var(--z-block-ui-over); display: flex; gap: 2px; padding: 4px;
     border-radius: 14px; background: var(--bg-pop); box-shadow: var(--pop-shadow);

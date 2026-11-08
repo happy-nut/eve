@@ -31,6 +31,12 @@ async function slash(page, item) {
   await page.waitForTimeout(300);
   await page.keyboard.press('Enter');
 }
+// the dock over a diagram's top-right corner: + adds, ⋯ holds its layout, its rows and its code; done is Esc or a click away
+const dockMenu = async (page, which, item) => {
+  await page.locator(`.tiptap .dblock.active .dock button[aria-label="${which}"]`).click();
+  await page.locator('[role="menu"] [role="menuitem"]', { hasText: item }).first().click(); // a popup, or a phone's sheet
+};
+const leaveIt = async (page) => { for (let i = 0; i < 4 && await page.locator('.tiptap .dblock.active').count(); i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(100); } };
 const boxAt = async (page, label) => {
   const b = await page.locator('.tiptap .mermaid-view g.node', { hasText: label }).first().boundingBox();
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
@@ -222,7 +228,8 @@ try {
   await settle(page);
   assert.ok((await md(page)).includes('"One"'), 'undo brings it back');
   // with it open, a click on the task under it toggles the task (the tools folding away moved it from under the press)
-  await page.locator('.tiptap .mermaid-view').click();
+  // (opened by its corner: its middle is a box's + now, the drawing a strip lower for the dock)
+  await page.locator('.tiptap .mermaid-view').click({ position: { x: 4, y: 4 } });
   await page.waitForSelector('.tiptap .dblock.active');
   await page.locator('.tiptap ul[data-type="taskList"] input[type="checkbox"]').click();
   await settle(page);
@@ -519,7 +526,7 @@ try {
   await page.locator('.layer .bar button[aria-label="Rename the lane"]').click();
   await page.keyboard.type('Warehouse');
   await page.keyboard.press('Enter');
-  await page.locator('.tiptap .dblock .tools button', { hasText: '+ Lane' }).click();
+  await dockMenu(page, 'Add', 'Lane');
   await page.waitForSelector('.layer input.lane-name');
   await page.keyboard.type('Billing');
   await page.keyboard.press('Enter');
@@ -578,7 +585,7 @@ try {
   // ---- a pie: its parts as rows under it, in the note ----
   page = await open('# Week\n\nx\n');
   await slash(page, 'pie');
-  await page.locator('.tiptap .dblock.active .tools button', { hasText: 'List' }).click(); // every part as a row
+  await dockMenu(page, 'More', 'List'); // every part as a row
   await page.waitForSelector('.tiptap .dblock.active .p-slice');
   await page.locator('.tiptap .p-slice input.label').first().fill('Writing <b>&');
   await page.locator('.tiptap .p-slice input.num').first().fill('70');
@@ -600,7 +607,7 @@ try {
   // ---- a Gantt chart's date emptied: the last one stays ----
   page = await open('# G\n\nx\n');
   await slash(page, 'gantt');
-  await page.locator('.tiptap .dblock.active .tools button', { hasText: 'List' }).click(); // every part as a row
+  await dockMenu(page, 'More', 'List'); // every part as a row
   await page.waitForSelector('.tiptap .dblock.active .g-task');
   await page.locator('.tiptap .g-task input.date').first().fill('');
   await page.locator('.tiptap .g-phase .add').first().click();
@@ -617,7 +624,7 @@ try {
   assert.match(await md(page), /```mermaid\nflowchart LR\n {2}A --> B\n```/, 'opening the note changes nothing');
   await page.locator('.tiptap .mermaid-view').click();
   await page.waitForSelector('.tiptap .dblock.active');
-  await page.locator('.tiptap .dblock .tools .done').click();
+  await leaveIt(page);
   await settle(page);
   assert.match(await md(page), /```mermaid\nflowchart LR\n {2}A --> B\n```/, 'nor opening it for editing and closing it');
   console.log('ok   hand-written, readable: untouched until changed');
@@ -629,10 +636,10 @@ try {
   await page.locator('.tiptap .mermaid-view').click();
   await page.waitForSelector('.tiptap .code-block.editing');
   assert.equal(await page.locator('.tiptap .dblock.active').count(), 0);
-  assert.match(await page.locator('.tiptap .codebar').textContent(), /::icon\(fa fa-book\).*can't show/s, 'it says why: the line it cannot show');
-  await page.locator('.tiptap .codebar .done').click();
+  assert.match(await page.locator('.tiptap .why').textContent(), /::icon\(fa fa-book\).*can't show/s, 'it says why: the line it cannot show');
+  await page.locator('.tiptap h1').click(); // the caret out of it: no Done to press
   await page.waitForFunction(() => !document.querySelector('.tiptap .code-block.editing'));
-  console.log('ok   hand-written: opens as code, saying why; Done leaves it');
+  console.log('ok   hand-written: opens as code, saying why; the caret out of it leaves it');
   await page.close();
 
   // ---- a flowchart pasted in as code (another app's ways: a style, a chain, an open line): edited in the drawing, what
@@ -667,9 +674,9 @@ try {
   page = await open('# Plan\n\nAbove\n\n```mermaid\nflowchart LR\n  A --> B\n```\n');
   await page.waitForSelector('.tiptap .mermaid-view svg');
   await page.locator('.tiptap .mermaid-view').click();
-  await page.locator('.tiptap .dblock .tools button', { hasText: 'Code' }).click();
+  await dockMenu(page, 'More', 'Edit code');
   await page.waitForSelector('.tiptap .code-block.editing');
-  await page.locator('.tiptap .codebar button', { hasText: 'Edit as drawing' }).click();
+  await page.locator('.tiptap .dock button[aria-label="Edit as drawing"]').click();
   await page.waitForSelector('.tiptap .dblock.active');
   assert.equal(await page.locator('.tiptap .code-block.editing').count(), 0, 'the code gone, the drawing open');
   await page.keyboard.press('Escape');
@@ -683,7 +690,7 @@ try {
   await page.waitForFunction(() => window.__editor.state.selection.node?.type.name === 'codeBlock');
   await page.keyboard.press('Enter'); // and ↵ opens it
   await page.waitForSelector('.tiptap .dblock.active');
-  await page.locator('.tiptap .dblock .tools button', { hasText: 'Code' }).click();
+  await dockMenu(page, 'More', 'Edit code');
   await page.waitForSelector('.tiptap .code-block.editing');
   await page.keyboard.press('ControlOrMeta+Enter');
   await page.waitForSelector('.tiptap .dblock.active');
