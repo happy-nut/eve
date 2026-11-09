@@ -57,6 +57,20 @@ test('a passage is changed only where it is, exactly once', () => {
   expect(apply({ ask: '6', op: 'append', id: open.id, text: 'x' }).ok).toBe(false);
 });
 
+test('a note written anew stays the same note, in its place', () => {
+  const open = fresh();
+  const up = notes.addImported('# Projects\n');
+  const n = notes.addImported('# Plan\n\nold words\n', Date.now(), up.id);
+  const child = notes.addImported('# Step\n', Date.now(), n.id);
+  const r = apply({ ask: '1', op: 'rewrite', id: n.id, body: '# Plan\n\n- new\n- words\n' });
+  expect(r).toEqual({ ok: true, text: 'Rewrote "Plan".' });
+  // the same id, under the same page, its sub-page still its own; nothing new made
+  expect([get(n.id).body, get(n.id).parent, get(child.id).parent, notes.currentId]).toEqual(['# Plan\n\n- new\n- words\n', up.id, n.id, open.id]);
+  expect(notes.visible.filter((x) => titleOf(x) === 'Plan')).toHaveLength(1);
+  expect(apply({ ask: '2', op: 'rewrite', id: n.id, body: '\n' }).ok).toBe(false);
+  expect(get(n.id).body).toBe('# Plan\n\n- new\n- words\n');
+});
+
 // Claude copies a passage from read_note and writes it back a little differently: the escapes the note keeps (2 \* 3,
 // \[x\], a line ending in \), a table's | --- | as |---|, spaces at a line's end gone, Windows line ends. Each was
 // "not in the note as written", and an edit was tried again and again. The same passage is found, as written, once

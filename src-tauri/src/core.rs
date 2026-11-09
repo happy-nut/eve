@@ -614,6 +614,24 @@ pub const COMMANDS: &[Command] = &[
         },
     },
     Command {
+        tool: "rewrite_note",
+        cli: "rewrite",
+        title: "Rewrite a note",
+        help: "Writes a note's whole text anew, keeping it the same note where it is: its place among the pages, its sub-pages, its id, the [[links]] to it. For a change too large for edit_note (reordering, restructuring, most of it rewritten) — never make a new note with create_note to change one that is there. body is the note's whole new markdown as read_note returns it, its first line the title (left out, the title is kept on top). Read the note first; if the user has it open, it shows there at once.",
+        params: &[TITLE, ID, needed(text("body", "The note's whole new markdown, its first line the # title"))],
+        effect: Effect::Rewrites,
+        run: |dir, notes, args| {
+            let (note, _, _) = pick(notes, args)?;
+            let body = arg_str(args, "body").trim_matches('\n');
+            if body.trim().is_empty() {
+                return Err("Give body: the note's whole new text. To delete the note, use delete_note.".into());
+            }
+            // the title stays on top when only what is under it was written
+            let body = if body.trim_start().starts_with("# ") { format!("{body}\n") } else { format!("# {}\n\n{body}\n", title_of(&note.body)) };
+            ask_app(dir, serde_json::json!({ "op": "rewrite", "id": note.id, "body": body }))
+        },
+    },
+    Command {
         tool: "delete_note",
         cli: "delete",
         title: "Delete a note",
@@ -1057,6 +1075,15 @@ fn create_note(dir: &Path, notes: &[Note], args: &Value) -> Result<String, Strin
     let title = arg_str(args, "title").trim();
     if title.is_empty() || title.contains('\n') {
         return Err("Give the new note a title, one line.".into());
+    }
+    // asked to make a note that is there, Claude means to change it: made again it would be a second note somewhere
+    // else, the first left behind (and a [[link]] by its title opens only one of them)
+    if let Some(n) = notes.iter().find(|n| title_of(&n.body).to_lowercase() == title.to_lowercase()) {
+        return Err(format!(
+            "There is already a note \"{}\" (id {}). To change it, use edit_note for a passage or rewrite_note for the whole of it: it stays where it is. To make a second note, give it another title.",
+            title_of(&n.body),
+            n.id
+        ));
     }
     let parent = arg_str(args, "parent").trim();
     let parent = if parent.is_empty() {

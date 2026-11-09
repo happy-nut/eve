@@ -229,7 +229,9 @@ inbox as the writes below do (starting it in the background); the PNGs are kept 
 `append_note` adds to the end of one, `edit_note` replaces one passage found in it only once (like an editor's
 find-and-replace, it refuses a passage that is missing or there twice; what copying from read_note changes — an escape
 left out, spaces at a line's end or by a table's `|`, a table rule's length, backticks, Windows line ends — is forgiven,
-and a passage not found is answered with the note's nearest line), and `delete_note` deletes one as the user would: to
+and a passage not found is answered with the note's nearest line), `rewrite_note` writes a note's whole text anew
+while it stays the same note in the same place (for a change too large for one passage; `create_note` refuses a
+title that is already a note's and points here, so a change never becomes a second note somewhere else), and `delete_note` deletes one as the user would: to
 Eve's trash, with Undo offered. None of them
 writes a file: each change goes into the app's inbox (`inbox/` beside `notes/`, which only programs on this Mac can
 write), an `eve://inbox` link tells Eve to look there without bringing it to the front (starting it in the background

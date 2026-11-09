@@ -1,5 +1,5 @@
 /**
- * Changes Claude makes through the MCP server (`eve mcp`: create_note, append_note, edit_note, delete_note), and its asks
+ * Changes Claude makes through the MCP server (`eve mcp`: create_note, append_note, edit_note, rewrite_note, delete_note), and its asks
  * for a note's diagrams as pictures (diagram_images: pictures.ts, which only the app can draw). Each comes as a
  * file in the app's inbox (src-tauri/src/core.rs ask_app), taken once (files.rs take_inbox), and is done here
  * through the notes store as if it were typed: the store stays the only writer, the change is saved and synced as
@@ -12,7 +12,7 @@ import { pictures, type Picture } from './pictures';
 
 export interface Ask {
   ask: string;
-  op: 'create' | 'append' | 'edit' | 'delete' | 'picture';
+  op: 'create' | 'append' | 'edit' | 'rewrite' | 'delete' | 'picture';
   id?: string;
   body?: string;
   /** a page path to put it under ("Work/Projects"), each page found by its title or made (an older server calls it a group) */
@@ -51,7 +51,7 @@ export function apply(a: Ask): Answer {
     const where = up ? ` under "${titleOf(up)}"` : path.length ? ` under ${path.join(' / ')}` : '';
     return { ok: true, text: `Made "${titleOf(n)}"${where} in Eve (id ${n.id}).` };
   }
-  if (a.op !== 'append' && a.op !== 'edit' && a.op !== 'delete') return no(`Eve does not know "${a.op}": update Eve.`);
+  if (a.op !== 'append' && a.op !== 'edit' && a.op !== 'rewrite' && a.op !== 'delete') return no(`Eve does not know "${a.op}": update Eve.`);
   const was = live(a.id);
   if (!was) return no(`No note with id "${a.id}" (deleted since it was found?).`);
   notes.flush(was.id); // the open editor's last keys first: the change is made to what the user sees
@@ -67,6 +67,10 @@ export function apply(a: Ask): Answer {
     const text = (a.text ?? '').replace(/^\n+|\n+$/g, '');
     if (!text) return no('Nothing to add.');
     body = `${n.body.replace(/\n+$/, '')}\n\n${text}\n`;
+  } else if (a.op === 'rewrite') {
+    // the whole text anew, the note itself kept: its id, its place, its sub-pages
+    if (!(a.body ?? '').trim()) return no('Nothing to write: to delete the note, use delete_note.');
+    body = a.body as string;
   } else {
     const old = a.old ?? '';
     const found = findPassage(n.body, old);
@@ -79,7 +83,7 @@ export function apply(a: Ask): Answer {
   }
   notes.update(n.id, body);
   notes.flush(n.id);
-  return { ok: true, text: a.op === 'append' ? `Added to "${title}".` : `Changed "${titleOf(n)}".` };
+  return { ok: true, text: a.op === 'append' ? `Added to "${title}".` : a.op === 'rewrite' ? `Rewrote "${titleOf(n)}".` : `Changed "${titleOf(n)}".` };
 }
 
 /** A note's diagrams drawn, for Claude to see: nothing in the notes changes */
