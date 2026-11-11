@@ -84,7 +84,7 @@ try {
     } else {
       await page.waitForSelector('.tiptap');
       await page.locator('.toolbar .icon').last().click();
-      await page.locator('.menu button', { hasText: 'New note' }).click();
+      await page.locator('.menu').getByRole('menuitem', { name: 'New note', exact: true }).click();
     }
     await page.waitForSelector('.tiptap');
     await page.evaluate(() => {

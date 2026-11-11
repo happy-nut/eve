@@ -163,7 +163,7 @@ try {
     // a new note from the toolbar's + (at this width the list's own button is not shown), then a line to type a / on
     const fresh = async (body) => {
       await page.locator('.toolbar .icon').last().click();
-      await page.locator('.menu button', { hasText: 'New note' }).click();
+      await page.locator('.menu').getByRole('menuitem', { name: 'New note', exact: true }).click();
       await page.waitForTimeout(400);
       await page.evaluate((b) => window.__editor.commands.setContent(b, true), body);
       await page.waitForTimeout(500);
@@ -262,13 +262,13 @@ try {
     const box = async (sel) => ((await page.locator(sel).count()) ? page.locator(sel).first().boundingBox() : null);
     const meet = (a, b) => a && b && a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
     await page.locator('.toolbar .icon').last().click();
-    await page.locator('.menu button', { hasText: 'New note' }).click();
+    await page.locator('.menu').getByRole('menuitem', { name: 'New note', exact: true }).click();
     await page.waitForTimeout(400);
     await page.evaluate(() => window.__editor.commands.setContent('# Parent page\n\nwords\n', true));
     await page.waitForTimeout(300);
     // a page under it, so the crumbs show (a note at the top level has none)
     await page.locator('.toolbar .icon').last().click();
-    await page.locator('.menu button', { hasText: 'New page in' }).first().click();
+    await page.locator('.menu button', { hasText: 'New note in' }).first().click();
     await page.waitForTimeout(500);
     await page.evaluate(() => window.__editor.commands.setContent('# A page with a cover\n\nwords\n', true));
     await page.waitForTimeout(300);
@@ -339,7 +339,7 @@ try {
     await page.waitForSelector('.tiptap');
     const say = (what) => problems.push(`look ${JSON.stringify(look)}: ${what}`);
     await page.locator('.toolbar .icon').last().click();
-    await page.locator('.menu button', { hasText: 'New note' }).click();
+    await page.locator('.menu').getByRole('menuitem', { name: 'New note', exact: true }).click();
     await page.waitForTimeout(400);
     await page.evaluate((b) => window.__editor.commands.setContent(b, true), '# Look\n\n- [ ] a to-do\n\n<details open><summary>a toggle</summary>\n\nbody\n\n</details>\n\n> [!tip] a callout\n> body\n\n' + Array.from({ length: 10 }, (_, i) => `${i + 1}. item`).join('\n') + '\n');
     await page.waitForTimeout(500);
@@ -367,7 +367,7 @@ try {
     await page.goto(URL_);
     await page.waitForSelector('.tiptap');
     await page.locator('.toolbar .icon').last().click();
-    await page.locator('.menu button', { hasText: 'New note' }).click();
+    await page.locator('.menu').getByRole('menuitem', { name: 'New note', exact: true }).click();
     await page.waitForTimeout(400);
     const wide = '| ' + Array.from({ length: 12 }, (_, i) => `column number ${i}`).join(' | ') + ' |\n|' + ' --- |'.repeat(12) + '\n| ' + Array.from({ length: 12 }, () => 'some words').join(' | ') + ' |';
     await page.evaluate((b) => window.__editor.commands.setContent(b, true), '# Reach\n\nA line of text.\n\n```js\nconst aVeryLongLine = "this line is long enough to run well past the width of the editor column and on";\n```\n\n```mermaid\nflowchart LR\n  A[Start here] --> B[Second step] --> C[Third step] --> D[Fourth step] --> E[Fifth step] --> F[The end]\n```\n\n' + wide + '\n\nend\n');
@@ -390,7 +390,7 @@ try {
     await page.goto(URL_);
     await page.waitForSelector('.tiptap');
     await page.locator('.toolbar .icon').last().click();
-    await page.locator('.menu button', { hasText: 'New note' }).click();
+    await page.locator('.menu').getByRole('menuitem', { name: 'New note', exact: true }).click();
     await page.waitForTimeout(400);
     await page.evaluate(() => { window.__editor.commands.setContent('# A page title\n\nwords', true); const n = window.__notes.current; window.__notes.setIcon(n.id, '🌱'); });
     await page.waitForTimeout(400);
