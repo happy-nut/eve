@@ -290,6 +290,26 @@ describe('links', () => {
     a.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
     expect(ui.menu?.items.map((i) => i.label)).toEqual(['Show as card', 'Open link', 'Remove link', 'Copy link']);
   });
+
+  // an address left as words once its link is removed is read back as words, not made a link again on reopening
+  test.each([
+    'see https://example.com/a?b=1 now',
+    'see [https://example.com](https://example.com) now',
+    'see www.example.com now',
+    'mail me@example.com now',
+    'see <https://example.com> now',
+  ])('removed, it stays removed after a reload: %s', (note) => {
+    const ed = editorWith(note);
+    expect(ed.view.dom.querySelector('a')).toBeTruthy();
+    // what the link's menu does (noteMenu.ts unlink), the caret inside the link
+    ed.chain().setTextSelection(posOf(ed, 'example') + 2).extendMarkRange('link').unsetLink().run();
+    expect(ed.view.dom.querySelector('a')).toBeNull();
+    const saved = md(ed);
+    const again = editorWith(saved);
+    expect(again.view.dom.querySelector('a'), saved).toBeNull();
+    expect(again.view.dom.textContent).toBe(ed.view.dom.textContent);
+    expect(md(again)).toBe(saved); // and saves the same again
+  });
 });
 
 describe('lists of different kinds', () => {

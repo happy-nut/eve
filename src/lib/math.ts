@@ -394,6 +394,27 @@ const plain = (text: string) => text
   .replace(/&(#?[a-z0-9]+;)/gi, (m, rest) => (isEntity(m) ? `&amp;${rest}` : m))
   .replace(/</g, '&lt;').replace(/>/g, '&gt;'); // tiptap-markdown's own escapeHTML
 
+/** the parser's own linkify (parse.setup below): what it would make a link of, read back */
+let linkify: MarkdownIt['linkify'] | null = null;
+
+/**
+ * Words in a line that the parser would take for an address (https://…, www.…, me@…) though they are not a link — its
+ * link removed, or never one: a backslash before each `:` `.` `@` in them keeps them words. Read back with no link
+ * they came back linked, and a removed link was there again once the note was opened anew.
+ */
+function unlinked(text: string, write: (s: string, escape: boolean) => void) {
+  let last = 0;
+  for (const m of linkify?.match(text) ?? []) {
+    write(text.slice(last, m.index), true);
+    for (const part of text.slice(m.index, m.lastIndex).split(/([:.@])/)) {
+      if (/^[:.@]$/.test(part)) write(`\\${part}`, false);
+      else if (part) write(part, true);
+    }
+    last = m.lastIndex;
+  }
+  write(text.slice(last), true);
+}
+
 const mathSafeText = {
   serialize(state: any, node: PMNode, parent?: PMNode, index?: number) {
     // a link written as <address>: markdown reads nothing inside it, so a backslash there stayed in the address
@@ -427,7 +448,11 @@ const mathSafeText = {
         continue;
       }
       const text = plain(s);
-      if (!dollars) { state.text(text); continue; }
+      if (!dollars) {
+        if (node.marks.some((m) => m.type.name === 'link' || m.type.name === 'code')) state.text(text);
+        else unlinked(text, (part, escape) => { if (part) state.text(part, escape); });
+        continue;
+      }
       text.split('$').forEach((part, i) => {
         if (i) state.write('\\$');
         if (part) state.text(part);
@@ -435,7 +460,7 @@ const mathSafeText = {
     }
     if (trail) state.text(ent(trail), false);
   },
-  parse: {},
+  parse: { setup(md: MarkdownIt) { linkify = md.linkify; } },
 };
 export const Text = Node.create({ name: 'text', group: 'inline', addStorage: () => ({ markdown: mathSafeText }) });
 
