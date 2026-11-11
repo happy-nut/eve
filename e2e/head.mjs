@@ -117,10 +117,34 @@ try {
       if (m.title?.text !== 'The page in question') problems.push(`${win.name}, ${state}: measured another note (${m.title?.text})`);
       check(m, (what) => problems.push(`${win.name}, ${state}: ${what}`));
     }
+    // the sidebar sliding shut and open again, every frame: the crumbs never under the toolbar's buttons (they slid under
+    // them with the note as it went, and jumped clear only once the sidebar was gone; opened, they jumped back under them)
+    if (!win.phone) {
+      await page.evaluate((id) => { window.__notes.setParent(window.__head.id, window.__head.holder); }, null);
+      await page.waitForTimeout(250);
+      for (const way of win.noSidebar ? ['opening', 'closing'] : ['closing', 'opening']) {
+        const hits = await page.evaluate(() => new Promise((done) => {
+          const meet = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+          const out = new Set();
+          document.querySelector('.toolbar button[aria-label="Sidebar"]').click();
+          const t0 = performance.now();
+          const look = () => {
+            const buttons = [...document.querySelectorAll('.toolbar button')].map((b) => [b.getAttribute('aria-label'), b.getBoundingClientRect()]);
+            for (const c of document.querySelectorAll('.crumbs .crumb')) {
+              const r = c.getBoundingClientRect();
+              for (const [n, b] of buttons) if (r.width && meet(r, b)) out.add(`"${c.textContent.trim()}" under ${n} at ${Math.round(performance.now() - t0)}ms`);
+            }
+            if (performance.now() - t0 < 450) requestAnimationFrame(look); else done([...out]);
+          };
+          requestAnimationFrame(look);
+        }));
+        for (const h of hits) problems.push(`${win.name}, the sidebar ${way}: the crumbs ${h}`);
+      }
+    }
     await ctx.close();
   }
   if (problems.length) { console.log(problems.map((p) => 'FAIL ' + p).join('\n')); assert.fail(`${problems.length} things out of place`); }
-  console.log(`ok   the page's head in ${WINDOWS.length} windows × 16 states: cover, icon, row, title in order, clear of the bars, in line`);
+  console.log(`ok   the page's head in ${WINDOWS.length} windows × 16 states: cover, icon, row, title in order, clear of the bars, in line; the crumbs clear of the toolbar as the sidebar slides`);
 } finally {
   await browser.close();
   await server?.close();

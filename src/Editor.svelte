@@ -312,10 +312,14 @@
   /* level with the window's toolbar, past it when the sidebar is closed and it sits over the note; only the crumbs
      take clicks, the rest of the row still drags the window */
   .crumbs {
-    position: absolute; top: 10px; left: 14px; right: 52px; height: 24px; z-index: var(--z-toolbar); pointer-events: none;
+    position: absolute; top: 10px; right: 52px;
+    /* 14px into the note, but never left of 214px from the window's edge (the toolbar's four buttons end at 210px): the
+       note's way from that edge is the window less the note (100vw - 100%), followed as the sidebar slides, so the crumbs
+       go with the note until the toolbar and stay clear of it. Waiting for the sidebar to be gone (:has(aside)), they
+       slid under its buttons as it went and jumped clear at the end, and opened again they jumped back under them. */
+    left: max(14px, calc(214px - (100vw - 100%))); height: 24px; z-index: var(--z-toolbar); pointer-events: none;
     display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; font-size: 13px; color: var(--fg-dim); white-space: nowrap;
   }
-  :global(.shell:not(:has(aside))) .crumbs { left: 214px; }
   /* tabs open: the note starts under their row, and the crumbs, kept in the window's top row, are 71px above it — left
      at 10px they ran through the page's icon and "Add cover" */
   :global(main.tabbed) .crumbs { top: -61px; }
