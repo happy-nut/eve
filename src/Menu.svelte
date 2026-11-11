@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { scale } from 'svelte/transition';
   import BottomSheet from './BottomSheet.svelte';
   import { isMobile } from './lib/platform';
@@ -81,6 +82,11 @@
     const first = field ?? (document.documentElement.dataset.input === 'keyboard' && (on ?? node.querySelector<HTMLElement>('button:not(:disabled)')));
     (first || node).focus();
   };
+  // each menu as it opens, not only the first: one opened from another's item (Text color…, Highlight…) is drawn by the
+  // same list, and the first one closing had given the keyboard back to the note under it
+  $effect(() => {
+    if (ui.menu && el) untrack(() => autofocus(el!));
+  });
   // WebKit does not focus a clicked button, it blurs the menu — which would close it mid-click
   const hold = (e: MouseEvent) => { e.preventDefault(); (e.currentTarget as HTMLElement).focus(); };
 </script>
@@ -102,7 +108,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="backdrop" onmousedown={() => ui.closeMenu()} oncontextmenu={(e) => { e.preventDefault(); ui.closeMenu(); }}></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<ul bind:this={el} class="menu" role="menu" tabindex="-1" use:autofocus style="left: {x}px; top: {y}px" style:max-height={maxH === null ? null : `min(${maxH}px, 360px, 70vh)`}
+<ul bind:this={el} class="menu" role="menu" tabindex="-1" style="left: {x}px; top: {y}px" style:max-height={maxH === null ? null : `min(${maxH}px, 360px, 70vh)`}
   transition:scale|global={popIn} onkeydown={onKey}>
   {#if req.search}
     <li role="none" class="search"><input bind:value={q} placeholder={req.search} aria-label={req.search} spellcheck="false" autocomplete="off" autocapitalize="off" /></li>
