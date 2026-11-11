@@ -454,6 +454,7 @@ class NotesStore {
     this.touched(id);
     n.body = body;
     n.updatedAt = Date.now();
+    ui.typed();
     clearTimeout(this.timers.get(id));
     this.timers.set(id, setTimeout(() => this.flush(id), 300));
   }
@@ -629,7 +630,7 @@ class NotesStore {
     if (!this.currentId) this.create();
     // its Undo is this step taken back (the next note it opened, the one made because none was left, all of it);
     // with something done since, the note alone
-    ui.toast(`Deleted “${titleOf(n)}”`, { label: 'Undo', run: () => { if (!history.undo(step)) this.restore(id); } });
+    ui.toast(`Deleted “${titleOf(n)}”`, { label: 'Undo', byKey: true, run: () => { if (!history.undo(step)) this.restore(id); } });
   }
   /** A deleted note back as it was, and open. Dated now: the tombstone has synced, and must not win over it. */
   restore(id: string) {

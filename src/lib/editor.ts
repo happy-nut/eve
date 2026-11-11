@@ -50,7 +50,7 @@ import { hints } from './hints.svelte';
 import { fileMarkdown, isAsset } from './drop';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
-import { calendar, emojiRow, popup, suggestionVisible, PICKERS, ICONS, slashItems, pageItems, newPage, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
+import { calendar, emojiRow, popup, suggestionVisible, PICKERS, ICONS, slashAsked, slashItems, pageItems, newPage, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
 import { leaveToApp } from './keys';
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
@@ -556,7 +556,9 @@ const linesToCode = (editor: Editor) => ({ state, tr, dispatch }: { state: Edito
   return true;
 };
 
-function editorCommands(editor: Editor): Record<string, () => boolean> {
+/** a ⌘K answer that is a note to link to, not an address (no address starts with a NUL) */
+const LINK_NOTE = '\u0000note:';
+export function editorCommands(editor: Editor): Record<string, () => boolean> {
   const c = () => editor.chain().focus();
   // in code, or a selection with code in it: a list made of it took its lines as items, and they ran together
   const inCode = () => {
@@ -578,7 +580,10 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
       const word = /^\S*/.exec(rest)![0].length;
       const at = $from.pos + word;
       const before = $from.parent.textBetween(Math.max(0, $from.parentOffset + word - 1), $from.parentOffset + word, undefined, '\ufffc');
-      return c().setTextSelection(at).insertContent(before && !/\s/.test(before) ? ' /' : '/').run();
+      const spaced = !!before && !/\s/.test(before);
+      const ok = c().setTextSelection(at).insertContent(spaced ? ' /' : '/').run();
+      if (ok) slashAsked(editor.view, at, at + (spaced ? 1 : 0));
+      return ok;
     },
     callout: () => c().toggleWrap('callout').run(),
     math: () => (insertMath(editor, false), true),
@@ -596,10 +601,26 @@ function editorCommands(editor: Editor): Record<string, () => boolean> {
     code: () => c().toggleCode().run(),
     link: () => {
       const prev = editor.getAttributes('link').href as string | undefined;
-      ui.prompt('Link URL', prev ?? 'https://').then((typed) => {
+      const { from, to } = editor.state.selection;
+      const words = editor.state.doc.textBetween(from, to, ' ');
+      // as Notion's ⌘K: the notes found as the box is typed into, ↩ linking the words to one; an address all the same.
+      // It asked for a URL only, "https://" in it, and a link to another note meant typing [[ and its title again
+      const choices = prev ? undefined : (typed: string) => {
+        const q = typed.trim().toLowerCase();
+        return notes.pages.filter((n) => n.id !== notes.currentId && titleOf(n).toLowerCase().includes(q)).slice(0, 6)
+          .map((n) => ({ label: titleOf(n), icon: n.icon ?? '', value: LINK_NOTE + titleOf(n) }));
+      };
+      ui.prompt(prev ? 'Link URL' : 'Link to', prev ?? '', { choices, placeholder: 'A note, or a web address' }).then((typed) => {
         if (typed === null) return;
-        // the https:// it opens with is selected, but an address pasted after it still came out "https://https://…"
-        const url = typed.trim().replace(/^(?:https?:\/\/)+(https?:\/\/)/i, '$1');
+        if (typed.startsWith(LINK_NOTE)) {
+          const title = typed.slice(LINK_NOTE.length);
+          // the words stay what the line says; the link opens the note (Obsidian's [[Title|words]])
+          c().insertContentAt({ from, to }, { type: 'wikiLink', attrs: { title, alias: words && words !== title ? words : '' } }).run();
+          return;
+        }
+        // an address pasted after an "https://" came out "https://https://…"; one typed bare (example.com) is the web's
+        let url = typed.trim().replace(/^(?:https?:\/\/)+(https?:\/\/)/i, '$1');
+        if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(url)) url = `https://${url}`;
         // nothing but the scheme left is no address: OK there linked the words to "https://"
         if (!url || /^[a-z][\w+.-]*:\/*$/i.test(url)) c().extendMarkRange('link').unsetLink().run();
         // no words chosen and none linked: the address goes in as its own words (it linked nothing, and said nothing)

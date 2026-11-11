@@ -70,3 +70,44 @@ test('a long note is searched quickly', () => {
   expect(FIND.getState(next)!.hits.length).toBe(3000);
   expect(performance.now() - t).toBeLessThan(300);
 }, 30_000); // building a 3000-line note in jsdom is slow when the whole suite runs at once; the search is what's timed
+
+// ⌘F, a word typed letter by letter that is not in the note ("text" in "Kb test hello"): each letter's first match
+// took the caret ("t" in "test"), and when the word found nothing it stayed there — Esc left the keyboard in the
+// middle of a word far from where it was typed. Found nothing, the caret is back where it was; found, it is on it.
+test('a search that finds nothing leaves the caret where it was before ⌘F', async () => {
+  const { TextSelection } = await import('@tiptap/pm/state');
+  const ed = editorWith('Kb test hello');
+  const end = ed.state.doc.content.size - 1;
+  ed.view.dispatch(ed.state.tr.setSelection(TextSelection.create(ed.state.doc, end)));
+  for (const q of ['t', 'te', 'tex', 'text']) setQuery(ed, q);
+  expect(findState(ed).hits.length).toBe(0);
+  expect([ed.state.selection.from, ed.state.selection.to]).toEqual([end, end]);
+  // a word that is there: the caret on it
+  setQuery(ed, 'hel');
+  expect(ed.state.doc.textBetween(ed.state.selection.from, ed.state.selection.to)).toBe('hel');
+  // emptied again: back where it was
+  setQuery(ed, '');
+  expect([ed.state.selection.from, ed.state.selection.to]).toEqual([end, end]);
+});
+
+// The bar itself: it cleared the search and ran it again at every letter (its effect read the query), from where the
+// last letter's match had put the caret — so a word not found still left the caret in "test".
+test('typed letter by letter into the Find bar, a word not found leaves the caret where it was', async () => {
+  const { mount, unmount, flushSync } = await import('svelte');
+  const { TextSelection } = await import('@tiptap/pm/state');
+  const Find = (await import('../Find.svelte')).default;
+  const { allowFocusLoss } = await import('./focusWatch');
+  Element.prototype.animate ??= function () { return { finished: Promise.resolve(), cancel() {}, finish() {}, onfinish: null } as unknown as Animation; };
+  const ed = editorWith('Kb test hello');
+  const end = ed.state.doc.content.size - 1;
+  ed.view.dispatch(ed.state.tr.setSelection(TextSelection.create(ed.state.doc, end)));
+  const bar = mount(Find, { target: document.body, props: { editor: ed } });
+  flushSync();
+  const input = document.querySelector<HTMLInputElement>('.find input')!;
+  for (const q of ['t', 'te', 'tex', 'text']) { input.value = q; input.dispatchEvent(new Event('input', { bubbles: true })); flushSync(); }
+  expect(findState(ed).hits.length).toBe(0);
+  expect([ed.state.selection.from, ed.state.selection.to]).toEqual([end, end]);
+  allowFocusLoss(); // the bar goes with the test: the keyboard in its field goes nowhere, on purpose
+  unmount(bar);
+  ed.destroy();
+});

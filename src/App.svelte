@@ -614,6 +614,8 @@
       // too: a Korean word's last syllable is still being put together when ⌘N or ⌘1 comes straight after it
       claimKeys('global', { '*': onKeydown }, { priority: PRIORITY.app, composing: true }),
       claimKeys('global', { Meta: () => cmdUp() }, { keyup: true, priority: PRIORITY.app, composing: true }),
+      // ⌘Z in the note that came up after the open one was deleted: the delete back, before the note's own undo
+      claimKeys('global', { 'Mod-z': (e) => ui.toastUndoKey(e) }, { capture: true }),
       // the last thing used was the keyboard (any key, before anything takes it): hover-only buttons wait for the mouse
       claimKeys('global', { '*': () => { document.documentElement.dataset.input = 'keyboard'; delete document.documentElement.dataset.hover; } },
         { capture: true, priority: PRIORITY.watch, composing: true }),

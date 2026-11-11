@@ -111,6 +111,18 @@ describe('typing', () => {
     paste(ed, 'https://example.com/a');
     expect(saved(ed)).toBe('# T\n\nread [this](https://example.com/a) now');
   });
+  // ⌘K on chosen words: Notion's box searches pages as it is typed into, and ↩ links the words to the page found
+  test('⌘K on chosen words links them to a note found by its title', async () => {
+    const { notes } = await import('./notes.svelte');
+    const { editorCommands } = await import('./editor');
+    notes.addImported('# Roadmap 2027\n\nx\n');
+    const ed = editorWith('# T\n\nread this now');
+    ed.commands.setTextSelection({ from: posOf(ed, 'this'), to: posOf(ed, 'this', true) });
+    editorCommands(ed).link();
+    ui.done(ui.pending!.choices!('roadmap')[0].value);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(saved(ed)).toBe('# T\n\nread [[Roadmap 2027|this]] now');
+  });
 });
 
 describe('the / menu', () => {

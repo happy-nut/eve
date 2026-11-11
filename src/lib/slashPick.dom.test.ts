@@ -1,6 +1,6 @@
 // What ↩ and ⇥ do with the / menu up: a "/" in a sentence is the sentence's own until a letter after it finds a block.
 import { test, expect, afterEach } from 'vitest';
-import { createEditor, getMarkdown } from './editor';
+import { createEditor, editorCommands, getMarkdown } from './editor';
 import { posOf, press, type } from './testEditor';
 import type { SuggestItem } from './slash';
 
@@ -96,4 +96,27 @@ test('a "/" opening an empty line: ↩ picks the first, as before', async () => 
   await settle();
   press(ed, 'Enter');
   expect(picked).toEqual(['New note']);
+});
+
+// ⌘/ asks for the menu; nothing was typed. Closed with Esc, it left a "/" (and the space put before it) in the line.
+test.each([['at a line\'s end, after a word', 'hello', 'hello'], ['on an empty line', '', '']])('⌘/ then Esc %s: the line is as it was', async (_, text, after) => {
+  const { ed } = onEmptyLine();
+  if (text) type(ed, text);
+  editorCommands(ed).slash(); // ⌘/
+  await settle();
+  expect(menuUp()).toBe(true);
+  type(ed, 'he'); // a word typed into the menu to look for a block: gone with it too
+  await settle();
+  press(ed, 'Escape');
+  await tick();
+  expect(lines(ed)).toEqual(['T', after]);
+});
+
+test('a "/" typed by hand and closed with Esc stays: it is the line\'s own', async () => {
+  const { ed } = onEmptyLine();
+  type(ed, 'a /');
+  await settle();
+  press(ed, 'Escape');
+  await tick();
+  expect(lines(ed)).toEqual(['T', 'a /']);
 });

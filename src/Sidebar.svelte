@@ -297,11 +297,17 @@
         }
         break;
       }
-      // → opens a page's folded sub-pages; anywhere else it steps over into the note, as Escape does
-      case 'ArrowRight':
-        if (noteId && tree.isFolded(noteId) && el.closest('.note-row')?.querySelector('.fold')) tree.fold(noteId);
+      // as in Finder: → opens a page's folded notes, and on one open already goes down to the first of them; on a note
+      // with nothing under it, it steps over into the note, as Escape does. (On an open page it went into the open
+      // note's text, which was not even the row's note.)
+      case 'ArrowRight': {
+        const kids = noteId && el.closest('.note-row')?.querySelector('.fold');
+        const first = rows[i + 1];
+        if (kids && tree.isFolded(noteId)) tree.fold(noteId);
+        else if (kids && first && notes.all.find((n) => n.id === first.dataset.note)?.parent === noteId) first.focus();
         else focusNote();
         break;
+      }
       case 'Backspace': case 'Delete':
         if (noteId) void removeNote(notes.all.find((n) => n.id === noteId)!);
         break;

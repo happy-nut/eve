@@ -18,7 +18,7 @@ async function link(ed: ReturnType<typeof editorWith>, answer: string | null) {
 test('a link: the address typed after the https:// it opens with is one address', async () => {
   const ed = editorWith('see this');
   ed.commands.setTextSelection({ from: posOf(ed, 'this'), to: posOf(ed, 'this', true) });
-  expect(await link(ed, 'https://https://a.com/x')).toBe('https://');
+  expect(await link(ed, 'https://https://a.com/x')).toBe(''); // it opens empty now: a note or an address (⌘K, linkKey.dom.test.ts)
   expect(md(ed)).toBe('see [this](https://a.com/x)');
   ed.commands.setTextSelection({ from: posOf(ed, 'see'), to: posOf(ed, 'see', true) });
   await link(ed, 'http://https://b.com');

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import { caretIn } from './lib/motion';
   import type { Editor } from '@tiptap/core';
@@ -31,7 +31,10 @@
     // the note may be edited (or replaced into) while the bar is open
     const on = () => sync();
     e.on('transaction', on);
-    if (query) setQuery(e, query); // the bar was just opened with a query still in it
+    // the bar was just opened with a query still in it. Read untracked: tracked, every letter typed cleared the search
+    // and ran it again from where the last letter's match had put the caret, so a word not found left it there
+    const q = untrack(() => query);
+    if (q) setQuery(e, q);
     sync();
     return () => { e.off('transaction', on); clearFind(e); };
   });

@@ -10,7 +10,11 @@ export interface MenuItem { label: string; run?: () => void; keys?: string; sep?
   keywords?: string }
 
 /** In-app confirm/prompt (WKWebView has no native JS dialogs). Rendered by Confirm.svelte. */
+/** something a prompt offers as its box is typed into (a note to link to): ↑↓ choose one, ↩ answers with its value */
+export interface Choice { label: string; icon?: string; value: string }
 interface Pending { message: string; input?: string; danger?: boolean; yes?: string; alert?: boolean;
+  /** what to offer for the words in the box (ui.prompt's `choices`), and what the empty box says */
+  choices?: (typed: string) => Choice[]; placeholder?: string;
   /** a command to run in Terminal, shown under the message with a Copy button */
   command?: string; resolve: (v: string | null) => void }
 
@@ -390,8 +394,8 @@ class Ui {
     return new Promise((res) => this.asking({ message, command, danger: false, alert: true, resolve: () => res() }));
   }
   /** Text input; resolves null on cancel. */
-  prompt(message: string, initial = ''): Promise<string | null> {
-    return new Promise((res) => this.asking({ message, input: initial, resolve: res }));
+  prompt(message: string, initial = '', more: { choices?: (typed: string) => Choice[]; placeholder?: string } = {}): Promise<string | null> {
+    return new Promise((res) => this.asking({ message, input: initial, ...more, resolve: res }));
   }
   done(v: string | null) {
     const p = this.pending;
@@ -403,10 +407,10 @@ class Ui {
 
   /** A line at the bottom of the window that says what just happened (a note deleted), with one thing to do about it
    *  (Undo). Toast.svelte draws it. A newer one takes its place; on its own it goes after a few seconds. */
-  toastMsg = $state<{ message: string; action?: { label: string; run: () => void }; id: number } | null>(null);
+  toastMsg = $state<{ message: string; action?: ToastAction; id: number } | null>(null);
   private toastTimer: ReturnType<typeof setTimeout> | undefined;
   private toastSeq = 0;
-  toast(message: string, action?: { label: string; run: () => void }, ms = 6000) {
+  toast(message: string, action?: ToastAction, ms = 6000) {
     clearTimeout(this.toastTimer);
     const id = ++this.toastSeq;
     this.toastMsg = { message, action, id };
@@ -419,6 +423,19 @@ class Ui {
     run?.();
   }
   dismissToast() { clearTimeout(this.toastTimer); this.toastMsg = null; }
+  /** a note's text changed: what is typed is now the newest thing done, and ⌘Z in a note is its own again */
+  typed() { if (this.toastMsg?.action?.byKey) this.toastMsg.action.byKey = false; }
+  /** ⌘Z in a note while a toast offers to take back what was just done to the notes (the open note deleted, and the
+   *  next one came up with the keyboard in it), nothing typed since: that is the newest thing done, and ⌘Z is its.
+   *  Heard before the note's own undo, which would otherwise take back older words in the note that came up. */
+  toastUndoKey(e: KeyboardEvent): boolean {
+    if (e.key.toLowerCase() !== 'z' || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return false;
+    if (!this.toastMsg?.action?.byKey) return false;
+    const t = e.target as Element | null;
+    if (!t?.closest?.('.tiptap') || t.closest('input, textarea, select')) return false;
+    this.toastAction();
+    return true;
+  }
 
   /** ⌘Z (not ⇧⌘Z) with the keyboard outside a note, a field or a popup's input: the newest thing done to the notes or
    *  the groups taken back (history.svelte.ts). True when it took something back, and the key is spent. */
@@ -437,6 +454,9 @@ class Ui {
   /** what is typed in the list's search box: the list shows only what it finds while there is any */
   search = $state('');
 }
+
+/** a toast's one button; `byKey`: ⌘Z in a note does it too, until something is typed (ui.toastUndoKey) */
+export interface ToastAction { label: string; run: () => void; byKey?: boolean }
 
 /** a box on screen (a DOMRect, a caret's coordsAtPos) */
 type Edge = { left: number; right: number; top: number; bottom: number };

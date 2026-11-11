@@ -205,6 +205,11 @@ export function suggestionVisible(editor: Editor): boolean {
   return false;
 }
 
+/** A "/" that ⌘/ put in to open the menu, per editor view: where it (and the space put before it) starts. Nothing
+ *  was typed, so Esc takes it away again with whatever was typed after it to look for a block; it was left in the line. */
+const askedFor = new WeakMap<object, { start: number; slash: number }>();
+export function slashAsked(view: object, start: number, slash: number) { askedFor.set(view, { start, slash }); }
+
 /** a popup's life at the caret: it follows the caret, takes its keys as `keys` says, and is drawn by `show` */
 function atCaret(uiRef: Driven & { place?(rect: DOMRect): void }, keys: PickerKeys, show: (p: any) => void) {
   const follow = stayAtCaret(uiRef);
@@ -218,8 +223,16 @@ function atCaret(uiRef: Driven & { place?(rect: DOMRect): void }, keys: PickerKe
       open(p);
     },
     onUpdate: (p: any) => { follow.update(p); open(p); },
-    onKeyDown: k.onKeyDown,
-    onExit: () => { follow.stop(); uiRef.hide(); },
+    onKeyDown: (p: any) => {
+      const asked = askedFor.get(p.view);
+      const took = k.onKeyDown(p);
+      if (took && p.event.key === 'Escape' && asked && asked.slash === p.range?.from) {
+        askedFor.delete(p.view);
+        p.view.dispatch(p.view.state.tr.delete(asked.start, p.range.to));
+      }
+      return took;
+    },
+    onExit: (p: any) => { follow.stop(); uiRef.hide(); if (p?.editor) askedFor.delete(p.editor.view); },
   };
 }
 

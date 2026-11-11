@@ -38,6 +38,31 @@ test('a note deleted from the list: ⌘Z there brings it back, open; ⇧⌘Z or 
   text.remove(); r.remove();
 });
 
+// ⌘⇧⌫ on the open note: the next one opens with the keyboard in it, and ⌘Z there did nothing while the toast said
+// Undo — the delete was the newest thing done. Until something is typed, ⌘Z in the note is the delete's.
+test('the open note deleted by key: ⌘Z in the note that came up brings it back, until something is typed there', async () => {
+  history.clear();
+  const a = made('# Stay\n\nx'), b = made('# Gone\n\ny');
+  await done();
+  notes.currentId = b.id;
+  notes.remove(b.id);
+  await done();
+  const text = document.createElement('div'); text.className = 'tiptap'; text.contentEditable = 'true'; document.body.append(text);
+  expect(ui.toastUndoKey(cmdZ(text, true))).toBe(false); // ⇧⌘Z is no undo
+  const field = document.createElement('input'); document.body.append(field);
+  expect(ui.toastUndoKey(cmdZ(field))).toBe(false); // a field's ⌘Z is its own
+  expect(ui.toastUndoKey(cmdZ(text))).toBe(true);
+  expect(where(b.id).deleted).toBe(false);
+  expect(notes.currentId).toBe(b.id);
+  // deleted again, then a word typed into the note that came up: ⌘Z is that word's
+  notes.remove(b.id); await done();
+  notes.update(notes.currentId!, '# Stay\n\nx and more');
+  expect(ui.toastUndoKey(cmdZ(text))).toBe(false);
+  expect(where(b.id).deleted).toBe(true);
+  notes.currentId = a.id;
+  text.remove(); field.remove(); ui.dismissToast();
+});
+
 test('the toast\'s Undo and ⌘Z take a delete back once, not twice', async () => {
   history.clear();
   const a = made('# A\n\nx'); await done();

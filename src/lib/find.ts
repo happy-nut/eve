@@ -105,10 +105,21 @@ export const Find = Extension.create({
 
 export const findState = (editor: Editor): FindState => FIND.getState(editor.state) ?? { query: '', index: 0, hits: [] };
 
-/** Type in the find box. The first match is selected, so Enter walks on from there. */
+/** where the caret was as the search began (a query typed into an empty box) */
+const home = new WeakMap<Editor, { anchor: number; head: number }>();
+
+/** Type in the find box. The first match is selected, so Enter walks on from there. Nothing found (or the box
+ *  emptied), the caret goes back to where it was: each letter's first match had taken it, and Esc then left it in
+ *  some word on the way ("t" of "text"), far from where the user was typing. */
 export function setQuery(editor: Editor, query: string) {
+  if (!findState(editor).query || !home.has(editor)) home.set(editor, { anchor: editor.state.selection.anchor, head: editor.state.selection.head });
   editor.view.dispatch(editor.state.tr.setMeta(FIND, { query, index: 0 }));
   show(editor, 0);
+  const was = home.get(editor)!;
+  if (findState(editor).hits.length) return;
+  const max = editor.state.doc.content.size;
+  const at = (n: number) => editor.state.doc.resolve(Math.min(Math.max(0, n), max));
+  editor.view.dispatch(editor.state.tr.setSelection(TextSelection.between(at(was.anchor), at(was.head))).setMeta('addToHistory', false));
 }
 
 /** Step to the next (1) or previous (-1) match, wrapping around. */

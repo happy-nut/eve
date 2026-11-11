@@ -13,6 +13,11 @@
   const done = (v: string | null) => ui.done(v);
   let value = $state('');
   $effect(() => { value = p.input ?? ''; });
+  // what the box offers for its words (⌘K: the notes found), the first chosen unless the words are an address
+  const found = $derived(p.choices ? p.choices(value) : []);
+  const address = (v: string) => /[./:#]/.test(v.trim());
+  let picked = $state(0);
+  $effect(() => { picked = found.length && !address(value) ? 0 : -1; });
 
   let copied = $state(false);
   const copy = async () => { await copyText(p.command ?? ''); copied = true; setTimeout(() => (copied = false), 1500); };
@@ -29,8 +34,15 @@
     if (e.key === 'Escape') { e.preventDefault(); done(null); }
     // (the Enter that ends a Korean or Japanese word being put together is the word's, and never gets here: it
     // answered the dialog with the name half typed)
+    if (found.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      // -1 is the words themselves (an address): above the first one found
+      picked = Math.max(-1, Math.min(found.length - 1, picked + (e.key === 'ArrowDown' ? 1 : -1)));
+      return;
+    }
     if (e.key === 'Enter') {
       e.preventDefault();
+      if (picked >= 0 && found[picked] && document.activeElement?.tagName === 'INPUT') { done(found[picked].value); return; }
       // Enter presses the button that has the keyboard: Tab to Cancel, then Enter, deleted all the same
       const on = document.activeElement;
       if (on instanceof HTMLButtonElement && box.contains(on)) on.click();
@@ -68,10 +80,21 @@
     <div class="cmd"><code>{p.command}</code><button onclick={copy}>{copied ? 'Copied' : 'Copy'}</button></div>
   {/if}
   {#if p.input !== undefined}
-    <input bind:value use:focus spellcheck="false" />
+    <input bind:value use:focus spellcheck="false" placeholder={p.placeholder ?? ''} />
+    {#if found.length}
+      <!-- the pointer picks one as well; the keyboard stays in the box (↑↓ choose, ↩ takes) -->
+      <div class="found" role="listbox" aria-label="Found">
+        {#each found as f, i (f.value)}
+          <button class="choice" class:on={i === picked} role="option" aria-selected={i === picked} tabindex="-1"
+            onmousedown={(e) => e.preventDefault()} onmouseenter={() => (picked = i)} onclick={() => done(f.value)}>
+            <span class="ico">{f.icon || '📄'}</span><span class="label">{f.label}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
   {/if}
   <div class="actions">
-    {#if !p.alert}<button onclick={() => done(null)}>Cancel<kbd>esc</kbd></button>{/if}
+    {#if !p.alert}<button onclick={() => done(null)}>Cancel<kbd>Esc</kbd></button>{/if}
     {#if p.input !== undefined}
       <button class="primary" onclick={() => done(value)}>OK<kbd>↩</kbd></button>
     {:else}
@@ -106,6 +129,12 @@
     border: 0; background: var(--bg-input); color: var(--fg); outline: none;
   }
   input:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
+  .found { display: flex; flex-direction: column; gap: 1px; margin-top: 6px; }
+  .choice { justify-content: flex-start; gap: 8px; padding: 5px 8px; background: none; font-weight: 400; text-align: left; }
+  .choice.on { background: var(--bg-hover); }
+  .choice:active { transform: none; }
+  .choice .ico { flex: none; width: 18px; text-align: center; }
+  .choice .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 16px; }
   button {
     display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 500;
