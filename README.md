@@ -24,7 +24,7 @@ Eve gives up none of these:
   change goes through the app as if you had typed it; a note it deletes goes to the trash.
 - **On your phone too.** An Android app with a home-screen widget and background sync, and the same notes.
 
-Not for you if you need an iPhone, Windows or an Intel Mac, or want to edit a page live with other people: Eve is
+Not for you if you need an iPhone, Windows or an Intel Mac, or want to edit a note live with other people: Eve is
 one person's notes on Apple silicon Macs and Android.
 
 ## A look
@@ -36,7 +36,7 @@ Markdown turns into headings and to-dos as you type, and `⌘P` (or `⌘K`) find
 
 <p align="center"><img src="docs/eve-capture.gif" alt="A new note written and another found, all from the keyboard" width="800"></p>
 
-### 2. Rich pages, no syntax to learn
+### 2. Rich notes, no syntax to learn
 
 Type `/` for flowcharts, equations, kanban boards, callouts, code and images.
 Each is drawn in the note and edited by clicking on it — no Mermaid or TeX needed.
@@ -55,7 +55,7 @@ GitHub repo with no server in between. Claude can read and write them too, with 
 
 - **Notes link to notes** — `[[` picks one; `[[Note|alias]]`, `==highlight==` and `> [!warning]` callouts as Obsidian writes them.
 - **Lists that nest like a document** — `1.` → `a.` → `i.`; bullets, numbers and to-dos mix freely.
-- **Sidebar** — pages in pages, as in Notion (no folders: a group from an older version becomes a page), emoji icons, drag to reorder, `⌘1`…`⌘9` to jump, `⌘\` to drive it from the keyboard.
+- **Sidebar** — notes inside notes, as Notion has pages in pages (no folders: a group from an older version becomes a note), emoji icons, drag to reorder, `⌘1`…`⌘9` to jump, `⌘\` to drive it from the keyboard.
 - **Link cards, pictures, find & replace** (`⌘F`), section outline, text size (`⌘+` `⌘-`).
 - **Present a note** — ⋯ → Present (⇧⌘↩): cut into slides by itself, at its biggest headings and wherever the screen ends,
   a slide gone on to the next under its heading and subheading again, the window on the whole screen; → walks a diagram
@@ -107,7 +107,7 @@ Sign in from Settings → Sync on the phone too.
   down and the widget redraws. The app pushes when it leaves the screen.
 - **Opens where you left off** — the note you had open, not the list.
 - **A list made for a thumb** — each row shows the note's title, when it was edited and two lines of it. Swipe a
-  row left to delete it; long-press it to pick it up and drag it to another place or under another page.
+  row left to delete it; long-press it to pick it up and drag it to another place or under another note.
 - Back goes from a note to the list, and from the list out of the app.
 
 ```bash
@@ -126,16 +126,16 @@ image) is there, from the note's ⋯ menu: the file goes to the share sheet.
 
 Notion's, wherever Notion has a key for the same thing, and Notion's typing rules: `[] ` a to-do, `- ` `* ` `+ `
 bullets, `1. ` `a. ` `i. ` numbers, `# ` … `##### ` headings, `> ` a toggle, `" ` (or `| `) a quote, ```` ``` ```` code,
-`---` a divider, `**bold**`, `*italic*`, `` `code` ``, `~strike~`, `==highlight==`; `+` a new page under this one (or
+`---` a divider, `**bold**`, `*italic*`, `` `code` ``, `~strike~`, `==highlight==`; `+` a new note under this one (or
 one to link), `[[` a link, `@` a date, `@remind` a reminder, `:` an emoji, `/` a block (`/turn…` changes the line,
 `/color` colours it).
 
-**Databases** — `/database` makes a table of the pages under this one (Notion's): properties of their own kinds
+**Databases** — `/database` makes a table of the notes under this one (Notion's): properties of their own kinds
 (text, number, select, tags, date, checkbox, relation, rollup, formula), sorted or filtered from a column's menu, and
 Table, Board (grouped by a select; drag a card to another column), Calendar (by a date; drag a row to another day) and
-Gallery views. A relation links pages of another database (or any page), a rollup reads through it (count, sum,
+Gallery views. A relation links notes of another database (or any note), a rollup reads through it (count, sum,
 average, min, max, the values, percent checked), a formula is Notion's (`prop("Hours") * prop("Rate")`, `if(…)`,
-`dateBetween(…)`). ⌘Z / ⌘⇧Z on the table take back and redo what was done there. Each row is a page, its properties
+`dateBetween(…)`). ⌘Z / ⌘⇧Z on the table take back and redo what was done there. Each row is a note, its properties
 lines of its frontmatter (`Status: Doing`, `Tags: ["home"]`, `Projects: ["[[Eve]]"]`), as Obsidian writes them;
 rollups and formulas are worked out, never written; the table itself is a ```` ```database ```` block of JSON.
 
@@ -153,7 +153,7 @@ A done to-do's reminder does not ring.
 | system | Summon / dismiss Eve            | `⌘⇧E`             |
 | app    | New (note menu) / Search | `⌘N` `⌘P` (`⌘K` with no words chosen) |
 | app    | Back / Forward / Next / previous note | `⌘[` `⌘]` `⌃⇧J` `⌃⇧K` |
-| app    | The page above / Copy its eve:// link / Dark–light | `⌘⇧U` `⌘L` `⌘⇧L` |
+| app    | The note above / Copy its eve:// link / Dark–light | `⌘⇧U` `⌘L` `⌘⇧L` |
 | app    | Sidebar: open + focus / close   | `⌘\`              |
 | app    | Delete note / Settings / Hide   | `⌘⇧⌫` `⌘,` `Esc`  |
 | app    | Export Markdown / PDF / image   | `⌘⇧M` `⌘⇧P` `⌘⌥P` |
@@ -164,7 +164,7 @@ A done to-do's reminder does not ring.
 | editor | `/` menu / Callout / Image       | `⌘/` `⌘⇧C` `⌘⇧I` |
 | editor | Equation in the line (`$`)      | `⌘⌥E`             |
 | editor | Text / H1 / H2 / H3             | `⌘⌥0` `⌘⌥1` `⌘⌥2` `⌘⌥3` |
-| editor | To-do / Bullets / Numbers / Toggle / Code / New page | `⌘⌥4` `⌘⌥5` `⌘⌥6` `⌘⌥7` `⌘⌥8` `⌘⌥9` |
+| editor | To-do / Bullets / Numbers / Toggle / Code / New note | `⌘⌥4` `⌘⌥5` `⌘⌥6` `⌘⌥7` `⌘⌥8` `⌘⌥9` |
 | editor | Move the line / Duplicate it / Choose it (then all) | `⌘⇧↑` `⌘⇧↓` `⌘D` `⌘A` |
 | editor | Check a to-do / Open or close every toggle | `⌘↩` `⌘⌥T` |
 | editor | Quote / Divider                 | `⌘⇧.` `⌘⇧-`       |
@@ -214,7 +214,7 @@ after connecting.
 
 The server is the app's own binary started as `eve mcp` (no window, no Tauri): it reads `notes/*.md` from disk,
 so it works while Eve is closed. It hands over the notes exactly as written. Tools: `list_notes` and `search_notes` (every word must match; title
-hits first) find notes, narrowed to the pages under one page and by the dates a note was made or last changed (`from` / `to`:
+hits first) find notes, narrowed to the notes under one note and by the dates a note was made or last changed (`from` / `to`:
 `2026-09` or `2026-09-05`, local time); `read_note` returns one (by title or id, a `[[Title#Section]]` link, or
 one section) and `read_notes` several, by id, in the order given. `open_note` shows one in Eve — the running
 app comes to the front with that note open, at a section if one is named (Eve starts if it was not running):
@@ -225,7 +225,7 @@ Gantt charts, mind maps…) as pictures Claude sees, drawn by Eve as the note dr
 its mermaid code: one by its number, or the first six. Only the app can draw them, so the server asks it through the
 inbox as the writes below do (starting it in the background); the PNGs are kept in `pictures/` beside `notes/`, and
 `eve pictures <title>` names them there.
-`create_note` makes a note (a title, markdown under it, a folder, or a page to put it under as a sub-page),
+`create_note` makes a note (a title, markdown under it, a folder, or a note to put it under),
 `append_note` adds to the end of one, `edit_note` replaces one passage found in it only once (like an editor's
 find-and-replace, it refuses a passage that is missing or there twice; what copying from read_note changes — an escape
 left out, spaces at a line's end or by a table's `|`, a table rule's length, backticks, Windows line ends — is forgiven,
@@ -284,7 +284,7 @@ src/                Svelte UI
                           FlowEditor.svelte a flowchart on its picture, DiagramViewer.svelte the full-screen view)
   lib/math.ts             $…$ and $$…$$ formulas: their nodes and markdown (MathEdit.svelte edits one in place,
                           lib/mathParts.ts the row of parts, lib/mathRender.ts MathLive loaded on first use)
-  lib/importTree.ts       files and folders dropped on the list, a folder as a page of its name
+  lib/importTree.ts       files and folders dropped on the list, a folder as a note of its name
   lib/sync.svelte.ts      sync client (notes + images <-> GitHub)
   lib/github.ts           GitHub REST sync engine (pure, tested in Node)
 src-tauri/          Rust: file/asset storage commands, window toggle, global-shortcut plugin

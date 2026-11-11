@@ -23,7 +23,7 @@ function editor(content: string) {
     move(d: number) { sel = (sel + d + shown.length) % shown.length; },
     expand: () => false, collapse: () => false,
     // a new page would go to it: only said, not made
-    select() { if (!shown.length) return false; picked.push(shown[sel].label); if (shown[sel].label !== 'New page') pick(shown[sel]); return true; },
+    select() { if (!shown.length) return false; picked.push(shown[sel].label); if (shown[sel].label !== 'New note') pick(shown[sel]); return true; },
     hide() { shown = []; },
     visible: () => shown.length > 0,
     chosen: () => pointed,
@@ -87,7 +87,7 @@ test('in a sentence, the pointer makes ↩ pick', async () => {
   await settle();
   point();
   press(ed, 'Enter');
-  expect(picked).toEqual(['New page']);
+  expect(picked).toEqual(['New note']);
 });
 
 test('a "/" opening an empty line: ↩ picks the first, as before', async () => {
@@ -95,5 +95,5 @@ test('a "/" opening an empty line: ↩ picks the first, as before', async () => 
   type(ed, '/');
   await settle();
   press(ed, 'Enter');
-  expect(picked).toEqual(['New page']);
+  expect(picked).toEqual(['New note']);
 });

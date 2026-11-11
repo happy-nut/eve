@@ -153,7 +153,7 @@
   async function configure(type: PropType, where: Where, base: Partial<PropDef> = {}): Promise<Partial<PropDef> | null> {
     if (type === 'select' || type === 'multi') return { options: base.options ?? [] };
     if (type === 'relation') {
-      const target = await choose(where, [{ label: 'Any page', value: '' }, ...databases().filter((x) => x.id !== pageId).map((x, i) => ({ label: x.title, value: x.id, sep: i === 0 }))]);
+      const target = await choose(where, [{ label: 'Any note', value: '' }, ...databases().filter((x) => x.id !== pageId).map((x, i) => ({ label: x.title, value: x.id, sep: i === 0 }))]);
       return target === null ? null : { target };
     }
     if (type === 'rollup') {
@@ -270,14 +270,14 @@
     const now = linksIn(n.props?.[p.name]);
     let pool = (p.target ? notes.all.filter((x) => x.parent === p.target && !x.deleted) : notes.pages.filter((x) => x.id !== n.id)).map((x) => titleOf(x));
     if (pool.length > 30) {
-      const q = (await ui.prompt(`Link which page? (${pool.length} to choose from)`, ''))?.trim().toLowerCase();
+      const q = (await ui.prompt(`Link which note? (${pool.length} to choose from)`, ''))?.trim().toLowerCase();
       if (q === undefined) return;
       pool = pool.filter((t) => t.toLowerCase().includes(q)).slice(0, 30);
     }
     const all = [...new Set([...now, ...pool])];
     ui.openMenu(where, all.length
       ? all.map((t) => ({ label: t, checked: now.includes(t), run: () => setCell(n, p, (now.includes(t) ? now.filter((x) => x !== t) : [...now, t]).map(asLink)) }))
-      : [{ label: p.target ? 'That database has no rows yet' : 'No pages to link', disabled: true }]);
+      : [{ label: p.target ? 'That database has no rows yet' : 'No notes to link', disabled: true }]);
   }
 
   // ---- views ----

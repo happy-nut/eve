@@ -486,7 +486,7 @@ pub enum Effect {
     Rewrites,
 }
 
-const PAGE: Param = text("page", "Only under this page: the titles of the pages down to it, such as \"Work\" or \"Work/Projects\"");
+const PAGE: Param = text("page", "Only under this note: the titles of the notes down to it, such as \"Work\" or \"Work/Projects\"");
 const FROM: Param = text("from", "Made or changed on/after this month or day: 2026-09 or 2026-09-05 (local time)");
 const TO: Param = text("to", "…and on/before this month or day (inclusive)");
 const ID: Param = text("id", "The note's id, from list_notes or search_notes");
@@ -497,7 +497,7 @@ pub const COMMANDS: &[Command] = &[
         tool: "list_notes",
         cli: "list",
         title: "List notes",
-        help: "Lists the notes in Eve, newest first: title, id, the page it is inside, when made and last changed. Narrow it to the pages under one page (page) or to notes made or changed in a period (from / to). Read the ones you need with read_note or read_notes.",
+        help: "Lists the notes in Eve, newest first: title, id, the note it is inside, when made and last changed. Narrow it to the notes under one note (page) or to notes made or changed in a period (from / to). Read the ones you need with read_note or read_notes.",
         params: &[
             PAGE,
             FROM,
@@ -570,12 +570,12 @@ pub const COMMANDS: &[Command] = &[
         tool: "create_note",
         cli: "create",
         title: "Create a note",
-        help: "Makes a new note in Eve with this title and markdown under it, as the user would write it: headings, lists, - [ ] to-dos, tables, [[Title]] links to other notes. Optionally under a page, by the titles down to it (page), or under another note by its title or id (parent). The note the user has open stays open. Returns the new note's id.",
+        help: "Makes a new note in Eve with this title and markdown under it, as the user would write it: headings, lists, - [ ] to-dos, tables, [[Title]] links to other notes. Optionally under another note, by the titles down to it (page), or under another note by its title or id (parent). The note the user has open stays open. Returns the new note's id.",
         params: &[
             needed(bare(text("title", "The new note's title"))),
             text("body", "Markdown under the title"),
-            text("page", "The page to put it under, by the titles down to it, such as \"Work\" or \"Work/Projects\": a page of each title is made where there is none (default: the top level)"),
-            text("parent", "Title or id of the note to put it under, as a sub-page"),
+            text("page", "The note to put it under, by the titles down to it, such as \"Work\" or \"Work/Projects\": a note of each title is made where there is none (default: the top level)"),
+            text("parent", "Title or id of the note to put it under, inside it"),
         ],
         effect: Effect::Adds,
         run: create_note,
@@ -617,7 +617,7 @@ pub const COMMANDS: &[Command] = &[
         tool: "rewrite_note",
         cli: "rewrite",
         title: "Rewrite a note",
-        help: "Writes a note's whole text anew, keeping it the same note where it is: its place among the pages, its sub-pages, its id, the [[links]] to it. For a change too large for edit_note (reordering, restructuring, most of it rewritten) — never make a new note with create_note to change one that is there. body is the note's whole new markdown as read_note returns it, its first line the title (left out, the title is kept on top). Read the note first; if the user has it open, it shows there at once.",
+        help: "Writes a note's whole text anew, keeping it the same note where it is: its place among the notes, the notes inside it, its id, the [[links]] to it. For a change too large for edit_note (reordering, restructuring, most of it rewritten) — never make a new note with create_note to change one that is there. body is the note's whole new markdown as read_note returns it, its first line the title (left out, the title is kept on top). Read the note first; if the user has it open, it shows there at once.",
         params: &[TITLE, ID, needed(text("body", "The note's whole new markdown, its first line the # title"))],
         effect: Effect::Rewrites,
         run: |dir, notes, args| {
@@ -635,7 +635,7 @@ pub const COMMANDS: &[Command] = &[
         tool: "delete_note",
         cli: "delete",
         title: "Delete a note",
-        help: "Deletes a note as the user deletes one: it goes to Eve's trash, where the user can bring it back (and Eve offers Undo for a few seconds). Give its title (as in a [[wiki link]]) or its id. Its sub-pages are not deleted with it. Only when the user asked for the note to go.",
+        help: "Deletes a note as the user deletes one: it goes to Eve's trash, where the user can bring it back (and Eve offers Undo for a few seconds). Give its title (as in a [[wiki link]]) or its id. The notes inside it are not deleted with it. Only when the user asked for the note to go.",
         params: &[TITLE, ID],
         effect: Effect::Rewrites,
         run: |dir, notes, args| {

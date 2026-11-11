@@ -17,7 +17,7 @@ test('+ from the open note offers a new page inside it, and that page goes under
   flushSync();
   hooks.openPlus!();
   flushSync();
-  const item = ui.menu!.items.find((i) => i.label === `New page in “${titleOf(page)}”`);
+  const item = ui.menu!.items.find((i) => i.label === `New note in “${titleOf(page)}”`);
   expect(item).toBeTruthy();
   item!.run!();
   flushSync();

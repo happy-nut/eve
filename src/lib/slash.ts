@@ -24,7 +24,7 @@ import { COLORS, colorText } from './textColor';
 
 export interface SuggestItem {
   label: string; value?: string; hint?: string; icon?: string; noteIcon?: string;
-  /** more words the / menu finds it by, not shown (하위 페이지 for New page: Korean is searched in as often) */
+  /** more words the / menu finds it by, not shown (하위 페이지 for New note: Korean is searched in as often) */
   keywords?: string;
   /** the sections inside this one, for a page the picker can be opened into */
   sections?: SuggestItem[];
@@ -279,7 +279,7 @@ export function calendar(uiRef: CalendarUI) {
  */
 export function pageItems(query: string, pages: readonly { body: string; icon?: string }[], self: string): SuggestItem[] {
   const q = query.trim().toLowerCase();
-  const make: SuggestItem = { label: 'New page', hint: q ? `“${query.trim()}”, under this one` : 'under this one', icon: ICONS.page, run: (e) => newPage(e, query) };
+  const make: SuggestItem = { label: 'New note', hint: q ? `“${query.trim()}”, under this one` : 'under this one', icon: ICONS.page, run: (e) => newPage(e, query) };
   const found: SuggestItem[] = [];
   for (const n of pages) {
     const title = titleOf(n);
@@ -381,7 +381,7 @@ export function slashItems(query: string): SuggestItem[] {
  * Red); `slashKorean.dom.test.ts` fails on an item with no Korean name.
  */
 export const KOREAN: Record<string, string> = {
-  Text: '텍스트 글 본문', 'New page': '새 페이지 페이지', Heading: '헤딩 제목', 'Bulleted list': '글머리 기호 목록 불릿 리스트',
+  Text: '텍스트 글 본문', 'New note': '새 노트 새 페이지 하위 노트', Heading: '헤딩 제목', 'Bulleted list': '글머리 기호 목록 불릿 리스트',
   'Numbered list': '번호 목록 넘버 리스트', 'To-do list': '할 일 투두 체크리스트 체크박스', Quote: '인용 쿼트 인용문',
   Callout: '콜아웃 강조 상자 박스', Toggle: '토글 접기', 'Code block': '코드 블록', Divider: '구분선 디바이더 줄',
   Kanban: '칸반 보드', Database: '데이터베이스 디비', Diagram: '다이어그램 머메이드 차트 도표',
@@ -433,7 +433,7 @@ function colors(): SuggestItem {
 const TEXT: SuggestItem = { label: 'Text', hint: 'a plain line', keywords: 'paragraph plain 텍스트', icon: ICONS.text, run: line('paragraph') };
 
 export const SLASH: SuggestItem[] = [
-  { label: 'New page', hint: 'a page under this one', keywords: '하위 페이지 subpage', icon: ICONS.page, run: newPage },
+  { label: 'New note', hint: 'a note under this one', keywords: '하위 페이지 하위 노트 subpage page', icon: ICONS.page, run: newPage },
   // the lines a key makes as well, the key as the hint: as their own shortcuts do them (a list's lines change kind)
   {
     label: 'Heading', hint: '# to #####', keywords: 'title 제목', icon: ICONS.h1, folder: true,
@@ -449,7 +449,7 @@ export const SLASH: SuggestItem[] = [
   { label: 'Code block', hint: '``` code, highlighted', keywords: '코드', icon: ICONS.code, run: tip('codeBlock', (e) => { if (!e.isActive('tableCell') && !e.isActive('tableHeader')) e.chain().focus().toggleCodeBlock().run(); }) },
   { label: 'Divider', hint: '--- a line across', keywords: '구분선 hr rule', icon: ICONS.divider, run: tip('divider', (e) => e.chain().focus().setHorizontalRule().run()) },
   { label: 'Kanban', hint: 'board', keywords: '칸반', icon: ICONS.kanban, run: insertKanban },
-  { label: 'Database', hint: 'a table of pages under this one', keywords: 'table view board 데이터베이스 db', icon: ICONS.table, run: insertDatabase },
+  { label: 'Database', hint: 'a table of notes under this one', keywords: 'table view board 데이터베이스 db', icon: ICONS.table, run: insertDatabase },
   {
     label: 'Diagram', hint: 'flowchart, sequence, pie…', keywords: 'mermaid chart 다이어그램 차트', icon: ICONS.diagram, folder: true,
     sections: [
@@ -475,7 +475,7 @@ export const SLASH: SuggestItem[] = [
   // Notion's own, for the line the / was typed on
   { label: 'Table of contents', hint: 'every section, kept up to date', keywords: 'toc outline 목차', icon: ICONS.text, run: (e) => e.chain().focus().insertContent([{ type: 'htmlComment', attrs: { text: ' toc ' } }, { type: 'paragraph' }]).run() }, // the caret on a line under it (left on it, the next key replaced it)
   { label: 'Duplicate', hint: 'this line again under it', keywords: 'copy 복제', icon: ICONS.text, run: (e) => runEditorCommand(e, 'duplicate') },
-  { label: 'Move to', hint: 'this line to another page', keywords: 'moveto 옮기기 이동', icon: ICONS.page, run: (e) => void moveLine(e) },
+  { label: 'Move to', hint: 'this line to another note', keywords: 'moveto 옮기기 이동', icon: ICONS.page, run: (e) => void moveLine(e) },
   { label: 'Delete', hint: 'this line', keywords: 'remove 삭제', icon: ICONS.text, run: deleteLine },
   {
     label: 'Emoji', hint: '😀 pick one', icon: ICONS.emoji,
@@ -512,7 +512,7 @@ async function moveLine(editor: Editor) {
   const here = notes.current;
   let pool = notes.pages.filter((n) => n.id !== here?.id);
   if (pool.length > 30) {
-    const q = (await ui.prompt(`Move to which page? (${pool.length} to choose from)`, ''))?.trim().toLowerCase();
+    const q = (await ui.prompt(`Move to which note? (${pool.length} to choose from)`, ''))?.trim().toLowerCase();
     if (q === undefined) return void editor.commands.focus();
     pool = pool.filter((n) => titleOf(n).toLowerCase().includes(q)).slice(0, 30);
   }
@@ -530,7 +530,7 @@ async function moveLine(editor: Editor) {
       deleteLine(editor);
       ui.toast(`Moved to “${titleOf(n)}”`);
     } }))
-    : [{ label: 'No other page to move it to', disabled: true }]);
+    : [{ label: 'No other note to move it to', disabled: true }]);
 }
 
 /** 'Untitled', 'Untitled 2', … — a fresh page needs a title no other page answers to, because

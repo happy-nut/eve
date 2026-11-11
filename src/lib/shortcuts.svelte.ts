@@ -29,7 +29,7 @@ export const DEFAULTS: Action[] = [
   // ⌃⇧J / ⌃⇧K as Notion steps through a database's pages: ⌘⇧↑↓ moves the line, as there
   { id: 'nextNote', label: 'Next note', scope: 'app', keys: 'Ctrl-Shift-j' },
   { id: 'prevNote', label: 'Previous note', scope: 'app', keys: 'Ctrl-Shift-k' },
-  { id: 'parentPage', label: 'The page this one is under', scope: 'app', keys: 'Mod-Shift-u' },
+  { id: 'parentPage', label: 'The note this one is under', scope: 'app', keys: 'Mod-Shift-u' },
   { id: 'copyLink', label: 'Copy a link to this note (eve://)', scope: 'app', keys: 'Mod-l' },
   { id: 'theme', label: 'Dark / light theme', scope: 'app', keys: 'Mod-Shift-l' },
   // tabs, as Notion's desktop and a browser have them
@@ -82,7 +82,7 @@ export const DEFAULTS: Action[] = [
   { id: 'toggleCheck', label: 'Check / uncheck a to-do, or open the link under the caret', scope: 'editor', keys: 'Mod-Enter' },
   { id: 'blockquote', label: 'Quote', scope: 'editor', keys: 'Mod-Shift-.' },
   { id: 'codeBlock', label: 'Code block', scope: 'editor', keys: 'Mod-Alt-8' },
-  { id: 'newPage', label: 'New page under this one, linked here', scope: 'editor', keys: 'Mod-Alt-9' },
+  { id: 'newPage', label: 'New note under this one, linked here', scope: 'editor', keys: 'Mod-Alt-9' },
   { id: 'duplicate', label: 'Duplicate the line / selected lines', scope: 'editor', keys: 'Mod-d' },
   { id: 'toggleAll', label: 'Open / close every toggle', scope: 'editor', keys: 'Mod-Alt-t' },
   { id: 'selectBlock', label: 'Select the line, then the whole note', scope: 'editor', keys: 'Mod-a' },

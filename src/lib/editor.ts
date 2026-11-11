@@ -2050,7 +2050,7 @@ export function createEditor(opts: {
             const items = [...pages, ...sections].slice(0, 8); // pages first: the sections fill what is left
             // a title nothing answers to yet: picking it links a page that gets created on the first visit
             if (query && !query.includes('#') && !pages.some((p) => p.label.toLowerCase() === q)) {
-              items.push({ label: query, hint: 'new page', icon: ICONS.page });
+              items.push({ label: query, hint: 'new note', icon: ICONS.page });
             }
             return items;
           },

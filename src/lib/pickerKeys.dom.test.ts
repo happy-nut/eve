@@ -32,7 +32,7 @@ function editor(content: string) {
     move(d: number) { sel = (sel + d + list.length) % list.length; },
     expand: () => false, collapse: () => false,
     // a new page would go to it: only said, not made
-    select() { if (!list.length) return false; picked.push(list[sel].label); if (list[sel].label !== 'New page') pickItem(list[sel]); return true; },
+    select() { if (!list.length) return false; picked.push(list[sel].label); if (list[sel].label !== 'New note') pickItem(list[sel]); return true; },
     hide() { list = []; },
     visible: () => list.length > 0,
     chosen: () => false,
@@ -152,7 +152,7 @@ test('"+" in "1 + 2", "C++" or "a+b" brings nothing up, and "+Me" offers a new p
   }
   const { pageItems } = await import('./slash');
   const items = pageItems('Me', [{ body: '# Meeting notes\n' }, { body: '# T\n' }, { body: '# Other\n' }], 'T');
-  expect(items.map((i) => i.label)).toEqual(['New page', 'Meeting notes']);
+  expect(items.map((i) => i.label)).toEqual(['New note', 'Meeting notes']);
   const { ed, picked, open } = editor('# T\n\nsee');
   ed.commands.focus();
   ed.commands.setTextSelection(posOf(ed, 'see', true));

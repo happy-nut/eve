@@ -120,7 +120,7 @@
   const plusItems = $derived.by(() => {
     const items: { label: string; run: () => void; sep?: boolean }[] = [
       // from a note's row: a page under that note first
-      ...(ctxNote ? [{ label: `New page in “${titleOf(ctxNote)}”`, run: newPageIn(ctxNote) }] : []),
+      ...(ctxNote ? [{ label: `New note in “${titleOf(ctxNote)}”`, run: newPageIn(ctxNote) }] : []),
       { label: 'New note', run: newNote },
     ];
     if (appearance.s.dailyNotes) items.push({ label: "Today's daily note", run: () => { ui.focusOwner = 'editor'; notes.caretEnd = true; notes.openDaily(); } });
@@ -350,7 +350,7 @@
         ? [
             { label: 'Open', run: () => openNote(n) },
             { label: 'Open in new tab', run: () => tabs.open(n.id), hide: isMobile || n.id === CALENDAR_NOTE_ID },
-            { label: 'New page inside', run: newPageIn(n), hide: n.id === CALENDAR_NOTE_ID },
+            { label: 'New note inside', run: newPageIn(n), hide: n.id === CALENDAR_NOTE_ID },
             { label: 'Change icon…', run: () => pickIcon(n) },
             // a move that would do nothing (the first row up, no page above to nest under) is left out
             // and none in search results, dragged either: the row above there is not the one above in the list
