@@ -570,7 +570,7 @@ pub const COMMANDS: &[Command] = &[
         tool: "create_note",
         cli: "create",
         title: "Create a note",
-        help: "Makes a new note in Eve with this title and markdown under it, as the user would write it: headings, lists, - [ ] to-dos, tables, [[Title]] links to other notes. Optionally under another note, by the titles down to it (page), or under another note by its title or id (parent). The note the user has open stays open. Returns the new note's id.",
+        help: "Makes a new note in Eve with this title and markdown under it, as the user would write it: headings, lists, - [ ] to-dos, tables, [[Title]] links to other notes. Optionally under another note: by the titles down to it (page), or by its title or id (parent). The note the user has open stays open. Returns the new note's id.",
         params: &[
             needed(bare(text("title", "The new note's title"))),
             text("body", "Markdown under the title"),
