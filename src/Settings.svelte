@@ -6,7 +6,7 @@
   import { sync } from './lib/sync.svelte';
   import { storage, autostart, dock, defaultApp, mcp, isTauri, isMobile, copyText, openUrl, type McpClient } from './lib/platform';
   import { normHost, webBase } from './lib/github';
-  import { ui } from './lib/ui.svelte';
+  import { ui, errorText } from './lib/ui.svelte';
   import { appearance, PASTELS, SIZE_MIN, SIZE_MAX, FONTS, THEMES, SLIDE_TURNS, CODE_THEMES, CODE_SHADES, type Theme, type CodeShade, type SlideTurn } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
   import Select from './Select.svelte';
@@ -42,7 +42,7 @@
     storage.path().then((p) => (notesPath = p));
     autostart.get().then((v) => (launchAtLogin = v));
     defaultApp.get().then((v) => (opensMarkdown = v));
-    if (isTauri && !isMobile) mcp.clients().then((c) => (claude = c), (e) => (claudeError = String(e)));
+    if (isTauri && !isMobile) mcp.clients().then((c) => (claude = c), (e) => (claudeError = errorText(e)));
   });
   /** Claude apps found on this Mac (null while looking), and the one-click register / unregister */
   let claude = $state<McpClient[] | null>(isTauri && !isMobile ? null : []);
@@ -58,7 +58,7 @@
   async function connectClaude(on: boolean) {
     claudeBusy = true;
     claudeError = null;
-    try { claude = await mcp.connect(on); } catch (err) { claudeError = String(err); claude = await mcp.clients().catch(() => claude); }
+    try { claude = await mcp.connect(on); } catch (err) { claudeError = errorText(err); claude = await mcp.clients().catch(() => claude); }
     claudeBusy = false;
   }
   async function claimMarkdown(on: boolean) {
@@ -67,7 +67,7 @@
       await defaultApp.set(on);
       opensMarkdown = await defaultApp.get(); // LaunchServices decides; show what it settled on
     } catch (err) {
-      defaultAppError = String(err);
+      defaultAppError = errorText(err);
       opensMarkdown = await defaultApp.get();
     }
   }
@@ -167,7 +167,7 @@
         <button role="tab" aria-selected={tab === id} class:on={tab === id} onclick={() => { tab = id; recording = null; conflict = null; }}>{label}</button>
       {/each}
     </div>
-    <button class="icon" onclick={onClose} title="Close (Esc)">✕</button>
+    <button class="icon" aria-label="Close" onclick={onClose} title="Close (Esc)">✕</button>
   </header>
 
   <div class="body">
@@ -210,7 +210,7 @@
             onchange={(e) => appearance.set({ autoCorrect: e.currentTarget.checked })} />
         </label>
         <label class="row">
-          <span class="label">Copy tables as Markdown <span class="sub">cells chosen with the header row copy as a markdown table; off, or without it, a tab between cells</span></span>
+          <span class="label">Copy tables as Markdown <span class="sub">cells chosen with the header row copy as a Markdown table; off, or without it, a tab between cells</span></span>
           <input type="checkbox" class="switch" checked={appearance.s.tableCopyMarkdown}
             onchange={(e) => appearance.set({ tableCopyMarkdown: e.currentTarget.checked })} />
         </label>
@@ -282,7 +282,7 @@
             onchange={(e) => { launchAtLogin = e.currentTarget.checked; autostart.set(launchAtLogin); }} />
         </label>
         <label class="row">
-          <span class="label">Open .md files <span class="sub">double-clicking a markdown or text file in Finder opens it here</span></span>
+          <span class="label">Open .md files <span class="sub">double-clicking a Markdown or text file in Finder opens it here</span></span>
           <input type="checkbox" class="switch" checked={opensMarkdown} disabled={!isTauri}
             onchange={(e) => claimMarkdown(e.currentTarget.checked)} />
         </label>

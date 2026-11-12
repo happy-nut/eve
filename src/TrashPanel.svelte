@@ -41,7 +41,7 @@
     <ul>
       {#each list as n (n.id)}
         <li>
-          <button class="row" title="Bring it back" onclick={() => restore(n.id)}>
+          <button class="row" title="Restore" onclick={() => restore(n.id)}>
             {#if n.icon}<Icon icon={n.icon} size={16} />{/if}
             <span class="name">{isDailyId(n.id) ? n.id.slice(6) : titleOf(n)}</span>
             <span class="when">{editedLabel(n.updatedAt)}</span>

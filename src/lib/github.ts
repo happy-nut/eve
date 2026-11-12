@@ -264,6 +264,22 @@ export function signInError(msg: string): string | null {
   return msg;
 }
 
+/**
+ * A sync that failed, said as what happened and what comes next — not "TypeError: Load failed" or GitHub's
+ * own paragraph. Sync tries again every minute by itself, so most of these need nothing from the user.
+ */
+export function syncError(msg: string): string {
+  if (/ exists but is | is not a server address| is not a user or organization name|already exists, but this sign-in/.test(msg)) return msg;
+  const answered = /^\d{3}\b/.test(msg);
+  if (!answered && /failed to fetch|load failed|networkerror|could not reach|lookup address|network|\bdns\b|timed? ?out|connection|offline|error sending request/i.test(msg)) return 'Could not reach GitHub. Eve tries again every minute; your notes are kept here meanwhile.';
+  if (/^401\b/.test(msg)) return 'GitHub no longer accepts this sign-in. Sign in again here to keep syncing.';
+  if (/^403\b/.test(msg) && /rate limit|abuse|secondary/i.test(msg)) return 'GitHub asked Eve to slow down. It tries again in a few minutes by itself.';
+  if (/^404\b/.test(msg)) return 'The notes repository is gone, or this sign-in can no longer see it. Sign in again to choose it.';
+  if (/^5\d\d\b/.test(msg)) return 'GitHub is having trouble right now. Eve tries again every minute.';
+  if (/branch keeps moving/i.test(msg)) return 'Another device was syncing at the same moment. Eve tries again in a minute.';
+  return msg.replace(/^\w*Error:\s*/, '');
+}
+
 /** The sign-in code ran out before it was entered (GitHub's own `expired_token`, or its time up). */
 export class CodeExpired extends Error {
   constructor(msg = 'the sign-in code expired; start again') { super(msg); }

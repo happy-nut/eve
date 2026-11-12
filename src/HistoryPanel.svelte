@@ -4,6 +4,7 @@
   import { panelIn, scrimFade } from './lib/motion';
   import { sheet } from './lib/popup';
   import { ui } from './lib/ui.svelte';
+  import { syncError } from './lib/github';
   import { notes, titleOf } from './lib/notes.svelte';
   import { sync } from './lib/sync.svelte';
   import { editedLabel } from './lib/date';
@@ -20,7 +21,7 @@
 
   $effect(() => {
     if (!sync.enabled) { versions = []; return; }
-    sync.versions(id).then((v) => (versions = v), (e: Error) => (failed = e.message));
+    sync.versions(id).then((v) => (versions = v), (e: Error) => (failed = syncError(e.message)));
   });
   // the one chosen, read when it is chosen (a note saved a hundred times is not read a hundred times)
   $effect(() => {
@@ -28,7 +29,7 @@
     body = null;
     if (!v) return;
     let gone = false;
-    sync.versionAt(id, v.sha).then((b) => { if (!gone) body = b; }, (e: Error) => { if (!gone) failed = e.message; });
+    sync.versionAt(id, v.sha).then((b) => { if (!gone) body = b; }, (e: Error) => { if (!gone) failed = syncError(e.message); });
     return () => { gone = true; };
   });
 

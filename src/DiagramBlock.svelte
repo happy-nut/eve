@@ -320,7 +320,7 @@
       { label: 'Edit code', hide: codeShown, run: () => { active = false; onCodeEdit(); } },
       { label: 'Full screen', hide: !!error || !svg, run: enterFull },
       { label: 'Copy image', sep: true, hide: !!error || !svg, run: () => void copyPicture() },
-      { label: 'Copy markdown', run: () => void copyText(fenced(code, 'mermaid')) },
+      { label: 'Copy Markdown', run: () => void copyText(fenced(code, 'mermaid')) },
       { label: 'Unfold all', hide: !folds.size, run: () => (folds = new Set()) },
       { label: 'Delete diagram', sep: true, danger: true, run: () => { flush(); active = false; onDelete(true); } },
     ]);

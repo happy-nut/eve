@@ -1,7 +1,7 @@
 // Sync engine self-check. Default: in-memory fake GitHub. Real API: EVE_TEST_REPO=owner/name EVE_TEST_TOKEN=... npm test
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { Repo, FileHashes, syncRound, blobSha, deviceLogin, pollToken, normHost, apiBase, ensureRepo, signInError } from './github.ts';
+import { Repo, FileHashes, syncRound, blobSha, deviceLogin, pollToken, normHost, apiBase, ensureRepo, signInError, syncError } from './github.ts';
 import { fakeGitHub } from './fakeGitHub.mjs';
 
 const gitSha = (buf) => createHash('sha1').update(`blob ${buf.length}\0`).update(buf).digest('hex');
@@ -250,5 +250,18 @@ if (fake) {
   assert.deepEqual(await Promise.all(vs.map(async (v) => dec.decode(await H.fileAt(path, v.sha)).split('\n').pop())), ['three', 'two', 'one']);
   assert.equal(await H.fileAt(N('never'), vs[0].sha), null);
 }
+
+// A sync that failed is said as what happened and what to do, not as the network library's words
+// ("TypeError: Load failed", "403 API rate limit exceeded for 1.2.3.4. (But here's the good news…)")
+assert.match(syncError('TypeError: Load failed'), /^Could not reach GitHub/);
+assert.match(syncError('Failed to fetch'), /^Could not reach GitHub/);
+assert.match(syncError('error sending request for url (https://api.github.com/…)'), /^Could not reach GitHub/);
+assert.match(syncError('401 bad token'), /Sign in again/);
+assert.match(syncError('403 API rate limit exceeded for 1.2.3.4.'), /slow down/);
+assert.match(syncError('404 repository not found (check owner/name and the token\'s access)'), /repository/);
+assert.match(syncError('502 Bad Gateway'), /GitHub is having trouble/);
+assert.match(syncError('branch keeps moving; try again'), /another device/i);
+assert.ok(!/Error:|^\d{3} /.test(syncError('TypeError: Load failed')));
+assert.equal(syncError('dnsmith/eve-notes exists but is public — make it private or rename it'), 'dnsmith/eve-notes exists but is public — make it private or rename it');
 
 console.log('SYNC_OK');

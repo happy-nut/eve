@@ -350,10 +350,10 @@
     </div>
   {:else if mind}
     <div class="section">
-      <div class="head">Centre</div>
+      <div class="head">Center</div>
       <div class="row">
-        <input class="grow" bind:value={mind.root} placeholder="The main idea" aria-label="Centre" />
-        <Select label="Centre shape" value={mind.rootShape ?? 'circle'} options={ROOT_SHAPES} onchange={(v) => { if (v === 'circle') delete mind.rootShape; else mind.rootShape = v as MindShape; }} />
+        <input class="grow" bind:value={mind.root} placeholder="The main idea" aria-label="Center" />
+        <Select label="Center shape" value={mind.rootShape ?? 'circle'} options={ROOT_SHAPES} onchange={(v) => { if (v === 'circle') delete mind.rootShape; else mind.rootShape = v as MindShape; }} />
       </div>
     </div>
     <div class="section">

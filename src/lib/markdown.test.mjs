@@ -59,7 +59,7 @@ assert.equal(plain('costs \\$5 or \\$10'), 'costs $5 or $10');
 assert.equal(calloutKind('💡'), null);
 assert.equal(calloutKind('nonsense'), null);
 
-// a diagram copied as markdown (its menu's Copy markdown): fenced as the note saves it, the fence longer than any
+// a diagram copied as markdown (its menu's Copy Markdown): fenced as the note saves it, the fence longer than any
 // run of backticks in it
 assert.equal(fenced('flowchart TD\n  A --> B', 'mermaid'), '```mermaid\nflowchart TD\n  A --> B\n```');
 assert.equal(fenced('a ``` b', 'js'), '````js\na ``` b\n````');

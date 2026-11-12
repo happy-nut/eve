@@ -2,7 +2,7 @@ import { notes, titleOf, type Note } from './notes.svelte';
 import { importTree, type Source } from './importTree';
 import { files, importAsset, pickFiles, pickFolders, listFolder, pickSavePath, savePdf, savePng, isMobile, widget } from './platform';
 import { commonDir, dirOf } from './paths';
-import { ui } from './ui.svelte';
+import { ui, errorText } from './ui.svelte';
 import { flushEdits } from './pending';
 
 /**
@@ -55,7 +55,7 @@ export async function exportNote(note: Note, as: ExportAs): Promise<string | nul
   flushEdits(); // the export is of the note as it is on screen, the last keys included
   // a phone has no save panel: the note goes to the share sheet (Files, Drive, a chat…)
   if (isMobile) {
-    if (!(await widget.export(as, titleOf(note), note.body))) throw new Error(`Could not export this note as ${as.toUpperCase()}.`);
+    if (!(await widget.export(as, titleOf(note), note.body))) throw new Error(`The phone did not take the ${as.toUpperCase()}.`);
     return titleOf(note);
   }
   const path = await pickSavePath(titleOf(note), as);
@@ -76,6 +76,6 @@ export async function exportCurrent(as: ExportAs): Promise<void> {
   try {
     await exportNote(n, as);
   } catch (err) {
-    await ui.ask(String(err), false);
+    await ui.ask(`Could not export “${titleOf(n)}”. ${errorText(err)}`, false);
   }
 }

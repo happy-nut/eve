@@ -1,6 +1,6 @@
 import { findUpdate, type Update } from './update';
 import { isMobile, isTauri, widget } from './platform';
-import { ui } from './ui.svelte';
+import { ui, errorText } from './ui.svelte';
 
 /**
  * Eve's own updates, on the phone and the Mac: looked for at launch and when the app comes back (at most
@@ -62,7 +62,7 @@ class Updates {
       await invoke('install_update', { url: u.url, sha256: u.sha256 ?? '', version: u.version });
     } catch (err) {
       this.state = 'error';
-      this.message = String(err);
+      this.message = errorText(err);
       // a line in a tooltip was all it said, and the command to run was in it to retype: a dialog, the command copied with a click
       void ui.tell(`Eve ${u.version} could not be installed.\n${this.message}\n\nIn Terminal, this installs it instead:`, BY_HAND);
     }

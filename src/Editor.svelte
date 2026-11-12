@@ -223,7 +223,7 @@
   {/if}
   <div class="page-head" class:with-icon={!!note.icon} class:with-cover={!!note.cover}>
     {#if note.icon}
-      <button class="big-icon" title="Change icon" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={isMobile ? 44 : 56} /></button>
+      <button class="big-icon" aria-label="Change icon" title="Change icon" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={isMobile ? 44 : 56} /></button>
     {/if}
     <!-- Notion's row: under the icon, right over the title, shown as the page is hovered. (A press keeps the caret where
          it was: the button goes as it is used, and the keyboard fell to <body>) -->

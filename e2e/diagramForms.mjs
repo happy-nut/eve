@@ -93,7 +93,7 @@ try {
   await page.waitForTimeout(600);
   const fill = await page.evaluate(() => getComputedStyle(document.querySelector('.tiptap .mermaid-view [data-spot="branch:1"] > circle')).fill);
   assert.ok(!['rgb(242, 244, 246)', 'rgb(255, 255, 255)'].includes(fill), `a circle branch in its branch's colour, not ${fill}`);
-  await choose(page.locator('.form'), 'Centre shape', '▢ Square');
+  await choose(page.locator('.form'), 'Center shape', '▢ Square');
   has(await md(page), ['root[제품]', ')편집기(']);
   await page.close();
   page = await open('timeline\n  2020 : 시작\n  2021 : 첫 고객');

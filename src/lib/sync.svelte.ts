@@ -1,7 +1,7 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
 import { flushEdits } from './pending';
 import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText } from './platform';
-import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, signInError, type LocalFile, type RemoteFile } from './github';
+import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, signInError, syncError, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
 import { merge3 } from './merge3';
 
@@ -218,7 +218,7 @@ class Sync {
     } catch (e) {
       this.save({}); // keep whatever head/known advanced before the failure
       this.status = 'error';
-      this.error = e instanceof Error ? e.message : String(e);
+      this.error = syncError(e instanceof Error ? e.message : String(e));
       return false;
     }
   }

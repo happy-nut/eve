@@ -22,7 +22,7 @@ export const DEFAULTS: Action[] = [
   // Notion's keys (notion.com/help/keyboard-shortcuts) wherever Notion has one for the same thing.
   // ⌘P searches, and so does ⌘K with no words chosen (with words chosen it links them: the editor's `link`)
   { id: 'search', label: 'Search notes', scope: 'app', keys: 'Mod-p' },
-  { id: 'find', label: 'Find & replace in this note', scope: 'app', keys: 'Mod-f' },
+  { id: 'find', label: 'Find & replace in this note…', scope: 'app', keys: 'Mod-f' },
   { id: 'focusSidebar', label: 'Sidebar: focus / close (↑↓ move, ←→ or Space fold / unfold, ⌥↑↓ reorder, ⌫ delete, Esc back)', scope: 'app', keys: 'Mod-\\' },
   { id: 'back', label: 'Back (previous note)', scope: 'app', keys: 'Mod-[' },
   { id: 'forward', label: 'Forward', scope: 'app', keys: 'Mod-]' },

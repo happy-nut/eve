@@ -169,7 +169,7 @@ try {
     for (let p = 0; p < png.data.length; p += 4) if (png.data[p] + png.data[p + 1] + png.data[p + 2] < 300 && png.data[p + 3] > 200) ink++;
     assert.ok(ink > 200, `${what}: its labels are drawn in the picture (${ink} dark pixels)`);
   }
-  const text = await copyFrom(0, 'Copy markdown');
+  const text = await copyFrom(0, 'Copy Markdown');
   assert.deepEqual(text, { type: 'text', text: '```mermaid\nflowchart TD\n  A[Write the plan] --> B[Ship it]\n```' });
   console.log('ok   a diagram copies from its menu as a picture, labels and all, and as its markdown');
   // "// 주석" typed into code with a Korean input method: every key, even a "/", comes through the input method, and

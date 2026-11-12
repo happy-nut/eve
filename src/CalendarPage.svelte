@@ -121,7 +121,7 @@
 
 <div class="calendar">
   <div class="head">
-    <button class="big-icon" title="Change icon" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={notes.calendar.icon} size={44} /></button>
+    <button class="big-icon" aria-label="Change icon" title="Change icon" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={notes.calendar.icon} size={44} /></button>
     <input class="name" bind:value={renaming} onblur={rename} spellcheck="false" aria-label="Name"
       onkeydown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); if (e.key === 'Escape') renaming = notes.calendar.name; else rename(); void moveTo(cursor); } }} />
   </div>

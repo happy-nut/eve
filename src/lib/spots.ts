@@ -233,7 +233,7 @@ const subtreeEnd = (m: Mindmap, i: number) => { let e = i + 1; while (e < m.item
 function mindSpot(m: Mindmap, key: string): Spot | null {
   const shape = (get: MindShape, put: (v: MindShape) => void, list: [MindShape, string][]): Field => ({ kind: 'select', label: 'Shape', value: get, options: list, set: (v) => put(v as MindShape) });
   if (key === 'root') return {
-    text: m.root, label: 'Centre', set: (v) => { m.root = v; },
+    text: m.root, label: 'Center', set: (v) => { m.root = v; },
     fields: [shape(m.rootShape ?? 'circle', (v) => { if (v === 'circle') delete m.rootShape; else m.rootShape = v; }, ROOT_SHAPES)],
     acts: [{ label: 'Add a branch', icon: 'child', tab: true, run: () => { m.items.push({ text: w(m, 'Idea'), depth: 1 }); return `branch:${m.items.length - 1}`; } }],
   };

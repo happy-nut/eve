@@ -472,6 +472,13 @@ export function under(el: Element | Edge): { clientX: number; clientY: number; f
 
 export const ui = new Ui();
 
+/** A failure as a sentence a person reads: the reason alone, never "Error: " or "TypeError: " before it. */
+export function errorText(e: unknown): string {
+  const s = (e instanceof Error ? e.message : String(e ?? '')).replace(/^\w*Error:\s*/, '').trim();
+  if (!s) return 'Something went wrong.';
+  return s[0].toUpperCase() + s.slice(1) + (/[.!?…]$/.test(s) ? '' : '.');
+}
+
 /** Imperative hooks a component registers for others to call (plain object, not state). */
 export const hooks: {
   openPlus?: (anchor?: HTMLElement) => void;
