@@ -338,16 +338,18 @@ test('a stored file is looked for under its own name, not the percent-encoded on
 });
 
 
-test('a link card shows its address shortened, and whole while it is selected (an arrow key onto it)', () => {
+// the address is written out whole; only the card's width cuts it (one line, "…" where it runs out: app.css .bm-url).
+// It was cut at 20 letters however wide the card, "github.com/happy-nut…" across a card with room for all of it
+test('a link card shows its whole address on one line, cut only by the card\'s width; selected, it wraps whole', () => {
   const href = 'https://github.com/happy-nut/eve/pull/190/files#diff-0123456789abcdef';
   const ed = editorWith(`# t\n\n${href}\n\n끝`);
   let at = -1;
   ed.state.doc.forEach((n, p) => { if (n.type.name === 'bookmark') at = p; });
   const url = () => ed.view.dom.querySelector('.bm-url')!.textContent;
-  expect(url()).toBe('github.com/happy-nut…');
+  expect(url()).toBe('github.com/happy-nut/eve/pull/190/files#diff-0123456789abcdef');
   ed.view.dispatch(ed.state.tr.setSelection(NodeSelection.create(ed.state.doc, at)));
   expect(url()).toBe('github.com/happy-nut/eve/pull/190/files#diff-0123456789abcdef');
   expect(ed.view.dom.querySelector('.bookmark')!.classList.contains('ProseMirror-selectednode')).toBe(true);
   ed.commands.setTextSelection(posOf(ed, '끝'));
-  expect(url()).toBe('github.com/happy-nut…');
+  expect(url()).toBe('github.com/happy-nut/eve/pull/190/files#diff-0123456789abcdef');
 });

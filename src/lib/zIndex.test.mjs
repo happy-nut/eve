@@ -87,3 +87,14 @@ for (const p of all.filter((p) => /\.(svelte|css)$/.test(p) && rel(p) !== 'Edito
 }
 assert.deepEqual(heads, [], "the page's head is laid out in Editor.svelte only (a window sets --head-top / --head-side there)");
 console.log('z-index, window size, containers, an opaque window and the page\'s head: ok');
+
+// ---- a bare address, or a link card's, is cut at the width it has, not at a count of letters ----
+// (cut at 42ch, or 20 letters on a card, an address ended in "…" across a note with room for all of it)
+{
+  const css = readFileSync(join(SRC, 'app.css'), 'utf8');
+  const rule = (sel) => new RegExp(`${sel.replace(/[.]/g, '\\.')} \\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+  assert.match(rule('.tiptap .long-link'), /max-width:\s*100%/, 'a bare address is cut where its line ends');
+  assert.doesNotMatch(rule('.tiptap .long-link'), /\dch/, 'a bare address is not cut at a count of letters');
+  assert.match(rule('.tiptap .bm-url'), /min-width:\s*0/, "a card's address can shrink to the card, to be cut there");
+  assert.match(rule('.tiptap .bm-url'), /text-overflow:\s*ellipsis/, "a card's address ends in … where the card does");
+}

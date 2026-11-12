@@ -809,7 +809,7 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .dblock:not(.full) .
 .tiptap .bm-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tiptap .bm-desc { color: var(--fg-dim); font-size: 0.88em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tiptap .bm-site { display: flex; align-items: center; gap: 6px; color: var(--fg-dim); font-size: 0.82em; margin-top: auto; }
-.tiptap .bm-url { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tiptap .bm-url { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* whole, cut only where the card ends */
 /* selected, the whole address (bookmark.ts): on as many lines as it takes, the card grown to hold them */
 .tiptap .bookmark.ProseMirror-selectednode { max-height: none; }
 .tiptap .bookmark.ProseMirror-selectednode .bm-url { white-space: normal; overflow-wrap: anywhere; }
@@ -1048,9 +1048,10 @@ html.mobile .tiptap [data-type='details'] > button::after { content: ''; positio
   background: color-mix(in srgb, var(--sel) 55%, transparent);
 }
 
-/* a long bare address (the long-link decoration, bookmark.ts): one line, cut short with an ellipsis */
+/* a bare address (the long-link decoration, bookmark.ts): one line, cut short with an ellipsis only where the line
+   ends — one that fits is shown whole (cut at 42ch, a wide note's address ended in "…" with room to spare) */
 .tiptap .long-link {
-  display: inline-block; max-width: min(42ch, 100%); overflow: hidden; text-overflow: ellipsis;
+  display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; vertical-align: bottom;
 }
 

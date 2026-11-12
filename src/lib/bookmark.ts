@@ -2,8 +2,6 @@ import { Node, getMarkRange, type Editor } from '@tiptap/core';
 import { Plugin, TextSelection, type NodeSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
-/** a bare address longer than this is shown cut short */
-const LONG = 48;
 import { fetchUrl, openUrl } from './platform';
 
 /**
@@ -19,15 +17,9 @@ export interface Meta { title: string; desc: string; image: string; icon: string
 const cache: Record<string, Meta> = (() => { try { return JSON.parse(localStorage.getItem(LS) ?? '{}'); } catch { return {}; } })();
 const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
 
-/** How long a link may be before the card shortens it. */
-const LINK_MAX = 20;
-/** The address as a card spells it out: without the scheme, or a slash at its end. */
-const bareUrl = (u: string) => u.replace(/^https?:\/\//, '').replace(/\/$/, '');
-/** The link as the card shows it: the address itself, minus the scheme, cut only when it runs long. */
-export const shortUrl = (u: string) => {
-  const bare = bareUrl(u);
-  return bare.length > LINK_MAX ? `${bare.slice(0, LINK_MAX)}…` : bare;
-};
+/** The address as a card spells it out: without the scheme, or a slash at its end. Whole: the card's width is what
+ *  cuts it, on one line with an ellipsis (app.css .bm-url) — cut at 20 letters, it ended in "…" with room to spare. */
+export const bareUrl = (u: string) => u.replace(/^https?:\/\//, '').replace(/\/$/, '');
 
 /** og:/twitter:/plain <meta> out of a page; relative image/icon URLs resolved against the page. */
 export function parseMeta(html: string, url: string): Meta {
@@ -107,7 +99,7 @@ export const Bookmark = Node.create({
       const site = el('span', 'bm-site');
       const ico = el('img', 'bm-ico') as HTMLImageElement;
       ico.alt = '';
-      const url = el('span', 'bm-url', shortUrl(href));
+      const url = el('span', 'bm-url', bareUrl(href));
       site.append(ico, url); // the address, not just the site name
       body.append(title, site);
       dom.append(body);
@@ -124,12 +116,12 @@ export const Bookmark = Node.create({
           dom.append(im);
         }
       });
-      // selected (an arrow key onto it), the card spells its address out whole: cut short, there was no way to read it
-      // short of opening it
+      // selected (an arrow key onto it), the card's address wraps onto as many lines as it takes (app.css): cut short,
+      // there was no way to read it short of opening it
       return {
         dom,
-        selectNode: () => { dom.classList.add('ProseMirror-selectednode'); url.textContent = bareUrl(href); },
-        deselectNode: () => { dom.classList.remove('ProseMirror-selectednode'); url.textContent = shortUrl(href); },
+        selectNode: () => dom.classList.add('ProseMirror-selectednode'),
+        deselectNode: () => dom.classList.remove('ProseMirror-selectednode'),
       };
     };
   },
@@ -154,7 +146,8 @@ export const Bookmark = Node.create({
           },
         },
       }),
-      // a bare address too long for its line is cut short with an ellipsis; with the caret in it, it shows whole.
+      // a bare address too long for its line is cut short with an ellipsis (app.css: at the line's width, so one that
+      // fits is whole, however long); with the caret in it, it shows whole.
       // Not in code: code is read (and copied by eye) character by character
       new Plugin({
         props: {
@@ -165,7 +158,7 @@ export const Bookmark = Node.create({
               if (!node.isText) return true;
               const href = type.isInSet(node.marks)?.attrs.href;
               const end = pos + node.nodeSize;
-              if (href && node.text === href && href.length > LONG && (to < pos || from > end) && !node.marks.some((m) => m.type.spec.code)) cut.push(Decoration.inline(pos, end, { class: 'long-link' }));
+              if (href && node.text === href && (to < pos || from > end) && !node.marks.some((m) => m.type.spec.code)) cut.push(Decoration.inline(pos, end, { class: 'long-link' }));
               return false;
             });
             return cut.length ? DecorationSet.create(state.doc, cut) : null;
