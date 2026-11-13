@@ -1,6 +1,6 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
 import { flushEdits } from './pending';
-import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText } from './platform';
+import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText, memMark } from './platform';
 import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, signInError, syncError, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
 import { merge3 } from './merge3';
@@ -172,6 +172,7 @@ class Sync {
   async now(): Promise<boolean> {
     if (!this.enabled || this.status === 'syncing') return false;
     this.status = 'syncing';
+    memMark('sync');
     const dec = new TextDecoder();
     const repo = new Repo(this.settings);
     try {

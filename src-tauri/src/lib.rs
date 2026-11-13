@@ -7,6 +7,7 @@ mod files;
 mod mac;
 pub mod mcp;
 mod mcp_setup;
+mod mem;
 mod net;
 mod update;
 mod window;
@@ -46,10 +47,12 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Pending::default())
         .manage(PendingLink::default())
+        .manage(mem::Marks::default())
         .setup(|app| {
             mac::release_unclaimed_markdown(app.handle());
             mac::keep_page_awake(app.handle());
             mac::menu_without_close(app.handle())?;
+            mem::watch(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -91,7 +94,8 @@ pub fn run() {
             mac::set_default_for_markdown,
             mcp_setup::mcp_clients,
             mcp_setup::mcp_connect,
-            update::install_update
+            update::install_update,
+            mem::mem_mark
         ])
         .on_window_event(|window, event| {
             // Closing the window keeps the app alive so the global hotkey still works.

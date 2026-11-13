@@ -27,6 +27,7 @@ jobs:
       - run: npm run e2e:overlap
       - run: npm run e2e:forms
       - run: npm run e2e:present
+      - run: npm run e2e:mem
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

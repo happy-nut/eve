@@ -1,5 +1,5 @@
 import { untrack } from 'svelte';
-import { storage } from './platform';
+import { storage, memMark } from './platform';
 import { flushEdits } from './pending';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
@@ -197,6 +197,9 @@ class NotesStore {
     }
     this._cur = id;
     remember(id);
+    // a big note is told apart, the rest only counted
+    const size = id ? this.all.find((n) => n.id === id)?.body.length ?? 0 : 0;
+    memMark(size >= 50_000 ? `note ${Math.round(size / 1000)}KB` : 'note');
     this.leave(left);
   }
   back() { this.step(-1); }

@@ -9,6 +9,10 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
   return invoke<T>(cmd, args);
 }
 
+/** What the page just did, for memory.log (mem.rs: a line a minute of what the page holds and what came before it).
+ *  A Mac's only; nothing goes anywhere but that file. */
+export const memMark = (what: string) => { if (desktop) void invoke('mem_mark', { what }).catch(() => {}); };
+
 const LS = 'eve.notes.';
 
 let notesDir = '';

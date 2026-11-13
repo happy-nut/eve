@@ -1,6 +1,6 @@
 [package]
 name = "eve"
-version = "0.7.144"
+version = "0.7.145"
 description = "Fast, keyboard-first markdown notes"
 authors = ["happynut"]
 license = "MIT"
@@ -41,6 +41,8 @@ core-foundation = "0.10"
 # "Export as PDF" prints the note to a file: a print job that saves needs no printer, and no panel
 objc2 = "0.6"
 objc2-foundation = "0.3"
+# the page's memory, read from its process (memory.log; already in the tree)
+libc = "0.2"
 objc2-app-kit = { version = "0.3", features = ["NSPrintInfo", "NSPrintOperation", "NSGraphics"] }
 objc2-web-kit = { version = "0.3", features = ["WKWebView", "WKWebViewConfiguration", "WKPreferences", "objc2-app-kit"] }
 

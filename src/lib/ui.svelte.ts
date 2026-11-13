@@ -1,6 +1,6 @@
 import { history } from './history.svelte';
 import { focusNote } from './popup';
-import { isMobile } from './platform';
+import { isMobile, memMark } from './platform';
 import { shifting, shiftingUntil } from './focusWatch';
 /** One line of a menu. `sep` starts a group above it; a `hide` item never makes the list; `checked` is the current choice. */
 export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean; checked?: boolean;
@@ -107,6 +107,7 @@ class Layers {
   push(layer: Omit<Layer, 'from'> & { from?: Element | null }): () => void {
     const l: Layer = { ...layer, from: layer.from !== undefined ? layer.from : document.activeElement };
     this.set([...this.items, l]);
+    memMark(l.id);
     return () => this.remove(l);
   }
   /** Close the one on top; false when nothing is open. */
