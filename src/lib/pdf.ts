@@ -62,11 +62,13 @@ export const Pdf = Node.create({
       // lazy: the page is only rendered once the card is actually on screen. A picture, not a live PDF
       // view — the webview's built-in one draws its own floating zoom/share HUD over the note on hover.
       let url: string | null = null;
+      let gone = false; // put away before the picture came: it is let go as it comes
       const io = new IntersectionObserver((entries) => {
         if (!entries.some((e) => e.isIntersecting)) return;
         io.disconnect();
         void pdfThumb(src).then((u) => {
           if (!u) return;
+          if (gone) return URL.revokeObjectURL(u);
           url = u;
           const img = document.createElement('img');
           img.className = 'pdf-page';
@@ -80,7 +82,7 @@ export const Pdf = Node.create({
       return {
         dom,
         ignoreMutation: () => true,
-        destroy: () => { io.disconnect(); if (url) URL.revokeObjectURL(url); },
+        destroy: () => { gone = true; io.disconnect(); if (url) URL.revokeObjectURL(url); },
       };
     };
   },
