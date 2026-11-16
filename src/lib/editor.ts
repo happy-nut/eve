@@ -14,8 +14,8 @@ import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { NOTION_COPY, fromNotion } from './notionPaste';
-import { canJoin, findWrapping, liftTarget, Mapping } from '@tiptap/pm/transform';
-import { DOMParser, Fragment, Mark, Slice, type Node as PMNode, type Schema, type ResolvedPos } from '@tiptap/pm/model';
+import { canJoin, findWrapping, liftTarget } from '@tiptap/pm/transform';
+import { DOMParser, Fragment, Slice, type Node as PMNode, type Schema, type ResolvedPos } from '@tiptap/pm/model';
 import { CellSelection } from '@tiptap/pm/tables';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
@@ -1040,49 +1040,6 @@ function codeEdge(state: EditorState, $c = state.selection.$from, stored = state
 }
 
 /**
- * Two codes with a letter between them (`ab`/`cd`), the letter deleted: still two codes, side by side, as Notion keeps
- * them. The second is a code `joined` to the first, since ProseMirror runs text with the same marks into one (they
- * became `abcd`). And a joined code no longer right after a code (a letter typed between them, the first deleted)
- * is a plain code again, so it is not written with the comment that keeps two touching codes apart.
- */
-function codeTouching(trs: readonly Transaction[], old: EditorState, state: EditorState): Transaction | null {
-  const code = state.schema.marks.code;
-  if (!code || !trs.some((t) => t.docChanged)) return null;
-  const start = old.doc.content.findDiffStart(state.doc.content);
-  if (start == null) return null;
-  const end = old.doc.content.findDiffEnd(state.doc.content)!;
-  const oldEnd = Math.max(start, end.a), newEnd = Math.max(start, end.b);
-  const tr = state.tr;
-  const others = (marks: readonly Mark[]) => code.removeFromSet(marks);
-  /** the text just before `pos` is code, with the same other marks as `marks` */
-  const codeBefore = (doc: PMNode, pos: number, marks: readonly Mark[]) => {
-    const b = doc.resolve(pos).nodeBefore;
-    return !!b?.isText && !!code.isInSet(b.marks) && Mark.sameSet(others(b.marks), others(marks));
-  };
-  const clip = (doc: PMNode, p: number) => Math.min(Math.max(p, 0), doc.content.size);
-  // a joined code that is no longer right after a code: plain again
-  state.doc.nodesBetween(clip(state.doc, start - 1), clip(state.doc, newEnd + 1), (n, pos) => {
-    const c = n.isText ? code.isInSet(n.marks) : null;
-    if (c?.attrs.joined && !codeBefore(state.doc, pos, n.marks)) tr.addMark(pos, pos + n.nodeSize, code.create());
-  });
-  // codes that were apart, run together by what was taken from between them: the second joined to the first
-  const runs: { from: number; to: number }[] = [];
-  old.doc.nodesBetween(clip(old.doc, start - 1), clip(old.doc, oldEnd + 1), (n, pos) => {
-    if (n.isText && code.isInSet(n.marks)) runs.push({ from: pos, to: pos + n.nodeSize });
-  });
-  const mapping = new Mapping(trs.flatMap((t) => t.mapping.maps));
-  for (let i = 1; i < runs.length; i++) {
-    const a = runs[i - 1], b = runs[i];
-    if (a.to >= b.from) continue; // touching already: one code, or two kept apart as they are
-    const seam = mapping.map(b.from, 1), bEnd = mapping.map(b.to, -1);
-    if (mapping.map(a.to, -1) !== seam || bEnd <= seam) continue;
-    const after = state.doc.resolve(seam).nodeAfter;
-    if (after?.isText && code.isInSet(after.marks) && codeBefore(state.doc, seam, after.marks)) tr.addMark(seam, bEnd, code.create({ joined: true }));
-  }
-  return tr.docChanged ? tr : null;
-}
-
-/**
  * ← → at an edge of inline code take the caret across the edge first, where it is: after `ab`, → once and what is
  * typed is plain, beside the code; → again goes on to the next letter. Come back with ←, the caret is outside first,
  * and ← again takes it in. The caret is drawn on its side (inside the code's box or outside it), since the webview's
@@ -1493,18 +1450,12 @@ export function createEditor(opts: {
       // itself, and ProseMirror keeps the deleted letters' marks for the next keys (as with bold): after `abc` was
       // cleared out (in WebKit), everything typed after it came out as code.
       Code.extend({
-        // (and another code: a code "joined" to the one before it, below, is one code, not two on the same letters)
-        excludes: 'bold italic strike underline highlight code',
+        excludes: 'bold italic strike underline highlight',
         // → at the end of a line ending in code is markExit's, as for every mark. The stock exit typed a space there,
         // one more each time the caret came by
         exitable: false,
         // its spaces as written (`a  b`, `  `): read as any text, a run of them was one space when the note opened,
         // and code of spaces only went altogether
-        // a code right after another, with nothing between them (`ab`<!---->`cd`): ProseMirror runs text with the same
-        // marks into one, so the second is told apart by this, and they stay two codes side by side
-        addAttributes() {
-          return { joined: { default: false, rendered: false, parseHTML: (el: HTMLElement) => el.previousSibling?.nodeName === 'CODE' } };
-        },
         parseHTML() {
           return [
             {
@@ -1530,8 +1481,7 @@ export function createEditor(opts: {
           return {
             markdown: {
               serialize: {
-                // two code spans touching (`ab``cd`) read back as one: an empty comment between them keeps them two
-                open: (_st: unknown, m: Mark, parent: PMNode, i: number) => (m.attrs.joined ? '<!---->' : '') + fence(parent.child(i), -1),
+                open: (_st: unknown, _m: unknown, parent: PMNode, i: number) => fence(parent.child(i), -1),
                 close: (_st: unknown, _m: unknown, parent: PMNode, i: number) => fence(parent.child(i - 1), 1),
                 escape: false,
               },
@@ -1547,9 +1497,6 @@ export function createEditor(opts: {
               if (!stored || !$cur || !trs.some((tr) => tr.docChanged) || !code.isInSet(stored) || code.isInSet($cur.marks())) return null;
               return state.tr.setStoredMarks(code.removeFromSet(stored));
             },
-          }), new Plugin({
-            key: new PluginKey('codeTouching'),
-            appendTransaction: (trs, old, state) => codeTouching(trs, old, state),
           })];
         },
       }),

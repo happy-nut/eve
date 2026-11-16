@@ -213,9 +213,6 @@ export const HtmlBlock = Node.create({
           const comments: Comment[] = [];
           while (walk.nextNode()) comments.push(walk.currentNode as Comment);
           for (const c of comments) {
-            // the empty comment the note writes between two codes touching (`ab`<!---->`cd`): only what keeps them
-            // two, not a comment of the note's own
-            if (!c.data && c.previousSibling?.nodeName === 'CODE' && c.nextSibling?.nodeName === 'CODE') { c.remove(); continue; }
             const parent = c.parentElement;
             // one between blocks: a block of its own; one in a line of text (a paragraph, an item, a heading) is
             // kept in the line, where it used to be dropped (a block there would split the paragraph)
