@@ -4,7 +4,7 @@ import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { Plugin, PluginKey, Selection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { imageMarkdown } from './image';
 import { hidePipesInMath } from './math';
-import { CellSelection, cellAround, columnResizingPluginKey, deleteColumn, deleteRow, fixTables, inSameTable, nextCell, tableEditingKey } from '@tiptap/pm/tables';
+import { CellSelection, cellAround, columnResizingPluginKey, deleteColumn, deleteRow, fixTables, inSameTable, nextCell, tableEditingKey, TableMap } from '@tiptap/pm/tables';
 
 /**
  * Tables. The markdown form is the GFM pipe table everyone else writes:
@@ -501,11 +501,48 @@ const holdWidths = new Plugin<Pin[]>({
   },
 });
 
+/**
+ * A column's edge taken by the pointer: every column of the table given the width it has on screen first, so the drag
+ * moves that edge alone. Only the dragged column was given a width, and on release the page laid the others out
+ * afresh, so a line not dragged moved too. Before the resizing plugin, which reads the widths as it starts.
+ */
+const holdColumnsForDrag = new Plugin({
+  props: {
+    handleDOMEvents: {
+      mousedown(view, down) {
+        const handle = columnResizingPluginKey.getState(view.state)?.activeHandle ?? -1;
+        if (down.button !== 0 || handle < 0) return false;
+        const $cell = view.state.doc.resolve(handle), table = $cell.node(-1), start = $cell.start(-1);
+        if (table?.type.name !== 'table') return false;
+        const map = TableMap.get(table), row = (view.nodeDOM(start - 1) as HTMLElement | null)?.querySelector('tr');
+        if (!row) return false;
+        // each column's width, from the first row (a cell over two columns split between them)
+        const widths: number[] = [];
+        for (const c of row.children as HTMLCollectionOf<HTMLTableCellElement>) {
+          const w = c.getBoundingClientRect().width / c.colSpan;
+          for (let i = 0; i < c.colSpan; i++) widths.push(Math.round(w));
+        }
+        if (widths.length !== map.width) return false;
+        const tr = view.state.tr;
+        for (const pos of new Set(map.map)) {
+          const cell = table.nodeAt(pos)!;
+          if (cell.attrs.colwidth?.every(Boolean)) continue;
+          const col = map.colCount(pos);
+          tr.setNodeMarkup(start + pos, null, { ...cell.attrs, colwidth: widths.slice(col, col + cell.attrs.colspan) });
+        }
+        // not a step of its own for ⌘Z: the drag's own step takes the column back, and the rest look as they did
+        if (tr.docChanged) view.dispatch(tr.setMeta('addToHistory', false));
+        return false;
+      },
+    },
+  },
+});
+
 export const TableNodes = [
   Table.extend({
     addStorage: () => tableMarkdown,
     addProseMirrorPlugins() {
-      return [dragOutOfTable, pasteAfterClear, holdWidths, ...(this.parent?.() ?? []).map((p) => (p.spec.key === tableEditingKey ? lessTableEditing(p) : p))];
+      return [dragOutOfTable, pasteAfterClear, holdWidths, holdColumnsForDrag, ...(this.parent?.() ?? []).map((p) => (p.spec.key === tableEditingKey ? lessTableEditing(p) : p))];
     },
   }).configure({ resizable: true }),
   TableRow.extend({ addStorage: () => inner }),

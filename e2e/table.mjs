@@ -37,6 +37,24 @@ try {
   assert.ok(narrow.reduce((a, b) => a + b) <= 900, `a narrower window lays the table out again (${narrow})`);
   console.log('ok   a narrower window lays the table out again');
 
+  // a column's edge dragged by the pointer moves that edge alone: the columns not dragged keep their widths when it is
+  // let go. Only the dragged column was given a width, and the page laid the others out afresh on release
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.evaluate(() => window.__editor.commands.setContent('# Sized\n\n| Name | Kind | Note |\n| --- | --- | --- |\n| alpha | b | a longer note here |\n| d | e | f |\n', true));
+  await page.waitForTimeout(500);
+  for (const [col, dx] of [[0, 60], [1, -40]]) {
+    const before = await widths();
+    const r = await page.evaluate((col) => { const c = document.querySelector('.tiptap table tr').children[col].getBoundingClientRect(); return { x: c.right - 1, y: c.top + c.height / 2 }; }, col);
+    await page.mouse.move(r.x - 3, r.y); await page.mouse.move(r.x, r.y); await page.waitForTimeout(100);
+    await page.mouse.down();
+    for (let i = 1; i <= 5; i++) { await page.mouse.move(r.x + (dx * i) / 5, r.y); await page.waitForTimeout(30); }
+    await page.mouse.up(); await page.waitForTimeout(300);
+    const after = await widths();
+    assert.ok(Math.abs(after[col] - before[col] - dx) <= 2, `column ${col + 1} is ${dx} wider (${before} → ${after})`);
+    for (let i = 0; i < before.length; i++) if (i !== col) assert.ok(Math.abs(after[i] - before[i]) <= 1, `column ${i + 1}, not dragged, keeps its width (${before} → ${after})`);
+  }
+  console.log('ok   dragging a column\'s edge moves that edge alone');
+
   // Notion's handles on a table (tableHandles.ts), the pointer driving them as a hand does
   await page.setViewportSize({ width: 1200, height: 800 });
   const set = async (body) => { await page.evaluate((b) => window.__editor.commands.setContent(b, true), body); await page.waitForTimeout(700); };
