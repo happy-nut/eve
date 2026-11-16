@@ -53,6 +53,7 @@ test.each(['Backspace', 'Delete'])('a picture clicked on, %s deletes it', async 
   let at = 0;
   ed.state.doc.forEach((n, pos) => { if (n.firstChild?.type.name === 'image' || n.type.name === 'image') at = n.type.name === 'image' ? pos : pos + 1; });
   ed.view.dispatch(ed.state.tr.setSelection(NodeSelection.create(ed.state.doc, at)));
+  ed.view.focus(); // as a click on it leaves the keyboard: in the note
   imageMenu(ed, () => at, { clientX: 10, clientY: 10 }, 'assets/a.png');
   const m = mount(Menu, { target: document.body });
   flushSync();
@@ -63,5 +64,7 @@ test.each(['Backspace', 'Delete'])('a picture clicked on, %s deletes it', async 
   expect(ui.menu).toBeNull();
   expect(md(ed)).not.toContain('a.png');
   expect(md(ed)).toContain('end');
+  await new Promise((r) => setTimeout(r, 300)); // the menu gone from the page (it slides away), the keyboard is in the note
+  expect(ed.view.dom.contains(document.activeElement)).toBe(true);
   unmount(m);
 });
