@@ -4,7 +4,7 @@
   import BottomSheet from './BottomSheet.svelte';
   import { isMobile } from './lib/platform';
   import { ui, type MenuItem } from './lib/ui.svelte';
-  import { prettyKeys } from './lib/shortcuts.svelte';
+  import { eventToKeys, prettyKeys } from './lib/shortcuts.svelte';
   import { hints } from './lib/hints.svelte';
   import { popIn } from './lib/motion';
   import { floatAt, held } from './lib/popup';
@@ -52,6 +52,11 @@
     it.run?.();
     if (it.keys) hints.show('menu:' + it.label, `${it.label.replace(/…$/, '')} has a shortcut`, it.keys);
   }
+  const keyed = (e: KeyboardEvent) => {
+    const k = eventToKeys(e).replace(/(^|-)Delete$/, '$1Backspace');
+    // ↩ and Space are the focused item's own
+    return k && k !== 'Enter' && k !== 'Space' ? shown.find((it) => it.keys === k && !it.disabled) : undefined;
+  };
   function onKey(e: KeyboardEvent) {
     const items = [...(el?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
     const i = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -68,6 +73,8 @@
     else if (e.key === 'ArrowDown') items[(i + 1) % items.length]?.focus();
     else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length]?.focus();
     else if (e.key === 'Escape') ui.closeMenu();
+    // an item's shortcut, shown beside it, does it here too (⌦ as ⌫: a Mac keyboard's delete is either)
+    else if (keyed(e)) { const it = keyed(e)!; ui.closeMenu(); it.run?.(); }
     else return;
     e.preventDefault();
     e.stopPropagation();

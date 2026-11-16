@@ -39,3 +39,29 @@ test.each([
   press(ed, 'Backspace');
   expect(md(ed).trim()).toBe('# tend');
 });
+
+// A click on a picture opens its menu, and the menu takes the keyboard: ⌫ or ⌦ after it did nothing, the picture
+// stayed. The menu has Delete, on ⌫ (⌦ the same), as Notion deletes a picture clicked on.
+test.each(['Backspace', 'Delete'])('a picture clicked on, %s deletes it', async (key) => {
+  const { mount, unmount, flushSync } = await import('svelte');
+  const { default: Menu } = await import('../Menu.svelte');
+  const { ui } = await import('./ui.svelte');
+  const { imageMenu } = await import('./image');
+  (Element.prototype as any).scrollIntoView ??= () => {}; // jsdom draws nothing: no scrolling, no motion
+  (Element.prototype as any).animate ??= () => ({ finished: Promise.resolve(), cancel() {}, onfinish: null });
+  const ed = editorWith('# t\n\n![](assets/a.png)\n\nend');
+  let at = 0;
+  ed.state.doc.forEach((n, pos) => { if (n.firstChild?.type.name === 'image' || n.type.name === 'image') at = n.type.name === 'image' ? pos : pos + 1; });
+  ed.view.dispatch(ed.state.tr.setSelection(NodeSelection.create(ed.state.doc, at)));
+  imageMenu(ed, () => at, { clientX: 10, clientY: 10 }, 'assets/a.png');
+  const m = mount(Menu, { target: document.body });
+  flushSync();
+  const menu = document.querySelector('.menu') as HTMLElement;
+  expect(menu.contains(document.activeElement)).toBe(true); // the keyboard is on the menu
+  menu.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  flushSync();
+  expect(ui.menu).toBeNull();
+  expect(md(ed)).not.toContain('a.png');
+  expect(md(ed)).toContain('end');
+  unmount(m);
+});

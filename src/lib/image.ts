@@ -337,6 +337,12 @@ export function imageMenu(editor: Editor, getPos: () => number | null | undefine
     { label: 'Align left', sep: true, checked: align === 'left', run: () => place('left') },
     { label: 'Align center', checked: align === 'center', run: () => place('center') },
     { label: 'Align right', checked: align === 'right', run: () => place('right') },
+    // clicked on, the menu has the keyboard: ⌫ here is what deleted the picture, as in Notion (⌦ the same, Menu.svelte)
+    { label: 'Delete', sep: true, danger: true, keys: 'Backspace', run: () => {
+      const p = getPos();
+      if (p == null || editor.state.doc.nodeAt(p)?.type.name !== 'image') return;
+      editor.chain().focus().deleteRange({ from: p, to: p + 1 }).run();
+    } },
   ]);
 }
 
