@@ -120,6 +120,10 @@ test('"/turn" offers what the line can become, plain text too; "/color" colours 
   expect(labels('turn')).not.toContain('Kanban');
   expect(labels('turnh2')).toEqual(['Heading 2']);
   expect(labels('turnbullet')).toEqual(['Bulleted list']);
+  // the colours are typed for ("/color", "/red"), not a row at the foot of the bare / menu, where opening it pushed
+  // its colours out of sight under it
+  expect(labels('')).not.toContain('Color');
+  expect(labels('red')).toContain('Red');
   const ed = editorWith('# T\n\npaint me');
   ed.commands.setTextSelection(posOf(ed, 'paint', true));
   const pens = slashItems('color');

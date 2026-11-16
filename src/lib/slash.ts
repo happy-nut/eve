@@ -360,8 +360,10 @@ const line = (id: string): SuggestItem['run'] => tip(id, (e) => runEditorCommand
  * something typed, every match as a row of its own, wherever it sits ("/flow" finds Flowchart, not "Diagram").
  */
 export function slashItems(query: string): SuggestItem[] {
+  // the colours only typed for ("/red", "/color"): a row at the foot of the bare menu, they were seldom wanted there,
+  // and opened they fell below the menu's edge
+  if (!query) return SLASH;
   const all = [...SLASH, colors()];
-  if (!query) return all;
   let q = query.toLowerCase();
   // Notion's "/turn": what the line can be turned into ("/turnh2", "/turnbullet"), plain text among them
   const turn = /^turn(?:into)?/.exec(q);

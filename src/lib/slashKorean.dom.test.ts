@@ -3,14 +3,16 @@ import { expect, test } from 'vitest';
 import { koreanOf, slashItems, type SuggestItem } from './slash';
 
 const every = (items: SuggestItem[]): SuggestItem[] => items.flatMap((i) => (i.sections ? [i, ...every(i.sections)] : [i]));
+// the bare menu, and the colours, which are only found typed for
+const ALL = [...slashItems(''), ...slashItems('color')];
 const labels = (q: string) => slashItems(q).map((i) => i.label);
 
 test('every / item, the kinds inside Heading, Diagram and Color too, has a Korean name', () => {
-  expect(every(slashItems('')).filter((i) => !koreanOf(i)).map((i) => i.label)).toEqual([]);
+  expect(every(ALL).filter((i) => !koreanOf(i)).map((i) => i.label)).toEqual([]);
 });
 
 // (a group, Heading or Diagram, is found as its kinds, each a row of its own, as "/heading" lists them)
-test.each(every(slashItems('')).filter((i) => !i.folder).map((i) => [i.label, koreanOf(i).split(' ')[0]]))('%s is found by "%s" as it is typed', (label, word) => {
+test.each(every(ALL).filter((i) => !i.folder).map((i) => [i.label, koreanOf(i).split(' ')[0]]))('%s is found by "%s" as it is typed', (label, word) => {
   const lead = String.fromCharCode('ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'.charCodeAt(Math.floor((word.charCodeAt(0) - 0xac00) / 588)));
   for (const q of [lead, word[0], word.replace(/\s+/g, '')]) expect(labels(q), q).toContain(label);
 });
