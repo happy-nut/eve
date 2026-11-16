@@ -14,7 +14,7 @@ import { Markdown } from 'tiptap-markdown';
 import { keydownHandler } from '@tiptap/pm/keymap';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { NOTION_COPY, fromNotion } from './notionPaste';
-import { canJoin, findWrapping, liftTarget } from '@tiptap/pm/transform';
+import { AddMarkStep, RemoveMarkStep, canJoin, findWrapping, liftTarget } from '@tiptap/pm/transform';
 import { DOMParser, Fragment, Mark, Slice, type Node as PMNode, type Schema, type ResolvedPos } from '@tiptap/pm/model';
 import { CellSelection } from '@tiptap/pm/tables';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
@@ -1456,6 +1456,37 @@ export function createEditor(opts: {
             state.inAutolink = undefined;
             return `](<${href.replace(/[<>]/g, (c) => encodeURIComponent(c))}>${mark.attrs.title ? ` "${String(mark.attrs.title).replace(/"/g, '\\"')}"` : ''})`;
           } } } };
+        },
+        // Words a link was taken off stay words: autolink linked the last word again at every space or ↩ typed after
+        // it. Where a link is removed is kept (mapped as the note changes) and a link autolink puts back there is taken
+        // off in the same step; a link put on them by hand clears the place.
+        addProseMirrorPlugins() {
+          const link = this.type;
+          type Span = { from: number; to: number };
+          const key = new PluginKey<Span[]>('unlinked');
+          const unlinked = new Plugin<Span[]>({
+            key,
+            state: {
+              init: () => [],
+              apply(tr, spans) {
+                let next = spans.map((s) => ({ from: tr.mapping.map(s.from, 1), to: tr.mapping.map(s.to, -1) })).filter((s) => s.from < s.to);
+                if (tr.getMeta('appendedTransaction')) return next;
+                tr.steps.forEach((st, i) => {
+                  if (!(st instanceof RemoveMarkStep || st instanceof AddMarkStep) || st.mark.type !== link) return;
+                  const rest = tr.mapping.slice(i + 1), from = rest.map(st.from, 1), to = rest.map(st.to, -1);
+                  next = next.filter((s) => s.to <= from || s.from >= to);
+                  if (st instanceof RemoveMarkStep && from < to) next.push({ from, to });
+                });
+                return next;
+              },
+            },
+            appendTransaction(_trs, _old, state) {
+              const tr = state.tr;
+              for (const s of key.getState(state) ?? []) if (state.doc.rangeHasMark(s.from, s.to, link)) tr.removeMark(s.from, s.to, link);
+              return tr.steps.length ? tr : null;
+            },
+          });
+          return [...(this.parent?.() ?? []), unlinked];
         },
       }).configure({ openOnClick: false, autolink: true }),
       // code inside a link ([run `npm i` first](u)) stays in it: stock code shuts out every other mark, so the link

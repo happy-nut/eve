@@ -310,6 +310,34 @@ describe('links', () => {
     expect(again.view.dom.textContent).toBe(ed.view.dom.textContent);
     expect(md(again)).toBe(saved); // and saves the same again
   });
+
+  // An address typed becomes a link at the space after it; its link removed, a space or ↩ typed just after it made it
+  // a link again, as many times as it was removed. Words the link was taken off stay words; a new address still links.
+  test.each(['space', 'Enter', 'space again'])('removed, it is not made a link again by typing on (%s)', (how) => {
+    const ed = editorWith('# T\n\nsee x');
+    ed.commands.setTextSelection(ed.state.doc.content.size - 1);
+    type(ed, ' asdf.com ');
+    expect(ed.view.dom.querySelector('a')).toBeTruthy();
+    const after = ed.state.selection.from - 1; // just after the address, before the space
+    ed.chain().setTextSelection(after - 2).extendMarkRange('link').unsetLink().setTextSelection(after).run();
+    if (how === 'Enter') press(ed, 'Enter');
+    else if (how === 'space') type(ed, ' ');
+    else { ed.commands.deleteRange({ from: after, to: after + 1 }); type(ed, ' '); }
+    expect(ed.view.dom.querySelector('a'), md(ed)).toBeNull();
+    type(ed, 'and qwer.com ');
+    expect([...ed.view.dom.querySelectorAll('a')].map((a) => a.textContent)).toEqual(['qwer.com']);
+  });
+
+  test('a link put back on those words by hand stays', () => {
+    const ed = editorWith('# T\n\nsee x');
+    ed.commands.setTextSelection(ed.state.doc.content.size - 1);
+    type(ed, ' asdf.com ');
+    const after = ed.state.selection.from - 1;
+    ed.chain().setTextSelection(after - 2).extendMarkRange('link').unsetLink().run();
+    ed.chain().setTextSelection({ from: after - 8, to: after }).setLink({ href: 'https://asdf.com' }).setTextSelection(after).run();
+    type(ed, ' ');
+    expect(ed.view.dom.querySelector('a')?.textContent).toBe('asdf.com');
+  });
 });
 
 describe('lists of different kinds', () => {
