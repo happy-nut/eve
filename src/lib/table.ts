@@ -130,6 +130,13 @@ function wideTables(md: any) {
 }
 
 const WIDTHS = 'eve:widths';
+/** markdown written for the clipboard's plain text, not for the note: what only the note needs (a table's widths, an
+ *  address's <>) is left out. Pasted in another app it showed as written; Eve pastes the copy's HTML. */
+export let copying = false;
+export function asCopy<T>(write: () => T): T {
+  copying = true;
+  try { return write(); } finally { copying = false; }
+}
 const WIDTHS_RE = new RegExp(`^<!--\\s*${WIDTHS}((?:\\s+(?:\\d+|-))+)\\s*-->\\s*$`);
 
 /** a table's column widths, from the comment under it (written by the table's serializer), onto its cells */
@@ -190,7 +197,7 @@ const tableMarkdown = {
       // other apps do not show) holds them, "-" for a column left to size itself
       const widths: (number | null)[] = Array(width).fill(null);
       node.forEach((row) => row.forEach((cell, _o, i) => { widths[i] ??= cell.attrs.colwidth?.[0] ?? null; }));
-      if (widths.some((w) => w)) {
+      if (!copying && widths.some((w) => w)) {
         state.write(`<!-- ${WIDTHS} ${widths.map((w) => w || '-').join(' ')} -->`);
         state.closeBlock(node);
       }

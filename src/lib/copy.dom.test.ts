@@ -94,6 +94,20 @@ test('a picture or a board selected on its own copies as its markdown', () => {
   }
 });
 
+// Pasted in a text editor or a chat, a copy showed what only the note's markdown needs: an address as <https://…>, a
+// table's column widths as the <!-- eve:widths … --> under it. Eve itself pastes the copy's HTML, widths and all.
+test('an address is copied bare, without the <> around it', () => {
+  expect(copied('see https://example.com/a now', '', '', { all: true }).trim()).toBe('see https://example.com/a now');
+  expect(copied('mail me@example.com now', '', '', { all: true }).trim()).toBe('mail me@example.com now');
+  expect(copied('[x](https://e.com) and `<https://e.com>`', '', '', { all: true }).trim()).toBe('[x](https://e.com) and `<https://e.com>`');
+});
+
+test("a table is copied without its columns' widths; the note keeps them", () => {
+  const note = '| a | b |\n| --- | --- |\n| 1 | 2 |\n\n<!-- eve:widths 200 - -->';
+  expect(copied(note, '', '', { all: true }).trim()).toBe('| a | b |\n| --- | --- |\n| 1 | 2 |');
+  expect(md(editorWith(note))).toContain('eve:widths 200 -');
+});
+
 test('part of a toggle body copies as that body, not as a toggle titled with its first line', () => {
   const text = copied('<details open>\n<summary>T</summary>\n\nbody one\n\nbody two\n\n</details>', 'one', 'two');
   expect(text).not.toContain('<summary>');

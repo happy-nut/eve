@@ -34,7 +34,7 @@ import { FootnoteRef, FootnoteText } from './footnote';
 import { CodeBlock, inCell } from './code';
 import { Pdf } from './pdf';
 import { Video } from './video';
-import { TableNodes, cellEnter, clearForPaste, upAboveTable } from './table';
+import { TableNodes, asCopy, cellEnter, clearForPaste, upAboveTable, copying } from './table';
 import { Find } from './find';
 import { SelectionLayer } from './selectionLayer';
 import { BlockHandle } from './blockHandle';
@@ -1204,7 +1204,7 @@ export function createEditor(opts: {
       // images pasted or dropped in are stored as files (blob: URLs would die on restart)
       // a copy is markdown (tiptap-markdown's serializer, transformCopiedText below); words inside one line come
       // as just those words, their bold or links kept, not wrapped in the line's list item or heading
-      clipboardTextSerializer: (slice, view) => {
+      clipboardTextSerializer: (slice, view) => asCopy(() => {
         const { $from, $to } = view.state.selection;
         const serializer = (editor.storage as any).markdown.serializer;
         if (view.state.selection instanceof CellSelection) return copiedCells(view.state.selection, slice, serializer);
@@ -1246,7 +1246,7 @@ export function createEditor(opts: {
         return text.replace(new RegExp(`^${BLANK}$`, 'gm'), '')
           .replace(/^([ \t>]*(?:[-*+] (?:\[[ xX]\] )?|\d+[.)] )?)((?:&#(?:32|9);)+)/gm, (_, pre, run) => pre + spaces(run))
           .replace(/(?:&#(?:32|9);)+(?=\\\n)/g, spaces);
-      },
+      }),
       // lines copied from inside a toggle's body come with the toggle around them (no title): pasted elsewhere, a
       // new untitled toggle was made of them. They are just the lines; a whole toggle copied is still a toggle.
       transformPasted: (slice, view) => {
@@ -1450,8 +1450,17 @@ export function createEditor(opts: {
         // space, and read back the link was gone and its [words](…) showed as text
         addStorage() {
           const plain = defaultMarkdownSerializer.marks.link;
-          return { markdown: { serialize: { ...plain, close: (state: any, mark: any, parent: any, index: number) => {
+          // copied (asCopy), an address written as itself goes bare: another app showed its <> as written
+          const open = (state: any, mark: any, parent: any, index: number) => {
+            const w = (plain.open as any)(state, mark, parent, index);
+            // (a mail address too: kept as [me@x.com](mailto:me@x.com), copied it is me@x.com)
+            const node = parent.child(index), next = index + 1 < parent.childCount ? parent.child(index + 1) : null;
+            if (copying && !state.inAutolink && node.isText && mark.attrs.href === `mailto:${node.text}` && !mark.isInSet(next?.marks ?? [])) state.inAutolink = true;
+            return copying && state.inAutolink ? '' : w;
+          };
+          return { markdown: { serialize: { ...plain, open, close: (state: any, mark: any, parent: any, index: number) => {
             const href = String(mark.attrs.href ?? '');
+            if (copying && state.inAutolink) { state.inAutolink = undefined; return ''; }
             if (state.inAutolink || !/\s/.test(href)) return (plain.close as any)(state, mark, parent, index);
             state.inAutolink = undefined;
             return `](<${href.replace(/[<>]/g, (c) => encodeURIComponent(c))}>${mark.attrs.title ? ` "${String(mark.attrs.title).replace(/"/g, '\\"')}"` : ''})`;

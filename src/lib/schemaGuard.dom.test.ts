@@ -63,9 +63,11 @@ for (const [where, wrap] of Object.entries(INSIDE)) {
 
 // what another app gets as plain text is the note's own markdown (a chat, a terminal, another editor), but for two
 // lines of text one after the other, which come a line apart as in the note (Slack and a chat drew markdown's blank
-// line between them as an empty line after every Enter): the same lines, only those blank lines left out
-test.each(Object.entries(SAMPLES))('%s: copied as plain text, it is its markdown', (_k, note) => {
-  const ed = editorWith(note);
+// line between them as an empty line after every Enter): the same lines, only those blank lines left out. What only
+// the note needs is left out too, as another app showed it as written: a table's widths, the <> around an address
+test.each(Object.entries(SAMPLES))('%s: copied as plain text, it is its markdown', (_k, saved) => {
+  const note = saved.replace(/\n*<!-- eve:widths[^>]*-->/g, '').replace(/<((?:https?:\/\/|mailto:)[^\s<>]+)>/g, '$1');
+  const ed = editorWith(saved);
   ed.commands.selectAll();
   const { text } = ed.view.serializeForClipboard(ed.state.selection.content());
   const lines = (s: string) => s.replace(/\n+$/, '').split(/\n+/);
