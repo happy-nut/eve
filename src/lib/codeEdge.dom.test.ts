@@ -73,3 +73,22 @@ test('the caret is drawn on its side of the edge: inside the code, or outside it
   arrow(ed, 1); // away from the edge: the webview's own caret again
   expect(caret()).toBeNull();
 });
+
+// Two codes touching that stayed two (the first a link, as code copied from a web page comes in): ⌫ or ⌦ with the
+// caret between them puts them together, one code, as deleting between two codes with a letter between them does.
+// It deleted the letter before the seam instead (the "f" of `asdf`), and they stayed two.
+test.each(['Backspace', 'Delete'])('%s between two codes touching puts them together, deleting no letter', (key) => {
+  const ed = editorWith('# T\n\nx [`asdf`](https://a.b)`qwer` y');
+  ed.commands.setTextSelection(posOf(ed, 'qwer'));
+  expect(press(ed, key).defaultPrevented).toBe(true);
+  expect(line(ed)).toBe('x [`asdfqwer`](https://a.b) y');
+  expect(ed.state.selection.from).toBe(posOf(ed, 'asdf') + 4);
+  type(ed, 'z');
+  expect(line(ed)).toBe('x [`asdfzqwer`](https://a.b) y');
+});
+
+test('⌫ beside a code (a plain letter before it) still deletes that letter', () => {
+  const ed = editorWith('# T\n\nx a`qwer` y');
+  ed.commands.setTextSelection(posOf(ed, 'qwer'));
+  expect(press(ed, 'Backspace').defaultPrevented).toBe(false);
+});

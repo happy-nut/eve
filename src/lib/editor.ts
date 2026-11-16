@@ -15,7 +15,7 @@ import { keydownHandler } from '@tiptap/pm/keymap';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Command, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { NOTION_COPY, fromNotion } from './notionPaste';
 import { canJoin, findWrapping, liftTarget } from '@tiptap/pm/transform';
-import { DOMParser, Fragment, Slice, type Node as PMNode, type Schema, type ResolvedPos } from '@tiptap/pm/model';
+import { DOMParser, Fragment, Mark, Slice, type Node as PMNode, type Schema, type ResolvedPos } from '@tiptap/pm/model';
 import { CellSelection } from '@tiptap/pm/tables';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { WikiLink } from './wikilink';
@@ -1069,7 +1069,21 @@ const codeEdges = Extension.create({
       view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, $to.pos)).setStoredMarks(inside ? there.inMarks : there.outMarks).scrollIntoView());
       return true;
     };
-    return { ArrowRight: step(1), ArrowLeft: step(-1) };
+    // ⌫ or ⌦ between two codes touching (two, their marks differing: the first a link, as code copied from a web page
+    // comes in) puts them together, the second taking the first's marks, as deleting between two codes with a letter
+    // between them does. The webview deleted the letter before the seam instead, and they stayed two
+    const join = () => {
+      const { state, view } = this.editor, sel = state.selection;
+      const code = state.schema.marks.code;
+      if (!(sel instanceof TextSelection) || !sel.empty || !code) return false;
+      const $c = sel.$from, b = $c.nodeBefore, a = $c.nodeAfter;
+      if (!b?.isText || !a?.isText || !code.isInSet(b.marks) || !code.isInSet(a.marks) || Mark.sameSet(b.marks, a.marks)) return false;
+      const end = $c.pos + a.nodeSize, tr = state.tr.removeMark($c.pos, end);
+      for (const m of b.marks) tr.addMark($c.pos, end, m);
+      view.dispatch(tr.setStoredMarks(b.marks));
+      return true;
+    };
+    return { ArrowRight: step(1), ArrowLeft: step(-1), Backspace: join, Delete: join };
   },
   addProseMirrorPlugins() {
     const caret = () => Object.assign(document.createElement('span'), { className: 'code-caret' });
