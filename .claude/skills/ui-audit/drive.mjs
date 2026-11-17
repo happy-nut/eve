@@ -77,7 +77,7 @@ const t = {
   },
   type: (text) => page.keyboard.type(text),
   key: (name) => page.keyboard.press(name),
-  markdown: () => page.evaluate(() => window.__editor?.storage.markdown.getMarkdown() ?? ''),
+  markdown: () => page.evaluate(() => window.__editor?.storage.markdown?.getMarkdown() ?? '(no note open)'),
 };
 
 let failed = false;
