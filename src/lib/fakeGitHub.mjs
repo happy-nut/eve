@@ -1,4 +1,3 @@
-// @ts-nocheck — a plain-JS test helper, also imported by the node tests
 import { createHash, randomBytes } from 'node:crypto';
 
 const gitSha = (buf) => createHash('sha1').update(`blob ${buf.length}\0`).update(buf).digest('hex');
