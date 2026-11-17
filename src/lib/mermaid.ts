@@ -237,9 +237,9 @@ export function smallActors(svg: string): string {
 /** the theme to draw in changed (Settings, or the system's dark mode): diagrams drawn again */
 export const themeKey = () => (dark() ? 'dark' : 'light');
 
-/** the colour mermaid gives a pie's `i`th slice (the builder's swatches) */
-export const sliceColor = (i: number) => {
-  const h = PALETTE[themeKey()].hues[i % 12];
+/** the colour the chart draws a pie's `i`th slice in, `hue` from charts.ts's sliceHues (the builder's swatches) */
+export const sliceColor = (hue: number, i: number) => {
+  const h = PALETTE[themeKey()].hues[hue % 12];
   return i >= 12 ? `color-mix(in srgb, ${h} 62%, #000)` : h; // as the chart draws a 13th part on (app.css .deep)
 };
 /** the colour a mind map's `i`th first-level branch is drawn in (the builder's bullets) */

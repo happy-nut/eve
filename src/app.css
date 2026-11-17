@@ -154,7 +154,8 @@ html.mobile .mhead svg {
 html.mobile .page { top: 52px; }
 /* the note: phone margins, room under the last line for the formatting bar */
 @media screen {
-  html.mobile .tiptap { padding-left: 20px !important; padding-right: 20px !important; padding-bottom: 160px !important; }
+  html.mobile .tiptap { padding-left: 20px !important; padding-right: 20px !important; }
+  html.mobile .tiptap:not(.code-sample) { padding-bottom: 160px !important; }
 }
 /* the list: a title, then rows a thumb can hit */
 

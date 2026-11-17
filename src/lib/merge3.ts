@@ -18,6 +18,8 @@ function kept(a: string[], b: string[]): Int32Array {
   return to;
 }
 
+const withoutFinalNewlines = (text: string) => text.replace(/\n+$/, '');
+
 const same = (x: string[], y: string[]) => x.length === y.length && x.every((l, i) => l === y[i]);
 
 /**
@@ -27,7 +29,8 @@ const same = (x: string[], y: string[]) => x.length === y.length && x.every((l, 
  * changed the same words differently, or one changed lines the other took out, null: there is no right answer to make
  * up, and the caller keeps both versions instead.
  */
-export function merge3(base: string, ours: string, theirs: string): string | null {
+export function merge3(...versions: [base: string, ours: string, theirs: string]): string | null {
+  const [base, ours, theirs] = versions.map(withoutFinalNewlines);
   if (ours === theirs) return ours;
   if (ours === base) return theirs;
   if (theirs === base) return ours;

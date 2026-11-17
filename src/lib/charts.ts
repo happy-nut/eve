@@ -34,6 +34,8 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 const title = (t: string) => (t.trim() ? `<div class="chart-title" data-spot="title">${esc(t.trim())}</div>` : '');
 const fmt = (v: number) => (Math.round(v * 100) / 100).toLocaleString('en-US');
 
+export const sliceHues = (labels: string[]) => huesOf(labels, labels.map((_, i) => `slice:${i}`));
+
 function pie(d: Pie) {
   const parts = d.slices.filter((s) => s.value > 0);
   const total = parts.reduce((a, s) => a + s.value, 0);
@@ -41,7 +43,7 @@ function pie(d: Pie) {
   // a ring of strokes on one circle: each part a dash of its share, a hair of gap between them
   const R = 70, C = 2 * Math.PI * R, gap = parts.length > 1 ? 2.2 : 0;
   // each slice's colour by its name, not its place (chartHues.ts)
-  const hue = huesOf(d.slices.map((s) => s.label), d.slices.map((_, i) => `slice:${i}`));
+  const hue = sliceHues(d.slices.map((s) => s.label));
   const tone = (i: number) => `c${hue[i]}${i >= 12 ? ' deep' : ''}`;
   let at = 0;
   const arcs = parts.map((s) => {

@@ -1,4 +1,5 @@
 import { Mark, Node } from '@tiptap/core';
+import { inkGoesOnWhileTyping } from './textColor';
 
 /**
  * HTML written in a note's markdown that the editor has no node of its own for, kept as it was: a <span> with a
@@ -173,6 +174,7 @@ export const HtmlInline = Mark.create({
   // below the app's own (a [[link]] and an @date are spans too): a rule of theirs comes first
   parseHTML: () => INLINE.map((tag) => ({ tag: `${tag}[${MARK}]`, priority: 30, getAttrs: (el: HTMLElement) => ({ tag, attrs: attrsOf(el) }) })),
   renderHTML: ({ mark }) => [mark.attrs.tag, render(mark.attrs.attrs), 0],
+  addProseMirrorPlugins: () => [inkGoesOnWhileTyping],
   addStorage: () => ({
     markdown: {
       serialize: {

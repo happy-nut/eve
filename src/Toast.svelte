@@ -9,7 +9,7 @@
      there for the mouse (or a tap) while it lasts. Keyed, so a newer one comes in as itself, not as an edit of the last -->
 {#if ui.toastMsg}
   {#key ui.toastMsg.id}
-    <div class="toast" class:mobile={isMobile} role="status" aria-live="polite" transition:fly|global={{ y: 8, duration: 160, easing: cubicOut }}>
+    <div class="toast" class:mobile={isMobile} class:clear-of-sheet={isMobile && !!ui.layers.top} role="status" aria-live="polite" transition:fly|global={{ y: 8, duration: 160, easing: cubicOut }}>
       <span class="msg">{ui.toastMsg.message}</span>
       {#if ui.toastMsg.action}
         <!-- mousedown kept from the button: the caret stays in the note it was in -->
@@ -30,7 +30,8 @@
   }
   /* a phone's formatting bar (and the list's + button) sit along the bottom: clear of them */
   .toast.mobile { bottom: calc(84px + env(safe-area-inset-bottom)); }
-  .msg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toast.mobile.clear-of-sheet { bottom: auto; top: calc(12px + env(safe-area-inset-top)); }
+  .msg { min-width: 0; overflow-wrap: anywhere; }
   button {
     flex: none; border: 0; border-radius: 6px; padding: 4px 9px; background: none;
     font: inherit; font-size: 13px; font-weight: 600; color: light-dark(#7cb4ff, #8ab8ff); transition: background 0.12s;

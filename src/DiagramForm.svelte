@@ -4,6 +4,7 @@
   import { ui } from './lib/ui.svelte';
   import { composing } from './lib/keys';
   import { sliceColor, branchColor } from './lib/mermaid';
+  import { sliceHues } from './lib/charts';
   import {
     starter, freshId, addDays, ganttDates, isMessage, replies, type Diagram, type Message, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task,
     type BlockKind, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type StateBox, type StateLink, stateParent,
@@ -204,6 +205,7 @@
   // narrowed views of the chart for the form (each kind's part of it)
   const seqD = $derived(d.kind === 'sequence' ? d : null);
   const pie = $derived(d.kind === 'pie' ? d : null);
+  const pieHues = $derived(pie ? sliceHues(pie.slices.map((s) => s.label)) : []);
   const mind = $derived(d.kind === 'mindmap' ? d : null);
   const time = $derived(d.kind === 'timeline' ? d : null);
   const gantt = $derived(d.kind === 'gantt' ? d : null);
@@ -338,7 +340,7 @@
       </div>
       {#each pie.slices as s, i (i)}
         <div class="row p-slice">
-          <span class="swatch" style:background={sliceColor(i)}></span>
+          <span class="swatch" style:background={sliceColor(pieHues[i], i)}></span>
           <input class="grow label" bind:value={s.label} placeholder="Part" aria-label="Part name" onkeydown={(e) => rowEnter(e, '.p-slice input.label', () => addSlice(pie))} />
           <input class="num" type="number" min="0" step="any" inputmode="decimal" value={s.value} aria-label="Value"
             oninput={(e) => { const v = e.currentTarget.value; if (v !== '') s.value = pieValue(+v); }} onblur={(e) => (e.currentTarget.value = String(s.value))}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { chartHtml } from './charts';
+import { chartHtml, sliceHues } from './charts';
 import { held, huesOf } from './chartHues';
 
 const F = (code: string) => document.createRange().createContextualFragment(chartHtml(code)!);
@@ -14,6 +14,11 @@ describe('chart colours by name', () => {
     const added = tones(F('pie\n  "Fish" : 2\n  "Dogs" : 4\n  "Cats" : 3\n  "Rats" : 1'), '.pie-legend .dot');
     expect(gone).toEqual(before.slice(1));
     expect(added.slice(1)).toEqual(before);
+  });
+
+  it("the builder's list shows each part in the colour the chart draws it", () => {
+    const drawn = tones(F('pie\n  "Dogs" : 4\n  "Cats" : 3\n  "Rats" : 1'), '.pie-legend .dot').map(Number);
+    expect(sliceHues(['Dogs', 'Cats', 'Rats'])).toEqual(drawn);
   });
 
   it('names that come out the same take the next free colour, so no two alike', () => {

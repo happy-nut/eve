@@ -157,6 +157,13 @@ describe('what the / menu\'s own lines do', () => {
     run(ed, 'Delete');
     expect(saved(ed)).toBe('# T\n\n- b');
   });
+  test('a colour chosen on an empty line colours what is typed next on it', () => {
+    const ed = at('# T\n\nabove', 'above', true);
+    press(ed, 'Enter');
+    slashItems('red').find((i) => i.label === 'Red')!.run!(ed);
+    type(ed, 'abc');
+    expect(saved(ed)).toMatch(/<span style="color: [^"]+">abc<\/span>$/);
+  });
   test('Table of contents lists the headings, and follows them as they change; saved, it is a comment other apps leave be', () => {
     const ed = at('# T\n\n## One\n\nx\n\n### Two', 'x', true);
     run(ed, 'Table of contents');

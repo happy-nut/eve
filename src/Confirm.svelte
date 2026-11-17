@@ -27,7 +27,18 @@
   const appear = (node: Element) => sheet(node, (n) => scale(n, panelIn));
   // the keypress that opened the dialog (Enter on a / menu item, say) is still travelling to window:
   // it must not count as the answer to a dialog that did not exist when the key went down
-  const openedAt = performance.now();
+  let openedAt = performance.now();
+  let input = $state<HTMLInputElement>();
+  let yes = $state<HTMLButtonElement>();
+  $effect(() => {
+    if (!ui.pending) return;
+    openedAt = performance.now();
+    const el = input ?? yes;
+    el?.focus();
+    // selected once its text is in (it is set just after the box is drawn): the "https://" a link opens with was left
+    // unselected, and an address pasted went in after it
+    if (el instanceof HTMLInputElement) tick().then(() => el.select());
+  });
   function onKey(e: KeyboardEvent) {
     e.stopPropagation();
     if (e.timeStamp < openedAt) return;
@@ -56,9 +67,6 @@
   }
   // every key while it is the one on top (fading out under a menu, or already answered, it hears nothing)
   $effect(() => claimKeys('global', { '*': onKey }, { whileTop: 'confirm' }));
-  // selected once its text is in (it is set just after the box is drawn): the "https://" a link opens with was left
-  // unselected, and an address pasted went in after it
-  const focus = (el: HTMLElement) => { el.focus(); if (el instanceof HTMLInputElement) tick().then(() => el.select()); };
 </script>
 
 
@@ -80,7 +88,7 @@
     <div class="cmd"><code>{p.command}</code><button onclick={copy}>{copied ? 'Copied' : 'Copy'}</button></div>
   {/if}
   {#if p.input !== undefined}
-    <input bind:value use:focus spellcheck="false" placeholder={p.placeholder ?? ''} />
+    <input bind:this={input} bind:value spellcheck="false" placeholder={p.placeholder ?? ''} />
     {#if found.length}
       <!-- the pointer picks one as well; the keyboard stays in the box (↑↓ choose, ↩ takes) -->
       <div class="found" role="listbox" aria-label="Found">
@@ -98,7 +106,7 @@
     {#if p.input !== undefined}
       <button class="primary" onclick={() => done(value)}>OK<kbd>↩</kbd></button>
     {:else}
-      <button class="primary" class:danger={p.danger} use:focus onclick={() => done('yes')}>{p.yes ?? (p.danger ? 'Delete' : 'OK')}<kbd>↩</kbd></button>
+      <button class="primary" class:danger={p.danger} bind:this={yes} onclick={() => done('yes')}>{p.yes ?? (p.danger ? 'Delete' : 'OK')}<kbd>↩</kbd></button>
     {/if}
   </div>
 </div>

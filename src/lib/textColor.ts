@@ -1,5 +1,6 @@
 import type { Editor } from '@tiptap/core';
 import type { Mark as PMMark } from '@tiptap/pm/model';
+import { Plugin } from '@tiptap/pm/state';
 
 /**
  * Coloured words (Notion's text colours). Written as `<span style="color: #c4302b">`: another app shows the colour the
@@ -27,14 +28,20 @@ const isColor = (m: PMMark) => !!colorOf(m);
 export function colorText(editor: Editor, from: number, to: number, name: string | null) {
   const { state } = editor;
   const type = state.schema.marks.htmlInline;
-  if (!type || from >= to) return;
+  const c = COLORS.find((x) => x.name === name);
+  if (!type || from > to) return;
+  const ink = (hex: string) => type.create({ tag: 'span', attrs: [['style', `color: ${hex}`]] });
+  if (from === to) {
+    const others = (state.storedMarks ?? state.selection.$from.marks()).filter((m) => !isColor(m));
+    editor.view.dispatch(state.tr.setStoredMarks(c ? [...others, ink(c.hex)] : others));
+    return;
+  }
   const tr = state.tr;
   // a colour replaces the one there, never sits inside it
   state.doc.nodesBetween(from, to, (node, pos) => {
     for (const m of node.marks) if (isColor(m)) tr.removeMark(Math.max(from, pos), Math.min(to, pos + node.nodeSize), m);
   });
-  const c = COLORS.find((x) => x.name === name);
-  if (c) tr.addMark(from, to, type.create({ tag: 'span', attrs: [['style', `color: ${c.hex}`]] }));
+  if (c) tr.addMark(from, to, ink(c.hex));
   editor.view.dispatch(tr);
 }
 
@@ -43,3 +50,15 @@ export function colorAt(editor: Editor): string {
   const m = editor.state.selection.$from.marks().find(isColor);
   return m ? colorOf(m)!.name : '';
 }
+
+/** a colour chosen with no words chosen goes on with each key typed after it, until the caret moves: as Notion's red empty line */
+export const inkGoesOnWhileTyping = new Plugin({
+  appendTransaction(trs, before, after) {
+    const ink = before.storedMarks?.find(isColor);
+    if (!ink || after.storedMarks || !trs.some((t) => t.docChanged)) return null;
+    const { $from, empty } = after.selection;
+    if (!empty || !$from.nodeBefore?.marks.some((m) => m.eq(ink))) return null;
+    return after.tr.setStoredMarks([...$from.marks().filter((m) => !isColor(m)), ink]);
+  },
+});
+

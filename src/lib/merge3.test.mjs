@@ -30,4 +30,6 @@ assert.equal(merge3('# N\n\nbeta line with [[Target]] in it', '# N\n\nbeta ONE l
 assert.equal(merge3('# N\n\ntotal 100 today', '# N\n\ntotal 120 today', '# N\n\ntotal 250 today'), null);
 // nothing in common to go by (a note both devices started from nothing): no merge
 assert.equal(merge3('', 'mine', 'theirs'), null);
+assert.equal(merge3('# Trip\n\npack\n\nbook\n', '# Trip\n\npack, here\n\nbook', '# Trip\n\npack\n\nbook, on the phone'), '# Trip\n\npack, here\n\nbook, on the phone',
+  'a file that ends in a newline (written on github.com) and the same note as Eve saves it, without one, still merge');
 console.log('ok   merge3: both devices\' changes kept, conflicts not guessed at');

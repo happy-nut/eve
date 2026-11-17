@@ -66,7 +66,7 @@
     const scroll = isMobile ? bar.parentElement?.querySelector<HTMLElement>(':scope > .scroll') : null;
     if (!scroll) return;
     const fit = () => { scroll.style.paddingTop = `${bar.offsetHeight + 8}px`; };
-    const ro = new ResizeObserver(fit);
+    const ro = new ResizeObserver(() => requestAnimationFrame(fit));
     ro.observe(bar);
     fit();
     return { destroy() { ro.disconnect(); scroll.style.paddingTop = ''; } };
