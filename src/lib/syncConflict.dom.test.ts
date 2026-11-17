@@ -339,3 +339,17 @@ test('keys typed into a long open note while sync waits, still on their way from
   }
   target.remove();
 });
+
+test('a day here still only its template, the other device\'s written day arrives, a key typed here while sync waits: both kept', async () => {
+  const later = made('# After\n\none');
+  expect(await sync.now()).toBe(true);
+  const day = notes.dayNote('2031-09-10');
+  await otherPuts({ id: day.id, body: '# Sep 10\n\nwritten there', updatedAt: Date.now() - 30_000, deleted: false, order: 0 });
+  await otherWrites(later, '# After\n\none\n\nthere');
+  notes.update(later, '# After\n\nhere\n\none');
+  const w = whileWaitingOn(later, () => notes.update(day.id, bodyOf(day.id) + '\n\ntyped here meanwhile'));
+  try { expect(await sync.now()).toBe(true); } finally { onFetch = null; }
+  expect(w.done).toBe(true);
+  const all = await findable(day.id);
+  for (const words of ['written there', 'typed here meanwhile']) expect(all).toContain(words);
+});
