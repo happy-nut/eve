@@ -11,7 +11,7 @@ good. Versions come from the sync repository's commits, so they exist only with 
   `Deleted “<title>”` offers Undo.
 - `trash-undo`: the toast's Undo brings the note back, open.
 - `trash-swipe`: on a phone a row pulled to the left shows a red Delete under it; let go, the same question comes up.
-- `trash-open`: the sidebar's bin (`aside button[aria-label="Trash"]`) or ⋯ → Trash… opens the `Trash` panel, the
+- `trash-open`: the sidebar's bin (`aside button[aria-label="Trash"]`), or on a phone ⋯ → Trash…, opens the `Trash` panel, the
   keyboard in its `Search the trash` box; rows newest first, each with Restore and Delete for good.
 - `trash-search`: typing narrows the Trash to matching titles.
 - `trash-restore`: a row (or its ↶ `Restore`) brings the note back to the list, opens it and closes the Trash.
@@ -30,7 +30,7 @@ good. Versions come from the sync repository's commits, so they exist only with 
 
 - Delete: hover a sidebar row → ×; ⌘⇧⌫; the row's right-click menu → Delete note; ⌫ on a row from ⌘\. Phone: the bin
   in the note's bar, or pull a row left in the list.
-- Trash: the bin at the sidebar's bottom (Mac), or the note's ⋯ → Trash… (Mac menu, phone sheet).
+- Trash: the bin at the sidebar's bottom (Mac), or the note's ⋯ → Trash… (phone sheet only; the Mac's ⋯ leaves it to the bin).
 - Version history: the note's ⋯ → Version history… (Mac and phone).
 
 ## Driving it with drive.mjs
@@ -51,7 +51,7 @@ Preconditions: the default three notes plus `e.md` `# Old idea` / `Gone soon.`. 
 - **Trash.** `await t.click('aside button[aria-label="Trash"]');` lists Old idea and Reading list; `await t.type('read')`
   leaves Reading list; clear the box, then `await t.click('[aria-label="Trash"][role="dialog"] li:has-text("Reading list") button[aria-label="Restore"]');`
   The panel is gone, Reading list is back and open, `deleted: false`.
-- **For good.** `await t.click('button[aria-label="More"]'); await t.click('.menu button[role="menuitem"]:has-text("Trash…")'); await t.click('[aria-label="Trash"][role="dialog"] li:has-text("Old idea") button[aria-label="Delete for good"]'); await t.key('Enter');`
+- **For good.** `await t.click('aside button[aria-label="Trash"]'); await t.click('[aria-label="Trash"][role="dialog"] li:has-text("Old idea") button[aria-label="Delete for good"]'); await t.key('Enter');`
   The panel says `Nothing in the trash. …`; after a reload Old idea is still gone, its file `---\nid: e\n…deleted: true\norder: 3\n---\n`.
 - **Empty.** With two in the Trash, `button:has-text("Empty trash")`, then `button.primary:has-text("Delete")`: both
   files are tombstones, the list keeps the rest.

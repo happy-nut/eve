@@ -76,9 +76,7 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
     { label: 'Present', keys: keys('present'), hide: !empty, run: () => ui.openPresent(editor.view.dom) },
     // from the block the right click was on
     { label: 'Present from here', keys: keys('presentHere'), hide: !empty, run: () => { const d = editor.view.domAtPos(editor.state.selection.from).node; let b: Node | null = d; while (b && b.parentNode !== editor.view.dom) b = b.parentNode; ui.openPresent(editor.view.dom, b as Element | null); } },
-    { label: 'Export as Markdown…', sep: true, keys: keys('exportMd'), hide: !empty, run: () => void exportCurrent('md') },
-    { label: 'Export as PDF…', keys: keys('exportPdf'), hide: !empty, run: () => void exportCurrent('pdf') },
-    { label: 'Export as image…', keys: keys('exportPng'), hide: !empty, run: () => void exportCurrent('png') },
+    { label: 'Export…', sep: true, hide: !empty, run: () => exportMenu(at) },
   ];
   // from the keyboard (⌥↩) there is no pointer: the menu opens under the caret instead
   ui.openMenu(at, items);
@@ -112,3 +110,14 @@ async function linkSelection(editor: Editor) {
   if (!href) return editor.commands.focus();
   editor.chain().focus().setLink({ href: /^[a-z]+:/i.test(href) ? href : `https://${href}` }).run();
 }
+
+/** the open note saved as a file, one menu for every place that offers it (the note's ⋯, a right click) */
+export function exportMenu(at: { clientX: number; clientY: number }) {
+  const keys = (id: string) => shortcuts.keysFor(id);
+  ui.openMenu(at, [
+    { label: 'Markdown…', keys: keys('exportMd'), run: () => void exportCurrent('md') },
+    { label: 'PDF…', keys: keys('exportPdf'), run: () => void exportCurrent('pdf') },
+    { label: 'Image…', keys: keys('exportPng'), run: () => void exportCurrent('png') },
+  ]);
+}
+

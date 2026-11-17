@@ -27,6 +27,7 @@
   import { droppedFiles, isAsset } from './lib/drop';
   import { importTree } from './lib/importTree';
   import { importPaths, exportCurrent } from './lib/transfer';
+  import { exportMenu } from './lib/noteMenu';
   import { titleOf } from './lib/notes.svelte';
   import { tabs } from './lib/tabs.svelte';
   import TabBar from './TabBar.svelte';
@@ -255,15 +256,13 @@
       { label: 'Full width', checked: !!notes.current?.wide, hide: isMobile, run: () => { const n = notes.current; if (n) notes.setWide(n.id, !n.wide); } },
       { label: 'Small text', checked: !!notes.current?.small, run: () => { const n = notes.current; if (n) notes.setLook(n.id, { small: !n.small || undefined }); } },
       { label: 'Present', keys: shortcuts.keysFor('present'), sep: !isMobile, hide: !notes.current, run: () => present() },
-      { label: 'Find & replace…', run: () => ui.openFind() },
-      { label: 'Select all', run: () => hooks.command?.('selectAll') },
-      { label: 'Export as Markdown…', sep: true, run: () => void exportCurrent('md') },
-      { label: 'Export as PDF…', run: () => void exportCurrent('pdf') },
-      { label: 'Export as image…', run: () => void exportCurrent('png') },
+      { label: 'Find & replace…', hide: !isMobile, run: () => ui.openFind() },
+      { label: 'Select all', hide: !isMobile, run: () => hooks.command?.('selectAll') },
+      { label: 'Export…', sep: true, run: () => exportMenu({ clientX: r.right, clientY: r.bottom }) },
       // the .md file itself, for a terminal, an agent or another app (a phone's is inside the app, of no use outside it)
       { label: 'Copy file path', sep: true, hide: !isTauri || isMobile || !notes.current, run: () => void copyPath() },
       { label: 'Version history…', sep: !isTauri || isMobile, hide: !notes.current, run: () => { const n = notes.current; if (n) { notes.flush(n.id); ui.openHistory(n.id); } } },
-      { label: 'Trash…', run: () => ui.openTrash() },
+      { label: 'Trash…', hide: !isMobile, run: () => ui.openTrash() },
     ]);
   }
   /** the open note a slide at a time (Present.svelte), from the page as it is drawn; `here`: from the slide with the

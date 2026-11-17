@@ -14,7 +14,7 @@ the save panel are the Tauri shell's, so here they do nothing.
 - `import-pick`: the `+` menu's Import files… / Import folder… open Finder's pickers (not proved here: `pickFiles` /
   `pickFolders` return nothing without Tauri; clicking them does nothing; `src/lib/importTree.dom.test.ts` covers what
   they hand on).
-- `export-note`: ⋯ → Export as Markdown… / PDF… / image…, ⌘⇧M / ⌘⇧P / ⌘⌥P save the open note (not proved here: the save
+- `export-note`: ⋯ (or a right click in the note) → Export… → Markdown… / PDF… / Image…, ⌘⇧M / ⌘⇧P / ⌘⌥P save the open note (not proved here: the save
   panel and the PDF / image printing are Tauri commands, `pickSavePath` returns null in a browser, so nothing happens and
   no error shows; on a phone the file goes to Android's share sheet, also Tauri; no test covers it).
 
@@ -23,7 +23,7 @@ the save panel are the Tauri shell's, so here they do nothing.
 - Drag files or a folder from Finder onto the sidebar list (onto a row: into that page); onto the note: a picture or
   PDF is attached, a text file opens as a new note.
 - The top bar's `+` (`New`) → Import files… / Import folder….
-- The note's ⋯ → Export as Markdown… / PDF… / image…; ⌘⇧M, ⌘⇧P, ⌘⌥P.
+- The note's ⋯ or a right click → Export… → Markdown… / PDF… / Image…; ⌘⇧M, ⌘⇧P, ⌘⌥P.
 
 ## Driving it with drive.mjs
 
@@ -65,7 +65,7 @@ const dropOn = (t, sel, files, folders) => t.page.evaluate(async ({ sel, files, 
 - **Folder.** `await dropOn(t, 'aside .tree', [], { Vault: { 'Trip.md': '# Trip\n\nSee [the plan](Trip/Plan.md).\n', Trip: { 'Plan.md': '# Plan for the trip\n\nday one\n', 'Packing 0123456789abcdef0123456789abcdef.md': 'socks\n' } } });`
   The sidebar shows Vault › Trip › Packing, Plan 2, indented; Trip's markdown is `See [[Plan 2|the plan]].`
 - **Pickers and export (web).** `await t.click('button[aria-label="New"]')` lists `Import files…`, `Import folder…`;
-  clicking one, ⌘⇧M, or ⋯ → `Export as Markdown…` leaves no dialog and no new note.
+  clicking one, ⌘⇧M, or ⋯ → `Export…` → `Markdown…` leaves no dialog and no new note.
 
 ## Gotchas
 
