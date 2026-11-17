@@ -10,6 +10,12 @@ import { CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, isDailyId } from './daily';
  *  GitHub with no version agreed on before was made on both, not copied from there */
 const fixedId = (id: string) => isDailyId(id) || id === DAILY_TEMPLATE_ID || id === CALENDAR_NOTE_ID;
 
+/** a line written in `body` that neither `kept` nor `base` has: what would be gone if `body` were dropped */
+function wordsOnlyIn(body: string, kept: string, base: string): boolean {
+  const known = new Set([...kept.split('\n'), ...base.split('\n')].map((l) => l.trim()));
+  return body.split('\n').some((l) => l.trim() && !known.has(l.trim()));
+}
+
 /**
  * Sync through a private GitHub repository (see github.ts). Layout mirrors the local notes dir:
  * notes/<id>.md (frontmatter included) and notes/assets/*. A note changed on both sides since they
@@ -187,9 +193,10 @@ class Sync {
         for (const name of await assets.list()) if (!(ASSETS + name in repo.s.known)) out.push({ path: ASSETS + name, data: await assets.read(name) });
         return out;
       }, async (files: RemoteFile[]) => {
-        // `seen`: the note's words here that a forced note was worked out from. The pull goes on waiting on GitHub
-        // after it, and a key typed meanwhile was written over when the forced note went in
-        const lww: Note[] = [], force: { r: Note; seen?: string }[] = [], copies: Note[] = [];
+        // What came in is only gathered while the pull waits on GitHub (a note's hash, the version two devices last
+        // agreed on), and decided once there is no wait left: a key typed during a wait, into any note, used to be
+        // written over by a decision made before it
+        const pulled: { r: Note; seen?: string; untouched: boolean; base?: string; merge: boolean; fixed: boolean }[] = [];
         for (const f of files) {
           if (f.path.startsWith(ASSETS)) {
             // one this device cannot keep (a name with a space or a leading dot, put there on github.com) is
@@ -201,35 +208,44 @@ class Sync {
           const r = parse(dec.decode(f.data));
           if (!r) continue;
           // a long note's last keys may still be on their way from the editor: counted, the note is not "untouched"
-          // and the other device's copy does not simply replace it (it replaced the words on screen too, unsaved)
           flushEdits();
           const local = notes.all.find((n) => n.id === r.id);
           const seen = local?.body;
-          const untouched = local && f.prev && (await this.hashes.file(f.path, serialize(local))).sha === f.prev;
-          // written on both devices since they last agreed: the newer one used to replace the other, whose words
-          // were gone. Both changes are put together; where they cannot be, the one that would be lost is kept beside.
-          // So too when one device deleted the note and the other wrote in it, and when a day's note (the same id on
-          // every device) was written on both before either synced, with no version they agreed on to merge from
-          if (local && !untouched && local.body !== r.body && (f.prev || (local.updatedAt && fixedId(r.id)))) {
-            if (f.prev && !r.deleted && !local.deleted) {
-              const base = await repo.blob(f.prev).then((d) => parse(dec.decode(d)), () => null);
-              const ours = local.body;
-              const both = base ? merge3(base.body, ours, r.body) : null;
-              if (both !== null) { force.push({ r: { ...(r.updatedAt > local.updatedAt ? r : local), body: both, updatedAt: Date.now() }, seen: ours }); continue; }
-            }
-            copies.push({ ...(r.updatedAt > local.updatedAt ? local : r) });
-          }
-          if (untouched) force.push({ r, seen }); else lww.push(r);
+          const untouched = !!(local && f.prev && (await this.hashes.file(f.path, serialize(local))).sha === f.prev);
+          // the version the two last agreed on: the note here, untouched; read from GitHub when both changed it
+          const fixed = !f.prev && fixedId(r.id);
+          if (untouched) pulled.push({ r, seen, untouched, base: seen, merge: true, fixed });
+          else if (local && local.body !== r.body && f.prev) {
+            // not read (GitHub refused it): nothing to merge from, but what either side wrote is still kept
+            const base = await repo.blob(f.prev).then((d) => parse(dec.decode(d))?.body ?? '', () => null);
+            pulled.push({ r, seen, untouched, base: base ?? '', merge: base !== null, fixed });
+          } else pulled.push({ r, seen, untouched, merge: false, fixed });
+        }
+        // a long note's last keys, still on their way from the editor while the pull waited
+        flushEdits();
+        const lww: Note[] = [], force: Note[] = [], copies: Note[] = [];
+        for (const { r, seen, untouched, merge, fixed, ...was } of pulled) {
+          const now = notes.all.find((n) => n.id === r.id);
+          if (untouched && now?.body === seen) { force.push(r); continue; }
+          // A day's note (the same id on every device) met with none agreed was made on both: nothing to merge from, but
+          // what either wrote is kept. Judged now, as a key typed during the wait may be the first written in it (one
+          // still UNWRITTEN, the day's template alone, holds nothing written: the written one simply wins)
+          const base = was.base ?? (fixed && now && now.body !== r.body && now.updatedAt && r.updatedAt ? '' : undefined);
+          if (!now || base === undefined) { lww.push(r); continue; }
+          // written on both devices since they last agreed: both changes put together
+          const both = merge && !now.deleted && !r.deleted ? merge3(base, now.body, r.body) : null;
+          if (both !== null) { force.push({ ...(r.updatedAt > now.updatedAt ? r : now), body: both, updatedAt: Date.now() }); continue; }
+          // Deleted on both, erased for good on one (Trash › Delete forever, body ''): the erasure stands, whichever came
+          // later, or the words someone chose to be rid of came back into the Trash
+          const erased = now.deleted && r.deleted && (!now.body || !r.body) ? (now.body ? r : now) : undefined;
+          // one side deleted it, or the two cannot be put together: the later one stands, and the other is kept beside
+          // when it holds words the later one and the agreed version do not (a version that loses nothing is not copied)
+          const later = erased ?? (r.updatedAt > now.updatedAt ? r : now), earlier = later === r ? now : r;
+          if (wordsOnlyIn(earlier.body, later.body, base)) copies.push({ ...earlier });
+          if (later === r) (erased ? force : lww).push(r);
         }
         notes.mergeRemote(lww);
-        notes.mergeRemote(force.map(({ r, seen }) => {
-          const now = notes.all.find((n) => n.id === r.id);
-          if (seen === undefined || !now || now.body === seen || now.deleted) return r;
-          const both = r.deleted ? null : merge3(seen, now.body, r.body);
-          if (both !== null) return { ...r, body: both, updatedAt: Date.now() };
-          copies.push({ ...now }); // deleted there, or not to be put together: what was typed is a note of its own
-          return r;
-        }), true);
+        notes.mergeRemote(force, true);
         for (const c of copies) notes.keepConflictCopy(c);
       });
       this.save({ lastSynced: Date.now() });
