@@ -1,7 +1,4 @@
 #!/bin/sh
-# ./check.sh: the promise (EveSync, EveSyncDay) holds, and Reach is broken (the model still makes conflict copies).
-# ./check.sh <config>: TLC on that one config, its output as it is.
-# Fetches the pinned tla2tools.jar (TLA+ 1.7.4, from the TLA+ project's GitHub release) once, checked by its sha256.
 set -e
 cd "$(dirname "$0")"
 JAR="${TLA2TOOLS:-$HOME/.cache/tlaplus/tla2tools-1.7.4.jar}"

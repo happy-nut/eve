@@ -1,6 +1,3 @@
-// A note changed on this device and on another before they synced. It used to come down to whichever was saved last,
-// and the other device's words were gone without a trace: a line added on the phone on the train, overwritten by the
-// Mac. Now both changes are kept, and when they cannot be put together, the other version is kept as a note of its own.
 import { test, expect } from 'vitest';
 import { mount, flushSync, tick } from 'svelte';
 import Editor from '../Editor.svelte';
@@ -13,26 +10,22 @@ import { notes, serialize, parse, type Note } from './notes.svelte';
 import { sync } from './sync.svelte';
 
 const gh = fakeGitHub();
-/** a step taken while this device's sync waits on GitHub (a key typed then) */
-let onFetch: ((url: string, init?: RequestInit) => void) | null = null;
-globalThis.fetch = ((url: string, init?: RequestInit) => { onFetch?.(String(url), init); return gh.fetch(url, init); }) as typeof fetch;
+let duringFetch: ((url: string, init?: RequestInit) => void) | null = null;
+globalThis.fetch = ((url: string, init?: RequestInit) => { duringFetch?.(String(url), init); return gh.fetch(url, init); }) as typeof fetch;
 sync.save({ user: 'o', repo: 'o/r', token: 'tok' });
 
-/** the other device: its own view of the same repository */
-const other = new Repo({ repo: 'o/r', token: 'tok', head: '', tree: '', known: {} }, gh.fetch);
+const otherDevice = new Repo({ repo: 'o/r', token: 'tok', head: '', tree: '', known: {} }, gh.fetch);
 const enc = new TextEncoder(), dec = new TextDecoder();
 const path = (id: string) => `notes/${id}.md`;
-/** what the repository holds for a note, as the other device reads it */
 async function remote(id: string): Promise<Note> {
-  await other.pull();
+  await otherDevice.pull();
   const r = new Repo({ repo: 'o/r', token: 'tok', head: '', tree: '', known: {} }, gh.fetch);
   const f = (await r.pull()).find((x) => x.path === path(id))!;
   return parse(dec.decode(f.data))!;
 }
-/** the other device writes `body` into the note, a moment after this one did */
 async function otherWrites(id: string, body: string) {
   const n = await remote(id);
-  expect(await other.push([{ path: path(id), data: enc.encode(serialize({ ...n, body, updatedAt: Date.now() + 5000 })) }])).toBe(true);
+  expect(await otherDevice.push([{ path: path(id), data: enc.encode(serialize({ ...n, body, updatedAt: Date.now() + 5000 })) }])).toBe(true);
 }
 function made(body: string): string {
   const n = notes.create(body);
@@ -74,7 +67,6 @@ test('the same line made into two different things: one stays the note, the othe
   const texts = notes.all.filter((n) => !n.deleted).map((n) => n.body).join('\n---\n');
   expect(texts).toContain('total: 250');
   expect(texts).toContain('total: 120');
-  // the note itself is the later one (the other device's), and the copy says what it is
   expect(bodyOf(id)).toContain('total: 250');
   const copy = notes.all.find((n) => !n.deleted && n.id !== id && n.body.includes('total: 120'))!;
   expect(copy.body.split('\n')[0]).toMatch(/Budget.*conflict/i);
@@ -101,8 +93,6 @@ test('a link renamed on the other device in the line being written here: the wor
   expect(notes.all.some((n) => !n.deleted && n.body.startsWith('# Notes (conflict copy)'))).toBe(false);
 });
 
-// The three ways words were still lost, found by the TLA+ model in .claude/skills/formal-sync (EveSync.tla)
-/** every note's words here, the Trash included, and the branch's copy */
 async function findable(id: string): Promise<string> {
   return notes.all.map((n) => n.body).join('\n') + '\n' + ((await remote(id))?.body ?? '');
 }
@@ -112,9 +102,9 @@ test('written here while the other device deleted the note later: what was writt
   expect(await sync.now()).toBe(true);
   notes.update(id, '# Plan\n\nshared\n\nwritten here');
   const r = await remote(id);
-  expect(await other.push([{ path: path(id), data: enc.encode(serialize({ ...r, deleted: true, updatedAt: Date.now() + 5000 })) }])).toBe(true);
+  expect(await otherDevice.push([{ path: path(id), data: enc.encode(serialize({ ...r, deleted: true, updatedAt: Date.now() + 5000 })) }])).toBe(true);
   expect(await sync.now()).toBe(true);
-  expect(notes.all.find((n) => n.id === id)!.deleted).toBe(true); // the delete, the later step, stands
+  expect(notes.all.find((n) => n.id === id)!.deleted).toBe(true);
   expect(notes.all.filter((n) => !n.deleted).map((n) => n.body).join('\n')).toContain('written here');
 });
 
@@ -131,8 +121,8 @@ test('a day\'s note written on both devices before either synced: both days\' wo
   const key = '2030-01-02';
   const day = notes.dayNote(key);
   notes.update(day.id, day.body + '\n\nwritten here');
-  await other.pull();
-  expect(await other.push([{ path: path(day.id), data: enc.encode(serialize({ id: day.id, body: '# Jan 2\n\nwritten there', updatedAt: Date.now() + 5000, deleted: false, order: 0 })) }])).toBe(true);
+  await otherDevice.pull();
+  expect(await otherDevice.push([{ path: path(day.id), data: enc.encode(serialize({ id: day.id, body: '# Jan 2\n\nwritten there', updatedAt: Date.now() + 5000, deleted: false, order: 0 })) }])).toBe(true);
   expect(await sync.now()).toBe(true);
   const here = notes.all.filter((n) => !n.deleted).map((n) => n.body).join('\n');
   expect(here).toContain('written there');
@@ -145,14 +135,9 @@ test('a key typed into a note while sync waits on another note\'s file: the key\
   await otherWrites(a, '# Alpha\n\none\n\nthere');
   await otherWrites(b, '# Beta\n\none\n\nthere');
   notes.update(b, '# Beta\n\none\n\nhere too');
-  // the pull reads the changed files, then waits on Beta's last agreed version to put its two changes together: a key then
-  const base = sync.settings.known[path(b)];
-  let typed = false;
-  onFetch = (url, init) => {
-    if (!typed && url.endsWith(`/git/blobs/${base}`) && (init?.method ?? 'GET') === 'GET') { typed = true; notes.update(a, '# Alpha\n\none\n\ntyped meanwhile'); }
-  };
-  try { expect(await sync.now()).toBe(true); } finally { onFetch = null; }
-  expect(typed).toBe(true);
+  const w = whileWaitingOn(b, () => notes.update(a, '# Alpha\n\none\n\ntyped meanwhile'));
+  try { expect(await sync.now()).toBe(true); } finally { duringFetch = null; }
+  expect(w.done).toBe(true);
   const body = notes.all.find((n) => n.id === a)!.body;
   expect(body).toContain('typed meanwhile');
   expect(body).toContain('there');
@@ -164,7 +149,7 @@ test('written and deleted here, deleted on the other device later: what was writ
   notes.update(id, '# Old\n\nshared\n\nwritten before deleting');
   notes.remove(id);
   const r = await remote(id);
-  expect(await other.push([{ path: path(id), data: enc.encode(serialize({ ...r, deleted: true, updatedAt: Date.now() + 5000 })) }])).toBe(true);
+  expect(await otherDevice.push([{ path: path(id), data: enc.encode(serialize({ ...r, deleted: true, updatedAt: Date.now() + 5000 })) }])).toBe(true);
   expect(await sync.now()).toBe(true);
   const trash = notes.all.filter((n) => n.deleted).map((n) => n.body).join('\n');
   expect(trash).toContain('written before deleting');
@@ -175,28 +160,22 @@ test('a key typed into a note while sync brings in its deletion from the other d
   const [a, b] = [made('# Gamma\n\none'), made('# Delta\n\none')].sort();
   expect(await sync.now()).toBe(true);
   const ra = await remote(a);
-  expect(await other.push([{ path: path(a), data: enc.encode(serialize({ ...ra, deleted: true, updatedAt: Date.now() + 5000 })) }])).toBe(true);
+  expect(await otherDevice.push([{ path: path(a), data: enc.encode(serialize({ ...ra, deleted: true, updatedAt: Date.now() + 5000 })) }])).toBe(true);
   await otherWrites(b, '# Delta\n\none\n\nthere');
   notes.update(b, '# Delta\n\none\n\nhere too');
-  const base = sync.settings.known[path(b)];
-  let typed = false;
-  onFetch = (url, init) => {
-    if (!typed && url.endsWith(`/git/blobs/${base}`) && (init?.method ?? 'GET') === 'GET') { typed = true; notes.update(a, '# Gamma\n\none\n\ntyped as it was deleted there'); }
-  };
-  try { expect(await sync.now()).toBe(true); } finally { onFetch = null; }
+  const w = whileWaitingOn(b, () => notes.update(a, '# Gamma\n\none\n\ntyped as it was deleted there'));
+  try { expect(await sync.now()).toBe(true); } finally { duringFetch = null; }
+  expect(w.done).toBe(true);
   expect(notes.all.find((n) => n.id === a)!.deleted).toBe(true);
   expect(notes.all.filter((n) => !n.deleted).map((n) => n.body).join('\n')).toContain('typed as it was deleted there');
 });
 
-// Found by reviewing the fixes above: copies of a version that loses nothing, and keys lost while sync waited on a
-// note whose two versions could not be put together, or whose keys were still in the editor
 const copiesOf = (title: string) => notes.all.filter((n) => n.body.startsWith(`# ${title} (conflict copy)`));
-const otherPuts = async (n: Note) => { await other.pull(); expect(await other.push([{ path: path(n.id), data: enc.encode(serialize(n)) }])).toBe(true); };
-/** `step` once, while this device's sync waits on the version of `id` the two devices last agreed on */
+const otherPuts = async (n: Note) => { await otherDevice.pull(); expect(await otherDevice.push([{ path: path(n.id), data: enc.encode(serialize(n)) }])).toBe(true); };
 function whileWaitingOn(id: string, step: () => void) {
   const base = sync.settings.known[path(id)];
   const w = { done: false };
-  onFetch = (url, init) => { if (!w.done && url.endsWith(`/git/blobs/${base}`) && (init?.method ?? 'GET') === 'GET') { w.done = true; step(); } };
+  duringFetch = (url, init) => { if (!w.done && url.endsWith(`/git/blobs/${base}`) && (init?.method ?? 'GET') === 'GET') { w.done = true; step(); } };
   return w;
 }
 
@@ -275,7 +254,7 @@ for (const [name, there] of [['the other device a little later', 5000], ['the ot
     await otherWrites(b, `# Zed ${there}\n\none\n\nthere`);
     notes.update(b, `# Zed ${there}\n\nhere\n\none`);
     const w = whileWaitingOn(b, () => notes.update(a, `# Budget ${there}\n\ntotal: 120\n\none more key`));
-    try { expect(await sync.now()).toBe(true); } finally { onFetch = null; }
+    try { expect(await sync.now()).toBe(true); } finally { duringFetch = null; }
     expect(w.done).toBe(true);
     const all = await findable(a);
     for (const words of ['total: 120', 'one more key', 'total: 250']) expect(all).toContain(words);
@@ -291,7 +270,7 @@ test('a day written on both before either synced, a key typed in it while sync w
   await otherWrites(later, '# Later\n\none\n\nthere');
   notes.update(later, '# Later\n\nhere\n\none');
   const w = whileWaitingOn(later, () => notes.update(day.id, bodyOf(day.id) + '\n\none more key'));
-  try { expect(await sync.now()).toBe(true); } finally { onFetch = null; }
+  try { expect(await sync.now()).toBe(true); } finally { duringFetch = null; }
   expect(w.done).toBe(true);
   const all = await findable(day.id);
   for (const words of ['written here', 'one more key', 'written there']) expect(all).toContain(words);
@@ -304,7 +283,7 @@ test('typed into a note and deleted it while sync waits, the other device wrote 
   await otherWrites(b, '# Zeta\n\none\n\nthere');
   notes.update(b, '# Zeta\n\nhere\n\none');
   const w = whileWaitingOn(b, () => { notes.update(a, '# Eps\n\none\n\ntyped then deleted'); notes.remove(a); });
-  try { expect(await sync.now()).toBe(true); } finally { onFetch = null; }
+  try { expect(await sync.now()).toBe(true); } finally { duringFetch = null; }
   expect(w.done).toBe(true);
   const all = await findable(a);
   for (const words of ['typed then deleted', 'there']) expect(all).toContain(words);
@@ -327,7 +306,7 @@ test('keys typed into a long open note while sync waits, still on their way from
   const ed = (window as unknown as { __editor: import('@tiptap/core').Editor }).__editor;
   ed.commands.focus('end');
   const w = whileWaitingOn(b, () => typeIn(ed, ' TYPEDMEANWHILE'));
-  try { expect(await sync.now()).toBe(true); } finally { onFetch = null; }
+  try { expect(await sync.now()).toBe(true); } finally { duringFetch = null; }
   expect(w.done).toBe(true);
   flushSync();
   await tick();
@@ -348,7 +327,7 @@ test('a day here still only its template, the other device\'s written day arrive
   await otherWrites(later, '# After\n\none\n\nthere');
   notes.update(later, '# After\n\nhere\n\none');
   const w = whileWaitingOn(later, () => notes.update(day.id, bodyOf(day.id) + '\n\ntyped here meanwhile'));
-  try { expect(await sync.now()).toBe(true); } finally { onFetch = null; }
+  try { expect(await sync.now()).toBe(true); } finally { duringFetch = null; }
   expect(w.done).toBe(true);
   const all = await findable(day.id);
   for (const words of ['written there', 'typed here meanwhile']) expect(all).toContain(words);

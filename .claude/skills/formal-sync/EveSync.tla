@@ -1,6 +1,6 @@
 ---------------------------- MODULE EveSync ----------------------------
 (* One note, two devices, one GitHub branch: Eve's sync round as it is written in
-   src/lib/sync.svelte.ts (Sync.now, its onPull callback), src/lib/github.ts (syncRound, Repo.pull,
+   src/lib/sync.svelte.ts (Sync.now, gather and decide), src/lib/github.ts (syncRound, Repo.pull,
    Repo.push) and src/lib/notes.svelte.ts (mergeRemote, keepConflictCopy, update, remove, dayNote).
 
    The promise checked (CLAUDE.md, "A note written on two devices before they sync loses one device's
@@ -35,7 +35,7 @@ VARIABLES
   prev,    \* f.prev: what known said before this pull
   ut,      \* `untouched`, as the hash taken before the await found it
   seen,    \* `seen`: the note here as it was when `untouched` was taken
-  base,    \* the version the two last agreed on, as onPull holds it (None: no agreed version, plain lww)
+  base,    \* the version the two last agreed on, as gather holds it (None: no agreed version, plain lww)
   mg,      \* whether merge3 may put the two together (an agreed version from f.prev or untouched)
   snap,    \* local(): what is pushed, read before Repo.push's awaits
   tries,   \* syncRound's three tries
@@ -78,7 +78,7 @@ Delete(d) ==
   /\ loc' = [loc EXCEPT ![d] = Rec(loc[d].w, TRUE, clock)] /\ Tick
   /\ UNCHANGED <<known, head, rfile, rver, pc, pr, prev, ut, seen, base, mg, snap, tries, copies, typed>>
 
-\* notes.dayNote: the day's note made here, dated UNWRITTEN (0) so another device's written copy wins
+\* notes.dayNote: the day's note made here, dated OLDER_THAN_ANY_SYNC (0) so another device's written copy wins
 Make(d) ==
   /\ FreshSameId /\ ~Syncing(d)
   /\ loc[d].none
@@ -105,7 +105,7 @@ Pull(d) ==
             /\ pc' = [pc EXCEPT ![d] = "hash"]
   /\ UNCHANGED <<loc, rfile, rver, ut, seen, base, mg, snap, tries, copies, typed, clock>>
 
-\* onPull, gathering: flushEdits(); `seen` and `untouched` from the note's hash, taken before `await this.hashes.file`
+\* gather: flushEdits(); `seen` and `untouched` from the note's hash, taken before `await hashes.file`
 Hash(d) ==
   /\ pc[d] = "hash"
   /\ ut' = [ut EXCEPT ![d] = ~loc[d].none /\ ~prev[d].none /\ loc[d] = prev[d]]
@@ -130,7 +130,7 @@ Base(d) ==
 Lww(d, r) == IF loc[d].none \/ loc[d].at < r.at THEN r ELSE loc[d]
 Later(d) == IF pr[d].at > loc[d].at THEN pr[d] ELSE loc[d]
 Earlier(d) == IF pr[d].at > loc[d].at THEN loc[d] ELSE pr[d]
-\* judged at Decide: a fixedId note with no f.prev, made and written on both (neither UNWRITTEN): nothing agreed ({})
+\* judged at Decide: a madeOnEveryDevice note with no f.prev, made and written on both (neither OLDER_THAN_ANY_SYNC): nothing agreed ({})
 Agreed(d) == IF ~base[d].none THEN base[d]
              ELSE IF FreshSameId /\ prev[d].none /\ ~loc[d].none /\ loc[d].w # pr[d].w /\ loc[d].at # 0 /\ pr[d].at # 0
                THEN Rec({}, FALSE, 0) ELSE None
@@ -139,7 +139,7 @@ KeepEarlier(d) ==
   /\ copies' = IF Earlier(d).w \ (Later(d).w \cup Agreed(d).w) # {} THEN copies \cup {Earlier(d).w} ELSE copies
   /\ loc' = [loc EXCEPT ![d] = Later(d)] /\ UNCHANGED clock
 
-\* onPull, deciding: no wait left before mergeRemote; the note as it is now (flushEdits() again first)
+\* decide: no wait left before mergeRemote; the note as it is now (flushEdits() again first)
 Decide(d) ==
   /\ pc[d] = "decide"
   /\ IF ut[d] /\ loc[d].w = seen[d].w

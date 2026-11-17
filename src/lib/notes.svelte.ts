@@ -12,29 +12,23 @@ export { plain };
 
 export interface Note {
   id: string;
-  body: string; // markdown
-  updatedAt: number; // ms epoch
+  body: string;
+  updatedAt: number;
   deleted: boolean;
-  /** the folder an older version kept it in ("Work/Projects"): read from its file only to be made pages (tree.toPages) */
   group?: string;
-  order: number; // manual sort rank among the pages beside it (ascending)
-  parent?: string; // id of the page this one was created inside (sub-page; sits under it in the sidebar)
-  icon?: string; // emoji shown in the sidebar (Notion-style)
-  wide?: boolean; // laid out across the whole pane instead of the reading width
-  small?: boolean; // its text a step smaller than Settings' size (Notion's "Small text")
-  /** the picture across the top of the page: a preset (`gradient:sea`, cover.ts) or an image's address */
+  order: number;
+  parent?: string;
+  icon?: string;
+  wide?: boolean;
+  small?: boolean;
   cover?: string;
-  /** a database row's properties (Status, Due, Tags…): frontmatter lines of their own, as Obsidian writes them */
   props?: Record<string, PropValue>;
 }
 export type PropValue = string | string[];
 
-/** the frontmatter keys that are Eve's own: a property may not take one of these names */
 export const OWN_KEYS = new Set(['id', 'updated', 'deleted', 'order', 'group', 'parent', 'icon', 'wide', 'small', 'cover']);
-/** a property's name as a frontmatter key can hold it: one line, no colon, not one of Eve's own */
-// (not one opening with ---: its line in the file read as the end of the properties, and every row's broke there)
-export const propName = (name: string) => name.replace(/[:\n\r]/g, ' ').trim().replace(/^-{3,}\s*/, '');
-/** a value as one frontmatter line: a list (and a word that would read as one) as JSON, anything else as it is */
+const stripFence = (name: string) => name.replace(/^-{3,}\s*/, '');
+export const propName = (name: string) => stripFence(name.replace(/[:\n\r]/g, ' ').trim());
 const propLine = (v: PropValue) => (Array.isArray(v) || /^[["]/.test(v) || v !== v.trim() ? JSON.stringify(v) : v.replace(/[\n\r]+/g, ' '));
 export function readProp(v: string): PropValue {
   if (/^[["]/.test(v)) {
@@ -42,35 +36,27 @@ export function readProp(v: string): PropValue {
       const x = JSON.parse(v);
       if (typeof x === 'string') return x;
       if (Array.isArray(x)) return x.map(String);
-    } catch { /* written by hand: the words as they are */ }
+    } catch {}
   }
   return v;
 }
 
-/** An icon for a note that was just made, unless the setting is off. */
 const autoIcon = () => (appearance.s.autoIcon ? randomIcon() : undefined);
 
 export const newId = () =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
-// ---- (de)serialization: markdown with a tiny frontmatter -------------------
 export function serialize(n: Note): string {
   return `---\nid: ${n.id}\nupdated: ${n.updatedAt}\ndeleted: ${n.deleted}\norder: ${n.order}${n.group ? `\ngroup: ${n.group}` : ''}${n.parent ? `\nparent: ${n.parent}` : ''}${n.icon ? `\nicon: ${n.icon}` : ''}${n.wide ? '\nwide: true' : ''}${n.small ? '\nsmall: true' : ''}${n.cover ? `\ncover: ${n.cover}` : ''}${Object.entries(n.props ?? {}).map(([k, v]) => `\n${k}: ${propLine(v)}`).join('')}\n---\n${n.body}`;
 }
 
-/**
- * When a note with a fixed id (a day, the daily template, the calendar's row) was only just made here and not
- * written in yet. Another device may have made and written the same note already; this blank copy must not be
- * newer than that one, or the first sync kept the blank and pushed it over what was written there. Typing in
- * it dates it as any edit does.
- */
-const UNWRITTEN = 0;
+const OLDER_THAN_ANY_SYNC = 0;
+
+const normalizeEol = (text: string) => text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+const legacyOrder = (meta: Record<string, string>) => -(Number(meta.updated) || 0);
 
 export function parse(text: string): Note | null {
-  // a note saved on Windows (CRLF), or with a byte-order mark, is the same note: unread, it was skipped by the
-  // pull and the older copy here pushed back over it
-  text = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
-  const m = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text);
+  const m = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(normalizeEol(text));
   if (!m) return null;
   const meta: Record<string, string> = {};
   const props: Record<string, PropValue> = {};
@@ -94,38 +80,26 @@ export function parse(text: string): Note | null {
     small: meta.small === 'true' || undefined,
     cover: meta.cover || undefined,
     ...(Object.keys(props).length ? { props } : {}),
-    // legacy notes without order: newest first
-    order: meta.order !== undefined && !Number.isNaN(Number(meta.order)) ? Number(meta.order) : -(Number(meta.updated) || 0),
+    order: meta.order !== undefined && !Number.isNaN(Number(meta.order)) ? Number(meta.order) : legacyOrder(meta),
   };
 }
 
-
-
-/** the line a note's title is read from: its first written line that is more than HTML tags or a comment */
 const titleLine = (body: string) => body.split('\n').find((l) => l.trim() && !onlyHtml(l)) ?? '';
-/** the first written line of a body, as it is (an empty title reads "Untitled" through titleOf) */
 const plainTitleLine = (body: string) => plain(titleLine(body));
 
 export function titleOf(n: Pick<Note, 'body'>): string {
   return plain(titleLine(n.body)) || 'Untitled';
 }
-/** the title as it was read before 0.7.35, which the [[links]] written then still say (see legacyPlain) */
 export const legacyTitleOf = (n: Pick<Note, 'body'>): string => legacyPlain(titleLine(n.body)) || 'Untitled';
 
-/** A search's matches, the note called what was typed first, then the ones whose title starts with it, then the ones
- *  whose title has it anywhere, then the ones that only say it somewhere: ↩ opens the first, and it used to be whichever
- *  came first in the list. Each tier keeps the list's order. `q` is lower case. */
 export function rankByTitle<T extends Pick<Note, 'body'>>(list: T[], q: string): T[] {
   const tier = (n: T) => {
     const t = titleOf(n).toLowerCase();
     return t === q ? 0 : t.startsWith(q) ? 1 : t.includes(q) ? 2 : 3;
   };
-  return list.map((n) => ({ n, t: tier(n) })).sort((a, b) => a.t - b.t).map((x) => x.n); // a stable sort
+  return list.map((n) => ({ n, t: tier(n) })).sort((a, b) => a.t - b.t).map((x) => x.n);
 }
 
-/** `list` depth-first: every page is followed by its sub-pages (`folded` hides a page's sub-pages,
- *  it still reports `kids`). A sub-page whose parent is not in `list` (deleted, say) shows up at
- *  the top level. */
 export function nested(list: readonly Note[], folded?: (id: string) => boolean): { n: Note; depth: number; kids: boolean }[] {
   const ids = new Set(list.map((n) => n.id));
   const kids = new Map<string, Note[]>();
@@ -144,51 +118,47 @@ export function nested(list: readonly Note[], folded?: (id: string) => boolean):
   return out;
 }
 
-/** Not a note: the daily notes' calendar, opened in the editor's place and kept in back/forward history. */
 export const CALENDAR = 'calendar';
 
-/**
- * The note next to `current` in the list (⌘↓ / ⌘↑), round the end. The calendar is its row; a page not in
- * the list (a daily note) steps to the list's first note, or back to its last.
- */
 export function stepFrom<T extends { id: string }>(list: T[], current: string | null, delta: number): T | undefined {
   const i = list.findIndex((n) => n.id === (current === CALENDAR ? CALENDAR_NOTE_ID : current));
   if (i < 0) return list[delta > 0 ? 0 : list.length - 1];
   return list[(i + delta + list.length) % list.length];
 }
 
-/** the note last looked at, kept on this device for the next start */
 const LAST = 'eve.lastNote';
-function remember(id: string | null) { try { if (id) localStorage.setItem(LAST, id); } catch { /* private mode: no memory, no harm */ } }
+function remember(id: string | null) { try { if (id) localStorage.setItem(LAST, id); } catch {} }
 function lastSeen(): string | null { try { return localStorage.getItem(LAST); } catch { return null; } }
 
-// ---- reactive store --------------------------------------------------------
+const noteMark = (size: number) => (size >= 50_000 ? `note ${Math.round(size / 1000)}KB` : 'note');
+
+const isDayRow = (n: Note) => isDailyId(n.id) || (!!n.parent && isDailyId(n.parent));
+const inList = (n: Note) => !n.deleted && !isDayRow(n) && n.id !== DAILY_TEMPLATE_ID && (n.id !== CALENDAR_NOTE_ID || appearance.s.dailyNotes);
+
+const sameBody = (a: string, b: string) => a === b || a.replace(/\n+$/, '') === b.replace(/\n+$/, '');
+
+const linkPattern = (title: string) => new RegExp(`\\[\\[${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(#[^\\]|\\\\]*)?(?=\\]\\]|\\||\\\\\\|)`, 'gi');
+
+const fixLinksInProps = (props: Note['props'], fix: (t: string) => string) =>
+  props && Object.fromEntries(Object.entries(props).map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => (typeof x === 'string' ? fix(x) : x)) : typeof v === 'string' ? fix(v) : v]));
+
 class NotesStore {
   all = $state<Note[]>([]);
   private _cur = $state<string | null>(null);
-  /** visited-note history for back/forward (⌘[ / ⌘]) */
   private history = $state<string[]>([]);
   private hIndex = $state(-1);
-  // only where back/forward would actually go: a deleted note in the history is stepped over (step), so a
-  // history of nothing else left the button lit and doing nothing
   get canBack() { return this.landing(-1) >= 0; }
   get canForward() { return this.landing(1) >= 0; }
-  /** last cursor position per note, restored when navigating back */
   cursor = new Map<string, number>();
-  /** set just before creating a page whose title is a placeholder: the editor selects it on open */
   selectTitle = false;
-  /** set just before opening a note to write in it (today's daily note): the editor puts the caret at its end */
-  caretEnd = $state(false); // reactive: an editor already showing the note acts on it too (Editor.svelte)
-  /** the heading a `[[Title#Section]]` link just aimed at; the editor scrolls there as the page opens */
+  caretEnd = $state(false);
   section = '';
 
   get currentId() { return this._cur; }
   set currentId(id: string | null) {
-    if (id === CALENDAR_NOTE_ID) id = CALENDAR; // its row opens the calendar: history keeps the calendar, or Back opened it again
+    if (id === CALENDAR_NOTE_ID) id = CALENDAR;
     if (id === this._cur) return;
     const left = this._cur;
-    // a long note's (or a board card's) last keys, handed over while what they were typed into is still on
-    // screen: after the switch the board they belong to is gone, and they went nowhere
     flushEdits();
     if (id) {
       this.history = this.history.slice(0, this.hIndex + 1).filter((h) => h !== id);
@@ -197,14 +167,11 @@ class NotesStore {
     }
     this._cur = id;
     remember(id);
-    // a big note is told apart, the rest only counted
-    const size = id ? this.all.find((n) => n.id === id)?.body.length ?? 0 : 0;
-    memMark(size >= 50_000 ? `note ${Math.round(size / 1000)}KB` : 'note');
+    memMark(noteMark(id ? this.all.find((n) => n.id === id)?.body.length ?? 0 : 0));
     this.leave(left);
   }
   back() { this.step(-1); }
   forward() { this.step(1); }
-  /** the history entry back/forward lands on (deleted notes skipped), -1 for none */
   private landing(d: number): number {
     for (let i = this.hIndex + d; i >= 0 && i < this.history.length; i += d) {
       const id = this.history[i];
@@ -223,67 +190,37 @@ class NotesStore {
     this.leave(left);
   }
 
-  /**
-   * Notes made here this session (⌘N, the +, a [[link]] to a page not there yet) that nothing has been written in
-   * since: the body still as it was made. Left like that, one goes again — every ⌘N used to leave an "Untitled"
-   * behind for good. Not a day's note or the calendar's (they are not made by create), nor anything sync or an
-   * import brought: those were written somewhere. In memory only: after a restart a note is just a note.
-   */
-  private untouched = new Set<string>();
-  /** the open note moved on from `id`: gone quietly if it was never written in (nothing to undo: it was empty) */
+  private blankSinceMade = new Set<string>();
   private leave(id: string | null) {
-    // its last keys first, still on their way from the editor (a long note's wait a moment): Back right after a long
-    // paste took the note for never written in, and it went with them
     flushEdits();
-    if (!id || !this.untouched.has(id)) return;
-    this.untouched.delete(id);
+    if (!id || !this.blankSinceMade.has(id)) return;
+    this.blankSinceMade.delete(id);
     const n = this.all.find((x) => x.id === id);
     if (!n || n.deleted) return;
     n.deleted = true;
     n.updatedAt = Date.now();
     this.flush(id);
   }
-  /**
-   * The open note put away without another taking its place (a phone's back to the list): if it was never written
-   * in, it goes as it would have on the next note opened, and the note next to it in the list is the open one. Nothing
-   * is made in its place: the list is what is on screen.
-   */
   letGo() {
     const id = this._cur;
-    if (!id || !this.untouched.has(id)) return;
-    this.currentId = this.neighbourOf(id)?.id ?? null; // moving on from it takes it away (leave); none left: nothing open
+    if (!id || !this.blankSinceMade.has(id)) return;
+    this.currentId = this.neighbourOf(id)?.id ?? null;
   }
 
-  /** something done to the note itself (written in, an icon picked, moved by hand), or a link to it written
-   *  elsewhere (a sub-page made with /page): it is kept */
-  touched(id: string) { this.untouched.delete(id); }
+  touched(id: string) { this.blankSinceMade.delete(id); }
   loaded = $state(false);
-  /** the app opened on the note last looked at */
   resumed = false;
-  /** bumps whenever a note changes locally; sync listens to it */
   dirty = $state(0);
 
-  /** the list's notes: everything but deleted ones and daily notes (those live in the calendar) */
-  /** the list's notes that are notes: the calendar's row is in `visible` (it moves like one) but opens the calendar */
-  // Kept, not worked out at every read: the list, a link drawn, a row of the sidebar each read them, and with 800
-  // notes filtering and sorting them at each read made opening a note take a third of a second. They are shared:
-  // nothing may sort or splice them in place.
   get pages(): readonly Note[] { return this.#pages; }
   get visible(): readonly Note[] { return this.#visible; }
-  // (a day's database rows too: under a day, which the list does not show, they came up at its top as pages of their own)
-  #visible = $derived(this.all.filter((n) => !n.deleted && !isDailyId(n.id) && !(n.parent && isDailyId(n.parent)) && n.id !== DAILY_TEMPLATE_ID && (n.id !== CALENDAR_NOTE_ID || appearance.s.dailyNotes)).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt));
+  #visible = $derived(this.all.filter(inList).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt));
   #pages = $derived(this.#visible.filter((n) => n.id !== CALENDAR_NOTE_ID));
-  /**
-   * The list as the sidebar stacks it: `shown` without what folded pages hide, `all` with it.
-   * tree.svelte.ts fills this in (it reads the notes, so they cannot import it back); until then, rank order.
-   */
   sidebar: { shown: () => readonly Note[]; all: () => readonly Note[] } = { shown: () => this.visible, all: () => this.visible };
-  /** the list's first note, as the sidebar shows it (not one tucked away under a folded page, when there is another) */
   firstPage(): Note | undefined {
     const page = (n: Note) => n.id !== CALENDAR_NOTE_ID;
     return this.sidebar.shown().find(page) ?? this.sidebar.all().find(page);
   }
-  /** The note to open in place of `id` going away: the row below it in the list, else the one above, else the first. */
   private neighbourOf(id: string): Note | undefined {
     const page = (n: Note) => n.id !== id && n.id !== CALENDAR_NOTE_ID;
     for (const list of [this.sidebar.shown(), this.sidebar.all()]) {
@@ -291,14 +228,12 @@ class NotesStore {
       const nb = i < 0 ? undefined : list.slice(i + 1).find(page) ?? list.slice(0, i).findLast(page);
       if (nb) return nb;
     }
-    return this.sidebar.shown().find(page) ?? this.sidebar.all().find(page); // not in the list (a day's note): the list's first
+    return this.sidebar.shown().find(page) ?? this.sidebar.all().find(page);
   }
 
-  /** daily notes, newest day first */
   get daily(): readonly Note[] { return this.#daily; }
   #daily = $derived(this.all.filter((n) => !n.deleted && isDailyId(n.id)).sort((a, b) => (a.id < b.id ? 1 : -1)));
 
-  /** the calendar's name and icon (its own little note, made on the first rename or icon change) */
   get calendar() {
     const n = this.all.find((x) => x.id === CALENDAR_NOTE_ID && !x.deleted);
     return { name: n ? titleOf(n) : CALENDAR_NAME, icon: n?.icon ?? '🗓️' };
@@ -312,17 +247,16 @@ class NotesStore {
     void storage.write(n.id, serialize(n));
     this.dirty++;
   }
-  /** The calendar's row: made the first time daily notes are on, at the top of Notes (it moves like a note). */
   ensureCalendar(): Note {
     let n = this.all.find((x) => x.id === CALENDAR_NOTE_ID);
-    if (n && n.deleted) { // deleted (from an older Eve, or another device): the row comes back, on every device
+    if (n && n.deleted) {
       Object.assign(n, { deleted: false, updatedAt: Date.now() });
       void storage.write(n.id, serialize(n));
       this.dirty++;
     }
     if (n) return n;
     const top = this.visible.filter((x) => !x.parent).reduce((m, x) => Math.min(m, x.order), 1);
-    n = { id: CALENDAR_NOTE_ID, body: `# ${CALENDAR_NAME}\n`, updatedAt: UNWRITTEN, deleted: false, order: top - 1, icon: '🗓️' };
+    n = { id: CALENDAR_NOTE_ID, body: `# ${CALENDAR_NAME}\n`, updatedAt: OLDER_THAN_ANY_SYNC, deleted: false, order: top - 1, icon: '🗓️' };
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
     void storage.write(n.id, serialize(n));
@@ -330,16 +264,14 @@ class NotesStore {
     return this.all.at(-1)!;
   }
 
-  /** what a new day starts as: the template note, or the default until there is one */
   get dailyTemplate(): string {
     const t = this.all.find((n) => n.id === DAILY_TEMPLATE_ID && !n.deleted);
     return t ? t.body : DEFAULT_TEMPLATE;
   }
-  /** The daily template's note, made from the default the first time. */
   templateNote(): Note {
     let n = this.all.find((x) => x.id === DAILY_TEMPLATE_ID);
     if (!n) {
-      this.all.push({ id: DAILY_TEMPLATE_ID, body: DEFAULT_TEMPLATE, updatedAt: UNWRITTEN, deleted: false, order: 0, icon: '🗓️' });
+      this.all.push({ id: DAILY_TEMPLATE_ID, body: DEFAULT_TEMPLATE, updatedAt: OLDER_THAN_ANY_SYNC, deleted: false, order: 0, icon: '🗓️' });
       n = this.all.at(-1)!;
       void storage.write(n.id, serialize(n));
       this.dirty++;
@@ -348,10 +280,6 @@ class NotesStore {
     return n;
   }
 
-  /** A day's note (today by default), started from the template when there is none yet. */
-  /** the notes a step of the app's undo made (⌘N, an import, a page): ⌘Z may take them back. Not a day's note, a sync's
-   *  arrival or a conflict copy, which no step made: undoing an older step deleted them (a day written after it went to
-   *  the Trash) */
   readonly madeInStep = new Set<string>();
 
   dayNote(key = dayKey(new Date())): Note {
@@ -360,27 +288,22 @@ class NotesStore {
     if (n && !n.deleted) return n;
     const body = dailyBody(this.dailyTemplate, key);
     if (n) {
-      // a deleted day, begun again: what was written in it stays in the Trash, a note of its own (written over, it was
-      // gone from there)
-      if (n.body.trim() && n.body !== body) {
-        const kept: Note = { ...n, id: newId() };
-        this.all.push(kept);
-        this.titles.set(kept.id, titleOf(kept));
-        void storage.write(kept.id, serialize(kept));
-      }
+      this.keepWrittenDayInTrash(n, body);
       Object.assign(n, { deleted: false, body, updatedAt: Date.now() });
     }
-    else { this.all.push({ id, body, updatedAt: UNWRITTEN, deleted: false, order: 0, icon: '🗓️' }); n = this.all.at(-1)!; }
+    else { this.all.push({ id, body, updatedAt: OLDER_THAN_ANY_SYNC, deleted: false, order: 0, icon: '🗓️' }); n = this.all.at(-1)!; }
     this.titles.set(id, titleOf(n));
     void storage.write(id, serialize(n));
     this.dirty++;
     return n;
   }
-  /**
-   * A day picked in the calendar, to look at: what its page shows, and where what is typed there goes. A day
-   * with no note yet gets one only once something is written in it. Looking used to be enough to make the
-   * note, save it and sync it, and the calendar then marked every day merely looked at.
-   */
+  private keepWrittenDayInTrash(day: Note, freshBody: string) {
+    if (!day.body.trim() || day.body === freshBody) return;
+    const kept: Note = { ...day, id: newId() };
+    this.all.push(kept);
+    this.titles.set(kept.id, titleOf(kept));
+    void storage.write(kept.id, serialize(kept));
+  }
   dayDraft(key: string): { body: string; write(md: string): void; readonly note: Note | null } {
     const id = dailyId(key);
     let note = this.all.find((x) => x.id === id && !x.deleted) ?? null;
@@ -388,14 +311,13 @@ class NotesStore {
     return {
       body,
       write: (md) => {
-        if (!note && !isWritten(md, this.dailyTemplate, key)) return; // still only the template (or less)
+        if (!note && !isWritten(md, this.dailyTemplate, key)) return;
         note ??= this.dayNote(key);
         this.update(note.id, md);
       },
       get note() { return note; },
     };
   }
-  /** Open a day's note in the editor (to write today's, from the reminder or the phone's +). */
   openDaily(key = dayKey(new Date())): Note {
     const n = this.dayNote(key);
     this.currentId = n.id;
@@ -407,11 +329,10 @@ class NotesStore {
   }
 
   async load() {
-    await storage.path(); // image srcs are resolved against it: an editor must not render before it is known
+    await storage.path();
     const texts = await storage.list();
     this.all = texts.map(parse).filter((n): n is Note => !!n);
     for (const n of this.all) this.titles.set(n.id, titleOf(n));
-    // the note last looked at, as it was left (a phone opens on it, not on the list); else the list's first
     const last = lastSeen();
     this.resumed = !!last && (last === CALENDAR ? appearance.s.dailyNotes : this.all.some((n) => n.id === last && !n.deleted));
     this.currentId = this.resumed ? last : this.firstPage()?.id ?? null;
@@ -426,17 +347,13 @@ class NotesStore {
     if (step) this.madeInStep.add(n.id);
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
-    this.untouched.add(n.id);
+    this.blankSinceMade.add(n.id);
     this.currentId = n.id;
     void storage.write(n.id, serialize(n));
     this.dirty++;
     return n;
   }
 
-  /**
-   * A note made by importing a file. It joins the end of the pages beside it (an import reads top to bottom)
-   * and leaves the open note alone — the file usually links itself into the page being written.
-   */
   addImported(body: string, updatedAt = Date.now(), parent?: string, props?: Note['props']): Note {
     const step = history.record();
     const last = this.visible.filter((x) => (x.parent ?? '') === (parent ?? '')).at(-1);
@@ -452,8 +369,7 @@ class NotesStore {
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   update(id: string, body: string) {
     const n = this.all.find((x) => x.id === id);
-    // the editor writes no final newline where the file has one: the same note, not an edit
-    if (!n || n.body === body || n.body.replace(/\n+$/, '') === body.replace(/\n+$/, '')) return;
+    if (!n || sameBody(n.body, body)) return;
     this.touched(id);
     n.body = body;
     n.updatedAt = Date.now();
@@ -462,7 +378,6 @@ class NotesStore {
     this.timers.set(id, setTimeout(() => this.flush(id), 300));
   }
 
-  /** A page with the id it is given (an older version's folder made a page, tree.toPages): nothing opened, no step of its own */
   addWithId(n: Note) {
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
@@ -470,11 +385,10 @@ class NotesStore {
     this.dirty++;
   }
 
-  /** write every edit still waiting on its debounce (the app is going to the background) */
   flushAll() { flushEdits(); for (const id of [...this.timers.keys()]) this.flush(id); }
 
   flush(id: string) {
-    flushEdits(); // a long note's last keys may still be on their way from the editor
+    flushEdits();
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
     clearTimeout(this.timers.get(id));
@@ -484,33 +398,28 @@ class NotesStore {
     this.dirty++;
   }
 
-  /** title as of the last flush, so a retitled page can take its [[links]] with it */
   private titles = new Map<string, string>();
+  private isTitleOfAnother(n: Note, title: string) {
+    return this.all.some((o) => !o.deleted && o.id !== n.id && titleOf(o).toLowerCase() === title.toLowerCase());
+  }
+  private isSettledTitle(n: Note, title: string) {
+    return /\S/.test(plainTitleLine(n.body)) && !this.isTitleOfAnother(n, title);
+  }
   private followRename(n: Note) {
     const now = titleOf(n);
     const was = this.titles.get(n.id);
     if (was === undefined || was === now) { this.titles.set(n.id, now); return; }
-    // A title on its way to another (each pause in typing flushes) is no rename yet while it is empty or is
-    // another note's: "Ideas 2" → "Ideas" (on the way to "Ideas 3") made [[Ideas 2]] into [[Ideas]], and the
-    // next step then took the other note's [[Ideas]] along. The links wait for a title of this note's own.
-    const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-    if (!/\S/.test(plainTitleLine(n.body))) return; // emptied, on the way to a new title
-    if (this.all.some((o) => !o.deleted && o.id !== n.id && same(titleOf(o), now))) return;
+    if (!this.isSettledTitle(n, now)) return;
     this.titles.set(n.id, now);
     // ponytail: scans every body on a rename; fine for local notes, index the links if it ever bites
-    // every shape of the link: the page itself, one of its sections, and either under an alias
-    // (`[[Title|shown as]]`, its bar escaped inside a table); in any case, as links are followed
-    const link = new RegExp(`\\[\\[${was.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(#[^\\]|\\\\]*)?(?=\\]\\]|\\||\\\\\\|)`, 'gi');
-    // "[[C# notes]]" is the note "C# notes", not "C" with a section, when there is such a note (splitLink)
-    const isTitle = (t: string) => same(t, was) || this.all.some((o) => !o.deleted && o.id !== n.id && same(titleOf(o), t));
-    const ours = (section: string | undefined) => !section || same(splitLink(was + section, isTitle)[0], was);
-    // a "$" in a title is just a "$"
+    const link = linkPattern(was);
+    const isTitle = (t: string) => t.toLowerCase() === was.toLowerCase() || this.isTitleOfAnother(n, t);
+    const ours = (section: string | undefined) => !section || splitLink(was + section, isTitle)[0].toLowerCase() === was.toLowerCase();
     const fix = (t: string) => t.replace(link, (m: string, section?: string) => (ours(section) ? `[[${now}${section ?? ''}` : m));
     for (const other of this.all) {
       if (other.deleted || other.id === n.id) continue;
       const body = fix(other.body);
-      // a database row's relation to it too: left, the link went nowhere, and its rollups counted nothing
-      const props = other.props && Object.fromEntries(Object.entries(other.props).map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => (typeof x === 'string' ? fix(x) : x)) : typeof v === 'string' ? fix(v) : v]));
+      const props = fixLinksInProps(other.props, fix);
       const propsMoved = !!props && JSON.stringify(props) !== JSON.stringify(other.props);
       if (body === other.body && !propsMoved) continue;
       other.body = body;
@@ -520,11 +429,9 @@ class NotesStore {
     }
   }
 
-
-  /** Make a note a sub-page of `parent` (null = a page of its own). Refuses a loop. */
   setParent(id: string, parent: string | null) {
     history.record();
-    if (id === CALENDAR_NOTE_ID || parent === CALENDAR_NOTE_ID) return; // the calendar's row takes no sub-pages, is none
+    if (id === CALENDAR_NOTE_ID || parent === CALENDAR_NOTE_ID) return;
     const n = this.all.find((x) => x.id === id);
     if (!n || (parent && (parent === id || this.isAncestor(id, parent)))) return;
     this.touched(id);
@@ -533,7 +440,6 @@ class NotesStore {
     this.flush(id);
   }
 
-  /** Is `id` somewhere above `other` in the sub-page chain? (a page cannot be tucked under its own child) */
   isAncestor(id: string, other: string): boolean {
     let cur = this.all.find((n) => n.id === other);
     while (cur?.parent) {
@@ -555,7 +461,6 @@ class NotesStore {
 
   setWide(id: string, wide: boolean) { this.setLook(id, { wide: wide || undefined }); }
 
-  /** how the page looks, kept in its frontmatter: full width, small text, its cover */
   setLook(id: string, look: Partial<Pick<Note, 'wide' | 'small' | 'cover'>>) {
     history.record();
     const n = this.all.find((x) => x.id === id);
@@ -566,27 +471,18 @@ class NotesStore {
     this.flush(id);
   }
 
-  /**
-   * Put a note at an exact spot: the page it belongs under ('' = the top level) and the page beside it it goes in front
-   * of (null = last). Its own sub-pages come along, under it. This is what a drag and the list's ⌥-arrow walk move
-   * with, so a page can slide into another page as a sub-page instead of only stepping past it.
-   * ponytail: ranks can get arbitrarily close after thousands of moves; renormalize then.
-   */
-  /** the page a note shows under in the list: its parent while that is there, else none (a sub-page whose page was
-   *  deleted is shown at the top level) */
   shownParent(n: Note): string {
     return n.parent && this.visible.some((p) => p.id === n.parent) ? n.parent : '';
   }
+  // ponytail: ranks can get arbitrarily close after thousands of moves; renormalize then.
   place(id: string, parent: string, before: string | null) {
     history.record();
-    if (id === CALENDAR_NOTE_ID && parent) return; // the calendar's row is never a sub-page
+    if (id === CALENDAR_NOTE_ID && parent) return;
     if (parent === CALENDAR_NOTE_ID) return;
     const n = this.all.find((x) => x.id === id);
     if (!n || id === before) return;
-    if (parent && (parent === id || this.isAncestor(id, parent))) return; // never under its own sub-page
+    if (parent && (parent === id || this.isAncestor(id, parent))) return;
     this.touched(id);
-    // the pages beside it as the list shows them: a sub-page whose page was deleted is among the top level's (looked
-    // for under the deleted page, the move found no place and did nothing, while ⌥↑ said it had)
     const sibs = this.visible.filter((x) => this.shownParent(x) === parent && x.id !== id);
     let order: number;
     if (before) {
@@ -605,10 +501,6 @@ class NotesStore {
     this.flush(id);
   }
 
-  /**
-   * A rank between list[i - 1] and list[i]. Two notes can share a rank (imported, or older files): the
-   * midpoint would share it too and the move would not show, so the list is ranked 0, 1, 2… first.
-   */
   private between(list: Note[], i: number): number {
     if (list[i - 1].order >= list[i].order) {
       list.forEach((x, j) => { if (x.order !== j) { x.order = j; x.updatedAt = Date.now(); this.flush(x.id); } });
@@ -616,26 +508,19 @@ class NotesStore {
     return (list[i - 1].order + list[i].order) / 2;
   }
 
-  /** Delete a note (tombstone). A toast offers it back for a few seconds: the dialog before it is easy to say yes to. */
   remove(id: string) {
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
     const step = history.record();
-    this.untouched.delete(id); // deleted by hand: it goes the way any note does, and can come back
-    // the open note deleted: the one next to it in the list comes up. The list's first by rank was opened
-    // before, often a note deep under a folded page, nowhere near where the user was.
-    const next = this.currentId === id ? this.neighbourOf(id) : undefined;
+    this.blankSinceMade.delete(id);
+    const neighbour = this.currentId === id ? this.neighbourOf(id) : undefined;
     n.deleted = true;
     n.updatedAt = Date.now();
     this.flush(id);
-    // (a note made here because there was none left is untouched: Undo moving on from it takes it away again)
-    if (this.currentId === id) this.currentId = next?.id ?? null;
+    if (this.currentId === id) this.currentId = neighbour?.id ?? null;
     if (!this.currentId) this.create();
-    // its Undo is this step taken back (the next note it opened, the one made because none was left, all of it);
-    // with something done since, the note alone
     ui.toast(`Deleted “${titleOf(n)}”`, { label: 'Undo', byKey: true, run: () => { if (!history.undo(step)) this.restore(id); } });
   }
-  /** A deleted note back as it was, and open. Dated now: the tombstone has synced, and must not win over it. */
   restore(id: string) {
     history.record();
     const n = this.all.find((x) => x.id === id);
@@ -646,15 +531,9 @@ class NotesStore {
     this.currentId = id;
   }
 
-  /**
-   * The trash (Notion's): deleted notes and days, newest deletion first. One deleted for good keeps its tombstone,
-   * which the other devices need to delete it too, but nothing of what it said, and is no longer here.
-   */
   get trash(): readonly Note[] {
     return this.all.filter((n) => n.deleted && n.body !== '' && n.id !== CALENDAR_NOTE_ID && n.id !== DAILY_TEMPLATE_ID).sort((a, b) => b.updatedAt - a.updatedAt);
   }
-  /** Deleted for good: its words gone from this device and, once synced, from the others' copies and the repo's head
-   *  (the repo's history still has them). No undo: the dialog before it says so. */
   erase(ids: readonly string[]) {
     for (const id of ids) {
       const n = this.all.find((x) => x.id === id);
@@ -664,11 +543,6 @@ class NotesStore {
       this.flush(id);
     }
   }
-  /**
-   * A note back to a version of it (Notion's page history). Dated now, so sync carries it to the other devices as the
-   * newest; the open editor takes it as any body from outside. The toast's Undo puts back what it said (the app's
-   * ⌘Z keeps where notes are, not their words: those are the editor's to take back).
-   */
   restoreVersion(id: string, body: string, when: string) {
     const n = this.all.find((x) => x.id === id);
     if (!n || n.deleted || n.body === body) return;
@@ -678,10 +552,6 @@ class NotesStore {
     ui.toast(`Restored the version from ${when}`, { label: 'Undo', run: () => put(was) });
   }
 
-  /**
-   * A database row's property set (or taken off, with null or nothing in it). Dated now, so sync carries it; a
-   * property no one has left is no line of the file.
-   */
   setProp(id: string, name: string, value: PropValue | null) {
     const n = this.all.find((x) => x.id === id);
     const key = propName(name);
@@ -694,7 +564,6 @@ class NotesStore {
     n.updatedAt = Date.now();
     this.flush(id);
   }
-  /** A property renamed on the rows that have it (the database's column renamed), its order among the others kept */
   renameProp(ids: readonly string[], from: string, to: string) {
     const key = propName(to);
     if (!key || OWN_KEYS.has(key) || key === from) return;
@@ -706,7 +575,6 @@ class NotesStore {
       this.flush(id);
     }
   }
-  /** A database row taken away or brought back by the table's own ⌘Z: no toast, and the open note stays open. */
   setGone(id: string, gone: boolean) {
     const n = this.all.find((x) => x.id === id);
     if (!n || n.deleted === gone) return;
@@ -715,24 +583,14 @@ class NotesStore {
     this.flush(id);
     if (gone && this.currentId === id) this.currentId = n.parent ?? this.firstPage()?.id ?? null;
   }
-  /** A new row of the database on page `parent`: a page under it, titled, with these properties. Not opened. */
   addRow(parent: string, title: string, props: Record<string, PropValue> = {}): Note {
-    const up = this.all.find((x) => x.id === parent);
-    // as an import is made: at the end of the pages under it, the open note left alone (the table stays in front)
     const made = this.addImported(`# ${title}\n\n`, Date.now(), parent);
-    const n = this.all.find((x) => x.id === made.id)!; // the store's own (the one made is a copy it was taken from)
+    const n = this.all.find((x) => x.id === made.id)!;
     const clean = Object.fromEntries(Object.entries(props).filter(([k, v]) => propName(k) && !OWN_KEYS.has(propName(k)) && v !== '' && !(Array.isArray(v) && !v.length)));
     if (Object.keys(clean).length) { n.props = clean; this.flush(n.id); }
     return n;
   }
 
-  /** Open note by title, creating it if missing (used by [[wiki links]]). */
-  /** Follow a `[[link]]`. `Title#Section` opens the page at that heading (Editor reads `section`). */
-  /**
-   * Every title a [[link]] can find a page by, in one string: it changes when a page is made, renamed or deleted, not
-   * at every key typed into one, so what watches it (a link drawn as missing, onTitles) is not run at every key either.
-   * Each note's titles are read once per version of it.
-   */
   private titleKey = $derived(this.visible.map((n) => this.titlesOf(n)).join('\n'));
   private titleCache = new Map<string, { body: string; key: string }>();
   private titlesOf(n: Note): string {
@@ -742,7 +600,6 @@ class NotesStore {
     this.titleCache.set(n.id, { body: n.body, key });
     return key;
   }
-  /** `run` now and whenever the pages' titles change (made, renamed, deleted); the returned function stops it */
   onTitles(run: () => void): () => void {
     run();
     let seen = this.titleKey; // the effect's first run comes a moment later: only a change since then counts
@@ -756,12 +613,10 @@ class NotesStore {
     });
   }
 
-  /** the page a [[link]] names: by its title, else by the title it had when the link was written */
   byTitle(t: string): Note | undefined {
     const want = t.toLowerCase();
     return this.#byTitle.now.get(want) ?? this.#byTitle.was.get(want);
   }
-  /** every page by its title and by its old one, lower case, the first in the list winning (each link drawn asks) */
   #byTitle = $derived.by(() => {
     const now = new Map<string, Note>(), was = new Map<string, Note>();
     for (const n of this.visible) {
@@ -771,10 +626,6 @@ class NotesStore {
     }
     return { now, was };
   });
-  /**
-   * The notes whose [[links]] lead to `id` (Notion's backlinks): the page, a section of it, under an alias or a title it
-   * had, from any note or day but itself; each with the first line that links there, as words. A link in code is code.
-   */
   linksTo(id: string): { note: Note; line: string }[] {
     const out: { note: Note; line: string }[] = [];
     const find = (t: string) => this.byTitle(t);
@@ -785,7 +636,6 @@ class NotesStore {
     }
     return out;
   }
-  /** a note's [[links]] with the line each is on, read once per version of the note (every page asks of every note) */
   private linkCache = new Map<string, { body: string; links: { link: string; line: string }[] }>();
   private linksOf(n: Note) {
     const had = this.linkCache.get(n.id);
@@ -795,7 +645,6 @@ class NotesStore {
     for (const raw of n.body.split('\n')) {
       if (/^\s*(```|~~~)/.test(raw)) { fenced = !fenced; continue; }
       if (fenced || !raw.includes('[[')) continue;
-      // a to-do's box is no part of what the line says (plain takes the list's mark, not the box after it)
       const line = plain(raw.replace(/^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]\s+/, ''));
       for (const m of raw.matchAll(/\[\[([^\]\n]+?)\]\]/g)) links.push({ link: splitAlias(m[1])[0], line });
     }
@@ -811,16 +660,11 @@ class NotesStore {
     this.currentId = hit ? hit.id : this.create(`# ${title}\n\n`).id;
   }
 
-  /**
-   * A note's version that sync could not put together with this device's (both changed the same lines): kept as a
-   * note of its own beside it, its title saying so, and said in a toast. No one's step to undo.
-   */
   keepConflictCopy(n: Note) {
     const [first, ...rest] = n.body.split('\n');
     const body = [`${first.trim() ? first : '# ' + titleOf(n)} (conflict copy)`, ...rest].join('\n');
     const copy = history.quietly(() => this.addImported(body, Date.now(), n.parent));
-    if (n.icon) copy.icon = n.icon; // recognisable as the same note
-    // a deleted version that lost: what was written in it before it was deleted goes to the Trash, not back in the list
+    if (n.icon) copy.icon = n.icon;
     if (n.deleted) copy.deleted = true;
     if (n.icon || n.deleted) void storage.write(copy.id, serialize(copy));
     if (n.deleted) return copy;
@@ -828,30 +672,22 @@ class NotesStore {
     return copy;
   }
 
-  /** Apply notes coming from sync (last-writer-wins, or unconditionally with `force`). Returns true if anything changed. */
-  /** another device's notes: no one's step to undo here */
   mergeRemote(remote: Note[], force = false): boolean { return history.quietly(() => this.mergeRemoteNow(remote, force)); }
   private mergeRemoteNow(remote: Note[], force: boolean): boolean {
     let changed = false;
-    // the open note deleted on another device: the one next to it in the list comes up, as when it is deleted here.
-    // It stayed open, deleted, and back/forward led into it
     let instead: Note | undefined, gone = false;
     const renamed: Note[] = [];
     for (const r of remote) {
       const local = this.all.find((n) => n.id === r.id);
       if (!force && local && local.updatedAt >= r.updatedAt) continue;
       if (r.deleted && r.id === this.currentId && !local?.deleted) { instead = this.neighbourOf(r.id); gone = true; }
-      if (local) Object.assign(local, { icon: undefined, parent: undefined, wide: undefined, small: undefined, cover: undefined }, r); // a removed icon/parent/look must come through too
+      if (local) Object.assign(local, { icon: undefined, parent: undefined, wide: undefined, small: undefined, cover: undefined }, r);
       else this.all.push(r);
-      this.untouched.delete(r.id); // what another device says it is: not this session's to take away
+      this.blankSinceMade.delete(r.id);
       renamed.push(local ?? r);
       void storage.write(r.id, serialize(r));
       changed = true;
     }
-    // A page renamed on another device took its [[links]] along there, but only in the notes that device had: one
-    // written here meanwhile kept the old name, and its link led to a new empty page. Followed here too, once every
-    // note of this pull is in (followed earlier, a link put right here was dated now, and the other device's own
-    // newer edit to that note, later in the same pull, lost to it).
     for (const n of renamed) if (!n.deleted) this.followRename(n);
     if (gone) { this.currentId = instead?.id ?? null; if (!this.currentId) this.create(); }
     return changed;
@@ -860,8 +696,6 @@ class NotesStore {
 
 export const notes = new NotesStore();
 
-// What the app's undo puts back of the notes: where each sits, whether it is there, its icon and look, and which is open. A note
-// a step made since goes again; a note's text is the note's own undo, not this.
 type Spot = [id: string, deleted: boolean, parent: string, order: number, icon: string, wide: boolean, small: boolean, cover: string];
 undoSource<{ open: string | null; spots: Spot[] }>({
   take: () => ({ open: notes.currentId, spots: notes.all.map((n) => [n.id, n.deleted, n.parent ?? '', n.order, n.icon ?? '', !!n.wide, !!n.small, n.cover ?? ''] as Spot) }),
@@ -869,9 +703,7 @@ undoSource<{ open: string | null; spots: Spot[] }>({
     const was = new Map(spots.map((s) => [s[0], s]));
     for (const n of notes.all) {
       const s = was.get(n.id);
-      // deleted for good: no step brings it back (an older delete's undo raised it as an empty "Untitled")
       if (n.deleted && n.body === '') continue;
-      // made since, but by no step (a day's note, another device's, a conflict copy): not this undo's to take back
       if (!s && !notes.madeInStep.has(n.id)) continue;
       const [deleted, parent, order, icon, wide, small, cover] = s ? [s[1], s[2] || undefined, s[3], s[4] || undefined, s[5] || undefined, s[6] || undefined, s[7] || undefined] : [true, n.parent, n.order, n.icon, n.wide, n.small, n.cover];
       if (n.deleted === deleted && n.parent === parent && n.order === order && n.icon === icon && n.wide === wide && n.small === small && n.cover === cover) continue;

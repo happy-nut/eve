@@ -6,30 +6,75 @@ import { seal, open, ticketLink, type Ticket } from './handoff';
 import { merge3 } from './merge3';
 import { CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, isDailyId } from './daily';
 
-/** a note every device makes under the same id (a day's note, the day template, the calendar's row): one met on
- *  GitHub with no version agreed on before was made on both, not copied from there */
-const fixedId = (id: string) => isDailyId(id) || id === DAILY_TEMPLATE_ID || id === CALENDAR_NOTE_ID;
+const LS = 'eve.sync';
+const ASSETS = 'notes/assets/';
+const PHONE_OFFER_MS = 600_000;
 
-/** a line written in `body` that neither `kept` nor `base` has: what would be gone if `body` were dropped */
-function wordsOnlyIn(body: string, kept: string, base: string): boolean {
-  const known = new Set([...kept.split('\n'), ...base.split('\n')].map((l) => l.trim()));
+const madeOnEveryDevice = (id: string) => isDailyId(id) || id === DAILY_TEMPLATE_ID || id === CALENDAR_NOTE_ID;
+
+function wordsOnlyIn(body: string, kept: string, agreed: string): boolean {
+  const known = new Set([...kept.split('\n'), ...agreed.split('\n')].map((l) => l.trim()));
   return body.split('\n').some((l) => l.trim() && !known.has(l.trim()));
 }
 
-/**
- * Sync through a private GitHub repository (see github.ts). Layout mirrors the local notes dir:
- * notes/<id>.md (frontmatter included) and notes/assets/*. A note changed on both sides since they
- * last agreed is merged line by line (merge3), or kept as a conflict copy; a note untouched locally
- * since the last sync takes the remote version unconditionally, so edits made on github.com come through too. The GitHub is github.com or,
- * `host` set, a GitHub Enterprise one (NAME.ghe.com, or a server of the company's own).
- */
-const LS = 'eve.sync';
-const ASSETS = 'notes/assets/';
+const writtenOnBoth = (a: Note, b: Note) => a.body !== b.body && !!a.updatedAt && !!b.updatedAt;
 
-/** `host`: '' = github.com, else the GitHub Enterprise server (see github.ts normHost) */
+function whichStands(here: Note, there: Note) {
+  const erasedForGood = here.deleted && there.deleted && (!here.body || !there.body) ? (here.body ? there : here) : undefined;
+  const later = erasedForGood ?? (there.updatedAt > here.updatedAt ? there : here);
+  return { later, earlier: later === there ? here : there, erasedForGood: !!erasedForGood };
+}
+
+interface Pulled { r: Note; seen?: string; untouched: boolean; agreed?: string; mergeable: boolean; sameIdNoneAgreed: boolean }
+
+async function takeAssetOrAskAgain(repo: Repo, f: RemoteFile) {
+  try { await assets.write(f.path.slice(ASSETS.length), f.data); } catch { delete repo.s.known[f.path]; }
+}
+
+async function gather(files: RemoteFile[], repo: Repo, hashes: FileHashes): Promise<Pulled[]> {
+  const dec = new TextDecoder();
+  const pulled: Pulled[] = [];
+  for (const f of files) {
+    if (f.path.startsWith(ASSETS)) { await takeAssetOrAskAgain(repo, f); continue; }
+    if (!f.path.endsWith('.md')) continue;
+    const r = parse(dec.decode(f.data));
+    if (!r) continue;
+    flushEdits();
+    const local = notes.all.find((n) => n.id === r.id);
+    const seen = local?.body;
+    const untouched = !!(local && f.prev && (await hashes.file(f.path, serialize(local))).sha === f.prev);
+    const sameIdNoneAgreed = !f.prev && madeOnEveryDevice(r.id);
+    if (untouched) pulled.push({ r, seen, untouched, agreed: seen, mergeable: true, sameIdNoneAgreed });
+    else if (local && local.body !== r.body && f.prev) {
+      const agreed = await repo.blob(f.prev).then((d) => parse(dec.decode(d))?.body ?? '', () => null);
+      pulled.push({ r, seen, untouched, agreed: agreed ?? '', mergeable: agreed !== null, sameIdNoneAgreed });
+    } else pulled.push({ r, seen, untouched, mergeable: false, sameIdNoneAgreed });
+  }
+  return pulled;
+}
+
+function decide(pulled: Pulled[]) {
+  flushEdits();
+  const lww: Note[] = [], force: Note[] = [], copies: Note[] = [];
+  for (const p of pulled) {
+    const { r } = p;
+    const here = notes.all.find((n) => n.id === r.id);
+    if (p.untouched && here?.body === p.seen) { force.push(r); continue; }
+    const agreed = p.agreed ?? (p.sameIdNoneAgreed && here && writtenOnBoth(here, r) ? '' : undefined);
+    if (!here || agreed === undefined) { lww.push(r); continue; }
+    const both = p.mergeable && !here.deleted && !r.deleted ? merge3(agreed, here.body, r.body) : null;
+    if (both !== null) { force.push({ ...(r.updatedAt > here.updatedAt ? r : here), body: both, updatedAt: Date.now() }); continue; }
+    const { later, earlier, erasedForGood } = whichStands(here, r);
+    if (wordsOnlyIn(earlier.body, later.body, agreed)) copies.push({ ...earlier });
+    if (later === r) (erasedForGood ? force : lww).push(r);
+  }
+  notes.mergeRemote(lww);
+  notes.mergeRemote(force, true);
+  for (const c of copies) notes.keepConflictCopy(c);
+}
+
 interface Settings { user: string; repo: string; token: string; host: string; head: string; tree: string; known: Record<string, string>; lastSynced: number }
 
-/** Where to sign in, for GitHub Enterprise or an organization: all optional. `token` skips the browser. */
 export interface SignIn { host?: string; owner?: string; clientId?: string; token?: string }
 
 function load(): Settings {
@@ -48,10 +93,13 @@ class Sync {
   private hashes = new FileHashes();
 
   save(patch: Partial<Settings>) {
-    // a different repository (or the same name on another server) = start over
     const moved = (patch.repo !== undefined && patch.repo !== this.settings.repo) || (patch.host !== undefined && patch.host !== this.settings.host);
     if (moved) Object.assign(patch, { head: '', tree: '', known: {}, lastSynced: 0 });
     Object.assign(this.settings, patch);
+    this.persist();
+  }
+
+  private persist() {
     localStorage.setItem(LS, JSON.stringify(this.settings));
     widget.account(this.settings.repo, this.settings.token, this.settings.host);
   }
@@ -61,7 +109,14 @@ class Sync {
   /** device-flow code the user has to enter on GitHub, while a sign-in is in progress; `renewed`: the one
    *  before it ran out (an account still being made), and this one is not on the clipboard yet */
   pending = $state<{ code: string; url: string; renewed?: boolean } | null>(null);
-  private abort: AbortController | undefined;
+  private signingIn: AbortController | undefined;
+
+  private offerCode(code: string, url: string, renewed: boolean) {
+    this.pending = { code, url, renewed };
+    if (renewed) return;
+    void copyText(code);
+    if (!isMobile) void openUrl(url);
+  }
 
   /**
    * Sign in with GitHub, then create/find the private notes repo and sync. By default the browser's
@@ -69,24 +124,15 @@ class Sync {
    * `clientId`, the device flow then needs) or an organization, or hands a token so no browser is needed.
    */
   async login(a: SignIn = {}) {
-    if (!isTauri || this.abort) return; // one sign-in at a time
-    this.abort = new AbortController();
+    if (!isTauri || this.signingIn) return;
+    this.signingIn = new AbortController();
     this.error = '';
     try {
       const host = normHost(a.host ?? '');
       const clientId = a.clientId?.trim();
       let token = a.token?.trim();
       if (!token && host && !clientId) throw new Error('For this server, paste a token, or the Client ID of an OAuth App its admin set up for Eve.');
-      // the code goes on the clipboard first; a phone waits for the button, so the code is seen before
-      // the browser covers it
-      // a renewed code is only shown: the clipboard may hold what they are pasting on GitHub's sign-up
-      // pages meanwhile, and a new browser tab every 15 minutes would be in the way
-      token ||= await deviceLogin(github.post, (code, url, renewed) => {
-        this.pending = { code, url, renewed };
-        if (renewed) return;
-        void copyText(code);
-        if (!isMobile) void openUrl(url);
-      }, this.abort.signal, undefined, { host, clientId });
+      token ||= await deviceLogin(github.post, (code, url, renewed) => this.offerCode(code, url, !!renewed), this.signingIn.signal, undefined, { host, clientId });
       const { user, repo } = await ensureRepo(token, undefined, { host, owner: a.owner });
       this.save({ token, user, repo, host });
       this.pending = null;
@@ -97,17 +143,12 @@ class Sync {
       this.status = said === null ? 'idle' : 'error';
       this.error = said ?? '';
     } finally {
-      this.abort = undefined;
+      this.signingIn = undefined;
     }
   }
-  cancelLogin() { this.abort?.abort(); }
-  /** copy the code and open the device page (again: the browser tab may have been closed) */
+  cancelLogin() { this.signingIn?.abort(); }
   openLogin() { if (this.pending) { void copyText(this.pending.code); void openUrl(this.pending.url); this.pending.renewed = false; } }
-  /**
-   * Mac: set up a phone. This Mac's sign-in, sealed with a one-time key, is served once on the local
-   * network; the QR carries the address and the key (handoff.ts). No GitHub step: the phone simply
-   * gets what this Mac already has. Closed after the phone takes it, or ten minutes.
-   */
+
   phone = $state<{ link: string; until: number; done: boolean } | null>(null);
   private phoneTimer: ReturnType<typeof setTimeout> | undefined;
   private phoneOff: (() => void) | undefined;
@@ -117,12 +158,12 @@ class Sync {
     try {
       const { user, repo, token, host } = this.settings;
       const s = await seal({ user, repo, token, host });
-      const lan = await share.start(s.path, s.body); // this Mac's address on the local network
-      this.phone = { link: ticketLink({ host: lan, path: s.path, key: s.key }, version), until: Date.now() + 600_000, done: false };
+      const macLanAddress = await share.start(s.path, s.body);
+      this.phone = { link: ticketLink({ host: macLanAddress, path: s.path, key: s.key }, version), until: Date.now() + PHONE_OFFER_MS, done: false };
       this.phoneOff?.();
       this.phoneOff = await share.onDone(() => { if (this.phone) this.phone.done = true; });
       clearTimeout(this.phoneTimer);
-      this.phoneTimer = setTimeout(() => this.phoneDone(), 600_000);
+      this.phoneTimer = setTimeout(() => this.phoneDone(), PHONE_OFFER_MS);
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     }
@@ -135,7 +176,6 @@ class Sync {
     void share.stop();
   }
 
-  /** Phone: taking the sign-in from the Mac whose QR was scanned. */
   claiming = $state(false);
   async claim(t: Ticket) {
     this.claiming = true;
@@ -162,8 +202,7 @@ class Sync {
     this.error = '';
   }
 
-  /** debounce after local edits */
-  schedule(ms = 2000) {
+  syncSoon(ms = 2000) {
     if (!this.enabled) return;
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.now(), ms);
@@ -184,76 +223,20 @@ class Sync {
     if (!this.enabled || this.status === 'syncing') return false;
     this.status = 'syncing';
     memMark('sync');
-    const dec = new TextDecoder();
     const repo = new Repo(this.settings);
     try {
       await syncRound(repo, async () => {
         const out: LocalFile[] = await Promise.all(notes.all.map((n) => this.hashes.file(`notes/${n.id}.md`, serialize(n))));
-        // images never change once written, so only unknown names need reading
-        for (const name of await assets.list()) if (!(ASSETS + name in repo.s.known)) out.push({ path: ASSETS + name, data: await assets.read(name) });
+        const unsynced = (await assets.list()).filter((name) => !(ASSETS + name in repo.s.known));
+        for (const name of unsynced) out.push({ path: ASSETS + name, data: await assets.read(name) });
         return out;
-      }, async (files: RemoteFile[]) => {
-        // What came in is only gathered while the pull waits on GitHub (a note's hash, the version two devices last
-        // agreed on), and decided once there is no wait left: a key typed during a wait, into any note, used to be
-        // written over by a decision made before it
-        const pulled: { r: Note; seen?: string; untouched: boolean; base?: string; merge: boolean; fixed: boolean }[] = [];
-        for (const f of files) {
-          if (f.path.startsWith(ASSETS)) {
-            // one this device cannot keep (a name with a space or a leading dot, put there on github.com) is
-            // left on GitHub and asked for again next time; the notes after it still come in
-            try { await assets.write(f.path.slice(ASSETS.length), f.data); } catch { delete repo.s.known[f.path]; }
-            continue;
-          }
-          if (!f.path.endsWith('.md')) continue;
-          const r = parse(dec.decode(f.data));
-          if (!r) continue;
-          // a long note's last keys may still be on their way from the editor: counted, the note is not "untouched"
-          flushEdits();
-          const local = notes.all.find((n) => n.id === r.id);
-          const seen = local?.body;
-          const untouched = !!(local && f.prev && (await this.hashes.file(f.path, serialize(local))).sha === f.prev);
-          // the version the two last agreed on: the note here, untouched; read from GitHub when both changed it
-          const fixed = !f.prev && fixedId(r.id);
-          if (untouched) pulled.push({ r, seen, untouched, base: seen, merge: true, fixed });
-          else if (local && local.body !== r.body && f.prev) {
-            // not read (GitHub refused it): nothing to merge from, but what either side wrote is still kept
-            const base = await repo.blob(f.prev).then((d) => parse(dec.decode(d))?.body ?? '', () => null);
-            pulled.push({ r, seen, untouched, base: base ?? '', merge: base !== null, fixed });
-          } else pulled.push({ r, seen, untouched, merge: false, fixed });
-        }
-        // a long note's last keys, still on their way from the editor while the pull waited
-        flushEdits();
-        const lww: Note[] = [], force: Note[] = [], copies: Note[] = [];
-        for (const { r, seen, untouched, merge, fixed, ...was } of pulled) {
-          const now = notes.all.find((n) => n.id === r.id);
-          if (untouched && now?.body === seen) { force.push(r); continue; }
-          // A day's note (the same id on every device) met with none agreed was made on both: nothing to merge from, but
-          // what either wrote is kept. Judged now, as a key typed during the wait may be the first written in it (one
-          // still UNWRITTEN, the day's template alone, holds nothing written: the written one simply wins)
-          const base = was.base ?? (fixed && now && now.body !== r.body && now.updatedAt && r.updatedAt ? '' : undefined);
-          if (!now || base === undefined) { lww.push(r); continue; }
-          // written on both devices since they last agreed: both changes put together
-          const both = merge && !now.deleted && !r.deleted ? merge3(base, now.body, r.body) : null;
-          if (both !== null) { force.push({ ...(r.updatedAt > now.updatedAt ? r : now), body: both, updatedAt: Date.now() }); continue; }
-          // Deleted on both, erased for good on one (Trash › Delete forever, body ''): the erasure stands, whichever came
-          // later, or the words someone chose to be rid of came back into the Trash
-          const erased = now.deleted && r.deleted && (!now.body || !r.body) ? (now.body ? r : now) : undefined;
-          // one side deleted it, or the two cannot be put together: the later one stands, and the other is kept beside
-          // when it holds words the later one and the agreed version do not (a version that loses nothing is not copied)
-          const later = erased ?? (r.updatedAt > now.updatedAt ? r : now), earlier = later === r ? now : r;
-          if (wordsOnlyIn(earlier.body, later.body, base)) copies.push({ ...earlier });
-          if (later === r) (erased ? force : lww).push(r);
-        }
-        notes.mergeRemote(lww);
-        notes.mergeRemote(force, true);
-        for (const c of copies) notes.keepConflictCopy(c);
-      });
+      }, async (files: RemoteFile[]) => decide(await gather(files, repo, this.hashes)));
       this.save({ lastSynced: Date.now() });
       this.status = 'ok';
       this.error = '';
       return true;
     } catch (e) {
-      this.save({}); // keep whatever head/known advanced before the failure
+      this.persist();
       this.status = 'error';
       this.error = syncError(e instanceof Error ? e.message : String(e));
       return false;
@@ -261,8 +244,8 @@ class Sync {
   }
 
   start() {
-    widget.account(this.settings.repo, this.settings.token, this.settings.host); // a sign-in from before the widget existed
-    $effect(() => { notes.dirty; this.schedule(); });
+    this.persist();
+    $effect(() => { notes.dirty; this.syncSoon(); });
     const iv = setInterval(() => this.now(), 60_000);
     window.addEventListener('focus', () => this.now());
     // a phone: back from the background pulls, and leaving pushes before the OS may kill the app

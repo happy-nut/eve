@@ -1,11 +1,9 @@
 // @ts-nocheck — a plain-JS test helper, also imported by the node tests
-// An in-memory GitHub: the handful of endpoints github.ts uses, with real git blob ids. For the sync tests.
 import { createHash, randomBytes } from 'node:crypto';
 
 const gitSha = (buf) => createHash('sha1').update(`blob ${buf.length}\0`).update(buf).digest('hex');
 const rnd = () => randomBytes(20).toString('hex');
 
-/** The handful of GitHub endpoints github.ts uses, with real git blob ids so local sha comparison is exercised. */
 export function fakeGitHub() {
   const blobs = new Map(), trees = new Map(), commits = new Map();
   let ref = null, calls = 0;
@@ -22,7 +20,6 @@ export function fakeGitHub() {
     const body = init.body ? JSON.parse(init.body) : {};
     if (init.headers?.authorization !== 'Bearer tok') return json(401, { message: 'Bad credentials' });
     if (m === 'GET' && p === '/branches/main') return ref ? json(200, { commit: { sha: ref, commit: { tree: { sha: commits.get(ref).tree } } } }) : json(404, { message: 'Branch not found' });
-    // a file's history: the commits on main that changed it, newest first
     if (m === 'GET' && p === '/commits') {
       const q = new URL(url).searchParams, path = q.get('path'), out = [];
       for (let c = ref; c && out.length < Number(q.get('per_page') || 30); c = commits.get(c).parents[0]) {

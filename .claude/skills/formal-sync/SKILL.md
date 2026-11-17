@@ -37,11 +37,11 @@ The model was last checked to describe the code at `f723a17`. Each action names 
 |---|---|
 | `Type` | `notes.update` (a key reaching the store: the editor's 150 ms flush) |
 | `Delete` | `notes.remove` (a tombstone, the body kept) |
-| `Make` | `notes.dayNote` (a day's note, fixed id `daily-<date>`, dated `UNWRITTEN` = 0) |
+| `Make` | `notes.dayNote` (a day's note, fixed id `daily-<date>`, dated `OLDER_THAN_ANY_SYNC` = 0) |
 | `Start` → `Pull` | `Sync.now` → `syncRound` → `Repo.pull` (head, `known`, `f.prev`) |
-| `Hash` | onPull, gathering: `flushEdits()`, then `seen` and `untouched` from `serialize(local)`, taken before `await this.hashes.file` |
-| `Base` | onPull, gathering: the agreed version (`base`): `seen` when untouched, `await repo.blob(f.prev)` when both changed it, else none for now |
-| `Decide` | onPull, deciding, after the last await and a second `flushEdits()`: untouched and unchanged since `seen` → `mergeRemote(force)`; else `base` (or, for a `fixed` note with no `f.prev` written on both, `''` judged now) → `merge3`; else the later stands (an erasure stands over a tombstone) and the earlier is a `keepConflictCopy` if `wordsOnlyIn` it; no base → lww |
+| `Hash` | `gather` (sync.svelte.ts): `flushEdits()`, then `seen` and `untouched` from `serialize(local)`, taken before `await hashes.file` |
+| `Base` | `gather`: the agreed version (`agreed`): `seen` when untouched, `await repo.blob(f.prev)` when both changed it, else none for now |
+| `Decide` | `decide`, after the last await, its own `flushEdits()` first: untouched and unchanged since `seen` → `mergeRemote(force)`; else `agreed` (or, for a `sameIdNoneAgreed` note `writtenOnBoth`, `''` judged now) → `merge3`; else `whichStands` (the later, or an erasure over a tombstone) and the earlier is a `keepConflictCopy` if `wordsOnlyIn` it; none agreed → lww |
 | `Snap` / `Push` | `local()` (`serialize` now, hashed after), `Repo.push` (nothing changed → done; ref PATCH 422 → pull again, 3 tries) |
 
 Each `await` in the code is a gap between two actions, where the other device and the person may act. Bounds:
