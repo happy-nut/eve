@@ -39,7 +39,8 @@ export function fakeGitHub() {
     }
     if (m === 'GET' && p.startsWith('/git/trees/')) {
       const t = p.slice('/git/trees/'.length);
-      return json(200, { sha: t, tree: trees.get(t).map((e) => ({ ...e, type: 'blob', mode: '100644' })) });
+      // GitHub lists a tree by path (git keeps a tree's entries sorted): a day's note before a note with a made id
+      return json(200, { sha: t, tree: [...trees.get(t)].sort((x, y) => (x.path < y.path ? -1 : 1)).map((e) => ({ ...e, type: 'blob', mode: '100644' })) });
     }
     if (m === 'GET' && p.startsWith('/git/blobs/')) {
       const b = blobs.get(p.slice('/git/blobs/'.length));
