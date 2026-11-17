@@ -188,5 +188,8 @@ Spec == Init /\ [][Next]_vars
 Kept == UNION ({loc[d].w : d \in Devices} \cup {rfile.w} \cup copies)
 NoWordLost == typed \subseteq Kept
 
+\* must be reached (Reach.cfg): a check that passes because a step can no longer fire proves nothing
+NoCopyYet == copies = {}
+
 Bounds == clock <= MaxClock /\ rver <= MaxHead
 =============================================================================

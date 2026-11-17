@@ -1,5 +1,6 @@
 #!/bin/sh
-# Runs TLC on one config of EveSync (default: the promise). ./check.sh [EveSync|FindingDelete|FindingSameId|FindingMidSync]
+# ./check.sh: the promise (EveSync, EveSyncDay) holds, and Reach is broken (the model still makes conflict copies).
+# ./check.sh <config>: TLC on that one config, its output as it is.
 # Fetches the pinned tla2tools.jar (TLA+ 1.7.4, from the TLA+ project's GitHub release) once, checked by its sha256.
 set -e
 cd "$(dirname "$0")"
@@ -10,7 +11,10 @@ if [ ! -f "$JAR" ]; then
   curl -sSLf -o "$JAR" https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar
 fi
 echo "$SUM  $JAR" | shasum -a 256 -c - >/dev/null || { echo "tla2tools.jar does not match its sha256" >&2; exit 2; }
-CFG="${1:-EveSync}"
-OUT="${TMPDIR:-/tmp}/eve-tlc-$CFG"
-mkdir -p "$OUT"
-exec java -XX:+UseParallelGC -cp "$JAR" tlc2.TLC -config "$CFG.cfg" -workers auto -deadlock -metadir "$OUT" -cleanup EveSync.tla
+tlc() { mkdir -p "${TMPDIR:-/tmp}/eve-tlc-$1"; java -XX:+UseParallelGC -cp "$JAR" tlc2.TLC -config "$1.cfg" -workers auto -deadlock -metadir "${TMPDIR:-/tmp}/eve-tlc-$1" -cleanup EveSync.tla; }
+if [ -n "$1" ]; then tlc "$1"; exit; fi
+for c in EveSync EveSyncDay; do
+  if tlc $c | grep -q "No error has been found"; then echo "ok   $c: no word lost"; else echo "FAIL $c: run ./check.sh $c for the trace"; exit 1; fi
+done
+if tlc Reach | grep -q "Invariant NoCopyYet is violated"; then echo "ok   Reach: conflict copies are still reached"
+else echo "FAIL Reach: no conflict copy is ever made; a step can no longer fire, and the passes above prove nothing"; exit 1; fi

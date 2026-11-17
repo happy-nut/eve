@@ -17,11 +17,14 @@ is gone with nothing saying so.
 ## Run it
 
 ```bash
-.claude/skills/formal-sync/check.sh             # a note both devices have: written, deleted, typed into mid-sync (~20 s)
-.claude/skills/formal-sync/check.sh EveSyncDay  # a day's note made under the same id on both devices (~50 s)
+.claude/skills/formal-sync/check.sh                # all three below, ~1 min; prints ok/FAIL per line, exit 1 on a FAIL
+.claude/skills/formal-sync/check.sh EveSync        # a note both devices have: written, deleted, typed into mid-sync
+.claude/skills/formal-sync/check.sh EveSyncDay     # a day's note made under the same id on both devices
+.claude/skills/formal-sync/check.sh Reach          # must be violated: conflict copies are still reached
 ```
 
-Both must say `No error has been found`. Needs Java (`brew install openjdk`). `check.sh` fetches the pinned
+`EveSync` and `EveSyncDay` must say `No error has been found`; `Reach` must say `NoCopyYet is violated`, or the model
+has gone quiet (a step that can no longer fire) and the two passes prove nothing. Needs Java (`brew install openjdk`). `check.sh` fetches the pinned
 `tla2tools.jar` (TLA+ 1.7.4) into `~/.cache/tlaplus/` once and checks its sha256. Read every result, a pass or a
 trace, with `/devkit:statechart`: it turns a violation into the shortest path in plain words, and a pass into a
 picture of how the states move.
