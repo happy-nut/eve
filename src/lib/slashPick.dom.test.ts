@@ -87,7 +87,7 @@ test('in a sentence, the pointer makes ↩ pick', async () => {
   await settle();
   point();
   press(ed, 'Enter');
-  expect(picked).toEqual(['New note']);
+  expect(picked).toEqual(['Text']);
 });
 
 test('a "/" opening an empty line: ↩ picks the first, as before', async () => {
@@ -95,7 +95,7 @@ test('a "/" opening an empty line: ↩ picks the first, as before', async () => 
   type(ed, '/');
   await settle();
   press(ed, 'Enter');
-  expect(picked).toEqual(['New note']);
+  expect(picked).toEqual(['Text']);
 });
 
 // ⌘/ asks for the menu; nothing was typed. Closed with Esc, it left a "/" (and the space put before it) in the line.

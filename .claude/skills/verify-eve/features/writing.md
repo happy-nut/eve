@@ -20,8 +20,10 @@ Preconditions: the default notes; make a fresh one with ⌘N so lines start empt
 
 - **Markdown.** `await t.key('Enter'); await t.type('[] pack bags');` A checkbox line `pack bags`; the saved
   markdown has `- [ ] pack bags`.
-- **Menu.** `await t.key('Enter'); await t.type('/table'); await t.shot('slash');` The menu (`.suggest li`) lists
-  `Table 3×3, with a header row` first.
+- **Menu.** `await t.key('Enter'); await t.type('/table'); await t.shot('slash');` The menu (`.suggest li:not(.group)`)
+  lists `Table` first. Bare `/` shows four groups (`.suggest li.group`: Basic blocks, Media, Notes and boards,
+  Advanced), Text first, each row its own icon and on its right the key that also makes it (`#`, `-`, `[[`, `$$`);
+  Duplicate, Move to and Delete are found by typing only.
 - **Korean.** Type `/표` instead: Table is first.
 
 ## Gotchas

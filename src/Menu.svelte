@@ -95,9 +95,11 @@
     if (ui.menu && el) untrack(() => autofocus(el!));
   });
   // WebKit does not focus a clicked button, it blurs the menu — which would close it mid-click
+  const iconed = $derived(req.items.some((it) => it.icon));
   const hold = (e: MouseEvent) => { e.preventDefault(); (e.currentTarget as HTMLElement).focus(); };
 </script>
 
+{#snippet ico(it: MenuItem)}{#if it.swatch}<span class="swatch" style:background={it.swatch}></span>{:else if iconed}<svg class="ico" viewBox="0 0 16 16" aria-hidden="true">{@html it.icon ?? ''}</svg>{/if}{/snippet}
 {#snippet check()}<svg class="check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>{/snippet}
 
 {#if isMobile}
@@ -106,7 +108,7 @@
     <ul class="items" role="menu">
       {#each req.items as it, i (i)}
         <li role="none" class:sep={it.sep}>
-          <button role="menuitem" class:danger={it.danger} class:on={it.checked} disabled={it.disabled} onclick={() => pick(it)}>{#if it.swatch}<span class="swatch" style:background={it.swatch}></span>{/if}<span class="lbl">{it.label}</span>{#if it.checked}{@render check()}{/if}</button>
+          <button role="menuitem" class:danger={it.danger} class:on={it.checked} disabled={it.disabled} onclick={() => pick(it)}>{@render ico(it)}<span class="lbl">{it.label}</span>{#if it.checked}{@render check()}{/if}</button>
         </li>
       {/each}
     </ul>
@@ -125,7 +127,7 @@
     <li role="none" class:sep={it.sep}>
       <button role="menuitem" class:danger={it.danger} class:on={it.checked} disabled={it.disabled}
         onmousedown={hold} onmouseenter={(e) => e.currentTarget.focus()} onclick={() => pick(it)}>
-        <span class="label">{#if it.swatch}<span class="swatch" style:background={it.swatch}></span>{/if}{it.label}</span>{#if it.checked}{@render check()}{/if}{#if it.keys}<kbd>{prettyKeys(it.keys)}</kbd>{/if}
+        <span class="label">{@render ico(it)}{it.label}</span>{#if it.checked}{@render check()}{/if}{#if it.keys}<kbd>{prettyKeys(it.keys)}</kbd>{/if}
       </button>
     </li>
   {/each}
@@ -134,6 +136,8 @@
 
 <style>
   .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; margin-right: 8px; flex: none; vertical-align: -2px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
+  .ico { width: 15px; height: 15px; margin-right: 8px; flex: none; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; opacity: 0.7; }
+  .items .ico { width: 20px; height: 20px; margin-right: 12px; vertical-align: -4px; }
   .items { margin: 0; padding: 0; list-style: none; }
   .items button {
     width: 100%; min-height: 52px; border: 0; border-radius: 12px; background: none; color: var(--fg);
@@ -158,7 +162,7 @@
   .menu button {
     width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px;
     border: 0; background: none; color: inherit; font: inherit; font-size: 13px;
-    padding: 6px 8px; border-radius: 5px; text-align: left; white-space: nowrap;
+    padding: var(--row-pad); border-radius: var(--row-radius); text-align: left; white-space: nowrap;
   }
   .menu .label { overflow: hidden; text-overflow: ellipsis; }
   .menu kbd { flex: none; color: var(--fg-dim); font: inherit; font-size: 11.5px; }

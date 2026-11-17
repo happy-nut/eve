@@ -130,7 +130,7 @@
   .pop.up { transform-origin: bottom right; }
   .pop button {
     display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; border: 0;
-    border-radius: 6px; padding: 7px 10px; background: none; color: var(--fg); font: inherit; font-size: 13px; text-align: left;
+    border-radius: var(--row-radius); padding: var(--row-pad); background: none; color: var(--fg); font: inherit; font-size: 13px; text-align: left;
   }
   .pop button.at { background: var(--accent-soft); }
   .pop svg, .opt svg { color: var(--accent-text); }

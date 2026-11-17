@@ -50,6 +50,9 @@
   /* every floating surface is one of two: a popup (menus, popovers, the caret's popups, Find) or a panel (Settings,
      a confirm, a card, a PDF). Their motion is src/lib/motion.ts. */
   --pop-radius: 10px;
+  /* one row of any list that pops up (the / menu, a right click, a Select): the same height and corners in each */
+  --row-pad: 6px 8px;
+  --row-radius: 6px;
   --pop-border: 1px solid var(--line);
   /* Notion's layers, a near one and a far one, each faint: the hairline border draws the edge, the shadow only lifts it
      (one 18% shadow spread wide read as a smudge round every menu). The dark theme's are stronger, or nothing shows. */
@@ -195,7 +198,7 @@ html.mobile .panel input:not([type]) { font-size: 16px; padding: 9px 11px; }
 html.mobile .box, html.mobile .box input, html.mobile .box button { font-size: 16px !important; }
 html.mobile .box button { padding: 10px 16px !important; }
 html.mobile .suggest { font-size: 16px !important; }
-html.mobile .suggest button, html.mobile .suggest li { min-height: 44px; }
+html.mobile .suggest button, html.mobile .suggest li:not(.group) { min-height: 44px; }
 html.mobile .cal { font-size: 15px !important; }
 html.mobile .cal-wd, html.mobile .cal-foot { font-size: 13px !important; }
 

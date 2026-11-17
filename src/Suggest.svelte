@@ -62,7 +62,12 @@
   // near the right edge of the window ran off it
   $effect(() => { shown; if (list && anchor) place = placeAt(anchor, want(), list.offsetWidth); });
   // keep the highlighted suggestion visible while arrowing through a long list
-  $effect(() => { sel; list?.querySelector('li.sel')?.scrollIntoView({ block: 'nearest' }); });
+  $effect(() => {
+    sel;
+    const row = list?.querySelector('li.sel'), head = row?.previousElementSibling;
+    if (head?.classList.contains('group')) head.scrollIntoView({ block: 'nearest' });
+    row?.scrollIntoView({ block: 'nearest' });
+  });
 </script>
 
 {#if items.length}
@@ -71,6 +76,9 @@
          Svelte stopped with an error as soon as the page was opened into its sections -->
     {#each shown as row, i (i)}
       {@const t = row.item}
+      {#if !row.child && t.group && t.group !== shown[i - 1]?.item.group && t.group !== items[shown[i - 1]?.top]?.group}
+        <li class="group" role="presentation">{t.group}</li>
+      {/if}
       <li class:sel={i === sel} class:child={row.child}>
         <!-- a move, not mouseenter: the list drawn under a pointer resting there has not been pointed at -->
         <button onmousedown={(e) => { e.preventDefault(); if (t.folder) toggle(i); else pick(t); }} onmousemove={() => { if (sel !== i || !pointed) { sel = i; pointed = true; } }}>
@@ -80,6 +88,7 @@
           {:else}<span class="chev"></span>{/if}
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           {#if t.noteIcon}<span class="s-emoji"><Icon icon={t.noteIcon} size={14} /></span>
+          {:else if t.swatch}<span class="s-swatch" style:background={t.swatch}></span>
           {:else if t.icon}<svg class="s-ico" viewBox="0 0 16 16">{@html t.icon}</svg>{/if}
           <span class="s-label">{t.label}</span>
           <!-- a section under its own page needs no reminder of which page that is (a kind in a / menu folder does) -->
@@ -106,7 +115,10 @@
     border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
     font-size: 13px;
   }
-  .suggest button { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; border: 0; background: none; color: inherit; font: inherit; padding: 5px 8px; border-radius: 5px; white-space: nowrap; }
+  .suggest button { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; border: 0; background: none; color: inherit; font: inherit; padding: var(--row-pad); border-radius: var(--row-radius); white-space: nowrap; }
+  .suggest .group { padding: 8px 8px 3px; font-size: 11.5px; font-weight: 600; color: var(--fg-dim); }
+  .suggest .group:first-child { padding-top: 3px; }
+  .s-swatch { width: 14px; height: 14px; flex: none; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
   /* the twisty column is held open on every row, so labels line up whether or not a row has one */
   .chev { width: 9px; height: 9px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0.4; transition: transform 120ms; }
   .chev.down { transform: rotate(90deg); }

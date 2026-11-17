@@ -24,6 +24,12 @@ import { COLORS, colorText } from './textColor';
 
 export interface SuggestItem {
   label: string; value?: string; hint?: string; icon?: string; noteIcon?: string;
+  /** a colour drawn in the icon's place (the / menu's colours, as the right-click menu draws them) */
+  swatch?: string;
+  /** the heading it sits under in the bare / menu ("Basic blocks"); a list found by typing has none */
+  group?: string;
+  /** found by typing only, not in the bare / menu: what it does to the line, not something it makes */
+  typedOnly?: boolean;
   /** more words the / menu finds it by, not shown (하위 페이지 for New note: Korean is searched in as often) */
   keywords?: string;
   /** the sections inside this one, for a page the picker can be opened into */
@@ -345,6 +351,14 @@ export const ICONS = {
   quote: '<path d="M3 2.5v11"/><path d="M6 4.5h7.5M6 8h7.5M6 11.5h5"/>',
   color: '<path d="M9.5 2.5l4 4-5.5 5.5H4v-4z"/><path d="M2.5 14h11"/>',
   text: '<path d="M3 3.5h10M8 3.5v9"/>',
+  database: '<ellipse cx="8" cy="4" rx="5.5" ry="2"/><path d="M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2"/>',
+  footnote: '<path d="M2.5 4h7M6 4v8.5"/><path d="M11.5 3.5l1.2-.7v4"/>',
+  toc: '<path d="M2.5 4h1M2.5 8h1M2.5 12h1M6 4h7.5M7.5 8h6M7.5 12h6"/>',
+  duplicate: '<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/>',
+  trash: '<path d="M2.5 4.5h11M6.5 4.5V3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6"/>',
+  moveTo: '<path d="M2.5 8h8M8 5l3 3-3 3"/><path d="M9.5 2.5h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-3"/>',
+  up: '<path d="M8 13V3M4 7l4-4 4 4"/>',
+  down: '<path d="M8 3v10M4 9l4 4 4-4"/>',
   emoji: '<circle cx="8" cy="8" r="6"/><path d="M5.8 9.4c.6.9 1.3 1.4 2.2 1.4s1.6-.5 2.2-1.4"/><path d="M6.3 6.4h.01M9.7 6.4h.01"/>',
 };
 
@@ -362,14 +376,14 @@ const line = (id: string): SuggestItem['run'] => tip(id, (e) => runEditorCommand
 export function slashItems(query: string): SuggestItem[] {
   // the colours only typed for ("/red", "/color"): a row at the foot of the bare menu, they were seldom wanted there,
   // and opened they fell below the menu's edge
-  if (!query) return SLASH;
+  if (!query) return SLASH.filter((i) => !i.typedOnly);
   const all = [...SLASH, colors()];
   let q = query.toLowerCase();
   // Notion's "/turn": what the line can be turned into ("/turnh2", "/turnbullet"), plain text among them
   const turn = /^turn(?:into)?/.exec(q);
   if (turn) q = q.slice(turn[0].length);
   // (plain text is one of what the menu makes, "/text" too: it found only the nine colours, and ↩ greyed the line)
-  const from = turn ? [TEXT, ...SLASH.filter((i) => TURNS.has(i.label))] : [TEXT, ...all];
+  const from = turn ? SLASH.filter((i) => i === TEXT || TURNS.has(i.label)) : all;
   // a word with a space in it ("할 일", "하위 페이지") found typed without it: the / menu ends at a space
   const has = (w: string | undefined) => !!w && (typedIn(w.toLowerCase(), q) || typedIn(w.toLowerCase().replace(/\s+/g, ''), q));
   const finds = (i: SuggestItem) => [i.label, i.hint, i.keywords, koreanOf(i)].some(has);
@@ -387,7 +401,7 @@ export function slashItems(query: string): SuggestItem[] {
     // its Korean name first said as its name ("/테이" is Table before Database tables, which has 테이블 further in)
     return name === q ? 0 : name.startsWith(q) || starts(koreanOf(i).split(' ')[0]) ? 1 : words(i).includes(q) ? 2 : words(i).some(starts) ? 3 : 4;
   };
-  return found.map((i, n) => ({ i, n, r: rank(i) })).sort((a, b) => a.r - b.r || a.n - b.n).map((x) => x.i);
+  return found.map((i, n) => ({ i, n, r: rank(i) })).sort((a, b) => a.r - b.r || a.n - b.n).map((x) => ({ ...x.i, group: undefined }));
 }
 
 /**
@@ -437,36 +451,51 @@ function colors(): SuggestItem {
   return {
     label: 'Color', hint: 'the line: its words, or a highlighter', keywords: 'colour text background highlight 색 글자색 형광펜', icon: ICONS.color, folder: true,
     sections: [
-      ...COLORS.map((c) => ({ label: c.label, hint: 'text color', keywords: `color colour text ${c.name} 글자색`, icon: ICONS.color, run: (e: Editor) => inkLine(e, c.name) })),
-      ...pens.map((c, i) => ({ label: `${penName(c)} background`, hint: 'highlight the line', keywords: 'color colour background highlight 배경 형광펜', icon: ICONS.color, run: (e: Editor) => colorLine(e, c, !i) })),
-      { label: 'Default', hint: 'no color on the line', keywords: 'color colour none 색 없음', icon: ICONS.color, run: (e: Editor) => { colorLine(e, null, false); inkLine(e, null); } },
+      ...COLORS.map((c) => ({ label: c.label, hint: 'text color', keywords: `color colour text ${c.name} 글자색`, swatch: c.hex, run: (e: Editor) => inkLine(e, c.name) })),
+      ...pens.map((c, i) => ({ label: `${penName(c)} background`, hint: 'highlight the line', keywords: 'color colour background highlight 배경 형광펜', swatch: c, run: (e: Editor) => colorLine(e, c, !i) })),
+      { label: 'Default', hint: 'no color on the line', keywords: 'color colour none 색 없음', swatch: 'transparent', run: (e: Editor) => { colorLine(e, null, false); inkLine(e, null); } },
     ],
   };
 }
 
 /** "/turn"'s plain line: a heading or a list's line back to text */
-const TEXT: SuggestItem = { label: 'Text', hint: 'a plain line', keywords: 'paragraph plain 텍스트', icon: ICONS.text, run: line('paragraph') };
 
+
+const BASIC = 'Basic blocks', MEDIA = 'Media', PAGES = 'Notes and boards', MORE = 'Advanced';
+const TEXT: SuggestItem = { label: 'Text', keywords: 'paragraph plain a plain line 텍스트', icon: ICONS.text, group: BASIC, run: line('paragraph') };
+/** the bare menu in its groups, each row's hint the key that also makes it (Notion's), a few words only where there is none */
 export const SLASH: SuggestItem[] = [
-  { label: 'New note', hint: 'a note under this one', keywords: '하위 페이지 하위 노트 subpage page', icon: ICONS.page, run: newPage },
-  // the lines a key makes as well, the key as the hint: as their own shortcuts do them (a list's lines change kind)
+  TEXT,
   {
-    label: 'Heading', hint: '# to #####', keywords: 'title 제목', icon: ICONS.h1, folder: true,
+    label: 'Heading', hint: '#', keywords: 'title 제목', icon: ICONS.h1, folder: true, group: BASIC,
     sections: [1, 2, 3, 4, 5].map((n) => ({ label: `Heading ${n}`, hint: '#'.repeat(n), keywords: `${n === 1 ? 'title ' : ''}h${n} 제목`, icon: ICONS[`h${n}` as 'h1'], run: line(`h${n}`) })),
   },
-  { label: 'Bulleted list', hint: '-', keywords: 'bullet unordered ul 목록', icon: ICONS.bullet, run: line('bulletList') },
-  { label: 'Numbered list', hint: '1.', keywords: 'ordered ol number 번호', icon: ICONS.numbered, run: line('orderedList') },
-  { label: 'To-do list', hint: '[ ]', keywords: 'todo task checkbox check 할 일', icon: ICONS.todo, run: line('taskList') },
-  { label: 'Quote', hint: '|', keywords: 'blockquote 인용', icon: ICONS.quote, run: line('blockquote') },
-  { label: 'Callout', hint: '💡 highlighted box', icon: ICONS.callout, run: tip('callout', (e) => e.chain().focus().toggleWrap('callout').run()) },
-  { label: 'Toggle', hint: '> folds its content', keywords: '토글 접기', icon: ICONS.toggle, run: (e) => e.chain().focus().setDetails().updateAttributes('details', { open: true }).run() },
-  // as ``` and --- make them as you type
-  { label: 'Code block', hint: '``` code, highlighted', keywords: '코드', icon: ICONS.code, run: tip('codeBlock', (e) => { if (!e.isActive('tableCell') && !e.isActive('tableHeader')) e.chain().focus().toggleCodeBlock().run(); }) },
-  { label: 'Divider', hint: '--- a line across', keywords: '구분선 hr rule', icon: ICONS.divider, run: tip('divider', (e) => e.chain().focus().setHorizontalRule().run()) },
-  { label: 'Kanban', hint: 'board', keywords: '칸반', icon: ICONS.kanban, run: insertKanban },
-  { label: 'Database', hint: 'a table of notes under this one', keywords: 'table view board 데이터베이스 db', icon: ICONS.table, run: insertDatabase },
+  { label: 'Bulleted list', hint: '-', keywords: 'bullet unordered ul 목록', icon: ICONS.bullet, group: BASIC, run: line('bulletList') },
+  { label: 'Numbered list', hint: '1.', keywords: 'ordered ol number 번호', icon: ICONS.numbered, group: BASIC, run: line('orderedList') },
+  { label: 'To-do list', hint: '[ ]', keywords: 'todo task checkbox check 할 일', icon: ICONS.todo, group: BASIC, run: line('taskList') },
+  { label: 'Toggle', hint: '>', keywords: 'folds its content 토글 접기', icon: ICONS.toggle, group: BASIC, run: (e) => e.chain().focus().setDetails().updateAttributes('details', { open: true }).run() },
+  { label: 'Quote', hint: '|', keywords: 'blockquote 인용', icon: ICONS.quote, group: BASIC, run: line('blockquote') },
+  { label: 'Callout', keywords: 'highlighted box 💡', icon: ICONS.callout, group: BASIC, run: tip('callout', (e) => e.chain().focus().toggleWrap('callout').run()) },
+  { label: 'Divider', hint: '---', keywords: 'a line across 구분선 hr rule', icon: ICONS.divider, group: BASIC, run: tip('divider', (e) => e.chain().focus().setHorizontalRule().run()) },
+  { label: 'Table', keywords: '3×3 with a header row 표 grid', icon: ICONS.table, group: BASIC, run: (e) => e.chain().focus().command(({ tr }) => { outOfEmptyItem(tr, e.schema.nodes.table.createAndFill()); return true; }).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+  { label: 'Code block', hint: '```', keywords: 'code highlighted 코드', icon: ICONS.code, group: BASIC, run: tip('codeBlock', (e) => { if (!e.isActive('tableCell') && !e.isActive('tableHeader')) e.chain().focus().toggleCodeBlock().run(); }) },
+  { label: 'Image', keywords: 'pick a file 이미지 그림 사진 picture photo', icon: ICONS.image, group: MEDIA, run: tip('image', (e) => { pickImage().then((src) => src && insertImage(e, src)); }) },
+  { label: 'Video', keywords: 'pick a file movie', icon: ICONS.video, group: MEDIA, run: (e) => { pickVideo().then((src) => src && e.chain().focus().insertContent({ type: 'video', attrs: { src, name: src.split('/').pop() } }).run()); } },
   {
-    label: 'Diagram', hint: 'flowchart, sequence, pie…', keywords: 'mermaid chart 다이어그램 차트', icon: ICONS.diagram, folder: true,
+    label: 'Emoji', hint: ':', keywords: 'pick one 😀', icon: ICONS.emoji, group: MEDIA,
+    run: (e) => {
+      const c = e.view.coordsAtPos(e.state.selection.from);
+      ui.pickEmoji(new DOMRect(c.left, c.top, 0, c.bottom - c.top)).then((v) => {
+        if (v && !isCustom(v)) e.chain().focus().insertContent(v).run(); else e.commands.focus();
+      });
+    },
+  },
+  { label: 'New note', keywords: 'a note under this one 하위 페이지 하위 노트 subpage page', icon: ICONS.page, group: PAGES, run: newPage },
+  { label: 'Link to note', hint: '[[', keywords: 'another note', icon: ICONS.wikiLink, group: PAGES, run: tip('wikiLink', (e) => e.chain().focus().insertContent('[[').run()) },
+  { label: 'Database', keywords: 'a table of notes under this one table view board 데이터베이스 db', icon: ICONS.database, group: PAGES, run: insertDatabase },
+  { label: 'Kanban', keywords: 'board 칸반', icon: ICONS.kanban, group: PAGES, run: insertKanban },
+  {
+    label: 'Diagram', keywords: 'mermaid chart 다이어그램 차트', icon: ICONS.diagram, folder: true, group: PAGES,
     sections: [
       { label: 'Flowchart', hint: 'boxes and arrows', icon: ICONS.diagram, run: (e) => insertDiagram(e, 'flowchart') },
       { label: 'Swimlanes', hint: 'who does each step, in lanes', icon: ICONS.lanes, run: (e) => insertDiagram(e, swimlaneStarter()) },
@@ -480,27 +509,14 @@ export const SLASH: SuggestItem[] = [
       { label: 'Database tables', hint: 'an ER diagram: tables and their keys', icon: ICONS.tables, run: (e) => insertDiagram(e, 'er') },
     ],
   },
-  { label: 'Equation', hint: '∑ formula, its own line ($$)', icon: ICONS.math, run: (e) => insertMath(e, true) },
-  { label: 'Inline equation', hint: 'x² formula, in the line ($)', icon: ICONS.mathInline, run: (e) => insertMath(e, false) },
-  { label: 'Table', hint: '3×3, with a header row', keywords: '표 grid', icon: ICONS.table, run: (e) => e.chain().focus().command(({ tr }) => { outOfEmptyItem(tr, e.schema.nodes.table.createAndFill()); return true; }).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-  { label: 'Image', hint: 'Pick a file', keywords: '이미지 그림 사진 picture photo', icon: ICONS.image, run: tip('image', (e) => { pickImage().then((src) => src && insertImage(e, src)); }) },
-  { label: 'Video', hint: 'Pick a file', icon: ICONS.video, run: (e) => { pickVideo().then((src) => src && e.chain().focus().insertContent({ type: 'video', attrs: { src, name: src.split('/').pop() } }).run()); } },
-  { label: 'Footnote', hint: '[^1] a note at the end', keywords: 'reference cite 각주 주석', icon: ICONS.text, run: insertFootnote },
-  { label: 'Link to note', hint: '[[ another note', icon: ICONS.wikiLink, run: tip('wikiLink', (e) => e.chain().focus().insertContent('[[').run()) },
+  { label: 'Equation', hint: '$$', keywords: 'formula its own line ∑', icon: ICONS.math, group: MORE, run: (e) => insertMath(e, true) },
+  { label: 'Inline equation', hint: '$', keywords: 'formula in the line x²', icon: ICONS.mathInline, group: MORE, run: (e) => insertMath(e, false) },
+  { label: 'Footnote', hint: '[^1]', keywords: 'a note at the end reference cite 각주 주석', icon: ICONS.footnote, group: MORE, run: insertFootnote },
   // Notion's own, for the line the / was typed on
-  { label: 'Table of contents', hint: 'every section, kept up to date', keywords: 'toc outline 목차', icon: ICONS.text, run: (e) => e.chain().focus().insertContent([{ type: 'htmlComment', attrs: { text: ' toc ' } }, { type: 'paragraph' }]).run() }, // the caret on a line under it (left on it, the next key replaced it)
-  { label: 'Duplicate', hint: 'this line again under it', keywords: 'copy 복제', icon: ICONS.text, run: (e) => runEditorCommand(e, 'duplicate') },
-  { label: 'Move to', hint: 'this line to another note', keywords: 'moveto 옮기기 이동', icon: ICONS.page, run: (e) => void moveLine(e) },
-  { label: 'Delete', hint: 'this line', keywords: 'remove 삭제', icon: ICONS.text, run: deleteLine },
-  {
-    label: 'Emoji', hint: '😀 pick one', icon: ICONS.emoji,
-    run: (e) => {
-      const c = e.view.coordsAtPos(e.state.selection.from);
-      ui.pickEmoji(new DOMRect(c.left, c.top, 0, c.bottom - c.top)).then((v) => {
-        if (v && !isCustom(v)) e.chain().focus().insertContent(v).run(); else e.commands.focus();
-      });
-    },
-  },
+  { label: 'Table of contents', keywords: 'every section kept up to date toc outline 목차', icon: ICONS.toc, group: MORE, run: (e) => e.chain().focus().insertContent([{ type: 'htmlComment', attrs: { text: ' toc ' } }, { type: 'paragraph' }]).run() }, // the caret on a line under it (left on it, the next key replaced it)
+  { label: 'Duplicate', hint: 'this line', keywords: 'copy again 복제', icon: ICONS.duplicate, typedOnly: true, run: (e) => runEditorCommand(e, 'duplicate') },
+  { label: 'Move to', hint: 'this line', keywords: 'another note moveto 옮기기 이동', icon: ICONS.moveTo, typedOnly: true, run: (e) => void moveLine(e) },
+  { label: 'Delete', hint: 'this line', keywords: 'remove 삭제', icon: ICONS.trash, typedOnly: true, run: deleteLine },
 ];
 
 /** The block the caret is in, as Notion means it: a list's item (with what is under it), or the line itself */

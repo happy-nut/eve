@@ -9,14 +9,15 @@ import { Plugin, PluginKey, NodeSelection, Selection, TextSelection, type Editor
 import type { EditorView } from '@tiptap/pm/view';
 import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { ui, under, type MenuItem } from './ui.svelte';
+import { ICONS } from './slash';
 
 interface Block { pos: number; node: PMNode; dom: HTMLElement; item?: boolean }
 
 /** what a plain line can be turned into: the editor's own commands (editor.ts), as the / menu and the keys run them */
-const TURN: [kind: string, label: string][] = [
-  ['paragraph', 'Text'], ['h1', 'Heading 1'], ['h2', 'Heading 2'], ['h3', 'Heading 3'],
-  ['bulletList', 'Bulleted list'], ['orderedList', 'Numbered list'], ['taskList', 'To-do list'],
-  ['blockquote', 'Quote'], ['callout', 'Callout'], ['toggle', 'Toggle'], ['codeBlock', 'Code'],
+export const TURN: [kind: string, label: string, icon: keyof typeof ICONS][] = [
+  ['paragraph', 'Text', 'text'], ['h1', 'Heading 1', 'h1'], ['h2', 'Heading 2', 'h2'], ['h3', 'Heading 3', 'h3'],
+  ['bulletList', 'Bulleted list', 'bullet'], ['orderedList', 'Numbered list', 'numbered'], ['taskList', 'To-do list', 'todo'],
+  ['blockquote', 'Quote', 'quote'], ['callout', 'Callout', 'callout'], ['toggle', 'Toggle', 'toggle'], ['codeBlock', 'Code block', 'code'],
 ];
 /** a plain line's kind as TURN names it; null for anything else (a list, a quote, a picture…), which is not turned.
  *  (ponytail: a list or a quote turned into another kind as Notion does needs an unwrap first; add when asked for) */
@@ -266,7 +267,7 @@ class Handle {
     if (scroller) scroller.scrollTop = top;
     const kind = kindOf(node);
     const items: MenuItem[] = [
-      { label: 'Delete', danger: true, run: () => {
+      { label: 'Delete', icon: ICONS.trash, danger: true, run: () => {
         // the only line of its list: the list goes too (an empty bullet was left)
         const $p = this.view.state.doc.resolve(pos), alone = b.item && $p.parent.childCount === 1;
         const [from, to] = alone ? [$p.before(), $p.after()] : [pos, end];
@@ -274,10 +275,10 @@ class Handle {
       } },
       // a block taken whole (a table, a picture, a divider) is copied and moved as a block: the line commands act on
       // a selection's lines, and a table chosen whole is its cells to them (they did nothing)
-      { label: 'Duplicate', run: () => (own ? this.run('duplicate') : this.view.dispatch(this.view.state.tr.insert(end, node).scrollIntoView())) },
-      { label: 'Move up', run: () => (own ? this.run('moveBlockUp') : this.step(pos, -1)) },
-      { label: 'Move down', run: () => (own ? this.run('moveBlockDown') : this.step(pos, 1)) },
-      ...(kind ? TURN.map(([k, label], i) => ({ label, sep: i === 0, checked: k === kind, run: () => void (k !== kind && this.run(k)) })) : []),
+      { label: 'Duplicate', icon: ICONS.duplicate, run: () => (own ? this.run('duplicate') : this.view.dispatch(this.view.state.tr.insert(end, node).scrollIntoView())) },
+      { label: 'Move up', icon: ICONS.up, run: () => (own ? this.run('moveBlockUp') : this.step(pos, -1)) },
+      { label: 'Move down', icon: ICONS.down, run: () => (own ? this.run('moveBlockDown') : this.step(pos, 1)) },
+      ...(kind ? TURN.map(([k, label, icon], i) => ({ label, icon: ICONS[icon], sep: i === 0, checked: k === kind, run: () => void (k !== kind && this.run(k)) })) : []),
     ];
     this.hide();
     ui.openMenu(under(r), items);

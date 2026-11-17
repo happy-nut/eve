@@ -15,7 +15,7 @@ function popup() {
   made = mount(Suggest, { target: document.body });
   return (made as unknown as { ui: SuggestionUI }).ui;
 }
-const labels = () => [...document.querySelectorAll('.suggest li')].map((li) => li.querySelector('.s-label')?.textContent);
+const labels = () => [...document.querySelectorAll('.suggest li:not(.group)')].map((li) => li.querySelector('.s-label')?.textContent);
 
 test('a page with two headings of the same name opens into its sections without an error', () => {
   const ui = popup();
