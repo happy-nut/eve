@@ -35,7 +35,7 @@
   import { applyAll } from './lib/inbox';
   import { focusNote } from './lib/popup';
   import { cameBack } from './lib/comeBack';
-  import { flushEdits } from './lib/pending';
+  import { takeEditorKeys } from './lib/pending';
   import { claimKeys, handledBy, PRIORITY } from './lib/keys';
 
   let sidebarOpen = $state(true);
@@ -556,9 +556,9 @@
     e.preventDefault();
     // the list behind a floating page: the page is put away first (as ⌘⇧↓ puts it away, opening another note), so
     // the list is not opened, folded or focused unseen behind it. Its last keys are handed over before it goes.
-    if (ui.card && (a.id === 'search' || a.id === 'focusSidebar')) { flushEdits(); ui.closeCard(); }
+    if (ui.card && (a.id === 'search' || a.id === 'focusSidebar')) { takeEditorKeys(); ui.closeCard(); }
     // Settings over floating pages: they are put away, all of them, so Settings is the one thing up
-    if (a.id === 'settings' && !settingsOpen && ui.card) { flushEdits(); while (ui.card) ui.closeCard(); }
+    if (a.id === 'settings' && !settingsOpen && ui.card) { takeEditorKeys(); while (ui.card) ui.closeCard(); }
     switch (a.id) {
       case 'newNote':
         // from the sidebar, ask what to create via the + menu

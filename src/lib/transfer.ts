@@ -3,7 +3,7 @@ import { importTree, type Source } from './importTree';
 import { files, importAsset, pickFiles, pickFolders, listFolder, pickSavePath, savePdf, savePng, isMobile, widget } from './platform';
 import { commonDir, dirOf } from './paths';
 import { ui, errorText } from './ui.svelte';
-import { flushEdits } from './pending';
+import { takeEditorKeys } from './pending';
 
 /**
  * Import files picked in Finder, or whole folders. One file lands as a plain new note beside the open note; several
@@ -52,7 +52,7 @@ export type ExportAs = 'md' | 'pdf' | 'png';
  * the picture being that page rasterised.
  */
 export async function exportNote(note: Note, as: ExportAs): Promise<string | null> {
-  flushEdits(); // the export is of the note as it is on screen, the last keys included
+  takeEditorKeys(); // the export is of the note as it is on screen, the last keys included
   // a phone has no save panel: the note goes to the share sheet (Files, Drive, a chat…)
   if (isMobile) {
     if (!(await widget.export(as, titleOf(note), note.body))) throw new Error(`The phone did not take the ${as.toUpperCase()}.`);

@@ -39,9 +39,9 @@ The model was last checked to describe the code at `f723a17`. Each action names 
 | `Delete` | `notes.remove` (a tombstone, the body kept) |
 | `Make` | `notes.dayNote` (a day's note, fixed id `daily-<date>`, dated `OLDER_THAN_ANY_SYNC` = 0) |
 | `Start` → `Pull` | `Sync.now` → `syncRound` → `Repo.pull` (head, `known`, `f.prev`) |
-| `Hash` | `gather` (sync.svelte.ts): `flushEdits()`, then `seen` and `untouched` from `serialize(local)`, taken before `await hashes.file` |
+| `Hash` | `gather` (sync.svelte.ts): `takeEditorKeys()`, then `seen` and `untouched` from `serialize(local)`, taken before `await hashes.file` |
 | `Base` | `gather`: the agreed version (`agreed`): `seen` when untouched, `await repo.blob(f.prev)` when both changed it, else none for now |
-| `Decide` | `decide`, after the last await, its own `flushEdits()` first: untouched and unchanged since `seen` → `mergeRemote(force)`; else `agreed` (or, for a `sameIdNoneAgreed` note `writtenOnBoth`, `''` judged now) → `merge3`; else `whichStands` (the later, or an erasure over a tombstone) and the earlier is a `keepConflictCopy` if `wordsOnlyIn` it; none agreed → lww |
+| `Decide` | `decide`, after the last await, its own `takeEditorKeys()` first: untouched and unchanged since `seen` → `mergeRemote(force)`; else `agreed` (or, for a `sameIdNoneAgreed` note `writtenOnBoth`, `''` judged now) → `merge3`; else `whichStands` (the later, or an erasure over a tombstone) and the earlier is a `keepConflictCopy` if `wordsOnlyIn` it; none agreed → lww |
 | `Snap` / `Push` | `local()` (`serialize` now, hashed after), `Repo.push` (nothing changed → done; ref PATCH 422 → pull again, 3 tries) |
 
 Each `await` in the code is a gap between two actions, where the other device and the person may act. Bounds:
@@ -67,7 +67,7 @@ Found by this model on 2026-11-17 and fixed the same day (each has a case in `sr
 Found by a review of that fix (`/dev:review`, three models) and by this model once it was brought up to the code, and
 fixed on 2026-11-17 by deciding only after the last wait:
 - a key typed while sync waited, into a note whose two versions could not be put together, or a day's note, or a long
-  note whose keys were still in the editor (the second `flushEdits()`), or into a day's note still only its template;
+  note whose keys were still in the editor (the second `takeEditorKeys()`), or into a day's note still only its template;
 - copies of a version that loses nothing (erased, a template, deleted unchanged, untouched since signing in again):
   `wordsOnlyIn`; and an erasure undone by a later tombstone.
 
@@ -83,8 +83,8 @@ fixed on 2026-11-17 by deciding only after the last wait:
 4. If you meant to change what sync does (a new path, an await added or removed, a new reason to force or skip),
    change the matching action, keeping one action per stretch of code without an `await` in it.
 5. Then break it on purpose once and see it fail. Each of these must report `NoWordLost is violated`; undo it after:
-   `ELSE IF rver = head[d]` → `ELSE IF TRUE` (a push over a moved branch); `IF ut[d] /\ loc[d].w = seen[d].w` →
-   `IF ut[d]` (no re-check of `seen`); `copies' = IF Earlier(d).w ...` → `copies' = copies` (no copy; on both configs);
+   `ELSE IF rver = head[d]` → `ELSE IF TRUE` (a push over a moved branch); `IF untouched[d] /\ loc[d].w = seen[d].w` →
+   `IF untouched[d]` (no re-check of `seen`); `copies' = IF Earlier(d).w ...` → `copies' = copies` (no copy; on both configs);
    in `Agreed`, `FreshSameId /\ prev[d].none` → `FALSE /\ prev[d].none` (`EveSyncDay`). If a check passes far faster or
    with far fewer states than before, suspect the model first: an action that cannot fire (a variable both set and
    listed in its `UNCHANGED`) once hid every copy.

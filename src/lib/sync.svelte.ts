@@ -1,5 +1,5 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
-import { flushEdits } from './pending';
+import { takeEditorKeys } from './pending';
 import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText, memMark } from './platform';
 import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, signInError, syncError, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
@@ -25,7 +25,9 @@ function whichStands(here: Note, there: Note) {
   return { later, earlier: later === there ? here : there, erasedForGood: !!erasedForGood };
 }
 
-interface Pulled { r: Note; seen?: string; untouched: boolean; agreed?: string; mergeable: boolean; sameIdNoneAgreed: boolean }
+const UNREADABLE = null;
+
+interface Pulled { r: Note; seen?: string; untouched: boolean; agreed?: string | typeof UNREADABLE; sameIdNoneAgreed: boolean }
 
 async function takeAssetOrAskAgain(repo: Repo, f: RemoteFile) {
   try { await assets.write(f.path.slice(ASSETS.length), f.data); } catch { delete repo.s.known[f.path]; }
@@ -39,30 +41,31 @@ async function gather(files: RemoteFile[], repo: Repo, hashes: FileHashes): Prom
     if (!f.path.endsWith('.md')) continue;
     const r = parse(dec.decode(f.data));
     if (!r) continue;
-    flushEdits();
+    takeEditorKeys();
     const local = notes.all.find((n) => n.id === r.id);
     const seen = local?.body;
     const untouched = !!(local && f.prev && (await hashes.file(f.path, serialize(local))).sha === f.prev);
     const sameIdNoneAgreed = !f.prev && madeOnEveryDevice(r.id);
-    if (untouched) pulled.push({ r, seen, untouched, agreed: seen, mergeable: true, sameIdNoneAgreed });
+    if (untouched) pulled.push({ r, seen, untouched, agreed: seen, sameIdNoneAgreed });
     else if (local && local.body !== r.body && f.prev) {
-      const agreed = await repo.blob(f.prev).then((d) => parse(dec.decode(d))?.body ?? '', () => null);
-      pulled.push({ r, seen, untouched, agreed: agreed ?? '', mergeable: agreed !== null, sameIdNoneAgreed });
-    } else pulled.push({ r, seen, untouched, mergeable: false, sameIdNoneAgreed });
+      const agreed = await repo.blob(f.prev).then((d) => parse(dec.decode(d))?.body ?? '', () => UNREADABLE);
+      pulled.push({ r, seen, untouched, agreed, sameIdNoneAgreed });
+    } else pulled.push({ r, seen, untouched, sameIdNoneAgreed });
   }
   return pulled;
 }
 
 function decide(pulled: Pulled[]) {
-  flushEdits();
+  takeEditorKeys();
   const lww: Note[] = [], force: Note[] = [], copies: Note[] = [];
   for (const p of pulled) {
     const { r } = p;
     const here = notes.all.find((n) => n.id === r.id);
     if (p.untouched && here?.body === p.seen) { force.push(r); continue; }
-    const agreed = p.agreed ?? (p.sameIdNoneAgreed && here && writtenOnBoth(here, r) ? '' : undefined);
+    const readable = typeof p.agreed === 'string';
+    const agreed = p.agreed === undefined ? (p.sameIdNoneAgreed && here && writtenOnBoth(here, r) ? '' : undefined) : p.agreed ?? '';
     if (!here || agreed === undefined) { lww.push(r); continue; }
-    const both = p.mergeable && !here.deleted && !r.deleted ? merge3(agreed, here.body, r.body) : null;
+    const both = readable && !here.deleted && !r.deleted ? merge3(agreed, here.body, r.body) : null;
     if (both !== null) { force.push({ ...(r.updatedAt > here.updatedAt ? r : here), body: both, updatedAt: Date.now() }); continue; }
     const { later, earlier, erasedForGood } = whichStands(here, r);
     if (wordsOnlyIn(earlier.body, later.body, agreed)) copies.push({ ...earlier });

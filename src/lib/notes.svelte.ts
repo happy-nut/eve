@@ -1,6 +1,6 @@
 import { untrack } from 'svelte';
 import { storage, memMark } from './platform';
-import { flushEdits } from './pending';
+import { takeEditorKeys } from './pending';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
 import { ui } from './ui.svelte';
@@ -159,7 +159,7 @@ class NotesStore {
     if (id === CALENDAR_NOTE_ID) id = CALENDAR;
     if (id === this._cur) return;
     const left = this._cur;
-    flushEdits();
+    takeEditorKeys();
     if (id) {
       this.history = this.history.slice(0, this.hIndex + 1).filter((h) => h !== id);
       this.history.push(id);
@@ -192,7 +192,7 @@ class NotesStore {
 
   private blankSinceMade = new Set<string>();
   private leave(id: string | null) {
-    flushEdits();
+    takeEditorKeys();
     if (!id || !this.blankSinceMade.has(id)) return;
     this.blankSinceMade.delete(id);
     const n = this.all.find((x) => x.id === id);
@@ -363,7 +363,7 @@ class NotesStore {
     this.titles.set(n.id, titleOf(n));
     void storage.write(n.id, serialize(n));
     this.dirty++;
-    return n;
+    return this.all.at(-1)!;
   }
 
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -385,10 +385,10 @@ class NotesStore {
     this.dirty++;
   }
 
-  flushAll() { flushEdits(); for (const id of [...this.timers.keys()]) this.flush(id); }
+  flushAll() { takeEditorKeys(); for (const id of [...this.timers.keys()]) this.flush(id); }
 
   flush(id: string) {
-    flushEdits();
+    takeEditorKeys();
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
     clearTimeout(this.timers.get(id));
@@ -584,11 +584,8 @@ class NotesStore {
     if (gone && this.currentId === id) this.currentId = n.parent ?? this.firstPage()?.id ?? null;
   }
   addRow(parent: string, title: string, props: Record<string, PropValue> = {}): Note {
-    const made = this.addImported(`# ${title}\n\n`, Date.now(), parent);
-    const n = this.all.find((x) => x.id === made.id)!;
     const clean = Object.fromEntries(Object.entries(props).filter(([k, v]) => propName(k) && !OWN_KEYS.has(propName(k)) && v !== '' && !(Array.isArray(v) && !v.length)));
-    if (Object.keys(clean).length) { n.props = clean; this.flush(n.id); }
-    return n;
+    return this.addImported(`# ${title}\n\n`, Date.now(), parent, clean);
   }
 
   private titleKey = $derived(this.visible.map((n) => this.titlesOf(n)).join('\n'));

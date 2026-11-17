@@ -33,17 +33,17 @@ VARIABLES
   pc,      \* where each device is in Sync.now
   pr,      \* the file pulled (f.data parsed: r)
   prev,    \* f.prev: what known said before this pull
-  ut,      \* `untouched`, as the hash taken before the await found it
+  untouched,      \* `untouched`, as the hash taken before the await found it
   seen,    \* `seen`: the note here as it was when `untouched` was taken
-  base,    \* the version the two last agreed on, as gather holds it (None: no agreed version, plain lww)
-  mg,      \* whether merge3 may put the two together (an agreed version from f.prev or untouched)
+  agreed,    \* the version the two last agreed on, as gather holds it (None: no agreed version, plain lww)
+  readable, \* `readable` in decide: the agreed version was read (from f.prev, or untouched), so merge3 may put the two together
   snap,    \* local(): what is pushed, read before Repo.push's awaits
   tries,   \* syncRound's three tries
   copies,  \* the words in conflict copies (keepConflictCopy), never lost
   typed,   \* every word ever written (history)
   clock    \* Date.now()
 
-vars == <<loc, known, head, rfile, rver, pc, pr, prev, ut, seen, base, mg, snap, tries, copies, typed, clock>>
+vars == <<loc, known, head, rfile, rver, pc, pr, prev, untouched, seen, agreed, readable, snap, tries, copies, typed, clock>>
 
 Init ==
   /\ clock = 2
@@ -54,8 +54,8 @@ Init ==
             /\ loc = [d \in Devices |-> Rec({}, FALSE, 1)]
             /\ known = [d \in Devices |-> Rec({}, FALSE, 1)]
   /\ pc = [d \in Devices |-> "idle"] /\ pr = [d \in Devices |-> None] /\ prev = [d \in Devices |-> None]
-  /\ ut = [d \in Devices |-> FALSE] /\ seen = [d \in Devices |-> None] /\ base = [d \in Devices |-> None]
-  /\ mg = [d \in Devices |-> FALSE] /\ snap = [d \in Devices |-> None] /\ tries = [d \in Devices |-> 0]
+  /\ untouched = [d \in Devices |-> FALSE] /\ seen = [d \in Devices |-> None] /\ agreed = [d \in Devices |-> None]
+  /\ readable = [d \in Devices |-> FALSE] /\ snap = [d \in Devices |-> None] /\ tries = [d \in Devices |-> 0]
   /\ copies = {} /\ typed = {}
 
 Syncing(d) == pc[d] # "idle"
@@ -69,27 +69,27 @@ Type(d, word) ==
   /\ TypeMidSync \/ ~Syncing(d)
   /\ loc' = [loc EXCEPT ![d] = Rec(loc[d].w \cup {word}, FALSE, clock)]
   /\ typed' = typed \cup {word} /\ Tick
-  /\ UNCHANGED <<known, head, rfile, rver, pc, pr, prev, ut, seen, base, mg, snap, tries, copies>>
+  /\ UNCHANGED <<known, head, rfile, rver, pc, pr, prev, untouched, seen, agreed, readable, snap, tries, copies>>
 
 \* notes.remove: a tombstone, the words kept in it (the Trash)
 Delete(d) ==
   /\ Deletes /\ ~Syncing(d)
   /\ ~loc[d].none /\ ~loc[d].del
   /\ loc' = [loc EXCEPT ![d] = Rec(loc[d].w, TRUE, clock)] /\ Tick
-  /\ UNCHANGED <<known, head, rfile, rver, pc, pr, prev, ut, seen, base, mg, snap, tries, copies, typed>>
+  /\ UNCHANGED <<known, head, rfile, rver, pc, pr, prev, untouched, seen, agreed, readable, snap, tries, copies, typed>>
 
 \* notes.dayNote: the day's note made here, dated OLDER_THAN_ANY_SYNC (0) so another device's written copy wins
 Make(d) ==
   /\ FreshSameId /\ ~Syncing(d)
   /\ loc[d].none
   /\ loc' = [loc EXCEPT ![d] = Rec({}, FALSE, 0)]
-  /\ UNCHANGED <<known, head, rfile, rver, pc, pr, prev, ut, seen, base, mg, snap, tries, copies, typed, clock>>
+  /\ UNCHANGED <<known, head, rfile, rver, pc, pr, prev, untouched, seen, agreed, readable, snap, tries, copies, typed, clock>>
 
 \* ---- Sync.now -> syncRound ----------------------------------------------------------------------
 Start(d) ==
   /\ pc[d] = "idle"
   /\ pc' = [pc EXCEPT ![d] = "pull"] /\ tries' = [tries EXCEPT ![d] = 0]
-  /\ UNCHANGED <<loc, known, head, rfile, rver, pr, prev, ut, seen, base, mg, snap, copies, typed, clock>>
+  /\ UNCHANGED <<loc, known, head, rfile, rver, pr, prev, untouched, seen, agreed, readable, snap, copies, typed, clock>>
 
 \* Repo.pull: nothing if the head is the same; else the file, when its blob is not the one known
 Pull(d) ==
@@ -103,63 +103,63 @@ Pull(d) ==
             /\ prev' = [prev EXCEPT ![d] = known[d]]
             /\ known' = [known EXCEPT ![d] = rfile]
             /\ pc' = [pc EXCEPT ![d] = "hash"]
-  /\ UNCHANGED <<loc, rfile, rver, ut, seen, base, mg, snap, tries, copies, typed, clock>>
+  /\ UNCHANGED <<loc, rfile, rver, untouched, seen, agreed, readable, snap, tries, copies, typed, clock>>
 
-\* gather: flushEdits(); `seen` and `untouched` from the note's hash, taken before `await hashes.file`
+\* gather: takeEditorKeys(); `seen` and `untouched` from the note's hash, taken before `await hashes.file`
 Hash(d) ==
   /\ pc[d] = "hash"
-  /\ ut' = [ut EXCEPT ![d] = ~loc[d].none /\ ~prev[d].none /\ loc[d] = prev[d]]
+  /\ untouched' = [untouched EXCEPT ![d] = ~loc[d].none /\ ~prev[d].none /\ loc[d] = prev[d]]
   /\ seen' = [seen EXCEPT ![d] = loc[d]]
-  /\ pc' = [pc EXCEPT ![d] = "base"]
-  /\ UNCHANGED <<loc, known, head, rfile, rver, pr, prev, base, mg, snap, tries, copies, typed, clock>>
+  /\ pc' = [pc EXCEPT ![d] = "agreed"]
+  /\ UNCHANGED <<loc, known, head, rfile, rver, pr, prev, agreed, readable, snap, tries, copies, typed, clock>>
 
 \* after that await: the version the two last agreed on. Untouched: the note as it was (`seen`). Changed on both
 \* with an f.prev: `await repo.blob(f.prev)` (a gap after this step, as every step). Else none for now
 Base(d) ==
-  /\ pc[d] = "base"
+  /\ pc[d] = "agreed"
   /\ LET differ == ~loc[d].none /\ loc[d].w # pr[d].w IN
-     /\ base' = [base EXCEPT ![d] =
-          IF ut[d] THEN seen[d]
+     /\ agreed' = [agreed EXCEPT ![d] =
+          IF untouched[d] THEN seen[d]
           ELSE IF differ /\ ~prev[d].none THEN prev[d]
           ELSE None]
-     /\ mg' = [mg EXCEPT ![d] = ut[d] \/ (differ /\ ~prev[d].none)]
+     /\ readable' = [readable EXCEPT ![d] = untouched[d] \/ (differ /\ ~prev[d].none)]
   /\ pc' = [pc EXCEPT ![d] = "decide"]
-  /\ UNCHANGED <<loc, known, head, rfile, rver, pr, prev, ut, seen, snap, tries, copies, typed, clock>>
+  /\ UNCHANGED <<loc, known, head, rfile, rver, pr, prev, untouched, seen, snap, tries, copies, typed, clock>>
 
 \* mergeRemote(lww): taken only if newer; mergeRemote(force): taken as it is
 Lww(d, r) == IF loc[d].none \/ loc[d].at < r.at THEN r ELSE loc[d]
 Later(d) == IF pr[d].at > loc[d].at THEN pr[d] ELSE loc[d]
 Earlier(d) == IF pr[d].at > loc[d].at THEN loc[d] ELSE pr[d]
 \* judged at Decide: a madeOnEveryDevice note with no f.prev, made and written on both (neither OLDER_THAN_ANY_SYNC): nothing agreed ({})
-Agreed(d) == IF ~base[d].none THEN base[d]
+Agreed(d) == IF ~agreed[d].none THEN agreed[d]
              ELSE IF FreshSameId /\ prev[d].none /\ ~loc[d].none /\ loc[d].w # pr[d].w /\ loc[d].at # 0 /\ pr[d].at # 0
                THEN Rec({}, FALSE, 0) ELSE None
-\* wordsOnlyIn: the earlier version is kept as a conflict copy only if it holds words the later and the base lack
+\* wordsOnlyIn: the earlier version is kept as a conflict copy only if it holds words the later and the agreed version lack
 KeepEarlier(d) ==
   /\ copies' = IF Earlier(d).w \ (Later(d).w \cup Agreed(d).w) # {} THEN copies \cup {Earlier(d).w} ELSE copies
   /\ loc' = [loc EXCEPT ![d] = Later(d)] /\ UNCHANGED clock
 
-\* decide: no wait left before mergeRemote; the note as it is now (flushEdits() again first)
+\* decide: no wait left before mergeRemote; the note as it is now (takeEditorKeys() again first)
 Decide(d) ==
   /\ pc[d] = "decide"
-  /\ IF ut[d] /\ loc[d].w = seen[d].w
+  /\ IF untouched[d] /\ loc[d].w = seen[d].w
        THEN /\ loc' = [loc EXCEPT ![d] = pr[d]] /\ UNCHANGED <<copies, clock>>
        ELSE IF loc[d].none \/ Agreed(d).none
          THEN /\ loc' = [loc EXCEPT ![d] = Lww(d, pr[d])] /\ UNCHANGED <<copies, clock>>
-       ELSE IF mg[d] /\ ~loc[d].del /\ ~pr[d].del
+       ELSE IF readable[d] /\ ~loc[d].del /\ ~pr[d].del
          THEN \/ /\ loc' = [loc EXCEPT ![d] = Rec(loc[d].w \cup pr[d].w, FALSE, clock)] /\ Tick
                  /\ UNCHANGED copies
               \/ KeepEarlier(d)
        ELSE KeepEarlier(d)
   /\ pc' = [pc EXCEPT ![d] = "snap"]
-  /\ UNCHANGED <<known, head, rfile, rver, pr, prev, ut, seen, base, mg, snap, tries, typed>>
+  /\ UNCHANGED <<known, head, rfile, rver, pr, prev, untouched, seen, agreed, readable, snap, tries, typed>>
 
 \* local(): serialize(n) read now, hashed and pushed after awaits
 Snap(d) ==
   /\ pc[d] = "snap"
   /\ snap' = [snap EXCEPT ![d] = loc[d]]
   /\ pc' = [pc EXCEPT ![d] = "push"]
-  /\ UNCHANGED <<loc, known, head, rfile, rver, pr, prev, ut, seen, base, mg, tries, copies, typed, clock>>
+  /\ UNCHANGED <<loc, known, head, rfile, rver, pr, prev, untouched, seen, agreed, readable, tries, copies, typed, clock>>
 
 \* Repo.push: nothing changed -> done; else a commit on s.head; the ref PATCH refused (422) if the
 \* branch moved -> syncRound pulls again, three times at most, then an error (head/known kept)
@@ -175,7 +175,7 @@ Push(d) ==
          ELSE /\ tries' = [tries EXCEPT ![d] = tries[d] + 1]
               /\ pc' = [pc EXCEPT ![d] = IF tries[d] + 1 < 3 THEN "pull" ELSE "idle"]
               /\ UNCHANGED <<rfile, rver, head, known>>
-  /\ UNCHANGED <<loc, pr, prev, ut, seen, base, mg, snap, copies, typed, clock>>
+  /\ UNCHANGED <<loc, pr, prev, untouched, seen, agreed, readable, snap, copies, typed, clock>>
 
 Next ==
   \E d \in Devices :

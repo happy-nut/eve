@@ -7,5 +7,4 @@ const pending = new Set<() => void>();
 
 export const holdEdit = (flush: () => void) => pending.add(flush);
 export const dropEdit = (flush: () => void) => pending.delete(flush);
-/** every edit still waiting, handed over now */
-export function flushEdits() { for (const flush of [...pending]) flush(); }
+export function takeEditorKeys() { for (const flush of [...pending]) flush(); }

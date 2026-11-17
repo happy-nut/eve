@@ -1176,7 +1176,7 @@ export function createEditor(opts: {
     return find(splitLink(link, (t) => !!find(t))[0])?.icon ?? ''; // a section link keeps the page's icon
   };
   // A long note's markdown is a few milliseconds per key (54 KB: 6.6 ms of a 7.9 ms keystroke), so it is made
-  // once the typing pauses; a short one, at once. Anything that reads the note first runs flushEdits() (pending.ts).
+  // once the typing pauses; a short one, at once. Anything that reads the note first runs takeEditorKeys() (pending.ts).
   let timer: ReturnType<typeof setTimeout> | undefined;
   const cancel = () => { clearTimeout(timer); timer = undefined; dropEdit(flush); };
   const flush = () => { if (timer === undefined) return; cancel(); opts.onUpdate(getMarkdown(editor)); };
