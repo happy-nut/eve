@@ -2,7 +2,7 @@ import { Node, getMarkRange, type Editor } from '@tiptap/core';
 import { Plugin, TextSelection, type NodeSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
-import { fetchUrl, openUrl } from './platform';
+import { fetchUrl, openUrl, youtubePlayer } from './platform';
 
 /**
  * Bookmark card: a URL on a line of its own renders as a compact preview (favicon, title, description,
@@ -48,6 +48,27 @@ export async function linkMeta(url: string): Promise<Meta> {
   }
 }
 
+const seconds = (t: string) => {
+  if (/^\d+$/.test(t)) return t;
+  const m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(t);
+  return m && m[0] ? String(+(m[1] ?? 0) * 3600 + +(m[2] ?? 0) * 60 + +(m[3] ?? 0)) : '';
+};
+
+/** The player for a YouTube address (watch, youtu.be, shorts, live, embed), from where it was linked at; null for any other */
+export function youtubeEmbed(href: string): string | null {
+  let u: URL;
+  try { u = new URL(href); } catch { return null; }
+  const site = u.hostname.replace(/^(www|m|music)\./, '');
+  const path = u.pathname.split('/').filter(Boolean);
+  const id = site === 'youtu.be' ? path[0]
+    : site === 'youtube.com' || site === 'youtube-nocookie.com'
+      ? (path[0] === 'watch' ? u.searchParams.get('v') : ['shorts', 'live', 'embed'].includes(path[0]) ? path[1] : null)
+      : null;
+  if (!id || !/^[\w-]{11}$/.test(id)) return null;
+  const start = seconds(u.searchParams.get('t') ?? u.searchParams.get('start') ?? '');
+  return `https://www.youtube-nocookie.com/embed/${id}${start && start !== '0' ? `?start=${start}` : ''}`;
+}
+
 const el = (tag: string, cls: string, text = '') => { const e = document.createElement(tag); e.className = cls; if (text) e.textContent = text; return e; };
 const trim = (u: string) => u.replace(/\/$/, '');
 /** an address as one reads it: `서울` and `%EC%84%9C%EC%9A%B8` are the same page */
@@ -91,6 +112,8 @@ export const Bookmark = Node.create({
   addNodeView() {
     return ({ node }) => {
       const href = node.attrs.href as string;
+      const player = youtubeEmbed(href);
+      if (player) return youtubeView(href, player);
       const dom = el('a', 'bookmark') as HTMLAnchorElement;
       dom.href = href;
       dom.contentEditable = 'false';
@@ -132,12 +155,19 @@ export const Bookmark = Node.create({
     return [
       new Plugin({
         props: {
-          handlePaste: (view, event) => {
-            const text = event.clipboardData?.getData('text/plain').trim() ?? '';
+          handlePaste: (view, event, slice) => {
+            const text = (event.clipboardData ? event.clipboardData.getData('text/plain') : slice.content.textBetween(0, slice.content.size, '\n')).trim();
             const { $from, empty } = view.state.selection;
             if (!URL_RE.test(text) || !empty || $from.parent.type.spec.code) return false;
             // a card copied as a card comes back a card: its plain text is its address too, and it came back a link
             if (event.clipboardData?.getData('text/html').includes('data-bookmark')) return false;
+            const line = $from.parent, holder = $from.node(-1), at = $from.index(-1), card = view.state.schema.nodes.bookmark;
+            if (youtubeEmbed(text) && line.type.name === 'paragraph' && !line.content.size && holder.canReplaceWith(at, at + 1, card)) {
+              const last = at === holder.childCount - 1, video = card.create({ href: text });
+              const tr = view.state.tr.replaceWith($from.before(), $from.after(), last ? [video, view.state.schema.nodes.paragraph.create()] : video);
+              view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve($from.before() + 1))).scrollIntoView());
+              return true;
+            }
             const link = view.state.schema.text(text, [view.state.schema.marks.link.create({ href: text })]);
             // what is typed next is not the address: the link mark reaches on at its end (autolink makes it inclusive),
             // and " for details" became part of the link
@@ -211,6 +241,32 @@ export const Bookmark = Node.create({
     };
   },
 });
+
+/** A YouTube address on its own line: its player, and under it the video's name and address, which open it on YouTube */
+function youtubeView(href: string, src: string) {
+  const dom = el('div', 'bookmark yt');
+  dom.contentEditable = 'false';
+  const frame = el('iframe', 'yt-frame') as HTMLIFrameElement;
+  youtubePlayer(src, (at) => { frame.src = at; });
+  frame.title = 'YouTube';
+  frame.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+  frame.setAttribute('allowfullscreen', '');
+  frame.referrerPolicy = 'strict-origin-when-cross-origin';
+  const site = el('a', 'bm-site') as HTMLAnchorElement;
+  site.href = href;
+  const name = el('span', 'bm-title', 'YouTube'), url = el('span', 'bm-url', bareUrl(href));
+  site.append(name, url);
+  site.addEventListener('click', (e) => { e.preventDefault(); void openUrl(href); });
+  void linkMeta(href).then((m) => { if (m.title && m.title !== host(href)) name.textContent = m.title; });
+  dom.append(frame, site);
+  return {
+    dom,
+    selectNode: () => dom.classList.add('ProseMirror-selectednode'),
+    deselectNode: () => dom.classList.remove('ProseMirror-selectednode'),
+    stopEvent: (e: Event) => e.target === frame,
+    ignoreMutation: () => true,
+  };
+}
 
 /** The link under the caret (or just behind it): where it runs and where it points. */
 function linkAt(editor: Editor): { from: number; to: number; href: string } | null {

@@ -812,6 +812,10 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .dblock:not(.full) .
 .tiptap .bm-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 0.9em; line-height: 1.35; }
 .tiptap .bm-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tiptap .bm-desc { color: var(--fg-dim); font-size: 0.88em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tiptap .bookmark.yt { display: flex; flex-direction: column; gap: 8px; padding: 0; border: 0; background: none; max-width: 720px; max-height: none; overflow: visible; }
+.tiptap .yt-frame { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 10px; background: #000; }
+.tiptap .yt .bm-site { margin: 0; text-decoration: none; cursor: pointer; }
+.tiptap .yt .bm-title { color: var(--fg); font-weight: 500; flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tiptap .bm-site { display: flex; align-items: center; gap: 6px; color: var(--fg-dim); font-size: 0.82em; margin-top: auto; }
 .tiptap .bm-url { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* whole, cut only where the card ends */
 /* selected, the whole address (bookmark.ts): on as many lines as it takes, the card grown to hold them */

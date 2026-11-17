@@ -13,6 +13,10 @@ with a click, and the links follow when that note is renamed; `@` puts a day in 
   other notes' saved markdown too.
 - `link-date`: `@tomorrow` opens a calendar with that day chosen; Enter (or a day tapped) leaves a chip, saved as
   `@2026-11-18`. `@` is for days only (and `@remind`): there are no people or page mentions.
+- `link-youtube`: a YouTube address (watch, youtu.be, shorts, live, embed) pasted on an empty line is a player in
+  the note (`.bookmark.yt iframe.yt-frame`), its title and address under it; saved as the bare address. In a
+  sentence it stays a link. On the Mac app the player is a page the app serves on 127.0.0.1 (`net.rs`
+  `player_page`): YouTube refuses a `tauri://` page (error 153, no referrer).
 
 ## How to get to it (user POV)
 
@@ -40,10 +44,21 @@ Preconditions: the default notes (Groceries is under Plan, so `[[Gro` has one ma
   type ` due @`, then `t.page.locator('.cal .cal-day', { hasText: /^20$/ }).first().tap()`: a chip `2026.11.20`;
   `t.page.locator('.tiptap .wikilink').first().tap()` opens Groceries, with `Plan / Groceries` in the bar.
 
+- **YouTube.** On an empty line, paste through the page: `const dt = new DataTransfer(); dt.setData('text/plain',
+  'https://www.youtube.com/watch?v=aqz-KE-bpKQ'); window.__editor.view.dom.dispatchEvent(new ClipboardEvent('paste',
+  { clipboardData: dt, bubbles: true, cancelable: true }))`; wait for `iframe.yt-frame` and 6 s; the frame from
+  `t.page.frames()` whose url has `/embed/` reads the video's title; a click at the frame's centre plays it
+  (its `video.currentTime` above 0, `paused` false after 8 s).
+
+Proved on 2026-11-18: `mac-01-pasted`, `mac-02-playing` (Big Buck Bunny, 7.3 s in).
 Proved on 2026-11-17 (0.7.147): `mac-01-picker`, `mac-02-alias`, `mac-03-calendar`, `mac-04-datechip`,
 `mac-05-alias-opened`, `mac-06-renamed`, `phone-02-linked`, `phone-03-opened`.
 
 ## Gotchas
+
+- A YouTube player in a page whose address is not http(s) (`file://`, `tauri://`) shows "error 153": the browser
+  sends no referrer. WebKit through drive.mjs is http://localhost, so it plays there either way; the Mac app's own
+  page is proved only by its loopback player (`cargo test player`, and a `file://` page framing it).
 
 - Do not use `t.page.goBack()` to return: the page throws `The operation is insecure` and the run is lost. Use the
   sidebar row (Mac) or the bar's back arrow (phone).

@@ -182,3 +182,93 @@ mod login_tests {
         assert!(!ok("https://localhost/login/device/code"));
     }
 }
+
+// ---- a YouTube video played in a note ---------------------------------------------------------
+/// YouTube's player refuses to play for a page with no http(s) address to name as its referrer (error 153), and the
+/// Mac app's page is tauri://. A page on the loopback holds the player instead; its address is the referrer.
+static PLAYER: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
+
+/// The player page for `GET /yt/<11-letter id>[?start=<seconds>]`; None for anything else.
+pub(crate) fn player_page(target: &str) -> Option<String> {
+    let rest = target.strip_prefix("/yt/")?;
+    let (id, query) = rest.split_once('?').unwrap_or((rest, ""));
+    let id_ok = id.len() == 11 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    let start = query.strip_prefix("start=").unwrap_or("");
+    if !id_ok || !start.bytes().all(|b| b.is_ascii_digit()) || (!query.is_empty() && start.is_empty()) {
+        return None;
+    }
+    let at = if start.is_empty() { String::new() } else { format!("?start={start}") };
+    Some(format!(
+        "<!doctype html><meta charset=utf-8><style>html,body{{margin:0;height:100%;background:#000}}iframe{{border:0;width:100%;height:100%;display:block}}</style>\
+<iframe src=\"https://www.youtube-nocookie.com/embed/{id}{at}\" title=\"YouTube\" allow=\"autoplay; encrypted-media; picture-in-picture; fullscreen\" allowfullscreen referrerpolicy=\"strict-origin-when-cross-origin\"></iframe>"
+    ))
+}
+
+fn serve_players(listener: std::net::TcpListener) {
+    use std::io::{Read, Write};
+    for mut conn in listener.incoming().flatten() {
+        let _ = conn.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+        let mut buf = [0u8; 2048];
+        let n = conn.read(&mut buf).unwrap_or(0);
+        let head = String::from_utf8_lossy(&buf[..n]);
+        let page = head.strip_prefix("GET ").and_then(|r| r.split(' ').next()).and_then(player_page);
+        let reply = match page {
+            Some(p) => format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{p}", p.len()),
+            None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
+        };
+        let _ = conn.write_all(reply.as_bytes());
+    }
+}
+
+/// The loopback port the player pages are served on, the server started the first time it is asked for.
+pub(crate) fn player_port() -> Result<u16, String> {
+    if let Some(p) = PLAYER.get() {
+        return Ok(*p);
+    }
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).map_err(|e| e.to_string())?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    if PLAYER.set(port).is_ok() {
+        std::thread::spawn(move || serve_players(listener));
+    }
+    Ok(*PLAYER.get().unwrap())
+}
+
+#[tauri::command]
+pub(crate) fn youtube_port() -> Result<u16, String> {
+    player_port()
+}
+
+#[cfg(test)]
+mod player_tests {
+    use super::{player_page, player_port};
+
+    #[test]
+    fn only_a_video_id_and_a_start() {
+        assert!(player_page("/yt/dQw4w9WgXcQ").unwrap().contains("youtube-nocookie.com/embed/dQw4w9WgXcQ\""));
+        assert!(player_page("/yt/dQw4w9WgXcQ?start=42").unwrap().contains("/embed/dQw4w9WgXcQ?start=42\""));
+        for bad in ["/yt/short", "/yt/dQw4w9WgXc\"", "/yt/dQw4w9WgXcQ?start=4x", "/yt/dQw4w9WgXcQ?x=1", "/other", "/yt/../../etc"] {
+            assert!(player_page(bad).is_none(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn served_on_the_loopback() {
+        use std::io::{Read, Write};
+        let port = player_port().unwrap();
+        assert_eq!(player_port().unwrap(), port, "one server, asked twice");
+        let get = |path: &str| {
+            let mut c = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            c.write_all(format!("GET {path} HTTP/1.1\r\nHost: x\r\n\r\n").as_bytes()).unwrap();
+            let mut s = String::new();
+            c.read_to_string(&mut s).unwrap();
+            s
+        };
+        let ok = get("/yt/dQw4w9WgXcQ?start=7");
+        assert!(ok.starts_with("HTTP/1.1 200") && ok.contains("/embed/dQw4w9WgXcQ?start=7"), "{ok}");
+        assert!(get("/").starts_with("HTTP/1.1 404"));
+        if std::env::var_os("EVE_HOLD_PLAYER").is_some() {
+            println!("player port {port}");
+            std::thread::sleep(std::time::Duration::from_secs(90));
+        }
+    }
+}

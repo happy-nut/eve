@@ -11,6 +11,14 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 
 /** What the page just did, for memory.log (mem.rs: a line a minute of what the page holds and what came before it).
  *  A Mac's only; nothing goes anywhere but that file. */
+/** A YouTube player's address for this app: on the Mac, the page the app serves on the loopback (net.rs, player_port) */
+export function youtubePlayer(embed: string, put: (src: string) => void) {
+  if (!desktop) return put(embed);
+  const u = new URL(embed);
+  void invoke<number>('youtube_port')
+    .then((port) => put(`http://127.0.0.1:${port}${u.pathname.replace(/^\/embed\//, '/yt/')}${u.search}`))
+    .catch(() => put(embed));
+}
 export const memMark = (what: string) => { if (desktop) void invoke('mem_mark', { what }).catch(() => {}); };
 
 const LS = 'eve.notes.';

@@ -72,6 +72,7 @@ pub fn run() {
             net::share_stop,
             net::lan_get,
             net::open_url,
+            net::youtube_port,
             mac::open_asset,
             net::fetch_url,
             files::read_file,
