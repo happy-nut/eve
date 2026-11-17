@@ -17,7 +17,7 @@ is gone with nothing saying so.
 ## Run it
 
 ```bash
-.claude/skills/formal-sync/check.sh             # a note both devices have: written, deleted, typed into mid-sync (~15 s)
+.claude/skills/formal-sync/check.sh             # a note both devices have: written, deleted, typed into mid-sync (~20 s)
 .claude/skills/formal-sync/check.sh EveSyncDay  # a day's note made under the same id on both devices (~50 s)
 ```
 
@@ -26,9 +26,9 @@ Both must say `No error has been found`. Needs Java (`brew install openjdk`). `c
 trace, with `/devkit:statechart`: it turns a violation into the shortest path in plain words, and a pass into a
 picture of how the states move.
 
-## What it covers (sync commit `2e15a85`)
+## What it covers (sync commit `f723a17`)
 
-The model was last checked to describe the code at `2e15a85`. Each action names the code it stands for:
+The model was last checked to describe the code at `f723a17`. Each action names the code it stands for:
 
 | Action | Code |
 |---|---|
@@ -36,19 +36,21 @@ The model was last checked to describe the code at `2e15a85`. Each action names 
 | `Delete` | `notes.remove` (a tombstone, the body kept) |
 | `Make` | `notes.dayNote` (a day's note, fixed id `daily-<date>`, dated `UNWRITTEN` = 0) |
 | `Start` → `Pull` | `Sync.now` → `syncRound` → `Repo.pull` (head, `known`, `f.prev`) |
-| `Hash` | onPull: `flushEdits()`, then `seen` and `untouched` from `serialize(local)`, taken before `await this.hashes.file` |
-| `Decide` | onPull after the await: written on both (`Both`) → `Merge`; else a clash with nothing to merge from (one side deleted, or a `fixedId` note with no `f.prev`) → `keepConflictCopy` of the version lww drops (a tombstone's into the Trash) + lww; else `untouched` → `mergeRemote(force)`, re-checked against `seen` at the end of onPull (changed since → `merge3(seen, now, r)`, or a copy of the note as it is now); else lww |
-| `Merge` | `await repo.blob(f.prev)` → `merge3`, or `keepConflictCopy` of the older + lww |
+| `Hash` | onPull, gathering: `flushEdits()`, then `seen` and `untouched` from `serialize(local)`, taken before `await this.hashes.file` |
+| `Base` | onPull, gathering: the agreed version (`base`): `seen` when untouched, `await repo.blob(f.prev)` when both changed it, else none for now |
+| `Decide` | onPull, deciding, after the last await and a second `flushEdits()`: untouched and unchanged since `seen` → `mergeRemote(force)`; else `base` (or, for a `fixed` note with no `f.prev` written on both, `''` judged now) → `merge3`; else the later stands (an erasure stands over a tombstone) and the earlier is a `keepConflictCopy` if `wordsOnlyIn` it; no base → lww |
 | `Snap` / `Push` | `local()` (`serialize` now, hashed after), `Repo.push` (nothing changed → done; ref PATCH 422 → pull again, 3 tries) |
 
 Each `await` in the code is a gap between two actions, where the other device and the person may act. Bounds:
 2 devices, 3 words, clock ≤ 9, 7 commits.
 
 Assumptions, not checked: clocks agree (`updatedAt` is one counter; a device whose clock is behind loses lww where the
-model has it win, though the loser is now kept as a copy either way); one note per run (several notes' files in one
-pull share one `Decide` here; the `seen` re-check is what keeps a later file's wait from mattering); words are only
-added (a person erasing is not a loss); assets, renames and `[[link]]` following are left out; the editor's unflushed
-keys before `flushEdits` are not modelled; `merge3` is taken as "both sides' words" or "cannot".
+model has it win, though the loser is kept as a copy either way when it holds words of its own); one note per run
+(several notes' files in one pull are gathered first and decided together after the last wait, so another file's wait
+is one more gap before `Decide`); words are only added (a person erasing is not a loss, and Trash › Delete forever is
+not modelled: `src/lib/syncConflict.dom.test.ts` covers it); deleting while the note's own sync waits is not modelled
+(covered by a test); `repo.blob` refusing is not modelled (the code then merges nothing and keeps copies); assets,
+renames and `[[link]]` following are left out; `merge3` is taken as "both sides' words" or "cannot".
 
 ## History
 
@@ -58,6 +60,13 @@ Found by this model on 2026-11-17 and fixed the same day (each has a case in `sr
 - a day's note written on both devices before either synced (no `f.prev`): lww dropped one side;
 - a key typed while the sync waited on GitHub, into a note judged `untouched` before the wait: the other device's
   version, or its deletion, went in over it.
+
+Found by a review of that fix (`/dev:review`, three models) and by this model once it was brought up to the code, and
+fixed on 2026-11-17 by deciding only after the last wait:
+- a key typed while sync waited, into a note whose two versions could not be put together, or a day's note, or a long
+  note whose keys were still in the editor (the second `flushEdits()`), or into a day's note still only its template;
+- copies of a version that loses nothing (erased, a template, deleted unchanged, untouched since signing in again):
+  `wordsOnlyIn`; and an erasure undone by a later tombstone.
 
 ## Before you change sync
 
@@ -71,8 +80,9 @@ Found by this model on 2026-11-17 and fixed the same day (each has a case in `sr
 4. If you meant to change what sync does (a new path, an await added or removed, a new reason to force or skip),
    change the matching action, keeping one action per stretch of code without an `await` in it.
 5. Then break it on purpose once and see it fail. Each of these must report `NoWordLost is violated`; undo it after:
-   `ELSE IF rver = head[d]` → `ELSE IF TRUE` (a push over a moved branch); `ELSE IF ~ut[d] \/ loc[d].w = seen[d].w \/
-   loc[d].del` → `ELSE IF TRUE` (no re-check of `seen`); `copies' = copies \cup {Lost(d).w}` → `copies' = copies` (no
-   copy when lww drops a side; also on `EveSyncDay`). Taking out the merge alone (`IF Both(d)` → `IF FALSE`) passes, and
-   should: a conflict copy still keeps every word, only less neatly.
+   `ELSE IF rver = head[d]` → `ELSE IF TRUE` (a push over a moved branch); `IF ut[d] /\ loc[d].w = seen[d].w` →
+   `IF ut[d]` (no re-check of `seen`); `copies' = IF Earlier(d).w ...` → `copies' = copies` (no copy; on both configs);
+   in `Agreed`, `FreshSameId /\ prev[d].none` → `FALSE /\ prev[d].none` (`EveSyncDay`). If a check passes far faster or
+   with far fewer states than before, suspect the model first: an action that cannot fire (a variable both set and
+   listed in its `UNCHANGED`) once hid every copy.
 6. Only once the model describes the new commit, set the sync commit above to it.
