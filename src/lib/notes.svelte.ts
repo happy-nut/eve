@@ -819,7 +819,11 @@ class NotesStore {
     const [first, ...rest] = n.body.split('\n');
     const body = [`${first.trim() ? first : '# ' + titleOf(n)} (conflict copy)`, ...rest].join('\n');
     const copy = history.quietly(() => this.addImported(body, Date.now(), n.parent));
-    if (n.icon) { copy.icon = n.icon; void storage.write(copy.id, serialize(copy)); } // recognisable as the same note
+    if (n.icon) copy.icon = n.icon; // recognisable as the same note
+    // a deleted version that lost: what was written in it before it was deleted goes to the Trash, not back in the list
+    if (n.deleted) copy.deleted = true;
+    if (n.icon || n.deleted) void storage.write(copy.id, serialize(copy));
+    if (n.deleted) return copy;
     ui.toast(`“${titleOf(n)}” was changed on two devices at once: the other version is kept as “${titleOf(copy)}”`);
     return copy;
   }

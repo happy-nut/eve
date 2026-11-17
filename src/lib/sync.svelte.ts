@@ -4,6 +4,11 @@ import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText, me
 import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, signInError, syncError, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
 import { merge3 } from './merge3';
+import { CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, isDailyId } from './daily';
+
+/** a note every device makes under the same id (a day's note, the day template, the calendar's row): one met on
+ *  GitHub with no version agreed on before was made on both, not copied from there */
+const fixedId = (id: string) => isDailyId(id) || id === DAILY_TEMPLATE_ID || id === CALENDAR_NOTE_ID;
 
 /**
  * Sync through a private GitHub repository (see github.ts). Layout mirrors the local notes dir:
@@ -182,7 +187,9 @@ class Sync {
         for (const name of await assets.list()) if (!(ASSETS + name in repo.s.known)) out.push({ path: ASSETS + name, data: await assets.read(name) });
         return out;
       }, async (files: RemoteFile[]) => {
-        const lww: Note[] = [], force: Note[] = [], copies: Note[] = [];
+        // `seen`: the note's words here that a forced note was worked out from. The pull goes on waiting on GitHub
+        // after it, and a key typed meanwhile was written over when the forced note went in
+        const lww: Note[] = [], force: { r: Note; seen?: string }[] = [], copies: Note[] = [];
         for (const f of files) {
           if (f.path.startsWith(ASSETS)) {
             // one this device cannot keep (a name with a space or a leading dot, put there on github.com) is
@@ -197,19 +204,32 @@ class Sync {
           // and the other device's copy does not simply replace it (it replaced the words on screen too, unsaved)
           flushEdits();
           const local = notes.all.find((n) => n.id === r.id);
+          const seen = local?.body;
           const untouched = local && f.prev && (await this.hashes.file(f.path, serialize(local))).sha === f.prev;
           // written on both devices since they last agreed: the newer one used to replace the other, whose words
-          // were gone. Both changes are put together; where they cannot be, the one that would be lost is kept beside
-          if (local && !untouched && f.prev && !r.deleted && !local.deleted && local.body !== r.body) {
-            const base = await repo.blob(f.prev).then((d) => parse(dec.decode(d)), () => null);
-            const both = base ? merge3(base.body, local.body, r.body) : null;
-            if (both !== null) { force.push({ ...(r.updatedAt > local.updatedAt ? r : local), body: both, updatedAt: Date.now() }); continue; }
+          // were gone. Both changes are put together; where they cannot be, the one that would be lost is kept beside.
+          // So too when one device deleted the note and the other wrote in it, and when a day's note (the same id on
+          // every device) was written on both before either synced, with no version they agreed on to merge from
+          if (local && !untouched && local.body !== r.body && (f.prev || (local.updatedAt && fixedId(r.id)))) {
+            if (f.prev && !r.deleted && !local.deleted) {
+              const base = await repo.blob(f.prev).then((d) => parse(dec.decode(d)), () => null);
+              const ours = local.body;
+              const both = base ? merge3(base.body, ours, r.body) : null;
+              if (both !== null) { force.push({ r: { ...(r.updatedAt > local.updatedAt ? r : local), body: both, updatedAt: Date.now() }, seen: ours }); continue; }
+            }
             copies.push({ ...(r.updatedAt > local.updatedAt ? local : r) });
           }
-          (untouched ? force : lww).push(r);
+          if (untouched) force.push({ r, seen }); else lww.push(r);
         }
         notes.mergeRemote(lww);
-        notes.mergeRemote(force, true);
+        notes.mergeRemote(force.map(({ r, seen }) => {
+          const now = notes.all.find((n) => n.id === r.id);
+          if (seen === undefined || !now || now.body === seen || now.deleted) return r;
+          const both = r.deleted ? null : merge3(seen, now.body, r.body);
+          if (both !== null) return { ...r, body: both, updatedAt: Date.now() };
+          copies.push({ ...now }); // deleted there, or not to be put together: what was typed is a note of its own
+          return r;
+        }), true);
         for (const c of copies) notes.keepConflictCopy(c);
       });
       this.save({ lastSynced: Date.now() });
