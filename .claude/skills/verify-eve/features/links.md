@@ -13,10 +13,13 @@ with a click, and the links follow when that note is renamed; `@` puts a day in 
   other notes' saved markdown too.
 - `link-date`: `@tomorrow` opens a calendar with that day chosen; Enter (or a day tapped) leaves a chip, saved as
   `@2026-11-18`. `@` is for days only (and `@remind`): there are no people or page mentions.
-- `link-youtube`: a YouTube address (watch, youtu.be, shorts, live, embed) pasted on an empty line is a player in
-  the note (`.bookmark.yt iframe.yt-frame`), its title and address under it; saved as the bare address. In a
-  sentence it stays a link. On the Mac app the player is a page the app serves on 127.0.0.1 (`net.rs`
-  `player_page`): YouTube refuses a `tauri://` page (error 153, no referrer).
+- `link-video`: a video's address pasted on an empty line plays in the note. YouTube (watch, youtu.be, shorts,
+  live, embed) and Vimeo (`vimeo.com/<id>[/<hash>]`, `player.vimeo.com/video/<id>`) are the site's player
+  (`.bookmark.video iframe.video-frame`), its title and address under it, saved as the bare address. A video
+  file's address (`.mp4`, `.mov`, `.m4v`, `.webm`) is the video block a dropped file is (`figure.vid-fig video`),
+  saved as `[name](address)`. In a sentence each stays a link. On the Mac app YouTube's player is a page the app
+  serves on 127.0.0.1 (`net.rs` `player_page`): YouTube refuses a `tauri://` page (error 153, no referrer);
+  Vimeo plays from `tauri://` as it is. Dailymotion is left out: its player answered "Forbidden" even from http.
 
 ## How to get to it (user POV)
 
@@ -44,11 +47,13 @@ Preconditions: the default notes (Groceries is under Plan, so `[[Gro` has one ma
   type ` due @`, then `t.page.locator('.cal .cal-day', { hasText: /^20$/ }).first().tap()`: a chip `2026.11.20`;
   `t.page.locator('.tiptap .wikilink').first().tap()` opens Groceries, with `Plan / Groceries` in the bar.
 
-- **YouTube.** On an empty line, paste through the page: `const dt = new DataTransfer(); dt.setData('text/plain',
+- **Video.** On an empty line, paste through the page: `const dt = new DataTransfer(); dt.setData('text/plain',
   'https://www.youtube.com/watch?v=aqz-KE-bpKQ'); window.__editor.view.dom.dispatchEvent(new ClipboardEvent('paste',
-  { clipboardData: dt, bubbles: true, cancelable: true }))`; wait for `iframe.yt-frame` and 6 s; the frame from
+  { clipboardData: dt, bubbles: true, cancelable: true }))`; wait for `iframe.video-frame` and 6 s; the frame from
   `t.page.frames()` whose url has `/embed/` reads the video's title; a click at the frame's centre plays it
-  (its `video.currentTime` above 0, `paused` false after 8 s).
+  (its `video.currentTime` above 0, `paused` false after 8 s). The same for `https://vimeo.com/76979871`. A video
+  file plays in the Mac app (`https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4`), not
+  in drive.mjs: Playwright's WebKit has no H.264 (`video.error.code` 4).
 
 Proved on 2026-11-18: `mac-01-pasted`, `mac-02-playing` (Big Buck Bunny, 7.3 s in).
 Proved on 2026-11-17 (0.7.147): `mac-01-picker`, `mac-02-alias`, `mac-03-calendar`, `mac-04-datechip`,
