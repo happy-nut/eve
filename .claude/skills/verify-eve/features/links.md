@@ -18,8 +18,11 @@ with a click, and the links follow when that note is renamed; `@` puts a day in 
   (`.bookmark.video iframe.video-frame`), its title and address under it, saved as the bare address. A video
   file's address (`.mp4`, `.mov`, `.m4v`, `.webm`) is the video block a dropped file is (`figure.vid-fig video`),
   saved as `[name](address)`. In a sentence each stays a link. On the Mac app YouTube's player is a page the app
-  serves on 127.0.0.1 (`net.rs` `player_page`): YouTube refuses a `tauri://` page (error 153, no referrer);
-  Vimeo plays from `tauri://` as it is. Dailymotion is left out: its player answered "Forbidden" even from http.
+  serves on 127.0.0.1 (`net.rs` `player_page`): YouTube refuses a `tauri://` page (error 153, no referrer). In
+  the Mac app a Vimeo address stays a link card: Vimeo's player there (from `tauri://` or from the 127.0.0.1 page)
+  stopped at "copyright problem: playback could not be authorized", its protected playback refused to an app Apple
+  has not signed; with WebKit's protected playback turned off it drew nothing. Dailymotion is left out: its player
+  answered "Forbidden" even from http.
 
 ## How to get to it (user POV)
 
@@ -52,7 +55,7 @@ Preconditions: the default notes (Groceries is under Plan, so `[[Gro` has one ma
   { clipboardData: dt, bubbles: true, cancelable: true }))`; wait for `iframe.video-frame` and 6 s; the frame from
   `t.page.frames()` whose url has `/embed/` reads the video's title; a click at the frame's centre plays it
   (its `video.currentTime` above 0, `paused` false after 8 s). The same for `https://vimeo.com/76979871`. A video
-  file plays in the Mac app (`https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4`), not
+  file plays in the Mac app (`https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4`), not
   in drive.mjs: Playwright's WebKit has no H.264 (`video.error.code` 4).
 
 Proved on 2026-11-18: `mac-01-pasted`, `mac-02-playing` (Big Buck Bunny, 7.3 s in).

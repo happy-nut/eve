@@ -2,7 +2,7 @@ import { Node, getMarkRange, type Editor } from '@tiptap/core';
 import { Plugin, TextSelection, type NodeSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
-import { fetchUrl, openUrl, youtubePlayer } from './platform';
+import { fetchUrl, isMobile, isTauri, openUrl, youtubePlayer } from './platform';
 import { VIDEO_FILE } from './drop';
 
 /**
@@ -57,8 +57,8 @@ const seconds = (t: string) => {
 
 export type Video = { src: string; site: string };
 
-/** The player for a video's address: YouTube's (watch, youtu.be, shorts, live, embed) or Vimeo's; null for any
- * other address. A video file's address is the video block's (video.ts), as a dropped file is */
+/** The player for a video's address: YouTube's (watch, youtu.be, shorts, live, embed) or Vimeo's (not in the Mac
+ * app, whose page Vimeo refuses protected playback: "playback could not be authorized"); null for any other address. A video file's address is the video block's (video.ts), as a dropped file is */
 export function videoOf(href: string): Video | null {
   let u: URL;
   try { u = new URL(href); } catch { return null; }
@@ -72,7 +72,7 @@ export function videoOf(href: string): Video | null {
     const start = seconds(u.searchParams.get('t') ?? u.searchParams.get('start') ?? '');
     return { src: `https://www.youtube-nocookie.com/embed/${id}${start && start !== '0' ? `?start=${start}` : ''}`, site: 'YouTube' };
   }
-  if (site === 'vimeo.com' || site === 'player.vimeo.com') {
+  if ((site === 'vimeo.com' || site === 'player.vimeo.com') && !(isTauri && !isMobile)) {
     const at = path.findLastIndex((p) => /^\d+$/.test(p));
     if (at < 0) return null;
     const hash = u.searchParams.get('h') ?? (/^[\da-f]+$/.test(path[at + 1] ?? '') ? path[at + 1] : '');

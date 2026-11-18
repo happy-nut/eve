@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest';
+import { test, expect, vi } from 'vitest';
 import { editorWith, md, paste } from './testEditor';
 import { videoOf } from './bookmark';
 import type { Editor } from '@tiptap/core';
@@ -93,4 +93,18 @@ test('a video file\'s address pasted on an empty line plays as the file itself, 
   expect(md(ed)).toBe(`# T\n\n[My clip.mp4](${U})`);
   expect(editorWith(md(ed)).view.dom.querySelector('video')?.getAttribute('src')).toBe(U);
   expect(editorWith(`# T\n\n${U}`).view.dom.querySelector('video')?.getAttribute('src')).toBe(U);
+});
+
+test('in the Mac app a Vimeo address is a link card: Vimeo refuses its page protected playback', async () => {
+  vi.resetModules();
+  (window as any).__TAURI_INTERNALS__ = { transformCallback: () => 0, invoke: () => new Promise(() => {}) };
+  try {
+    const mac = await import('./bookmark');
+    expect(mac.videoOf('https://vimeo.com/76979871')).toBeNull();
+    expect(mac.videoOf('https://youtu.be/dQw4w9WgXcQ')?.site).toBe('YouTube');
+  } finally {
+    await new Promise((settled) => setTimeout(settled, 50));
+    delete (window as any).__TAURI_INTERNALS__;
+    vi.resetModules();
+  }
 });
