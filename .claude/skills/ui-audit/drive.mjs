@@ -3,7 +3,8 @@
 // <note.md> is the body of the one open note (markdown); or a folder of notes, each <id>.md (a body, or a whole saved note
 // with its own --- front matter, for a parent: or an icon:), the first by name opened. <steps.mjs> default-exports `async (t) => {...}`.
 // t.page (Playwright page), t.shot(label, locator?), t.click(selector), t.spot(key) (a diagram part by data-spot),
-// t.type(text), t.key(name), t.mod ('Meta' on a Mac host, else 'Control'), t.wait(ms), t.markdown() (the note as it would be saved).
+// t.type(text), t.key(name), t.mod ('Meta' on a Mac host, else 'Control'), t.wait(ms), t.markdown() (the note as it would be saved),
+// t.ok(id, cond, what): a sub-feature's check, `cond` a value or a function waited on for up to 5 s; prints PASS/FAIL <id>, a FAIL stops the run.
 // Prints the saved markdown, page errors and console errors at the end, and screenshots where a step threw.
 import { createRequire } from 'node:module';
 import { readFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
@@ -78,6 +79,15 @@ const t = {
   type: (text) => page.keyboard.type(text),
   key: (name) => page.keyboard.press(name),
   markdown: () => page.evaluate(() => window.__editor?.storage.markdown?.getMarkdown() ?? '(no note open)'),
+  ok: async (id, cond, what) => {
+    let held = typeof cond === 'function' ? false : !!cond;
+    for (const until = Date.now() + 5000; typeof cond === 'function'; await page.waitForTimeout(150)) {
+      held = !!(await cond().catch(() => false));
+      if (held || Date.now() > until) break;
+    }
+    console.log(`${held ? 'PASS' : 'FAIL'} ${id} ${what}`);
+    if (!held) throw new Error(`${id}: ${what}`);
+  },
 };
 
 let failed = false;

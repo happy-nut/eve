@@ -20,12 +20,12 @@ gets all of it back after the app is opened again.
 
 ## Driving it with drive.mjs
 
-Preconditions: the default three notes.
+Preconditions: the default three notes. Run: `node .claude/skills/verify-eve/drives/run.mjs notes` (`drives/notes.mjs`).
 
-- **New note.** `await t.key(`${t.mod}+n`); await t.wait(500); await t.type('Trip');` The sidebar's first row reads
+- `note-new` `note-title` **New note.** `await t.key(`${t.mod}+n`); await t.wait(500); await t.type('Trip');` The sidebar's first row reads
   `Trip`: `t.page.evaluate(() => [...document.querySelectorAll('aside [data-row]')].map((r) => r.textContent.trim()))`.
-- **Sub-page.** Groceries (seeded with `parent: a`) is indented under Plan with a fold arrow by Plan; shot the sidebar.
-- **Kept.** `await t.page.reload(); await t.page.waitForSelector('.tiptap'); await t.wait(800);` Trip is still listed
+- `note-tree` **Sub-page.** Groceries (seeded with `parent: a`) is indented under Plan with a fold arrow by Plan; shot the sidebar.
+- `note-kept` **Kept.** `await t.page.reload(); await t.page.waitForSelector('.tiptap'); await t.wait(800);` Trip is still listed
   and the saved markdown printed at the end still has its lines.
 - **Phone.** With `--phone`: `await t.click('button[aria-label="Back"]:visible'); await t.click('button[aria-label="New note"]:visible'); await t.click('button:visible:has-text("New note")'); await t.click('.tiptap'); await t.type('From the phone'); await t.click('button[aria-label="Back"]:visible');`
   The list shows `From the phone` on top, dated 지금.
