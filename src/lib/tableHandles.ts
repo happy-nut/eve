@@ -60,11 +60,17 @@ export function duplicateColumn(editor: Editor, pos: number, c: number) {
 export function addAtEnd(editor: Editor, pos: number, what: 'row' | 'col') {
   const t = tableAt(editor.state.doc, pos);
   if (!t) return;
-  if (what === 'col') return addColumnAt(editor, pos, t.map.width);
-  editor.chain().setTextSelection(cellPos(pos, t.map, t.map.height - 1, 0) + 2).run();
+  if (what === 'col') addColumnAt(editor, pos, t.map.width); else addRowAt(editor, pos, t.map.height);
+}
+
+/** A row at `edge` (1, under the header row; the table's height, at its foot), the caret into its first cell */
+export function addRowAt(editor: Editor, pos: number, edge: number) {
+  const t = tableAt(editor.state.doc, pos);
+  if (!t) return;
+  editor.chain().setTextSelection(cellPos(pos, t.map, edge - 1, 0) + 2).run();
   editor.chain().addRowAfter().run();
   const n = tableAt(editor.state.doc, pos)!;
-  editor.chain().focus().setTextSelection(cellPos(pos, n.map, n.map.height - 1, 0) + 2).run();
+  editor.chain().focus().setTextSelection(cellPos(pos, n.map, edge, 0) + 2).run();
 }
 
 /** A column at `edge` (0, the left edge; the table's width, the right one), the caret into its first cell */
@@ -92,8 +98,8 @@ class Handles {
   private colGrip = this.button('tbl-grip col', DOTS_H, 'Column: drag to move, click for its menu');
   private addRow = this.button('tbl-add row', PLUS, 'Add a row');
   private addCol = this.button('tbl-add col', PLUS, 'Add a column');
-  private addHere = this.button('tbl-add here', PLUS, 'Add a column here');
-  private edge = 0;
+  private addHere = this.button('tbl-add here', PLUS, 'Add here');
+  private here: { what: 'row' | 'col'; edge: number } = { what: 'col', edge: 0 };
   private line = document.createElement('div'); // where a dragged row (column) would go
   private cur: Over | null = null;
   private dragging: { what: 'row' | 'col'; from: number; to: number } | null = null;
@@ -110,8 +116,13 @@ class Handles {
     for (const b of [this.addRow, this.addCol, this.addHere]) b.addEventListener('mousedown', (e) => e.preventDefault());
     this.addRow.addEventListener('click', () => { const c = this.cur; if (c) { this.hide(); addAtEnd(this.editor, c.pos, 'row'); } });
     this.addCol.addEventListener('click', () => { const c = this.cur; if (c) { this.hide(); addAtEnd(this.editor, c.pos, 'col'); } });
-    this.addHere.addEventListener('click', () => { const c = this.cur; if (c) { this.hide(); addColumnAt(this.editor, c.pos, this.edge); } });
-    this.addHere.addEventListener('mouseenter', () => { if (this.cur) this.drawEdge(this.cur, this.edge); });
+    this.addHere.addEventListener('click', () => {
+      const c = this.cur, { what, edge } = this.here;
+      if (!c) return;
+      this.hide();
+      if (what === 'col') addColumnAt(this.editor, c.pos, edge); else addRowAt(this.editor, c.pos, edge);
+    });
+    this.addHere.addEventListener('mouseenter', () => { if (this.cur) this.drawEdge(this.cur); });
     this.addHere.addEventListener('mouseleave', () => this.line.classList.remove('on'));
   }
 
@@ -173,15 +184,22 @@ class Handles {
     else this.colGrip.classList.remove('on');
     put(this.addRow, { left, top: t.bottom + 3, width: right - left, height: 16 });
     put(this.addCol, { left: right + 3, top: t.top, width: 16, height: t.height });
-    // by the top border, near an edge between two columns or at the left one: a + there puts a column in at that edge
-    // (the right edge is the + bar's)
-    const edges = [...o.table.rows[0].cells].map((c, i, all) => (i ? all[i - 1].getBoundingClientRect().right : c.getBoundingClientRect().left));
-    const near = edges.reduce((b, e, i) => (Math.abs(e - o.x) < Math.abs(edges[b] - o.x) ? i : b), 0);
-    if (Math.abs(o.y - t.top) <= EDGE_REACH && Math.abs(edges[near] - o.x) <= EDGE_REACH && edges[near] >= left - 1) {
-      this.edge = near;
-      put(this.addHere, { left: edges[near] - 8, top: t.top - 8 });
+    // by the top border, near an edge between two columns or at the left one: a + there puts a column in at that edge;
+    // by the left border, near an edge between two rows (under the header row, not over it), a row. The right and
+    // bottom edges are the + bars'
+    const cols = [...o.table.rows[0].cells].map((c, i, all) => (i ? all[i - 1].getBoundingClientRect().right : c.getBoundingClientRect().left));
+    const rows = [...o.table.rows].map((r) => r.getBoundingClientRect().top).slice(1);
+    const nearest = (edges: number[], at: number) => edges.reduce((b, e, i) => (Math.abs(e - at) < Math.abs(edges[b] - at) ? i : b), 0);
+    const c = nearest(cols, o.x), r = rows.length ? nearest(rows, o.y) : -1;
+    if (Math.abs(o.y - t.top) <= EDGE_REACH && Math.abs(cols[c] - o.x) <= EDGE_REACH && cols[c] >= left - 1) {
+      this.here = { what: 'col', edge: c };
+      put(this.addHere, { left: cols[c] - 8, top: t.top - 8 });
       this.colGrip.classList.remove('on');
-      if (near === 0) this.rowGrip.classList.remove('on'); // the header row's ⋮⋮ is just under the left edge's +
+      if (c === 0) this.rowGrip.classList.remove('on'); // the header row's ⋮⋮ is just under the left edge's +
+    } else if (r >= 0 && Math.abs(o.x - left) <= EDGE_REACH && Math.abs(rows[r] - o.y) <= EDGE_REACH) {
+      this.here = { what: 'row', edge: r + 1 };
+      put(this.addHere, { left: left - 8, top: rows[r] - 8 });
+      this.rowGrip.classList.remove('on');
     } else this.addHere.classList.remove('on');
   }
   hide() {
@@ -241,11 +259,17 @@ class Handles {
     this.line.classList.add('on');
   }
 
-  /** the line where a column put in at `edge` will stand, while the pointer is on that edge's + */
-  private drawEdge(o: Over, edge: number) {
-    const host = this.host.getBoundingClientRect(), t = o.table.getBoundingClientRect(), cells = o.table.rows[0].cells;
-    const x = edge ? cells[edge - 1].getBoundingClientRect().right : cells[0].getBoundingClientRect().left;
-    Object.assign(this.line.style, { left: `${x - host.left - 1.5}px`, top: `${t.top - host.top}px`, width: '3px', height: `${t.height}px` });
+  /** the line where a column (row) put in at the + under the pointer will stand */
+  private drawEdge(o: Over) {
+    const host = this.host.getBoundingClientRect(), t = o.table.getBoundingClientRect(), { what, edge } = this.here;
+    if (what === 'col') {
+      const cells = o.table.rows[0].cells, x = edge ? cells[edge - 1].getBoundingClientRect().right : cells[0].getBoundingClientRect().left;
+      Object.assign(this.line.style, { left: `${x - host.left - 1.5}px`, top: `${t.top - host.top}px`, width: '3px', height: `${t.height}px` });
+    } else {
+      const y = o.table.rows[edge].getBoundingClientRect().top, w = o.wrap.getBoundingClientRect();
+      const left = Math.max(t.left, w.left), right = Math.min(t.right, w.right);
+      Object.assign(this.line.style, { left: `${left - host.left}px`, top: `${y - host.top - 1.5}px`, width: `${right - left}px`, height: '3px' });
+    }
     this.line.classList.add('on');
   }
 

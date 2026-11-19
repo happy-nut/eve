@@ -8,7 +8,7 @@ A person puts in a table, writes in its cells without the columns jumping, and d
 - `table-write`: a cell's words wrap in it; every column keeps its width while typing.
 - `table-resize`: dragging a column's edge moves that edge alone.
 - `table-handles`: hovering shows a row's ⋮⋮ on the left, a column's ⋯ on top, + below and right.
-- `table-add-here`: the pointer on the top border by an edge between two columns, or the table's left edge, shows a round + there; on it, a line down that edge; a click puts an empty column in at that edge, the caret in its first cell.
+- `table-add-here`: the pointer on the top border by an edge between two columns, or the table's left edge, shows a round + there; on it, a line down that edge; a click puts an empty column in at that edge, the caret in its first cell. The same on the left border by an edge between two rows (under the header row, not over it) puts a row in.
 - `table-chosen`: the whole table chosen (⌫ at the start of the line under it, or every cell dragged over) is outlined in the accent, as a chosen picture is, its cells no longer tinted.
 - `table-drop-empty`: ⌫ in the first cell of a table with nothing in any cell takes the table out, the caret at the end of the line above; one ⌘Z brings it back.
 - `table-bullets`: "- " at a line's start in a cell makes a bullet ("• "), Enter the next, Enter on an empty one ends the list, ⌫ after "• " a plain line; / Bulleted list (⌘⇧8) toggles it. Saved as `• a<br>• b`, a markdown cell holding no list.
@@ -31,7 +31,8 @@ Preconditions: a fresh note (⌘N). Run: `node .claude/skills/verify-eve/drives/
 
 - `table-add-here` **A column at the left edge.** Move the mouse to the table's top-left corner (`tb.x + 3, tb.y + 1`): `.tbl-add.here.on` is
   centred on the left edge across the top border; on it, `.tbl-drop.on` runs down that edge; a click and `new` typed: the header reads
-  `new | x |  |  `. The edge between columns 2 and 3 the same way puts `mid` between them.
+  `new | x |  |  `. The edge between columns 2 and 3 the same way puts `mid` between them. The left border at the edge under
+  the header row: the + there, a line across, a click and `row` typed: the first column reads `new | row | …`.
 - `table-bullets` **Bullets.** Click the second row's second cell, type `- milk`, Enter, `eggs`, Enter, Enter, `done`: the cell reads `• milk`, `• eggs`, `done` on three lines, saved as `| • milk<br>• eggs<br>done |`.
 
 ## Gotchas

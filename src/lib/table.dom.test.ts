@@ -414,3 +414,15 @@ test.each([[0, ['|  | a1 | b1 |', '| --- | --- | --- |', '|  | a2 | b2 |']], [1,
     ed.commands.undo();
     expect(md(ed)).toBe(note);
   });
+
+test('a row put in at the edge between two rows, from the + on the left border there', async () => {
+  const { addRowAt } = await import('./tableHandles');
+  const ed = editorWith(['| a1 | b1 |', '| --- | --- |', '| a2 | b2 |', '| a3 | b3 |'].join('\n'));
+  const pos = posOf(ed, 'a1') - 4;
+  addRowAt(ed, pos, 2);
+  type(ed, 'z');
+  expect(md(ed).trimEnd().split('\n')).toEqual(['| a1 | b1 |', '| --- | --- |', '| a2 | b2 |', '| z |  |', '| a3 | b3 |']);
+  ed.commands.undo();
+  ed.commands.undo();
+  expect(md(ed).trimEnd().split('\n')).toHaveLength(4);
+});

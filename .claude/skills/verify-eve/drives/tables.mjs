@@ -89,4 +89,20 @@ export default async (t) => {
   await t.type('mid');
   await t.ok('table-add-here', async () => (await t.page.evaluate(() => [...document.querySelector('.tiptap table').rows[0].cells].map((c) => c.textContent).join('|'))) === 'new|x|mid||',
     "the + on the edge between two columns puts one in between them");
+
+  const under = await t.page.evaluate(() => { const tb = document.querySelector('.tiptap table'); return { x: tb.getBoundingClientRect().left, y: tb.rows[1].getBoundingClientRect().top }; });
+  await t.page.mouse.move(under.x + 30, under.y + 10);
+  await t.page.mouse.move(under.x + 3, under.y + 1, { steps: 3 });
+  await t.ok('table-add-here', async () => { const p = await box(t, '.tbl-add.here.on'); return !!p && Math.abs(p.x + p.width / 2 - under.x) <= 2 && Math.abs(p.y + p.height / 2 - under.y) <= 2 && (await t.page.locator('.tbl-grip.row.on').count()) === 0; },
+    "by the left border under the header row, a + on that edge (and no ⋮⋮ under it)");
+  const rp = await box(t, '.tbl-add.here.on');
+  await t.page.mouse.move(rp.x + rp.width / 2, rp.y + rp.height / 2, { steps: 2 });
+  await t.ok('table-add-here', async () => { const l = await box(t, '.tbl-drop.on'); const w = await box(t, '.tiptap .tableWrapper'); return !!l && Math.abs(l.y + l.height / 2 - under.y) <= 2 && l.height <= 4 && l.x + l.width <= w.x + w.width + 1; }, 'on it, a line across that edge, no further than the table is shown');
+  await t.shot('table-add-row-hover');
+  const rat = await box(t, '.tbl-add.here.on');
+  await t.page.mouse.click(rat.x + rat.width / 2, rat.y + rat.height / 2);
+  await t.type('row');
+  await t.ok('table-add-here', async () => (await t.page.evaluate(() => [...document.querySelector('.tiptap table').rows].map((r) => r.cells[0].textContent))).join('|') === 'new|row||',
+    'a click puts an empty row in under the header row, the caret in its first cell');
+  await t.shot('table-add-row', '.tiptap table');
 };
