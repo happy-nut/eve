@@ -45,7 +45,8 @@ await page.addInitScript((notes) => {
   localStorage.setItem('eve.lastNote', notes[0][0]);
 }, seed);
 await page.goto(server.resolvedUrls.local[0]);
-await page.waitForSelector('.tiptap', { timeout: 60000 }); // several runs at once compile slowly
+const appShown = () => page.waitForSelector('.tiptap', { timeout: 60000 }); // several runs at once compile slowly
+await appShown().catch(async () => { await page.reload(); await appShown(); });
 await page.waitForTimeout(1000);
 
 let n = 0;
