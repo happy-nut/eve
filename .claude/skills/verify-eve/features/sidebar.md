@@ -36,28 +36,28 @@ closes the sidebar to write. The phone has the same list as its own screen, rear
 Preconditions: the default three notes plus `d.md` with front matter (a real `updated:`, `order: 3`, `icon: 🌱`) and
 `# Garden` / `Seeds.`. The list starts Plan, Groceries (under Plan), Reading list, 🌱 Garden. Read the list with
 `[...document.querySelectorAll('aside [data-row]')].map((r) => getComputedStyle(r.closest('li')).getPropertyValue('--d') + '|' + r.textContent.trim())`
-(`--d` is the depth).
+(`--d` is the depth). Run: `node .claude/skills/verify-eve/drives/run.mjs sidebar`.
 
-- **Reorder by drag.** `await t.page.dragAndDrop('aside [data-note="c"]', 'aside [data-note="a"]', { targetPosition: { x: 40, y: 3 } });`
+- `sidebar-drag-reorder` **Reorder by drag.** `await t.page.dragAndDrop('aside [data-note="c"]', 'aside [data-note="a"]', { targetPosition: { x: 40, y: 3 } });`
   The list reads `0|Reading list`, `0|Plan`, `1|Groceries`, `0|🌱 Garden`.
-- **Nest by drag.** `await t.page.dragAndDrop('aside [data-note="d"]', 'aside [data-note="a"]', { targetPosition: { x: 40, y: 25 } });`
+- `sidebar-drag-nest` **Nest by drag.** `await t.page.dragAndDrop('aside [data-note="d"]', 'aside [data-note="a"]', { targetPosition: { x: 40, y: 25 } });`
   Garden is `1|` under Plan, above Groceries. After `t.page.reload()` it is still there, and
   `localStorage.getItem('eve.notes.d')` has `parent: a`.
-- **Icon.** `await t.click('aside [data-note="c"] .ico-slot'); await t.page.waitForSelector('[aria-label="Choose an icon"] emoji-picker button.emoji'); await t.click('emoji-picker button.emoji >> nth=3');`
+- `sidebar-icon` **Icon.** `await t.click('aside [data-note="c"] .ico-slot'); await t.page.waitForSelector('[aria-label="Choose an icon"] emoji-picker button.emoji'); await t.click('emoji-picker button.emoji >> nth=3');`
   (the locator reaches into the picker's shadow root). The row reads `😄  Reading list`; open it and the page's head
   shows the big 😄 over `Add cover`.
-- **Jump.** `await t.click('.tiptap'); await t.page.keyboard.down('Meta'); await t.wait(800);` shot the sidebar: 1 2 3 4
+- `sidebar-jump` **Jump.** `await t.click('.tiptap'); await t.page.keyboard.down('Meta'); await t.wait(800);` shot the sidebar: 1 2 3 4
   badges in list order, Groceries' included. `await t.page.keyboard.press('Digit3'); await t.page.keyboard.up('Meta');`
   Reading list is open and `document.activeElement` is the `.tiptap`.
-- **Keys.** From the note: `` await t.key(`${t.mod}+Backslash`) `` focuses the open row (`row c`); `ArrowUp` → Groceries;
+- `sidebar-keys` **Keys.** From the note: `` await t.key(`${t.mod}+Backslash`) `` focuses the open row (`row c`); `ArrowUp` → Groceries;
   `Alt+ArrowDown` on Groceries (the last sub-page) moves it out to the top level after Plan; `Alt+ArrowRight` nests it
   back under Plan; `ArrowUp` → Plan, `ArrowLeft` folds it (Groceries gone, chevron points right); `' '` unfolds;
   `Escape` puts the keyboard back in the `.tiptap`.
-- **Close / open.** With the keyboard in the note, ⌘\ twice (first focuses the list, second closes it): no `aside` on
+- `sidebar-toggle` **Close / open.** With the keyboard in the note, ⌘\ twice (first focuses the list, second closes it): no `aside` on
   the page, the note still has the keyboard. `await t.click('button[aria-label="Sidebar"]')` brings it back.
-- **Fold by click.** `await t.click('aside button[aria-label="Collapse"]');` Groceries is hidden; reload; still hidden;
+- `sidebar-fold` **Fold by click.** `await t.click('aside button[aria-label="Collapse"]');` Groceries is hidden; reload; still hidden;
   `aside button[aria-label="Expand"]` shows it again.
-- **Phone reorder.** With `--phone` the list is up at start. WebKit has no `Touch` constructor, so the finger is a plain
+- `sidebar-phone-reorder` **Phone reorder.** With `--phone` the list is up at start. WebKit has no `Touch` constructor, so the finger is a plain
   `Event('touchstart' | 'touchmove' | 'touchend', { bubbles: true, cancelable: true })` with `touches` /
   `changedTouches` set by `Object.defineProperty` to `[{ identifier: 1, clientX, clientY }]`, dispatched on the row
   (start), then on what was the target: start on Reading list's row, wait 600 ms, 8 moves up to 4 px under Plan's
@@ -82,3 +82,6 @@ after-reload), `shots3/` (drag-kept), `shots4/` (phone-list, phone-lifted, phone
 - ⌘1…⌘9 count the rows shown, sub-pages included, folded ones left out.
 - On a phone a row pulled left asks to delete it (driven in `history-trash.md`); a tap on a row's icon opens the note
   rather than the picker (from `iconTap` in `Sidebar.svelte`, not driven).
+- The open note's pages are unfolded on start: a page folded while one of its own sub-pages is open comes back unfolded after a reload. Open another note before folding to prove the fold is kept.
+- ⌥↑ / ⌥↓ step through slots, an open page above being one: ⌥↑ under a page's sub-page first goes into it (as its last sub-page), the next ⌥↑ passes it.
+- The picker's 4th emoji is not the same in every run (recently used ones come first): read the picked emoji back from the row.

@@ -33,30 +33,30 @@ Screens: `DiagramBlock.svelte` (the block, its dock, the whole screen), `FlowEdi
 
 Preconditions: the default notes. Each diagram goes in on a new line after the last paragraph:
 `await t.click('.tiptap > p >> nth=-1'); await t.key('End'); await t.key('Enter'); await t.type('/flowchart'); await t.wait(300); await t.key('Enter'); await t.wait(900);`
-(the same with `/pie`, `/sequence`, `/swimlanes`).
+(the same with `/pie`, `/sequence`, `/swimlanes`). Run: `node .claude/skills/verify-eve/drives/run.mjs diagrams`
 
-- **Put in.** After `/flowchart`: `await t.page.waitForSelector('.tiptap .mermaid-view svg')`. Start → Ready? → Done is
+- `diagram-new` **Put in.** After `/flowchart`: `await t.page.waitForSelector('.tiptap .mermaid-view svg')`. Start → Ready? → Done is
   drawn, `.tiptap .dblock.active` is there; the markdown has ```mermaid / `flowchart LR`.
-- **Edit a box.** `await t.click('.tiptap .mermaid-view g.node:has-text("Start")'); await t.type('Begin'); await t.key('Escape');`
+- `diagram-edit` `diagram-kept` **Edit a box.** `await t.click('.tiptap .mermaid-view g.node:has-text("Start")'); await t.type('Begin'); await t.key('Escape');`
   The box reads Begin; the mermaid line is `n1(["Begin"])`. The first Esc lets go of the box, the diagram stays open.
-- **+ a step.** `await t.click('.tiptap .mermaid-view g.node:has-text("Done")'); await t.click('.layer button.plus'); await t.type('Ship'); await t.key('Escape');`
+- `diagram-edit` `diagram-kept` **+ a step.** `await t.click('.tiptap .mermaid-view g.node:has-text("Done")'); await t.click('.layer button.plus'); await t.type('Ship'); await t.key('Escape');`
   A box Ship after Done; the markdown adds `n4("Ship")` and `n3 --> n4`. (The dock's + → Box adds a box with no line.)
-- **Undo.** `await t.click('.tiptap .dblock .dock button[aria-label="Undo"]')` twice: first `n4("New step")`, then no
+- `diagram-undo` **Undo.** `await t.click('.tiptap .dblock .dock button[aria-label="Undo"]')` twice: first `n4("New step")`, then no
   n4 and no `n3 --> n4`.
-- **Full screen.** `await t.click('.tiptap .dblock .dock button[aria-label="Full screen"]')`: `.dblock.full[role="dialog"]`,
+- `diagram-full` **Full screen.** `await t.click('.tiptap .dblock .dock button[aria-label="Full screen"]')`: `.dblock.full[role="dialog"]`,
   the drawing at 200%, ✕ at the top right. Esc twice (the first lets go of editing, the second of the screen) or
   `await t.click('button[aria-label="Back to the note"]')`: back in the note, the keyboard in `.tiptap`.
-- **A chart's part (ChartEditor).** After `/pie`: `await t.spot('slice:0'); await t.type('Rent');` the legend reads
+- `diagram-chart` **A chart's part (ChartEditor).** After `/pie`: `await t.spot('slice:0'); await t.type('Rent');` the legend reads
   Rent at once; `await t.click('.layer .bar input[aria-label="Value"]'); await t.key(`${t.mod}+a`); await t.type('70'); await t.key('Enter');`
   the ring and percentages redraw (Rent 58.3%); the markdown is `"Rent" : 70`.
-- **List (DiagramForm).** `await t.click('.tiptap .dblock.active .dock button[aria-label="More"]'); await t.click('[role="menu"] [role="menuitem"]:has-text("List")');`
+- `diagram-list` **List (DiagramForm).** `await t.click('.tiptap .dblock.active .dock button[aria-label="More"]'); await t.click('[role="menu"] [role="menuitem"]:has-text("List")');`
   then `.tiptap .dblock.active .form`. Pie: click `.tiptap .p-slice input.label >> nth=1`, ⌘A, `Food`; `input.num
   >> nth=1`, ⌘A, `20`: legend Rent / Food / C, markdown `"Food" : 20`. Sequence: click
   `.tiptap .form input[aria-label="Message"]`, ⌘A, `Sign in`; `await t.click('.tiptap .form .adds button.add:has-text("Message")'); await t.type('Welcome');`
   a third arrow Welcome is drawn; markdown `p1->>p2: Sign in` … `p1->>p2: Welcome`.
-- **Swimlanes.** After `/swimlanes`: `await t.page.waitForSelector('.tiptap .dblock.active svg.lanes')`: lanes Customer,
+- `diagram-lanes` **Swimlanes.** After `/swimlanes`: `await t.page.waitForSelector('.tiptap .dblock.active svg.lanes')`: lanes Customer,
   Store, Delivery with Order … Receive; the markdown has `flowchart TD` and `subgraph L1["Customer"]` … `L3["Delivery"]`.
-- **Phone.** `t.page.locator('.tiptap p').last().tap()`, `/flowchart`, Enter; tap Start by its box's centre with
+- `diagram-edit` `diagram-full` **Phone.** `t.page.locator('.tiptap p').last().tap()`, `/flowchart`, Enter; tap Start by its box's centre with
   `t.page.touchscreen.tap`; `await t.page.locator('.layer .bar button[aria-label="Edit the text"]').tap()` (the field
   `Step name` takes the keyboard), ⌘A, `Begin`, Enter: `n1(["Begin"])`. ⤢ tapped: whole screen at 89%; ✕ tapped: back.
 
@@ -72,6 +72,9 @@ Proved on 2026-11-17 (0.7.147), shots under `${TMPDIR}/eve-verify/`: `diag-flow/
 - Click boxes through `t.click`/`t.spot` (mouse at the centre): Playwright's own click misplaces SVG text.
 - A pie part typed over and then Esc puts the old name back; Enter (or the Value field) keeps it.
 - On the whole screen the keyboard is on `<body>` by design (`letGo()`); keys reach the diagram from there.
+- The note's undo takes a change made within half a second of the one before as one: after + wait ~700 ms before typing, or ↶ takes the step and its words back together.
+- After ↶ took the added step back, a + stays beside Done with no box picked, and the first Esc changes nothing; the drive leaves the whole screen with ✕ there, and tries Esc twice on a fresh open.
+- `t.click` clicks the element's place on screen: scroll a field below the window into view first, or the click lands on nothing and the diagram closes.
 - A phone's tapped box does not take the keyboard: go through **Text**. Keys typed without it go into the note under
   the diagram.
 - In ⋯ → List a pie row's dot is the colour the chart draws that part in (both from `sliceHues`, `charts.ts`): compare

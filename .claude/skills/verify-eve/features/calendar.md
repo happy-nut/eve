@@ -39,28 +39,28 @@ Preconditions: the default three notes (and, for deleting, `daily-2026-11-10.md`
 `Dentist booked.`). Each run turns daily notes on the way a person does:
 `` await t.key(`${t.mod}+Comma`); await t.page.locator(':has(> .label:has-text("Daily notes")) input.switch').first().click(); await t.key('Escape'); ``
 The list then reads `🗓️  Daily notes`, Plan, Groceries, Reading list. Read the days with
-`[...document.querySelectorAll('.calendar .day.has')].map((d) => d.querySelector('.num').textContent + ':' + (d.querySelector('.line')?.textContent ?? ''))`.
+`[...document.querySelectorAll('.calendar .day.has')].map((d) => d.querySelector('.num').textContent + ':' + (d.querySelector('.line')?.textContent ?? ''))`. Run: `node .claude/skills/verify-eve/drives/run.mjs calendar`
 
-- **Open.** `await t.click('aside [data-row]:has-text("Daily")');` The month (`.calendar .month`, `2026년 11월`) with
+- `daily-on` `calendar-open` **Open.** `await t.click('aside [data-row]:has-text("Daily")');` The month (`.calendar .month`, `2026년 11월`) with
   today ringed and focused.
-- **Keys.** `ArrowRight`, `ArrowDown` move the cursor 17 → 25; `` `${t.mod}+ArrowRight` `` shows `2026년 12월`;
+- `calendar-keys` **Keys.** `ArrowRight`, `ArrowDown` move the cursor 17 → 25; `` `${t.mod}+ArrowRight` `` shows `2026년 12월`;
   `await t.click('.calendar button.today-btn')` comes back with the cursor on today.
-- **A day.** `await t.key('Enter');` → `.card-page` with the day's title; `await t.type('Walked the dog'); await t.key('Escape');`
+- `calendar-day` **A day.** `await t.key('Enter');` → `.card-page` with the day's title; `await t.type('Walked the dog'); await t.key('Escape');`
   The card closes, today's cell reads `Walked the dog`, and `localStorage` has `eve.notes.daily-2026-11-17`.
-- **Template.** `await t.click('.calendar button.tpl'); await t.type('Mood: '); await t.key('Escape');` then
+- `calendar-template` `calendar-today` **Template.** `await t.click('.calendar button.tpl'); await t.type('Mood: '); await t.key('Escape');` then
   `await t.click('button[aria-label="New"]'); await t.click('.menu button[role="menuitem"]:has-text("Today\'s daily note")');`
   The editor shows `2026-11-17 화요일` / `Mood:` (the calendar's icon on its head); typing `good` there and going back
   to the calendar, the 17th reads `Mood:good`.
-- **Delete a day.** `await t.page.click('.calendar .day.has:has(.num:text-is("10"))', { button: 'right' }); await t.click('.menu button[role="menuitem"]:has-text("Delete")'); await t.key('Enter');`
+- `calendar-delete` **Delete a day.** `await t.page.click('.calendar .day.has:has(.num:text-is("10"))', { button: 'right' }); await t.click('.menu button[role="menuitem"]:has-text("Delete")'); await t.key('Enter');`
   The 10th has no line. With the cursor on a day with a note, `await t.key('Backspace')` asks the same question.
-- **Rename.** `await t.page.fill('.calendar input.name', 'Journal'); await t.key('Enter');` The row reads `🗓️ Journal`;
+- `calendar-rename` **Rename.** `await t.page.fill('.calendar input.name', 'Journal'); await t.key('Enter');` The row reads `🗓️ Journal`;
   after a reload the calendar is still open, still `Journal`, the 17th still `Mood:good`.
-- **@ by keys.** In Plan: `await t.click('.tiptap p'); await t.key('End'); await t.key('Enter'); await t.type('Call mum @tom');`
+- `date-at` **@ by keys.** In Plan: `await t.click('.tiptap p'); await t.key('End'); await t.key('Enter'); await t.type('Call mum @tom');`
   `.cal .cal-day.on` is 18; `ArrowRight` → 19; `Enter` → the saved markdown has `Call mum @2026-11-19 `.
-- **Chip.** `await t.click('.tiptap .datechip');` → a menu with `Remind me…`.
-- **@ by mouse.** On a new line `Dentist @`, click `.cal .cal-step[aria-label="Next month"]` by its box
+- `date-chip` **Chip.** `await t.click('.tiptap .datechip');` → a menu with `Remind me…`.
+- `date-at` **@ by mouse.** On a new line `Dentist @`, click `.cal .cal-step[aria-label="Next month"]` by its box
   (`t.page.mouse.click`; the button acts on mousedown), then `.cal .cal-day:not(.out) >> text="5"` → `@2026-12-05`.
-- **Phone.** With `--phone`: `button[aria-label="Back"]:visible`, `aside button[aria-label="Settings"]`, the same
+- `calendar-phone` **Phone.** With `--phone`: `button[aria-label="Back"]:visible`, `aside button[aria-label="Settings"]`, the same
   switch, close, then `t.page.tap('aside [data-row]:has-text("Daily")')` shows the calendar with no list; tap
   `.calendar .day.today` → a `.card-page` sheet with the day's title and `Start writing…`.
 
@@ -83,3 +83,6 @@ sheet (it has no Close button; it goes by a pull down, not driven).
   shows.
 - The `@` calendar's month buttons act on mousedown; `t.click` works by box, Playwright's own click may not.
 - The dates read in the system's language: in this browser `2026년 11월`, `화요일`, `내일`.
+- The drives work out every date from today when they run: the day deleted is seeded on the 27th (the 3rd after the 14th), clear of the days the keys and Enter touch.
+- Today's note from `+` saves its title as a heading, `# 2026-11-19 목요일`, not as a bare first line.
+- A reminder is made by the chip's Remind me… and the `Remind at (HH:MM)` question (`.box[role="dialog"] input`); it is saved `@2026-11-21 09:30 ⏰`, and Stop reminding takes the time and ⏰ off.

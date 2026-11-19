@@ -16,15 +16,16 @@ A person finds a note by a few letters of its name (or of what it says) and open
 
 ## Driving it with drive.mjs
 
-Preconditions: the default three notes, Plan open.
+Preconditions: the default three notes, Plan open. Run: `node .claude/skills/verify-eve/drives/run.mjs search`
 
-- **Narrow.** `await t.key(`${t.mod}+p`); await t.type('groc'); await t.shot('search');` Only Groceries is listed and
+- `search-open` `search-narrow` **Narrow.** `await t.key(`${t.mod}+p`); await t.type('groc'); await t.shot('search');` Only Groceries is listed and
   highlighted; `document.activeElement` is the `Search  ⌘P` input.
-- **Open.** `await t.key('Enter'); await t.wait(500);` The note shows `Groceries` / `milk`, and the saved markdown
+- `search-enter` **Open.** `await t.key('Enter'); await t.wait(500);` The note shows `Groceries` / `milk`, and the saved markdown
   printed at the end is Groceries'.
-- **Click entry.** `await t.click('aside .search input'); await t.type('read');` Reading list alone is listed.
+- `search-narrow` **Click entry.** `await t.click('aside .search input'); await t.type('read');` Reading list alone is listed.
 
 ## Gotchas
 
 - Results come back by title first, then by text: a word only in a body ranks after every title match.
+- Enter empties the box: once the note opens, the whole list is back.
 - On the phone the box says `Search` with no keys, and there is no ⌘P.

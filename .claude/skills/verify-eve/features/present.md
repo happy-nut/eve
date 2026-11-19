@@ -25,19 +25,19 @@ presentation" screen, and Esc gives the note back with the keyboard in it.
 
 Preconditions: one note, `# Talk` / `What this is about.` / `## The flow` with a ```mermaid
 `flowchart LR` of three boxes / `## Last part` / `The last words.`; wait for `.tiptap .mermaid-view svg g.node` and
-~2.5 s for the note's own chart to draw in.
+~2.5 s for the note's own chart to draw in. Run: `node .claude/skills/verify-eve/drives/run.mjs present`.
 
-- **Open.** `await t.click('.note-more'); await t.click('[role="menuitem"]:has-text("Present")'); await t.page.waitForSelector('.present .slide h1');`
+- `present-open` **Open.** `await t.click('.note-more'); await t.click('[role="menuitem"]:has-text("Present")'); await t.page.waitForSelector('.present .slide h1');`
   `.present .count` reads `1 / 3`, the slide's heading `Talk`.
-- **Walk.** `await t.key('ArrowRight')` (wait ~700 ms each): `2 / 3` `The flow`; → and Space: all three boxes shown
+- `present-walk` **Walk.** `await t.key('ArrowRight')` (wait ~700 ms each): `2 / 3` `The flow`; → and Space: all three boxes shown
   (`[...document.querySelectorAll('.present .slide g.node')]` with opacity ≠ 0), still `2 / 3`; → `3 / 3`
   `Last part`; `t.page.mouse.click(1100, 750)` (right, below the words): `.present .end` is there, the count `End`;
   ← back to `3 / 3`; `t.page.mouse.click(100, 450)` (left third) `2 / 3`; Home `1 / 3`.
-- **Leave.** `await t.key('Escape')`: `.present` gone, `document.activeElement` inside `.tiptap`.
-- **Keys.** `await t.key(`${t.mod}+Shift+Enter`)` starts at `1 / 3`; `await t.click('button[aria-label="End the presentation"]')`
+- `present-leave` **Leave.** `await t.key('Escape')`: `.present` gone, `document.activeElement` inside `.tiptap`.
+- `present-open` `present-here` `present-leave` **Keys.** `await t.key(`${t.mod}+Shift+Enter`)` starts at `1 / 3`; `await t.click('button[aria-label="End the presentation"]')`
   leaves; `await t.click('.tiptap p:has-text("The last words.")'); await t.key(`${t.mod}+Alt+Enter`);` starts at
   `3 / 3` `Last part`.
-- **Phone.** With `--phone`: `await t.page.locator('button[aria-label="More"]:visible').tap(); await t.page.locator('.sheet :text-is("Present")').tap();`
+- `present-phone` **Phone.** With `--phone`: `await t.page.locator('button[aria-label="More"]:visible').tap(); await t.page.locator('.sheet :text-is("Present")').tap();`
   then `t.page.touchscreen.tap(330, 500)` turns the page (a one-slide note goes to End),
   `await t.page.locator('button[aria-label="End the presentation"]').tap()` leaves.
 
@@ -49,3 +49,4 @@ Preconditions: one note, `# Talk` / `What this is about.` / `## The flow` with a
 - `e2e/present.mjs` (`npm run e2e:present`) checks sizes, scrolling a long slide and the whole screen in depth; this
   file is the person's path through it.
 - `ArrowRight` on a chart slide is one box, not one slide: count presses by `.present .count`, not by key.
+- A flowchart slide opens with its first box only: on three boxes it takes → twice more (or Space) before the next → turns the page.

@@ -29,13 +29,13 @@ picks a light or dark look that stays after the app is opened again.
 
 ## Driving it with drive.mjs
 
-Preconditions: the default three notes.
+Preconditions: the default three notes. Run: `node .claude/skills/verify-eve/drives/run.mjs settings`.
 
-- **Open.** `await t.key(`${t.mod}+Comma`); await t.page.waitForSelector('[role="dialog"][aria-label="Settings"]');`
+- `settings-open` **Open.** `await t.key(`${t.mod}+Comma`); await t.page.waitForSelector('[role="dialog"][aria-label="Settings"]');`
   The General tab is up over a dimmed app. The gear: `await t.click('aside button[aria-label="Settings"]');`. Phone
   (`--phone`): `await t.click('button[aria-label="Back"]:visible'); await t.page.locator('button[aria-label="Settings"]:visible').tap();`
   shows General, Appearance, Sync full screen, no Shortcuts.
-- **Conflict, then rebind.**
+- `settings-conflict` `settings-rebind` **Conflict, then rebind.**
   ```js
   await t.click('[role="dialog"] button[role="tab"]:has-text("Shortcuts")');
   const row = '[role="dialog"] .row:has(.label:text-is("Search notes"))';
@@ -46,7 +46,7 @@ Preconditions: the default three notes.
   ```
   Then `await t.click('.tiptap'); await t.key(`${t.mod}+j`);` puts the keyboard in the sidebar box, whose placeholder
   now reads `Search  ⌘J`; ⌘P leaves it in the note. After `t.page.reload()` ⌘J still opens search.
-- **Theme.**
+- `settings-theme` **Theme.**
   ```js
   await t.click('[role="dialog"] button[role="tab"]:has-text("Appearance")');
   await t.click('button[aria-label="Theme"]');
@@ -55,7 +55,7 @@ Preconditions: the default three notes.
   `document.documentElement.dataset.theme` is `dark`, `body` is `rgb(11, 12, 16)`. Esc, then ⌘⇧L: `light`,
   `rgb(255, 255, 255)`; after a reload still `light`.
 
-- **Slider.**
+- `settings-slider` **Slider.**
   ```js
   await t.click('[role="dialog"] button[role="tab"]:has-text("Appearance")');
   const s = t.page.locator('input[aria-label="Size"]');
@@ -87,3 +87,4 @@ still 20px / 34px); `slider-phone/shots/phone-01-size` (28px by a tap).
 - A slider clicked or dragged with the mouse does not take the keyboard in Playwright's WebKit: ← → then do
   nothing. Tab to it first.
 - Text's sliders sit below the fold in Appearance: `scrollIntoViewIfNeeded()` before reading the slider's box.
+- Width's value shows as the note column itself: two ← on Width (20 px a step) make `.tiptap` 40 px narrower, also after a reload.

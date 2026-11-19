@@ -47,33 +47,33 @@ Preconditions: the default three notes for making one. For views, seed `p.md` (f
 then a ```` ```database ```` block `{ "title": "Work", "props": [{ "name": "Status", "type": "select", "options":
 ["Not started", "In progress", "Done"] }, { "name": "Due", "type": "date" }], "view": "table" }`) and rows `r1..r3.md`
 with front matter `parent: p`, `Status: …`, `Due: 2026-11-2x` (Write spec / In progress / 11-20, Ship app / Done /
-11-25, Plan launch / Not started / 11-18).
+11-25, Plan launch / Not started / 11-18). Run: `node .claude/skills/verify-eve/drives/run.mjs database` (`drives/database.mjs`, `drives/database.kanban.mjs`, `drives/database.phone.mjs`).
 
-- **Make one.** `` await t.key(`${t.mod}+n`); await t.type('Projects'); await t.key('Enter'); await t.type('/database'); await t.key('Enter'); ``
+- `db-new` **Make one.** `` await t.key(`${t.mod}+n`); await t.type('Projects'); await t.key('Enter'); await t.type('/database'); await t.key('Enter'); ``
   Heads read Name, Status, Due, +.
-- **Rows and cells.** `await t.click('.db button.new'); await t.type('Write spec'); await t.key('Enter');` (the
+- `db-row` `db-cells` **Rows and cells.** `await t.click('.db button.new'); await t.type('Write spec'); await t.key('Enter');` (the
   keyboard is in `Title`); `await t.click('.db tbody tr:nth-child(1) button.chips[aria-label="Status"]'); await t.click('.menu button[role="menuitem"]:has-text("In progress")');`
   `await t.page.fill('.db tbody tr:nth-child(1) input[type=date][aria-label="Due"]', '2026-11-20');` The row's
   `localStorage` file has `parent: <page>`, `Status: In progress`, `Due: 2026-11-20`.
-- **A property.** `await t.click('.db button[aria-label="Add a property"]'); await t.click('.menu button[role="menuitem"]:has-text("Number")'); await t.page.keyboard.press(`${t.mod}+a`); await t.type('Hours'); await t.key('Enter');`
+- `db-props` **A property.** `await t.click('.db button[aria-label="Add a property"]'); await t.click('.menu button[role="menuitem"]:has-text("Number")'); await t.page.keyboard.press(`${t.mod}+a`); await t.type('Hours'); await t.key('Enter');`
   For Formula the same, then click the formula field (`[role="dialog"] input:visible`) before typing
   `prop("Hours") * 10` and Enter: Cost reads 30 and 0. Checkbox: click `input[type=checkbox][aria-label="Paid"]`.
   Tags: its chips → `New choice…` → type → Enter. Relation: after the name, `Any note`, then its chips (scroll them in
   with `locator.scrollIntoViewIfNeeded()` first: the table is wider than the page) → a note's name.
-- **Sort and filter.** `await t.click('.db thead button.head:has-text("Due")'); await t.click('.menu button[role="menuitem"]:has-text("Sort ascending")');`
+- `db-sort-filter` **Sort and filter.** `await t.click('.db thead button.head:has-text("Due")'); await t.click('.menu button[role="menuitem"]:has-text("Sort ascending")');`
   → Plan launch, Write spec, Ship app. Status head → `Only “Done”` → Ship app alone; `.db .note button.link`
   (`show all`) brings the rest back.
-- **Board.** `await t.click('.db .views button[role="tab"]:has-text("Board")');` Columns `.db .col[role="group"]`
+- `db-board` **Board.** `await t.click('.db .views button[role="tab"]:has-text("Board")');` Columns `.db .col[role="group"]`
   labelled by choice. `await t.page.dragAndDrop('.db button.card:has-text("Plan launch")', '.db .col[aria-label="Done"]');`
   → Done has Plan launch and Ship app, `r3` has `Status: Done`; `` await t.key(`${t.mod}+z`) `` → back in Not started,
   and so after a reload.
-- **Calendar, Gallery.** The tabs: Plan launch on 11-18, Write spec 11-20, Ship app 11-25 (`.db .day[aria-label]`);
+- `db-calendar` `db-gallery` **Calendar, Gallery.** The tabs: Plan launch on 11-18, Write spec 11-20, Ship app 11-25 (`.db .day[aria-label]`);
   `.db .g-card` cards with `About …`, Status and Due.
-- **Open, delete.** Hover the row, `button[aria-label="Open"]` → the row's page; `button[aria-label="Row menu"]` →
+- `db-open-row` `db-delete-row` **Open, delete.** Hover the row, `button[aria-label="Open"]` → the row's page; `button[aria-label="Row menu"]` →
   `Delete row` → gone from the table and the sidebar, `deleted: true`.
-- **Phone.** With `--phone` and the seeded database open: Board tab, `.db .col[aria-label="Not started"] button.new`
+- `db-phone` **Phone.** With `--phone` and the seeded database open: Board tab, `.db .col[aria-label="Not started"] button.new`
   → a `Name` sheet with the keyboard in it, `Write docs`, OK → a card in Not started; tap it → the row's page.
-- **Kanban.** `/kanban` in a new note; `await t.click('.kb-col:nth-child(1) .kb-add'); await t.type('Buy milk'); await t.key('Enter'); await t.type('Two bottles.'); await t.key('Escape');`
+- `kanban-new` `kanban-card` `kanban-move` `kanban-delete` **Kanban.** `/kanban` in a new note; `await t.click('.kb-col:nth-child(1) .kb-add'); await t.type('Buy milk'); await t.key('Enter'); await t.type('Two bottles.'); await t.key('Escape');`
   `await t.page.dragAndDrop('.kb-card:has-text("Fix tap")', '.kb-col:nth-child(2)');` moves a card. Open a card,
   `.card-page button[aria-label="Move to another column"]`, pick a column. `.card-page button[aria-label="Delete card"]`,
   Enter; `` `${t.mod}+z` `` brings it back. Read the board with
@@ -96,3 +96,7 @@ kanban card page on a phone.
 - The table and the phone's board are wider than the page: scroll a cell or a column into view before clicking it.
 - Delete row asks nothing (the row goes to the Trash); Delete card asks first.
 - A kanban card lives in the note's JSON, not as a page: the sidebar does not list it (a database row it does).
+- A page with no parent has no crumbs: wait for it by the first line of `.tiptap`, not `.crumb.here`.
+- After a few added properties the `+` head is past the table's right edge: scroll it into view before clicking it.
+- A sort set in the table holds in the board too: the cards in a column follow it.
+- The Calendar opens on this month: the drive seeds the Due days in the current month.

@@ -28,20 +28,20 @@ Screens: `Tooltip.svelte` (any element with `data-tip`, and `data-keys`), `Hint.
 
 ## Driving it with drive.mjs
 
-Preconditions: the default notes.
+Preconditions: the default notes. Run: `node .claude/skills/verify-eve/drives/run.mjs hints`.
 
-- **Tooltip.** `const b = await t.page.locator('button[aria-label="New"]').boundingBox(); await t.page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await t.wait(700);`
+- `tooltip-show` `tooltip-hide` **Tooltip.** `const b = await t.page.locator('button[aria-label="New"]').boundingBox(); await t.page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await t.wait(700);`
   `.tip` reads `New⌘N`. `await t.key('Shift')`: no `.tip`. The gear (`aside button[aria-label="Settings"]`): `.tip`
   `Settings⌘,` sits above it, inside the window. The mouse moved off: gone.
-- **Tip.** `await t.click('.tiptap > p >> nth=-1'); await t.key('End'); await t.key('Enter'); await t.type('/callout'); await t.wait(300); await t.key('Enter'); await t.wait(500); await t.type('x');`
+- `hint-show` **Tip.** `await t.click('.tiptap > p >> nth=-1'); await t.key('End'); await t.key('Enter'); await t.type('/callout'); await t.wait(300); await t.key('Enter'); await t.wait(500); await t.type('x');`
   `.hint[role="status"]` reads `💡 Callout has a shortcut ⌘ ⇧ C ×`.
-- **Dismiss.** `await t.click('.hint button[aria-label="Dismiss"]')`: no `.hint`; `await t.type('zz')` lands in the callout
+- `hint-dismiss` **Dismiss.** `await t.click('.hint button[aria-label="Dismiss"]')`: no `.hint`; `await t.type('zz')` lands in the callout
   (`> xzz` in the markdown).
-- **Limits.** `/callout` again at once: no tip (25 s gap). After `t.wait(26000)`: the tip again (2nd); gone 5.5 s later
+- `hint-limits` **Limits.** `/callout` again at once: no tip (25 s gap). After `t.wait(26000)`: the tip again (2nd); gone 5.5 s later
   by itself. After another 25 s: 3rd. After another 26 s: none, and `localStorage['eve.hints']` has `"callout":3`.
-- **Off.** `await t.key(`${t.mod}+Comma`)`, then `const sw = t.page.locator('input[aria-label="Show tips"]'); await sw.scrollIntoViewIfNeeded(); await t.click('input[aria-label="Show tips"]');`
+- `hint-off` **Off.** `await t.key(`${t.mod}+Comma`)`, then `const sw = t.page.locator('input[aria-label="Show tips"]'); await sw.scrollIntoViewIfNeeded(); await t.click('input[aria-label="Show tips"]');`
   `eve.hints` has `"off":true`; Esc, `/callout`: no `.hint`.
-- **Phone.** `--phone`: `/callout` typed in the note, then `.hint` count is 0.
+- `hint-phone` **Phone.** `--phone`: `/callout` typed in the note, then `.hint` count is 0.
 
 Proved on 2026-11-17 (0.7.147), shots under `${TMPDIR}/eve-verify/`: `hints/shots/mac-01-tip-new`, `mac-02-tip-gear`,
 `mac-03-hint-callout`, `mac-04-hint-gone` (the 4th time, none); `hints3/shots/mac-01-tip-hidden-by-key`,
@@ -58,3 +58,5 @@ Proved on 2026-11-17 (0.7.147), shots under `${TMPDIR}/eve-verify/`: `hints/shot
   not by `document.activeElement`.
 - Show tips sits below the window's fold in Settings: scroll it into view before `t.click`, or the click lands
   elsewhere and nothing changes.
+- The drive does not wait out the 25 s gaps: `t.page.clock.install()` and a reload at the start, then `t.page.clock.fastForward(26_000)` before each tip; the 5 s that put a tip away still pass as real time.
+- A phone has no `.tip` even for a tap on a button with `data-tip` (the list's fold chevron).

@@ -32,7 +32,7 @@ keyboard, and the chevron at the top goes back from a note to the list.
 
 Run with `--phone`. Preconditions: Plan with three lines (`First line.`, `Second line of the plan.`,
 `Third line, not shown in the list.`), Groceries (`parent: a`, `milk` / `eggs`), Reading list (`A book.` /
-`Another book.`).
+`Another book.`). Run: `node .claude/skills/verify-eve/drives/run.mjs phone`
 
 A swipe is touch events on the row: WebKit's `Touch` constructor is refused ("Illegal constructor"), so the steps
 build a `TouchEvent` and give it `touches` by hand; the app's own `swipeRow` and drawer listeners take them as they are.
@@ -57,21 +57,21 @@ const swipe = (t, sel, dx) => t.page.evaluate(async ({ sel, dx }) => {
 }, { sel, dx });
 ```
 
-- **Opens on the note.** At start `.tiptap` shows Plan and there is no `aside`.
-- **Bar.** `await t.page.locator('.tiptap p:has-text("Second line")').tap(); await t.page.setViewportSize({ width: 390, height: 470 });`
+- `phone-open` **Opens on the note.** At start `.tiptap` shows Plan and there is no `aside`.
+- `phone-bar` **Bar.** `await t.page.locator('.tiptap p:has-text("Second line")').tap(); await t.page.setViewportSize({ width: 390, height: 470 });`
   `.mbar` is there; `await t.page.locator('.mbar button[aria-label="To-do"]').tap()` makes the saved line
   `- [ ] Second line of the plan.`; `.mbar button[aria-label="Done"]` tapped (and the size put back): no `.mbar`.
-- **Sheet.** `await t.page.locator('button[aria-label="More"]:visible').tap()` brings `.sheet` with the items above;
+- `phone-sheet` **Sheet.** `await t.page.locator('button[aria-label="More"]:visible').tap()` brings `.sheet` with the items above;
   `await t.page.touchscreen.tap(195, 80)` (the dim page): no `.sheet`.
-- **List.** `await t.page.locator('button[aria-label="Back"]:visible').tap()`; each `aside [data-row]` has `.t`,
+- `phone-list` **List.** `await t.page.locator('button[aria-label="Back"]:visible').tap()`; each `aside [data-row]` has `.t`,
   `.when` and `.preview` (Plan's preview holds all three lines' text, cut to two lines on screen).
-- **Swipe.** `await touchHelper(t); await swipe(t, 'aside [data-row][data-note="c"]', -220);` brings
+- `phone-swipe` **Swipe.** `await touchHelper(t); await swipe(t, 'aside [data-row][data-note="c"]', -220);` brings
   `[role="dialog"].box` `Delete “Reading list”?`; `await t.page.locator('[role="dialog"].box button:text-is("Delete")').tap()`:
   the row is gone, `localStorage['eve.notes.c']` has `deleted: true`, a toast says `Deleted “Reading list”` / Undo.
-- **Long press, move.** With the helper: `touchstart` on `aside [data-row][data-note="c"]`, wait 600 ms, 12
+- `phone-reorder` **Long press, move.** With the helper: `touchstart` on `aside [data-row][data-note="c"]`, wait 600 ms, 12
   `touchmove`s ~30 ms apart up to 6 px under the top of Plan's row: `.lifted` is on the page; `touchend`: the rows
   read Reading list, Plan, Groceries.
-- **New, pull down, back.** `await t.page.locator('button[aria-label="New note"]:visible').tap()` brings a sheet with
+- `phone-sheet` `phone-back` **New, pull down, back.** `await t.page.locator('button[aria-label="New note"]:visible').tap()` brings a sheet with
   `New note`; a `touchstart` / `touchmove` 250 px down / `touchend` on `.sheet` (the helper, y instead of x) closes it;
   tap `+` again, `.sheet button:has-text("New note")`, tap `.tiptap`, type `From the phone`, ‹: the list starts
   `From the phone 지금`.
@@ -83,3 +83,5 @@ const swipe = (t, sel, dx) => t.page.evaluate(async ({ sel, dx }) => {
 - A sheet's dim page (`.scrim`) is over the ‹: a tap on ‹ with a sheet up times out. Close the sheet first.
 - The delete confirm is `Confirm.svelte` (`[role="dialog"].box`), not a `.sheet`.
 - The swipe must be quick (moves ~16 ms apart) and mostly sideways, or it is taken for a scroll or a long press.
+- Long-press before the swipe: the swipe deletes Reading list, the row the long press lifts.
+- A to-do line is `ul[data-type="taskList"] > li`: the `li` itself has no `data-type`.

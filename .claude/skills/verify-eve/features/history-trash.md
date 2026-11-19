@@ -9,7 +9,7 @@ good. Versions come from the sync repository's commits, so they exist only with 
 - `trash-delete`: a row's × (`Delete note`), ⌘⇧⌫ on the open note, or the phone's bin in the note's bar asks
   `Delete “<title>”?`; Delete (or ↩) moves the note to the Trash (`deleted: true` in its file) and a toast
   `Deleted “<title>”` offers Undo.
-- `trash-undo`: the toast's Undo brings the note back, open.
+- `trash-undo`: the toast's Undo puts things back as they were before the delete: the note is in the list again, and open if it was the open note.
 - `trash-swipe`: on a phone a row pulled to the left shows a red Delete under it; let go, the same question comes up.
 - `trash-open`: the sidebar's bin (`aside button[aria-label="Trash"]`), or on a phone ⋯ → Trash…, opens the `Trash` panel, the
   keyboard in its `Search the trash` box; rows newest first, each with Restore and Delete for good.
@@ -36,28 +36,28 @@ good. Versions come from the sync repository's commits, so they exist only with 
 ## Driving it with drive.mjs
 
 Preconditions: the default three notes plus `e.md` `# Old idea` / `Gone soon.`. Read a note's state with
-`localStorage.getItem('eve.notes.<id>')` (`deleted: true|false`).
+`localStorage.getItem('eve.notes.<id>')` (`deleted: true|false`). Run: `node .claude/skills/verify-eve/drives/run.mjs history-trash`
 
-- **Delete by ×.** The × shows only once the mouse has moved over the row (`html[data-hover]`) and the tools slid
+- `trash-delete` **Delete by ×.** The × shows only once the mouse has moved over the row (`html[data-hover]`) and the tools slid
   open: `await t.page.hover('aside [data-note="c"]', { position: { x: 20, y: 10 } }); await t.page.hover('aside [data-note="c"]', { position: { x: 60, y: 14 } }); await t.wait(400); await t.click('aside [data-note="c"] ~ .tools button[aria-label="Delete note"]'); await t.key('Enter');`
   Reading list leaves the list, `deleted: true`, the toast `Deleted “Reading list”  Undo` is at the bottom.
-- **Delete by key.** Open Old idea, `` await t.key(`${t.mod}+Shift+Backspace`); await t.click('button.primary:has-text("Delete")'); ``
+- `trash-delete` **Delete by key.** Open Old idea, `` await t.key(`${t.mod}+Shift+Backspace`); await t.click('button.primary:has-text("Delete")'); ``
   The next note (Groceries) opens.
-- **Delete from the list.** `await t.page.click('aside [data-note="e"]', { button: 'right' }); await t.click('.menu button[role="menuitem"]:has-text("Delete note")'); await t.key('Enter');`
+- `trash-delete` **Delete from the list.** `await t.page.click('aside [data-note="e"]', { button: 'right' }); await t.click('.menu button[role="menuitem"]:has-text("Delete note")'); await t.key('Enter');`
   Old idea goes and the keyboard is on the next row (Reading list); `await t.key('Backspace')` there asks
   `Delete “Reading list”?`, Enter deletes it and the keyboard moves to Groceries' row.
-- **Undo.** Right after a delete: `await t.click('.toast button:has-text("Undo")');` Old idea is back in the list and
+- `trash-undo` **Undo.** Right after a delete: `await t.click('.toast button:has-text("Undo")');` Old idea is back in the list and
   open.
-- **Trash.** `await t.click('aside button[aria-label="Trash"]');` lists Old idea and Reading list; `await t.type('read')`
+- `trash-open` `trash-search` `trash-restore` **Trash.** `await t.click('aside button[aria-label="Trash"]');` lists Old idea and Reading list; `await t.type('read')`
   leaves Reading list; clear the box, then `await t.click('[aria-label="Trash"][role="dialog"] li:has-text("Reading list") button[aria-label="Restore"]');`
   The panel is gone, Reading list is back and open, `deleted: false`.
-- **For good.** `await t.click('aside button[aria-label="Trash"]'); await t.click('[aria-label="Trash"][role="dialog"] li:has-text("Old idea") button[aria-label="Delete for good"]'); await t.key('Enter');`
+- `trash-erase` **For good.** `await t.click('aside button[aria-label="Trash"]'); await t.click('[aria-label="Trash"][role="dialog"] li:has-text("Old idea") button[aria-label="Delete for good"]'); await t.key('Enter');`
   The panel says `Nothing in the trash. …`; after a reload Old idea is still gone, its file `---\nid: e\n…deleted: true\norder: 3\n---\n`.
-- **Empty.** With two in the Trash, `button:has-text("Empty trash")`, then `button.primary:has-text("Delete")`: both
+- `trash-empty` **Empty.** With two in the Trash, `button:has-text("Empty trash")`, then `button.primary:has-text("Delete")`: both
   files are tombstones, the list keeps the rest.
-- **History, sync off.** ⋯ (`button[aria-label="More"]`) → `Version history…`: the panel's text is the "Versions come
+- `history-off` **History, sync off.** ⋯ (`button[aria-label="More"]`) → `Version history…`: the panel's text is the "Versions come
   from sync…" line.
-- **History, sync on (a GitHub stand-in).** The web build has no real sync here, so GitHub is answered by Playwright:
+- `history-list` `history-restore` **History, sync on (a GitHub stand-in).** The web build has no real sync here, so GitHub is answered by Playwright:
   `t.page.route('https://api.github.com/**', …)` returns two commits for `GET …/commits?sha=main&path=notes%2Fa.md`
   (`[{ sha: 'c2', commit: { committer: { date } } }, { sha: 'c1', … }]`), `{ content: base64(<whole note file>) }` for
   `GET …/contents/notes/a.md?ref=<sha>`, and 503 for everything else. Then
@@ -66,7 +66,7 @@ Preconditions: the default three notes plus `e.md` `# Old idea` / `Gone soon.`. 
   `ul[aria-label="Versions"] li:nth-child(2) button`: the older text is drawn. `Restore this version`: the panel
   closes, the note reads the older text, the toast says `Restored the version from …`, and `eve.notes.a` holds it.
   The sidebar says `sync error` (the other calls got 503) and one console error for it is expected.
-- **Phone.** With `--phone` (a note open at start): `button[aria-label="Delete note"]:visible` then
+- `trash-delete` `trash-swipe` `trash-open` **Phone.** With `--phone` (a note open at start): `button[aria-label="Delete note"]:visible` then
   `button.primary:has-text("Delete")` deletes it and shows the list. A pull to the left is plain
   `Event('touchstart' | 'touchmove' | 'touchend')` with `touches` set by `Object.defineProperty` (WebKit has no
   `Touch` constructor): start at the row's right, 10 moves of 25 px left, end, wait 1.2 s; the row shows the red
@@ -91,4 +91,8 @@ the ⋯ sheet, the panel itself was not opened there).
 - `t.click` on the × before the hover has opened `.tools` clicks a 0-wide box and hits nothing.
 - The phone's question comes up 120 ms after the finger lifts, sliding: wait about a second before tapping it.
 - Restoring opens the note; a toast from the delete may still be up after it.
+- Undo brings back the step before the delete: a note deleted while another was open comes back, but the open note stays
+  the one that was open; only a deleted open note comes back open.
+- The `어제` row needs a commit dated yesterday by the calendar (yesterday noon), not 24 h ago: after midnight that is two days back.
+- A drive file cannot import `drives/run.mjs` for its notes: importing it runs every drive.
 - Erasing never removes the file: sync needs the tombstone to delete the note on other devices.

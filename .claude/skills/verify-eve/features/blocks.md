@@ -29,10 +29,10 @@ nest as a document numbers them, code, highlighted and coloured words.
 ## Driving it with drive.mjs
 
 Preconditions: `a.md` is `# Plan`, `First line.`, then `> [!warning] Careful` / `> mind the step`; `c.md` as the
-default. The typed blocks go in a fresh note (⌘N, `Blocks`, Enter).
+default. The typed blocks go in a fresh note (⌘N, `Blocks`, Enter). Run: `node .claude/skills/verify-eve/drives/run.mjs blocks`
 
-- **Callout read.** `.tiptap .callout` has `data-color="orange"`, `.callout-emoji` is ⚠️; `t.shot('callout-read', '.tiptap')`.
-- **All typed blocks, one after another.**
+- `block-callout-read` **Callout read.** `.tiptap .callout` has `data-color="orange"`, `.callout-emoji` is ⚠️; `t.shot('callout-read', '.tiptap')`.
+- `block-callout-new` `block-toggle` `block-list-nest` `block-code` `block-highlight` **All typed blocks, one after another.**
   `await t.type('/callout'); await t.page.waitForSelector('.suggest li'); await t.key('Enter'); await t.type('boxed words'); await t.key('Enter'); await t.key('Enter');`
   `await t.type('> '); await t.type('Fold me'); await t.key('Enter'); await t.type('hidden body'); await t.key('Enter'); await t.key('Enter');`
   `await t.type('1. one'); await t.key('Enter'); await t.key('Tab'); await t.type('two'); await t.key('Enter'); await t.key('Tab'); await t.type('three');`
@@ -40,12 +40,12 @@ default. The typed blocks go in a fresh note (⌘N, `Blocks`, Enter).
   `await t.key('ArrowDown'); await t.key('ArrowDown'); await t.type('a ==bright== word and red');`
   The saved markdown is `> [!💡]` / `> boxed words`, `<details open>` / `<summary>Fold me</summary>` /
   `hidden body`, `1. one` / `   1. two` / `      1. three`, a ```` ``` ```` block, `a ==bright== word and red`.
-- **Colour.** `await t.key('Enter'); await t.type('now in red /red'); await t.page.waitForSelector('.suggest li');`
+- `block-color` **Colour.** `await t.key('Enter'); await t.type('now in red /red'); await t.page.waitForSelector('.suggest li');`
   the first row is `Red` (hint `text color`); `await t.key('Enter')`: the words are `rgb(196, 48, 43)` and saved in a
   `<span style="color: #c4302b">`.
-- **Fold.** `await t.click('.tiptap [data-type="details"] > button')`: the body hides, the node loses `is-open`,
+- `block-toggle` **Fold.** `await t.click('.tiptap [data-type="details"] > button')`: the body hides, the node loses `is-open`,
   the markdown says `<details>`.
-- **Phone.** Tap the last `.tiptap p`, mimic the keyboard (`setViewportSize 390×470`), type `1. one` Enter, tap
+- `block-list-nest` `block-highlight` **Phone.** Tap the last `.tiptap p`, mimic the keyboard (`setViewportSize 390×470`), type `1. one` Enter, tap
   `.mbar button[aria-label="Indent"]`, `two` Enter, Indent, `three`; then four Enters, tap
   `.mbar button[aria-label="Highlight"]` and type `glow`: `1.`/`a.`/`i.` and a yellow `glow`, saved `==glow==`.
 
@@ -64,3 +64,5 @@ Proved on 2026-11-17 (0.7.147): `mac-01-callout-read`, `mac-02-blocks` (every ty
 - `/red` on an empty line colours what is typed next on it, until the caret moves (as Notion colours an empty block):
   the saved line is `<span style="color: #c4302b">typed after</span>`.
 - The bar's Insert block types `/` at the caret, inside a mark if one is on: after Highlight it saved `==glow /==`.
+- `now in red /red` keeps the space before the `/` inside the colour: saved `<span style="color: #c4302b">now in red </span>`.
+- A drive cannot `import` from `drives/run.mjs` (importing it starts a run): write a default note out in its own `notes`.

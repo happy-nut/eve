@@ -32,25 +32,25 @@ with a click, and the links follow when that note is renamed; `@` puts a day in 
 
 ## Driving it with drive.mjs
 
-Preconditions: the default notes (Groceries is under Plan, so `[[Gro` has one match).
+Preconditions: the default notes (Groceries is under Plan, so `[[Gro` has one match). Run: `node .claude/skills/verify-eve/drives/run.mjs links`
 
-- **Picker.** `await t.click('.tiptap p'); await t.key('End'); await t.key('Enter'); await t.type('see [[Gro'); await t.page.waitForSelector('.suggest li');`
+- `link-picker` **Picker.** `await t.click('.tiptap p'); await t.key('End'); await t.key('Enter'); await t.type('see [[Gro'); await t.page.waitForSelector('.suggest li');`
   The rows are `Groceries` (chosen) and `Gro new note`. `await t.key('Enter')`: a `.tiptap .wikilink` reading
   `Groceries`; the markdown has `see [[Groceries]] ` (the picker adds the space).
-- **Alias.** `await t.type(' and [[Reading list|books]] ')`: the second `.wikilink` reads `books`; the markdown keeps
+- `link-alias` **Alias.** `await t.type(' and [[Reading list|books]] ')`: the second `.wikilink` reads `books`; the markdown keeps
   `[[Reading list|books]]`.
-- **Date.** `await t.type('due @tomorrow'); await t.page.waitForSelector('.cal');` the month shows with tomorrow
+- `link-date` **Date.** `await t.type('due @tomorrow'); await t.page.waitForSelector('.cal');` the month shows with tomorrow
   chosen. `await t.key('Enter')`: a `.tiptap .datechip` (its label in the host's language, `내일` here); the markdown
   ends `due @2026-11-18`.
-- **Open.** `await t.click('.tiptap .wikilink >> nth=1')`: Reading list is open (`.tiptap h1`), with `1 link here`.
+- `link-open` **Open.** `await t.click('.tiptap .wikilink >> nth=1')`: Reading list is open (`.tiptap h1`), with `1 link here`.
   Back by `await t.click('aside [data-row]:has-text("Plan")')`.
-- **Rename.** Open Groceries by its link, `await t.click('.tiptap h1'); await t.key('End'); await t.type(' 2'); await t.wait(1500);`
+- `link-rename` **Rename.** Open Groceries by its link, `await t.click('.tiptap h1'); await t.key('End'); await t.type(' 2'); await t.wait(1500);`
   then back to Plan by its sidebar row: the link reads `Groceries 2` and the saved markdown has `[[Groceries 2]]`.
 - **Phone.** `t.page.locator('.tiptap p').last().tap()`, type `see [[Gro`, `t.page.locator('.suggest li').first().tap()`;
   type ` due @`, then `t.page.locator('.cal .cal-day', { hasText: /^20$/ }).first().tap()`: a chip `2026.11.20`;
   `t.page.locator('.tiptap .wikilink').first().tap()` opens Groceries, with `Plan / Groceries` in the bar.
 
-- **Video.** On an empty line, paste through the page: `const dt = new DataTransfer(); dt.setData('text/plain',
+- `link-video` **Video.** On an empty line, paste through the page: `const dt = new DataTransfer(); dt.setData('text/plain',
   'https://www.youtube.com/watch?v=aqz-KE-bpKQ'); window.__editor.view.dom.dispatchEvent(new ClipboardEvent('paste',
   { clipboardData: dt, bubbles: true, cancelable: true }))`; wait for `iframe.video-frame` and 6 s; the frame from
   `t.page.frames()` whose url has `/embed/` reads the video's title; a click at the frame's centre plays it
@@ -74,3 +74,5 @@ Proved on 2026-11-17 (0.7.147): `mac-01-picker`, `mac-02-alias`, `mac-03-calenda
   edit is written.
 - The picker's trailing space plus one typed makes two spaces; expect `[[Groceries]]  and` in the markdown.
 - A date chip's label is in the browser's language (`내일`, `2026.11.20`); check the markdown for the day.
+- In the web build the name under a video's player stays the site's (`YouTube`, `Vimeo`): fetching the video's page for its title is refused by CORS, and WebKit prints that as page errors at the end of the run. Check the player's `src`, the address under it and the saved markdown instead.
+- An address pasted in a sentence is saved as `<https://…>`.

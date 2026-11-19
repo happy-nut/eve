@@ -25,22 +25,22 @@ it looks, drawn where it sits, edited by a click on it. The note keeps `$…$` a
 ## Driving it with drive.mjs
 
 Preconditions: `a.md` is `# Sums` / `Half:`; `c.md` as the default. The field is open when
-`.tiptap math-field` exists; closed when it is gone (`waitForFunction(() => !document.querySelector('.tiptap math-field'))`).
+`.tiptap math-field` exists; closed when it is gone (`waitForFunction(() => !document.querySelector('.tiptap math-field'))`). Run: `node .claude/skills/verify-eve/drives/run.mjs math`
 
-- **Block.** `await t.click('.tiptap > p:last-of-type'); await t.key('Enter'); await t.type('/equation'); await t.page.waitForSelector('.suggest li'); await t.key('Enter');`
+- `math-block-new` **Block.** `await t.click('.tiptap > p:last-of-type'); await t.key('Enter'); await t.type('/equation'); await t.page.waitForSelector('.suggest li'); await t.key('Enter');`
   wait for `.tiptap math-field`, then `await t.click('.tiptap .math-edit .part[aria-label="Fraction"]'); await t.type('1'); await t.key('Tab'); await t.type('2'); await t.key('Tab'); await t.type('+');`
   `await t.click('.tiptap .math-edit button[role="tab"]:has-text("Greek")'); await t.click('.tiptap .math-edit .part[aria-label="pi"]');`
   The block shows ½ + π with the Greek tab open; `await t.click('.tiptap .math-edit .done')`: drawn, and the markdown
   has `$$\n\dfrac{1}{2}+\pi\n$$`.
-- **Inline.** `await t.key('Enter'); await t.type('Area is $a+b$ here');` one `.tiptap .math-inline`, drawn in
+- `math-inline-typed` **Inline.** `await t.key('Enter'); await t.type('Area is $a+b$ here');` one `.tiptap .math-inline`, drawn in
   italic maths type; the markdown line is `Area is $a+b$ here`.
-- **Edit.** `await t.click('.tiptap .math-inline')`, wait for the field, `await t.type('+c'); await t.key('Escape');`
+- `math-edit` **Edit.** `await t.click('.tiptap .math-inline')`, wait for the field, `await t.type('+c'); await t.key('Escape');`
   the line is `Area is $a+c+b$ here` (the click put the caret mid-formula).
-- **TeX.** `await t.click('.tiptap .math-block')`, wait, `await t.click('.tiptap .math-edit .texb'); await t.page.locator('.tiptap .math-edit .texin').fill('\\sqrt{x}');`
+- `math-tex` **TeX.** `await t.click('.tiptap .math-block')`, wait, `await t.click('.tiptap .math-edit .texb'); await t.page.locator('.tiptap .math-edit .texin').fill('\\sqrt{x}');`
   Esc: the block draws √x and saves `$$\n\sqrt{x}\n$$`.
-- **Kept.** `await t.page.reload(); await t.page.waitForSelector('.tiptap .math-block .ML__latex')`: the markdown is
+- `math-kept` **Kept.** `await t.page.reload(); await t.page.waitForSelector('.tiptap .math-block .ML__latex')`: the markdown is
   unchanged.
-- **Phone.** Seed `$$\nx\n$$` and `Area is $a$ here`; `t.page.locator('.tiptap .math-block').tap()`, mimic the
+- `math-block-new` `math-edit` **Phone.** Seed `$$\nx\n$$` and `Area is $a$ here`; `t.page.locator('.tiptap .math-block').tap()`, mimic the
   keyboard (390×470), tap `.math-edit .part[aria-label="Fraction"]`, type `1` Tab `2`, tap `.math-edit .done`:
   saved `x\dfrac{1}{2}`. A tap on `.math-inline` opens it with the row above the line and MathLive's keyboard below.
 

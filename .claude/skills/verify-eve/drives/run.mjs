@@ -10,9 +10,9 @@ import { pathToFileURL } from 'node:url';
 
 const HERE = import.meta.dirname;
 const DRIVE = resolve(HERE, '../../ui-audit/drive.mjs');
-const OUT = join(tmpdir(), 'eve-drives', new Date().toISOString().replace(/[:.]/g, '-'));
+const OUT = join(process.env.EVE_DRIVES_OUT ?? join(tmpdir(), 'eve-drives'), new Date().toISOString().replace(/[:.]/g, '-'));
 const hour = 3600_000;
-export const DEFAULT_NOTES = {
+const DEFAULT_NOTES = {
   a: '# Plan\n\nFirst line.\n',
   b: `---\nid: b\nupdated: ${Date.now() - hour}\ndeleted: false\norder: 1\nparent: a\n---\n# Groceries\n\nmilk\n`,
   c: '# Reading list\n\nA book.\n',
@@ -20,7 +20,7 @@ export const DEFAULT_NOTES = {
 
 const wanted = process.argv.slice(2);
 const drives = readdirSync(HERE).filter((f) => f.endsWith('.mjs') && f !== 'run.mjs')
-  .filter((f) => !wanted.length || wanted.includes(f.replace(/(\.phone)?\.mjs$/, '')));
+  .filter((f) => !wanted.length || wanted.some((w) => f.split('.')[0] === w || f.replace(/(\.phone)?\.mjs$/, '') === w));
 
 async function run(file) {
   const name = file.replace(/\.mjs$/, '');

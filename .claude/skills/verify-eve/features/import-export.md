@@ -27,7 +27,7 @@ the save panel are the Tauri shell's, so here they do nothing.
 
 ## Driving it with drive.mjs
 
-Preconditions: the default three notes.
+Preconditions: the default three notes. Run: `node .claude/skills/verify-eve/drives/run.mjs import-export`
 
 A drop is a `DataTransfer` of real `File`s dispatched as `dragover` then `drop` on `aside .tree` (as Finder hands it
 over). A folder needs directory entries, which a page cannot make, so `DataTransferItem.prototype.webkitGetAsEntry`
@@ -59,10 +59,10 @@ const dropOn = (t, sel, files, folders) => t.page.evaluate(async ({ sel, files, 
 }, { sel, files, folders });
 ```
 
-- **Files.** `await dropOn(t, 'aside .tree', [['Ideas.md', '# Ideas\n\nSee [[Reading list]] and ==this==.\n\n> [!warning] Careful\n> it is a callout\n'], ['Loose thought.md', 'no heading here\n']]);`
+- `import-files` **Files.** `await dropOn(t, 'aside .tree', [['Ideas.md', '# Ideas\n\nSee [[Reading list]] and ==this==.\n\n> [!warning] Careful\n> it is a callout\n'], ['Loose thought.md', 'no heading here\n']]);`
   returns `Import into the list`; the rows end `Ideas`, `Loose thought` (each with an icon); opened, Ideas shows a
   link, a highlight and a warning callout, and its markdown is as dropped.
-- **Folder.** `await dropOn(t, 'aside .tree', [], { Vault: { 'Trip.md': '# Trip\n\nSee [the plan](Trip/Plan.md).\n', Trip: { 'Plan.md': '# Plan for the trip\n\nday one\n', 'Packing 0123456789abcdef0123456789abcdef.md': 'socks\n' } } });`
+- `import-folder` **Folder.** `await dropOn(t, 'aside .tree', [], { Vault: { 'Trip.md': '# Trip\n\nSee [the plan](Trip/Plan.md).\n', Trip: { 'Plan.md': '# Plan for the trip\n\nday one\n', 'Packing 0123456789abcdef0123456789abcdef.md': 'socks\n' } } });`
   The sidebar shows Vault › Trip › Packing, Plan 2, indented; Trip's markdown is `See [[Plan 2|the plan]].`
 - **Pickers and export (web).** `await t.click('button[aria-label="New"]')` lists `Import files…`, `Import folder…`;
   clicking one, ⌘⇧M, or ⋯ → `Export…` → `Markdown…` leaves no dialog and no new note.
@@ -74,3 +74,4 @@ const dropOn = (t, sel, files, folders) => t.page.evaluate(async ({ sel, files, 
   `# Plan for the trip` is the page `Plan`, or `Plan 2` if a Plan exists).
 - Google Keep Takeout (`.json` per note) goes the same way; `src/lib/keepImport.dom.test.ts` covers its reading.
 - New imported notes get a random icon (Settings → General); match rows with `includes`.
+- A link's words are its `.wl-t`: the `.wikilink` also holds the linked page's icon before them.

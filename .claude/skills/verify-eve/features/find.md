@@ -22,20 +22,20 @@ one, and makes the text larger or smaller with ⌘+ / ⌘- without going to Sett
 ## Driving it with drive.mjs
 
 Preconditions: `a.md` is `# Plan`, `The cat sat. A cat ran.`, then three `## ` headings (Morning, Lunch, Evening)
-each over 14 lines of text, so the note is taller than the window; `c.md` as the default.
+each over 14 lines of text, so the note is taller than the window; `c.md` as the default. Run: `node .claude/skills/verify-eve/drives/run.mjs find`
 
-- **Find.** `await t.click('.tiptap p'); await t.key(`${t.mod}+f`); await t.page.waitForSelector('.find'); await t.type('cat');`
+- `find-bar` **Find.** `await t.click('.tiptap p'); await t.key(`${t.mod}+f`); await t.page.waitForSelector('.find'); await t.type('cat');`
   `.find .count` reads `1/2`; both `cat`s are marked, the first darker.
-- **Replace all.** `await t.click('.find button[aria-label="Replace"]'); await t.type('dog'); await t.click('.find button[aria-label="Replace all"]');`
+- `find-replace` **Replace all.** `await t.click('.find button[aria-label="Replace"]'); await t.type('dog'); await t.click('.find button[aria-label="Replace all"]');`
   The line reads `The dog sat. A dog ran.` on screen and in the saved markdown; the count goes to `0/0`.
   `await t.key('Escape')`: `.find` is gone and `document.activeElement` is the `.tiptap`.
-- **Outline.** `nav.outline .tick` counts 4 (Plan, Morning, Lunch, Evening).
+- `find-outline` **Outline.** `nav.outline .tick` counts 4 (Plan, Morning, Lunch, Evening).
   `await t.page.hover('nav.outline .tick >> nth=1'); await t.wait(800);` a balloon shows `Morning` and its first
   lines. `await t.click('nav.outline .tick >> nth=2')`: the page scrolls so `Lunch` is at the top.
-- **Text size.** Read `getComputedStyle(document.querySelector('.tiptap p')).fontSize`: 15px.
+- `find-size` **Text size.** Read `getComputedStyle(document.querySelector('.tiptap p')).fontSize`: 15px.
   `await t.key(`${t.mod}+Equal`)` gives 19px and the `Text 19px` pill; two `${t.mod}+Minus` give 12px;
   `${t.mod}+0` gives 15px again.
-- **Phone.** `await t.page.locator('.mhead button[aria-label="More"]').tap(); await t.page.locator('button[role="menuitem"]', { hasText: 'Find & replace' }).tap();`
+- `find-bar` `find-replace` **Phone.** `await t.page.locator('.mhead button[aria-label="More"]').tap(); await t.page.locator('button[role="menuitem"]', { hasText: 'Find & replace' }).tap();`
   then type, tap `.find button[aria-label="Replace"]` (first) and Replace all as on the Mac, and close with
   `.find button[aria-label="Close"]` tapped. Same result: `The dog sat. A dog ran.`
 
@@ -52,3 +52,5 @@ Proved on 2026-11-17 (0.7.147): `mac-01-find`, `mac-02-replaced`, `mac-03-outlin
   ⌘0 returns to it.
 - Both runs end with `errors: 0`. A phone run that ends with `ResizeObserver loop completed` means the bar's height is
   being fitted in the same frame again (`makeRoom` in `Find.svelte` waits a frame for it).
+- The rail fades out while the mouse is over a line of the note (its ⋮⋮ handle shows): it is still there, only `opacity: 0`.
+- The bar fades out over a moment after Esc / Close: a check that it is still open passes during the fade; wait for it to be gone.

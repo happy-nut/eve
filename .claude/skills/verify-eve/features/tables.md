@@ -16,12 +16,14 @@ A person puts in a table, writes in its cells without the columns jumping, and d
 
 ## Driving it with drive.mjs
 
-Preconditions: a fresh note (⌘N).
+Preconditions: a fresh note (⌘N). Run: `node .claude/skills/verify-eve/drives/run.mjs tables`
 
-- **Put in.** `await t.type('/table'); await t.key('Enter'); await t.type('x'); await t.shot('table');` A 3×3 grid,
+- `table-new` **Put in.** `await t.type('/table'); await t.key('Enter'); await t.type('x'); await t.shot('table');` A 3×3 grid,
   `x` in the header's first cell; the saved markdown is a `| x |  |  |` table.
-- **Resize.** Read the first row's cell widths, move the mouse to cell 1's `right - 1`, down, move +60 px in 5 steps,
+- `table-write` **Write.** Click the second row's first cell and type a long sentence: it wraps to more lines in that cell, and every column of the first row is within 1 px of its width before.
+- `table-resize` **Resize.** Read the first row's cell widths, move the mouse to cell 1's `right - 1`, down, move +60 px in 5 steps,
   up (as `e2e/table.mjs` does). Column 1 is ~60 px wider; the others are within 1 px of before.
+- `table-handles` **Handles.** Move the mouse to a body cell: `.tbl-grip.row.on` sits on the table's left edge by that row, `.tbl-grip.col.on` on its top edge over that column, `.tbl-add.row.on` below and `.tbl-add.col.on` right of it.
 
 ## Gotchas
 
