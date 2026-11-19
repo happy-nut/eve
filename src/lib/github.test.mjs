@@ -88,7 +88,7 @@ const posts = [];
 const post = async (url, form) => { posts.push(url); return url.endsWith('device/code') ? '{"device_code":"d","user_code":"AB12-CD34","verification_uri":"https://github.com/login/device","interval":1}' : replies.shift(); };
 let shown;
 assert.equal(await deviceLogin(post, (code, url) => (shown = [code, url]), undefined, async () => {}), 'gho_x');
-assert.deepEqual(shown, ['AB12-CD34', 'https://github.com/login/device']);
+assert.deepEqual(shown, ['AB12-CD34', 'https://github.com/login/device'], 'sync-signin: the device code and the page to enter it on are shown, and the token comes back once GitHub says yes');
 assert.equal(posts.length, 4);
 const ac = new AbortController(); ac.abort();
 await assert.rejects(deviceLogin(post, () => {}, ac.signal, async () => {}), /cancelled/);

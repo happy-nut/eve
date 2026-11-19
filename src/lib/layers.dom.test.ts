@@ -100,7 +100,7 @@ test('putAway empties the stack, whatever is open, the keyboard back in the note
   expect(document.activeElement).toBe(note);
 });
 
-test('the order they opened in is the order back takes them: a sheet over a card, a dialog over Settings', () => {
+test('phone-hardware-back: the order they opened in is the order back takes them: a sheet over a card, a dialog over Settings', () => {
   OPENERS.card();
   OPENERS.sheet();
   ui.layers.closeTop('back');

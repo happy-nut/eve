@@ -246,7 +246,7 @@ test('signed out and in again: a day the other device wrote on since, untouched 
 });
 
 for (const [name, there] of [['the other device a little later', 5000], ['the other device half a minute earlier', -30_000]] as const) {
-  test(`one line made two things on both devices, a key typed in it while sync waits (${name}): all three kept`, async () => {
+  test(`sync-model: one line made two things on both devices, a key typed in it while sync waits (${name}): all three kept`, async () => {
     const [a, b] = [made(`# Budget ${there}\n\ntotal: 100`), made(`# Zed ${there}\n\none`)].sort();
     expect(await sync.now()).toBe(true);
     notes.update(a, `# Budget ${there}\n\ntotal: 120`);

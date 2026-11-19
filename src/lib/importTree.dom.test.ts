@@ -8,7 +8,7 @@ const byTitle = (t: string) => notes.all.find((n) => !n.deleted && titleOf(n) ==
 /** the titles of the pages it is under, outermost first */
 const pathOf = (id: string): string => { const n = notes.all.find((x) => x.id === id)!; return n.parent ? [pathOf(n.parent), titleOf(notes.all.find((x) => x.id === n.parent)!)].filter(Boolean).join('/') : ''; };
 
-test('folders become pages of their names, a page’s folder its sub-pages, relative pictures come along', async () => {
+test('import-pick: folders become pages of their names, a page’s folder its sub-pages, relative pictures come along', async () => {
   const made = await importTree(tree({
     'Notes/Trip.md': '# Trip\n\n![map](img/map%20one.png)\n\nSee [the plan](Trip/Plan.md) and [site](https://x.y).',
     'Notes/Trip/Plan.md': '# Plan\n\n![[photo.jpg]]',

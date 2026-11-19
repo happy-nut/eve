@@ -28,8 +28,13 @@ jobs:
       - run: npm run e2e:forms
       - run: npm run e2e:present
       - run: npm run e2e:mem
+      - run: npm run verify:map
+        env:
+          EVE_DRIVES_OUT: ${{ runner.temp }}/eve-drives
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-screenshots
-          path: e2e/out
+          path: |
+            e2e/out
+            ${{ runner.temp }}/eve-drives

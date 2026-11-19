@@ -5,7 +5,7 @@ const account = { user: 'happy-nut', repo: 'happy-nut/eve-notes', token: 'gho_ex
 
 // round trip: what the Mac seals, the phone opens with the QR's key
 const s = await seal(account);
-assert.deepEqual(await open(s.body, s.key), { ...account, host: account.host ?? '' });
+assert.deepEqual(await open(s.body, s.key), { ...account, host: account.host ?? '' }, 'sync-phone-qr: what the Mac seals for its QR, the phone opens with the key in it');
 // a GitHub Enterprise sign-in carries its server; a bad one is refused
 const ghes = { user: 'me', repo: 'me/eve-notes', token: 'ghp_x', host: 'github.acme.com' };
 const g = await seal(ghes);
