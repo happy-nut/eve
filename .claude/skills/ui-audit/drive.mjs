@@ -59,9 +59,17 @@ const t = {
     await (locator ? page.locator(locator).first().screenshot({ path }) : page.screenshot({ path }));
     console.log('shot', path);
   },
-  // by mouse at the element's centre: Playwright's own click misplaces SVG text and arcs
+  // by mouse at the element's centre: Playwright's own click misplaces SVG text and arcs. A popup still sliding in
+  // (a slower CI) is waited for: the centre is read once the element is where it was 60 ms before
   click: async (selector) => {
-    const box = await page.locator(selector).first().boundingBox();
+    const el = page.locator(selector).first();
+    let box = await el.boundingBox();
+    for (let i = 0; i < 30 && box; i++) {
+      await page.waitForTimeout(60);
+      const now = await el.boundingBox();
+      if (now && now.x === box.x && now.y === box.y && now.width === box.width) break;
+      box = now;
+    }
     if (!box) throw new Error(`nothing at ${selector}`);
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await page.waitForTimeout(300);
