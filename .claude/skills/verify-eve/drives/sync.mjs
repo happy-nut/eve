@@ -104,6 +104,7 @@ export default async (t) => {
   }, 'a line changed here and another on the other device: the note and the repository\'s notes/a.md both have both');
   await t.shot('sync-merge');
 
+  offline = true;
   await otherWrites('b', '# Budget\n\ntotal: 250', 1);
   await openRow(t, 'Budget');
   await t.click('.tiptap p:has-text("total: 100")');
@@ -111,6 +112,7 @@ export default async (t) => {
   await t.key('Backspace');
   await t.key('Backspace');
   await t.type('20');
+  offline = false;
   await syncNow(t);
   await closeSettings(t);
   await t.ok('sync-conflict', async () => {
