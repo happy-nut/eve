@@ -33,6 +33,8 @@ export function codeColors(id: string): Record<string, string | null> {
 
 interface Appearance {
   theme: Theme; font: string; custom: string; size: number; lineHeight: number; width: number;
+  /** the note's text weight (Settings → Appearance → Text); what is bolder than the text (headings, bold) moves with it */
+  weight: number;
   /** close the sidebar as soon as you start writing (typing in the editor; the arrows only read). Off unless asked
    *  for: it replaces `hideSidebarOnEdit`, which was on by default and saved with every other setting,
    *  so a new name is what lets every device start from off */
@@ -74,10 +76,13 @@ interface Appearance {
 export const PASTELS = ['#fff1a8', '#c9f2d4', '#cfe3ff', '#ffd6e3', '#e5d8ff'];
 /** the note's text size, px: the Size slider's range, and where ⌘+ / ⌘- stop */
 export const SIZE_MIN = 12, SIZE_MAX = 28;
+/** the Weight slider's range, a step a named weight */
+export const WEIGHT_MIN = 300, WEIGHT_MAX = 600;
+export const weightName = (w: number): string => ({ 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'Semibold' })[w] ?? String(w);
 /** ⌘+ / ⌘-'s steps, each a quarter or more on the last (a browser's tenths still hardly showed), and how far they go:
  *  further than the Size slider, as a browser zooms past any font size a page sets */
 const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 2.5, 3], ZOOM_MIN = 9, ZOOM_MAX = 48;
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832, summon: true, slideTurn: 'push', slideBuild: true, codeTheme: 'eve', codeShade: 'auto' };
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, weight: 400, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832, summon: true, slideTurn: 'push', slideBuild: true, codeTheme: 'eve', codeShade: 'auto' };
 
 function load(): Appearance {
   try {
@@ -120,7 +125,7 @@ class AppearanceStore {
   /** Appearance's own Reset: how notes look (theme, type, text), not what the app does (daily notes, window…). What
    *  it was is returned, for its Undo: the Undo put back six of the eight, and the code colours and ⌘+ stayed reset */
   reset(): Partial<Appearance> {
-    const keys = ['theme', 'font', 'custom', 'size', 'lineHeight', 'width', 'zoom', 'codeTheme', 'codeShade'] as const;
+    const keys = ['theme', 'font', 'custom', 'size', 'weight', 'lineHeight', 'width', 'zoom', 'codeTheme', 'codeShade'] as const;
     const was = Object.fromEntries(keys.map((k) => [k, this.s[k]])) as Partial<Appearance>;
     this.set(Object.fromEntries(keys.map((k) => [k, DEFAULTS[k]])) as Partial<Appearance>);
     return was;
@@ -134,6 +139,7 @@ class AppearanceStore {
       r.setProperty('--font-editor', this.stack);
       r.setProperty('--font-size', `${this.textPx}px`);
       r.setProperty('--line-height', String(this.s.lineHeight));
+      r.setProperty('--font-weight', String(this.s.weight));
       r.setProperty('--editor-width', `${this.widthPx}px`);
       r.setProperty('--hl-plain', this.s.highlights[0] ?? PASTELS[0]); // the ==plain== pen (app.css, .tiptap mark)
       // code's colours: another theme's over app.css's own (Eve's)

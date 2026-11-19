@@ -6,6 +6,7 @@ const inNote = (t) => t.page.evaluate(() => !!document.activeElement?.closest('.
 const theme = (t) => t.page.evaluate(() => `${document.documentElement.dataset.theme}|${getComputedStyle(document.body).backgroundColor}`);
 const noteFont = (t) => t.page.evaluate(() => { const s = getComputedStyle(document.querySelector('.tiptap p')); return `${s.fontSize}|${s.lineHeight}`; });
 const sub = (t, label) => t.page.evaluate((l) => document.querySelector(`input[aria-label="${l}"]`)?.closest('label.row')?.querySelector('.sub')?.textContent.trim(), label);
+const weights = (t) => t.page.evaluate(() => [document.querySelector('.tiptap p:not(:first-child)'), document.querySelector('.tiptap > :first-child')].map((e) => getComputedStyle(e).fontWeight).join('|'));
 const noteWidth = (t) => t.page.evaluate(() => Math.round(document.querySelector('.tiptap').getBoundingClientRect().width));
 
 const reach = async (t, label) => {
@@ -91,6 +92,13 @@ export default async (t) => {
   await t.ok('settings-slider', async () => (await sub(t, 'Size')) === '20px' && (await noteFont(t)).startsWith('20px|'),
     'dragging Size to the middle makes it 20px, the note following');
   await t.shot('size-mouse');
+  await t.ok('settings-slider', async () => (await sub(t, 'Weight')) === 'Regular' && (await weights(t)) === '400|700', 'Weight starts at Regular: the note 400, its title 700');
+  await reach(t, 'Weight');
+  await t.key('ArrowRight');
+  await t.key('ArrowRight');
+  await t.ok('settings-slider', async () => (await sub(t, 'Weight')) === 'Semibold' && (await weights(t)) === '600|900',
+    'two right arrows on Weight make it Semibold: the note 600, its title still a step over it at 900');
+  await t.shot('weight-keys');
   await reach(t, 'Line height');
   await t.ok('settings-slider', async () => (await sub(t, 'Line height')) === '1.6' && (await t.page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) === 'Line height',
     '⌥Tab reaches Line height (Tab alone skips sliders where macOS keyboard navigation is off), at 1.6');
@@ -116,5 +124,6 @@ export default async (t) => {
   await t.page.reload();
   await t.page.waitForSelector('.tiptap');
   await t.ok('settings-slider', async () => (await noteFont(t)) === '20px|34px' && (await noteWidth(t)) === wide - 40, 'after a reload the note is still 20 px with 34 px lines and 40 px narrower');
+  await t.ok('settings-slider', async () => (await weights(t)) === '600|900', 'and still Semibold');
   await t.shot('slider-kept');
 };

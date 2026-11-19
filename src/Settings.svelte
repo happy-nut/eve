@@ -7,7 +7,7 @@
   import { storage, autostart, dock, defaultApp, mcp, isTauri, isMobile, copyText, openUrl, type McpClient } from './lib/platform';
   import { normHost, webBase } from './lib/github';
   import { ui, errorText } from './lib/ui.svelte';
-  import { appearance, PASTELS, SIZE_MIN, SIZE_MAX, FONTS, THEMES, SLIDE_TURNS, CODE_THEMES, CODE_SHADES, type Theme, type CodeShade, type SlideTurn } from './lib/appearance.svelte';
+  import { appearance, PASTELS, SIZE_MIN, SIZE_MAX, WEIGHT_MIN, WEIGHT_MAX, weightName, FONTS, THEMES, SLIDE_TURNS, CODE_THEMES, CODE_SHADES, type Theme, type CodeShade, type SlideTurn } from './lib/appearance.svelte';
   import Keys from './Keys.svelte';
   import Select from './Select.svelte';
   import Slider from './Slider.svelte';
@@ -359,6 +359,8 @@
       <div class="card">
         <label class="row"><span class="label">Size <span class="sub">{appearance.s.size}px</span></span>
           <Slider label="Size" min={SIZE_MIN} max={SIZE_MAX} value={appearance.s.size} oninput={(v) => appearance.set({ size: v })} /></label>
+        <label class="row"><span class="label">Weight <span class="sub">{weightName(appearance.s.weight)}</span></span>
+          <Slider label="Weight" min={WEIGHT_MIN} max={WEIGHT_MAX} step={100} value={appearance.s.weight} oninput={(v) => appearance.set({ weight: v })} /></label>
         <label class="row"><span class="label">Line height <span class="sub">{appearance.s.lineHeight}</span></span>
           <Slider label="Line height" min={1.2} max={2.2} step={0.05} value={appearance.s.lineHeight} oninput={(v) => appearance.set({ lineHeight: v })} /></label>
 {#if !isMobile}
@@ -366,7 +368,7 @@
           <Slider label="Width" min={520} max={1400} step={20} value={appearance.s.width} oninput={(v) => appearance.set({ width: v })} /></label>
 {/if}
       </div>
-      <p class="sample" style="font-family: {appearance.stack}; font-size: {appearance.s.size}px; line-height: {appearance.s.lineHeight}">
+      <p class="sample" style="font-family: {appearance.stack}; font-size: {appearance.s.size}px; font-weight: {appearance.s.weight}; line-height: {appearance.s.lineHeight}">
         The quick brown fox jumps over the lazy dog. 다람쥐 헌 쳇바퀴에 타고파. 0123456789
       </p>
       <div class="foot"><button class="link reset" onclick={resetLook}>Reset to defaults</button></div>

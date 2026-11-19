@@ -13,9 +13,9 @@ picks a light or dark look that stays after the app is opened again.
   waiting.
 - `settings-theme`: Appearance → Theme → Dark darkens the whole window at once; ⌘⇧L flips dark / light; the choice is
   kept over a reload.
-- `settings-slider`: Appearance → Text's sliders (`Slider.svelte`: Size 12–28 px, Line height 1.2–2.2, Width
+- `settings-slider`: Appearance → Text's sliders (`Slider.svelte`: Size 12–28 px, Weight Light–Semibold (300–600, the title, headings and bold the same steps over it), Line height 1.2–2.2, Width
   520–1400 px) move by a click on the track, a drag, or ← → once the slider has the keyboard; the value beside the label
-  and the open note change at once, and stay after a reload. A phone has Size and Line height only. (Size and Line
+  and the open note change at once, and stay after a reload. A phone has Size, Weight and Line height only. (Size, Weight and Line
   height driven; Width not. General → Window's Opening width / height size the Mac window through Tauri: not proved
   here.)
 
@@ -24,7 +24,7 @@ picks a light or dark look that stays after the app is opened again.
 - ⌘, anywhere; the gear (`Settings`) at the foot of the sidebar; on a phone the gear at the top of the list.
 - Shortcuts tab: click a chip, press the combo; Esc cancels, ⌫ puts that action's own key back; "Reset all to
   defaults" under the list.
-- Appearance tab: Theme (System / Light / Dark), Editor font, code colours, text size, line height, width, Presenting.
+- Appearance tab: Theme (System / Light / Dark), Editor font, code colours, text size, weight, line height, width, Presenting.
 - ⌘⇧L (Dark / light theme) without opening Settings.
 
 ## Driving it with drive.mjs

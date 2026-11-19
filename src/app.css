@@ -349,7 +349,7 @@ html.mobile .mhead .micon.on svg { fill: currentColor; }
   /* the head as tall as what it holds: held to 80px, the row under the icon ran over the title */
   html.mobile .big-icon { font-size: 44px; }
 }
-html.mobile .tiptap h1 { font-size: 1.65em; font-weight: 700; }
+html.mobile .tiptap h1 { font-size: 1.65em; font-weight: calc(var(--font-weight, 400) + 300); }
 html.mobile .tiptap h2 { font-size: 1.3em; }
 html.mobile .tiptap h3 { font-size: 1.1em; }
 main { flex: 1; min-width: 0; position: relative; }
@@ -387,6 +387,7 @@ main.tabbed .page { top: 71px; }
   margin: 0 auto;
   user-select: text;
   font-family: var(--font-editor, inherit);
+  font-weight: var(--font-weight, 400);
   line-height: var(--line-height, 1.6);
   font-size: var(--font-size, 15px);
 }
@@ -395,7 +396,7 @@ main.tabbed .page { top: 71px; }
    a step above the text (at 1.15em an h3 read as a bold line). The room above each is the text's size times a step
    (2, 1.4, 1.1), not the heading's own em, which gave an h3 less room than the text gets: a heading sits with what
    follows it, not with what came before. */
-.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5, .tiptap h6 { font-weight: 600; line-height: 1.3; margin: calc(var(--font-size, 15px) * 1.1) 0 0.15em; letter-spacing: -0.01em; }
+.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5, .tiptap h6 { font-weight: calc(var(--font-weight, 400) + 200); line-height: 1.3; margin: calc(var(--font-size, 15px) * 1.1) 0 0.15em; letter-spacing: -0.01em; }
 .tiptap h1 { font-size: 1.875em; margin-top: calc(var(--font-size, 15px) * 2); }
 .tiptap h2 { font-size: 1.5em; margin-top: calc(var(--font-size, 15px) * 1.4); }
 .tiptap h3 { font-size: 1.25em; }
@@ -405,7 +406,7 @@ main.tabbed .page { top: 71px; }
 .tiptap > h1:first-child { margin-top: 0; }
 .tiptap p { margin: 0; }
 /* 700, not 600: the Korean face only steps up at Bold, and 600 reads the same as the text around it */
-.tiptap strong { font-weight: 700; }
+.tiptap strong { font-weight: calc(var(--font-weight, 400) + 300); }
 .tiptap > :first-child.is-empty::before, .tiptap > p.is-empty:nth-child(2):last-child::before,
 .tiptap :is(h1, h2, h3, h4, h5, h6, summary, li p, blockquote > p).is-empty::before {
   content: attr(data-placeholder);
@@ -415,7 +416,7 @@ main.tabbed .page { top: 71px; }
 /* the page's title is its first line (titleOf), whatever it was written as: a plain line or any heading. It is drawn
    as the title, larger than a heading in the note, in a note's own pane only (a floating card has a title of its own) */
 .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5, h6):first-child {
-  font-size: 2.5em; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; margin-top: 0; color: var(--fg); text-transform: none;
+  font-size: 2.5em; font-weight: calc(var(--font-weight, 400) + 300); line-height: 1.2; letter-spacing: -0.02em; margin-top: 0; color: var(--fg); text-transform: none;
 }
 html.mobile .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5, h6):first-child { font-size: 2em; }
 /* every list's words start at one place, as Notion's do: a bullet's at 1.4em began left of a number's and a to-do's,
@@ -790,7 +791,7 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .dblock:not(.full) .
 .tiptap .callout-body { flex: 1; min-width: 0; }
 .tiptap .callout-body > * + * { margin-top: 0.4em; }
 /* the text on the marker's line ([!warning] Watch out) is the callout's title */
-.tiptap .callout[data-titled] .callout-body > p:first-child { font-weight: 600; }
+.tiptap .callout[data-titled] .callout-body > p:first-child { font-weight: calc(var(--font-weight, 400) + 200); }
 /* an Obsidian type ([!warning], [!tip]…) tints the box its colour */
 .tiptap .callout[data-color='blue'] { background: var(--tint-blue); }
 .tiptap .callout[data-color='cyan'] { background: var(--tint-cyan); }
@@ -864,7 +865,7 @@ html:not(.mobile) .tiptap .tableWrapper { margin-bottom: calc(0.7em + 18px); }
    the cell's line out with it and leaves the caret outside the cell, so the next syllable went in front: 결격 came
    out 격결. ponytail: typing with the mouse resting on the column's edge still positions it */
 .tiptap .selectedCell, .tiptap :is(th, td):has(> .column-resize-handle) { position: relative; }
-.tiptap th { background: var(--bg-input); font-weight: 600; text-align: left; }
+.tiptap th { background: var(--bg-input); font-weight: calc(var(--font-weight, 400) + 200); text-align: left; }
 .tiptap th > p, .tiptap td > p { margin: 0; white-space: pre-wrap; } /* a wrapped word's space hangs at the end of the line, as text does: break-spaces (ProseMirror's) set it at the start of the next, or on a line of its own */
 /* a phone: eight columns shared out over its width left a few letters a line in each cell. There every column keeps
    room for a word or two and the table runs as wide as that needs, scrolling sideways in its wrapper; one that fits

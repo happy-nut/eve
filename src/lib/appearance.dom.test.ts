@@ -103,3 +103,14 @@ test("code's own light or dark is kept, and Reset (and its Undo) take it with th
   expect(appearance.s.codeShade).toBe('dark');
   appearance.reset();
 });
+
+test("the note's weight, like its font: Regular to begin with, named on the slider, kept, and put back by Reset", async () => {
+  const { WEIGHT_MIN, WEIGHT_MAX, weightName } = await import('./appearance.svelte');
+  expect(appearance.s.weight).toBe(400);
+  expect([WEIGHT_MIN, WEIGHT_MAX]).toEqual([300, 600]);
+  expect([300, 400, 500, 600].map(weightName)).toEqual(['Light', 'Regular', 'Medium', 'Semibold']);
+  appearance.set({ weight: 500 });
+  expect(JSON.parse(localStorage.getItem('eve.appearance')!).weight).toBe(500);
+  appearance.reset();
+  expect(appearance.s.weight).toBe(400);
+});
