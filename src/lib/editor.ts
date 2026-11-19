@@ -34,7 +34,7 @@ import { FootnoteRef, FootnoteText } from './footnote';
 import { CodeBlock, inCell } from './code';
 import { Pdf } from './pdf';
 import { Video } from './video';
-import { TableNodes, asCopy, cellBulletRule, cellEnter, cellUnbullet, clearForPaste, toggleCellBullet, upAboveTable, copying } from './table';
+import { TableNodes, asCopy, cellBulletRule, cellEnter, cellUnbullet, dropEmptyTable, clearForPaste, toggleCellBullet, upAboveTable, copying } from './table';
 import { Find } from './find';
 import { SelectionLayer } from './selectionLayer';
 import { BlockHandle } from './blockHandle';
@@ -1812,7 +1812,7 @@ export function createEditor(opts: {
           return {
             Enter: () => free() && cellEnter(this.editor.view, () => this.editor.commands.setHardBreak()),
             ArrowUp: () => free() && upAboveTable(this.editor.view),
-            Backspace: () => cellUnbullet(this.editor.view),
+            Backspace: () => cellUnbullet(this.editor.view) || dropEmptyTable(this.editor.view),
           };
         },
         addInputRules() {

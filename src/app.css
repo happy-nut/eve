@@ -879,6 +879,8 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 .tiptap .selectedCell::after {
   content: ''; position: absolute; inset: 0; background: var(--accent-soft); pointer-events: none;
 }
+.tiptap .tableWrapper.table-chosen table { outline: 2px solid var(--accent); outline-offset: -1px; }
+.tiptap .tableWrapper.table-chosen .selectedCell::after { background: none; }
 /* the drag handle between two columns */
 .tiptap .column-resize-handle {
   position: absolute; right: -2px; top: 0; bottom: 0; width: 4px; background: var(--accent); pointer-events: none;

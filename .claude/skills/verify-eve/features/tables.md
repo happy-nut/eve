@@ -8,6 +8,8 @@ A person puts in a table, writes in its cells without the columns jumping, and d
 - `table-write`: a cell's words wrap in it; every column keeps its width while typing.
 - `table-resize`: dragging a column's edge moves that edge alone.
 - `table-handles`: hovering shows a row's ⋮⋮ on the left, a column's ⋯ on top, + below and right.
+- `table-chosen`: the whole table chosen (⌫ at the start of the line under it, or every cell dragged over) is outlined in the accent, as a chosen picture is, its cells no longer tinted.
+- `table-drop-empty`: ⌫ in the first cell of a table with nothing in any cell takes the table out, the caret at the end of the line above; one ⌘Z brings it back.
 - `table-bullets`: "- " at a line's start in a cell makes a bullet ("• "), Enter the next, Enter on an empty one ends the list, ⌫ after "• " a plain line; / Bulleted list (⌘⇧8) toggles it. Saved as `• a<br>• b`, a markdown cell holding no list.
 
 ## How to get to it (user POV)

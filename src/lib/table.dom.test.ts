@@ -275,6 +275,42 @@ describe('⌫ on a chosen row or column with nothing in it takes it out', () => 
   });
 });
 
+describe('a whole table chosen, and an empty one taken out', () => {
+  test('table-chosen: the whole table chosen is outlined as a chosen picture is; a few cells are not', () => {
+    const ed = editorWith('# T\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\nbelow');
+    const wrapper = () => ed.view.dom.querySelector('.tableWrapper')!.classList.contains('table-chosen');
+    ed.commands.setTextSelection(posOf(ed, 'below'));
+    press(ed, 'Backspace');
+    expect('$anchorCell' in ed.state.selection).toBe(true);
+    expect(wrapper()).toBe(true);
+    ed.commands.setTextSelection(posOf(ed, '1'));
+    expect(wrapper()).toBe(false);
+  });
+  test('table-drop-empty: ⌫ in the first cell of a table with nothing in it takes the table out, the caret on the line above; one ⌘Z brings it back', () => {
+    const ed = editorWith('# T\n\nabove\n\n|  |  |\n| --- | --- |\n|  |  |\n\nafter');
+    const before = md(ed);
+    let cell = -1;
+    ed.state.doc.descendants((n, p) => { if (cell < 0 && n.type.name === 'tableHeader') cell = p + 2; return cell < 0; });
+    ed.commands.setTextSelection(cell);
+    press(ed, 'Backspace');
+    expect(md(ed).trim()).toBe('# T\n\nabove\n\nafter');
+    type(ed, '!');
+    expect(md(ed).trim()).toBe('# T\n\nabove!\n\nafter');
+    ed.commands.undo();
+    ed.commands.undo();
+    expect(md(ed)).toBe(before);
+  });
+  test('a table with words in any cell stays', () => {
+    const ed = editorWith('# T\n\n|  |  |\n| --- | --- |\n|  | x |');
+    const before = md(ed);
+    let cell = -1;
+    ed.state.doc.descendants((n, p) => { if (cell < 0 && n.type.name === 'tableHeader') cell = p + 2; return cell < 0; });
+    ed.commands.setTextSelection(cell);
+    press(ed, 'Backspace');
+    expect(md(ed)).toBe(before);
+  });
+});
+
 describe('a cell holds lines and pictures only: what a markdown cell can keep', () => {
   for (const [typed, kept = typed] of [['- X', '• X'], ['1. X'], ['[] X'], ['# X'], ['> X'], ['" X'], ['--- ']]) {
     test(`"${typed}" typed at a cell's start stays the words typed${kept === typed ? '' : `, a list item as "${kept}"`}`, () => {

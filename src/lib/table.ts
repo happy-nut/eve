@@ -382,6 +382,33 @@ export function toggleCellBullet(view: EditorView): boolean {
   return true;
 }
 
+/** ⌫ at the very start of a table with nothing in it: the table goes, the caret at the end of the line above */
+export function dropEmptyTable(view: EditorView): boolean {
+  const sel = view.state.selection;
+  const $cell = sel.empty && sel instanceof TextSelection ? cellAround(sel.$head) : null;
+  if (!$cell) return false;
+  const table = $cell.node(-1), at = $cell.before(-1);
+  if (sel.head !== at + 4) return false;
+  let empty = true;
+  table.descendants((n) => { if (n.type.spec.tableRole === 'cell' && (n.childCount > 1 || n.firstChild?.content.size)) empty = false; return empty && n.type.spec.tableRole !== 'cell'; });
+  if (!empty) return false;
+  const tr = view.state.tr.delete(at, at + table.nodeSize);
+  view.dispatch(tr.setSelection(Selection.near(tr.doc.resolve(Math.min(at, tr.doc.content.size)), -1)).scrollIntoView());
+  return true;
+}
+
+/** the whole table chosen: its wrapper marked, to be outlined as a chosen picture is */
+const chosenTable = new Plugin({
+  props: {
+    decorations(state) {
+      const sel = state.selection;
+      if (!(sel instanceof CellSelection) || !sel.isRowSelection() || !sel.isColSelection()) return null;
+      const at = sel.$anchorCell.before(-1);
+      return DecorationSet.create(state.doc, [Decoration.node(at, at + sel.$anchorCell.node(-1).nodeSize, { class: 'table-chosen' })]);
+    },
+  },
+});
+
 /** ↑ in the first row of a table opening the note: a line above it, as ↑ makes one over code opening the note */
 export const upAboveTable = (view: EditorView) => topRow(view) && view.endOfTextblock('up') && lineAbove(view);
 
@@ -604,7 +631,7 @@ export const TableNodes = [
   Table.extend({
     addStorage: () => tableMarkdown,
     addProseMirrorPlugins() {
-      return [dragOutOfTable, pasteAfterClear, holdWidths, holdColumnsForDrag, ...(this.parent?.() ?? []).map((p) => (p.spec.key === tableEditingKey ? lessTableEditing(p) : p))];
+      return [dragOutOfTable, chosenTable, pasteAfterClear, holdWidths, holdColumnsForDrag, ...(this.parent?.() ?? []).map((p) => (p.spec.key === tableEditingKey ? lessTableEditing(p) : p))];
     },
   }).configure({ resizable: true }),
   TableRow.extend({ addStorage: () => inner }),
