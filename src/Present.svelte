@@ -3,9 +3,9 @@
   import { fade } from 'svelte/transition';
   import { scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
-  import { slides, alone, path } from './lib/slides';
+  import { slides, alone, path, endHint } from './lib/slides';
   import { stepper } from './lib/diagramMotion';
-  import { wholeScreen, ownWholeScreen } from './lib/platform';
+  import { wholeScreen, ownWholeScreen, isMobile } from './lib/platform';
   import { appearance } from './lib/appearance.svelte';
 
   /**
@@ -260,7 +260,7 @@
     <!-- past the last slide: it says so, rather than a press that does nothing -->
     <div class="end" in:fade={{ duration: 200 }}>
       <p class="end-title">End of presentation</p>
-      <p class="end-hint">Esc to leave · ← back to the last slide</p>
+      <p class="end-hint">{endHint(isMobile)}</p>
     </div>
   {/if}
   <div class="count" aria-live="polite">{ended ? 'End' : `${at + 1} / ${deck.length}`}</div>

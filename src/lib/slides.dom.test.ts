@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { slides, alone } from './slides';
+import { slides, alone, endHint } from './slides';
 
 const blocks = (html: string) => { const d = document.createElement('div'); d.innerHTML = html; return [...d.children]; };
 const text = (s: Element[][]) => s.map((x) => x.map((b) => b.textContent).join('|'));
@@ -31,4 +31,10 @@ test('a deeper heading gives way to a shallower one: a new section starts the pa
 test('a diagram right under its headings keeps them as they are; two diagrams each a slide', () => {
   const deck = [blocks('<h2>Flow</h2><figure>D1</figure><figure>D2</figure>')];
   expect(shown(alone(deck, chart, crumb))).toEqual(['Flow|D1', '(Flow)|D2']);
+});
+
+test('the end screen names the keys on a Mac and the taps on a phone, which has no Esc or ←', () => {
+  expect(endHint(false)).toBe('Esc to leave · ← back to the last slide');
+  expect(endHint(true)).not.toMatch(/Esc|←/);
+  expect(endHint(true)).toMatch(/✕/);
 });

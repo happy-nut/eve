@@ -47,3 +47,7 @@ export function alone(deck: Element[][], chart: (b: Element) => boolean, again: 
   }
   return out;
 }
+
+/** what the end screen says to do next: a phone has no Esc or ←, only the ✕ and a tap on the left */
+export const endHint = (phone: boolean): string =>
+  phone ? 'Tap ✕ to leave · tap the left side for the last slide' : 'Esc to leave · ← back to the last slide';
