@@ -8,6 +8,8 @@ import { composing } from './keys';
 import { isMobile } from './platform';
 import { inKorean, starter, toCode, type Diagram, type Kind } from './diagram';
 import { mountDiagram } from './diagramBlock.svelte';
+import { editedLine } from './diagramUndo';
+import { closeHistory } from '@tiptap/pm/history';
 import { blockBeside } from './blocks';
 import { fenceFor } from './markdown';
 
@@ -567,6 +569,7 @@ export const CodeBlock = CodeBlockBase.extend({
       dom.append(chip, pre, host);
       const posNow = () => (typeof getPos === 'function' ? getPos() : null);
       let block: ReturnType<typeof mountDiagram> | null = null;
+      let lastLine: number | null = null;
       let shown = false; // the caret in the code
       let shownNode: PMNode = node; // the block as this view last drew it
       const setDiagram = (n: PMNode) => {
@@ -587,7 +590,11 @@ export const CodeBlock = CodeBlockBase.extend({
             const cur = p == null ? null : editor.state.doc.nodeAt(p);
             // equal, not the same object: the note read anew keeps this view for an equal node without telling it
             if (p == null || !cur || !cur.eq(shownNode) || cur.textContent === code) return;
-            editor.view.dispatch(editor.state.tr.replaceWith(p + 1, p + cur.nodeSize - 1, code ? editor.schema.text(code) : []));
+            const line = editedLine(cur.textContent, code);
+            const tr = editor.state.tr.replaceWith(p + 1, p + cur.nodeSize - 1, code ? editor.schema.text(code) : []);
+            if (line === null || line !== lastLine) closeHistory(tr);
+            lastLine = line;
+            editor.view.dispatch(tr);
           },
           onHistory: (redo) => queueMicrotask(() => { if (redo) editor.commands.redo(); else editor.commands.undo(); }),
           onCodeEdit: () => {

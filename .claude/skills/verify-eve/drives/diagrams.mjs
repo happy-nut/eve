@@ -41,7 +41,6 @@ export default async (t) => {
   await t.click('.tiptap .mermaid-view g.node:has-text("Done")');
   await t.click('.layer button.plus');
   await t.ok('diagram-edit', () => has(t, 'n4("New step")'), 'the blue + beside Done adds a step after it, saved as n4("New step")');
-  await t.wait(700);
   await t.type('Ship');
   await t.key('Escape');
   await t.ok('diagram-edit', () => drawn(t, 'Ship'), 'the blue + beside Done adds a step drawn as Ship');
