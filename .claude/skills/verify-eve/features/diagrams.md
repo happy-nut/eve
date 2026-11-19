@@ -73,7 +73,6 @@ Proved on 2026-11-17 (0.7.147), shots under `${TMPDIR}/eve-verify/`: `diag-flow/
 - A pie part typed over and then Esc puts the old name back; Enter (or the Value field) keeps it.
 - On the whole screen the keyboard is on `<body>` by design (`letGo()`); keys reach the diagram from there.
 - The note's undo takes a change made within half a second of the one before as one: after + wait ~700 ms before typing, or ↶ takes the step and its words back together.
-- After ↶ took the added step back, a + stays beside Done with no box picked, and the first Esc changes nothing; the drive leaves the whole screen with ✕ there, and tries Esc twice on a fresh open.
 - `t.click` clicks the element's place on screen: scroll a field below the window into view first, or the click lands on nothing and the diagram closes.
 - A phone's tapped box does not take the keyboard: go through **Text**. Keys typed without it go into the note under
   the diagram.

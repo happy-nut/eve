@@ -55,23 +55,25 @@ export default async (t) => {
   await t.ok('diagram-undo', async () => { const m = await md(t); return !m.includes('n4') && !m.includes('n3 --> n4'); },
     'the second undo takes back the added step and its line');
   await t.shot('undone');
+  await t.ok('diagram-undo', async () => (await t.page.locator('.layer button.plus').count()) === 0, 'with the added step taken back no + is left beside a box');
 
+  const back = () => t.page.evaluate(() => !document.querySelector('.dblock.full') && !!document.activeElement?.closest('.tiptap'));
+  await dock(t, 'Full screen');
+  await t.page.waitForSelector('.dblock.full[role="dialog"]');
+  await t.key('Escape');
+  await t.wait();
+  await t.key('Escape');
+  await t.ok('diagram-full', back, 'right after the undos, Esc twice on the whole screen puts it back in the note with the keyboard in the note');
+
+  await t.click('.tiptap .mermaid-view g.node:has-text("Ready?")');
+  await t.page.waitForSelector('.tiptap .dblock.active .dock');
   await dock(t, 'Full screen');
   await t.ok('diagram-full', async () => await t.page.locator('.dblock.full[role="dialog"]').isVisible()
     && (await t.page.locator('.dblock.full').textContent()).includes('200%')
     && await t.page.locator('button[aria-label="Back to the note"]').isVisible(), 'Full screen shows the diagram as a dialog at 200% with a close button');
   await t.shot('full');
   await t.click('button[aria-label="Back to the note"]');
-  const back = () => t.page.evaluate(() => !document.querySelector('.dblock.full') && !!document.activeElement?.closest('.tiptap'));
   await t.ok('diagram-full', back, 'the close button puts it back in the note with the keyboard in the note');
-  await t.click('.tiptap .mermaid-view g.node:has-text("Ready?")');
-  await t.key('Escape');
-  await dock(t, 'Full screen');
-  await t.page.waitForSelector('.dblock.full[role="dialog"]');
-  await t.key('Escape');
-  await t.wait();
-  await t.key('Escape');
-  await t.ok('diagram-full', back, 'opened again, Esc twice puts it back in the note with the keyboard in the note');
   await t.shot('back');
 
   await put(t, '/pie');

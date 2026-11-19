@@ -462,6 +462,7 @@
     else if ((e.target as Element).closest('g.lane-head')) return;
     else if (!(e.target as Element).closest('path.hit, g.edgeLabel')) addAfter(null, ((e.target as Element).closest('g.lane') as SVGGElement | null)?.dataset.lane || undefined);
   }
+  function onHostLeave(e: PointerEvent) { if (e.pointerType === 'mouse' && !drag) hover = null; }
   function onHostMove(e: PointerEvent) {
     if (e.pointerType !== 'mouse') return; // a finger has no hover: it left a + on a box nothing was picked on
     const g = (e.target as Element).closest?.('g.node');
@@ -589,7 +590,8 @@
     host.addEventListener('click', onHostClick);
     host.addEventListener('dblclick', onHostDouble);
     host.addEventListener('pointermove', onHostMove);
-    return () => { host.removeEventListener('click', onHostClick); host.removeEventListener('dblclick', onHostDouble); host.removeEventListener('pointermove', onHostMove); };
+    host.addEventListener('pointerleave', onHostLeave);
+    return () => { host.removeEventListener('click', onHostClick); host.removeEventListener('dblclick', onHostDouble); host.removeEventListener('pointermove', onHostMove); host.removeEventListener('pointerleave', onHostLeave); };
   });
 
   // ---- the + handle: click for the next step, drag to join ----
@@ -726,6 +728,15 @@
 
   const selId = $derived(sel && 'node' in sel ? sel.node : null);
   const selNode = $derived(selId ? flow.nodes.find((n) => n.id === selId) ?? null : null);
+  $effect(() => {
+    const drawnIds = new Set(boxes.map((b) => b.id)), edges = flow.edges.length;
+    untrack(() => {
+      if (hover && !drawnIds.has(hover)) hover = null;
+      if (!sel) return;
+      const gone = 'node' in sel ? !drawnIds.has(sel.node) : 'nodes' in sel ? !sel.nodes.some((id) => drawnIds.has(id)) : 'edge' in sel ? sel.edge >= edges : false;
+      if (gone && !editing) sel = null;
+    });
+  });
   const selBox = $derived(boxOf(selId));
   const selEdge = $derived(sel && 'edge' in sel ? flow.edges[sel.edge] ?? null : null);
   /** where the + sits on a box: after it, the way the chart reads */
