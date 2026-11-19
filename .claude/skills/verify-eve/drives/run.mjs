@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+process.env.TZ ??= 'Asia/Seoul';
 const HERE = import.meta.dirname;
 const DRIVE = resolve(HERE, '../../ui-audit/drive.mjs');
 const OUT = join(process.env.EVE_DRIVES_OUT ?? join(tmpdir(), 'eve-drives'), new Date().toISOString().replace(/[:.]/g, '-'));

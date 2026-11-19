@@ -13,6 +13,7 @@ import { pathToFileURL } from 'node:url';
 
 const [noteFile, stepsFile, outDir] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const PHONE = process.argv.includes('--phone');
+process.env.TZ ??= 'Asia/Seoul';
 if (!noteFile || !stepsFile || !outDir) { console.error('usage: drive.mjs <note.md> <steps.mjs> <out-dir> [--phone]'); process.exit(2); }
 const REPO = resolve(import.meta.dirname, '../../..');
 const req = createRequire(`${REPO}/package.json`);
@@ -26,9 +27,11 @@ mkdirSync(outDir, { recursive: true });
 process.chdir(REPO);
 const server = await createServer({ root: REPO, server: { port: 0 }, logLevel: 'error' }).then((s) => s.listen());
 const browser = await webkit.launch();
+// the same words and days on every machine (CI runs in en-US and UTC): the app says 내일 / 지금 and dates by the locale and clock
+const place = { locale: process.env.EVE_LOCALE ?? 'ko-KR', timezoneId: process.env.TZ };
 const ctx = await browser.newContext(PHONE
-  ? { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36' }
-  : { viewport: { width: 1200, height: 900 } });
+  ? { ...place, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36' }
+  : { ...place, viewport: { width: 1200, height: 900 } });
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));

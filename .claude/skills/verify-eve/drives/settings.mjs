@@ -89,8 +89,11 @@ export default async (t) => {
   await t.shot('size-mouse');
   for (let i = 0; i < 40 && !(await t.page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Line height')); i++) await t.key('Tab');
   await t.ok('settings-slider', async () => (await sub(t, 'Line height')) === '1.6', 'tab reaches Line height, at 1.6');
-  await t.key('ArrowRight');
-  await t.key('ArrowRight');
+  const lineHeight = () => t.page.evaluate(() => document.querySelector('input[aria-label="Line height"]').value);
+  for (const want of ['1.65', '1.7']) {
+    await t.key('ArrowRight');
+    await t.ok('settings-slider', async () => (await lineHeight()) === want, `a right arrow on Line height moves it one step, to ${want}`);
+  }
   await t.ok('settings-slider', async () => (await sub(t, 'Line height')) === '1.7' && (await noteFont(t)) === '20px|34px',
     'two right arrows make Line height 1.7, the note line 34 px at 20 px');
   await t.shot('lineheight-keys');
