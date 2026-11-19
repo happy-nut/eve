@@ -67,11 +67,24 @@ test('the caret is drawn on its side of the edge: inside the code, or outside it
   ed.commands.setTextSelection(posOf(ed, 'ab', true));
   const caret = () => ed.view.dom.querySelector('.code-caret');
   expect(caret()?.closest('code')).not.toBeNull();
+  expect(caret()!.classList.contains('out')).toBe(false);
   arrow(ed, 1);
-  expect(caret()).not.toBeNull();
-  expect(caret()!.closest('code')).toBeNull();
+  expect(caret()!.classList.contains('out')).toBe(true);
   arrow(ed, 1); // away from the edge: the webview's own caret again
   expect(caret()).toBeNull();
+});
+
+// The caret was a node of its own beside the code (contenteditable=false): an arrow stopped on it, and at a line's
+// start Hangul typed before the code went nowhere (#325). It is drawn by the code's own letter now, nothing between.
+test.each([['at a line\'s start', '`ab` cd', 0], ['in a line', 'w `ab`cd', 2], ['after it', 'w `ab`cd', 4]])('%s, nothing stands at the caret beside the code', (_, text, at) => {
+  const ed = editorWith(`# T\n\n${text}`);
+  const p = posOf(ed, text.replace(/`/g, '').slice(0, 1)) + at;
+  for (const stepIn of [false, true]) {
+    ed.commands.setTextSelection(p);
+    if (stepIn) press(ed, at === 4 ? 'ArrowLeft' : 'ArrowRight');
+    const caret = ed.view.dom.querySelector('.code-caret');
+    expect(caret?.textContent, 'the caret is drawn by a letter of the code, not an empty node of its own').toMatch(/^[ab]$/);
+  }
 });
 
 // Two codes touching that stayed two (the first a link, as code copied from a web page comes in): ⌫ or ⌦ with the

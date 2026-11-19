@@ -1086,17 +1086,22 @@ const codeEdges = Extension.create({
     return { ArrowRight: step(1), ArrowLeft: step(-1), Backspace: join, Delete: join };
   },
   addProseMirrorPlugins() {
-    const caret = () => Object.assign(document.createElement('span'), { className: 'code-caret' });
     return [new Plugin({
       key: new PluginKey('codeEdges'),
       props: {
         // the webview's caret hidden at an edge, and one drawn on the caret's side: in the code's box or beside it
         attributes: (state): Record<string, string> => (state.selection.empty && codeEdge(state) ? { class: 'at-code-edge' } : {}),
+        // drawn by the code's own letter at the edge (a ::before or ::after), not a node of its own at the caret: a
+        // widget there took an arrow's step and, at a line's start, left the input method nowhere to write (#325)
         decorations: (state) => {
           const e = state.selection.empty ? codeEdge(state) : null;
           if (!e) return null;
-          const toward = e.after === e.inside ? -1 : 1; // the code's side of the edge, or the other
-          return DecorationSet.create(state.doc, [Decoration.widget(state.selection.from, caret, { side: toward, marks: e.inside ? e.inMarks : e.outMarks, key: `code-caret-${e.inside}`, ignoreSelection: true })]);
+          const at = state.selection.from, $c = state.selection.$from;
+          const letters = Array.from((e.after ? $c.nodeBefore : $c.nodeAfter)!.text!);
+          const letter = e.after ? letters[letters.length - 1] : letters[0];
+          const [from, to] = e.after ? [at - letter.length, at] : [at, at + letter.length];
+          const cls = `code-caret code-caret-${e.after ? 'after' : 'before'}${e.inside ? '' : ' out'}`;
+          return DecorationSet.create(state.doc, [Decoration.inline(from, to, { class: cls })]);
         },
       },
     })];

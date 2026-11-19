@@ -249,7 +249,10 @@ try {
     await imePage.waitForTimeout(50);
     const drawn = await imePage.evaluate(() => {
       const c = document.querySelector('.tiptap .code-caret'), code = document.querySelector('.tiptap p code');
-      return c && { inCode: !!c.closest('code'), x: Math.round(c.getBoundingClientRect().left), right: Math.round(code.getBoundingClientRect().right) };
+      if (!c) return null;
+      const after = c.classList.contains('code-caret-after'), box = c.getBoundingClientRect();
+      const x = (after ? box.right : box.left) + parseFloat(getComputedStyle(c, after ? '::after' : '::before').marginLeft);
+      return { inCode: !c.classList.contains('out'), x: Math.round(x), right: Math.round(code.getBoundingClientRect().right) };
     });
     if (ime) await imePage.evaluate(async (t) => {
       const el = document.querySelector('.tiptap'), wait = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -1183,8 +1183,13 @@ html.mobile .tiptap [data-type='details'] > button::after { content: ''; positio
 /* the caret at an edge of inline code, drawn on its side (editor.ts, codeEdges): the webview's own stands at the same
    place inside the code or out of it */
 .tiptap.at-code-edge, html.mobile .tiptap.at-code-edge { caret-color: transparent; }
-.tiptap .code-caret { display: inline-block; width: 0; height: 1.15em; margin-right: -1.5px; border-left: 1.5px solid currentColor; vertical-align: text-bottom; pointer-events: none; animation: code-caret 1.1s steps(1) infinite; }
-.tiptap:not(.ProseMirror-focused) .code-caret { display: none; }
+.tiptap .code-caret::before, .tiptap .code-caret::after { display: inline-block; width: 0; height: 1.15em; border-left: 1.5px solid currentColor; vertical-align: text-bottom; pointer-events: none; animation: code-caret 1.1s steps(1) infinite; }
+.tiptap .code-caret-before::before { content: ''; margin-right: -1.5px; }
+.tiptap .code-caret-after::after { content: ''; margin-left: -1.5px; }
+/* outside the code's box: past its padding and margin (0.2em + 0.15em), the line laid out as without it */
+.tiptap .code-caret-before.out::before { margin-left: -0.35em; margin-right: calc(0.35em - 1.5px); }
+.tiptap .code-caret-after.out::after { margin-left: calc(0.35em - 1.5px); margin-right: -0.35em; }
+.tiptap:not(.ProseMirror-focused) .code-caret::before, .tiptap:not(.ProseMirror-focused) .code-caret::after { display: none; }
 @keyframes code-caret { 50% { opacity: 0; } }
 /* a dot running along a diagram's line while it is hovered (diagramMotion.ts) */
 /* a line drawing in (lib/diagramMotion.ts): its head comes once the line has got there; over mermaid's attribute and
