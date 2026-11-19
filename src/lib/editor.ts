@@ -2068,7 +2068,10 @@ export function createEditor(opts: {
             return { ...view, ignoreMutation: (m: { type: string; target: Node }) => m.type !== 'selection' && !view.contentDOM?.contains(m.target) };
           };
         },
-      }).configure({ nested: true }),
+        // the box's hidden label says "To-do", not the item's words: tiptap wrote the words into it, on the page just
+        // before them, at every key, and the Mac's Korean input lost the letter it was building there — the first
+        // syllable typed in a new to-do came out in pieces (사과 as ㅅㅏ과)
+      }).configure({ nested: true, a11y: { checkboxLabel: () => 'To-do' } }),
       // a phone's bar does the formatting; the markdown hint is for a keyboard
       // the first line is the page's title (drawn as one, app.css): empty, it says so; the line under it, what can be typed
       Placeholder.configure({ placeholder: ({ node, pos }) => (pos === 0 ? 'Untitled' : node.type.name === 'heading' ? `Heading ${node.attrs.level}` : isMobile ? 'Start writing…' : 'Start typing… # heading, - list, [[ link') }),

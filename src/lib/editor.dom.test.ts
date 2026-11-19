@@ -341,6 +341,18 @@ describe('links', () => {
 });
 
 describe('lists of different kinds', () => {
+  test('typing in a to-do leaves the page around its words as it was (the Korean input then split 사과 into ㅅㅏ과)', () => {
+    const ed = editorWith('- [ ] 하나');
+    ed.commands.setTextSelection(posOf(ed, '하나', true));
+    const item = ed.view.dom.querySelector('ul[data-type="taskList"] > li')!;
+    const outside = () => [...item.querySelectorAll(':scope > label *')].map((n) => `${n.textContent}|${n.getAttribute('aria-label') ?? ''}`).join();
+    const before = outside();
+    type(ed, 'ㅅ');
+    type(ed, '과');
+    expect(md(ed).trimEnd()).toBe('- [ ] 하나ㅅ과');
+    expect(outside()).toBe(before);
+  });
+
   test('under a to-do, "- " makes a bullet, "[] " a to-do again, "1. " a number', () => {
     const ed = editorWith('');
     ed.commands.focus('end');
