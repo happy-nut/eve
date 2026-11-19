@@ -60,21 +60,31 @@ export function duplicateColumn(editor: Editor, pos: number, c: number) {
 export function addAtEnd(editor: Editor, pos: number, what: 'row' | 'col') {
   const t = tableAt(editor.state.doc, pos);
   if (!t) return;
-  const { map } = t;
-  const last = what === 'row' ? cellPos(pos, map, map.height - 1, 0) : cellPos(pos, map, 0, map.width - 1);
-  editor.chain().setTextSelection(last + 2).run();
-  if (what === 'row') editor.chain().addRowAfter().run(); else editor.chain().addColumnAfter().run();
-  // the caret into the new row's (column's) first cell, to write in
+  if (what === 'col') return addColumnAt(editor, pos, t.map.width);
+  editor.chain().setTextSelection(cellPos(pos, t.map, t.map.height - 1, 0) + 2).run();
+  editor.chain().addRowAfter().run();
   const n = tableAt(editor.state.doc, pos)!;
-  const into = what === 'row' ? cellPos(pos, n.map, n.map.height - 1, 0) : cellPos(pos, n.map, 0, n.map.width - 1);
-  editor.chain().focus().setTextSelection(into + 2).run();
+  editor.chain().focus().setTextSelection(cellPos(pos, n.map, n.map.height - 1, 0) + 2).run();
+}
+
+/** A column at `edge` (0, the left edge; the table's width, the right one), the caret into its first cell */
+export function addColumnAt(editor: Editor, pos: number, edge: number) {
+  const t = tableAt(editor.state.doc, pos);
+  if (!t) return;
+  const before = edge < t.map.width;
+  editor.chain().setTextSelection(cellPos(pos, t.map, 0, before ? edge : t.map.width - 1) + 2).run();
+  if (before) editor.chain().addColumnBefore().run(); else editor.chain().addColumnAfter().run();
+  const n = tableAt(editor.state.doc, pos)!;
+  editor.chain().focus().setTextSelection(cellPos(pos, n.map, 0, edge) + 2).run();
 }
 
 const DOTS_V = '<svg viewBox="0 0 8 16"><circle cx="2.5" cy="4" r="1.2"/><circle cx="5.5" cy="4" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="5.5" cy="8" r="1.2"/><circle cx="2.5" cy="12" r="1.2"/><circle cx="5.5" cy="12" r="1.2"/></svg>';
 const DOTS_H = '<svg viewBox="0 0 16 8"><circle cx="4" cy="2.5" r="1.2"/><circle cx="4" cy="5.5" r="1.2"/><circle cx="8" cy="2.5" r="1.2"/><circle cx="8" cy="5.5" r="1.2"/><circle cx="12" cy="2.5" r="1.2"/><circle cx="12" cy="5.5" r="1.2"/></svg>';
 const PLUS = '<svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 
-interface Over { pos: number; table: HTMLTableElement; wrap: HTMLElement; row: number; col: number; cellEl?: HTMLTableCellElement }
+interface Over { pos: number; table: HTMLTableElement; wrap: HTMLElement; row: number; col: number; cellEl?: HTMLTableCellElement; x: number; y: number }
+/** how near a column's edge on the table's top border the pointer is for that edge's + */
+const EDGE_REACH = 14;
 
 class Handles {
   private host: HTMLElement;
@@ -82,6 +92,8 @@ class Handles {
   private colGrip = this.button('tbl-grip col', DOTS_H, 'Column: drag to move, click for its menu');
   private addRow = this.button('tbl-add row', PLUS, 'Add a row');
   private addCol = this.button('tbl-add col', PLUS, 'Add a column');
+  private addHere = this.button('tbl-add here', PLUS, 'Add a column here');
+  private edge = 0;
   private line = document.createElement('div'); // where a dragged row (column) would go
   private cur: Over | null = null;
   private dragging: { what: 'row' | 'col'; from: number; to: number } | null = null;
@@ -90,14 +102,17 @@ class Handles {
   constructor(private view: EditorView, private editor: Editor) {
     this.host = view.dom.parentElement!;
     this.line.className = 'tbl-drop';
-    this.host.append(this.rowGrip, this.colGrip, this.addRow, this.addCol, this.line);
+    this.host.append(this.rowGrip, this.colGrip, this.addRow, this.addCol, this.addHere, this.line);
     this.host.addEventListener('mousemove', this.onMove);
     this.host.addEventListener('mouseleave', this.onLeave);
     this.rowGrip.addEventListener('mousedown', (e) => this.press(e, 'row'));
     this.colGrip.addEventListener('mousedown', (e) => this.press(e, 'col'));
-    for (const b of [this.addRow, this.addCol]) b.addEventListener('mousedown', (e) => e.preventDefault());
+    for (const b of [this.addRow, this.addCol, this.addHere]) b.addEventListener('mousedown', (e) => e.preventDefault());
     this.addRow.addEventListener('click', () => { const c = this.cur; if (c) { this.hide(); addAtEnd(this.editor, c.pos, 'row'); } });
     this.addCol.addEventListener('click', () => { const c = this.cur; if (c) { this.hide(); addAtEnd(this.editor, c.pos, 'col'); } });
+    this.addHere.addEventListener('click', () => { const c = this.cur; if (c) { this.hide(); addColumnAt(this.editor, c.pos, this.edge); } });
+    this.addHere.addEventListener('mouseenter', () => { if (this.cur) this.drawEdge(this.cur, this.edge); });
+    this.addHere.addEventListener('mouseleave', () => this.line.classList.remove('on'));
   }
 
   private button(cls: string, svg: string, tip: string) {
@@ -126,7 +141,7 @@ class Handles {
       // after them, and Delete column took the wrong one
       const map = TableMap.get(this.view.state.doc.nodeAt(pos)!);
       const col = cellEl ? map.colCount(this.view.posAtDOM(cellEl, 0) - 1 - (pos + 1)) : 0;
-      return { pos, table, wrap, row: row < 0 ? rows.length - 1 : row, col, cellEl };
+      return { pos, table, wrap, row: row < 0 ? rows.length - 1 : row, col, cellEl, x, y };
     }
     return null;
   }
@@ -158,10 +173,20 @@ class Handles {
     else this.colGrip.classList.remove('on');
     put(this.addRow, { left, top: t.bottom + 3, width: right - left, height: 16 });
     put(this.addCol, { left: right + 3, top: t.top, width: 16, height: t.height });
+    // by the top border, near an edge between two columns or at the left one: a + there puts a column in at that edge
+    // (the right edge is the + bar's)
+    const edges = [...o.table.rows[0].cells].map((c, i, all) => (i ? all[i - 1].getBoundingClientRect().right : c.getBoundingClientRect().left));
+    const near = edges.reduce((b, e, i) => (Math.abs(e - o.x) < Math.abs(edges[b] - o.x) ? i : b), 0);
+    if (Math.abs(o.y - t.top) <= EDGE_REACH && Math.abs(edges[near] - o.x) <= EDGE_REACH && edges[near] >= left - 1) {
+      this.edge = near;
+      put(this.addHere, { left: edges[near] - 8, top: t.top - 8 });
+      this.colGrip.classList.remove('on');
+      if (near === 0) this.rowGrip.classList.remove('on'); // the header row's ⋮⋮ is just under the left edge's +
+    } else this.addHere.classList.remove('on');
   }
   hide() {
     this.cur = null;
-    for (const el of [this.rowGrip, this.colGrip, this.addRow, this.addCol]) el.classList.remove('on');
+    for (const el of [this.rowGrip, this.colGrip, this.addRow, this.addCol, this.addHere, this.line]) el.classList.remove('on');
   }
 
   /** a press on a handle: let go where it was pressed, the menu; moved, the row (column) is carried */
@@ -216,6 +241,14 @@ class Handles {
     this.line.classList.add('on');
   }
 
+  /** the line where a column put in at `edge` will stand, while the pointer is on that edge's + */
+  private drawEdge(o: Over, edge: number) {
+    const host = this.host.getBoundingClientRect(), t = o.table.getBoundingClientRect(), cells = o.table.rows[0].cells;
+    const x = edge ? cells[edge - 1].getBoundingClientRect().right : cells[0].getBoundingClientRect().left;
+    Object.assign(this.line.style, { left: `${x - host.left - 1.5}px`, top: `${t.top - host.top}px`, width: '3px', height: `${t.height}px` });
+    this.line.classList.add('on');
+  }
+
   private menu(o: Over, what: 'row' | 'col') {
     chooseLine(this.editor, o.pos, what === 'row' ? { row: o.row } : { col: o.col });
     this.view.focus();
@@ -252,7 +285,7 @@ class Handles {
     cancelAnimationFrame(this.frame);
     this.host.removeEventListener('mousemove', this.onMove);
     this.host.removeEventListener('mouseleave', this.onLeave);
-    for (const el of [this.rowGrip, this.colGrip, this.addRow, this.addCol, this.line]) el.remove();
+    for (const el of [this.rowGrip, this.colGrip, this.addRow, this.addCol, this.addHere, this.line]) el.remove();
   }
 }
 

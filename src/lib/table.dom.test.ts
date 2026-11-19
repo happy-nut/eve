@@ -396,3 +396,21 @@ describe('what else is pasted in a cell goes in it too, and the cell is the same
     expect(md(editorWith(saved))).toBe(saved);
   });
 });
+
+// A column could be added only at the right end (the + bar) or from a column's menu (Insert left), and a column at the
+// far left was made at the right end and dragged across. The + on the top edge between two columns, or at the left
+// edge, puts one there: the caret in its first cell, one ⌘Z takes it back.
+test.each([[0, ['|  | a1 | b1 |', '| --- | --- | --- |', '|  | a2 | b2 |']], [1, ['| a1 |  | b1 |', '| --- | --- | --- |', '| a2 |  | b2 |']]] as const)(
+  'a column put in at edge %i of the table', async (edge, want) => {
+    const { addColumnAt } = await import('./tableHandles');
+    const ed = editorWith(note);
+    const pos = posOf(ed, 'a1') - 4;
+    expect(ed.state.doc.nodeAt(pos)?.type.name).toBe('table');
+    addColumnAt(ed, pos, edge);
+    expect(md(ed).split('\n').slice(2, 5)).toEqual(want);
+    type(ed, 'z');
+    expect(md(ed).split('\n')[2]).toBe(want[0].replace('|  |', '| z |'));
+    ed.commands.undo();
+    ed.commands.undo();
+    expect(md(ed)).toBe(note);
+  });

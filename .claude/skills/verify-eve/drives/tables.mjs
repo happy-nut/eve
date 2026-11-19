@@ -65,4 +65,28 @@ export default async (t) => {
   await t.ok('table-bullets', async () => (await third()) === '• milk\n• eggs\ndone' && /\| • milk<br>• eggs<br>done \|/.test(await t.markdown()),
     '"- " in a cell makes a bullet, Enter the next, Enter on an empty one ends the list; saved as "• milk<br>• eggs<br>done"');
   await t.shot('table-bullets', '.tiptap table');
+
+  const tb = await box(t, '.tiptap table');
+  await t.page.mouse.move(tb.x + 30, tb.y + 4);
+  await t.page.mouse.move(tb.x + 3, tb.y + 1, { steps: 3 });
+  await t.ok('table-add-here', async () => { const p = await box(t, '.tbl-add.here.on'); return !!p && Math.abs(p.x + p.width / 2 - tb.x) <= 2 && Math.abs(p.y + p.height / 2 - tb.y) <= 2; },
+    "the pointer at the table's top-left corner shows a + on its left edge, across the top border");
+  await t.ok('table-add-here', async () => (await t.page.locator('.tbl-grip.on').count()) === 0, 'and no ⋮⋮ or ⋯ under it');
+  const plus = await box(t, '.tbl-add.here.on');
+  await t.page.mouse.move(plus.x + plus.width / 2, plus.y + plus.height / 2, { steps: 2 });
+  await t.ok('table-add-here', async () => { const l = await box(t, '.tbl-drop.on'); return !!l && Math.abs(l.x + l.width / 2 - tb.x) <= 2 && l.height >= tb.height - 2; },
+    'on the +, a line down the left edge shows where the column goes');
+  await t.shot('table-add-here-hover');
+  const at = await box(t, '.tbl-add.here.on');
+  await t.page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+  await t.type('new');
+  await t.ok('table-add-here', async () => (await t.page.evaluate(() => [...document.querySelector('.tiptap table').rows[0].cells].map((c) => c.textContent).join('|'))) === 'new|x||'
+    && /\| new \| x \|/.test(await t.markdown()), 'a click puts an empty column in at the far left, the caret in its first cell: typed "new" heads it, before "x"');
+  await t.shot('table-add-here', '.tiptap table');
+  const second = await t.page.evaluate(() => { const r = document.querySelector('.tiptap table').rows[0].cells[1].getBoundingClientRect(); return { x: r.right, y: r.top }; });
+  await t.page.mouse.move(second.x - 4, second.y + 2, { steps: 3 });
+  await t.page.mouse.click(second.x, second.y);
+  await t.type('mid');
+  await t.ok('table-add-here', async () => (await t.page.evaluate(() => [...document.querySelector('.tiptap table').rows[0].cells].map((c) => c.textContent).join('|'))) === 'new|x|mid||',
+    "the + on the edge between two columns puts one in between them");
 };
