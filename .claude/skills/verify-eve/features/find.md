@@ -11,7 +11,7 @@ one, and makes the text larger or smaller with ⌘+ / ⌘- without going to Sett
   the bar and the caret is back in the note.
 - `find-outline`: a note taller than the window has a rail of ticks beside it, one per heading; a tick hovered shows
   the section's title and first lines; a tick clicked scrolls to that section.
-- `find-size`: ⌘= one step larger (15 → 19px), ⌘- smaller, ⌘0 back to Settings' size; a `Text 19px` pill says so.
+- `find-size`: ⌘= one step larger (15 → 17px, about an eighth), ⌘- smaller, ⌘0 back to Settings' size; a `Text 17px` pill says so.
 
 ## How to get to it (user POV)
 
@@ -33,7 +33,7 @@ each over 14 lines of text, so the note is taller than the window; `c.md` as the
   `await t.page.hover('nav.outline .tick >> nth=1'); await t.wait(800);` a balloon shows `Morning` and its first
   lines. `await t.click('nav.outline .tick >> nth=2')`: the page scrolls so `Lunch` is at the top.
 - `find-size` **Text size.** Read `getComputedStyle(document.querySelector('.tiptap p')).fontSize`: 15px.
-  `await t.key(`${t.mod}+Equal`)` gives 19px and the `Text 19px` pill; two `${t.mod}+Minus` give 12px;
+  `await t.key(`${t.mod}+Equal`)` gives 17px and the `Text 17px` pill; two `${t.mod}+Minus` give 14px;
   `${t.mod}+0` gives 15px again.
 - `find-bar` `find-replace` **Phone.** `await t.page.locator('.mhead button[aria-label="More"]').tap(); await t.page.locator('button[role="menuitem"]', { hasText: 'Find & replace' }).tap();`
   then type, tap `.find button[aria-label="Replace"]` (first) and Replace all as on the Mac, and close with
@@ -48,7 +48,7 @@ Proved on 2026-11-17 (0.7.147): `mac-01-find`, `mac-02-replaced`, `mac-03-outlin
   `t.click` takes the first, the toggle; use Replace all, or `>> nth=1` for one at a time.
 - The outline shows only when the page overflows: a short seeded note has no `nav.outline .tick` at all.
 - The hover balloon waits 500 ms, and stays while the mouse is over the rail: move the mouse off before a later shot.
-- The size steps are proportional (125%, 150%… of Settings' size), not 1px; Settings' size itself is not changed, so
+- The size steps are proportional (112%, 125%, 137%… of Settings' size), not 1px; Settings' size itself is not changed, so
   ⌘0 returns to it.
 - Both runs end with `errors: 0`. A phone run that ends with `ResizeObserver loop completed` means the bar's height is
   being fitted in the same frame again (`makeRoom` in `Find.svelte` waits a frame for it).

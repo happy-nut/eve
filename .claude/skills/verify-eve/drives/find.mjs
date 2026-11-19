@@ -53,11 +53,11 @@ export default async (t) => {
 
   await t.ok('find-size', async () => (await size(t)) === '15px', "the text starts at Settings' 15px");
   await t.key(`${t.mod}+Equal`);
-  await t.ok('find-size', async () => (await size(t)) === '19px' && (await pill(t)) === 'Text 19px', '⌘= makes the text 19px and a "Text 19px" pill says so');
+  await t.ok('find-size', async () => (await size(t)) === '17px' && (await pill(t)) === 'Text 17px', '⌘= makes the text 17px, an eighth larger, and a "Text 17px" pill says so');
   await t.shot('bigger');
   await t.key(`${t.mod}+Minus`);
   await t.key(`${t.mod}+Minus`);
-  await t.ok('find-size', async () => (await size(t)) === '12px' && (await pill(t)) === 'Text 12px', '⌘- twice makes it 12px');
+  await t.ok('find-size', async () => (await size(t)) === '14px' && (await pill(t)) === 'Text 14px', '⌘- twice makes it 14px, a step under where it began');
   await t.shot('smaller');
   await t.key(`${t.mod}+0`);
   await t.ok('find-size', async () => (await size(t)) === '15px', "⌘0 puts it back to Settings' 15px");

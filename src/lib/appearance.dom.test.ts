@@ -14,34 +14,33 @@ test('a custom font not named yet writes in the system font, not in a font calle
 
 test('⌘+ / ⌘- step on top of the Settings size, and ⌘0 goes back to it, not to the default', () => {
   appearance.set({ size: 18, zoom: 0 });
+  expect(appearance.textSize(1)).toBe(20); // 112%
   expect(appearance.textSize(1)).toBe(23); // 125%
-  expect(appearance.textSize(1)).toBe(27); // 150%
   expect(appearance.s.size).toBe(18); // Settings keeps its own
   expect(appearance.textSize(0)).toBe(18);
   expect(appearance.s.size).toBe(18);
   appearance.textSize(-1);
   // the slider still sets the size under the steps
   appearance.set({ size: 22 });
-  expect(appearance.textPx).toBe(18);
+  expect(appearance.textPx).toBe(20);
   expect(appearance.textSize(0)).toBe(22);
   // and the steps go on past the slider's end, as far as 48px
   appearance.set({ size: 28 });
-  expect(appearance.textSize(1)).toBe(35);
-  expect(appearance.textSize(1)).toBe(42);
-  expect(appearance.textSize(1)).toBe(48);
-  expect(appearance.textSize(1)).toBe(48);
+  for (const px of [31, 35, 38, 42, 48, 48]) expect(appearance.textSize(1)).toBe(px);
   expect(appearance.textSize(0)).toBe(28);
 });
 
-test('a ⌘+ / ⌘- step is one a reader sees: a quarter or more of the size each time, up to three times it', () => {
-  // a step was 1px, 15 to 16, and the text hardly looked any different
+test('a ⌘+ / ⌘- step is one a reader sees, but not a jump: about an eighth of the size each time, up to three times it', () => {
+  // a step was 1px, 15 to 16, and the text hardly looked any different; then a quarter and more, and it leapt
   appearance.set({ size: 15, zoom: 0 });
   const seen = [15];
   for (let i = 0; i < 5; i++) seen.push(appearance.textSize(1));
-  expect(seen).toEqual([15, 19, 23, 30, 38, 45]);
-  for (let i = 1; i < seen.length; i++) expect(seen[i] / seen[i - 1]).toBeGreaterThanOrEqual(1.18);
+  expect(seen).toEqual([15, 17, 19, 21, 23, 26]);
+  for (let i = 1; i < seen.length; i++) { expect(seen[i] / seen[i - 1]).toBeGreaterThanOrEqual(1.08); expect(seen[i] / seen[i - 1]).toBeLessThanOrEqual(1.14); }
+  for (let i = 0; i < 20; i++) appearance.textSize(1);
+  expect(appearance.textPx).toBe(45);
   appearance.textSize(0);
-  expect([appearance.textSize(-1), appearance.textSize(-1), appearance.textSize(-1), appearance.textSize(-1)]).toEqual([12, 10, 9, 9]);
+  expect([appearance.textSize(-1), appearance.textSize(-1), appearance.textSize(-1), appearance.textSize(-1), appearance.textSize(-1)]).toEqual([14, 12, 11, 10, 9]);
   appearance.textSize(0);
 });
 
@@ -50,9 +49,9 @@ test('⌘+ / ⌘- make the page wider and narrower with the text, as a browser z
   appearance.set({ size: 16, zoom: 0, width: 800 });
   expect(appearance.widthPx).toBe(800);
   appearance.textSize(1); appearance.textSize(1);
-  expect(appearance.widthPx).toBe(1200); // 24 / 16 of it
+  expect(appearance.widthPx).toBe(1000); // 20 / 16 of it
   appearance.textSize(-1); appearance.textSize(-1); appearance.textSize(-1); appearance.textSize(-1);
-  expect(appearance.widthPx).toBe(550); // 11 / 16
+  expect(appearance.widthPx).toBe(650); // 13 / 16
   appearance.textSize(0);
   expect(appearance.widthPx).toBe(800);
   // Settings' own size leaves the width as Settings has it
@@ -80,7 +79,7 @@ test('a small-text note stays under the rest as ⌘- takes them small; a size se
   appearance.textSize(1); appearance.textSize(1); appearance.textSize(1);
   appearance.set({ size: 28 });
   const at = appearance.textPx;
-  expect(at / appearance.textSize(-1)).toBeGreaterThanOrEqual(1.1);
+  expect(at / appearance.textSize(-1)).toBeGreaterThanOrEqual(1.05);
   appearance.textSize(0);
 });
 

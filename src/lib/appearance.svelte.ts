@@ -79,9 +79,9 @@ export const SIZE_MIN = 12, SIZE_MAX = 28;
 /** the Weight slider's range, a step a named weight */
 export const WEIGHT_MIN = 300, WEIGHT_MAX = 600;
 export const weightName = (w: number): string => ({ 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'Semibold' })[w] ?? String(w);
-/** ⌘+ / ⌘-'s steps, each a quarter or more on the last (a browser's tenths still hardly showed), and how far they go:
- *  further than the Size slider, as a browser zooms past any font size a page sets */
-const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 2.5, 3], ZOOM_MIN = 9, ZOOM_MAX = 48;
+/** ⌘+ / ⌘-'s steps, each about an eighth on the last (a quarter and more leapt; 1px hardly showed), and how far they
+ *  go: further than the Size slider, as a browser zooms past any font size a page sets */
+const ZOOMS = [0.5, 0.58, 0.67, 0.73, 0.8, 0.9, 1, 1.12, 1.25, 1.37, 1.5, 1.73, 2, 2.24, 2.5, 2.74, 3], ZOOM_MIN = 9, ZOOM_MAX = 48;
 const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, weight: 400, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832, summon: true, slideTurn: 'push', slideBuild: true, codeTheme: 'eve', codeShade: 'auto' };
 
 function load(): Appearance {
@@ -110,14 +110,14 @@ class AppearanceStore {
   get widthPx() { return Math.round((this.s.width * this.textPx) / Math.min(SIZE_MAX, Math.max(SIZE_MIN, this.s.size))); }
   /**
    * ⌘+ / ⌘- / ⌘0: the note's text a step larger or smaller, or back to the size Settings has. A step is one that shows
-   * (125%, 150%, 200%… of that size): it was 1px, and 15 to 16 hardly showed. The steps are the keys' own, on top of that size: ⌘0 set Settings' size to the default, and the size chosen there was lost to
+   * (112%, 125%, 137%… of that size): it was 1px, and 15 to 16 hardly showed. The steps are the keys' own, on top of that size: ⌘0 set Settings' size to the default, and the size chosen there was lost to
    * a key pressed to read something small.
    */
   textSize(step: 1 | -1 | 0): number {
     const sizes = ZOOMS.map((f) => Math.round(Math.min(SIZE_MAX, Math.max(SIZE_MIN, this.s.size)) * f));
-    // a step a tenth away at least: zoomed and then given another size in Settings, the text sits between two steps,
-    // and the nearest was a pixel off
-    const next = step > 0 ? sizes.find((p) => p >= this.textPx * 1.1) : sizes.reverse().find((p) => p <= this.textPx / 1.1);
+    // a step a twentieth away at least: zoomed and then given another size in Settings, the text sits between two
+    // steps, and the nearest was a pixel off
+    const next = step > 0 ? sizes.find((p) => p >= this.textPx * 1.05) : sizes.reverse().find((p) => p <= this.textPx / 1.05);
     const px = step ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next ?? this.textPx)) : this.s.size;
     this.set({ zoom: px - this.s.size });
     return this.textPx;
