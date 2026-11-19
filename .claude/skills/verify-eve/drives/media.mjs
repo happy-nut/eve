@@ -24,9 +24,6 @@ const images = (t) => t.page.locator('.tiptap img').count();
 const dataImages = async (t) => ((await t.markdown()).match(/!\[[^\]]*\]\(data:image\/png;base64,/g) ?? []).length;
 
 export default async (t) => {
-  await t.page.evaluate(() => import('/src/PdfViewer.svelte')).catch(() => {});
-  await t.wait(1500);
-  await t.page.waitForSelector('.tiptap');
   await newLine(t);
   await t.type('/image');
   await t.page.waitForSelector('.suggest li');

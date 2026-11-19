@@ -8,6 +8,10 @@ const noteFont = (t) => t.page.evaluate(() => { const s = getComputedStyle(docum
 const sub = (t, label) => t.page.evaluate((l) => document.querySelector(`input[aria-label="${l}"]`)?.closest('label.row')?.querySelector('.sub')?.textContent.trim(), label);
 const noteWidth = (t) => t.page.evaluate(() => Math.round(document.querySelector('.tiptap').getBoundingClientRect().width));
 
+const reach = async (t, label) => {
+  for (let i = 0; i < 30 && (await t.page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) !== label; i++) await t.key('Alt+Tab');
+};
+
 export default async (t) => {
   await t.key(`${t.mod}+Comma`);
   await t.ok('settings-open', async () => (await t.page.locator(dialog).isVisible()) && (await selectedTab(t)) === 'General'
@@ -87,8 +91,9 @@ export default async (t) => {
   await t.ok('settings-slider', async () => (await sub(t, 'Size')) === '20px' && (await noteFont(t)).startsWith('20px|'),
     'dragging Size to the middle makes it 20px, the note following');
   await t.shot('size-mouse');
-  for (let i = 0; i < 40 && !(await t.page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Line height')); i++) await t.key('Tab');
-  await t.ok('settings-slider', async () => (await sub(t, 'Line height')) === '1.6', 'tab reaches Line height, at 1.6');
+  await reach(t, 'Line height');
+  await t.ok('settings-slider', async () => (await sub(t, 'Line height')) === '1.6' && (await t.page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) === 'Line height',
+    '⌥Tab reaches Line height (Tab alone skips sliders where macOS keyboard navigation is off), at 1.6');
   const lineHeight = () => t.page.evaluate(() => document.querySelector('input[aria-label="Line height"]').value);
   for (const want of ['1.65', '1.7']) {
     await t.key('ArrowRight');
@@ -99,8 +104,9 @@ export default async (t) => {
   await t.shot('lineheight-keys');
   const wide = await noteWidth(t);
   const width = Number((await sub(t, 'Width')).replace('px', ''));
-  await t.key('Tab');
-  await t.ok('settings-slider', () => t.page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Width'), 'tab goes on to Width');
+  await reach(t, 'Width');
+  await t.ok('settings-slider', async () => (await sub(t, 'Width')) === `${width}px` && (await t.page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) === 'Width',
+    '⌥Tab goes on to Width, as it was');
   await t.key('ArrowLeft');
   await t.key('ArrowLeft');
   await t.ok('settings-slider', async () => (await sub(t, 'Width')) === `${width - 40}px` && (await noteWidth(t)) === wide - 40,

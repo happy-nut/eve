@@ -88,3 +88,5 @@ still 20px / 34px); `slider-phone/shots/phone-01-size` (28px by a tap).
   nothing. Tab to it first.
 - Text's sliders sit below the fold in Appearance: `scrollIntoViewIfNeeded()` before reading the slider's box.
 - Width's value shows as the note column itself: two ← on Width (20 px a step) make `.tiptap` 40 px narrower, also after a reload.
+- WebKit gives a slider the keyboard by ⌥Tab, not by a click, and plain Tab skips sliders where macOS keyboard navigation
+  is off (as on CI): reach Line height and Width with ⌥Tab.

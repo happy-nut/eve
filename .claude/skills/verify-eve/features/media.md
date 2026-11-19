@@ -60,7 +60,6 @@ Proved on 2026-11-17 (0.7.147): `mac-01-image-picked`, `mac-02-viewer`, `mac-03-
 
 - The first time a run opens a PDF, Vite may optimise the viewer's code and reload the page, losing the click: the
   first run showed no panel, the next ones did. Run again before calling the panel broken.
-- Several dev servers at once can each find the PDF viewer's code new and reload the page mid-run; `drives/media.mjs` loads `/src/PdfViewer.svelte` once before its steps so that reload comes first.
 - A web build stores a dropped PDF as a `blob:` address, which is gone after a reload; the Mac app copies it into
   `assets/`. Do not check a PDF across a reload here.
 - The card's title is only the host in WebKit: the page's metadata is fetched by the browser and refused by CORS

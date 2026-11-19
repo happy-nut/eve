@@ -30,9 +30,10 @@ export default async (t) => {
   await t.click('aside [data-note="c"] .ico-slot');
   await t.page.waitForSelector('[aria-label="Choose an icon"] emoji-picker button.emoji');
   await t.ok('sidebar-icon', () => t.page.locator('[aria-label="Choose an icon"]').isVisible(), 'a click on the row icon opens the Choose an icon picker');
+  const picked = await t.page.locator('emoji-picker button.emoji >> nth=3').textContent();
   await t.click('emoji-picker button.emoji >> nth=3');
-  const emoji = (await list(t))[0].split('|')[1].split(' ')[0];
-  await t.ok('sidebar-icon', async () => (await list(t))[0] === `0|${emoji} Reading list` && emoji !== 'Reading', 'the picked emoji shows before Reading list on its row');
+  const emoji = picked.trim();
+  await t.ok('sidebar-icon', async () => (await list(t))[0] === `0|${emoji} Reading list`, `the picked emoji (${emoji}) shows before Reading list on its row`);
   await t.click('aside [data-note="c"]');
   await t.ok('sidebar-icon', () => t.page.evaluate((e) => [...document.querySelectorAll('.page-head *')].some((el) => el.children.length === 0 && el.textContent.trim() === e && el.getBoundingClientRect().height >= 40), emoji),
     'the same emoji shows big on the open page head');
