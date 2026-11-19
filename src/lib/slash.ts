@@ -221,6 +221,10 @@ function atCaret(uiRef: Driven & { place?(rect: DOMRect): void }, keys: PickerKe
   const follow = stayAtCaret(uiRef);
   const k = suggestKeys(uiRef, keys);
   const open = (p: any) => { k.shown(p); show(p); };
+  const readInWhatIsOnScreen = (view: any): boolean => { const was = view.state.doc; view.domObserver?.flush?.(); return view.state.doc !== was; };
+  const pressAgainOnceTheListIsNew = (view: any, e: KeyboardEvent) => setTimeout(() => {
+    if (!view.isDestroyed) view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: e.key, shiftKey: e.shiftKey, bubbles: true, cancelable: true }));
+  }, 0);
   return {
     onStart: (p: any) => {
       const set = popupsOf.get(p.editor) ?? new Set();
@@ -230,6 +234,7 @@ function atCaret(uiRef: Driven & { place?(rect: DOMRect): void }, keys: PickerKe
     },
     onUpdate: (p: any) => { follow.update(p); open(p); },
     onKeyDown: (p: any) => {
+      if ((p.event.key === 'Enter' || p.event.key === 'Tab') && readInWhatIsOnScreen(p.view)) return (pressAgainOnceTheListIsNew(p.view, p.event), true);
       const asked = askedFor.get(p.view);
       const took = k.onKeyDown(p);
       if (took && p.event.key === 'Escape' && asked && asked.slash === p.range?.from) {

@@ -120,3 +120,29 @@ test('a "/" typed by hand and closed with Esc stays: it is the line\'s own', asy
   await tick();
   expect(lines(ed)).toEqual(['T', 'a /']);
 });
+
+test('/t typed, "able" on the screen but not yet read in when ↩ comes: the table takes the whole "/table", nothing left (#321)', async () => {
+  const { ed } = onEmptyLine();
+  type(ed, '/t');
+  await settle();
+  const text = ed.view.dom.querySelector('.suggestion')!.firstChild as Text;
+  text.data += 'able';
+  window.getSelection()!.collapse(text, text.data.length);
+  press(ed, 'Enter');
+  await tick();
+  expect(ed.state.doc.textContent).not.toMatch(/able|\//);
+  expect(getMarkdown(ed)).toContain('|');
+});
+
+test('"and /z" with "z" not yet read in when ↩ comes: still a new line, the words kept (#321)', async () => {
+  const { ed, picked } = onEmptyLine();
+  type(ed, 'and /');
+  await settle();
+  const text = ed.view.dom.querySelector('.suggestion')!.firstChild as Text;
+  text.data += 'z';
+  window.getSelection()!.collapse(text, text.data.length);
+  press(ed, 'Enter');
+  await tick(); await tick();
+  expect(picked).toEqual([]);
+  expect(lines(ed)).toEqual(['T', 'and /z', '']);
+});
