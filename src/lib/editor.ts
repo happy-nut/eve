@@ -34,7 +34,7 @@ import { FootnoteRef, FootnoteText } from './footnote';
 import { CodeBlock, inCell } from './code';
 import { Pdf } from './pdf';
 import { Video } from './video';
-import { TableNodes, asCopy, cellEnter, clearForPaste, upAboveTable, copying } from './table';
+import { TableNodes, asCopy, cellBulletRule, cellEnter, cellUnbullet, clearForPaste, toggleCellBullet, upAboveTable, copying } from './table';
 import { Find } from './find';
 import { SelectionLayer } from './selectionLayer';
 import { BlockHandle } from './blockHandle';
@@ -641,7 +641,7 @@ export function editorCommands(editor: Editor): Record<string, () => boolean> {
     // list, a list's lines plain again), never over the empty line at the note's end
     // a list made of code took its lines into one item's text, newlines and all: saved, they read back as one line,
     // and in a callout or a toggle the list landed outside it. Code stays code; the keys do nothing there
-    bulletList: () => inCode() || editor.commands.command(switchLines('bulletList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('bulletList', 'listItem')).run() || c().command(leaveTrailer).toggleBulletList().run(),
+    bulletList: () => inCode() || toggleCellBullet(editor.view) || editor.commands.command(switchLines('bulletList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('bulletList', 'listItem')).run() || c().command(leaveTrailer).toggleBulletList().run(),
     orderedList: () => inCode() || editor.commands.command(switchLines('orderedList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('orderedList', 'listItem')).run() || c().command(leaveTrailer).toggleOrderedList().run(),
     taskList: () => inCode() || editor.commands.command(switchLines('taskList', 'taskItem')) || c().command(leaveTrailer).command(wrapLines('taskList', 'taskItem')).run() || c().command(leaveTrailer).toggleTaskList().run(),
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
@@ -1812,7 +1812,11 @@ export function createEditor(opts: {
           return {
             Enter: () => free() && cellEnter(this.editor.view, () => this.editor.commands.setHardBreak()),
             ArrowUp: () => free() && upAboveTable(this.editor.view),
+            Backspace: () => cellUnbullet(this.editor.view),
           };
+        },
+        addInputRules() {
+          return [new InputRule({ find: /[-+*][^\S\n]$/, handler: ({ state, range }) => (cellBulletRule(state.tr, range.from, range.to) ? undefined : null) })];
         },
       }),
       // Delete at the end of a list line over an item at another level or of another kind: that item's text joins the

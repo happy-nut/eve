@@ -46,6 +46,50 @@ test.each([
   expect(save(save(note))).toBe(save(note));
 });
 
+describe('a list in a cell', () => {
+  const cell = () => { const ed = editorWith('# t\n\n| h |\n| --- |\n| a1 |'); ed.commands.setTextSelection(posOf(ed, 'a1', true)); press(ed, 'Enter'); return ed; };
+
+  test('"- " at the start of a line makes it an item, Enter makes the next, Enter on an empty one ends the list', () => {
+    const ed = cell();
+    type(ed, '- milk');
+    press(ed, 'Enter');
+    type(ed, 'eggs');
+    press(ed, 'Enter');
+    press(ed, 'Enter');
+    type(ed, 'done');
+    expect(md(ed)).toBe('# t\n\n| h |\n| --- |\n| a1<br>• milk<br>• eggs<br>done |\n');
+    expect(md(editorWith(md(ed)))).toBe(md(ed));
+  });
+
+  test('"* " and "+ " too, at the very start of a cell, and not after words', () => {
+    const ed = editorWith('| h |\n| --- |\n|  |');
+    ed.commands.setTextSelection(posOf(ed, 'h', true) + 4);
+    type(ed, '* a x - b');
+    expect(md(ed)).toBe('| h |\n| --- |\n| • a x - b |\n');
+  });
+
+  test('⌫ just after "• " makes it a plain line again; ⌘Z right after "- " gives back what was typed', () => {
+    const ed = cell();
+    type(ed, '- ');
+    press(ed, 'Backspace');
+    type(ed, 'x');
+    expect(md(ed)).toBe('# t\n\n| h |\n| --- |\n| a1<br>x |\n');
+    const again = cell();
+    type(again, '- ');
+    press(again, 'z', { ctrlKey: true });
+    expect(again.state.doc.textContent).toBe('tha1- ');
+  });
+
+  test('the / menu\'s Bulleted list (⌘⇧8) makes the caret\'s line an item and takes it back, the cell still a cell', () => {
+    const ed = cell();
+    type(ed, 'x');
+    runEditorCommand(ed, 'bulletList');
+    expect(md(ed)).toBe('# t\n\n| h |\n| --- |\n| a1<br>• x |\n');
+    runEditorCommand(ed, 'bulletList');
+    expect(md(ed)).toBe('# t\n\n| h |\n| --- |\n| a1<br>x |\n');
+  });
+});
+
 test('Enter in a cell is a line break in it, saved as <br> the way ⇧Enter saves one', () => {
   const ed = editorWith('# t\n\n| h |\n| --- |\n| a1 |');
   const before = md(ed);
@@ -232,14 +276,14 @@ describe('⌫ on a chosen row or column with nothing in it takes it out', () => 
 });
 
 describe('a cell holds lines and pictures only: what a markdown cell can keep', () => {
-  for (const typed of ['- X', '1. X', '[] X', '# X', '> X', '" X', '--- ']) {
-    test(`"${typed}" typed at a cell's start stays the words typed`, () => {
+  for (const [typed, kept = typed] of [['- X', '• X'], ['1. X'], ['[] X'], ['# X'], ['> X'], ['" X'], ['--- ']]) {
+    test(`"${typed}" typed at a cell's start stays the words typed${kept === typed ? '' : `, a list item as "${kept}"`}`, () => {
       const ed = editorWith('# T\n\n| a | b |\n| --- | --- |\n| cc | d |');
       ed.commands.setTextSelection(posOf(ed, 'cc'));
       type(ed, typed);
       let cell = '';
       ed.state.doc.descendants((n) => { if (!cell && n.type.name === 'tableCell') cell = n.textContent; return !cell; });
-      expect(cell).toBe(`${typed}cc`); // the words as typed (markdown escapes the ones that would be markup)
+      expect(cell).toBe(`${kept}cc`); // the words as typed (markdown escapes the ones that would be markup)
       expect(md(editorWith(md(ed)))).toBe(md(ed)); // and reads back the same
     });
   }

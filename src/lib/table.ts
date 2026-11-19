@@ -324,7 +324,62 @@ export function cellEnter(view: EditorView, hardBreak: () => boolean): boolean {
   const sel = view.state.selection;
   if (sel instanceof CellSelection || !cellAround(sel.$head)) return false;
   if (topRow(view) && sel.head === Selection.atStart(view.state.doc).head) return lineAbove(view);
-  return hardBreak();
+  const item = bulletLine(view.state);
+  if (item && sel.empty && item.end === sel.head && item.text === sel.head) return unbullet(view, item);
+  if (!hardBreak()) return false;
+  if (item) view.dispatch(view.state.tr.insertText(BULLET));
+  return true;
+}
+
+/**
+ * A list in a table cell. A cell is one line of markdown, which holds no list, so its items are lines of the cell
+ * (`<br>` between them) that start with "• ": the note keeps them, and any markdown reader shows them as bullets.
+ */
+export const BULLET = '• ';
+
+function cellLine($pos: ResolvedPos) {
+  let start = $pos.start(), end = $pos.end();
+  $pos.parent.forEach((child, offset) => {
+    if (child.type.name !== 'hardBreak') return;
+    const at = $pos.start() + offset;
+    if (at < $pos.pos) start = at + 1;
+    else if (end === $pos.end()) end = at;
+  });
+  return { start, end };
+}
+
+const textLineInCell = ($pos: ResolvedPos) => $pos.parent.isTextblock && !$pos.parent.type.spec.code && !!cellAround($pos);
+
+function bulletLine(state: EditorState) {
+  const { $head } = state.selection;
+  if (!textLineInCell($head)) return null;
+  const line = cellLine($head);
+  return state.doc.textBetween(line.start, line.end).startsWith(BULLET) ? { ...line, text: line.start + BULLET.length } : null;
+}
+
+const unbullet = (view: EditorView, item: { start: number; text: number }) => (view.dispatch(view.state.tr.delete(item.start, item.text)), true);
+
+export function cellBulletRule(tr: Transaction, from: number, to: number): boolean {
+  const $from = tr.doc.resolve(from);
+  if (!textLineInCell($from)) return false;
+  const { start } = cellLine($from);
+  if (tr.doc.textBetween(start, from).trim()) return false;
+  tr.insertText(BULLET, start, to);
+  return true;
+}
+
+export function cellUnbullet(view: EditorView): boolean {
+  const item = view.state.selection.empty ? bulletLine(view.state) : null;
+  return !!item && view.state.selection.head === item.text && unbullet(view, item);
+}
+
+export function toggleCellBullet(view: EditorView): boolean {
+  const { $head } = view.state.selection;
+  if (!textLineInCell($head)) return false;
+  const item = bulletLine(view.state);
+  if (item) return unbullet(view, item);
+  view.dispatch(view.state.tr.insertText(BULLET, cellLine($head).start));
+  return true;
 }
 
 /** ↑ in the first row of a table opening the note: a line above it, as ↑ makes one over code opening the note */

@@ -53,4 +53,16 @@ export default async (t) => {
       && addRow.y >= tb.y + tb.height - 2 && addCol.x >= tb.x + tb.width - 2;
   }, "hovering a cell shows its row's ⋮⋮ on the table's left edge, its column's ⋯ on the top edge, + below and + on the right");
   await t.shot('table-handles');
+
+  await t.page.mouse.click(c.x + c.width / 2, c.y + c.height / 2);
+  await t.type('- milk');
+  await t.key('Enter');
+  await t.type('eggs');
+  await t.key('Enter');
+  await t.key('Enter');
+  await t.type('done');
+  const third = () => t.page.evaluate(() => document.querySelector('.tiptap table tr:nth-child(2) td:nth-child(2)').innerText);
+  await t.ok('table-bullets', async () => (await third()) === '• milk\n• eggs\ndone' && /\| • milk<br>• eggs<br>done \|/.test(await t.markdown()),
+    '"- " in a cell makes a bullet, Enter the next, Enter on an empty one ends the list; saved as "• milk<br>• eggs<br>done"');
+  await t.shot('table-bullets', '.tiptap table');
 };
