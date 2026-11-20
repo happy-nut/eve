@@ -33,4 +33,4 @@ test('summoning turned off: Eve back in the Dock and ⌘Tab, and kept there whil
   expect(row('Hide from Dock').disabled).toBe(false);
   unmount(app);
   document.body.innerHTML = '';
-});
+}, 30_000); // loads the whole Settings screen: past 5 s on a busy machine (the whole suite at once)
