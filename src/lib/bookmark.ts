@@ -4,6 +4,7 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 import { fetchUrl, isMobile, isTauri, openUrl, youtubePlayer } from './platform';
 import { VIDEO_FILE } from './drop';
+import { saved, save } from './stored';
 
 /**
  * Bookmark card: a URL on a line of its own renders as a compact preview (favicon, title, description,
@@ -15,7 +16,7 @@ export const URL_RE = /^https?:\/\/[^\s<>"']+$/;
 const LS = 'eve.links';
 export interface Meta { title: string; desc: string; image: string; icon: string }
 
-const cache: Record<string, Meta> = (() => { try { return JSON.parse(localStorage.getItem(LS) ?? '{}'); } catch { return {}; } })();
+const cache: Record<string, Meta> = saved(LS, {});
 const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
 
 /** The address as a card spells it out: without the scheme, or a slash at its end. Whole: the card's width is what
@@ -42,7 +43,7 @@ export async function linkMeta(url: string): Promise<Meta> {
   try {
     const meta = parseMeta(await fetchUrl(url), url);
     cache[url] = meta;
-    try { localStorage.setItem(LS, JSON.stringify(cache)); } catch { /* quota */ }
+    save(LS, cache);
     return meta;
   } catch {
     return { title: host(url), desc: '', image: '', icon: '' };

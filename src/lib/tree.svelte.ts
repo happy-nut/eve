@@ -1,5 +1,6 @@
 import { notes, nested, type Note } from './notes.svelte';
 import { history } from './history.svelte';
+import { saved, save } from './stored';
 
 /**
  * The list's pages as a tree, as Notion has them: pages in pages, no folders. Which pages show their sub-pages and
@@ -13,7 +14,7 @@ const OLD = 'eve.groups';
 interface Saved { folded: string[] }
 interface OldGroups { order?: string[]; collapsed?: string[]; icons?: Record<string, string>; folded?: string[] }
 
-const read = <T,>(key: string): Partial<T> => { try { return JSON.parse(localStorage.getItem(key) ?? '{}') ?? {}; } catch { return {}; } };
+const read = <T,>(key: string): Partial<T> => saved<Partial<T>>(key, {});
 
 const parentOf = (p: string) => p.split('/').slice(0, -1).join('/');
 const leafOf = (p: string) => p.split('/').pop() ?? p;
@@ -51,7 +52,7 @@ class Tree {
   reveal(id: string) {
     for (let p = notes.all.find((x) => x.id === id && !x.deleted)?.parent; p; p = notes.all.find((x) => x.id === p)?.parent) this.unfold(p);
   }
-  private persist() { localStorage.setItem(LS, JSON.stringify(this.saved)); }
+  private persist() { save(LS, this.saved); }
 
   /** an older version's groups still about: in its notes (this device's from before, another's come in by sync, a
    *  folder imported by one) */

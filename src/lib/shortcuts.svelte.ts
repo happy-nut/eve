@@ -1,5 +1,7 @@
 // All key bindings live here. Keys use ProseMirror syntax: "Mod-Shift-b".
 // Users can rebind anything at runtime; overrides persist in localStorage.
+import { saved, save } from './stored';
+
 
 export type Scope = 'global' | 'app' | 'editor';
 export interface Action {
@@ -107,13 +109,13 @@ class Shortcuts {
     const clash = this.actions.find((a) => a.keys === keys && a.id !== id);
     if (clash) return clash;
     this.overrides[id] = keys;
-    localStorage.setItem(LS_KEY, JSON.stringify(this.overrides));
+    save(LS_KEY, this.overrides);
     return null;
   }
   reset(id?: string) {
     if (id) delete this.overrides[id];
     else this.overrides = {};
-    localStorage.setItem(LS_KEY, JSON.stringify(this.overrides));
+    save(LS_KEY, this.overrides);
   }
   /** Find the action (of the given scopes) bound to a key event. */
   match(e: KeyboardEvent, scopes: Scope[]): Action | undefined {
@@ -124,11 +126,7 @@ class Shortcuts {
 }
 
 function load(): Record<string, string> {
-  try {
-    return JSON.parse(localStorage.getItem(LS_KEY) ?? '{}');
-  } catch {
-    return {};
-  }
+  return saved<Record<string, string>>(LS_KEY, {});
 }
 
 const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);

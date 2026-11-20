@@ -1,5 +1,6 @@
 import { notes, CALENDAR } from './notes.svelte';
 import { appearance } from './appearance.svelte';
+import { saved, save } from './stored';
 
 /**
  * Notes open side by side in tabs (Notion's desktop tabs), on the Mac. The tab in front is always the open note
@@ -98,13 +99,13 @@ class Tabs {
     this.save();
   }
   private save() {
-    try { localStorage.setItem(LS, JSON.stringify(this.list)); } catch { /* kept for this run only */ }
+    save(LS, this.list);
   }
 }
 
 function load(): Tab[] {
   try {
-    const l = JSON.parse(localStorage.getItem(LS) ?? '[]');
+    const l: any = saved(LS, []);
     return Array.isArray(l) ? l.filter((t) => typeof t?.id === 'string').map((t) => ({ id: t.id, ...(t.pinned ? { pinned: true } : {}) })) : [];
   } catch { return []; }
 }

@@ -1,5 +1,6 @@
 import { shortcuts } from './shortcuts.svelte';
 import { isMobile } from './platform';
+import { saved, save } from './stored';
 
 /**
  * Shortcut tips from what the user just did: something done the long way (a button, a menu, the "/"
@@ -12,8 +13,7 @@ const GAP = 25_000; // ms between any two tips
 
 interface Saved { off: boolean; seen: Record<string, number> }
 function load(): Saved {
-  try { return { off: false, seen: {}, ...JSON.parse(localStorage.getItem(LS) ?? '{}') }; }
-  catch { return { off: false, seen: {} }; }
+  return { off: false, seen: {}, ...saved<Partial<Saved>>(LS, {}) };
 }
 
 class Hints {
@@ -25,7 +25,7 @@ class Hints {
 
   get on() { return !this.saved.off; }
   setOn(on: boolean) { this.saved.off = !on; this.persist(); if (!on) this.current = null; }
-  private persist() { localStorage.setItem(LS, JSON.stringify(this.saved)); }
+  private persist() { save(LS, this.saved); }
 
   /** A tip for `key` (a stable id), saying `text`, with the keys that do it. Quietly skipped when due. */
   show(key: string, text: string, keys: string | string[]) {

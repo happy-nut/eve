@@ -1,6 +1,7 @@
 /** Theme + editor typography, applied on <html> (data-theme and CSS variables). Persisted locally. */
 import { setWindowSize, isMobile, paintGround } from './platform';
 import codeThemes from './codeThemes.json';
+import { saved, save } from './stored';
 const LS = 'eve.appearance';
 
 export const FONTS: { id: string; label: string; stack: string }[] = [
@@ -86,11 +87,11 @@ const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size
 
 function load(): Appearance {
   try {
-    const { hideSidebarOnEdit: _, ...saved } = JSON.parse(localStorage.getItem(LS) ?? '{}'); // the old name, dropped
+    const { hideSidebarOnEdit: _, ...kept } = saved<Partial<Appearance> & { hideSidebarOnEdit?: unknown }>(LS, {}); // the old name, dropped
     // every setting is saved whenever one is, so 820 is mostly the old default carried along, not a width anyone chose:
     // it gives way to the new one (900, Notion's 708px of text)
-    if (saved.width === 820) delete saved.width;
-    return { ...DEFAULTS, ...saved };
+    if (kept.width === 820) delete kept.width;
+    return { ...DEFAULTS, ...kept };
   } catch { return { ...DEFAULTS }; }
 }
 
@@ -99,7 +100,7 @@ class AppearanceStore {
   // Custom with no font named yet: the system font's stack. It fell back to the word "system", which is no font
   // at all, and the note came out in the webview's default serif.
   get stack() { return (this.s.font === 'custom' ? this.s.custom.trim() : FONTS.find((f) => f.id === this.s.font)?.stack) || FONTS[0].stack; }
-  set(patch: Partial<Appearance>) { Object.assign(this.s, patch); localStorage.setItem(LS, JSON.stringify(this.s)); }
+  set(patch: Partial<Appearance>) { Object.assign(this.s, patch); save(LS, this.s); }
   /** the note's text size as shown: the Settings size and the ⌘+ / ⌘- steps on it */
   get textPx() { return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, this.s.size + this.s.zoom)); }
   /** a note set to small text: a step under the rest, zoomed out too (held at the slider's 12px, it came out larger
