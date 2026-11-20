@@ -49,12 +49,13 @@ import { hints } from './hints.svelte';
 import { fileMarkdown, isAsset } from './drop';
 import Suggestion from '@tiptap/suggestion';
 import { shortcuts } from './shortcuts.svelte';
-import { calendar, emojiRow, popup, suggestionVisible, PICKERS, ICONS, slashAsked, slashItems, pageItems, newPage, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
+import { calendar, emojiRow, popup, suggestionVisible, PICKERS, slashAsked, slashItems, pageItems, newPage, type CalendarUI, type EmojiUI, type SuggestionUI, type SuggestItem } from './slash';
 import { leaveToApp } from './keys';
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
 import { blockBeside, moveBlock, indentLines, switchLines, wrapLines, leaveTrailer } from './blocks';
 import { holdEdit, dropEdit } from './pending';
+import { ICONS } from './lineIcons';
 import { LIST_ITEM_CONTENT, NumberedList, ListSwitch, JoinNextItem, LineIndent, JoinLists, ListMarkdown, ToDoItem, looseLists } from './lists';
 import { appearance } from './appearance.svelte';
 

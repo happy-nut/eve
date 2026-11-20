@@ -6,7 +6,7 @@ import { shifting, shiftingUntil } from './focusWatch';
 export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean; checked?: boolean;
   /** a colour drawn as a chip before the label (a highlighter's pen) */
   swatch?: string;
-  /** a 16×16 line drawing (slash.ts ICONS), the same one the / menu draws for the same thing */
+  /** a 16×16 line drawing (ICONS in lineIcons.ts), the same one the / menu draws for the same thing */
   icon?: string;
   /** other words a menu with a search field finds it by (a language's aliases: py, js) */
   keywords?: string }

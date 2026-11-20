@@ -9,7 +9,7 @@ import { Plugin, PluginKey, NodeSelection, Selection, TextSelection, type Editor
 import type { EditorView } from '@tiptap/pm/view';
 import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { ui, under, type MenuItem } from './ui.svelte';
-import { ICONS } from './slash';
+import { ICONS } from './lineIcons';
 
 interface Block { pos: number; node: PMNode; dom: HTMLElement; item?: boolean }
 

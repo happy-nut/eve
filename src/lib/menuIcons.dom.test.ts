@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
-import { ICONS, SLASH, slashItems, type SuggestItem } from './slash';
+import { SLASH, slashItems, type SuggestItem } from './slash';
+import { ICONS } from './lineIcons';
 import { TURN } from './blockHandle';
 
 const everyRow = (items: SuggestItem[]): SuggestItem[] => items.flatMap((i) => [i, ...everyRow(i.sections ?? [])]);

@@ -11,6 +11,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { CellSelection, TableMap, deleteCellSelection, moveTableColumn, moveTableRow } from '@tiptap/pm/tables';
 import type { Editor } from '@tiptap/core';
 import { ui, under, type MenuItem } from './ui.svelte';
+import { ICONS } from './lineIcons';
 
 /** the table at `pos` (its node, its map) */
 function tableAt(doc: PMNode, pos: number) {
@@ -86,7 +87,7 @@ export function addColumnAt(editor: Editor, pos: number, edge: number) {
 
 const DOTS_V = '<svg viewBox="0 0 8 16"><circle cx="2.5" cy="4" r="1.2"/><circle cx="5.5" cy="4" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="5.5" cy="8" r="1.2"/><circle cx="2.5" cy="12" r="1.2"/><circle cx="5.5" cy="12" r="1.2"/></svg>';
 const DOTS_H = '<svg viewBox="0 0 16 8"><circle cx="4" cy="2.5" r="1.2"/><circle cx="4" cy="5.5" r="1.2"/><circle cx="8" cy="2.5" r="1.2"/><circle cx="8" cy="5.5" r="1.2"/><circle cx="12" cy="2.5" r="1.2"/><circle cx="12" cy="5.5" r="1.2"/></svg>';
-const PLUS = '<svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+const PLUS = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">${ICONS.plus}</svg>`;
 
 interface Over { pos: number; table: HTMLTableElement; wrap: HTMLElement; row: number; col: number; cellEl?: HTMLTableCellElement; x: number; y: number }
 /** how near a column's edge on the table's top border the pointer is for that edge's + */

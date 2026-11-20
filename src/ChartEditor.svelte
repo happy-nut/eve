@@ -2,6 +2,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import type { Diagram } from './lib/diagram';
   import { spotOf, type Act, type Icon } from './lib/spots';
+  import { ICONS as LINE } from './lib/lineIcons';
   import { letGo } from './lib/focusWatch';
   import { composing } from './lib/keys';
   import { isMobile } from './lib/platform';
@@ -383,13 +384,13 @@
   });
 
   const ICONS: Record<Icon, string> = {
-    plus: '<path d="M8 3.5v9M3.5 8h9" />',
+    plus: LINE.plus,
     child: '<path d="M3.5 3v5.5a2 2 0 0 0 2 2H12M9.5 8l2.5 2.5L9.5 13" />',
     up: '<path d="M4.5 9.5 8 6l3.5 3.5" />',
     down: '<path d="M4.5 6.5 8 10l3.5-3.5" />',
     left: '<path d="M9.5 4.5 6 8l3.5 3.5" />',
     right: '<path d="M6.5 4.5 10 8l-3.5 3.5" />',
-    trash: '<path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" />',
+    trash: LINE.trash,
     note: '<path d="M3.5 2.5h9v7l-3 3h-6z M9.5 12.5v-3h3" />',
     section: '<path d="M2.5 4.5h11M2.5 8h7M2.5 11.5h7" />',
   };
