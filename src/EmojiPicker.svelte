@@ -83,6 +83,16 @@
    * every section is a few presses away; ↑ from the very top goes back to the box. ↩ / space pick. Typing
    * (a letter, ⌫) goes back to the box too, and the key lands there.
    */
+  /** ↓ pressed before the emoji are drawn (their list still loading, a first open): the keyboard goes to the first
+   *  once there is one, unless it has moved on meanwhile */
+  async function firstCellOnceDrawn(root: ShadowRoot, input: HTMLInputElement | null) {
+    for (let waited = 0; waited < 5000; waited += 50) {
+      await new Promise((r) => setTimeout(r, 50));
+      if (!root.host.isConnected || root.activeElement !== input) return;
+      const first = [...root.querySelectorAll<HTMLButtonElement>('.tabpanel button.emoji')].find((c) => c.offsetParent);
+      if (first) { first.focus(); first.scrollIntoView({ block: 'nearest' }); void showCell(first); return; }
+    }
+  }
   function onGridKey(e: KeyboardEvent) {
     const root = el?.shadowRoot;
     if (!root || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -92,7 +102,10 @@
     const i = cells.indexOf(at as HTMLButtonElement);
     const go = (cell: HTMLElement) => { e.preventDefault(); e.stopPropagation(); cell.focus(); cell.scrollIntoView({ block: 'nearest' }); void showCell(cell); };
     if (at === input) {
-      if (e.key === 'ArrowDown' && cells.length && !composing(e)) go(cells[0]);
+      if (e.key === 'ArrowDown' && !composing(e)) {
+        if (cells.length) go(cells[0]);
+        else { e.preventDefault(); e.stopPropagation(); void firstCellOnceDrawn(root, input); }
+      }
       // ↩ after a search picks its first match, the one a glance at the results lands on (it did nothing)
       else if (e.key === 'Enter' && !composing(e) && input?.value.trim() && root.querySelector('#search-results') && cells.length) {
         e.preventDefault(); e.stopPropagation(); cells[0].click();

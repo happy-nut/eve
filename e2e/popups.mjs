@@ -164,6 +164,21 @@ async function newNote(page, mobile) {
   await dropdown('note menu (…)', () => page.locator('button.note-more').click());
   await dropdown('sidebar row menu', () => page.locator('aside [data-note]').last().click({ button: 'right' }));
   await dropdown('emoji picker', () => page.locator('aside [data-note]').last().locator('.ico-slot').click());
+  {
+    // ↓ pressed the moment it opens, before its emoji are drawn (a first open on a slow machine): it lands on the first
+    // one once they are, rather than being lost
+    await page.evaluate(() => indexedDB.databases?.().then((dbs) => dbs.forEach((d) => indexedDB.deleteDatabase(d.name))));
+    await page.reload();
+    await page.waitForSelector('.tiptap');
+    await page.locator('aside [data-note]').last().locator('.ico-slot').click();
+    await page.waitForFunction(() => document.querySelector('emoji-picker')?.shadowRoot?.activeElement?.matches('input'), null, { timeout: 10_000 }).catch(() => {});
+    await page.keyboard.press('ArrowDown');
+    const onCell = await page.waitForFunction(() => document.querySelector('emoji-picker')?.shadowRoot?.activeElement?.matches('button.emoji'), null, { timeout: 10_000 }).then(() => true, () => false);
+    const r = { name: 'emoji picker, ↓ at once', opened: true, in: onCell, out: true, closed: true, focus: true };
+    results.push(r);
+    console.log(`${ok(r) ? 'pass' : 'FAIL'} ${r.name.padEnd(28)} ↓ before the emoji were drawn ${onCell ? 'went to the first one' : 'was LOST'}`);
+    await page.keyboard.press('Escape'); await page.waitForTimeout(350);
+  }
   await page.locator('button[data-tip="Settings"]').first().click();
   await page.waitForTimeout(400);
   await page.getByText('Appearance', { exact: true }).click();
