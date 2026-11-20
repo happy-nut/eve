@@ -39,6 +39,8 @@ export const focusLossAllowed = () => allowed;
 export function watchFocus(report: (what: string) => void): () => void {
   let pressed = false, pressTimer: ReturnType<typeof setTimeout> | undefined;
   let last: Element | null = null; // what had the keyboard last
+  const pending = new Set<ReturnType<typeof setTimeout>>();
+  const later = (look: () => void) => { const t = setTimeout(() => { pending.delete(t); look(); }); pending.add(t); };
   let moves = 0; // focusins so far: a blur followed by one handed the keyboard on (what happens to it next is its own)
   const describe = (el: Element | null) => {
     if (!el) return 'nothing';
@@ -60,7 +62,7 @@ export function watchFocus(report: (what: string) => void): () => void {
     // keyboard back by then, and so has whatever moves it on by itself (a caller's then(), a component that
     // focuses itself as it mounts)
     const at = era, n = moves;
-    setTimeout(() => { if (moves === n) check(from, 'blur', at); });
+    later(() => { if (moves === n) check(from, 'blur', at); });
   };
   let lastAt = 0; // the era it was focused in: one from before a reset (a test since ended) is not looked for
   const into = (e: FocusEvent) => { last = e.target as Element; lastAt = era; moves++; };
@@ -78,7 +80,7 @@ export function watchFocus(report: (what: string) => void): () => void {
     const from = last, at = era, n = moves;
     last = null;
     // (as a blur is, looked at again a moment later: what re-renders it may focus it again just after)
-    setTimeout(() => { if (moves === n) check(from, 'removed', at); });
+    later(() => { if (moves === n) check(from, 'removed', at); });
   };
   const poll = setInterval(probe, 25);
   probes.add(probe);
@@ -96,6 +98,8 @@ export function watchFocus(report: (what: string) => void): () => void {
     clearInterval(poll);
     probes.delete(probe);
     clearTimeout(pressTimer);
+    for (const t of pending) clearTimeout(t);
+    pending.clear();
   };
 }
 

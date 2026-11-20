@@ -1,4 +1,4 @@
-import { afterEach, beforeEach } from 'vitest';
+import { afterAll, afterEach, beforeEach } from 'vitest';
 import { watchFocus, resetFocusWatch, allowFocusLoss, focusLossAllowed, probeFocus } from './focusWatch';
 
 // Every DOM test is also a test that the keyboard is never left on <body> by accident (focusWatch.ts): a loss in a
@@ -6,7 +6,8 @@ import { watchFocus, resetFocusWatch, allowFocusLoss, focusLossAllowed, probeFoc
 // loaded by the setup is shared with the test file, and a test that mocks './platform' (a phone) must still be
 // the first to load ui.svelte.
 let lost: string[] = [];
-watchFocus((what) => lost.push(what));
+const stopWatching = watchFocus((what) => lost.push(what));
+afterAll(stopWatching);
 
 beforeEach(() => {
   lost = [];
