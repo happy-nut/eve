@@ -56,8 +56,12 @@
       // once the emoji are drawn: before that no tab is selected yet, and the custom one gets picked after
       const tab = root?.querySelector<HTMLButtonElement>('.nav-button:not([data-group-id="-1"])');
       if (!tab || !root?.querySelector('.tabpanel button.emoji')) { if (waits++ < 80) setTimeout(firstTab, 25); return; }
+      // ↓ may have taken the keyboard into the icons already (a slow first load): it goes on to the first of the tab
+      // shown next, not to <body> with the icon it was on
+      const inGrid = !!root?.activeElement?.matches('button.emoji');
       if (root?.querySelector('.nav-button[data-group-id="-1"][aria-selected="true"]')) tab.click();
-      focusSearch();
+      if (inGrid && root) void firstCellOnceDrawn(root, () => !root.activeElement?.matches('button.emoji') || !(root.activeElement as HTMLElement).offsetParent);
+      else focusSearch();
     };
     firstTab();
     if (root && !root.querySelector('#eve-nav')) {
@@ -85,10 +89,10 @@
    */
   /** ↓ pressed before the emoji are drawn (their list still loading, a first open): the keyboard goes to the first
    *  once there is one, unless it has moved on meanwhile */
-  async function firstCellOnceDrawn(root: ShadowRoot, input: HTMLInputElement | null) {
+  async function firstCellOnceDrawn(root: ShadowRoot, waiting: () => boolean) {
     for (let waited = 0; waited < 5000; waited += 50) {
       await new Promise((r) => setTimeout(r, 50));
-      if (!root.host.isConnected || root.activeElement !== input) return;
+      if (!root.host.isConnected || !waiting()) return;
       const first = [...root.querySelectorAll<HTMLButtonElement>('.tabpanel button.emoji')].find((c) => c.offsetParent);
       if (first) { first.focus(); first.scrollIntoView({ block: 'nearest' }); void showCell(first); return; }
     }
@@ -104,7 +108,7 @@
     if (at === input) {
       if (e.key === 'ArrowDown' && !composing(e)) {
         if (cells.length) go(cells[0]);
-        else { e.preventDefault(); e.stopPropagation(); void firstCellOnceDrawn(root, input); }
+        else { e.preventDefault(); e.stopPropagation(); void firstCellOnceDrawn(root, () => root.activeElement === input); }
       }
       // ↩ after a search picks its first match, the one a glance at the results lands on (it did nothing)
       else if (e.key === 'Enter' && !composing(e) && input?.value.trim() && root.querySelector('#search-results') && cells.length) {
