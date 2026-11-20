@@ -113,6 +113,65 @@ async function newNote(page, mobile) {
   await page.close();
 }
 
+// ---- every dropdown opened by the pointer: the keyboard is in it at once, and ↓ moves through it ----
+// (the pickers that come up as you type, / [[ @ :, leave the keyboard in the text so typing narrows them: their ↑↓ are
+// held by pickerKeys.dom.test.ts)
+{
+  const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+  page.on('pageerror', (e) => errors.push(`dropdowns: ${e.message}`));
+  await page.goto(URL_);
+  await page.waitForSelector('.tiptap');
+  await newNote(page, false);
+  await page.keyboard.type('A line');
+  await page.evaluate(() => {
+    const e = window.__editor;
+    e.commands.insertContentAt(e.state.doc.content.size, '<table><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table><pre><code class="language-js">let x = 1;</code></pre>');
+  });
+  await page.waitForTimeout(400);
+  const where = () => page.evaluate(() => {
+    let a = document.activeElement;
+    while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement;
+    const up = (n) => n.parentElement ?? n.getRootNode().host ?? null;
+    let pop = null;
+    for (let n = a; n && !pop; n = up(n)) if (n.matches?.('.menu, [role="listbox"], emoji-picker')) pop = n;
+    if (pop) { a.dataset.probe ??= String(Math.random()); }
+    return { inside: !!pop, id: a?.dataset?.probe ?? null, what: a ? `<${a.tagName.toLowerCase()}> ${(a.textContent || a.getAttribute('aria-label') || '').trim().slice(0, 24)}` : 'nothing' };
+  });
+  const hoverOn = async (sel) => { const b = await page.locator(sel).first().boundingBox(); await page.mouse.move(b.x + 2, b.y + b.height / 2); await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await page.waitForTimeout(300); };
+  const dropdown = async (name, open) => {
+    let r;
+    try {
+      await open();
+      await page.waitForTimeout(500);
+      const a = await where();
+      await page.keyboard.press('ArrowDown'); await page.waitForTimeout(120);
+      const b = await where();
+      await page.keyboard.press('ArrowDown'); await page.waitForTimeout(120);
+      const c = await where();
+      r = { name, opened: true, in: a.inside, out: b.inside && c.inside && b.id !== a.id && c.id !== b.id, closed: true, focus: true };
+      console.log(`${ok(r) ? 'pass' : 'FAIL'} ${name.padEnd(28)} opened, keyboard on ${a.inside ? '' : 'NOT '}it: ${a.what}  ↓ ${b.what}  ↓ ${c.what}`);
+    } catch (e) {
+      r = { name, opened: false };
+      console.log(`FAIL ${name.padEnd(28)} did not open: ${e.message.split('\n')[0]}`);
+    }
+    results.push(r);
+    await page.keyboard.press('Escape'); await page.waitForTimeout(350);
+  };
+  await dropdown('block menu (⋮⋮)', async () => { await hoverOn('.tiptap p'); await page.locator('.block-handle button.grip').click(); });
+  await dropdown('table row menu', async () => { await hoverOn('.tiptap td'); await page.locator('.tbl-grip.row').click(); });
+  await dropdown('table column menu', async () => { await hoverOn('.tiptap th'); await page.locator('.tbl-grip.col').click(); });
+  await dropdown('code language menu', async () => { await hoverOn('.code-block'); await page.locator('.code-lang').click(); });
+  await dropdown('note menu (…)', () => page.locator('button.note-more').click());
+  await dropdown('sidebar row menu', () => page.locator('aside [data-note]').last().click({ button: 'right' }));
+  await dropdown('emoji picker', () => page.locator('aside [data-note]').last().locator('.ico-slot').click());
+  await page.locator('button[data-tip="Settings"]').first().click();
+  await page.waitForTimeout(400);
+  await page.getByText('Appearance', { exact: true }).click();
+  await page.waitForTimeout(300);
+  for (const label of ['Theme', 'Editor font', 'Code colors']) await dropdown(`a setting's choices (${label})`, () => page.locator(`button.select[aria-label="${label}"]`).click());
+  await page.close();
+}
+
 // ---- a phone ----
 keyboard = false;
 {

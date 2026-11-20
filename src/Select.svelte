@@ -27,7 +27,7 @@
   // open, Esc closes the list first, wherever the keyboard is (gone from its button, the Esc closed what it sits in)
   $effect(() => {
     if (!open || isMobile) return;
-    return claimKeys('global', { Escape: (e) => { e.stopPropagation(); open = false; btn?.focus(); return true; } }, { capture: true, priority: PRIORITY.top, composing: true });
+    return claimKeys('global', { Escape: (e) => { e.stopPropagation(); close(); return true; } }, { capture: true, priority: PRIORITY.top, composing: true });
   });
   let btn = $state<HTMLButtonElement | null>(null);
   let pos = $state({ left: 0, top: 0, maxHeight: 0, width: 0, up: false }); // up: over the button, no room under it
@@ -42,10 +42,13 @@
     at = Math.max(0, options.findIndex(([id]) => id === value));
     if (btn && !isMobile) place(Math.max(btn.offsetWidth, 160), options.length * 34 + 8);
     open = true;
-    // its keys are its button's: opened by a click, WebKit leaves the focus where it was, and Esc closed the whole of
-    // Settings around it instead of the list
-    btn?.focus();
   }
+  let list = $state<HTMLDivElement | null>(null);
+  const option = (i: number) => list?.querySelectorAll<HTMLButtonElement>('[role="option"]')[i];
+  // the keyboard goes into the list as it opens, on the current choice, as every menu's does (Menu.svelte)
+  $effect(() => { if (open && list) option(at)?.focus(); });
+  function moveTo(i: number) { at = i; option(i)?.focus(); }
+  function close() { open = false; btn?.focus(); }
   /** Under the button, its right edge on the button's; over it when there is no room under it — its bottom edge just
    *  above the button (placed by its top at the button's top, the list covered the button and ran off the bottom of
    *  the window). Cut to the room it has either way, and scrolls. Guessed at first, then by its own size once drawn. */
@@ -56,21 +59,25 @@
   }
   const measured = (node: HTMLElement) => { place(node.offsetWidth, node.scrollHeight); };
   function pick(i: number) {
-    open = false;
+    close();
     const id = options[i]?.[0];
     if (id !== undefined && id !== value) onchange(id);
-    btn?.focus();
   }
   function key(e: KeyboardEvent) {
-    if (!open) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); show(); }
-      return;
-    }
+    if (open) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); show(); }
+  }
+  function listKey(e: KeyboardEvent) {
     e.stopPropagation(); // Esc closes this, not the settings around it
-    if (e.key === 'Escape') { e.preventDefault(); open = false; btn?.focus(); }
-    else if (e.key === 'ArrowDown') { e.preventDefault(); at = (at + 1) % options.length; }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); at = (at - 1 + options.length) % options.length; }
-    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(at); }
+    if (e.key === 'Escape') close();
+    else if (e.key === 'Tab') { close(); return; }
+    else if (e.key === 'ArrowDown') moveTo((at + 1) % options.length);
+    else if (e.key === 'ArrowUp') moveTo((at - 1 + options.length) % options.length);
+    else if (e.key === 'Home') moveTo(0);
+    else if (e.key === 'End') moveTo(options.length - 1);
+    else if (e.key === 'Enter' || e.key === ' ') pick(at);
+    else return;
+    e.preventDefault();
   }
 </script>
 
@@ -80,6 +87,11 @@
   <svg viewBox="0 0 16 16"><path d="M4.5 6.5L8 10l3.5-3.5"/></svg>
 </button>
 
+<!-- its own block: one in the list's would stay, catching clicks, while the list fades out -->
+{#if open && !isMobile}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="scrim" use:portal role="presentation" onmousedown={(e) => { e.preventDefault(); close(); }}></div>
+{/if}
 {#if open}
   {#if isMobile}
     <BottomSheet onclose={() => (open = false)} role="listbox" label={label || undefined}>
@@ -92,13 +104,12 @@
       {/each}
     </BottomSheet>
   {:else}
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div class="scrim" use:portal role="presentation" onmousedown={(e) => { e.preventDefault(); open = false; }}></div>
-    <div class="pop" class:up={pos.up} use:portal use:measured role="listbox" style="left: {pos.left}px; top: {pos.top}px; max-height: {pos.maxHeight}px; min-width: {Math.max(pos.width, 160) + 10}px"
+    <!-- svelte-ignore a11y_interactive_supports_focus -->
+    <div class="pop" bind:this={list} class:up={pos.up} use:portal use:measured onkeydown={listKey} role="listbox" style="left: {pos.left}px; top: {pos.top}px; max-height: {pos.maxHeight}px; min-width: {Math.max(pos.width, 160) + 10}px"
       transition:scale|global={popIn}>
       {#each options as [id, text], i (id)}
         <button role="option" aria-selected={id === value} class:at={i === at} tabindex="-1"
-          onmouseenter={() => (at = i)} onmousedown={(e) => e.preventDefault()} onclick={() => pick(i)}>
+          onmouseenter={() => moveTo(i)} onmousedown={(e) => e.preventDefault()} onclick={() => pick(i)}>
           <span>{text}</span>
           {#if id === value}<svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg>{/if}
         </button>
@@ -132,7 +143,7 @@
     display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; border: 0;
     border-radius: var(--row-radius); padding: var(--row-pad); background: none; color: var(--fg); font: inherit; font-size: 13px; text-align: left;
   }
-  .pop button.at { background: var(--accent-soft); }
+  .pop button.at, .pop button:focus { background: var(--accent-soft); outline: none; }
   .pop svg, .opt svg { color: var(--accent-text); }
 
   .title { margin: 0 8px 6px; font-size: 13px; font-weight: 600; color: var(--fg-dim); }
