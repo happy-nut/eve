@@ -7,6 +7,7 @@
   import { stepper } from './lib/diagramMotion';
   import { wholeScreen, ownWholeScreen, isMobile } from './lib/platform';
   import { appearance } from './lib/appearance.svelte';
+  import { followPointer } from './lib/followPointer';
 
   /**
    * The open note a slide at a time, over everything (⋯ → Present), cut by itself (slides.ts): a slide at each of its
@@ -135,10 +136,7 @@
       z.x = zx + m.clientX - x0; z.y = zy + m.clientY - y0;
       draw(false);
     };
-    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', up);
+    followPointer({ move, up: () => {} });
   }
   /** close up, a trackpad's two fingers move around it and a pinch (or ⌘ / ctrl and the wheel) zooms */
   function onWheel(e: WheelEvent) {

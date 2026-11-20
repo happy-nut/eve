@@ -6,6 +6,7 @@
   import { claimKeys, composing } from './lib/keys';
   import { isMobile } from './lib/platform';
   import { floatAt } from './lib/popup';
+  import { followPointer } from './lib/followPointer';
 
   /**
    * A flowchart drawn by hand on its own picture (the builder's preview): boxes are made, joined, renamed and removed
@@ -508,21 +509,7 @@
       if (!cancelled && m?.lane && n && n.lane !== m.lane) n.lane = m.lane;
       sel = { node: id };
     };
-    const pMove = (ev: PointerEvent) => move(ev.clientX, ev.clientY);
-    const pUp = () => end(false);
-    const pCancel = () => end(true);
-    // a finger's move is the drag's, not the page's scroll
-    const tMove = (ev: TouchEvent) => { if (ev.cancelable) ev.preventDefault(); };
-    const off = () => {
-      window.removeEventListener('pointermove', pMove);
-      window.removeEventListener('pointerup', pUp);
-      window.removeEventListener('pointercancel', pCancel);
-      window.removeEventListener('touchmove', tMove);
-    };
-    window.addEventListener('pointermove', pMove);
-    window.addEventListener('pointerup', pUp);
-    window.addEventListener('pointercancel', pCancel);
-    if (finger) window.addEventListener('touchmove', tMove, { passive: false });
+    const off = followPointer({ move: (ev) => move(ev.clientX, ev.clientY), up: () => end(false), cancel: () => end(true), holdPageScroll: finger });
   }
   /** a box dragged (no lanes): once it has moved, the line drawn from it as from its + */
   function wireFrom(e: PointerEvent, id: string, finger: boolean) {
@@ -534,17 +521,7 @@
       wire(id, x0, y0, finger, null);
       swallowClick = true; // the click its letting go makes is the drag's
     };
-    const tMove = (ev: TouchEvent) => { if (ev.cancelable) ev.preventDefault(); };
-    const off = () => {
-      window.removeEventListener('pointermove', pMove);
-      window.removeEventListener('pointerup', off);
-      window.removeEventListener('pointercancel', off);
-      window.removeEventListener('touchmove', tMove);
-    };
-    window.addEventListener('pointermove', pMove);
-    window.addEventListener('pointerup', off);
-    window.addEventListener('pointercancel', off);
-    if (finger) window.addEventListener('touchmove', tMove, { passive: false });
+    const off = followPointer({ move: pMove, up: () => {}, holdPageScroll: finger });
   }
   /** a mouse dragged across empty space: the boxes the box drawn touches are picked together */
   let marquee = $state<{ x0: number; y0: number; x: number; y: number } | null>(null);
@@ -571,10 +548,7 @@
       sel = ids.length > 1 ? { nodes: ids } : ids.length ? { node: ids[0] } : null;
       if (sel) letGo(); // ⌫ the drawing's, not the note's text
     };
-    const off = () => { window.removeEventListener('pointermove', pMove); window.removeEventListener('pointerup', pUp); window.removeEventListener('pointercancel', pUp); };
-    window.addEventListener('pointermove', pMove);
-    window.addEventListener('pointerup', pUp);
-    window.addEventListener('pointercancel', pUp);
+    const off = followPointer({ move: pMove, up: pUp });
   }
   /** the box under a point of the window */
   function boxAt(cx: number, cy: number) {
@@ -644,21 +618,8 @@
       if (!d.moved || !to) alone?.(); // a click, or let go on empty space: a new step after it
       else join(d.from, to);
     };
-    const pMove = (ev: PointerEvent) => move(ev.clientX, ev.clientY);
-    const pUp = (ev: PointerEvent) => end(ev.clientX, ev.clientY);
-    const pCancel = () => end(0, 0, true); // the gesture taken away: nothing is made of it, and the drag does not stick
-    // a finger's move is the line's, not the page's scroll
-    const tMove = (ev: TouchEvent) => { if (ev.cancelable) ev.preventDefault(); };
-    const off = () => {
-      window.removeEventListener('pointermove', pMove);
-      window.removeEventListener('pointerup', pUp);
-      window.removeEventListener('pointercancel', pCancel);
-      window.removeEventListener('touchmove', tMove);
-    };
-    window.addEventListener('pointermove', pMove);
-    window.addEventListener('pointerup', pUp);
-    window.addEventListener('pointercancel', pCancel);
-    if (finger) window.addEventListener('touchmove', tMove, { passive: false });
+    // the gesture taken away: nothing is made of it, and the drag does not stick
+    const off = followPointer({ move: (ev) => move(ev.clientX, ev.clientY), up: (ev) => end(ev.clientX, ev.clientY), cancel: () => end(0, 0, true), holdPageScroll: finger });
   }
 
   function onKey(e: KeyboardEvent) {

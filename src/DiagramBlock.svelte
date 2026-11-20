@@ -16,6 +16,7 @@
   import DiagramForm from './DiagramForm.svelte';
   import ChartEditor from './ChartEditor.svelte';
   import { tagSpots, adders, toggles } from './lib/spots';
+  import { followPointer } from './lib/followPointer';
 
   /**
    * A ```mermaid block in the note: its drawing, and, clicked, the drawing made editable right there — a flowchart's
@@ -488,16 +489,11 @@
       c.scrollTop = st - (m.clientY - y0);
     };
     const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', up);
       c.classList.remove('panning');
       // the click that ends a pan is not a click on the canvas (it opened the editor, or let go of the box picked)
       if (moved) window.addEventListener('click', (k) => { k.stopPropagation(); k.preventDefault(); }, { capture: true, once: true });
     };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', up, { once: true });
+    followPointer({ move, up });
   }
   /** two fingers pinch on a phone (one finger scrolls, as the canvas scrolls) */
   function pinchZoom(el: HTMLElement) {
