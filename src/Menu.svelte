@@ -114,8 +114,6 @@
     </ul>
   </BottomSheet>
 {:else}
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="backdrop" onmousedown={() => ui.closeMenu()} oncontextmenu={(e) => { e.preventDefault(); ui.closeMenu(); }}></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <ul bind:this={el} class="menu" role="menu" tabindex="-1" style="left: {x}px; top: {y}px" style:max-height={maxH === null ? null : `min(${maxH}px, 360px, 70vh)`}
   transition:scale|global={popIn} onkeydown={onKey}>
@@ -153,7 +151,6 @@
   .check { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--accent-text); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .items .check { width: 20px; height: 20px; }
   .items li.sep { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
-  .backdrop { position: fixed; inset: 0; z-index: var(--z-menu-scrim); } /* over a picture shown full size (--z-photo), which has a menu too */
   .menu {
     position: fixed; z-index: var(--z-menu); min-width: 184px; max-width: 280px; max-height: min(360px, 70vh); overflow-y: auto;
     list-style: none; margin: 0; padding: 4px; outline: none; transform-origin: top left;

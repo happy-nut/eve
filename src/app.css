@@ -1220,3 +1220,6 @@ svg .eve-drawing { marker-end: none !important; }
 }
 .diagram-canvas .eve-flowing .eve-flow { opacity: 0.85; animation-play-state: running; }
 @keyframes eve-flow { from { stroke-dashoffset: 48; } to { stroke-dashoffset: 0; } }
+
+/* a menu's click-outside catcher, over a picture shown full size (--z-photo), which has a menu too (App.svelte) */
+.menu-scrim { position: fixed; inset: 0; z-index: var(--z-menu-scrim); }

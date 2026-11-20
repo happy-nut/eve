@@ -122,7 +122,11 @@ export default async (t) => {
   await t.click(menu('Sort ascending'));
   await t.ok('db-sort-filter', async () => JSON.stringify(await names(t)) === JSON.stringify(['Plan launch', 'Write spec', 'Ship app']),
     'sorted by Due ascending: Plan launch, Write spec, Ship app');
-  await t.click('.db thead button.head:has-text("Status")');
+  await t.click('.db thead button.head:has-text("Due")');
+  const statusHead = await t.page.locator('.db thead button.head:has-text("Status")').boundingBox();
+  await t.page.locator(menu('Sort ascending')).first().click();
+  await t.page.mouse.click(statusHead.x + statusHead.width / 2, statusHead.y + statusHead.height / 2);
+  await t.ok('db-sort-filter', async () => t.page.locator(menu('Only “Done”')).first().isVisible(), 'a head clicked at once after a pick from another head\'s menu opens its own menu');
   await t.click(menu('Only “Done”'));
   await t.ok('db-sort-filter', async () => JSON.stringify(await names(t)) === JSON.stringify(['Ship app'])
     && (await t.page.locator('.db .note').textContent()).includes('Only rows whose Status is “Done”'), 'Only “Done” leaves Ship app with a note saying so');
