@@ -45,8 +45,8 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
     return;
   }
   // the caret on a link (⌥↩ there, or a right-click on it): the link's own menu, its card first
-  if (empty && linked) {
-    const href = (linkMark?.attrs.href as string | undefined) ?? '';
+  if (empty && linkMark) {
+    const href = (linkMark.attrs.href as string | undefined) ?? '';
     const unlink = () => editor.chain().focus().extendMarkRange('link').unsetLink().run();
     // an address that would not read back as a card is not offered as one (see cardable)
     const card = cardable(editor, href) ? [{ label: 'Show as card', run: () => void linkToCard(editor) }] : [];

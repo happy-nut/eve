@@ -134,17 +134,23 @@ pub(crate) fn set_ground(app: AppHandle, r: u8, g: u8, b: u8) {
     let _ = (app, r, g, b);
 }
 
+/// An asset of the notes, by its file name: one that names no other folder, and is there.
+fn stored_asset(app: &AppHandle, name: &str) -> Result<std::path::PathBuf, String> {
+    safe_name(name)?;
+    let p = assets_dir(app)?.join(name);
+    if !p.is_file() {
+        return Err("no such asset".into());
+    }
+    Ok(p)
+}
+
 /// First page of a stored PDF as a PNG, for the card in a note. Rendered by Quick Look (the same
 /// picture Finder shows) and cached, so a note full of PDFs costs one render each, once.
 /// ponytail: runs qlmanage on the async runtime; if a huge PDF ever makes that felt, move it to
 /// spawn_blocking.
 #[tauri::command]
 pub(crate) async fn pdf_thumb(app: AppHandle, name: String) -> Result<tauri::ipc::Response, String> {
-    safe_name(&name)?;
-    let src = assets_dir(&app)?.join(&name);
-    if !src.is_file() {
-        return Err("no such asset".into());
-    }
+    let src = stored_asset(&app, &name)?;
     let dir = app
         .path()
         .app_cache_dir()
@@ -200,11 +206,7 @@ pub(crate) fn run_with_deadline(
 /// Preview.html. A PDF never comes through here: the webview draws that itself.
 #[tauri::command]
 pub(crate) async fn ql_preview(app: AppHandle, name: String) -> Result<String, String> {
-    safe_name(&name)?;
-    let src = assets_dir(&app)?.join(&name);
-    if !src.is_file() {
-        return Err("no such asset".into());
-    }
+    let src = stored_asset(&app, &name)?;
     let dir = app
         .path()
         .app_cache_dir()
@@ -236,11 +238,7 @@ pub(crate) async fn ql_preview(app: AppHandle, name: String) -> Result<String, S
 /// webview renders means nothing to the rest of the system, so the file itself is opened by path.
 #[tauri::command]
 pub(crate) async fn open_asset(app: AppHandle, name: String) -> Result<(), String> {
-    safe_name(&name)?;
-    let path = assets_dir(&app)?.join(&name);
-    if !path.is_file() {
-        return Err("no such asset".into());
-    }
+    let path = stored_asset(&app, &name)?;
     let ok = std::process::Command::new("open")
         .arg(&path)
         .status()
@@ -395,15 +393,19 @@ pub(crate) mod default_app {
     }
 }
 
+/// Whether Launch Services opens this kind of file with Eve.
+#[cfg(target_os = "macos")]
+fn opens_with_eve(app: &AppHandle, t: &str) -> bool {
+    let me = app.config().identifier.to_lowercase();
+    default_app::handler(t).map(|h| h.to_lowercase() == me).unwrap_or(false)
+}
+
 /// Is this app what macOS opens a .md with?
 #[tauri::command]
 pub(crate) fn is_default_for_markdown(app: AppHandle) -> bool {
     #[cfg(target_os = "macos")]
     {
-        let me = app.config().identifier.to_lowercase();
-        return default_app::TYPES
-            .iter()
-            .all(|t| default_app::handler(t).map(|h| h.to_lowercase() == me).unwrap_or(false));
+        return default_app::TYPES.iter().all(|t| opens_with_eve(&app, t));
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -424,10 +426,8 @@ pub(crate) fn release_unclaimed_markdown(app: &AppHandle) {
         if marker.exists() {
             return;
         }
-        let me = app.config().identifier.to_lowercase();
-        let mine = |t: &str| default_app::handler(t).map(|h| h.to_lowercase() == me).unwrap_or(false);
         let [md, txt] = default_app::TYPES;
-        if mine(md) && !mine(txt) {
+        if opens_with_eve(app, md) && !opens_with_eve(app, txt) {
             let _ = default_app::set(md, "com.apple.TextEdit");
         }
         let _ = fs::create_dir_all(&dir);

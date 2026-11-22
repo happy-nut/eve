@@ -12,7 +12,7 @@ import type { Flowchart, FlowNode } from './diagram';
  * light and dark themes need no drawing again.
  */
 
-const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif";
+export const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif";
 let ctx: CanvasRenderingContext2D | null | undefined;
 /** a text's width at that size: the page's own measure, or a fair guess where there is no page (tests) */
 export function textW(s: string, size: number, weight = 400): number {
@@ -37,7 +37,7 @@ export function wrap(s: string, max: number, size: number, weight = 400): string
   out.push(line);
   return out;
 }
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 const SIZE = 14, LINE = 19;
 const GAP = 40; // between steps, along the flow (wider where a line's label stands in it)
@@ -322,8 +322,8 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   lanes.forEach((l, i) => {
     const [x, y] = xy(0, laneAt[i]);
     const last = i === lanes.length - 1;
-    const [w, h] = LR ? [W, last ? C - laneAt[i] : laneC[i]] : [last ? C - laneAt[i] : laneC[i], H];
     const span = last ? C - laneAt[i] : laneC[i]; // the last lane runs to the drawing's edge
+    const [w, h] = LR ? [W, span] : [span, H];
     const [hw, hh] = LR ? [HEAD_M, span] : [span, HEAD_M];
     const name = names[i];
     const [cx, cy] = [x + hw / 2, y + hh / 2];

@@ -46,7 +46,7 @@ export const Video = Node.create({
       if (node.attrs.width) video.style.width = `${node.attrs.width}px`;
 
       const setWidth = (width: number | null) => {
-        const pos = typeof getPos === 'function' ? getPos() : null;
+        const pos = getPos();
         if (pos == null) return;
         const current = editor.state.doc.nodeAt(pos);
         if (!current) return;

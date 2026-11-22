@@ -45,7 +45,7 @@ export async function blobSha(data: Uint8Array): Promise<string> {
   return [...new Uint8Array(await crypto.subtle.digest('SHA-1', buf))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-const b64 = (d: Uint8Array) => {
+export const b64 = (d: Uint8Array) => {
   let s = '';
   for (let i = 0; i < d.length; i += 0x8000) s += String.fromCharCode(...d.subarray(i, i + 0x8000));
   return btoa(s);
@@ -245,6 +245,9 @@ export async function requestCode(post: Post, l: Login = {}): Promise<DeviceCode
   return { device_code: a.device_code, user_code: a.user_code, verification_uri: a.verification_uri, interval: Number(a.interval) || 5, expires_in: Number(a.expires_in) || 900 };
 }
 
+// messages this app writes itself, already in words a person can act on
+const OWN_WORDS = / exists but is | is not a server address| is not a user or organization name|already exists, but this sign-in/;
+
 /**
  * A failed sign-in, said so that someone new to GitHub knows what to do next. Null: nothing to say
  * (they cancelled it themselves). Anything not recognised is shown as GitHub gave it.
@@ -253,7 +256,7 @@ export function signInError(msg: string): string | null {
   if (/cancelled/i.test(msg)) return null;
   // Eve's own messages name an account, a repository or a server the user chose ("dnsmith/eve-notes exists
   // but is public"): said as they are, never mistaken for a network failure by a word in a name
-  if (/ exists but is | is not a server address| is not a user or organization name|already exists, but this sign-in/.test(msg)) return msg;
+  if (OWN_WORDS.test(msg)) return msg;
   if (/denied/i.test(msg)) return 'Eve was not authorized on GitHub. Press Sign in with GitHub to try again.';
   if (/expired/i.test(msg)) return 'The sign-in code ran out. Press Sign in with GitHub for a new one.';
   if (/verif\w*.*email|email.*verif/i.test(msg)) return 'GitHub wants the account\'s email address confirmed first: open the link in the email GitHub sent, then sign in again.';
@@ -269,7 +272,7 @@ export function signInError(msg: string): string | null {
  * own paragraph. Sync tries again every minute by itself, so most of these need nothing from the user.
  */
 export function syncError(msg: string): string {
-  if (/ exists but is | is not a server address| is not a user or organization name|already exists, but this sign-in/.test(msg)) return msg;
+  if (OWN_WORDS.test(msg)) return msg;
   const answered = /^\d{3}\b/.test(msg);
   if (!answered && /failed to fetch|load failed|networkerror|could not reach|lookup address|network|\bdns\b|timed? ?out|connection|offline|error sending request/i.test(msg)) return 'Could not reach GitHub. Eve tries again every minute; your notes are kept here meanwhile.';
   if (/^401\b/.test(msg)) return 'GitHub no longer accepts this sign-in. Sign in again here to keep syncing.';

@@ -1,5 +1,4 @@
 import { saveAsset } from './platform';
-export { stem } from './paths';
 
 /** Text files that are a note's worth of content: they land as markdown, not as an attachment. */
 export const TEXT_FILE = /\.(md|markdown|mdx|txt)$/i;

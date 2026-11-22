@@ -3,6 +3,7 @@
  * load, so it comes only with the first diagram shown, as the code grammars do (code.ts).
  */
 import { chartHtml } from './charts';
+import { FONT } from './lanes';
 import { isMobile } from './platform';
 
 type Mermaid = typeof import('mermaid').default;
@@ -33,7 +34,6 @@ const PALETTE = {
     hues: ['#4593fc', '#2bd4a9', '#ffae4d', '#a07bff', '#ff6673', '#ffcd3c', '#6cd1ff', '#7ed36a', '#f47dbb', '#8187ff', '#d39a6c', '#3cc9b8'],
   },
 };
-export const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif";
 
 /** `hex` laid over `over` at `t` (0..1): the soft tints of a hue */
 function mix(hex: string, over: string, t: number) {
@@ -167,7 +167,7 @@ function load(): Promise<Mermaid> {
   lib ??= import('mermaid').then((m) => m.default, (e) => { lib = null; throw e; }); // failed: the next diagram tries again
   return lib.then((m) => {
     // in the note's colours, light or dark; strict: a diagram's labels are text, never script or a link that runs
-    const want = dark() ? 'dark' : 'light';
+    const want = themeKey();
     if (want !== theme) {
       theme = want;
       m.initialize(config(want));

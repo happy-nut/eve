@@ -4,7 +4,6 @@
  * scrolled through, not cut (Present.svelte).
  */
 export function slides(blocks: Element[]): Element[][] {
-  const level = (b: Element) => Number(/^H([1-6])$/.exec(b.tagName)?.[1] ?? 9);
   const top = Math.min(9, ...blocks.slice(1).map(level));
   const out: Element[][] = [[]];
   blocks.forEach((b, i) => {

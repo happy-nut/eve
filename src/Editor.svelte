@@ -104,7 +104,7 @@
     } else if (notes.caretEnd) {
       notes.caretEnd = false; // opened to write in: under whatever the template put there
       editor.commands.focus('end');
-    } else if (ui.focusOwner !== 'sidebar' && !isMobile) editor?.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
+    } else if (ui.focusOwner !== 'sidebar' && !isMobile) editor.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
     // (a phone opens a note to read it: the keyboard comes up when the text is tapped, not before)
     return () => {
       hooks.attach = undefined;
@@ -382,7 +382,6 @@
   /* positioned, as the cover is, so the icon is drawn over the cover's edge, not under it */
   .page-head.with-cover { position: relative; }
   .page-head.with-cover .big-icon { margin-top: -38px; }
-  /* the links count at the row's far end */
 
   /* On paper the head is a fixed block that holds the icon below the band at the top of the printed
      flow — WebKit lays that band out but never paints it, and the note's title used to vanish into it.

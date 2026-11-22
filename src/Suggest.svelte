@@ -86,7 +86,6 @@
           {#if !row.child && t.sections?.length}
             <svg class="chev" class:down={open.has(row.top)} viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5"/></svg>
           {:else}<span class="chev"></span>{/if}
-          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           {#if t.noteIcon}<span class="s-emoji"><Icon icon={t.noteIcon} size={14} /></span>
           {:else if t.swatch}<span class="s-swatch" style:background={t.swatch}></span>
           {:else if t.icon}<svg class="s-ico" viewBox="0 0 16 16">{@html t.icon}</svg>{/if}

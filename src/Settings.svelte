@@ -54,7 +54,7 @@
     claude === null ? 'Looking for Claude…'
     : !claudeFound.length ? 'Install Claude Desktop or Claude Code first'
     // every app, found or not: one missing must not pass for connected
-    : (claude ?? []).map((c) => `${c.name}: ${!c.installed ? 'not found' : c.connected ? '✓ connected' : c.stale ? 'points at another copy of Eve' : 'not connected'}`).join(' · '));
+    : claude.map((c) => `${c.name}: ${!c.installed ? 'not found' : c.connected ? '✓ connected' : c.stale ? 'points at another copy of Eve' : 'not connected'}`).join(' · '));
   async function connectClaude(on: boolean) {
     claudeBusy = true;
     claudeError = null;
@@ -124,7 +124,6 @@
     if (e.key === 'Escape') { e.stopPropagation(); onClose(); return true; }
     if (e.key === 'Tab' && !ui.menu) ui.layers.trapTab(e); // round Settings' own controls, never out behind it
   }
-  let panel: HTMLDivElement;
   const takeFocus = (el: HTMLElement) => { if (!isMobile) el.focus({ preventScroll: true }); };
   /** Esc with the keyboard still behind Settings (the list's row, the note) closes Settings first: left to them,
    *  the list's own Esc took the keyboard to the note. Inside Settings, its popups keep their own Esc. */
@@ -160,7 +159,7 @@
 <!-- preventDefault: the press would otherwise take the keyboard away again after closing gave it back -->
 <div class="backdrop" transition:fade|global={scrimFade} onmousedown={(e) => { e.preventDefault(); onClose(); }} role="presentation"></div>
 <!-- the keyboard comes into Settings and stays there: typing went on into the note behind it -->
-<div class="panel" bind:this={panel} use:takeFocus transition:scale|global={panelIn} role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1">
+<div class="panel" use:takeFocus transition:scale|global={panelIn} role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1">
   <header>
     <div class="seg" role="tablist">
       {#each tabs as [id, label]}
@@ -610,9 +609,8 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   input:not([type]), input[type='password'] {
     font: inherit; font-size: 12.5px; padding: 5px 8px; border-radius: 7px; border: 0; outline: none;
-    background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line); max-width: 240px;
+    background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line); max-width: 240px; flex: 1;
   }
-  input:not([type]), input[type='password'] { flex: 1; }
   input:not([type]):focus, input[type='password']:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   .link.small { font-size: inherit; }
   /* a thumb's target on a phone, not a 16px line of text */
@@ -664,12 +662,6 @@
   .qr.done { opacity: 0.25; }
   .took { margin: 0; font-size: 14px; color: var(--fg); }
   p.sub.pad { margin: 0; padding: 0 16px 10px; font-size: 12px; }
-  .codechip {
-    display: block; margin: 6px 0 2px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px;
-    background: var(--bg-pop); color: var(--fg); font-size: 16px; font-weight: 600; letter-spacing: 0.12em;
-    min-width: 128px; text-align: center; cursor: copy; user-select: all; -webkit-user-select: all;
-  }
-  .codechip:hover { border-color: var(--accent); }
 
   /* a setting that only applies while the one above is on: indented in the same group, macOS-style, and
      the hairline above it starts at the indent, so it reads as part of its parent rather than a peer */

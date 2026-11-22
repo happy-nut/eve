@@ -1,5 +1,5 @@
 import { history } from './history.svelte';
-import { focusNote } from './popup';
+import type { Box } from './popup';
 import { isMobile, memMark } from './platform';
 import { shifting, shiftingUntil } from './focusWatch';
 /** One line of a menu. `sep` starts a group above it; a `hide` item never makes the list; `checked` is the current choice. */
@@ -272,11 +272,11 @@ class Ui {
 
   /** every menu (a right click, the list's "+", a code block's language) at a point; the app draws its own
    *  everywhere, the webview's is suppressed. Menu.svelte draws it: a popup on the Mac, a sheet on a phone. */
-  menu = $state<{ x: number; y: number; from?: Edge; items: MenuItem[]; search?: string } | null>(null);
+  menu = $state<{ x: number; y: number; from?: Box; items: MenuItem[]; search?: string } | null>(null);
   private menuOff: (() => void) | undefined;
   private menuClosed: (() => void) | undefined;
   /** `search`: a field over the items, its placeholder; what is typed narrows them (a long list: a code block's languages) */
-  openMenu(at: { clientX: number; clientY: number; from?: Edge }, items: MenuItem[], onclose?: () => void, search?: string) {
+  openMenu(at: { clientX: number; clientY: number; from?: Box }, items: MenuItem[], onclose?: () => void, search?: string) {
     this.menuClosed?.();
     this.menuClosed = onclose;
     // dismissed or picked: whatever had the keyboard gets it back (a picked item may take it again). One opened over
@@ -461,14 +461,12 @@ class Ui {
 /** a toast's one button; `byKey`: ⌘Z in a note does it too, until something is typed (ui.toastUndoKey) */
 export interface ToastAction { label: string; run: () => void; byKey?: boolean }
 
-/** a box on screen (a DOMRect, a caret's coordsAtPos) */
-type Edge = { left: number; right: number; top: number; bottom: number };
 /**
  * Where a menu opened from a button (or the caret) goes: under it, or over it when there is no room under it. Given
  * only the point under it, a menu turned upwards was drawn up from that point and lay over the button it came from
  * (a database's column, its + and its tags, near the window's foot).
  */
-export function under(el: Element | Edge): { clientX: number; clientY: number; from: Edge } {
+export function under(el: Element | Box): { clientX: number; clientY: number; from: Box } {
   const r = el instanceof Element ? el.getBoundingClientRect() : el;
   return { clientX: Math.round(r.left), clientY: Math.round(r.bottom + 4), from: { left: r.left, right: r.right, top: r.top, bottom: r.bottom } };
 }

@@ -6,7 +6,7 @@
   import { ui } from './lib/ui.svelte';
   import { notes, titleOf } from './lib/notes.svelte';
   import { editedLabel } from './lib/date';
-  import { isDailyId } from './lib/daily';
+  import { isDailyId, keyOfDaily } from './lib/daily';
   import { typedIn } from './lib/hangul';
   import Icon from './Icon.svelte';
 
@@ -43,7 +43,7 @@
         <li>
           <button class="row" title="Restore" onclick={() => restore(n.id)}>
             {#if n.icon}<Icon icon={n.icon} size={16} />{/if}
-            <span class="name">{isDailyId(n.id) ? n.id.slice(6) : titleOf(n)}</span>
+            <span class="name">{isDailyId(n.id) ? keyOfDaily(n.id) : titleOf(n)}</span>
             <span class="when">{editedLabel(n.updatedAt)}</span>
           </button>
           <button class="restore" aria-label="Restore" title="Restore" onclick={() => restore(n.id)}>

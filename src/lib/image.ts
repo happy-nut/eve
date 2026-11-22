@@ -176,13 +176,14 @@ export const LocalImage = Image.extend({
       if (node.attrs.width) img.style.width = `${node.attrs.width}px`;
       if (node.attrs.align) figure.dataset.align = node.attrs.align;
 
+      const pos = () => getPos();
       /** the dragged width goes onto the node, so it is saved with the note and undoable */
       const setWidth = (width: number | null) => {
-        const pos = typeof getPos === 'function' ? getPos() : null;
-        if (pos == null) return;
-        const current = editor.state.doc.nodeAt(pos);
+        const p = pos();
+        if (p == null) return;
+        const current = editor.state.doc.nodeAt(p);
         if (!current) return;
-        editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, width }));
+        editor.view.dispatch(editor.state.tr.setNodeMarkup(p, undefined, { ...current.attrs, width }));
       };
 
       const cap = document.createElement('figcaption');
@@ -200,11 +201,11 @@ export const LocalImage = Image.extend({
       const save = () => {
         clearTimeout(timer);
         timer = undefined;
-        const pos = typeof getPos === 'function' ? getPos() : null;
-        if (pos == null || editor.isDestroyed) return;
-        const current = editor.state.doc.nodeAt(pos);
+        const p = pos();
+        if (p == null || editor.isDestroyed) return;
+        const current = editor.state.doc.nodeAt(p);
         if (!current || current.attrs.alt === cap.textContent) return;
-        editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, alt: cap.textContent || null }));
+        editor.view.dispatch(editor.state.tr.setNodeMarkup(p, undefined, { ...current.attrs, alt: cap.textContent || null }));
       };
       cap.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(save, 300); }); // one undo step per pause, not per key
       // A caption typed just before ⌘N (another note, the note closed) was lost: the pause was cut short with the
@@ -242,7 +243,6 @@ export const LocalImage = Image.extend({
 
       // a click on the picture (a tap on a phone) opens its menu: copy it, set where it sits. A double-click (a
       // double tap) shows it full size, with the same menu on it: the first click waits to see if a second follows
-      const pos = () => (typeof getPos === 'function' ? getPos() : null);
       let pending: ReturnType<typeof setTimeout> | undefined;
       img.addEventListener('click', (e) => {
         if (e.detail !== 1 || !editor.isEditable) return;

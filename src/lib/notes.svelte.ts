@@ -6,7 +6,7 @@ import { randomIcon } from './icons';
 import { ui } from './ui.svelte';
 import { history, undoSource } from './history.svelte';
 import { legacyPlain, onlyHtml, plain, splitAlias, splitLink } from './markdown';
-import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isDailyId, isWritten } from './daily';
+import { CALENDAR_NAME, CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, DEFAULT_TEMPLATE, dailyBody, dailyId, dayKey, isCalendarOwn, isDailyId, isWritten } from './daily';
 
 export { plain };
 
@@ -140,7 +140,7 @@ const sameBody = (a: string, b: string) => a === b || a.replace(/\n+$/, '') === 
 const linkPattern = (title: string) => new RegExp(`\\[\\[${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(#[^\\]|\\\\]*)?(?=\\]\\]|\\||\\\\\\|)`, 'gi');
 
 const fixLinksInProps = (props: Note['props'], fix: (t: string) => string) =>
-  props && Object.fromEntries(Object.entries(props).map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => (typeof x === 'string' ? fix(x) : x)) : typeof v === 'string' ? fix(v) : v]));
+  props && Object.fromEntries(Object.entries(props).map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => fix(x)) : fix(v)]));
 
 class NotesStore {
   all = $state<Note[]>([]);
@@ -532,7 +532,7 @@ class NotesStore {
   }
 
   get trash(): readonly Note[] {
-    return this.all.filter((n) => n.deleted && n.body !== '' && n.id !== CALENDAR_NOTE_ID && n.id !== DAILY_TEMPLATE_ID).sort((a, b) => b.updatedAt - a.updatedAt);
+    return this.all.filter((n) => n.deleted && n.body !== '' && !isCalendarOwn(n.id)).sort((a, b) => b.updatedAt - a.updatedAt);
   }
   erase(ids: readonly string[]) {
     for (const id of ids) {
@@ -627,7 +627,7 @@ class NotesStore {
     const out: { note: Note; line: string }[] = [];
     const find = (t: string) => this.byTitle(t);
     for (const n of this.all) {
-      if (n.deleted || n.id === id || n.id === DAILY_TEMPLATE_ID || n.id === CALENDAR_NOTE_ID || !n.body.includes('[[')) continue;
+      if (n.deleted || n.id === id || isCalendarOwn(n.id) || !n.body.includes('[[')) continue;
       const hit = this.linksOf(n).find((l) => find(splitLink(l.link, (t) => !!find(t))[0])?.id === id);
       if (hit) out.push({ note: n, line: hit.line });
     }

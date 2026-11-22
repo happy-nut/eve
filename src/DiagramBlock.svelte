@@ -532,7 +532,7 @@
       {/each}
     </div>
   {/if}
-  {#if flow && canvas && svg && !error}<FlowEditor bind:this={flowEd} {flow} host={canvas} version={svg} k={1} {pick} />{/if}
+  {#if flow && canvas && svg && !error}<FlowEditor bind:this={flowEd} {flow} host={canvas} version={svg} {pick} />{/if}
   {#if chart && canvas && svg && !error}<ChartEditor bind:this={chartEd} d={chart} host={canvas} version={svg} {pick} {pickField} />{/if}
   {#if !error && svg}
     <!-- its tools, over its top-right corner as the pointer comes over it (and while it is edited): no bar under it to
@@ -594,7 +594,7 @@
   {/if}
   </div>
 
-  {#if codeShown && !active && !error && !d && why}
+  {#if !active && why}
     <!-- written by hand: why it is edited as its code (the way back to the drawing, for one that has one, is the dock's) -->
     <p class="why">
       {#if 'kind' in why}This kind of diagram ({why.kind}) is edited as its code.
@@ -602,13 +602,9 @@
       {:else}Written by hand with more than the drawing editor shows, so it is edited as code. It still draws as written.{/if}
     </p>
   {/if}
-  {#if active && d}
-    <!-- no line of tips under it: the bars and the buttons' own titles say what they do (the tips looked cluttered) -->
-    {#if !flow}
-      {#if rows}
-        <DiagramForm {d} />
-      {/if}
-    {/if}
+  <!-- no line of tips under it: the bars and the buttons' own titles say what they do (the tips looked cluttered) -->
+  {#if active && d && !flow && rows}
+    <DiagramForm {d} />
   {/if}
 </div>
 

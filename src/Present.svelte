@@ -215,7 +215,7 @@
 
   // ---- the whole screen: the Mac's window over it all, a phone's bars hidden, or the page's (a browser) ----
   const own = ownWholeScreen();
-  const canWhole = own || (typeof document !== 'undefined' && !!document.fullscreenEnabled);
+  const canWhole = own || !!document.fullscreenEnabled;
   let full = $state(false);
   /** put on the whole screen or taken off it; false when nothing changed */
   async function whole(on: boolean): Promise<boolean> {

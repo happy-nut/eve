@@ -173,9 +173,9 @@ pub(crate) fn with_eve(config: &str, exe: Option<&str>) -> Result<Option<String>
     serde_json::to_string_pretty(&root).map(|s| Some(s + "\n")).map_err(|e| e.to_string())
 }
 
-fn status(installed: bool, command: Option<String>, me: &str) -> (bool, bool, bool) {
+fn status(command: Option<String>, me: &str) -> (bool, bool) {
     let connected = command.as_deref() == Some(me);
-    (installed, connected, command.is_some() && !connected)
+    (connected, command.is_some() && !connected)
 }
 
 // ---- Claude Desktop -------------------------------------------------------------
@@ -185,7 +185,7 @@ fn desktop(me: &str) -> Client {
         || home().join("Applications/Claude.app").exists()
         || path.parent().is_some_and(Path::exists);
     let command = std::fs::read_to_string(&path).ok().and_then(|c| registered(&c));
-    let (installed, connected, stale) = status(installed, command, me);
+    let (connected, stale) = status(command, me);
     Client { id: "desktop", name: "Claude Desktop", installed, connected, stale }
 }
 
@@ -245,7 +245,7 @@ fn code(me: &str) -> Client {
     let asked = shell(&format!("command -v claude >/dev/null 2>&1 || exit 127; claude mcp get {NAME}"));
     let installed = asked.as_ref().is_ok_and(|o| o.status.code() != Some(127));
     let command = asked.ok().filter(|o| o.status.success()).and_then(|o| command_in(&String::from_utf8_lossy(&o.stdout)));
-    let (installed, connected, stale) = status(installed, command, me);
+    let (connected, stale) = status(command, me);
     Client { id: "code", name: "Claude Code", installed, connected, stale }
 }
 
@@ -356,8 +356,8 @@ mod tests {
 
     #[test]
     fn stale_means_registered_elsewhere() {
-        assert_eq!(status(true, Some("/me".into()), "/me"), (true, true, false));
-        assert_eq!(status(true, Some("/old".into()), "/me"), (true, false, true));
-        assert_eq!(status(true, None, "/me"), (true, false, false));
+        assert_eq!(status(Some("/me".into()), "/me"), (true, false));
+        assert_eq!(status(Some("/old".into()), "/me"), (false, true));
+        assert_eq!(status(None, "/me"), (false, false));
     }
 }

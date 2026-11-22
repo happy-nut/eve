@@ -86,13 +86,11 @@ const ZOOMS = [0.5, 0.58, 0.67, 0.73, 0.8, 0.9, 1, 1.12, 1.25, 1.37, 1.5, 1.73, 
 const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, weight: 400, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832, summon: true, slideTurn: 'push', slideBuild: true, codeTheme: 'eve', codeShade: 'auto' };
 
 function load(): Appearance {
-  try {
-    const { hideSidebarOnEdit: _, ...kept } = saved<Partial<Appearance> & { hideSidebarOnEdit?: unknown }>(LS, {}); // the old name, dropped
-    // every setting is saved whenever one is, so 820 is mostly the old default carried along, not a width anyone chose:
-    // it gives way to the new one (900, Notion's 708px of text)
-    if (kept.width === 820) delete kept.width;
-    return { ...DEFAULTS, ...kept };
-  } catch { return { ...DEFAULTS }; }
+  const { hideSidebarOnEdit: _, ...kept } = saved<Partial<Appearance> & { hideSidebarOnEdit?: unknown }>(LS, {}); // the old name, dropped
+  // every setting is saved whenever one is, so 820 is mostly the old default carried along, not a width anyone chose:
+  // it gives way to the new one (900, Notion's 708px of text)
+  if (kept.width === 820) delete kept.width;
+  return { ...DEFAULTS, ...kept };
 }
 
 class AppearanceStore {

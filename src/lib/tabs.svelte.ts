@@ -104,10 +104,8 @@ class Tabs {
 }
 
 function load(): Tab[] {
-  try {
-    const l: any = saved(LS, []);
-    return Array.isArray(l) ? l.filter((t) => typeof t?.id === 'string').map((t) => ({ id: t.id, ...(t.pinned ? { pinned: true } : {}) })) : [];
-  } catch { return []; }
+  const l = saved<unknown>(LS, []);
+  return Array.isArray(l) ? l.filter((t) => typeof t?.id === 'string').map((t) => ({ id: t.id, ...(t.pinned ? { pinned: true } : {}) })) : [];
 }
 
 export const tabs = new Tabs();

@@ -248,7 +248,7 @@ export function focus(svg: SVGSVGElement): () => void {
       if (f?.classList.contains(FLOW)) lit.push(f);
     }
     for (const p of path) lit.push(nodes.get(p)!);
-    for (const el of lit) el?.classList.add('eve-lit');
+    for (const el of lit) el.classList.add('eve-lit');
     box.classList.add('eve-here');
     svg.classList.add('eve-focus');
   };

@@ -26,8 +26,8 @@
    *         picked together, ⌫ or their bar deletes them all; a box Shift-clicked joins those picked, or leaves them
    *   ⌥1…⌥9: the boxes picked come up at that press of → in a presentation, ⌥0 in the arrows' order again
    */
-  let { flow, host, version, k, pick = null }: {
-    flow: Flowchart; host: HTMLElement; version: string; k: number;
+  let { flow, host, version, pick = null }: {
+    flow: Flowchart; host: HTMLElement; version: string;
     /** the box the click that opened the diagram landed on: picked at once (that click only opened it, and the keys
      *  typed next went into the note) */
     pick?: string | null;
@@ -146,7 +146,7 @@
     });
     if (toReveal && boxOf(toReveal)) reveal(toReveal);
   }
-  $effect(() => { void version; void k; tick().then(measure); });
+  $effect(() => { void version; tick().then(measure); });
   // the drawing's own size too: zoomed on the whole screen (DiagramBlock.svelte), it grows or shrinks inside a canvas
   // that stays the same size, and each redraw comes in at its natural size before the zoom is put back — the boxes'
   // rings and + stayed where the boxes had been
@@ -893,8 +893,7 @@
   {#if selNode && selBox && !drag && !linking && !moving}
     <!-- under the box (one near the top) it goes below the + too: it sat over the + there, and a press on the + changed
          the box's shape instead. On a phone the shapes fold into one button: all six in a row ran off its narrow picture -->
-    {@const compact = isMobile && !shapesOpen}
-    {@const at = barAt(selBox.x + selBox.w / 2, selBox.y, selBox.y + selBox.h + (across(flow) ? 0 : isMobile ? 34 : 26), compact ? 290 : isMobile ? 290 : 580, selNode.id)}
+    {@const at = barAt(selBox.x + selBox.w / 2, selBox.y, selBox.y + selBox.h + (across(flow) ? 0 : isMobile ? 34 : 26), isMobile ? 290 : 580, selNode.id)}
     {@const current = SHAPES.find(([sh]) => sh === selNode.shape) ?? SHAPES[0]}
     <div class="bar" style:left={`${at.left}px`} style:top={`${at.top}px`}>
       {#if isMobile && shapesOpen}

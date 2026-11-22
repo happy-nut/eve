@@ -6,7 +6,7 @@
   import { isDailyId, DAILY_TEMPLATE_ID } from './lib/daily';
   import { startReminder, syncPhoneReminder } from './lib/reminder';
   import CalendarPage from './CalendarPage.svelte';
-  import { shortcuts, prettyKeys, eventToKeys } from './lib/shortcuts.svelte';
+  import { shortcuts, eventToKeys } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { tree } from './lib/tree.svelte';
   import { appearance } from './lib/appearance.svelte';
@@ -146,7 +146,7 @@
     const stopSync = sync.start();
     const stopReminder = startReminder();
     updates.start();
-    return () => { window.removeEventListener('eve-summon', onSummon); unfocus?.(); clearTimeout(hintTimer); stopSync?.(); stopReminder?.(); };
+    return () => { window.removeEventListener('eve-summon', onSummon); unfocus?.(); clearTimeout(hintTimer); stopSync(); stopReminder?.(); };
   });
 
   /**

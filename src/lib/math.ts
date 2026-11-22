@@ -7,7 +7,7 @@ import { fullSize } from './mathParts';
 import { mountMath, type MathEditing } from './mathEdit.svelte';
 import { scrollHint } from './scrollHint';
 import { HTML_TAGS } from './html';
-import { inCell } from './code';
+import { inCell } from './blocks';
 
 /**
  * Formulas: `$E = mc^2$` in a line of text, and a block of its own,

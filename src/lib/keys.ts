@@ -69,7 +69,7 @@ function install() {
   installed = true;
   for (const type of ['keydown', 'keyup'] as const) {
     for (const capture of [true, false]) {
-      const list = `${type === 'keyup' ? 'up' : 'down'}:${capture ? 'capture' : 'bubble'}`;
+      const list = listOf({ keyup: type === 'keyup', capture });
       window.addEventListener(type, (e) => dispatch(e as KeyboardEvent, lists.get(list)), capture);
     }
   }

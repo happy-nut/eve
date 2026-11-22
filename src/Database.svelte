@@ -83,7 +83,6 @@
   }
   const formulaError = (p: PropDef, n: Note) => evaluate(p.expr ?? '', (x) => val(n, x)).error;
 
-  const at = (el: HTMLElement) => under(el);
   /** ↩ in a field: what was written is taken (its change), the keyboard stays in the field — blurred, it was on nothing */
   const enterKeeps = (e: KeyboardEvent) => {
     if (e.key !== 'Enter' || e.isComposing) return;
@@ -176,7 +175,7 @@
   }
   const nameOk = (name: string, except?: string) => !!name && name !== NAME && !OWN_KEYS.has(name) && !d.props.some((p) => p.name === name && p.name !== except);
   async function addProp(btn: HTMLElement) {
-    const where = at(btn);
+    const where = under(btn);
     const type = await choose(where, TYPES.map((t) => ({ label: t.label, value: t.type })));
     if (!type) return;
     const typed = await ui.prompt('Property name', TYPES.find((t) => t.type === type)!.label);
@@ -224,7 +223,7 @@
     put({ ...d, props: d.props.map((x) => (x === p ? { name: x.name, type, ...more } : x)) });
   }
   function headMenu(e: MouseEvent, p: PropDef | null) {
-    const where = at(e.currentTarget as HTMLElement);
+    const where = under(e.currentTarget as HTMLElement);
     const name = p?.name ?? NAME;
     const sortBy = (desc: boolean) => put({ ...d, sort: { by: name, ...(desc ? { desc: true } : {}) } });
     const items: MenuItem[] = [
@@ -258,7 +257,7 @@
     const now = asList(n.props?.[p.name]);
     const multi = p.type === 'multi';
     const pick = (c: string) => setCell(n, p, multi ? (now.includes(c) ? now.filter((x) => x !== c) : [...now, c]) : now[0] === c ? null : c);
-    ui.openMenu(at(e.currentTarget as HTMLElement), [
+    ui.openMenu(under(e.currentTarget as HTMLElement), [
       ...(p.options ?? []).map((c) => ({ label: c, checked: now.includes(c), run: () => pick(c) })),
       { label: 'New choice…', sep: !!p.options?.length, run: async () => { const c = await newChoice(p); if (c) setCell(n, p, multi ? [...now, c] : c); } },
       { label: 'Clear', hide: !now.length, run: () => setCell(n, p, null) },
@@ -266,7 +265,7 @@
   }
   /** a relation's pages: the linked database's rows (or every page), each toggled; many: search first */
   async function relationMenu(e: MouseEvent, n: Note, p: PropDef) {
-    const where = at(e.currentTarget as HTMLElement);
+    const where = under(e.currentTarget as HTMLElement);
     const now = linksIn(n.props?.[p.name]);
     let pool = (p.target ? notes.all.filter((x) => x.parent === p.target && !x.deleted) : notes.pages.filter((x) => x.id !== n.id)).map((x) => titleOf(x));
     if (pool.length > 30) {
@@ -361,7 +360,7 @@
                 <input value={titleOf(n)} spellcheck="false" aria-label="Title" {@attach (el) => focusFresh(el as HTMLInputElement, n.id)}
                   onchange={(e) => retitle(n, e.currentTarget.value)} onkeydown={enterKeeps} />
                 <button class="open" aria-label="Open" title="Open" onclick={() => open(n)}>↗</button>
-                <button class="more" aria-label="Row menu" onclick={(e) => ui.openMenu(at(e.currentTarget), [{ label: 'Open', run: () => open(n) }, { label: 'Delete row', danger: true, run: () => dropRow(n) }])}>⋯</button>
+                <button class="more" aria-label="Row menu" onclick={(e) => ui.openMenu(under(e.currentTarget), [{ label: 'Open', run: () => open(n) }, { label: 'Delete row', danger: true, run: () => dropRow(n) }])}>⋯</button>
               </div></td>
               {#each d.props as p (p.name)}<td>{@render value(n, p)}</td>{/each}
               <td></td>

@@ -28,18 +28,10 @@ fn summary(marks: Vec<String>) -> String {
     kinds.iter().map(|(k, n)| if *n > 1 { format!("{k} ×{n}") } else { k.clone() }).collect::<Vec<_>>().join(", ")
 }
 
-/// Seconds since 1970 as UTC `2026-11-13 09:41` (days to a date: Howard Hinnant's civil_from_days).
+/// Seconds since 1970 as UTC `2026-11-13 09:41`.
 fn utc(secs: u64) -> String {
-    let (days, rem) = ((secs / 86400) as i64, secs % 86400);
-    let z = days + 719468;
-    let era = z.div_euclid(146097);
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
+    let (y, m, d) = crate::core::civil((secs / 86400) as i64);
+    let rem = secs % 86400;
     format!("{y}-{m:02}-{d:02} {:02}:{:02}", rem / 3600, rem % 3600 / 60)
 }
 

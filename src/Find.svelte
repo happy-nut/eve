@@ -88,7 +88,6 @@
 
 <!-- the keys come from the fields and buttons inside, which are focusable on their own; the bar only
      catches them once on the way up, so it needs no role of its own beyond the landmark -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <!-- its buttons keep the keyboard in the field (WebKit gives a clicked button no focus: it went to nothing, and ↩ no
      longer stepped through the matches) -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->

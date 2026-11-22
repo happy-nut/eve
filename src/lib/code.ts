@@ -10,7 +10,7 @@ import { inKorean, starter, toCode, type Diagram, type Kind } from './diagram';
 import { mountDiagram } from './diagramBlock.svelte';
 import { editedLine } from './diagramUndo';
 import { closeHistory } from '@tiptap/pm/history';
-import { blockBeside } from './blocks';
+import { blockBeside, inCell } from './blocks';
 import { fenceFor } from './markdown';
 
 /**
@@ -345,12 +345,6 @@ export function focusBack(editor: Editor) {
   });
 }
 
-/** In a table cell: no code block there, a table's markdown holds one line of text a cell */
-export const inCell = ($pos: ResolvedPos) => {
-  for (let d = $pos.depth; d > 0; d--) if (/^table(Cell|Header)$/.test($pos.node(d).type.name)) return true;
-  return false;
-};
-
 /** the caret from the start of the code at `at` to the end of the line over it, or that line gone when empty */
 function toLineBefore(state: EditorState, view: EditorView, at: number) {
   const before = state.doc.resolve(at).nodeBefore;
@@ -567,7 +561,7 @@ export const CodeBlock = CodeBlockBase.extend({
       host.className = 'mermaid-host';
       host.contentEditable = 'false';
       dom.append(chip, pre, host);
-      const posNow = () => (typeof getPos === 'function' ? getPos() : null);
+      const posNow = () => getPos();
       let block: ReturnType<typeof mountDiagram> | null = null;
       let lastLine: number | null = null;
       let shown = false; // the caret in the code
@@ -634,11 +628,11 @@ export const CodeBlock = CodeBlockBase.extend({
       (dom as any).__openDiagram = () => block?.edit() ?? false;
 
       const language = (): string => {
-        const pos = typeof getPos === 'function' ? getPos() : null;
+        const pos = posNow();
         return (pos == null ? null : editor.state.doc.nodeAt(pos)?.attrs.language) ?? '';
       };
       const setLanguage = (value: string) => {
-        const pos = typeof getPos === 'function' ? getPos() : null;
+        const pos = posNow();
         if (pos == null) return;
         const current = editor.state.doc.nodeAt(pos);
         if (!current) return;
@@ -742,7 +736,7 @@ export const CodeBlock = CodeBlockBase.extend({
         update: (updated, decorations) => {
           if (updated.type !== node.type) return false;
           chip.textContent = labelOf(updated.attrs.language);
-          shown = decorations.some((d) => (d as unknown as { spec?: { editing?: boolean } }).spec?.editing);
+          shown = decorations.some((d) => d.spec.editing);
           shownNode = updated;
           setDiagram(updated);
           return true;

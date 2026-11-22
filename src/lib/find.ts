@@ -160,8 +160,8 @@ function show(editor: Editor, index: number) {
       if (n.type.name === 'details' && !n.attrs.open) tr.setNodeAttribute($at.before(d), 'open', true);
     }
     tr.setMeta('addToHistory', false);
+    tr.setSelection(TextSelection.create(tr.doc, hit.from, hit.to));
   }
-  if (hit) tr.setSelection(TextSelection.create(tr.doc, hit.from, hit.to));
   editor.view.dispatch(tr);
   if (hit) reveal(editor, hit.from);
 }

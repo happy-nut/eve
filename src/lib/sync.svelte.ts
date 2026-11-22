@@ -4,14 +4,14 @@ import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText, me
 import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, signInError, syncError, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
 import { merge3 } from './merge3';
-import { CALENDAR_NOTE_ID, DAILY_TEMPLATE_ID, isDailyId } from './daily';
+import { isCalendarOwn, isDailyId } from './daily';
 import { saved, save } from './stored';
 
 const LS = 'eve.sync';
 const ASSETS = 'notes/assets/';
 const PHONE_OFFER_MS = 600_000;
 
-const madeOnEveryDevice = (id: string) => isDailyId(id) || id === DAILY_TEMPLATE_ID || id === CALENDAR_NOTE_ID;
+const madeOnEveryDevice = (id: string) => isDailyId(id) || isCalendarOwn(id);
 
 function wordsOnlyIn(body: string, kept: string, agreed: string): boolean {
   const known = new Set([...kept.split('\n'), ...agreed.split('\n')].map((l) => l.trim()));
@@ -83,10 +83,8 @@ export interface SignIn { host?: string; owner?: string; clientId?: string; toke
 
 function load(): Settings {
   const d: Settings = { user: '', repo: '', token: '', host: '', head: '', tree: '', known: {}, lastSynced: 0 };
-  try {
-    const s = { ...d, ...saved<Partial<Settings>>(LS, {}) };
-    return { user: s.user, repo: s.repo, token: s.token, host: s.host ?? '', head: s.head, tree: s.tree, known: s.known, lastSynced: s.lastSynced };
-  } catch { return d; }
+  const s = { ...d, ...saved<Partial<Settings>>(LS, {}) };
+  return { user: s.user, repo: s.repo, token: s.token, host: s.host ?? '', head: s.head, tree: s.tree, known: s.known, lastSynced: s.lastSynced };
 }
 
 class Sync {

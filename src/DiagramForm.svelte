@@ -6,12 +6,12 @@
   import { sliceColor, branchColor } from './lib/mermaid';
   import { sliceHues } from './lib/charts';
   import {
-    starter, freshId, addDays, ganttDates, isMessage, replies, type Diagram, type Message, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task,
-    type BlockKind, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type StateBox, type StateLink, stateParent,
+    freshId, isMessage, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt,
+    type BlockKind, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type StateLink, stateParent,
   } from './lib/diagram';
   import Select from './Select.svelte';
   import {
-    depthAt, DIVIDERS, OPENERS, SPLITS, dropStep, openerOf, SPLIT_OF, wellFormed, ARROWS, arrowOf, seqArrows, setArrow, BARS, pieValue, dropBranch, deeper, indent, movePeriod, MIND_SHAPES, ROOT_SHAPES, plausible, endOf, startOf, startOptions, setStart, taskName, andAfterOptions, addAfter, TAG_OPTIONS, setTags, tagOptions, rename, NAME_ID, TABLE_ID, drop, options, CLASS_ARROWS, arrowOptions, stateDepth, STATE_KINDS, insideOptions, renameState, dropState, LEFT, RIGHT,
+    depthAt, DIVIDERS, OPENERS, SPLITS, dropStep, openerOf, SPLIT_OF, wellFormed, arrowOf, seqArrows, setArrow, BARS, pieValue, dropBranch, deeper, indent, movePeriod, MIND_SHAPES, ROOT_SHAPES, plausible, endOf, startOf, startOptions, setStart, andAfterOptions, addAfter, setTags, tagOptions, rename, NAME_ID, TABLE_ID, drop, options, arrowOptions, stateDepth, STATE_KINDS, insideOptions, renameState, dropState, LEFT, RIGHT,
   } from './lib/diagramOps';
 
   /**

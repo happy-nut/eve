@@ -30,7 +30,7 @@ import { Bookmark, URL_RE, openLinkHere } from './bookmark';
 import { Kanban, deleteBoard } from './kanban';
 import { DatabaseBlock } from './databaseNode';
 import { FootnoteRef, FootnoteText } from './footnote';
-import { CodeBlock, inCell } from './code';
+import { CodeBlock } from './code';
 import { Pdf } from './pdf';
 import { Video } from './video';
 import { TableNodes, asCopy, cellBulletRule, cellEnter, cellUnbullet, dropEmptyTable, clearForPaste, toggleCellBullet, upAboveTable, copying } from './table';
@@ -53,7 +53,7 @@ import { calendar, emojiRow, popup, suggestionVisible, PICKERS, slashAsked, slas
 import { leaveToApp } from './keys';
 import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
-import { blockBeside, moveBlock, indentLines, switchLines, wrapLines, leaveTrailer } from './blocks';
+import { blockBeside, inCell, moveBlock, indentLines, switchLines, wrapLines, leaveTrailer } from './blocks';
 import { holdEdit, dropEdit } from './pending';
 import { ICONS } from './lineIcons';
 import { LIST_ITEM_CONTENT, NumberedList, ListSwitch, JoinNextItem, LineIndent, JoinLists, ListMarkdown, ToDoItem, looseLists } from './lists';
@@ -1125,10 +1125,8 @@ export function createEditor(opts: {
   // order to count on; until then, the say it had before this keystroke
   const menuOpen = (ed: Editor, state: EditorState, ...menus: PluginKey[]) =>
     menus.some((k) => (k.getState(state) ?? k.getState(ed.state))?.active);
-  const iconOf = (link: string) => {
-    const find = (t: string) => notes.byTitle(t);
-    return find(splitLink(link, (t) => !!find(t))[0])?.icon ?? ''; // a section link keeps the page's icon
-  };
+  const pageOf = (link: string) => notes.byTitle(splitLink(link, (t) => !!notes.byTitle(t))[0]);
+  const iconOf = (link: string) => pageOf(link)?.icon ?? ''; // a section link keeps the page's icon
   // A long note's markdown is a few milliseconds per key (54 KB: 6.6 ms of a 7.9 ms keystroke), so it is made
   // once the typing pauses; a short one, at once. Anything that reads the note first runs takeEditorKeys() (pending.ts).
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -1271,15 +1269,14 @@ export function createEditor(opts: {
         }
         // a URL pasted over selected text links that text instead of replacing it (a bare URL on its own
         // line still becomes a bookmark card — that is the empty-selection case, further down the chain)
-        const raw = event.clipboardData?.getData('text/plain') ?? '';
-        const text = raw.trim();
-        if (URL_RE.test(text) && !view.state.selection.empty) return editor.chain().focus().setLink({ href: text }).run();
+        const text = pasted.trim();
+        if (URL_RE.test(text) && !empty) return editor.chain().focus().setLink({ href: text }).run();
         const $from = state.selection.$from;
         // code copied in VS Code says so (and in what language): on an empty line it is a code block of it, as it was;
         // in a line of text it is its lines as written, none of its ** or ` read as markdown
         const vscode = event.clipboardData?.getData('vscode-editor-data');
         if (vscode && text && !editor.isActive('codeBlock') && !inCell($from)) {
-          const code = raw.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').trimEnd();
+          const code = pasted.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').trimEnd();
           if ($from.parent.type.name === 'paragraph' && !$from.parent.content.size && empty) {
             const block = state.schema.nodes.codeBlock.create({ language: vscodeLanguage(vscode) }, state.schema.text(code));
             const tr = state.tr.replaceRangeWith($from.before(), $from.after(), block);
@@ -1302,15 +1299,15 @@ export function createEditor(opts: {
         const html = event.clipboardData?.getData('text/html') ?? '';
         // blocks copied in Notion: its markdown says what they were, its HTML does not (notionPaste.ts)
         if (text && NOTION_COPY.test(html) && !editor.isActive('codeBlock') && !inCell($from)) {
-          view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse(fromNotion(raw))));
+          view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse(fromNotion(pasted))));
           return true;
         }
         // markdown copied from a chat or a terminal comes as plain text that happens to carry HTML of the
         // same characters; render it instead of pasting the ** and # in literally. Real formatting wins.
         if (text && MD_SYNTAX.test(text) && !RICH_HTML.test(html) && !editor.isActive('codeBlock')) {
-          const parsed = (editor.storage as any).markdown.parser.parse(raw);
+          const parsed = (editor.storage as any).markdown.parser.parse(pasted);
           // a line pasted into a line keeps the spaces at its ends (read as markdown, " $x$ ok" lost its first)
-          const lead = raw.includes('\n') ? '' : /^[ \t]+/.exec(raw)?.[0] ?? '', trail = raw.includes('\n') ? '' : /[ \t]+$/.exec(raw)?.[0] ?? '';
+          const lead = pasted.includes('\n') ? '' : /^[ \t]+/.exec(pasted)?.[0] ?? '', trail = pasted.includes('\n') ? '' : /[ \t]+$/.exec(pasted)?.[0] ?? '';
           view.dispatch(pasteMarkdown(view, parsed, lead, trail));
           return true;
         }
@@ -1320,7 +1317,7 @@ export function createEditor(opts: {
         // A line's indent is its text (written as the note keeps it, &#32; / &#9;): read as markdown, four spaces or a
         // tab made it code. A blank line is one empty line, as many as there were.
         if (text && /\n/.test(text) && !RICH_HTML.test(html) && !html.includes('data-pm-slice') && $from.parent.type.name === 'paragraph' && !inCell($from)) {
-          const lines = raw.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '').split('\n');
+          const lines = pasted.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '').split('\n');
           const indent = (ws: string) => ws.replace(/ /g, '&#32;').replace(/\t/g, '&#9;');
           const md = lines.map((l) => (l.trim() ? l.replace(/^[ \t]+/, indent) : BLANK)).join('\n\n');
           view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse(md)));
@@ -1753,7 +1750,7 @@ export function createEditor(opts: {
               const { $from, empty } = state.selection;
               const line = $from.parent;
               if (!empty || !line.isTextblock || line.content.size || $from.depth < 2) return null; // (the note's own lines: above)
-              const around = $from.depth > 1 ? $from.node(-1).type.name : '';
+              const around = $from.node(-1).type.name;
               const says = line.type.name === 'heading' ? `Heading ${line.attrs.level}` : line.type.name === 'detailsSummary' ? 'Toggle'
                 : around === 'taskItem' ? 'To-do' : around === 'listItem' ? 'List' : around === 'blockquote' ? 'Empty quote' : '';
               if (!says) return null;
@@ -1768,7 +1765,7 @@ export function createEditor(opts: {
       WikiLink.configure({
         onOpen: opts.onOpenNote,
         iconOf,
-        exists: (t) => { const find = (x: string) => notes.byTitle(x); return !!find(splitLink(t, (x) => !!find(x))[0]); },
+        exists: (t) => !!pageOf(t),
         watchTitles: (check) => notes.onTitles(check),
         suggestion: {
           char: PICKERS.wiki.char,

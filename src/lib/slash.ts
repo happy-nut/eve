@@ -525,7 +525,7 @@ async function moveLine(editor: Editor) {
 
 /** 'Untitled', 'Untitled 2', … — a fresh page needs a title no other page answers to, because
  *  [[links]] resolve by title. Renaming the page carries its links along (see followRename). */
-function untitled(base = 'Untitled'): string {
+function untitled(base: string): string {
   const taken = new Set(notes.visible.map((n) => titleOf(n)));
   let title = base;
   for (let i = 2; taken.has(title); i++) title = `${base} ${i}`;

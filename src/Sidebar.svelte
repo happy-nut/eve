@@ -19,7 +19,6 @@
   import { appearance } from './lib/appearance.svelte';
   import * as moves from './lib/moves';
   import { focusNote } from './lib/popup';
-  import { history } from './lib/history.svelte';
   import { touchReorder, type Reorder } from './lib/touchReorder';
   import { swipeRow } from './lib/swipeRow';
   import { previewOf, rawQuery, searchText } from './lib/markdown';
@@ -185,7 +184,7 @@
     e.preventDefault(); e.stopPropagation();
     const d = drag, at = dropAt;
     dragEnd();
-    if (!d || !at) return;
+    if (!at) return;
     if (!isMobile) hints.show('sidebarMove', 'Move notes from the keyboard: open the list, then ⌥↑↓', shortcuts.keysFor('focusSidebar'));
     if (at.parent) tree.unfold(at.parent);
     notes.place(d.note, at.parent, at.beforeNote ?? null);
@@ -355,8 +354,8 @@
     const items: MenuItem[] = n
         ? [
             { label: 'Open', run: () => openNote(n) },
-            { label: 'Open in new tab', run: () => tabs.open(n.id), hide: isMobile || n.id === CALENDAR_NOTE_ID },
-            { label: 'New note inside', run: newPageIn(n), hide: n.id === CALENDAR_NOTE_ID },
+            { label: 'Open in new tab', run: () => tabs.open(n.id), hide: isMobile },
+            { label: 'New note inside', run: newPageIn(n) },
             { label: 'Change icon…', run: () => pickIcon(n) },
             // a move that would do nothing (the first row up, no page above to nest under) is left out
             // and none in search results, dragged either: the row above there is not the one above in the list
@@ -605,7 +604,6 @@
   .ico { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; opacity: 0.75; }
   .ico-slot { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: none; border-radius: 4px; transition: background 0.12s; }
   .ico-slot:hover { background: var(--bg-active); }
-  .emoji { font-size: 13px; line-height: 1; }
   .num {
     width: 16px; height: 16px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;
     font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent-text);

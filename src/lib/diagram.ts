@@ -444,7 +444,7 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
 // ---- sequence ----
 // a participant's id as mermaid reads it: any letters (사용자->>앱), not a sign an arrow or a note's comma starts with
 const SID = String.raw`[^\s,:;+<>\-]+`;
-const SEQ_ARROW = String.raw`<<-->>|<<->>|-->>|->>|--x|-x|--\)|-\)|-->|->`;
+export const SEQ_ARROW = String.raw`<<-->>|<<->>|-->>|->>|--x|-x|--\)|-\)|-->|->`;
 const PARTICIPANT = new RegExp(String.raw`^(participant|actor)\s+(${SID})(?:\s+as\s+(.+))?$`);
 const MESSAGE = new RegExp(String.raw`^(${SID})\s*(${SEQ_ARROW})\s*([+-]?)\s*(${SID})\s*(?::\s?(.*))?$`);
 const NOTE = new RegExp(String.raw`^note\s+(over|left of|right of)\s+(${SID})(?:\s*,\s*(${SID}))?\s*:\s?(.*)$`, 'i');
@@ -523,11 +523,12 @@ function seqRead(lines: string[]): Sequence | null {
 }
 // ---- pie ----
 // a value as mermaid reads it: no exponent (1e+29 is not a number to it), so kept under a quadrillion
-const num = (v: number) => (Number.isFinite(v) && v > 0 ? +Math.min(v, 1e15).toFixed(4) : 0);
+// (and as the note keeps it: the form's field shows the same once left)
+export const pieValue = (v: number) => (Number.isFinite(v) && v > 0 ? +Math.min(v, 1e15).toFixed(4) : 0);
 function pieCode(d: Pie) {
   const lines = [`pie${d.showData ? ' showData' : ''}`];
   if (one(d.title)) lines.push(`  title ${ent(one(d.title), '#;')}`);
-  for (const s of d.slices) lines.push(`  ${quoted(s.label)} : ${num(s.value)}`);
+  for (const s of d.slices) lines.push(`  ${quoted(s.label)} : ${pieValue(s.value)}`);
   return lines.join('\n');
 }
 function pieRead(lines: string[], head: string): Pie | null {
@@ -1060,7 +1061,7 @@ export function fromCode(code: string): Diagram | null {
     if (head === 'stateDiagram' || head === 'stateDiagram-v2') return stateRead(rest, head === 'stateDiagram-v2');
     if (head === 'erDiagram') return erRead(rest);
   }
-  const lines = code.split('\n').filter((l) => l.trim() && !/^\s*%%/.test(l) === true);
+  const lines = code.split('\n').filter((l) => l.trim() && !/^\s*%%/.test(l));
   if (lines.length !== code.split('\n').filter((l) => l.trim()).length) return null; // a %% comment would be lost
   const head = lines.shift()?.trim() ?? '';
   const word = head.split(/\s+/)[0];

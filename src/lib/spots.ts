@@ -36,7 +36,7 @@ const at = (key: string) => key.split(':');
 const nameOf = (list: { id: string; name: string }[], id: string) => list.find((x) => x.id === id)?.name.trim() || id;
 /** where a note can be: over, left or right of each one, or over two side by side */
 function noteOptions(s: Sequence, st: { note: string; who: string[] }): [string, string][] {
-  const name = (id: string) => s.people.find((p) => p.id === id)?.name.trim() || id;
+  const name = (id: string) => nameOf(s.people, id);
   const opts: [string, string][] = s.people.flatMap((p) => (['over', 'left of', 'right of'] as const).map((at) => [`${at}|${p.id}`, `${at[0].toUpperCase()}${at.slice(1)} ${name(p.id)}`] as [string, string]));
   for (let i = 1; i < s.people.length; i++) opts.push([`over|${s.people[i - 1].id},${s.people[i].id}`, `Over ${name(s.people[i - 1].id)} and ${name(s.people[i].id)}`]);
   const now = `${st.note}|${st.who.join(',')}`;

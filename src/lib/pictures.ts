@@ -7,6 +7,7 @@
 import { renderMermaid } from './mermaid';
 import { pictureOf } from './snapshot';
 import { spreadLabels } from './edgeLabels';
+import { b64 } from './github';
 
 export interface Picture { number: number; code: string; png?: string; error?: string }
 
@@ -32,10 +33,7 @@ export function mermaidBlocks(body: string): string[] {
 
 /** the PNG as base64, as JSON carries it to the server */
 async function base64(b: Blob): Promise<string> {
-  const bytes = new Uint8Array(await b.arrayBuffer());
-  let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(s);
+  return b64(new Uint8Array(await b.arrayBuffer()));
 }
 
 /** the note's diagrams drawn: `number` alone (1 is the first), or the first `most` */

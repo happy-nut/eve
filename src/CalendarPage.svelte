@@ -11,6 +11,7 @@
   import { previewOf } from './lib/markdown';
   import { ui } from './lib/ui.svelte';
   import { dailyId, dayKey, keyOfDaily, monthGrid } from './lib/daily';
+  import { monthName, shiftDays, shiftMonths } from './lib/date';
   import Icon from './Icon.svelte';
 
   /**
@@ -47,7 +48,7 @@
   const year = $derived(parse(cursor).getFullYear());
   const month = $derived(parse(cursor).getMonth());
   const cells = $derived(monthGrid(year, month));
-  const title = $derived(new Date(year, month, 1).toLocaleDateString(undefined, { year: 'numeric', month: 'long' }));
+  const title = $derived(monthName(cursor));
   const weekdays = Array.from({ length: 7 }, (_, i) => new Date(2026, 8, 27 + i).toLocaleDateString(undefined, { weekday: 'short' }));
 
   /** what a day says, under its title, as it reads (previewOf, the phone list's): a table's words, a to-do's, a
@@ -64,12 +65,9 @@
     await tick();
     if (focus) grid?.querySelector<HTMLElement>('.day.cursor')?.focus();
   }
-  const shift = (days: number) => { const d = parse(cursor); d.setDate(d.getDate() + days); return dayKey(d); };
+  const shift = (days: number) => shiftDays(cursor, days);
   /** the same day in another month, or its last day when it has fewer */
-  const shiftMonth = (by: number) => {
-    const d = parse(cursor), last = new Date(d.getFullYear(), d.getMonth() + by + 1, 0).getDate();
-    return dayKey(new Date(d.getFullYear(), d.getMonth() + by, Math.min(d.getDate(), last)));
-  };
+  const shiftMonth = (by: number) => shiftMonths(cursor, by);
   /** Delete a day's note, once asked; the keyboard goes back where it was. A day with no note has nothing to delete. */
   async function remove(key: string) {
     const n = notes.daily.find((x) => x.id === dailyId(key));
@@ -223,8 +221,7 @@
     .line { -webkit-line-clamp: 1; line-clamp: 1; }
   }
   /* a phone: the month fits the screen, a day shows its number and a line */
-  :global(html.mobile) .calendar { padding: 12px 12px 16px; }
-  :global(html.mobile) .calendar { padding-top: 14px; }
+  :global(html.mobile) .calendar { padding: 14px 12px 16px; }
   :global(html.mobile) .name { font-size: 1.65em; }
   :global(html.mobile) .month { font-size: 16px; }
   :global(html.mobile) .nav { flex: none; width: 40px; height: 40px; border-radius: 12px; } /* a finger's size at 360 wide too */

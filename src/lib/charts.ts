@@ -1,5 +1,5 @@
 import { fromCode, ganttDates, type Gantt, type Pie, type Timeline } from './diagram';
-import { laneSvg } from './lanes';
+import { esc, laneSvg } from './lanes';
 import { mindSvg } from './mindmap';
 import { huesOf } from './chartHues';
 
@@ -30,7 +30,6 @@ export function chartHtml(code: string, laneMin = 0.64): string | null {
   return null;
 }
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const title = (t: string) => (t.trim() ? `<div class="chart-title" data-spot="title">${esc(t.trim())}</div>` : '');
 const fmt = (v: number) => (Math.round(v * 100) / 100).toLocaleString('en-US');
 
@@ -54,7 +53,7 @@ function pie(d: Pie) {
   }).join('');
   const top = parts.reduce((a, s) => (s.value > a.value ? s : a), parts[0]);
   const rows = d.slices.map((s, i) => {
-    const pct = total && s.value > 0 ? ((s.value / total) * 100).toFixed(1) : '0.0'; // one decimal on every row (8% beside 5.7%)
+    const pct = s.value > 0 ? ((s.value / total) * 100).toFixed(1) : '0.0'; // one decimal on every row (8% beside 5.7%)
     return `<div class="row" data-spot="slice:${i}"><span class="dot ${tone(i)}"></span><span class="lbl">${esc(s.label)}</span>`
       + `${d.showData ? `<span class="val">${fmt(s.value)}</span>` : ''}<span class="pct">${pct}%</span></div>`;
   }).join('');

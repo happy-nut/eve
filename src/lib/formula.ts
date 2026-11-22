@@ -1,3 +1,4 @@
+import { dayKey } from './daily';
 /**
  * Notion's formulas, the part a note's table needs: `prop("Price") * 2`, `if(prop("Done"), "✓", "")`,
  * `dateBetween(prop("Due"), now(), "days")`, `concat(prop("Name"), " (", prop("Status"), ")")`. Read by a small parser
@@ -74,7 +75,6 @@ const num = (v: Val): number => (typeof v === 'number' ? v : typeof v === 'boole
 const str = (v: Val): string => (v === null ? '' : typeof v === 'number' ? String(Math.round(v * 1e6) / 1e6) : String(v));
 const truthy = (v: Val) => !(v === null || v === false || v === 0 || v === '');
 const day = (v: Val) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(str(v)); return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : NaN; };
-const pad = (n: number) => String(n).padStart(2, '0');
 
 const FNS: Record<string, (a: Val[], prop: (name: string) => Val) => Val> = {
   prop: ([n], prop) => prop(str(n)),
@@ -97,7 +97,7 @@ const FNS: Record<string, (a: Val[], prop: (name: string) => Val) => Val> = {
   min: (a) => Math.min(...a.map(num)),
   max: (a) => Math.max(...a.map(num)),
   sum: (a) => a.map(num).reduce((x, y) => x + y, 0),
-  now: () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; },
+  now: () => dayKey(new Date()),
   // whole days (or weeks, months, years) from b to a, as Notion's dateBetween
   dateBetween: ([a, b, unit]) => {
     const x = day(a), y = day(b);

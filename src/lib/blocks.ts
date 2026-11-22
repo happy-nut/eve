@@ -4,6 +4,12 @@ import { EditorState, Selection, TextSelection } from '@tiptap/pm/state';
 import { liftListItem, sinkListItem } from '@tiptap/pm/schema-list';
 import { canJoin, liftTarget } from '@tiptap/pm/transform';
 
+/** In a table cell: no code block there, a table's markdown holds one line of text a cell */
+export const inCell = ($pos: ResolvedPos) => {
+  for (let d = $pos.depth; d > 0; d--) if (/^table(Cell|Header)$/.test($pos.node(d).type.name)) return true;
+  return false;
+};
+
 /**
  * The block a ⌫ at the start of the line at `$pos` runs into (dir -1), or a Delete at its end (1): the line's
  * neighbour, or the last (first) block deep in it as far as `stop` lets it go, since a list ending in a picture ends
@@ -253,7 +259,7 @@ export function indentLines(dir: 1 | -1) {
     const { from, to, $from } = tr.selection;
     if ($from.parent.type.spec.code) return false;
     // in a table, even one inside a list item, Tab walks the cells (and adds a row at the end), as anywhere else
-    for (let d = $from.depth; d > 0; d--) if (/^table(Cell|Header)$/.test($from.node(d).type.name)) return false;
+    if (inCell($from)) return false;
     // ProseMirror's own list commands, run on the one transaction (tiptap's would read a stale selection)
     const step = (sink: boolean, item: string) => {
       const type = tr.doc.type.schema.nodes[item];

@@ -1,5 +1,5 @@
 import type { Mindmap, MindShape } from './diagram';
-import { textW, wrap } from './lanes';
+import { esc, textW, wrap } from './lanes';
 
 /**
  * A mind map, drawn by Eve: the idea in the middle as a soft card, its branches out to both sides on soft curves,
@@ -26,7 +26,6 @@ const GAP_X = [64, 44, 34]; // from an idea to the ones under it
 const GAP_Y = [22, 14, 6]; // between ideas under one (the first branches, under them, further out)
 const PAD = 18;
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const span = (n: Node): number => n.kids.length ? Math.max(n.h, n.kids.reduce((a, k) => a + span(k), 0) + GAP_Y[Math.min(n.depth, 2)] * (n.kids.length - 1)) : n.h;
 
 function sized(n: Node) {

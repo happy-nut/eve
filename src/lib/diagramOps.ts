@@ -71,8 +71,7 @@ export function setArrow(m: Message, v: string) {
 }
 /** a message's activation bar: the receiver's starts (+), the sender's ends (-) */
 export const BARS: [string, string][] = [['', 'No bar'], ['+', 'Bar starts'], ['-', 'Bar ends']];
-/** a value as the note keeps it (no negatives, under a quadrillion): the field shows the same once left */
-export const pieValue = (v: number) => (Number.isFinite(v) && v > 0 ? +Math.min(v, 1e15).toFixed(4) : 0);
+export { pieValue } from './diagram';
 
 /** a branch gone: its own branches move up a level, under what held it (left where they were, the form showed them
  *  indented while the drawing put them first-level) */

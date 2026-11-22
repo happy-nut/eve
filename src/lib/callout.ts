@@ -22,8 +22,8 @@ const colorOf = (icon: string) => calloutKind(icon)?.color ?? '';
  * on that line.
  */
 /** Split a paragraph at its first line break: what came before it becomes a paragraph of its own, before
- *  it (marks and all). A paragraph of one line is all title. Returns whether there was a title. */
-function splitTitle(p: Element): boolean {
+ *  it (marks and all). A paragraph of one line is all title. */
+function splitTitle(p: Element): void {
   const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
   for (let t = walker.nextNode() as Text | null; t; t = walker.nextNode() as Text | null) {
     const at = t.data.indexOf('\n');
@@ -35,10 +35,9 @@ function splitTitle(p: Element): boolean {
     title.append(range.extractContents());
     t.data = t.data.slice(1); // the break itself (extractContents left the text from it on)
     p.before(title);
-    return true;
+    return;
   }
   // one line: it is the title, and the body follows in the next paragraphs
-  return true;
 }
 
 export const Callout = Node.create({
@@ -193,7 +192,7 @@ export const Callout = Node.create({
               // anything left on the marker's line is the title: it becomes a paragraph of its own
               let titled = false;
               if (text && text.nodeType === 3 && text.textContent!.startsWith('\n')) text.textContent = text.textContent!.slice(1);
-              else if (first.textContent?.trim()) titled = splitTitle(first);
+              else if (first.textContent?.trim()) { splitTitle(first); titled = true; }
               // an empty line kept on purpose is written as a no-break space (trim() takes that too, and dropped the line)
               if (!/[^\s]|\u00a0/.test(first.textContent ?? '') && first.children.length === 0) first.remove();
               const div = document.createElement('div');

@@ -1,3 +1,4 @@
+import { SEQ_ARROW } from './diagram';
 /**
  * Folding a sequence diagram's blocks (alt, opt, loop, par, critical, break, rect) while it is looked at: a folded
  * block keeps its box, its label and its condition, and its inside is drawn as one note saying what is hidden
@@ -30,7 +31,7 @@ const BLOCK = /^(alt|opt|loop|par_over|par|critical|break|rect|box)(?:\s+(.*))?$
 const SECTION = /^(else|and|option)(?:\s+(.*))?$/i;
 const END = /^end\s*;?$/i;
 const DECL = /^(?:create\s+)?(participant|actor)\s+(.+)$/i;
-const ARROW = /^(.+?)\s*(<<-->>|<<->>|-->>|->>|--x|-x|--\)|-\)|-->|->)\s*([+-]?)\s*(.+?)\s*:(.*)$/;
+const ARROW = new RegExp(String.raw`^(.+?)\s*(${SEQ_ARROW})\s*([+-]?)\s*(.+?)\s*:(.*)$`);
 const NOTE = /^note\s+(?:over|left\s+of|right\s+of)\s+([^:]+?)\s*:/i;
 const ACTIVATION = /^(activate|deactivate)\s+(.+?)\s*;?$/i;
 const NUMBER = /^autonumber(?:\s+(off)|\s+(\d+)(?:\s+(\d+))?)?\s*;?$/i;

@@ -1,5 +1,5 @@
 import { findUpdate, type Update } from './update';
-import { isMobile, isTauri, widget } from './platform';
+import { isMobile, isTauri, onWindowFocus, widget } from './platform';
 import { ui, errorText } from './ui.svelte';
 
 /**
@@ -96,7 +96,7 @@ class Updates {
     // the Mac stays open for days, hidden rather than quit: asked again each time it is summoned (the page's
     // visibility does not change for a hidden app), and every few hours besides
     if (!isMobile) {
-      void import('./platform').then(({ onWindowFocus }) => onWindowFocus(() => void this.check(false, FRESH)));
+      onWindowFocus(() => void this.check(false, FRESH));
       setInterval(() => void this.check(), EVERY);
     }
     void this.check(true);

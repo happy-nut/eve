@@ -97,10 +97,7 @@ pub fn plain(line: &str) -> String {
     let mut unescaped = String::with_capacity(s.len());
     let mut chars = s.chars();
     while let Some(c) = chars.next() {
-        match (c, c == '\\') {
-            (_, true) => unescaped.push(chars.next().unwrap_or(c)),
-            _ => unescaped.push(c),
-        }
+        unescaped.push(if c == '\\' { chars.next().unwrap_or(c) } else { c });
     }
     let unmarked: String = highlights_off(&unescaped).chars().filter(|c| !matches!(c, '*' | '_' | '`' | '~')).collect();
     let mut linked = String::with_capacity(unmarked.len());
@@ -127,7 +124,7 @@ fn highlights_off(s: &str) -> String {
     while i < s.len() {
         let rest = &s[i..];
         if let Some(after) = rest.strip_prefix("==") {
-            if let Some(first) = after.chars().next().filter(|c| !c.is_whitespace() && *c != '\n') {
+            if let Some(first) = after.chars().next().filter(|c| !c.is_whitespace()) {
                 let from = 2 + first.len_utf8();
                 let line_end = rest.find('\n').unwrap_or(rest.len());
                 if let Some(j) = rest[from..].find("==").map(|j| from + j).filter(|&j| j < line_end) {
@@ -319,7 +316,7 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 }
 
 /// (year, month, day) of a day count; the inverse of days_from_civil.
-fn civil(days: i64) -> (i64, i64, i64) {
+pub(crate) fn civil(days: i64) -> (i64, i64, i64) {
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097;
@@ -1072,7 +1069,7 @@ pub fn ask_app_for(dir: &Path, mut ask: Value) -> Result<Value, String> {
 
 /// `create_note`: the parent found here, from the notes on disk; the rest is the app's.
 fn create_note(dir: &Path, notes: &[Note], args: &Value) -> Result<String, String> {
-    let title = arg_str(args, "title").trim();
+    let title = arg_str(args, "title");
     if title.is_empty() || title.contains('\n') {
         return Err("Give the new note a title, one line.".into());
     }
@@ -1085,7 +1082,7 @@ fn create_note(dir: &Path, notes: &[Note], args: &Value) -> Result<String, Strin
             n.id
         ));
     }
-    let parent = arg_str(args, "parent").trim();
+    let parent = arg_str(args, "parent");
     let parent = if parent.is_empty() {
         String::new()
     } else {

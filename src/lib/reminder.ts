@@ -1,9 +1,8 @@
 import { appearance } from './appearance.svelte';
-import { notes } from './notes.svelte';
+import { notes, titleOf } from './notes.svelte';
 import { dailyId, dayKey, isWritten } from './daily';
 import { isMobile, isTauri, widget } from './platform';
 import { remindersIn } from './date';
-import { titleOf } from './notes.svelte';
 
 /**
  * The daily note reminder. A phone hands the time to Reminder.kt, whose alarm fires with the app closed
