@@ -1,5 +1,4 @@
 export function scrollHint(el: HTMLElement): () => void {
-  if (typeof ResizeObserver === 'undefined') return () => {};
   const update = () => {
     const more = el.scrollWidth - el.clientWidth > 2;
     el.classList.toggle('more-l', more && el.scrollLeft > 2);

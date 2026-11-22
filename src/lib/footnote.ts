@@ -30,7 +30,7 @@ export function footnoteMarkdown(md: MarkdownIt): void {
     return true;
   }, { alt: ['paragraph'] });
   md.inline.ruler.before('link', 'footnoteref', (state, silent) => {
-    if (state.src.charCodeAt(state.pos) !== 0x5b || state.src.charCodeAt(state.pos + 1) !== 0x5e) return false;
+    if (!state.src.startsWith('[^', state.pos)) return false;
     const m = /^\[\^([^\]\s]+)\]/.exec(state.src.slice(state.pos));
     if (!m) return false;
     if (state.pos === 0 && state.src[m[0].length] === ':') return false;

@@ -40,7 +40,7 @@ import { BlockHandle } from './blockHandle';
 import { TableHandles } from './tableHandles';
 import { ClickTarget } from './clickTarget';
 import { Divider } from './divider';
-import { MathBlock, MathInline, Text, insertMath } from './math';
+import { MathBlock, MathInline, Text as DollarSafeText, insertMath } from './math';
 import { ui, under } from './ui.svelte';
 import { notes, titleOf, type Note } from './notes.svelte';
 import { headingsOf, splitLink } from './markdown';
@@ -56,10 +56,10 @@ import { noteMenu } from './noteMenu';
 import { blockBeside, inCell, moveBlock, indentLines, switchLines, wrapLines, leaveTrailer } from './blocks';
 import { holdEdit, dropEdit } from './pending';
 import { ICONS } from './lineIcons';
-import { LIST_ITEM_CONTENT, NumberedList, ListSwitch, JoinNextItem, LineIndent, JoinLists, ListMarkdown, ToDoItem, looseLists } from './lists';
+import { LIST_ITEM_CONTENT, NumberedList, ListSwitch, JoinNextItem, LineIndent, JoinLists, ListMarkdown, ToDoItem, bulletsMarkdown } from './lists';
 import { appearance } from './appearance.svelte';
 
-const MD_SYNTAX = /(\$[^\s$]|\*\*|__|~~|^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|`|\[[^\]]*\]\(|^\|.*\|\s*$)/m;
+const LITERAL_MARKDOWN = /(\$[^\s$]|\*\*|__|~~|^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|`|\[[^\]]*\]\(|^\|.*\|\s*$)/m;
 /** clipboard HTML that carries formatting of its own, so it is more than a plain-text flavour */
 const RICH_HTML = /<(strong|b|em|i|u|s|a|h[1-6]|ul|ol|li|code|pre|blockquote|img|table|hr)\b/i;
 
@@ -68,6 +68,22 @@ const RICH_HTML = /<(strong|b|em|i|u|s|a|h[1-6]|ul|ol|li|code|pre|blockquote|img
  * HTML there: a toggle (`- <details>`, which came out of the list), a <video> kept as written
  */
 const LEADS = 'pre, h1, h2, h3, h4, h5, h6, blockquote, table, ul, ol, div[data-math-block], div[data-kanban], div[data-eve-raw], details';
+
+function writeNumberedTodo(state: any, item: PMNode, first: PMNode, text: string) {
+  state.write(text.slice(0, 4));
+  state.render(first.cut(4), item, 0);
+  item.forEach((child, _o, i) => { if (i) state.render(child, item, i); });
+}
+
+function keepNumberedTodoBrackets(state: any) {
+  const lists: string[] = [];
+  for (const [i, t] of (state.tokens as any[]).entries()) {
+    if (/_list_open$/.test(t.type)) lists.push(t.type);
+    else if (/_list_close$/.test(t.type)) lists.pop();
+    else if (t.type === 'inline' && lists.at(-1) === 'ordered_list_open' && state.tokens[i - 2]?.type === 'list_item_open'
+      && /^\[[ xX]\]([ \u00a0]|$)/.test(t.content)) t.content = `\\[${t.content[1]}\\]${t.content.slice(3)}`;
+  }
+}
 
 const ListItemLead = ListItem.extend({
   content: LIST_ITEM_CONTENT,
@@ -83,24 +99,14 @@ const ListItemLead = ListItem.extend({
           return;
         }
         if ((parent as PMNode | undefined)?.type?.name === 'orderedList' && first?.type.name === 'paragraph' && text?.isText && !text.marks.length && /^\[[ xX]\] \S/.test(text.text!)) {
-          state.write(text.text!.slice(0, 4));
-          state.render(first.cut(4), node, 0);
-          node.forEach((child, _o, i) => { if (i) state.render(child, node, i); });
+          writeNumberedTodo(state, node, first, text.text!);
           return;
         }
         state.renderContent(node);
       },
       parse: {
         setup(md: any) {
-          md.core.ruler.before('inline', 'eve-numbered-todo', (state: any) => {
-            const lists: string[] = [];
-            for (const [i, t] of (state.tokens as any[]).entries()) {
-              if (/_list_open$/.test(t.type)) lists.push(t.type);
-              else if (/_list_close$/.test(t.type)) lists.pop();
-              else if (t.type === 'inline' && lists.at(-1) === 'ordered_list_open' && state.tokens[i - 2]?.type === 'list_item_open'
-                && /^\[[ xX]\]([ \u00a0]|$)/.test(t.content)) t.content = `\\[${t.content[1]}\\]${t.content.slice(3)}`;
-            }
-          });
+          md.core.ruler.before('inline', 'eve-numbered-todo', keepNumberedTodoBrackets);
         },
         updateDOM(root: HTMLElement) {
           const leads = [...root.querySelectorAll('li:not(.task-list-item)')].filter((li) => {
@@ -204,9 +210,10 @@ function keepSpaces(root: HTMLElement) {
 function emptyBlankLines(el: HTMLElement) {
   for (const p of el.querySelectorAll('p')) if (p.textContent === BLANK) p.replaceChildren();
 }
+const LAST_TO_SEE_PAGE = 1;
 const KeepSpaces = Extension.create({
   name: 'keepSpaces',
-  priority: 1,
+  priority: LAST_TO_SEE_PAGE,
   addStorage: () => ({ markdown: { parse: { updateDOM: (el: HTMLElement) => { emptyBlankLines(el); keepSpaces(el); } } } }),
 });
 
@@ -214,17 +221,18 @@ const KEYMAP = new PluginKey('eve-keymap');
 const APP_GUARD = new PluginKey('eve-app-guard');
 
 export const getMarkdown = (editor: Editor): string => (editor.storage as any).markdown.getMarkdown();
-const LONG = 10_000;
+const DEBOUNCE_FROM_SIZE = 10_000;
 
 const FLASH = new PluginKey<DecorationSet>('moveFlash');
 let flashes = 0;
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
 const noteMove = new WeakMap<Editor, (dir: -1 | 1, onTitle: boolean) => boolean>();
 
+const onTitleLine = ($from: ResolvedPos) => $from.depth === 1 && $from.index(0) === 0 && $from.parent.type.name === 'heading';
+
 function moveAndFlash(editor: Editor, dir: -1 | 1): boolean {
   const { $from, empty } = editor.state.selection;
-  const onTitle = empty && $from.depth === 1 && $from.index(0) === 0 && $from.parent.type.name === 'heading';
-  if (noteMove.get(editor)?.(dir, onTitle)) return true;
+  if (noteMove.get(editor)?.(dir, empty && onTitleLine($from))) return true;
   const before = editor.state.doc;
   if (!editor.commands.command(moveBlock(dir))) return false;
   const { state, view } = editor;
@@ -271,7 +279,7 @@ function toggleHere({ tr, state }: { tr: any; state: any }): boolean {
   return false;
 }
 
-function toggleCheck({ tr, state }: { tr: any; state: any }): boolean {
+function tickTodos({ tr, state }: { tr: any; state: any }): boolean {
   const { from, to } = state.selection;
   const items: number[] = [];
   state.doc.nodesBetween(from, to, (n: PMNode, pos: number) => {
@@ -362,7 +370,6 @@ const selectLine: Command = (state, dispatch) => {
 /** Run one editor action by id (the phone's formatting bar uses these; a keyboard uses applyKeymap). */
 export const runEditorCommand = (editor: Editor, id: string): boolean => editorCommands(editor)[id]?.() ?? false;
 
-/** Editor-scoped actions, by id. Rebindable at runtime (see applyKeymap). */
 /** all the text from `from` to `to` (in one line) inline code */
 function allCode(state: EditorState, from: number, to: number) {
   if (from === to) return false;
@@ -598,7 +605,7 @@ export function editorCommands(editor: Editor): Record<string, () => boolean> {
     orderedList: () => inCode() || editor.commands.command(switchLines('orderedList', 'listItem')) || c().command(leaveTrailer).command(wrapLines('orderedList', 'listItem')).run() || c().command(leaveTrailer).toggleOrderedList().run(),
     taskList: () => inCode() || editor.commands.command(switchLines('taskList', 'taskItem')) || c().command(leaveTrailer).command(wrapLines('taskList', 'taskItem')).run() || c().command(leaveTrailer).toggleTaskList().run(),
     // ⌘↩: the link or card under the caret opens; on a to-do, its box is ticked or cleared
-    toggleCheck: () => openLinkHere(editor) || editor.commands.command(toggleCheck) || editor.commands.command(toggleHere),
+    toggleCheck: () => openLinkHere(editor) || editor.commands.command(tickTodos) || editor.commands.command(toggleHere),
     blockquote: () => editor.commands.command(quoteList) || c().toggleBlockquote().run(),
     codeBlock: () => !inCell(editor.state.selection.$from) && (editor.commands.command(linesToCode(editor)) || c().toggleCodeBlock().run()),
     // in a toggle's title, under the toggle: the title holds text only
@@ -661,7 +668,7 @@ function chipMenu(editor: Editor, pos: number, dom: HTMLElement) {
     : [{ label: 'Remind me…', run: () => void askTime(remindTime(node.attrs.date)) }]);
 }
 
-const FORMER: Record<string, string> = {
+const KEYS_BEFORE_NOTION: Record<string, string> = {
   'Mod-Shift-7': 'orderedList', 'Mod-Shift-8': 'bulletList', 'Mod-Shift-9': 'taskList', 'Mod-Alt-c': 'codeBlock',
   'Mod-Shift-x': 'strike', 'Alt-ArrowUp': 'moveBlockUp', 'Alt-ArrowDown': 'moveBlockDown',
 };
@@ -669,12 +676,13 @@ const FORMER: Record<string, string> = {
 export function applyKeymap(editor: Editor) {
   const cmds = editorCommands(editor);
   const bindings: Record<string, Command> = {};
+  const linkOrSearch = () => (!editor.state.selection.empty || editor.isActive('link')) && cmds.link();
   for (const a of shortcuts.actions) {
     if (a.scope !== 'editor' || !a.keys || !cmds[a.id]) continue;
     // ProseMirror knows the minus key as "-" ("Minus" is the list's own name for it), and with Shift held the
     // key reads "_": that is found by the key's code (Mod-Shift--), or as "_" without its Shift (Mod-_)
     const keys = a.keys.replace(/Minus$/, '-');
-    bindings[keys] = a.id === 'link' ? () => (!editor.state.selection.empty || editor.isActive('link')) && cmds.link() : () => cmds[a.id]();
+    bindings[keys] = a.id === 'link' ? linkOrSearch : () => cmds[a.id]();
     if (keys !== a.keys && keys.includes('Shift-')) bindings[keys.replace('Shift-', '').replace(/-$/, '_')] = bindings[keys];
   }
   editor.unregisterPlugin(KEYMAP);
@@ -694,7 +702,7 @@ export function applyKeymap(editor: Editor) {
   editor.registerPlugin(guard, (p, all) => [p, ...all]);
   bindings['Alt-Enter'] = () => (noteMenu(editor, null), true);
   const taken = new Set(shortcuts.actions.map((a) => a.keys));
-  for (const [keys, id] of Object.entries(FORMER)) if (!taken.has(keys) && !bindings[keys] && cmds[id]) bindings[keys] = () => cmds[id]();
+  for (const [keys, id] of Object.entries(KEYS_BEFORE_NOTION)) if (!taken.has(keys) && !bindings[keys] && cmds[id]) bindings[keys] = () => cmds[id]();
   const plugin = new Plugin({ key: KEYMAP, props: { handleKeyDown: keydownHandler(bindings) } });
   editor.registerPlugin(plugin, (p, all) => [p, ...all]);
 }
@@ -778,6 +786,15 @@ export function goToSection(editor: Editor, section: string) {
 let lastCut = { text: '', at: 0 };
 
 function typedTrigger(key: PluginKey<number | null>, char: string, endsAtSpace: boolean, closer?: string) {
+  const typedJustNow = (tr: Transaction, state: EditorState) => {
+    const { empty, $head } = state.selection;
+    return tr.docChanged && empty && !tr.getMeta('paste') && tr.getMeta('uiEvent') !== 'paste' && tr.getMeta('uiEvent') !== 'drop' && !tr.getMeta('history$')
+      && $head.parent.isTextblock && $head.parentOffset >= char.length
+      && $head.parent.textBetween($head.parentOffset - char.length, $head.parentOffset) === char
+      && tr.steps.some((st) => { const c = (st as { slice?: { content: Fragment; size: number } }).slice; return !!c?.size && c.content.textBetween(0, c.content.size).endsWith(char.at(-1)!); });
+  };
+  const endedBySpace = (state: EditorState, at: number) => endsAtSpace && /\s/.test(state.doc.textBetween(at + 1, Math.max(at + 1, state.selection.head)));
+  const closedBy = (state: EditorState, at: number) => !!closer && state.doc.textBetween(at + char.length, Math.max(at + char.length, state.selection.head)).includes(closer);
   return new Plugin<number | null>({
     key,
     state: {
@@ -787,17 +804,11 @@ function typedTrigger(key: PluginKey<number | null>, char: string, endsAtSpace: 
           const r = tr.mapping.mapResult(at, 1);
           at = r.deleted ? null : r.pos;
         }
-        const { empty, $head } = state.selection;
-        if (tr.docChanged && empty && !tr.getMeta('paste') && tr.getMeta('uiEvent') !== 'paste' && tr.getMeta('uiEvent') !== 'drop' && !tr.getMeta('history$')
-          && $head.parent.isTextblock && $head.parentOffset >= char.length
-          && $head.parent.textBetween($head.parentOffset - char.length, $head.parentOffset) === char
-          && tr.steps.some((st) => { const c = (st as { slice?: { content: Fragment; size: number } }).slice; return !!c?.size && c.content.textBetween(0, c.content.size).endsWith(char.at(-1)!); })) {
-          return $head.pos - char.length;
-        }
-        if (at !== null && (state.selection.head <= at || state.doc.resolve(at).parent !== $head.parent)) return null;
-        if (at !== null && endsAtSpace && /\s/.test(state.doc.textBetween(at + 1, Math.max(at + 1, $head.pos)))) return null;
-        if (at !== null && closer && state.doc.textBetween(at + char.length, Math.max(at + char.length, $head.pos)).includes(closer)) return null;
-        if (at !== null && !tr.docChanged && tr.selectionSet && (endsAtSpace || tr.getMeta('pointer'))) return null;
+        if (typedJustNow(tr, state)) return state.selection.head - char.length;
+        if (at === null) return null;
+        if (state.selection.head <= at || state.doc.resolve(at).parent !== state.selection.$head.parent) return null;
+        if (endedBySpace(state, at) || closedBy(state, at)) return null;
+        if (!tr.docChanged && tr.selectionSet && (endsAtSpace || tr.getMeta('pointer'))) return null;
         return at;
       },
     },
@@ -889,15 +900,14 @@ const codeEdges = Extension.create({
   name: 'codeEdges',
   priority: 110,
   addKeyboardShortcuts() {
-    const step = (dir: -1 | 1) => () => {
-      const { state, view } = this.editor, sel = state.selection;
-      if (!(sel instanceof TextSelection) || !sel.empty) return false;
-      const e = codeEdge(state);
-      if (e && (dir > 0) === (e.after === e.inside)) {
-        view.dispatch(state.tr.setStoredMarks(e.inside ? e.outMarks : e.inMarks));
-        return true;
-      }
-      const $c = sel.$from, node = dir > 0 ? $c.nodeAfter : $c.nodeBefore;
+    const stepAcrossEdge = (view: EditorView, dir: -1 | 1) => {
+      const e = codeEdge(view.state);
+      if (!e || (dir > 0) !== (e.after === e.inside)) return false;
+      view.dispatch(view.state.tr.setStoredMarks(e.inside ? e.outMarks : e.inMarks));
+      return true;
+    };
+    const stepOntoEdge = (view: EditorView, $c: ResolvedPos, dir: -1 | 1) => {
+      const { state } = view, node = dir > 0 ? $c.nodeAfter : $c.nodeBefore;
       if (!node?.isText) return false;
       const letters = Array.from(node.text!), letter = dir > 0 ? letters[0] : letters[letters.length - 1];
       const $to = state.doc.resolve($c.pos + dir * letter.length), there = codeEdge(state, $to, null);
@@ -906,7 +916,12 @@ const codeEdges = Extension.create({
       view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, $to.pos)).setStoredMarks(inside ? there.inMarks : there.outMarks).scrollIntoView());
       return true;
     };
-    const join = () => {
+    const step = (dir: -1 | 1) => () => {
+      const { view } = this.editor, sel = view.state.selection;
+      if (!(sel instanceof TextSelection) || !sel.empty) return false;
+      return stepAcrossEdge(view, dir) || stepOntoEdge(view, sel.$from, dir);
+    };
+    const joinTouchingCodes = () => {
       const { state, view } = this.editor, sel = state.selection;
       const code = state.schema.marks.code;
       if (!(sel instanceof TextSelection) || !sel.empty || !code) return false;
@@ -917,7 +932,7 @@ const codeEdges = Extension.create({
       view.dispatch(tr.setStoredMarks(b.marks));
       return true;
     };
-    return { ArrowRight: step(1), ArrowLeft: step(-1), Backspace: join, Delete: join };
+    return { ArrowRight: step(1), ArrowLeft: step(-1), Backspace: joinTouchingCodes, Delete: joinTouchingCodes };
   },
   addProseMirrorPlugins() {
     return [new Plugin({
@@ -940,6 +955,276 @@ const codeEdges = Extension.create({
     })];
   },
 });
+
+function dropOuterLists(content: Fragment, openStart: number): Fragment {
+  for (let open = openStart; open >= 2 && content.childCount === 1 && LISTS.test(content.firstChild!.type.name)
+    && content.firstChild!.childCount === 1 && LISTS.test(content.firstChild!.firstChild!.firstChild?.type.name ?? ''); open -= 2) {
+    content = content.firstChild!.firstChild!.content;
+  }
+  return content;
+}
+
+function untitleCallout(frag: Fragment): Fragment {
+  const first = frag.firstChild;
+  if (!first) return frag;
+  const node = first.type.name === 'callout' ? first.type.create({ ...first.attrs, titled: false }, first.content, first.marks) : first.copy(untitleCallout(first.content));
+  return frag.replaceChild(0, node);
+}
+
+function joinParagraphLines(content: Fragment, serializer: any): string {
+  const spaces = (s: string) => s.replace(/&#32;/g, ' ').replace(/&#9;/g, '\t');
+  let text = '', prev: PMNode | null = null;
+  content.forEach((block) => {
+    if (prev) text += prev.type.name === 'paragraph' && block.type.name === 'paragraph' ? '\n' : '\n\n';
+    text += (serializer.serialize(Fragment.from(block)) as string).replace(/\n+$/, '');
+    prev = block;
+  });
+  return text.replace(new RegExp(`^${BLANK}$`, 'gm'), '')
+    .replace(/^([ \t>]*(?:[-*+] (?:\[[ xX]\] )?|\d+[.)] )?)((?:&#(?:32|9);)+)/gm, (_, pre, run) => pre + spaces(run))
+    .replace(/(?:&#(?:32|9);)+(?=\\\n)/g, spaces);
+}
+
+function copyText(slice: Slice, view: EditorView, serializer: any): string {
+  const { $from, $to } = view.state.selection;
+  if (view.state.selection instanceof CellSelection) return copiedCells(view.state.selection, slice, serializer);
+  const inLine = $from.sameParent($to) && $from.parent.isTextblock;
+  if (inLine && $from.parent.type.spec.code) return slice.content.textBetween(0, slice.content.size, '\n');
+  if (inLine && allCode(view.state, $from.pos, $to.pos)) return view.state.doc.textBetween($from.pos, $to.pos);
+  if (inLine) return joinParagraphLines(Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))), serializer);
+  let content = dropOuterLists(slice.content, slice.openStart);
+  for (let d = $from.depth; d > 0; d--) {
+    if ($from.node(d).type.name !== 'callout' || !$from.node(d).attrs.titled || $from.index(d) === 0) continue;
+    content = untitleCallout(content);
+    break;
+  }
+  return joinParagraphLines(content, serializer);
+}
+
+function pasteInToggleTitle(view: EditorView, content: Fragment, serializer: any): Slice {
+  const { schema } = view.state;
+  const written = (leaf: PMNode) => (leaf.isText ? leaf.text! : leaf.isInline ? (serializer.serialize(schema.nodes.doc.create(null, schema.nodes.paragraph.create(null, leaf))) as string).trim() : '');
+  const words = content.textBetween(0, content.size, ' ', written).replace(/\s+/g, ' ').trim();
+  return new Slice(words ? Fragment.from(schema.text(words)) : Fragment.empty, 0, 0);
+}
+
+// rows copied from a table come as rows, open: pasted outside a table, ProseMirror made a table around them
+// and left the empty line above it. They are a table of their own. (Into a table, prosemirror-tables pastes
+// the cells.)
+function rowsAsTable(view: EditorView, content: Fragment): Slice | null {
+  if (content.firstChild?.type.name !== 'tableRow' || inCell(view.state.selection.$from)) return null;
+  return new Slice(Fragment.from(view.state.schema.nodes.table.create(null, content)), 0, 0);
+}
+
+function pasteInCell(view: EditorView, content: Fragment): Slice | null {
+  const { $from, $to } = view.state.selection;
+  if (!inCell($from) || !inCell($to) || content.firstChild?.type.name === 'tableRow') return null;
+  const fitted = cellLines(view, content, $from);
+  return fitted && new Slice(fitted, fitted.firstChild?.isTextblock ? 1 : 0, fitted.lastChild?.isTextblock ? 1 : 0);
+}
+
+function unwrapToggleBody(slice: Slice): Slice {
+  let { content, openStart, openEnd } = slice;
+  while (openStart >= 2 && content.childCount === 1 && content.firstChild!.type.name === 'details' && content.firstChild!.firstChild?.type.name === 'detailsContent') {
+    content = content.firstChild!.firstChild!.content;
+    openStart -= 2;
+    openEnd = Math.max(0, openEnd - 2);
+  }
+  return content === slice.content ? slice : new Slice(content, openStart, openEnd);
+}
+
+function wordsOnly({ content, openStart, openEnd }: Slice): Slice | null {
+  let inner = content, depth = 0;
+  while (inner.childCount === 1 && !inner.firstChild!.isTextblock && depth < Math.min(openStart, openEnd)) inner = inner.firstChild!.content, depth++;
+  const line = inner.childCount === 1 ? inner.firstChild! : null;
+  if (!line?.isTextblock || openStart !== depth + 1 || openEnd !== depth + 1 || (line.type.spec.code && line.textContent.includes('\n'))) return null;
+  return new Slice(line.content, 0, 0);
+}
+
+function linesIntoList(view: EditorView, { content, openStart, openEnd }: Slice): Slice | null {
+  const $at = view.state.selection.$from, item = $at.depth >= 2 ? $at.node(-1) : null;
+  if (!item || !/^(listItem|taskItem)$/.test(item.type.name) || $at.parent.type.name !== 'paragraph') return null;
+  const list = $at.node(-2), only = content.childCount === 1 ? content.firstChild! : null;
+  if (only && LISTS.test(only.type.name) && only.type !== list.type) return new Slice(Fragment.from(asList(only, list, item)), openStart, openEnd);
+  const lines: PMNode[] = []; content.forEach((n) => { lines.push(n); });
+  if (lines.length < 2 || !lines.every((n) => n.type.name === 'paragraph')) return null;
+  const items = list.type.create(null, lines.map((l) => item.type.create(item.type.name === 'taskItem' ? { checked: false } : null, l)));
+  return new Slice(Fragment.from(items), openStart ? openStart + 2 : 1, openEnd ? openEnd + 2 : 1);
+}
+
+type Clip = { pasted: string; text: string; html: string; vscode: string | undefined };
+
+const parseMarkdown = (editor: Editor, md: string) => (editor.storage as any).markdown.parser.parse(md);
+
+function pasteIntoCode(editor: Editor, view: EditorView, { pasted }: Clip): true | null {
+  const { state } = view, { from, to, empty } = state.selection, code = state.schema.marks.code;
+  if (!pasted || editor.isActive('codeBlock') || !(empty ? code.isInSet(state.storedMarks ?? state.selection.$from.marks()) : allCode(state, from, to))) return null;
+  const marks = empty ? state.storedMarks ?? state.selection.$from.marks() : state.doc.nodeAt(from)!.marks;
+  view.dispatch(state.tr.replaceWith(from, to, state.schema.text(pasted.replace(/\r?\n/g, ' '), marks)).scrollIntoView());
+  return true;
+}
+
+function linkSelection(editor: Editor, view: EditorView, { text }: Clip): boolean | null {
+  if (!URL_RE.test(text) || view.state.selection.empty) return null;
+  return editor.chain().focus().setLink({ href: text }).run();
+}
+
+function pasteVsCode(editor: Editor, view: EditorView, { pasted, text, vscode }: Clip): true | null {
+  const { state } = view, $from = state.selection.$from;
+  if (!vscode || !text || editor.isActive('codeBlock') || inCell($from) || $from.parent.type.name !== 'paragraph') return null;
+  const code = pasted.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').trimEnd();
+  if (!$from.parent.content.size && state.selection.empty) {
+    const block = state.schema.nodes.codeBlock.create({ language: vscodeLanguage(vscode) }, state.schema.text(code));
+    const tr = state.tr.replaceRangeWith($from.before(), $from.after(), block);
+    view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map($from.before()) + block.nodeSize - 1), -1)).scrollIntoView());
+    return true;
+  }
+  const { paragraph, doc } = state.schema.nodes;
+  const asTyped = doc.create(null, code.split('\n').map((l) => paragraph.create(null, l ? state.schema.text(l) : null)));
+  view.dispatch(pasteMarkdown(view, parseMarkdown(editor, (editor.storage as any).markdown.serializer.serialize(asTyped))));
+  return true;
+}
+
+function pasteIntoOneLine(view: EditorView, { text }: Clip): true | null {
+  const { state } = view, $from = state.selection.$from;
+  if (!/\n/.test(text) || !$from.parent.isTextblock || $from.parent.type.spec.code || $from.parent.type.contentMatch.matchType(state.schema.nodes.hardBreak)) return null;
+  view.dispatch(state.tr.insertText(text.replace(/\s*\r?\n\s*/g, ' ')).scrollIntoView());
+  return true;
+}
+
+// blocks copied in Notion: its markdown says what they were, its HTML does not (notionPaste.ts)
+function pasteNotion(editor: Editor, view: EditorView, { pasted, text, html }: Clip): true | null {
+  if (!text || !NOTION_COPY.test(html) || editor.isActive('codeBlock') || inCell(view.state.selection.$from)) return null;
+  view.dispatch(pasteMarkdown(view, parseMarkdown(editor, fromNotion(pasted))));
+  return true;
+}
+
+function pasteMarkdownText(editor: Editor, view: EditorView, { pasted, text, html }: Clip): true | null {
+  if (!text || !LITERAL_MARKDOWN.test(text) || RICH_HTML.test(html) || editor.isActive('codeBlock')) return null;
+  const lead = pasted.includes('\n') ? '' : /^[ \t]+/.exec(pasted)?.[0] ?? '', trail = pasted.includes('\n') ? '' : /[ \t]+$/.exec(pasted)?.[0] ?? '';
+  view.dispatch(pasteMarkdown(view, parseMarkdown(editor, pasted), lead, trail));
+  return true;
+}
+
+function pastePlainLines(editor: Editor, view: EditorView, { pasted, text, html }: Clip): true | null {
+  const $from = view.state.selection.$from;
+  if (!text || !/\n/.test(text) || RICH_HTML.test(html) || html.includes('data-pm-slice') || $from.parent.type.name !== 'paragraph' || inCell($from)) return null;
+  const lines = pasted.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '').split('\n');
+  const indent = (ws: string) => ws.replace(/ /g, '&#32;').replace(/\t/g, '&#9;');
+  const md = lines.map((l) => (l.trim() ? l.replace(/^[ \t]+/, indent) : BLANK)).join('\n\n');
+  view.dispatch(pasteMarkdown(view, parseMarkdown(editor, md)));
+  return true;
+}
+
+const NoRawNewlines = Extension.create({
+  name: 'noRawNewlines',
+  addProseMirrorPlugins: () => [new Plugin({
+    appendTransaction: (trs, _old, state) => {
+      if (!trs.some((t) => t.docChanged)) return null;
+      const ranges: [number, number][] = [];
+      trs.forEach((t, i) => t.steps.forEach((step, j) => step.getMap().forEach((_a, _b, from, to) => {
+        let f = from, e = to;
+        for (let k = j + 1; k < t.steps.length; k++) { f = t.steps[k].getMap().map(f, -1); e = t.steps[k].getMap().map(e, 1); }
+        for (let n = i + 1; n < trs.length; n++) { f = trs[n].mapping.map(f, -1); e = trs[n].mapping.map(e, 1); }
+        ranges.push([f, e]);
+      })));
+      const fix: { pos: number; text: string; breaks: boolean }[] = [];
+      for (const [from, to] of ranges) {
+        state.doc.nodesBetween(Math.max(0, from - 1), Math.min(state.doc.content.size, to + 1), (node, pos, parent) => {
+          if (!node.isText || !node.text!.includes('\n') || !parent || parent.type.spec.code) return;
+          if (!fix.some((x) => x.pos === pos)) fix.push({ pos, text: node.text!, breaks: !!parent.type.contentMatch.matchType(state.schema.nodes.hardBreak) });
+        });
+      }
+      if (!fix.length) return null;
+      const tr = state.tr;
+      for (const { pos, text, breaks } of fix.sort((a, b) => b.pos - a.pos)) {
+        const marks = state.doc.nodeAt(pos)!.marks;
+        const parts = text.split('\n');
+        const nodes = parts.flatMap((part, i) => [...(i ? [breaks ? state.schema.nodes.hardBreak.create() : state.schema.text(' ', marks)] : []), ...(part ? [state.schema.text(part, marks)] : [])]);
+        tr.replaceWith(pos, pos + text.length, nodes);
+      }
+      return tr;
+    },
+  })],
+});
+
+function selectionClass(node: PMNode): string | null {
+  if (node.type.name === 'codeBlock' && node.attrs.language === 'mermaid') return 'in-sel';
+  return node.isAtom ? (node.isBlock ? 'in-sel' : 'pm-sel') : null;
+}
+
+const PaintSelection = Extension.create({
+  name: 'paintSelection',
+  addProseMirrorPlugins: () => [new Plugin({
+    props: {
+      decorations: (state) => {
+        const sel = state.selection;
+        if (sel.empty || sel instanceof NodeSelection) return null;
+        const { from, to } = sel;
+        const marks: Decoration[] = [];
+        state.doc.nodesBetween(from, to, (node, pos) => {
+          if (node.isText) return false;
+          const cls = selectionClass(node);
+          if (!cls) return true;
+          if (pos >= from && pos + node.nodeSize <= to) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: cls }));
+          return false;
+        });
+        return marks.length ? DecorationSet.create(state.doc, marks) : null;
+      },
+    },
+  })],
+});
+
+const SelectMediaBeforeDelete = Extension.create({
+  name: 'selectMediaFirst',
+  priority: 1000,
+  addKeyboardShortcuts() {
+    const MEDIA = /^(image|pdf|video|bookmark|mathBlock|horizontalRule|table|kanban)$/;
+    const select = (dir: -1 | 1) => () => {
+      const { state, view } = this.editor;
+      const { $from, empty } = state.selection;
+      const line = $from.parent;
+      if (!empty || !line.isTextblock || $from.parentOffset !== (dir < 0 ? 0 : line.content.size)) return false;
+      const next = blockBeside($from, dir, (n) => MEDIA.test(n.type.name));
+      if (!next || !MEDIA.test(next.node.type.name)) return false;
+      const board = next.node.type.name === 'kanban';
+      if (!line.content.size && !(board && dir < 0)) return false;
+      if (board) return void deleteBoard(this.editor, next.pos), true;
+      view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, next.pos)).scrollIntoView());
+      return true;
+    };
+    return { Backspace: select(-1), Delete: select(1) };
+  },
+});
+
+function wikiItems(query: string, targets: readonly Note[], self: string | undefined): SuggestItem[] {
+  const q = query.toLowerCase();
+  const pages: SuggestItem[] = [];
+  const sections: SuggestItem[] = [];
+  for (const n of targets) {
+    const title = titleOf(n);
+    const inside = headingsOf(n.body).map((h) => ({ label: h, value: `${title}#${h}`, hint: title, icon: ICONS.section }));
+    if (title !== self && typedIn(title.toLowerCase(), q)) {
+      pages.push({ label: title, sections: inside, ...(n.icon ? { noteIcon: n.icon } : { icon: ICONS.note }) });
+    }
+    for (const h of inside) if (typedIn(h.value.toLowerCase(), q)) sections.push(h);
+  }
+  const items = [...pages, ...sections].slice(0, 8);
+  if (query && !query.includes('#') && !pages.some((p) => p.label.toLowerCase() === q)) {
+    items.push({ label: query, hint: 'new note', icon: ICONS.page });
+  }
+  return items;
+}
+
+function atNamesADay(state: EditorState, range: { from: number }): boolean {
+  const { $head } = state.selection;
+  const rest = /^\S+/.exec($head.parent.textBetween($head.parentOffset, $head.parent.content.size, undefined, '￼'))?.[0];
+  if (!rest || $head.pos <= range.from) return true;
+  const word = state.doc.textBetween(range.from + 1, $head.pos) + rest;
+  return !!remindChoices(word) || (dayChoices(word) as { exact?: boolean }[]).some((d) => d.exact);
+}
+
+const PHONE_BAR_MARGIN = { top: 16, bottom: 90, left: 0, right: 0 };
+const MAC_TOOLBAR_MARGIN = { top: 80, bottom: 48, left: 0, right: 0 };
 
 function cellLines(view: EditorView, content: Fragment, $at: ResolvedPos): Fragment | null {
   const schema = view.state.schema;
@@ -1004,8 +1289,8 @@ export function createEditor(opts: {
   const cancel = () => { clearTimeout(timer); timer = undefined; dropEdit(flush); };
   const flush = () => { if (timer === undefined) return; cancel(); opts.onUpdate(getMarkdown(editor)); };
   let closing = false;
-  function handOver(ed: Editor) {
-    if (closing || ed.state.doc.content.size < LONG) { cancel(); opts.onUpdate(getMarkdown(ed)); return; }
+  function handOverWhenIdle(ed: Editor) {
+    if (closing || ed.state.doc.content.size < DEBOUNCE_FROM_SIZE) { cancel(); opts.onUpdate(getMarkdown(ed)); return; }
     clearTimeout(timer);
     timer = setTimeout(flush, 150);
     holdEdit(flush);
@@ -1019,136 +1304,24 @@ export function createEditor(opts: {
     content: opts.content,
     editorProps: {
       attributes: { class: 'prose' },
-      ...(isMobile ? { scrollMargin: { top: 16, bottom: 90, left: 0, right: 0 }, scrollThreshold: { top: 16, bottom: 90, left: 0, right: 0 } } : { scrollMargin: { top: 80, bottom: 48, left: 0, right: 0 }, scrollThreshold: { top: 80, bottom: 48, left: 0, right: 0 } }),
-      clipboardTextSerializer: (slice, view) => asCopy(() => {
-        const { $from, $to } = view.state.selection;
-        const serializer = (editor.storage as any).markdown.serializer;
-        if (view.state.selection instanceof CellSelection) return copiedCells(view.state.selection, slice, serializer);
-        const inLine = $from.sameParent($to) && $from.parent.isTextblock;
-        if (inLine && $from.parent.type.spec.code) return slice.content.textBetween(0, slice.content.size, '\n');
-        if (inLine && allCode(view.state, $from.pos, $to.pos)) return view.state.doc.textBetween($from.pos, $to.pos);
-        let content = inLine ? Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))) : slice.content;
-        for (let open = slice.openStart; !inLine && open >= 2 && content.childCount === 1 && LISTS.test(content.firstChild!.type.name)
-          && content.firstChild!.childCount === 1 && LISTS.test(content.firstChild!.firstChild!.firstChild?.type.name ?? ''); open -= 2) {
-          content = content.firstChild!.firstChild!.content;
-        }
-        if (!inLine) for (let d = $from.depth; d > 0; d--) {
-          if ($from.node(d).type.name !== 'callout' || !$from.node(d).attrs.titled || $from.index(d) === 0) continue;
-          const untitle = (frag: Fragment): Fragment => {
-            const first = frag.firstChild;
-            if (!first) return frag;
-            const node = first.type.name === 'callout' ? first.type.create({ ...first.attrs, titled: false }, first.content, first.marks) : first.copy(untitle(first.content));
-            return frag.replaceChild(0, node);
-          };
-          content = untitle(content);
-          break;
-        }
-        const spaces = (s: string) => s.replace(/&#32;/g, ' ').replace(/&#9;/g, '\t');
-        let text = '', prev: PMNode | null = null;
-        content.forEach((block) => {
-          if (prev) text += prev.type.name === 'paragraph' && block.type.name === 'paragraph' ? '\n' : '\n\n';
-          text += (serializer.serialize(Fragment.from(block)) as string).replace(/\n+$/, '');
-          prev = block;
-        });
-        return text.replace(new RegExp(`^${BLANK}$`, 'gm'), '')
-          .replace(/^([ \t>]*(?:[-*+] (?:\[[ xX]\] )?|\d+[.)] )?)((?:&#(?:32|9);)+)/gm, (_, pre, run) => pre + spaces(run))
-          .replace(/(?:&#(?:32|9);)+(?=\\\n)/g, spaces);
-      }),
+      ...(isMobile ? { scrollMargin: PHONE_BAR_MARGIN, scrollThreshold: PHONE_BAR_MARGIN } : { scrollMargin: MAC_TOOLBAR_MARGIN, scrollThreshold: MAC_TOOLBAR_MARGIN }),
+      clipboardTextSerializer: (slice, view) => asCopy(() => copyText(slice, view, (editor.storage as any).markdown.serializer)),
       transformPasted: (slice, view) => {
-        let { content, openStart, openEnd } = slice;
-        const $here = view.state.selection.$from;
-        if ($here.parent.type.name === 'detailsSummary') {
-          const serializer = (editor.storage as any).markdown.serializer;
-          const written = (leaf: PMNode) => (leaf.isText ? leaf.text! : leaf.isInline ? (serializer.serialize(view.state.schema.nodes.doc.create(null, view.state.schema.nodes.paragraph.create(null, leaf))) as string).trim() : '');
-          const words = content.textBetween(0, content.size, ' ', written).replace(/\s+/g, ' ').trim();
-          return new Slice(words ? Fragment.from(view.state.schema.text(words)) : Fragment.empty, 0, 0);
-        }
-        // rows copied from a table come as rows, open: pasted outside a table, ProseMirror made a table around them
-        // and left the empty line above it. They are a table of their own. (Into a table, prosemirror-tables pastes
-        // the cells.)
-        if (content.firstChild?.type.name === 'tableRow' && !inCell(view.state.selection.$from)) {
-          return new Slice(Fragment.from(view.state.schema.nodes.table.create(null, content)), 0, 0);
-        }
-        if (inCell($here) && inCell(view.state.selection.$to) && content.firstChild?.type.name !== 'tableRow') {
-          const fitted = cellLines(view, content, $here);
-          if (fitted) return new Slice(fitted, fitted.firstChild?.isTextblock ? 1 : 0, fitted.lastChild?.isTextblock ? 1 : 0);
-        }
-        while (openStart >= 2 && content.childCount === 1 && content.firstChild!.type.name === 'details' && content.firstChild!.firstChild?.type.name === 'detailsContent') {
-          content = content.firstChild!.firstChild!.content;
-          openStart -= 2;
-          openEnd = Math.max(0, openEnd - 2);
-        }
-        let inner = content, depth = 0;
-        while (inner.childCount === 1 && !inner.firstChild!.isTextblock && depth < Math.min(openStart, openEnd)) inner = inner.firstChild!.content, depth++;
-        const line = inner.childCount === 1 ? inner.firstChild! : null;
-        if (line?.isTextblock && openStart === depth + 1 && openEnd === depth + 1 && !(line.type.spec.code && line.textContent.includes('\n'))) {
-          return new Slice(line.content, 0, 0);
-        }
-        const $at = view.state.selection.$from, item = $at.depth >= 2 ? $at.node(-1) : null;
-        if (item && /^(listItem|taskItem)$/.test(item.type.name) && $at.parent.type.name === 'paragraph') {
-          const list = $at.node(-2), only = content.childCount === 1 ? content.firstChild! : null;
-          if (only && LISTS.test(only.type.name) && only.type !== list.type) return new Slice(Fragment.from(asList(only, list, item)), openStart, openEnd);
-          const lines: PMNode[] = []; content.forEach((n) => { lines.push(n); });
-          if (lines.length > 1 && lines.every((n) => n.type.name === 'paragraph')) {
-            const items = list.type.create(null, lines.map((l) => item.type.create(item.type.name === 'taskItem' ? { checked: false } : null, l)));
-            return new Slice(Fragment.from(items), openStart ? openStart + 2 : 1, openEnd ? openEnd + 2 : 1);
-          }
-        }
-        return content === slice.content ? slice : new Slice(content, openStart, openEnd);
+        if (view.state.selection.$from.parent.type.name === 'detailsSummary') return pasteInToggleTitle(view, slice.content, (editor.storage as any).markdown.serializer);
+        const fitted = rowsAsTable(view, slice.content) ?? pasteInCell(view, slice.content);
+        if (fitted) return fitted;
+        const body = unwrapToggleBody(slice);
+        return wordsOnly(body) ?? linesIntoList(view, body) ?? body;
       },
       handlePaste: (view, event, slice): boolean => {
         if (insertFiles(editor, event.clipboardData?.files)) return true;
         clearForPaste(view);
-        const { state } = view, { from, to, empty } = state.selection, code = state.schema.marks.code;
         const pasted = event.clipboardData?.getData('text/plain') ?? '';
-        if (pasted && !editor.isActive('codeBlock') && (empty ? code.isInSet(state.storedMarks ?? state.selection.$from.marks()) : allCode(state, from, to))) {
-          const marks = empty ? state.storedMarks ?? state.selection.$from.marks() : state.doc.nodeAt(from)!.marks;
-          view.dispatch(state.tr.replaceWith(from, to, state.schema.text(pasted.replace(/\r?\n/g, ' '), marks)).scrollIntoView());
-          return true;
-        }
-        const text = pasted.trim();
-        if (URL_RE.test(text) && !empty) return editor.chain().focus().setLink({ href: text }).run();
-        const $from = state.selection.$from;
-        const vscode = event.clipboardData?.getData('vscode-editor-data');
-        if (vscode && text && !editor.isActive('codeBlock') && !inCell($from)) {
-          const code = pasted.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').trimEnd();
-          if ($from.parent.type.name === 'paragraph' && !$from.parent.content.size && empty) {
-            const block = state.schema.nodes.codeBlock.create({ language: vscodeLanguage(vscode) }, state.schema.text(code));
-            const tr = state.tr.replaceRangeWith($from.before(), $from.after(), block);
-            view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map($from.before()) + block.nodeSize - 1), -1)).scrollIntoView());
-            return true;
-          }
-          if ($from.parent.type.name === 'paragraph') {
-            const { paragraph, doc } = state.schema.nodes;
-            const asTyped = doc.create(null, code.split('\n').map((l) => paragraph.create(null, l ? state.schema.text(l) : null)));
-            view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse((editor.storage as any).markdown.serializer.serialize(asTyped))));
-            return true;
-          }
-        }
-        if (/\n/.test(text) && $from.parent.isTextblock && !$from.parent.type.spec.code && !$from.parent.type.contentMatch.matchType(state.schema.nodes.hardBreak)) {
-          view.dispatch(state.tr.insertText(text.replace(/\s*\r?\n\s*/g, ' ')).scrollIntoView());
-          return true;
-        }
-        const html = event.clipboardData?.getData('text/html') ?? '';
-        // blocks copied in Notion: its markdown says what they were, its HTML does not (notionPaste.ts)
-        if (text && NOTION_COPY.test(html) && !editor.isActive('codeBlock') && !inCell($from)) {
-          view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse(fromNotion(pasted))));
-          return true;
-        }
-        if (text && MD_SYNTAX.test(text) && !RICH_HTML.test(html) && !editor.isActive('codeBlock')) {
-          const parsed = (editor.storage as any).markdown.parser.parse(pasted);
-          const lead = pasted.includes('\n') ? '' : /^[ \t]+/.exec(pasted)?.[0] ?? '', trail = pasted.includes('\n') ? '' : /[ \t]+$/.exec(pasted)?.[0] ?? '';
-          view.dispatch(pasteMarkdown(view, parsed, lead, trail));
-          return true;
-        }
-        if (text && /\n/.test(text) && !RICH_HTML.test(html) && !html.includes('data-pm-slice') && $from.parent.type.name === 'paragraph' && !inCell($from)) {
-          const lines = pasted.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '').split('\n');
-          const indent = (ws: string) => ws.replace(/ /g, '&#32;').replace(/\t/g, '&#9;');
-          const md = lines.map((l) => (l.trim() ? l.replace(/^[ \t]+/, indent) : BLANK)).join('\n\n');
-          view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse(md)));
-          return true;
-        }
-        const tr = state.tr;
+        const clip: Clip = { pasted, text: pasted.trim(), html: event.clipboardData?.getData('text/html') ?? '', vscode: event.clipboardData?.getData('vscode-editor-data') };
+        const took = pasteIntoCode(editor, view, clip) ?? linkSelection(editor, view, clip) ?? pasteVsCode(editor, view, clip) ?? pasteIntoOneLine(view, clip)
+          ?? pasteNotion(editor, view, clip) ?? pasteMarkdownText(editor, view, clip) ?? pastePlainLines(editor, view, clip);
+        if (took !== null) return took;
+        const tr = view.state.tr;
         outOfEmptyItem(tr, slice.content.firstChild);
         if (tr.docChanged) {
           view.dispatch(tr.replaceSelection(slice).setMeta('paste', true).setMeta('uiEvent', 'paste').scrollIntoView());
@@ -1210,7 +1383,7 @@ export function createEditor(opts: {
         code: false,
         bulletList: false,
       }),
-      Text,
+      DollarSafeText,
       markExit,
       codeEdges,
       hangulKeys,
@@ -1328,6 +1501,7 @@ export function createEditor(opts: {
       // a line and then Enter made a list, heading or toggle instead of a new line. The rules here and below take
       // a typed space only (any whitespace but a newline).
       BulletList.extend({
+        addStorage: bulletsMarkdown,
         addInputRules() {
           return [wrappingInputRule({ find: /^\s*([-+*])[^\S\n]$/, type: this.type })];
         },
@@ -1416,64 +1590,8 @@ export function createEditor(opts: {
       ClickTarget,
       ...(isMobile ? [] : [BlockHandle.configure({ run: (id) => runEditorCommand(editor, id) })]),
       ...(isMobile ? [] : [TableHandles]),
-      Extension.create({
-        name: 'noRawNewlines',
-        addProseMirrorPlugins: () => [new Plugin({
-          appendTransaction: (trs, _old, state) => {
-            if (!trs.some((t) => t.docChanged)) return null;
-            const ranges: [number, number][] = [];
-            trs.forEach((t, i) => t.steps.forEach((step, j) => step.getMap().forEach((_a, _b, from, to) => {
-              let f = from, e = to;
-              for (let k = j + 1; k < t.steps.length; k++) { f = t.steps[k].getMap().map(f, -1); e = t.steps[k].getMap().map(e, 1); }
-              for (let n = i + 1; n < trs.length; n++) { f = trs[n].mapping.map(f, -1); e = trs[n].mapping.map(e, 1); }
-              ranges.push([f, e]);
-            })));
-            const fix: { pos: number; text: string; breaks: boolean }[] = [];
-            for (const [from, to] of ranges) {
-              state.doc.nodesBetween(Math.max(0, from - 1), Math.min(state.doc.content.size, to + 1), (node, pos, parent) => {
-                if (!node.isText || !node.text!.includes('\n') || !parent || parent.type.spec.code) return;
-                if (!fix.some((x) => x.pos === pos)) fix.push({ pos, text: node.text!, breaks: !!parent.type.contentMatch.matchType(state.schema.nodes.hardBreak) });
-              });
-            }
-            if (!fix.length) return null;
-            const tr = state.tr;
-            for (const { pos, text, breaks } of fix.sort((a, b) => b.pos - a.pos)) {
-              const marks = state.doc.nodeAt(pos)!.marks;
-              const parts = text.split('\n');
-              const nodes = parts.flatMap((part, i) => [...(i ? [breaks ? state.schema.nodes.hardBreak.create() : state.schema.text(' ', marks)] : []), ...(part ? [state.schema.text(part, marks)] : [])]);
-              tr.replaceWith(pos, pos + text.length, nodes);
-            }
-            return tr;
-          },
-        })],
-      }),
-      Extension.create({
-        name: 'paintSelection',
-        addProseMirrorPlugins: () => [new Plugin({
-          props: {
-            decorations: (state) => {
-              const sel = state.selection;
-              if (sel.empty || sel instanceof NodeSelection) return null;
-              const { from, to } = sel;
-              const marks: Decoration[] = [];
-              state.doc.nodesBetween(from, to, (node, pos) => {
-                if (node.isText) return false;
-                const whole = pos >= from && pos + node.nodeSize <= to;
-                if (node.type.name === 'codeBlock' && node.attrs.language === 'mermaid') {
-                  if (whole) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: 'in-sel' }));
-                  return false;
-                }
-                if (node.isAtom) {
-                  if (whole) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: node.isBlock ? 'in-sel' : 'pm-sel' }));
-                  return false;
-                }
-                return true;
-              });
-              return marks.length ? DecorationSet.create(state.doc, marks) : null;
-            },
-          },
-        })],
-      }),
+      NoRawNewlines,
+      PaintSelection,
       Extension.create({
         name: 'moveFlash',
         addProseMirrorPlugins: () => [new Plugin({
@@ -1485,27 +1603,7 @@ export function createEditor(opts: {
           props: { decorations: (state) => FLASH.getState(state) },
         })],
       }),
-      Extension.create({
-        name: 'selectMediaFirst',
-        priority: 1000,
-        addKeyboardShortcuts() {
-          const MEDIA = /^(image|pdf|video|bookmark|mathBlock|horizontalRule|table|kanban)$/;
-          const select = (dir: -1 | 1) => () => {
-            const { state, view } = this.editor;
-            const { $from, empty } = state.selection;
-            const line = $from.parent;
-            if (!empty || !line.isTextblock || $from.parentOffset !== (dir < 0 ? 0 : line.content.size)) return false;
-            const next = blockBeside($from, dir, (n) => MEDIA.test(n.type.name));
-            if (!next || !MEDIA.test(next.node.type.name)) return false;
-            const board = next.node.type.name === 'kanban';
-            if (!line.content.size && !(board && dir < 0)) return false;
-            if (board) return void deleteBoard(this.editor, next.pos), true;
-            view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, next.pos)).scrollIntoView());
-            return true;
-          };
-          return { Backspace: select(-1), Delete: select(1) };
-        },
-      }),
+      SelectMediaBeforeDelete,
       Extension.create({
         name: 'tableKeys',
         priority: 1000,
@@ -1531,7 +1629,7 @@ export function createEditor(opts: {
       JoinNextItem,
       LineIndent,
       JoinLists,
-      TaskList,
+      TaskList.extend({ addStorage: bulletsMarkdown }),
       ListMarkdown,
       ToDoItem,
       Placeholder.configure({ placeholder: ({ node, pos }) => (pos === 0 ? 'Untitled' : node.type.name === 'heading' ? `Heading ${node.attrs.level}` : isMobile ? 'Start writing…' : 'Start typing… # heading, - list, [[ link') }),
@@ -1568,25 +1666,7 @@ export function createEditor(opts: {
           allowedPrefixes: null,
           pluginKey: WIKI_MENU,
           allow: ({ state, range }) => WIKI_AT.getState(state) === range.from,
-          items: ({ query }) => {
-            const q = query.toLowerCase();
-            const pages: SuggestItem[] = [];
-            const sections: SuggestItem[] = [];
-            const self = editor.state.doc.firstChild?.textContent.trim();
-            for (const n of opts.targets()) {
-              const title = titleOf(n);
-              const inside = headingsOf(n.body).map((h) => ({ label: h, value: `${title}#${h}`, hint: title, icon: ICONS.section }));
-              if (title !== self && typedIn(title.toLowerCase(), q)) {
-                pages.push({ label: title, sections: inside, ...(n.icon ? { noteIcon: n.icon } : { icon: ICONS.note }) });
-              }
-              for (const h of inside) if (typedIn(h.value.toLowerCase(), q)) sections.push(h);
-            }
-            const items = [...pages, ...sections].slice(0, 8);
-            if (query && !query.includes('#') && !pages.some((p) => p.label.toLowerCase() === q)) {
-              items.push({ label: query, hint: 'new note', icon: ICONS.page });
-            }
-            return items;
-          },
+          items: ({ query }) => wikiItems(query, opts.targets(), editor.state.doc.firstChild?.textContent.trim()),
           command: ({ editor, range, props }) =>
             editor
               .chain()
@@ -1603,14 +1683,7 @@ export function createEditor(opts: {
           char: PICKERS.date.char,
           allowSpaces: true,
           pluginKey: DATE_MENU,
-          allow: ({ editor, state, range }) => {
-            if (menuOpen(editor, state, WIKI_MENU, SLASH_MENU, PAGE_MENU)) return false;
-            const { $head } = state.selection;
-            const rest = /^\S+/.exec($head.parent.textBetween($head.parentOffset, $head.parent.content.size, undefined, '￼'))?.[0];
-            if (!rest || $head.pos <= range.from) return true;
-            const word = state.doc.textBetween(range.from + 1, $head.pos) + rest;
-            return !!remindChoices(word) || (dayChoices(word) as { exact?: boolean }[]).some((d) => d.exact);
-          },
+          allow: ({ editor, state, range }) => !menuOpen(editor, state, WIKI_MENU, SLASH_MENU, PAGE_MENU) && atNamesADay(state, range),
           items: ({ query }) => remindChoices(query) ?? dayChoices(query),
           command: ({ editor, range, props }) => {
             const { value, remind } = props as { value: string; remind?: boolean };
@@ -1654,7 +1727,7 @@ export function createEditor(opts: {
       }),
       Bookmark,
       Kanban,
-      opts.page ? DatabaseBlock.configure({ page: opts.page }) : DatabaseBlock,
+      opts.page ? DatabaseBlock.configure({ hostNoteId: opts.page }) : DatabaseBlock,
       FootnoteRef,
       FootnoteText,
       Extension.create({
@@ -1734,14 +1807,13 @@ export function createEditor(opts: {
         },
       }),
     ],
-    onUpdate: ({ editor }) => handOver(editor),
+    onUpdate: ({ editor }) => handOverWhenIdle(editor),
   });
   // TipTap takes its stylesheet out of the page as its last editor goes and puts it back with the next one: the whole
   // page's style was worked out afresh both times, the list's included, and with 800 notes that was most of opening a
   // note (~150 ms in WebKit). Let go of it here and it stays.
   (editor as unknown as { css: HTMLStyleElement | null }).css = null;
   markStartsAfterPrefix(editor);
-  looseLists(editor);
   editor.on('blur', flush);
   editor.on('destroy', () => { closing = true; flush(); });
   if (opts.onNoteMove) noteMove.set(editor, opts.onNoteMove);

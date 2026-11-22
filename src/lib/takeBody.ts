@@ -20,27 +20,43 @@ function sameBoards(open: PMNode, next: PMNode): PMNode {
   return walk(next);
 }
 
-export function takeBody(editor: Editor, body: string): boolean {
-  if (getMarkdown(editor).trimEnd() === body.trimEnd()) return false;
-  const doc = editor.state.doc;
-  let next = sameBoards(doc, createDocument((editor.storage as any).markdown.parser.parse(body), editor.schema, editor.options.parseOptions));
-  const tail = doc.lastChild, nextTail = next.lastChild;
+function keepTrailingParagraph(open: PMNode, next: PMNode): PMNode {
+  const tail = open.lastChild, nextTail = next.lastChild;
   if (tail?.type.name === 'paragraph' && !tail.content.size && nextTail && nextTail.type.name !== 'paragraph') {
-    next = next.copy(next.content.addToEnd(tail.type.create()));
+    return next.copy(next.content.addToEnd(tail.type.create()));
   }
-  const start = doc.content.findDiffStart(next.content);
-  if (start === null) return false;
-  let { a: endA, b: endB } = doc.content.findDiffEnd(next.content)!;
+  return next;
+}
+
+function changedBlockRange(open: PMNode, next: PMNode) {
+  const start = open.content.findDiffStart(next.content);
+  if (start === null) return null;
+  let { a: endA, b: endB } = open.content.findDiffEnd(next.content)!;
   const overlap = start - Math.min(endA, endB);
   if (overlap > 0) { endA += overlap; endB += overlap; }
   const edges: number[] = [0];
-  doc.forEach((c) => edges.push(edges[edges.length - 1] + c.nodeSize));
+  open.forEach((c) => edges.push(edges[edges.length - 1] + c.nodeSize));
   const from = Math.max(...edges.filter((p) => p <= start));
   const toA = Math.min(...edges.filter((p) => p >= endA)), toB = toA + endB - endA;
+  return { start, endA, endB, from, toA, toB };
+}
+
+const caretAcrossDiff = (p: number, start: number, endA: number, endB: number) =>
+  p <= start ? p : p >= endA ? p + endB - endA : Math.min(p, endB);
+
+export const sameBody = (a: string, b: string) => a.trimEnd() === b.trimEnd();
+
+export function takeBody(editor: Editor, body: string): boolean {
+  if (sameBody(getMarkdown(editor), body)) return false;
+  const doc = editor.state.doc;
+  const next = keepTrailingParagraph(doc, sameBoards(doc, createDocument((editor.storage as any).markdown.parser.parse(body), editor.schema, editor.options.parseOptions)));
+  const range = changedBlockRange(doc, next);
+  if (!range) return false;
+  const { start, endA, endB, from, toA, toB } = range;
   const { selection } = editor.state;
   const tr = editor.state.tr.replace(from, toA, next.slice(from, toB));
   if (selection instanceof TextSelection) {
-    const map = (p: number) => (p <= start ? p : p >= endA ? p + endB - endA : Math.min(p, endB));
+    const map = (p: number) => caretAcrossDiff(p, start, endA, endB);
     tr.setSelection(TextSelection.between(tr.doc.resolve(map(selection.anchor)), tr.doc.resolve(map(selection.head))));
   }
   editor.view.dispatch(tr.setMeta('addToHistory', false).setMeta('preventUpdate', true));

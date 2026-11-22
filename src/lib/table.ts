@@ -18,12 +18,10 @@ function cellText(state: any, cell: PMNode): string {
   // a line break as `<br>` (tiptap-markdown's own way in a table): its usual backslash and newline came back as
   // "\ ", and one more backslash every save
   state.inTable = state.inCell = true;
-  cell.descendants((child) => {
-    if (!child.isTextblock && child.type.name !== 'image') return true;
+  cell.forEach((child) => {
     if (state.out && !/\s$/.test(state.out) && !/^\s/.test(child.textContent)) state.out += ' ';
     if (child.isTextblock) state.renderInline(child);
     else state.out += imageMarkdown(state, child);
-    return false;
   });
   const text = state.out;
   Object.assign(state, { out, delim, inlines, inTable: false, inCell: false });
@@ -50,7 +48,7 @@ function cellsOf(line: string): string[] {
   return cells;
 }
 
-const HIDDEN = '';
+const PIPE_IN_MATH = '';
 const widened = new WeakSet<object>();
 
 /**
@@ -72,7 +70,7 @@ function wideTables(md: any) {
     for (let l = start; l < end && !state.isEmpty(l); l++) {
       const from = state.bMarks[l] + state.tShift[l], to = state.eMarks[l];
       if (!src.slice(from, to).includes('$')) continue;
-      patched = patched.slice(0, from) + hidePipesInMath(src.slice(from, to), HIDDEN) + patched.slice(to);
+      patched = patched.slice(0, from) + hidePipesInMath(src.slice(from, to), PIPE_IN_MATH) + patched.slice(to);
     }
     const first = state.tokens.length;
     state.src = patched;
@@ -80,14 +78,14 @@ function wideTables(md: any) {
     try { ok = table(state, start, end, silent); } finally { state.src = src; }
     if (!ok || silent) return ok;
     const tokens: any[] = state.tokens;
-    for (let i = first; i < tokens.length; i++) if (tokens[i].type === 'inline') tokens[i].content = tokens[i].content.replaceAll(HIDDEN, '|');
+    for (let i = first; i < tokens.length; i++) if (tokens[i].type === 'inline') tokens[i].content = tokens[i].content.replaceAll(PIPE_IN_MATH, '|');
     const rows: { open: number; cells: string[] }[] = [];
     for (let i = first; i < tokens.length; i++) {
       if (tokens[i].type !== 'tr_open') continue;
       state.src = patched;
       const cells = cellsOf(lineOf(tokens[i].map[0]).trim());
       state.src = src;
-      rows.push({ open: i, cells: cells.map((c) => c.replaceAll(HIDDEN, '|').trim()) });
+      rows.push({ open: i, cells: cells.map((c) => c.replaceAll(PIPE_IN_MATH, '|').trim()) });
     }
     let count = 0;
     for (let i = rows[0]?.open + 1; tokens[i]?.type === 'th_open'; i += 3) count++;
@@ -191,7 +189,7 @@ const align = {
   renderHTML: (a: { align?: string | null }) => (a.align ? { style: `text-align: ${a.align}` } : {}),
 };
 
-const inner = { markdown: { serialize() {} } };
+const writtenByTable = { markdown: { serialize() {} } };
 
 const halfInTable = (sel: Selection) => sel instanceof TextSelection && !cellAround(sel.$from) !== !cellAround(sel.$to);
 
@@ -209,12 +207,12 @@ function outOfTable(view: EditorView, dir: 1 | -1): boolean {
   return true;
 }
 
-function clearHalf(view: EditorView, text = '', out = false) {
-  view.dispatch(cleared(view.state, text, out).scrollIntoView());
+function clearKeepingCells(view: EditorView, text = '', out = false) {
+  view.dispatch(clearedKeepingCells(view.state, text, out).scrollIntoView());
   return true;
 }
 
-function cleared(state: EditorState, text: string, out: boolean): Transaction {
+function clearedKeepingCells(state: EditorState, text: string, out: boolean): Transaction {
   const { from, to } = state.selection;
   const $cell = cellAround(state.selection.$to) ?? cellAround(state.selection.$from)!;
   const start = $cell.before(-1), end = $cell.after(-1);
@@ -240,7 +238,7 @@ function cleared(state: EditorState, text: string, out: boolean): Transaction {
 
 export function clearForPaste(view: EditorView) {
   if (!halfInTable(view.state.selection)) return;
-  const tr = cleared(view.state, '', true);
+  const tr = clearedKeepingCells(view.state, '', true);
   view.dispatch(tr);
   pasting = tr;
   queueMicrotask(() => { pasting = null; });
@@ -350,7 +348,7 @@ const chosenTable = new Plugin({
 
 export const upAboveTable = (view: EditorView) => topRow(view) && view.endOfTextblock('up') && lineAbove(view);
 
-function lessTableEditing(plugin: Plugin): Plugin {
+function letTextSelectionsLeaveTables(plugin: Plugin): Plugin {
   const { appendTransaction, props } = plugin.spec;
   return new Plugin({
     ...plugin.spec,
@@ -367,14 +365,14 @@ function lessTableEditing(plugin: Plugin): Plugin {
           data.clearData();
           data.setData('text/html', dom.innerHTML);
           data.setData('text/plain', text);
-          return clearHalf(view);
+          return clearKeepingCells(view);
         },
       },
-      handleTextInput: (view, _from, _to, text) => halfInTable(view.state.selection) && clearHalf(view, text),
+      handleTextInput: (view, _from, _to, text) => halfInTable(view.state.selection) && clearKeepingCells(view, text),
       handleKeyDown(view, e) {
         const sel = view.state.selection;
-        if ((e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey && !e.altKey && !e.ctrlKey && halfInTable(sel)) return clearHalf(view);
-        if ((e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey && !e.altKey && !e.ctrlKey && dropEmptyLines(view)) return true;
+        if ((e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey && !e.altKey && !e.ctrlKey && halfInTable(sel)) return clearKeepingCells(view);
+        if ((e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey && !e.altKey && !e.ctrlKey && dropEmptyRowsOrColumns(view)) return true;
         if (e.shiftKey && sel instanceof TextSelection && !cellAround(sel.$anchor)) return false;
         if (e.shiftKey && !e.altKey && !e.metaKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp') && outOfTable(view, e.key === 'ArrowDown' ? 1 : -1)) return true;
         return props!.handleKeyDown!.call(plugin, view, e);
@@ -383,7 +381,7 @@ function lessTableEditing(plugin: Plugin): Plugin {
   });
 }
 
-function dropEmptyLines(view: EditorView): boolean {
+function dropEmptyRowsOrColumns(view: EditorView): boolean {
   const sel = view.state.selection;
   if (!(sel instanceof CellSelection) || (sel.isRowSelection() && sel.isColSelection())) return false;
   let empty = true;
@@ -544,10 +542,10 @@ export const TableNodes = [
   Table.extend({
     addStorage: () => tableMarkdown,
     addProseMirrorPlugins() {
-      return [dragOutOfTable, chosenTable, pasteAfterClear, holdWidths, holdColumnsForDrag, ...(this.parent?.() ?? []).map((p) => (p.spec.key === tableEditingKey ? lessTableEditing(p) : p))];
+      return [dragOutOfTable, chosenTable, pasteAfterClear, holdWidths, holdColumnsForDrag, ...(this.parent?.() ?? []).map((p) => (p.spec.key === tableEditingKey ? letTextSelectionsLeaveTables(p) : p))];
     },
   }).configure({ resizable: true }),
-  TableRow.extend({ addStorage: () => inner }),
-  TableHeader.extend({ content: '(paragraph | image)+', addStorage: () => inner, addAttributes() { return { ...this.parent?.(), align }; } }),
-  TableCell.extend({ content: '(paragraph | image)+', addStorage: () => inner, addAttributes() { return { ...this.parent?.(), align }; } }),
+  TableRow.extend({ addStorage: () => writtenByTable }),
+  TableHeader.extend({ content: '(paragraph | image)+', addStorage: () => writtenByTable, addAttributes() { return { ...this.parent?.(), align }; } }),
+  TableCell.extend({ content: '(paragraph | image)+', addStorage: () => writtenByTable, addAttributes() { return { ...this.parent?.(), align }; } }),
 ];

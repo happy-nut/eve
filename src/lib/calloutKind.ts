@@ -1,6 +1,6 @@
 export type CalloutColor = 'blue' | 'cyan' | 'green' | 'orange' | 'red' | 'purple' | 'gray';
 
-const KINDS: [string[], string, CalloutColor][] = [
+const OBSIDIAN_KINDS: [string[], string, CalloutColor][] = [
   [['note'], '✏️', 'blue'],
   [['abstract', 'summary', 'tldr'], '📋', 'cyan'],
   [['info'], 'ℹ️', 'blue'],
@@ -15,6 +15,6 @@ const KINDS: [string[], string, CalloutColor][] = [
   [['example'], '📑', 'purple'],
   [['quote', 'cite'], '💬', 'gray'],
 ];
-const BY_NAME = new Map(KINDS.flatMap(([names, icon, color]) => names.map((n) => [n, { icon, color }] as const)));
+const BY_NAME = new Map(OBSIDIAN_KINDS.flatMap(([names, icon, color]) => names.map((n) => [n, { icon, color }] as const)));
 
 export const calloutKind = (token: string): { icon: string; color: CalloutColor } | null => BY_NAME.get(token.trim().toLowerCase()) ?? null;

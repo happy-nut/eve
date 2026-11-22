@@ -79,8 +79,13 @@ pub(crate) fn serve_once(listener: std::net::TcpListener, path: &str, body: &str
         };
         let _ = conn.write_all(reply.as_bytes());
     }
-    let _ = SHARE.compare_exchange(me, me + 1, Ordering::SeqCst, Ordering::SeqCst);
+    retire(me);
     done
+}
+
+fn retire(share: u64) {
+    use std::sync::atomic::Ordering;
+    let _ = SHARE.compare_exchange(share, share + 1, Ordering::SeqCst, Ordering::SeqCst);
 }
 
 #[tauri::command]
@@ -129,6 +134,8 @@ pub(crate) async fn open_url(app: AppHandle, url: String) -> Result<(), String> 
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+const PREVIEW_HTML_CHARS: usize = 300_000;
+
 #[tauri::command]
 pub(crate) async fn fetch_url(url: String) -> Result<String, String> {
     if !is_web_url(&url) {
@@ -143,7 +150,7 @@ pub(crate) async fn fetch_url(url: String) -> Result<String, String> {
     if html.is_empty() {
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
     }
-    if let Some((i, _)) = html.char_indices().nth(300_000) {
+    if let Some((i, _)) = html.char_indices().nth(PREVIEW_HTML_CHARS) {
         html.truncate(i);
     }
     Ok(html)

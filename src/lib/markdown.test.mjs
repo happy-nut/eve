@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { headingsOf, splitLink, plain, splitAlias, fenced } from './markdown.ts';
 import { calloutKind } from './calloutKind.ts';
+import plainCases from './plainCases.json' with { type: 'json' };
 
 // the first line is the note's title, not one of its sections
 assert.deepEqual(headingsOf('# DB\n\n## 인덱스\n본문\n### 지역성\n'), ['인덱스', '지역성']);
@@ -98,3 +99,5 @@ console.log('MARKDOWN_OK');
   assert.equal(legacyPlain('# Energy $E=mc^2$'), 'Energy $E=mc^2$');
   assert.equal(legacyPlain('# ![logo](a.png) Home'), '![logo](a.png) Home');
 }
+
+for (const [line, text] of plainCases) assert.equal(plain(line), text, line);

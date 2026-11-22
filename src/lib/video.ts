@@ -1,9 +1,9 @@
-import { Node } from '@tiptap/core';
+import { Node as TipTapNode } from '@tiptap/core';
 import { assetUrl } from './platform';
 import { VIDEO_FILE } from './drop';
 import { nameOf, sizeGrip, widthOf, withWidth } from './resize';
 
-export const Video = Node.create({
+export const Video = TipTapNode.create({
   name: 'video',
   group: 'block',
   atom: true,
@@ -33,8 +33,8 @@ export const Video = Node.create({
       dom.contentEditable = 'false';
 
       const video = document.createElement('video');
-      let shown: string = node.attrs.src;
-      video.src = assetUrl(shown) ?? shown;
+      let loadedSrc: string = node.attrs.src;
+      video.src = assetUrl(loadedSrc) ?? loadedSrc;
       video.controls = true;
       video.preload = 'metadata';
       video.playsInline = true;
@@ -55,11 +55,11 @@ export const Video = Node.create({
         ignoreMutation: () => true,
         update: (updated) => {
           if (updated.type !== node.type) return false;
-          if (updated.attrs.src !== shown) video.src = assetUrl((shown = updated.attrs.src)) ?? shown;
+          if (updated.attrs.src !== loadedSrc) video.src = assetUrl((loadedSrc = updated.attrs.src)) ?? loadedSrc;
           video.style.width = updated.attrs.width ? `${updated.attrs.width}px` : '';
           return true;
         },
-        stopEvent: (e) => e.target === grip || (e.target instanceof globalThis.Node && video.contains(e.target)),
+        stopEvent: (e) => e.target === grip || (e.target instanceof Node && video.contains(e.target)),
       };
     };
   },

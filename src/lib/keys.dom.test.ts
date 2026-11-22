@@ -38,6 +38,20 @@ test('capture claims hear a key before the element does, and can stop it reachin
   expect(heard).toEqual(['box', 'after', 'before']);
 });
 
+test('onlyKeysAfterClaim: the key whose own handling made the claim does not reach it', () => {
+  const heard: string[] = [];
+  const opening = claim('global', { Enter: () => { heard.push('opened'); opening(); claim('global', { Enter: () => void heard.push('answered') }, { onlyKeysAfterClaim: true }); } }, { capture: true });
+  const enter = () => {
+    const e = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    Object.defineProperty(e, 'timeStamp', { value: performance.now() });
+    document.body.dispatchEvent(e);
+  };
+  enter();
+  expect(heard).toEqual(['opened']);
+  enter();
+  expect(heard).toEqual(['opened', 'answered']);
+});
+
 test('a combo, a key, or any key; an element hears only keys typed inside it', () => {
   const heard: string[] = [];
   const mine = document.body.appendChild(document.createElement('div'));

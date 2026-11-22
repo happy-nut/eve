@@ -30,17 +30,25 @@ export function blockBeside($pos: ResolvedPos, dir: -1 | 1, stop: (n: PMNode) =>
 export function moveBlock(dir: -1 | 1) {
   return ({ state, dispatch }: { state: any; dispatch?: (tr: any) => void }): boolean => {
     const tr = state.tr;
-    const at = () => ({ doc: tr.doc, selection: tr.selection, tr });
     splitAtSelection(tr);
-    let r = moveOnce(at(), dir, tr.steps.length);
-    if (typeof r === 'number') {
-      splitList(tr, r);
-      r = moveOnce(at(), dir, tr.steps.length);
-    }
-    if (!r || typeof r === 'number') return false;
+    if (!splitListThenMove(tr, dir)) return false;
     if (dispatch && tr.docChanged) dispatch(tr.scrollIntoView());
     return true;
   };
+}
+
+type Move = { kind: 'handled' } | { kind: 'unhandled' } | { kind: 'split'; at: number };
+const HANDLED: Move = { kind: 'handled' }, UNHANDLED: Move = { kind: 'unhandled' };
+
+const stateOf = (tr: any) => ({ doc: tr.doc, selection: tr.selection, tr });
+
+function splitListThenMove(tr: any, dir: -1 | 1): boolean {
+  let move = moveOnce(stateOf(tr), dir, tr.steps.length);
+  if (move.kind === 'split') {
+    splitList(tr, move.at);
+    move = moveOnce(stateOf(tr), dir, tr.steps.length);
+  }
+  return move.kind === 'handled';
 }
 
 function splitList(tr: any, pos: number) {
@@ -79,7 +87,7 @@ const splitAt = (node: PMNode, from: number, dir: -1 | 1): number | null =>
     ? dir > 0 ? from + 1 + node.firstChild!.nodeSize : from + node.nodeSize - 1 - node.lastChild!.nodeSize
     : null;
 
-function moveOnce(state: any, dir: -1 | 1, done = 0): any {
+function moveOnce(state: any, dir: -1 | 1, done = 0): Move {
   const { $from, $to } = state.selection;
   let range = $from.blockRange($to);
   while (range) {
@@ -93,12 +101,12 @@ function moveOnce(state: any, dir: -1 | 1, done = 0): any {
       continue;
     }
     if (parent.type.name === 'details') {
-      if (startIndex > 0) return true;
+      if (startIndex > 0) return HANDLED;
       range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1));
       continue;
     }
     if (parent.type.name === 'callout' && parent.attrs.titled) {
-      if (startIndex === 1 && dir < 0) return true;
+      if (startIndex === 1 && dir < 0) return HANDLED;
       if (startIndex === 0) {
         range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1));
         continue;
@@ -107,18 +115,18 @@ function moveOnce(state: any, dir: -1 | 1, done = 0): any {
     const i = dir < 0 ? startIndex - 1 : endIndex;
     if (/^(callout|blockquote)$/.test(parent.type.name) && (i < 0 || i >= parent.childCount) && endIndex - startIndex < parent.childCount) {
       const target = liftTarget(range);
-      if (target == null) return true;
+      if (target == null) return HANDLED;
       state.tr.lift(range, target);
-      return true;
+      return HANDLED;
     }
     // rows move among the body rows: the header stays on top (the markdown table needs it there), and a row at
     // the body's edge stays in its table rather than taking the whole table along
-    if (parent.type.name === 'table' && (startIndex === 0 || i < 1 || i >= parent.childCount)) return true;
-    if (isEdge(state.doc, parent, i, dir)) return true;
+    if (parent.type.name === 'table' && (startIndex === 0 || i < 1 || i >= parent.childCount)) return HANDLED;
+    if (isEdge(state.doc, parent, i, dir)) return HANDLED;
     if (i >= 0 && i < parent.childCount) {
       const node = parent.child(i);
       const split = splitAt(node, dir < 0 ? start - node.nodeSize : end, dir);
-      if (split !== null) return split;
+      if (split !== null) return { kind: 'split', at: split };
       const tr = state.tr;
       if (dir < 0) {
         tr.delete(start - node.nodeSize, start);
@@ -127,16 +135,16 @@ function moveOnce(state: any, dir: -1 | 1, done = 0): any {
         tr.delete(end, end + node.nodeSize);
         tr.insert(start, node);
       }
-      return true;
+      return HANDLED;
     }
     if (/List$/.test(parent.type.name)) return hopOutOfList(state, range, dir, done);
-    if (range.depth < 1) return false;
+    if (range.depth < 1) return UNHANDLED;
     range = state.doc.resolve(start - 1).blockRange(state.doc.resolve(end + 1));
   }
-  return false;
+  return UNHANDLED;
 }
 
-function hopOutOfList(state: any, range: any, dir: -1 | 1, done: number): any {
+function hopOutOfList(state: any, range: any, dir: -1 | 1, done: number): Move {
   const { parent, start, end, depth } = range;
   const $start = state.doc.resolve(start);
   const listStart = $start.before(depth), listEnd = $start.after(depth);
@@ -147,10 +155,10 @@ function hopOutOfList(state: any, range: any, dir: -1 | 1, done: number): any {
   const across = lift && outer!.type !== parent.type;
   // the list is already at the edge, or what is beside it is the title or the note's end: nothing to step
   // over, and the key stays ours (the webview's own ⌥↓ would drop the selection)
-  if (!lift && (!beside || isEdge(state.doc, $list.parent, dir < 0 ? $list.index() - 1 : $list.index() + 1, dir))) return true;
+  if (!lift && (!beside || isEdge(state.doc, $list.parent, dir < 0 ? $list.index() - 1 : $list.index() + 1, dir))) return HANDLED;
   if (!lift) {
     const split = splitAt(beside, dir < 0 ? listStart - beside.nodeSize : listEnd, dir);
-    if (split !== null) return split;
+    if (split !== null) return { kind: 'split', at: split };
   }
   const alone = range.startIndex === 0 && range.endIndex === parent.childCount;
   const cut = alone ? { from: listStart, to: listEnd } : { from: start, to: end };
@@ -168,16 +176,13 @@ function hopOutOfList(state: any, range: any, dir: -1 | 1, done: number): any {
   const at = tr.mapping.slice(done).map(target);
   tr.insert(at, moved);
   if (lift && across && !ownerEdge && outer!.type.name === 'orderedList') {
-    const $at = tr.doc.resolve(Math.min(at + (moved.nodeSize ?? moved.size), tr.doc.content.size));
-    let after = $at.nodeAfter ? $at.pos : -1;
-    for (let p = $at.pos; after < 0 && p < Math.min($at.pos + 4, tr.doc.content.size); p++) if (tr.doc.resolve(p).nodeAfter?.type.name === 'orderedList') after = p;
-    const next = after >= 0 ? tr.doc.resolve(after).nodeAfter : null;
-    if (next?.type.name === 'orderedList') tr.setNodeAttribute(after, 'start', (outer!.attrs.start ?? 1) + ownerAt + 1);
+    const $rest = tr.doc.resolve(tr.mapping.slice(done).map(target, 1));
+    if ($rest.parent.type.name === 'orderedList') tr.setNodeAttribute($rest.before(), 'start', (outer!.attrs.start ?? 1) + ownerAt + 1);
   }
   const { anchor, head, empty } = state.selection;
   const pos = (p: number) => tr.doc.resolve(Math.min(at + p - base, tr.doc.content.size));
   tr.setSelection(empty ? Selection.near(pos(head)) : TextSelection.between(pos(anchor), pos(head)));
-  return true;
+  return HANDLED;
 }
 
 function lineDepths(doc: PMNode) {
@@ -337,7 +342,7 @@ export function switchLines(list: string, item: string) {
     const schema = tr.doc.type.schema;
     const { from, to } = tr.selection;
     const lines = lineDepths(tr.doc);
-    const picked = lines.map((l, k) => ({ l, k })).filter(({ l }) => l.pos + 1 <= to && l.end - 1 >= from && (l.item || l.end - l.pos > 2));
+    const picked = lines.map((l, k) => ({ l, k })).filter(({ l }) => l.pos + 1 <= to && l.end - 1 >= from && (l.item || !isBlank(l)));
     if (!picked.length || picked.some(({ l }) => !l.item)) return false;
     const change = picked.filter(({ l }) => l.first && l.list !== list);
     if (!change.length) return plainLines(tr, picked.map(({ k }) => k));
@@ -352,6 +357,8 @@ export function switchLines(list: string, item: string) {
     return true;
   };
 }
+
+const isBlank = (line: { pos: number; end: number }) => line.end - line.pos <= 2;
 
 function plainLines(tr: any, picked: number[]): boolean {
   const { from, to } = tr.selection;
@@ -408,6 +415,8 @@ export function wrapLines(list: string, item: string) {
   };
 }
 
+const endOfLastItem = (listEnd: number) => listEnd - 2;
+
 function sinkAcross(tr: any): boolean | null {
   const { $from, $to } = tr.selection;
   const range = $from.blockRange($to, (n: PMNode) => /List$/.test(n.type.name));
@@ -419,7 +428,7 @@ function sinkAcross(tr: any): boolean | null {
   const moved = list.copy(list.content.cut(0, offsetOf(list, range.endIndex)));
   if (range.endIndex === list.childCount) tr.delete(listStart, listEnd);
   else tr.delete(listStart + 1, listStart + 1 + offsetOf(list, range.endIndex));
-  tr.insert(listStart - 2, moved);
+  tr.insert(endOfLastItem(listStart), moved);
   return true;
 }
 

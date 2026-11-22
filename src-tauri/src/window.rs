@@ -31,21 +31,23 @@ pub(crate) fn summon_window(app: AppHandle) -> Result<(), String> {
     use tauri::Emitter;
     let n = SUMMONS.fetch_add(1, Ordering::SeqCst) + 1;
     *SUMMONED_AT.lock().unwrap() = Some(std::time::Instant::now());
-    crate::mac::set_seen(&app, false, None);
+    crate::mac::set_opaque(&app, false, None);
     show_window(app.clone())?;
     let _ = app.emit("eve-reveal", n);
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(FALLBACK_MS));
-        reveal(&app, n, "not drawn: seen anyway");
-        std::thread::sleep(std::time::Duration::from_millis(STUCK_MS));
-        let Some(w) = app.get_webview_window("main") else { return };
-        if stuck(ANSWERED.load(Ordering::SeqCst), n, w.is_visible().unwrap_or(false)) {
-            note(&app, format!("summon {n}: the page never answered: loaded again"));
-            crate::mac::end_page(&app);
-            let _ = w.reload();
-        }
-    });
+    std::thread::spawn(move || reveal_then_reload_if_stuck(&app, n));
     Ok(())
+}
+
+fn reveal_then_reload_if_stuck(app: &AppHandle, n: u64) {
+    std::thread::sleep(std::time::Duration::from_millis(REVEAL_ANYWAY_MS));
+    reveal(app, n, "not drawn: seen anyway");
+    std::thread::sleep(std::time::Duration::from_millis(RELOAD_SILENT_PAGE_MS));
+    let Some(w) = app.get_webview_window("main") else { return };
+    if stuck(LAST_DRAWN_SUMMON.load(Ordering::SeqCst), n, w.is_visible().unwrap_or(false)) {
+        note(app, format!("summon {n}: the page never answered: loaded again"));
+        crate::mac::end_page(app);
+        let _ = w.reload();
+    }
 }
 
 fn stuck(answered: u64, n: u64, visible: bool) -> bool {
@@ -60,17 +62,17 @@ pub(crate) fn page_ended<R: tauri::Runtime>(webview: &tauri::Webview<R>) {
     let _ = webview.reload();
 }
 
-const FALLBACK_MS: u64 = 1500;
-const STUCK_MS: u64 = 5000;
+const REVEAL_ANYWAY_MS: u64 = 1500;
+const RELOAD_SILENT_PAGE_MS: u64 = 5000;
 static SUMMONS: AtomicU64 = AtomicU64::new(0);
-static ANSWERED: AtomicU64 = AtomicU64::new(0);
+static LAST_DRAWN_SUMMON: AtomicU64 = AtomicU64::new(0);
 static SEEN: AtomicU64 = AtomicU64::new(0);
 static SUMMONED_AT: Mutex<Option<std::time::Instant>> = Mutex::new(None);
 
 #[tauri::command]
 pub(crate) fn reveal_window(app: AppHandle, n: Option<u64>) {
     let n = n.unwrap_or_else(|| SUMMONS.load(Ordering::SeqCst));
-    ANSWERED.fetch_max(n, Ordering::SeqCst);
+    LAST_DRAWN_SUMMON.fetch_max(n, Ordering::SeqCst);
     reveal(&app, n, "drawn");
 }
 
@@ -78,7 +80,7 @@ fn reveal(app: &AppHandle, n: u64, how: &'static str) {
     if SEEN.fetch_max(n, Ordering::SeqCst) >= n { return; }
     let ms = SUMMONED_AT.lock().unwrap().map(|t| t.elapsed().as_millis()).unwrap_or(0);
     let app2 = app.clone();
-    crate::mac::set_seen(app, true, Some(Box::new(move |visible: Option<bool>| {
+    crate::mac::set_opaque(app, true, Some(Box::new(move |visible: Option<bool>| {
         let shown = match visible { Some(true) => "on screen", Some(false) => "hidden from WebKit (occluded)", None => "?" };
         note(&app2, format!("summon {n}: {how} after {ms} ms; before it was seen the window was {shown}"));
     })));

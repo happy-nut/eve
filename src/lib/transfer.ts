@@ -3,7 +3,7 @@ import { importTree, type Source } from './importTree';
 import { files, importAsset, pickFiles, pickFolders, listFolder, pickSavePath, savePdf, savePng, isMobile, widget } from './platform';
 import { commonDir, dirOf } from './paths';
 import { ui, errorText } from './ui.svelte';
-import { takeEditorKeys } from './pending';
+import { flushPendingEdits } from './pending';
 
 export async function importPaths(paths: string[], from?: string, into = ''): Promise<Note | null> {
   const root = from ?? commonDir(paths);
@@ -36,7 +36,7 @@ export async function importFromFolder(): Promise<Note | null> {
 export type ExportAs = 'md' | 'pdf' | 'png';
 
 export async function exportNote(note: Note, as: ExportAs): Promise<string | null> {
-  takeEditorKeys();
+  flushPendingEdits();
   if (isMobile) {
     if (!(await widget.export(as, titleOf(note), note.body))) throw new Error(`The phone did not take the ${as.toUpperCase()}.`);
     return titleOf(note);

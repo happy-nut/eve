@@ -26,6 +26,10 @@ export function wrap(s: string, max: number, size: number, weight = 400): string
 }
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
+export const mermaidBoxId = (svgId: string, box: string) => `${svgId}-flowchart-${box}-0`;
+export const mermaidBoxOf = (g: Element) => /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null;
+export const mermaidLineId = (from: string, to: string, n: number) => `L_${from}_${to}_${n}`;
+
 const SIZE = 14, LINE = 19;
 const GAP = 40; // between steps, along the flow (wider where a line's label stands in it)
 const LABEL_MAX = 150, LABEL_LINE = 15, LABEL_AIR = 8; // a line's label: its width before it wraps, and room around it
@@ -296,14 +300,11 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   const W = Math.ceil(LR ? M : C), H = Math.ceil(LR ? C : M);
   const xy = (m: number, c: number): [number, number] => (LR ? [m, c] : [c, m]);
 
-  // ---- the lanes ----
-  // named and marked as mermaid's flowchart is, its boxes `<id>-flowchart-<box>-0` and its lines `L_<from>_<to>_<n>`:
-  // drawn in, and a step at a time in a presentation (boxes given an Order too), as a chart without lanes is
   let svg = `<svg class="lanes" id="${id}" aria-roledescription="flowchart-v2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width: ${W}px; min-width: ${Math.round(W * minScale)}px;" role="img" aria-label="${plain ? 'Flowchart' : 'Swimlanes'}">`;
   svg += `<defs><marker id="${id}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sl-head" d="M0,1.5 L9,5 L0,8.5 z"/></marker>`
     + `<linearGradient id="${id}-lit" x1="0" y1="0" x2="0" y2="1"><stop class="sl-lit0" offset="0"/><stop class="sl-lit1" offset="1"/></linearGradient></defs>`;
   const hue = (b: Box) => `c${(plain ? b.rank : b.lane) % 12}`;
-  lanes.forEach((l, i) => {
+  const drawLanes = () => lanes.map((l, i) => {
     const [x, y] = xy(0, laneAt[i]);
     const last = i === lanes.length - 1;
     const span = last ? C - laneAt[i] : laneC[i];
@@ -312,13 +313,13 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
     const name = names[i];
     const [cx, cy] = [x + hw / 2, y + hh / 2];
     const tspans = name.map((t, k) => `<tspan dy="0.35em" x="${cx}" y="${cy + (k - (name.length - 1) / 2) * 17}">${esc(t)}</tspan>`).join('');
-    svg += `<g class="lane c${i % 12}${l.id ? '' : ' none'}" data-lane="${esc(l.id)}">`
+    return `<g class="lane c${i % 12}${l.id ? '' : ' none'}" data-lane="${esc(l.id)}">`
       + `<rect class="lane-bg" x="${x}" y="${y}" width="${w}" height="${h}"/>`
       + `<g class="lane-head" data-lane="${esc(l.id)}"><rect x="${x}" y="${y}" width="${hw}" height="${hh}"/>`
       + `<text class="lane-name" text-anchor="middle">${tspans}</text></g>`
       + (i ? `<line class="lane-rule" x1="${x}" y1="${y}" x2="${LR ? W : x}" y2="${LR ? y : H}"/>` : '')
       + `</g>`;
-  });
+  }).join('');
 
   type R = { m0: number; m1: number; c0: number; c1: number };
   const taken: R[] = [...boxes.values()].map((b) => ({ m0: b.m - main(b) / 2 - 4, m1: b.m + main(b) / 2 + 4, c0: b.c - cross(b) / 2 - 4, c1: b.c + cross(b) / 2 + 4 }));
@@ -360,23 +361,26 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
     return best;
   }
 
-  const labels: string[] = [];
-  edges.forEach((e, i) => {
-    const { pts, at } = ways[i];
-    const p = pts.map(([m, c]) => xy(m, c));
-    svg += `<path class="flowchart-link sl-edge ${e.line}${e.animate ? ' moving' : ''}" data-id="${esc(`L_${e.from}_${e.to}_${i}`)}" d="${rounded(p)}" marker-end="url(#${id}-arrow)"/>`;
-    const chip = chips[i];
-    if (chip.lines.length) {
-      const [m, c] = placeLabel(pts, at, chip, i);
-      const [x, y] = xy(m, c), [w, h] = LR ? [chip.m, chip.c] : [chip.c, chip.m];
-      const tspans = chip.lines.map((l, k) => `<tspan dy="0.35em" x="${x}" y="${y + (k - (chip.lines.length - 1) / 2) * LABEL_LINE}">${esc(l)}</tspan>`).join('');
-      labels.push(`<g class="edgeLabel"><g class="label" data-id="${esc(`L_${e.from}_${e.to}_${i}`)}"><rect class="sl-chip" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="11"/>`
-        + `<text text-anchor="middle">${tspans}</text></g></g>`);
-    }
-  });
-  svg += labels.join('');
+  const drawLines = () => {
+    let paths = '';
+    const labels: string[] = [];
+    edges.forEach((e, i) => {
+      const { pts, at } = ways[i];
+      const p = pts.map(([m, c]) => xy(m, c));
+      paths += `<path class="flowchart-link sl-edge ${e.line}${e.animate ? ' moving' : ''}" data-id="${esc(mermaidLineId(e.from, e.to, i))}" d="${rounded(p)}" marker-end="url(#${id}-arrow)"/>`;
+      const chip = chips[i];
+      if (chip.lines.length) {
+        const [m, c] = placeLabel(pts, at, chip, i);
+        const [x, y] = xy(m, c), [w, h] = LR ? [chip.m, chip.c] : [chip.c, chip.m];
+        const tspans = chip.lines.map((l, k) => `<tspan dy="0.35em" x="${x}" y="${y + (k - (chip.lines.length - 1) / 2) * LABEL_LINE}">${esc(l)}</tspan>`).join('');
+        labels.push(`<g class="edgeLabel"><g class="label" data-id="${esc(mermaidLineId(e.from, e.to, i))}"><rect class="sl-chip" x="${x - w / 2}" y="${y - h / 2}" width="${w}" height="${h}" rx="11"/>`
+          + `<text text-anchor="middle">${tspans}</text></g></g>`);
+      }
+    });
+    return paths + labels.join('');
+  };
 
-  for (const b of boxes.values()) {
+  const drawSteps = () => [...boxes.values()].map((b) => {
     const [x, y] = xy(b.m, b.c);
     const l = x - b.w / 2, t = y - b.h / 2;
     let shape: string;
@@ -389,7 +393,8 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
       default: shape = `<rect class="sl-shape" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="12"/>`;
     }
     const lines = b.lines.map((s, k) => `<tspan dy="0.35em" x="${x}" y="${y + (b.n.shape === 'db' ? 4 : 0) + (k - (b.lines.length - 1) / 2) * LINE}">${esc(s)}</tspan>`).join('');
-    svg += `<g class="node sl-${b.n.shape} ${hue(b)}${b.n.step ? ` step${b.n.step}` : ''}" id="${id}-flowchart-${esc(b.n.id)}-0">${shape}<text class="sl-text" text-anchor="middle">${lines}</text></g>`;
-  }
-  return svg + '</svg>';
+    return `<g class="node sl-${b.n.shape} ${hue(b)}${b.n.presentStep ? ` step${b.n.presentStep}` : ''}" id="${mermaidBoxId(id, esc(b.n.id))}">${shape}<text class="sl-text" text-anchor="middle">${lines}</text></g>`;
+  }).join('');
+
+  return svg + drawLanes() + drawLines() + drawSteps() + '</svg>';
 }

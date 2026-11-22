@@ -1,6 +1,7 @@
 import { InputRule } from '@tiptap/core';
-import { Plugin, PluginKey, Selection, TextSelection, type EditorState } from '@tiptap/pm/state';
-import { Fragment, type Node as PMNode, type Schema } from '@tiptap/pm/model';
+import { Plugin, PluginKey, Selection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
+import type { EditorView } from '@tiptap/pm/view';
+import { Fragment, type Node as PMNode, type NodeType, type Schema } from '@tiptap/pm/model';
 import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -16,7 +17,7 @@ function outOfClosed(state: EditorState): number | null {
   return null;
 }
 
-const shown = (n: PMNode) => n.type.name === 'wikiLink' ? n.attrs.alias || n.attrs.title : n.type.name === 'dateMention' ? (n.attrs.remind ? `@${n.attrs.date} ${n.attrs.time} ⏰` : `@${n.attrs.date}`) : n.type.name === 'hardBreak' ? ' ' : n.textContent ?? '';
+const inlineAsText = (n: PMNode) => n.type.name === 'wikiLink' ? n.attrs.alias || n.attrs.title : n.type.name === 'dateMention' ? (n.attrs.remind ? `@${n.attrs.date} ${n.attrs.time} ⏰` : `@${n.attrs.date}`) : n.type.name === 'hardBreak' ? ' ' : n.textContent ?? '';
 
 const toggles = (doc: PMNode) => {
   let n = 0;
@@ -25,6 +26,47 @@ const toggles = (doc: PMNode) => {
 };
 
 export const DUPLICATE = 'duplicate';
+
+const wouldSplitToggle = (tr: Transaction, state: EditorState): boolean =>
+  tr.docChanged && !tr.getMeta(DUPLICATE) && state.selection.$from.parent.type.name === 'detailsSummary' &&
+  toggles(tr.doc) > toggles(state.doc);
+
+const backspaceInTitle = (state: EditorState): boolean => {
+  const { $from, empty } = state.selection;
+  return empty && $from.parent.type.name === 'detailsSummary' && $from.parentOffset > 0;
+};
+
+function backspaceIntoTitle(state: EditorState, view: EditorView, toggleType: NodeType): boolean {
+  const { $from, empty } = state.selection;
+  const box = $from.depth > 2 ? $from.node(-1) : null;
+  if (!(empty && $from.parentOffset === 0 && box?.type.name === 'detailsContent' && $from.index(-1) === 0 && $from.node(-2).type === toggleType)) return false;
+  const end = $from.before(-1) - 1, line = $from.parent, tr = state.tr;
+  let text = '', whole = true;
+  line.forEach((n) => { const s = n.isText ? n.text! : inlineAsText(n); if (!s && n.isLeaf) whole = false; text += s; });
+  if (!line.content.size) { if (box.childCount > 1) tr.delete($from.before(), $from.after()); }
+  else if (line.type.name === 'paragraph' && whole) {
+    if (box.childCount > 1) tr.delete($from.before(), $from.after());
+    else tr.replaceWith($from.before(), $from.after(), line.type.create());
+    if (text) tr.insert(end, state.schema.text(text));
+  }
+  view.dispatch(tr.setSelection(TextSelection.create(tr.doc, end)).scrollIntoView());
+  return true;
+}
+
+function backspaceAfterToggle(state: EditorState, view: EditorView, toggleType: NodeType): boolean {
+  const { $from, empty } = state.selection;
+  const before = empty && $from.parentOffset === 0 && $from.parent.isTextblock && $from.depth > 0 ? state.doc.resolve($from.before()).nodeBefore : null;
+  if (before?.type !== toggleType) return false;
+  const at = $from.before() - before.nodeSize;
+  const into = before.attrs.open ? Selection.findFrom(state.doc.resolve($from.before()), -1, true) : null;
+  const end = into ? into.from : at + 1 + before.firstChild!.nodeSize - 1;
+  const line = $from.parent;
+  const tr = state.tr;
+  if (!line.content.size) tr.delete($from.before(), $from.after());
+  else if (into && into.$from.parent.inlineContent && !line.type.spec.code) tr.delete($from.before(), $from.after()).insert(end, line.content);
+  view.dispatch(tr.setSelection(TextSelection.create(tr.doc, end)).scrollIntoView());
+  return true;
+}
 
 export const Toggle = [
   Details.extend({
@@ -37,7 +79,7 @@ export const Toggle = [
           const at = $from.index(-1);
           if (para.type.name !== 'paragraph' || !$from.node(-1).canReplaceWith(at, at + 1, this.type)) return null;
           const s = state.schema;
-          const title = state.doc.textBetween(range.to, $from.end(), undefined, shown);
+          const title = state.doc.textBetween(range.to, $from.end(), undefined, inlineAsText);
           const toggle = this.type.create({ open: true }, [
             s.nodes.detailsSummary.create(null, title ? s.text(title) : null),
             s.nodes.detailsContent.create(null, s.nodes.paragraph.create()),
@@ -51,10 +93,7 @@ export const Toggle = [
     addProseMirrorPlugins() {
       return [...(this.parent?.() ?? []), new Plugin({
         key: new PluginKey('toggleCaretShown'),
-        filterTransaction: (tr, state) => {
-          if (!tr.docChanged || tr.getMeta(DUPLICATE) || state.selection.$from.parent.type.name !== 'detailsSummary') return true;
-          return toggles(tr.doc) <= toggles(state.doc);
-        },
+        filterTransaction: (tr, state) => !wouldSplitToggle(tr, state),
         appendTransaction: (_trs, _old, state) => {
           const to = outOfClosed(state);
           return to === null ? null : state.tr.setSelection(TextSelection.create(state.doc, to)).scrollIntoView();
@@ -93,37 +132,8 @@ export const Toggle = [
         },
         Backspace: (p) => {
           const { state, view } = p.editor;
-          const { $from, empty } = state.selection;
-          // a letter in the title: the webview's own ⌫, by whole characters (the stock one took one code unit, and
-          // left half an emoji written into the file)
-          if (empty && $from.parent.type.name === 'detailsSummary' && $from.parentOffset > 0) return false;
-          const before = empty && $from.parentOffset === 0 && $from.parent.isTextblock && $from.depth > 0 ? state.doc.resolve($from.before()).nodeBefore : null;
-          const box = $from.depth > 2 ? $from.node(-1) : null;
-          if (empty && $from.parentOffset === 0 && box?.type.name === 'detailsContent' && $from.index(-1) === 0 && $from.node(-2).type === this.type) {
-            const end = $from.before(-1) - 1, line = $from.parent, tr = state.tr;
-            let text = '', whole = true;
-            line.forEach((n) => { const s = n.isText ? n.text! : shown(n); if (!s && n.isLeaf) whole = false; text += s; });
-            if (!line.content.size) { if (box.childCount > 1) tr.delete($from.before(), $from.after()); }
-            else if (line.type.name === 'paragraph' && whole) {
-              if (box.childCount > 1) tr.delete($from.before(), $from.after());
-              else tr.replaceWith($from.before(), $from.after(), line.type.create());
-              if (text) tr.insert(end, state.schema.text(text));
-            }
-            view.dispatch(tr.setSelection(TextSelection.create(tr.doc, end)).scrollIntoView());
-            return true;
-          }
-          if (before?.type === this.type) {
-            const at = $from.before() - before.nodeSize;
-            const into = before.attrs.open ? Selection.findFrom(state.doc.resolve($from.before()), -1, true) : null;
-            const end = into ? into.from : at + 1 + before.firstChild!.nodeSize - 1;
-            const line = $from.parent;
-            const tr = state.tr;
-            if (!line.content.size) tr.delete($from.before(), $from.after());
-            else if (into && into.$from.parent.inlineContent && !line.type.spec.code) tr.delete($from.before(), $from.after()).insert(end, line.content);
-            view.dispatch(tr.setSelection(TextSelection.create(tr.doc, end)).scrollIntoView());
-            return true;
-          }
-          return stock.Backspace?.(p) ?? false;
+          if (backspaceInTitle(state)) return false;
+          return backspaceIntoTitle(state, view, this.type) || backspaceAfterToggle(state, view, this.type) || (stock.Backspace?.(p) ?? false);
         },
         Delete: (p) => {
           const { state, view } = p.editor;

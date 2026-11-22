@@ -24,7 +24,7 @@
   import Menu from './Menu.svelte';
   import Toast from './Toast.svelte';
   import { ui, hooks } from './lib/ui.svelte';
-  import { droppedFiles, isAsset } from './lib/drop';
+  import { droppedFiles, isAsset, type Dropped } from './lib/drop';
   import { importTree } from './lib/importTree';
   import { importPaths, exportCurrent } from './lib/transfer';
   import { exportMenu } from './lib/noteMenu';
@@ -36,7 +36,7 @@
   import { applyAll } from './lib/inbox';
   import { focusNote } from './lib/popup';
   import { cameBack } from './lib/comeBack';
-  import { takeEditorKeys } from './lib/pending';
+  import { flushPendingEdits } from './lib/pending';
   import { claimKeys, handledBy, PRIORITY } from './lib/keys';
 
   let sidebarOpen = $state(true);
@@ -83,7 +83,7 @@
       });
       void links.onOpen((url) => {
         const link = parseEveLink(url);
-        if (!link || !notes.all.some((n) => n.id === link.id && !n.deleted)) return;
+        if (!link || !notes.exists(link.id)) return;
         putAway();
         ui.focusOwner = 'editor';
         if (notes.currentId === link.id) {
@@ -111,7 +111,7 @@
         const id = ask.startsWith('note:') ? ask.slice(5) : null;
         if (ask !== 'new' && !id) return;
         putAway();
-        if (id && !notes.all.some((n) => n.id === id && !n.deleted)) { sidebarOpen = true; return; }
+        if (id && !notes.exists(id)) { sidebarOpen = true; return; }
         ui.focusOwner = 'editor';
         if (id) notes.currentId = id; else newNote();
         sidebarOpen = false;
@@ -186,9 +186,16 @@
   }
 
   let swipe: { x: number; y: number; at: number } | null = null;
+  function noteIsCovered() {
+    return sidebarOpen || settingsOpen || !!ui.card || ui.diagramView !== null || !!ui.find || ui.layers.count > 0 || !!hooks.diagramBack;
+  }
+  const LONG_PRESS_MS = 600;
+  function choosingText(held: number) {
+    return held > LONG_PRESS_MS || !!getSelection()?.toString();
+  }
   function swipeStart(e: TouchEvent) {
     swipe = null;
-    if (!isMobile || sidebarOpen || settingsOpen || ui.card || ui.diagramView !== null || ui.find || ui.layers.count || hooks.diagramBack || e.touches.length !== 1) return;
+    if (!isMobile || noteIsCovered() || e.touches.length !== 1) return;
     const t = e.target as HTMLElement;
     if (t.closest('pre, table, .kanban, .mbar, .mhead, input, textarea, .menu, .suggest, .cal, .dblock, .diagram-canvas, .math-block')) return;
     for (let el: HTMLElement | null = t; el && el !== document.body; el = el.parentElement) {
@@ -202,7 +209,7 @@
     const dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
     const held = Date.now() - swipe.at;
     swipe = null;
-    if (held > 600 || getSelection()?.toString()) return;
+    if (choosingText(held)) return;
     if (dx > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) toList();
   }
   function toList() {
@@ -312,7 +319,11 @@
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
     else toList();
   }
-  $effect(() => { void notes.currentId; untrack(() => { ui.closeDiagramView(); ui.closeCard(); }); });
+  function leaveNote() {
+    ui.closeDiagramView();
+    ui.closeCard();
+  }
+  $effect(() => { void notes.currentId; untrack(leaveNote); });
   $effect(() => { if (notes.loaded && tree.groups.length) untrack(() => tree.toPages()); });
   let lastOpen: string | null = null;
   $effect(() => {
@@ -403,10 +414,11 @@
     dropHint = null;
     markRow(null);
     if (!e.dataTransfer?.types.includes('Files')) return;
-    const taken = e.defaultPrevented;
+    const editorTookDrop = e.defaultPrevented;
     e.preventDefault();
     const on = listTarget(e.target);
-    const dropped = (await droppedFiles(e.dataTransfer)).filter(({ file, dir }) => !taken || dir || !isAsset(file));
+    const notYetEmbedded = ({ file, dir }: Dropped) => !editorTookDrop || !!dir || !isAsset(file);
+    const dropped = (await droppedFiles(e.dataTransfer)).filter(notYetEmbedded);
     const made = await importTree(dropped.map(({ file, dir }) => ({
       path: dir ? `${dir}/${file.name}` : file.name,
       text: () => file.text(),
@@ -417,10 +429,23 @@
     for (const { note, source, embed } of made) {
       if (source.path.includes('/')) continue;
       if (!embed) hooks.attach?.(`[[${titleOf(note)}]]`);
-      else if (!taken) hooks.attach?.(embed);
+      else if (!editorTookDrop) hooks.attach?.(embed);
     }
   }
 
+  function escapePutsAway(e: KeyboardEvent) {
+    return e.key === 'Escape' && handledBy(e) !== 'taken' && ui.layers.escape();
+  }
+  function matchAppAction(e: KeyboardEvent) {
+    const action = (id: string) => shortcuts.actions.find((x) => x.id === id);
+    const plusIsBigger = e.key === '+' && (e.metaKey || e.ctrlKey) && !e.altKey;
+    const linkKeys = shortcuts.keysFor('link');
+    const emptyLinkIsSearch = !!linkKeys && eventToKeys(e) === linkKeys;
+    return shortcuts.match(e, ['app']) ?? (plusIsBigger ? action('textBigger') : undefined) ?? (emptyLinkIsSearch ? action('search') : undefined);
+  }
+  function searchOrSettingsTakesEscape() {
+    return settingsOpen || document.activeElement === searchEl;
+  }
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Meta' && !e.shiftKey && !e.altKey && !e.ctrlKey) cmdDown();
     else cmdUp();
@@ -431,7 +456,7 @@
       else if (settingsOpen && ui.layers.top?.id === 'settings' && shortcuts.match(e, ['app'])?.id === 'settings') { e.preventDefault(); settingsOpen = false; }
       return;
     }
-    if (e.key === 'Escape' && handledBy(e) !== 'taken' && ui.layers.escape()) {
+    if (escapePutsAway(e)) {
       e.preventDefault();
       return;
     }
@@ -442,13 +467,12 @@
     }
     if (handledBy(e) === 'taken') return;
     if (ui.undoKey(e)) { e.preventDefault(); return; }
-    const a = shortcuts.match(e, ['app']) ?? (e.key === '+' && (e.metaKey || e.ctrlKey) && !e.altKey ? shortcuts.actions.find((x) => x.id === 'textBigger') : undefined)
-      ?? (shortcuts.keysFor('link') && eventToKeys(e) === shortcuts.keysFor('link') ? shortcuts.actions.find((x) => x.id === 'search') : undefined);
+    const a = matchAppAction(e);
     if (!a) return;
-    if (a.id === 'hide' && (settingsOpen || document.activeElement === searchEl)) return;
+    if (a.id === 'hide' && searchOrSettingsTakesEscape()) return;
     e.preventDefault();
-    if (ui.card && (a.id === 'search' || a.id === 'focusSidebar')) { takeEditorKeys(); ui.closeCard(); }
-    if (a.id === 'settings' && !settingsOpen && ui.card) { takeEditorKeys(); while (ui.card) ui.closeCard(); }
+    if (ui.card && (a.id === 'search' || a.id === 'focusSidebar')) { flushPendingEdits(); ui.closeCard(); }
+    if (a.id === 'settings' && !settingsOpen && ui.card) { flushPendingEdits(); while (ui.card) ui.closeCard(); }
     switch (a.id) {
       case 'newNote':
         if (document.activeElement?.closest('aside')) hooks.openPlus?.();
@@ -463,7 +487,7 @@
       case 'forward': notes.forward(); break;
       case 'parentPage': {
         const up = notes.current?.parent;
-        if (up && notes.all.some((n) => n.id === up && !n.deleted)) notes.currentId = up;
+        if (up && notes.exists(up)) notes.currentId = up;
         break;
       }
       case 'copyLink': {

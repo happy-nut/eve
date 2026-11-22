@@ -4,7 +4,7 @@ import { Selection } from '@tiptap/pm/state';
 import { insertKanban } from './kanban';
 import { insertDatabase } from './databaseNode';
 import { insertFootnote } from './footnote';
-import { insertDiagram } from './code';
+import { domObserverOf, insertDiagram } from './code';
 import { swimlaneStarter } from './diagram';
 import { insertMath } from './math';
 import { insertImage } from './image';
@@ -66,7 +66,7 @@ export interface EmojiUI {
 
 const POPUPS = '.suggest, .cal, .emoji-row';
 
-function stayAtCaret(ui: { hide(): void; visible(): boolean; place?(rect: DOMRect): void }) {
+function followScroll(ui: { hide(): void; visible(): boolean; place?(rect: DOMRect): void }) {
   let last: any = null;
   const onScroll = (e: Event) => {
     if (!last || !ui.visible() || (e.target instanceof Element && e.target.closest(POPUPS))) return;
@@ -76,22 +76,34 @@ function stayAtCaret(ui: { hide(): void; visible(): boolean; place?(rect: DOMRec
     if (r.bottom < box.top || r.top > box.bottom) ui.hide();
     else ui.place?.(r);
   };
+  return {
+    start(p: any) {
+      last = p;
+      window.addEventListener('scroll', onScroll, true);
+    },
+    update(p: any) { last = p; },
+    stop() {
+      window.removeEventListener('scroll', onScroll, true);
+      last = null;
+    },
+  };
+}
+
+function hideOnBlur(ui: { hide(): void }) {
+  let watched: Editor | null = null;
   const onBlur = ({ event }: { event: FocusEvent }) => {
     if (event.relatedTarget instanceof Element && event.relatedTarget.closest(POPUPS)) return;
     ui.hide();
   };
   return {
-    start(p: any) {
-      if (last) this.stop();
-      last = p;
-      window.addEventListener('scroll', onScroll, true);
-      p.editor.on('blur', onBlur);
+    start(editor: Editor) {
+      watched?.off('blur', onBlur);
+      watched = editor;
+      editor.on('blur', onBlur);
     },
-    update(p: any) { last = p; },
     stop() {
-      window.removeEventListener('scroll', onScroll, true);
-      last?.editor.off('blur', onBlur);
-      last = null;
+      watched?.off('blur', onBlur);
+      watched = null;
     },
   };
 }
@@ -166,10 +178,10 @@ const askedFor = new WeakMap<object, { start: number; slash: number }>();
 export function slashAsked(view: object, start: number, slash: number) { askedFor.set(view, { start, slash }); }
 
 function atCaret(uiRef: Driven & { place?(rect: DOMRect): void }, keys: PickerKeys, show: (p: any) => void) {
-  const follow = stayAtCaret(uiRef);
+  const scrolling = followScroll(uiRef), blurring = hideOnBlur(uiRef);
   const k = suggestKeys(uiRef, keys);
   const open = (p: any) => { k.shown(p); show(p); };
-  const readInWhatIsOnScreen = (view: any): boolean => { const was = view.state.doc; view.domObserver?.flush?.(); return view.state.doc !== was; };
+  const readInWhatIsOnScreen = (view: any): boolean => { const was = view.state.doc; domObserverOf(view)?.flush?.(); return view.state.doc !== was; };
   const pressAgainOnceTheListIsNew = (view: any, e: KeyboardEvent) => setTimeout(() => {
     if (!view.isDestroyed) view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: e.key, shiftKey: e.shiftKey, bubbles: true, cancelable: true }));
   }, 0);
@@ -177,10 +189,11 @@ function atCaret(uiRef: Driven & { place?(rect: DOMRect): void }, keys: PickerKe
     onStart: (p: any) => {
       const set = popupsOf.get(p.editor) ?? new Set();
       popupsOf.set(p.editor, set.add(uiRef));
-      follow.start(p);
+      scrolling.start(p);
+      blurring.start(p.editor);
       open(p);
     },
-    onUpdate: (p: any) => { follow.update(p); open(p); },
+    onUpdate: (p: any) => { scrolling.update(p); open(p); },
     onKeyDown: (p: any) => {
       if ((p.event.key === 'Enter' || p.event.key === 'Tab') && readInWhatIsOnScreen(p.view)) return (pressAgainOnceTheListIsNew(p.view, p.event), true);
       const asked = askedFor.get(p.view);
@@ -191,7 +204,7 @@ function atCaret(uiRef: Driven & { place?(rect: DOMRect): void }, keys: PickerKe
       }
       return took;
     },
-    onExit: (p: any) => { follow.stop(); uiRef.hide(); if (p?.editor) askedFor.delete(p.editor.view); },
+    onExit: (p: any) => { scrolling.stop(); blurring.stop(); uiRef.hide(); if (p?.editor) askedFor.delete(p.editor.view); },
   };
 }
 
@@ -241,8 +254,8 @@ export function popup(uiRef: SuggestionUI, keys: PickerKeys = PICKERS.wiki) {
 }
 
 
-const tip = (id: string, run: NonNullable<SuggestItem['run']>): SuggestItem['run'] => (e) => { run(e); hints.action(id); };
-const line = (id: string): SuggestItem['run'] => tip(id, (e) => runEditorCommand(e, id));
+const withKeyHint = (id: string, run: NonNullable<SuggestItem['run']>): SuggestItem['run'] => (e) => { run(e); hints.action(id); };
+const editorCommand = (id: string): SuggestItem['run'] => withKeyHint(id, (e) => runEditorCommand(e, id));
 
 export function slashItems(query: string): SuggestItem[] {
   if (!query) return SLASH.filter((i) => !i.typedOnly);
@@ -312,23 +325,23 @@ function colors(): SuggestItem {
 
 
 const BASIC = 'Basic blocks', MEDIA = 'Media', PAGES = 'Notes and boards', MORE = 'Advanced';
-const TEXT: SuggestItem = { label: 'Text', keywords: 'paragraph plain a plain line 텍스트', icon: ICONS.text, group: BASIC, run: line('paragraph') };
+const TEXT: SuggestItem = { label: 'Text', keywords: 'paragraph plain a plain line 텍스트', icon: ICONS.text, group: BASIC, run: editorCommand('paragraph') };
 export const SLASH: SuggestItem[] = [
   TEXT,
   {
     label: 'Heading', hint: '#', keywords: 'title 제목', icon: ICONS.h1, folder: true, group: BASIC,
-    sections: [1, 2, 3, 4, 5].map((n) => ({ label: `Heading ${n}`, hint: '#'.repeat(n), keywords: `${n === 1 ? 'title ' : ''}h${n} 제목`, icon: ICONS[`h${n}` as 'h1'], run: line(`h${n}`) })),
+    sections: [1, 2, 3, 4, 5].map((n) => ({ label: `Heading ${n}`, hint: '#'.repeat(n), keywords: `${n === 1 ? 'title ' : ''}h${n} 제목`, icon: ICONS[`h${n}` as 'h1'], run: editorCommand(`h${n}`) })),
   },
-  { label: 'Bulleted list', hint: '-', keywords: 'bullet unordered ul 목록', icon: ICONS.bullet, group: BASIC, run: line('bulletList') },
-  { label: 'Numbered list', hint: '1.', keywords: 'ordered ol number 번호', icon: ICONS.numbered, group: BASIC, run: line('orderedList') },
-  { label: 'To-do list', hint: '[ ]', keywords: 'todo task checkbox check 할 일', icon: ICONS.todo, group: BASIC, run: line('taskList') },
+  { label: 'Bulleted list', hint: '-', keywords: 'bullet unordered ul 목록', icon: ICONS.bullet, group: BASIC, run: editorCommand('bulletList') },
+  { label: 'Numbered list', hint: '1.', keywords: 'ordered ol number 번호', icon: ICONS.numbered, group: BASIC, run: editorCommand('orderedList') },
+  { label: 'To-do list', hint: '[ ]', keywords: 'todo task checkbox check 할 일', icon: ICONS.todo, group: BASIC, run: editorCommand('taskList') },
   { label: 'Toggle', hint: '>', keywords: 'folds its content 토글 접기', icon: ICONS.toggle, group: BASIC, run: (e) => e.chain().focus().setDetails().updateAttributes('details', { open: true }).run() },
-  { label: 'Quote', hint: '|', keywords: 'blockquote 인용', icon: ICONS.quote, group: BASIC, run: line('blockquote') },
-  { label: 'Callout', keywords: 'highlighted box 💡', icon: ICONS.callout, group: BASIC, run: tip('callout', (e) => e.chain().focus().toggleWrap('callout').run()) },
-  { label: 'Divider', hint: '---', keywords: 'a line across 구분선 hr rule', icon: ICONS.divider, group: BASIC, run: tip('divider', (e) => e.chain().focus().setHorizontalRule().run()) },
+  { label: 'Quote', hint: '|', keywords: 'blockquote 인용', icon: ICONS.quote, group: BASIC, run: editorCommand('blockquote') },
+  { label: 'Callout', keywords: 'highlighted box 💡', icon: ICONS.callout, group: BASIC, run: withKeyHint('callout', (e) => e.chain().focus().toggleWrap('callout').run()) },
+  { label: 'Divider', hint: '---', keywords: 'a line across 구분선 hr rule', icon: ICONS.divider, group: BASIC, run: withKeyHint('divider', (e) => e.chain().focus().setHorizontalRule().run()) },
   { label: 'Table', keywords: '3×3 with a header row 표 grid', icon: ICONS.table, group: BASIC, run: (e) => e.chain().focus().command(({ tr }) => { outOfEmptyItem(tr, e.schema.nodes.table.createAndFill()); return true; }).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-  { label: 'Code block', hint: '```', keywords: 'code highlighted 코드', icon: ICONS.code, group: BASIC, run: tip('codeBlock', (e) => { if (!e.isActive('tableCell') && !e.isActive('tableHeader')) e.chain().focus().toggleCodeBlock().run(); }) },
-  { label: 'Image', keywords: 'pick a file 이미지 그림 사진 picture photo', icon: ICONS.image, group: MEDIA, run: tip('image', (e) => { pickImage().then((src) => src && insertImage(e, src)); }) },
+  { label: 'Code block', hint: '```', keywords: 'code highlighted 코드', icon: ICONS.code, group: BASIC, run: withKeyHint('codeBlock', (e) => { if (!e.isActive('tableCell') && !e.isActive('tableHeader')) e.chain().focus().toggleCodeBlock().run(); }) },
+  { label: 'Image', keywords: 'pick a file 이미지 그림 사진 picture photo', icon: ICONS.image, group: MEDIA, run: withKeyHint('image', (e) => { pickImage().then((src) => src && insertImage(e, src)); }) },
   { label: 'Video', keywords: 'pick a file movie', icon: ICONS.video, group: MEDIA, run: (e) => { pickVideo().then((src) => src && e.chain().focus().insertContent({ type: 'video', attrs: { src, name: src.split('/').pop() } }).run()); } },
   {
     label: 'Emoji', hint: ':', keywords: 'pick one 😀', icon: ICONS.emoji, group: MEDIA,
@@ -340,7 +353,7 @@ export const SLASH: SuggestItem[] = [
     },
   },
   { label: 'New note', keywords: 'a note under this one 하위 페이지 하위 노트 subpage page', icon: ICONS.page, group: PAGES, run: newPage },
-  { label: 'Link to note', hint: '[[', keywords: 'another note', icon: ICONS.wikiLink, group: PAGES, run: tip('wikiLink', (e) => e.chain().focus().insertContent('[[').run()) },
+  { label: 'Link to note', hint: '[[', keywords: 'another note', icon: ICONS.wikiLink, group: PAGES, run: withKeyHint('wikiLink', (e) => e.chain().focus().insertContent('[[').run()) },
   { label: 'Database', keywords: 'a table of notes under this one table view board 데이터베이스 db', icon: ICONS.database, group: PAGES, run: insertDatabase },
   { label: 'Kanban', keywords: 'board 칸반', icon: ICONS.kanban, group: PAGES, run: insertKanban },
   {

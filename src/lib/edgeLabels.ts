@@ -1,6 +1,8 @@
+import { LABEL_RING } from './mermaid';
+
 type Rect = { l: number; r: number; t: number; b: number };
 const ALONG = [0.5, 0.4, 0.6, 0.3, 0.7, 0.22, 0.78, 0.15, 0.85];
-const PAD = 7;
+const GAP = 2;
 
 const box = (el: Element, pad: number): Rect => {
   const b = el.getBoundingClientRect();
@@ -12,11 +14,11 @@ export function spreadLabels(svg: SVGSVGElement): number {
   const labels = [...svg.querySelectorAll<SVGGElement>('g.edgeLabels > g.edgeLabel')];
   const lines = [...svg.querySelectorAll<SVGPathElement>('path.flowchart-link')];
   if (!labels.length || labels.length !== lines.length) return 0;
-  const taken: Rect[] = [...svg.querySelectorAll('g.node')].map((n) => box(n, 2));
+  const taken: Rect[] = [...svg.querySelectorAll('g.node')].map((n) => box(n, GAP));
   let moved = 0;
   labels.forEach((label, i) => {
     if (!label.textContent?.trim()) return;
-    const here = box(label, PAD);
+    const here = box(label, LABEL_RING + GAP);
     if (!taken.some((t) => hits(here, t))) { taken.push(here); return; }
     const line = lines[i], toScreen = line.getScreenCTM(), parent = (label.parentNode as SVGGraphicsElement).getScreenCTM();
     if (!toScreen || !parent || typeof line.getTotalLength !== 'function') { taken.push(here); return; }

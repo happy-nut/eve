@@ -34,8 +34,9 @@
   });
 
   const q = $derived(ui.search.trim().toLowerCase());
-  const hits = $derived(rankByTitle([...notes.visible, ...(appearance.s.dailyNotes ? notes.daily : [])].filter((n) => typedIn(shownText(n), q) || (rawQuery(q) && n.body.toLowerCase().includes(q))), q));
-  let searching = $state(false);
+  const matchesSearch = (n: Note, q: string) => typedIn(shownText(n), q) || (rawQuery(q) && n.body.toLowerCase().includes(q));
+  const hits = $derived(rankByTitle([...notes.visible, ...(appearance.s.dailyNotes ? notes.daily : [])].filter((n) => matchesSearch(n, q)), q));
+  let searchHasKeyboard = $state(false);
   const shown = new Map<string, { body: string; text: string }>();
   function shownText(n: Note): string {
     const had = shown.get(n.id);
@@ -261,10 +262,14 @@
     e.stopPropagation();
   }
 
-  function iconTap(e: MouseEvent, n: Note) {
-    if (isMobile) return;
-    e.stopPropagation();
-    pickIcon(n, e.currentTarget as HTMLElement);
+  function rowClick(e: MouseEvent, n: Note) {
+    const icon = (e.target as Element).closest<HTMLElement>('.ico-slot');
+    if (icon && !isMobile) {
+      e.stopPropagation();
+      void pickIcon(n, icon);
+      return;
+    }
+    if (e.metaKey && !isMobile && n.id !== CALENDAR_NOTE_ID) tabs.open(n.id); else void openNote(n);
   }
   async function pickIcon(n: Note, anchor?: HTMLElement) {
     const el = anchor ?? document.querySelector<HTMLElement>(`aside [data-note="${n.id}"]`);
@@ -288,10 +293,10 @@
             { label: 'Open in new tab', run: () => tabs.open(n.id), hide: isMobile },
             { label: 'New note inside', run: newPageIn(n) },
             { label: 'Change icon…', run: () => pickIcon(n) },
-            { label: 'Move up', sep: true, run: () => nudgeNote(n.id, -1), hide: !!q || !moves.nudgeNote(n.id, -1, true) },
-            { label: 'Move down', run: () => nudgeNote(n.id, 1), hide: !!q || !moves.nudgeNote(n.id, 1, true) },
-            { label: 'Nest under previous', run: () => nestNote(n.id, 'in'), hide: !!q || !moves.nestNote(n.id, 'in', rowAbove(n.id), true) },
-            { label: 'Move out', run: () => nestNote(n.id, 'out'), hide: !!q || !moves.nestNote(n.id, 'out', undefined, true) },
+            { label: 'Move up', sep: true, run: () => nudgeNote(n.id, -1), hide: !!q || !moves.canNudge(n.id, -1) },
+            { label: 'Move down', run: () => nudgeNote(n.id, 1), hide: !!q || !moves.canNudge(n.id, 1) },
+            { label: 'Nest under previous', run: () => nestNote(n.id, 'in'), hide: !!q || !moves.canNest(n.id, 'in', rowAbove(n.id)) },
+            { label: 'Move out', run: () => nestNote(n.id, 'out'), hide: !!q || !moves.canNest(n.id, 'out') },
             { label: 'Delete note', sep: true, danger: true, run: () => removeNote(n) },
           ]
         : [];
@@ -305,13 +310,13 @@
     if (e.key === 'Enter' && hits[0] && !composing(e)) { e.preventDefault(); const n = hits[0]; ui.search = ''; void openNote(n); }
     if (e.key === 'ArrowDown' && !composing(e)) { rowsNow()[0]?.focus(); e.preventDefault(); }
   }
-  let pull = $state(0);
-  let leaving = $state(false);
-  $effect.pre(() => { if (open) leaving = false; });
+  let pullPx = $state(0);
+  let swipedAway = $state(false);
+  $effect.pre(() => { if (open) swipedAway = false; });
   let touch: { x: number; y: number; axis: '' | 'x' | 'y' } | null = null;
   function drawer(node: HTMLElement) {
     if (!isMobile) return slide(node, { axis: 'x', duration: 220, easing: cubicOut });
-    if (leaving) return { duration: 0 };
+    if (swipedAway) return { duration: 0 };
     return { duration: 240, easing: cubicOut, css: (t: number) => `transform: translateX(${(t - 1) * 100}%)` };
   }
   function pullStart(e: TouchEvent) {
@@ -321,21 +326,21 @@
   }
   function pullMove(e: TouchEvent) {
     if (!touch) return;
-    if (e.defaultPrevented) { touch = null; pull = 0; return; }
+    if (e.defaultPrevented) { touch = null; pullPx = 0; return; }
     const dx = e.touches[0].clientX - touch.x, dy = e.touches[0].clientY - touch.y;
     if (!touch.axis && Math.hypot(dx, dy) > 10) touch.axis = Math.abs(dx) > Math.abs(dy) * 1.4 && dx < 0 ? 'x' : 'y';
-    if (touch.axis === 'x') pull = Math.min(0, dx);
+    if (touch.axis === 'x') pullPx = Math.min(0, dx);
   }
   function pullEnd(e: TouchEvent) {
     if (!touch) return;
-    const far = pull < -Math.min(90, (e.currentTarget as HTMLElement).offsetWidth * 0.25);
+    const far = pullPx < -Math.min(90, (e.currentTarget as HTMLElement).offsetWidth * 0.25);
     touch = null;
-    if (far) { leaving = true; setTimeout(() => (open = false), 180); }
-    pull = 0;
+    if (far) { swipedAway = true; setTimeout(() => (open = false), 180); }
+    pullPx = 0;
   }
   const drawerStyle = $derived(
-    leaving ? 'transform: translateX(-100%); transition: transform 0.18s ease-out'
-    : pull ? `transform: translateX(${pull}px); transition: none` : undefined);
+    swipedAway ? 'transform: translateX(-100%); transition: transform 0.18s ease-out'
+    : pullPx ? `transform: translateX(${pullPx}px); transition: none` : undefined);
 
   const syncLabel = $derived(sync.enabled ? (sync.status === 'error' ? 'sync error' : sync.status === 'syncing' ? 'syncing…' : sync.settings.lastSynced ? 'synced' : 'not synced yet') : 'local only');
   const GEAR = '<svg class="gear-i" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -382,7 +387,7 @@
     {/if}
     <div class="top" data-tauri-drag-region>
       <span class="search">
-        <input bind:this={searchEl} bind:value={ui.search} onkeydown={onSearchKey} onfocus={() => (searching = true)} onblur={() => (searching = false)}
+        <input bind:this={searchEl} bind:value={ui.search} onkeydown={onSearchKey} onfocus={() => (searchHasKeyboard = true)} onblur={() => (searchHasKeyboard = false)}
           onmousedown={() => { if (document.activeElement !== searchEl) hints.action('search', 'Search from anywhere'); }}
           placeholder={isMobile ? 'Search' : `Search  ${prettyKeys(shortcuts.keysFor('search'))}`} spellcheck="false" />
         {#if ui.search}
@@ -394,7 +399,6 @@
       </span>
     </div>
 
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <ul class="tree" role="tree" use:showOpen onkeydown={treeKey} use:touchReorder={reorder}
       onmousedown={(e) => { if (!(e.target as Element).closest('button, input, a, [tabindex]')) e.preventDefault(); }}
       oncontextmenu={(e) => { if (isMobile) e.preventDefault(); else rowMenu(e); }}
@@ -412,10 +416,9 @@
             <div class="note-row" class:collapsed={tree.isFolded(n.id)} draggable={!isMobile && !q} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation" use:swipeRow={swipe}>
               <button data-row data-note={n.id} class:active={n.id === CALENDAR_NOTE_ID ? onCalendar : n.id === notes.currentId}
-                class:enter={searching && !!q && n.id === hits[0]?.id} onclick={(e) => (e.metaKey && !isMobile && n.id !== CALENDAR_NOTE_ID ? tabs.open(n.id) : openNote(n))}>
+                class:enter={searchHasKeyboard && !!q && n.id === hits[0]?.id} onclick={(e) => rowClick(e, n)}>
                 <span class="title">
-                  <!-- svelte-ignore a11y_click_events_have_key_events -->
-                  <span class="ico-slot" role="button" tabindex="-1" data-tip="Change icon" onclick={(e) => iconTap(e, n)}>
+                  <span class="ico-slot" tabindex="-1" data-tip="Change icon">
                     {#if jumpNumbers.has(n.id)}<span class="num">{jumpNumbers.get(n.id)}</span>
                     {:else if n.icon}<Icon icon={n.icon} />{:else}
                     <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>{/if}

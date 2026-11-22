@@ -8,10 +8,10 @@
   import { SHELVES, tidyTex, fullSize, type MathPart } from './lib/mathParts';
   import type { MathDone } from './lib/mathEdit.svelte';
 
-  let { latex, display, at = null, onInput, onDone, onHistory }: {
+  let { latex, display, clickedAt = null, onInput, onDone, onHistory }: {
     latex: string;
     display: boolean;
-    at?: { x: number; y: number } | null;
+    clickedAt?: { x: number; y: number } | null;
     onInput: (latex: string) => void;
     onDone: (how: MathDone) => void;
     onHistory: (redo: boolean) => void;
@@ -26,11 +26,29 @@
   let finished = false;
   let popAt = $state<{ left: number; top?: number; bottom?: number } | null>(null);
 
-  let edge = '', lastKey = '';
+  let armedEdge = '', lastKeyDown = '';
   const EDGE_KEY: Record<string, string> = { forward: 'ArrowRight', backward: 'ArrowLeft', upward: 'ArrowUp', downward: 'ArrowDown' };
-  let bumped = $state(false), bumpTimer: ReturnType<typeof setTimeout> | undefined;
-  function bump() { bumped = false; requestAnimationFrame(() => { bumped = true; clearTimeout(bumpTimer); bumpTimer = setTimeout(() => (bumped = false), 400); }); }
+  let edgeBumped = $state(false), bumpTimer: ReturnType<typeof setTimeout> | undefined;
+  function bumpEdge() { edgeBumped = false; requestAnimationFrame(() => { edgeBumped = true; clearTimeout(bumpTimer); bumpTimer = setTimeout(() => (edgeBumped = false), 400); }); }
+  function secondArrowLeaves(dir: string) {
+    if (lastKeyDown !== EDGE_KEY[dir] || armedEdge === dir) return true;
+    armedEdge = dir;
+    bumpEdge();
+    return false;
+  }
   const done = (how: MathDone) => { if (finished) return; finished = true; onDone(how); off(); };
+  const doneAfterKey = (how: MathDone) => setTimeout(() => done(how));
+  const SLASH_KEYS = ['/', '[NumpadDivide]'];
+  const FRACTION_KEYS = SLASH_KEYS.map((key) => ({ key, ifMode: 'math' as const, command: ['insert', '\\dfrac{#@}{#?}'] as ['insert', string] }));
+  const CALCULATOR_SHORTCUTS = { '*': '\\times', '**': '\\cdot' };
+  const ROW_INSET = 8, POP_GAP = 8, SIDE_MARGIN = 12;
+  const TOOLS_FALLBACK = { w: 440, h: 90 };
+  function caretAtClickElseEnd(el: { getOffsetFromPoint(x: number, y: number): number; position: number }, at: { x: number; y: number }) {
+    try {
+      const o = el.getOffsetFromPoint(at.x, at.y);
+      if (o >= 0) el.position = o;
+    } catch { }
+  }
   const off = ui.editingMath(() => done('after'));
   const clean = tidyTex;
 
@@ -60,11 +78,8 @@
         el.popoverPolicy = 'off';
         el.menuItems = [];
         el.placeholder = '\\text{Formula}';
-        el.keybindings = [
-          ...el.keybindings.filter((k) => k.key !== '/' && k.key !== '[NumpadDivide]'),
-          ...['/', '[NumpadDivide]'].map((key) => ({ key, ifMode: 'math' as const, command: ['insert', '\\dfrac{#@}{#?}'] as ['insert', string] })),
-        ];
-        el.inlineShortcuts = { ...el.inlineShortcuts, '*': '\\times', '**': '\\cdot' };
+        el.keybindings = [...el.keybindings.filter((k) => !SLASH_KEYS.includes(k.key)), ...FRACTION_KEYS];
+        el.inlineShortcuts = { ...el.inlineShortcuts, ...CALCULATOR_SHORTCUTS };
         f.value = fullSize(latex);
       } catch { return; }
       mf = f;
@@ -74,19 +89,19 @@
       f.addEventListener('move-out', (e: Event) => {
         e.preventDefault();
         const dir = (e as CustomEvent<{ direction: string }>).detail.direction;
-        if (lastKey === EDGE_KEY[dir] && edge !== dir) { edge = dir; bump(); return; }
-        setTimeout(() => done(dir === 'backward' || dir === 'upward' ? 'before' : 'after'));
+        if (!secondArrowLeaves(dir)) return;
+        doneAfterKey(dir === 'backward' || dir === 'upward' ? 'before' : 'after');
       });
       // ⌫ on an empty formula from MathLive's own keyboard (a phone's) removes it, as the key does
       let prev = f.value;
       f.addEventListener('input', (e: Event) => {
         const kind = (e as InputEvent).inputType;
-        if (!prev && !f.value && kind === 'deleteContentBackward') setTimeout(() => done('remove'));
+        if (!prev && !f.value && kind === 'deleteContentBackward') doneAfterKey('remove');
         prev = f.value;
       });
       f.addEventListener('keydown', (e: KeyboardEvent) => {
-        lastKey = e.key;
-        if (edge && e.key !== EDGE_KEY[edge]) edge = '';
+        lastKeyDown = e.key;
+        if (armedEdge && e.key !== EDGE_KEY[armedEdge]) armedEdge = '';
         if (f.mode === 'latex') return;
         if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey)) {
           e.preventDefault(); e.stopPropagation(); done('after');
@@ -105,7 +120,7 @@
       requestAnimationFrame(() => {
         if (gone) return;
         f.focus();
-        if (at) { try { const o = el.getOffsetFromPoint(at.x, at.y); if (o >= 0) el.position = o; } catch { } }
+        if (clickedAt) caretAtClickElseEnd(el, clickedAt);
         place();
         if (isMobile) setTimeout(clearKeyboard, 350);
       });
@@ -148,9 +163,9 @@
     const kb = (window as any).mathVirtualKeyboard?.boundingRect as DOMRect | undefined;
     // (by its height: it docks at the window's foot, and its top is still sliding up while it comes)
     if (kb?.height) ins.bottom = Math.max(ins.bottom, kb.height);
-    const f = floatAt({ left: r.left - 8, right: r.right, top: r.top, bottom: r.bottom }, { w: tools.offsetWidth || 440, h: tools.offsetHeight || 90 },
-      { gap: 8, avoid: { ...ins, left: Math.max(ins.left, 12), right: Math.max(ins.right, 12) } });
-    popAt = f.side === 'above' ? { left: f.left, bottom: viewSize().h - r.top + 8 } : { left: f.left, top: f.top };
+    const f = floatAt({ left: r.left - ROW_INSET, right: r.right, top: r.top, bottom: r.bottom }, { w: tools.offsetWidth || TOOLS_FALLBACK.w, h: tools.offsetHeight || TOOLS_FALLBACK.h },
+      { gap: POP_GAP, avoid: { ...ins, left: Math.max(ins.left, SIDE_MARGIN), right: Math.max(ins.right, SIDE_MARGIN) } });
+    popAt = f.side === 'above' ? { left: f.left, bottom: viewSize().h - r.top + POP_GAP } : { left: f.left, top: f.top };
   }
   function clearKeyboard() {
     place();
@@ -177,24 +192,24 @@
     if (mf) mf.value = fullSize(v);
     onInput(v);
   }
-  const keep = (e: Event) => e.preventDefault();
+  const keepFocusInBox = (e: Event) => e.preventDefault();
   function backToBox() {
     tex = false;
     requestAnimationFrame(() => mf?.focus());
   }
 </script>
 
-<svelte:element this={display ? 'div' : 'span'} class="math-edit" class:display class:bumped bind:this={root}>
+<svelte:element this={display ? 'div' : 'span'} class="math-edit" class:display class:edge-bumped={edgeBumped} bind:this={root}>
   <svelte:element this={display ? 'div' : 'span'} class="slot" class:hidden={tex} bind:this={slot}></svelte:element>
   <svelte:element this={display ? 'div' : 'span'} class="tools" class:pop={!display} bind:this={tools} style:left={popAt ? `${popAt.left}px` : null} style:top={popAt?.top !== undefined ? `${popAt.top}px` : null} style:bottom={popAt?.bottom !== undefined ? `${popAt.bottom}px` : null}>
     <span class="tabs">
       <span class="shelves" role="tablist">
         {#each SHELVES as s (s.id)}
-          <button type="button" role="tab" aria-selected={shelf === s.id} aria-label={s.label} title={s.label} class:on={shelf === s.id && !tex} onmousedown={keep} onclick={() => { shelf = s.id; backToBox(); }}>{isMobile ? s.short : s.label}</button>
+          <button type="button" role="tab" aria-selected={shelf === s.id} aria-label={s.label} title={s.label} class:on={shelf === s.id && !tex} onmousedown={keepFocusInBox} onclick={() => { shelf = s.id; backToBox(); }}>{isMobile ? s.short : s.label}</button>
         {/each}
       </span>
-      <button type="button" class="texb" class:on={tex} aria-pressed={tex} onmousedown={keep} onclick={() => { if (tex) backToBox(); else tex = true; }}>TeX</button>
-      <button type="button" class="done" onmousedown={keep} onclick={() => done('after')}>Done</button>
+      <button type="button" class="texb" class:on={tex} aria-pressed={tex} onmousedown={keepFocusInBox} onclick={() => { if (tex) backToBox(); else tex = true; }}>TeX</button>
+      <button type="button" class="done" onmousedown={keepFocusInBox} onclick={() => done('after')}>Done</button>
     </span>
     {#if tex}
       <textarea class="texin" rows={display ? 3 : 1} spellcheck="false" value={texValue} {@attach (el: HTMLTextAreaElement) => { el.focus(); }}
@@ -203,7 +218,7 @@
     {:else}
       <span class="parts" role="tabpanel">
         {#each SHELVES.find((s) => s.id === shelf)!.parts as p (p.tex)}
-          <button type="button" class="part" title={p.keys ? `${p.name} — type ${p.keys}` : p.name} aria-label={p.name} onmousedown={keep} onclick={() => put(p)}>
+          <button type="button" class="part" title={p.keys ? `${p.name} — type ${p.keys}` : p.name} aria-label={p.name} onmousedown={keepFocusInBox} onclick={() => put(p)}>
             {#if faces[p.tex]}{@html faces[p.tex]}{:else}{p.show ?? p.tex}{/if}
           </button>
         {/each}
@@ -224,7 +239,7 @@
     --caret-color: var(--accent); --selection-background-color: var(--accent-soft); --contains-highlight-background-color: transparent;
     --placeholder-color: var(--fg-dim); --smart-fence-color: var(--fg-dim);
   }
-  .bumped .slot :global(math-field) { animation: edge-bump 0.4s ease-out; }
+  .edge-bumped .slot :global(math-field) { animation: edge-bump 0.4s ease-out; }
   @keyframes edge-bump { 0% { box-shadow: 0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent); } 100% { box-shadow: 0 0 0 2px transparent; } }
   .display .slot :global(math-field) { display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 10px 12px; font-size: 1.15em; border-radius: 12px; }
   .display .slot :global(math-field::part(content)) { justify-content: center; }

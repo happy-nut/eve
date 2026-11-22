@@ -6,32 +6,32 @@ import {
 export function depthAt(s: Sequence, i: number) {
   let depth = 0;
   for (let j = 0; j < i; j++) {
-    const st = s.messages[j];
+    const st = s.steps[j];
     if ('block' in st) depth += st.block === 'end' ? -1 : DIVIDERS.has(st.block) ? 0 : 1;
   }
-  const st = s.messages[i];
+  const st = s.steps[i];
   return Math.max(0, depth - ('block' in st && (st.block === 'end' || DIVIDERS.has(st.block)) ? 1 : 0));
 }
 export const DIVIDERS = new Set<BlockKind>(['else', 'and', 'option']);
 export const OPENERS: [BlockKind, string][] = [['loop', 'Loop'], ['alt', 'If / else'], ['opt', 'Optional'], ['par', 'At once'], ['critical', 'Critical'], ['break', 'Break'], ['rect', 'Highlight']];
 export const SPLITS: [BlockKind, string][] = [['else', 'Else'], ['and', 'And'], ['option', 'Option']];
 export function dropStep(s: Sequence, i: number) {
-  const st = s.messages[i];
+  const st = s.steps[i];
   if ('block' in st && !DIVIDERS.has(st.block) && st.block !== 'end') {
     let depth = 0;
-    for (let j = i + 1; j < s.messages.length; j++) {
-      const x = s.messages[j];
+    for (let j = i + 1; j < s.steps.length; j++) {
+      const x = s.steps[j];
       if (!('block' in x) || DIVIDERS.has(x.block)) continue;
       if (x.block !== 'end') depth++;
-      else if (depth-- === 0) { s.messages.splice(j, 1); break; }
+      else if (depth-- === 0) { s.steps.splice(j, 1); break; }
     }
   }
-  s.messages.splice(i, 1);
+  s.steps.splice(i, 1);
 }
 export function openerOf(s: Sequence, i: number) {
   let depth = 0;
   for (let j = i - 1; j >= 0; j--) {
-    const x = s.messages[j];
+    const x = s.steps[j];
     if (!('block' in x) || DIVIDERS.has(x.block)) continue;
     if (x.block === 'end') depth++;
     else if (depth-- === 0) return x.block;
@@ -39,7 +39,7 @@ export function openerOf(s: Sequence, i: number) {
   return null;
 }
 export const SPLIT_OF: Partial<Record<BlockKind, BlockKind>> = { alt: 'else', par: 'and', critical: 'option' };
-export function wellFormed(steps: Sequence['messages']) {
+export function wellFormed(steps: Sequence['steps']) {
   const open: BlockKind[] = [];
   for (const st of steps) {
     if (!('block' in st)) continue;
@@ -52,13 +52,13 @@ export function wellFormed(steps: Sequence['messages']) {
 export const ARROWS: [string, string][] = [
   ['->>', '→  Sends'], ['-->>', '⇠  Replies'], ['-)', '→  Sends, no wait'], ['--)', '⇠  Replies, no wait'], ['-x', '→  Lost'], ['--x', '⇠  Lost reply'],
 ];
-export const arrowOf = (m: Message) => m.arrow ?? (m.reply ? '-->>' : '->>');
+export const arrowOf = (m: Message) => m.writtenArrow ?? (m.reply ? '-->>' : '->>');
 export const seqArrows = (m: Message) => (ARROWS.some(([a]) => a === arrowOf(m)) ? ARROWS : [...ARROWS, [arrowOf(m), arrowOf(m)] as [string, string]]);
 export function setArrow(m: Message, v: string) {
   m.reply = replies(v);
-  if (v === '->>' || v === '-->>') delete m.arrow; else m.arrow = v;
+  if (v === '->>' || v === '-->>') delete m.writtenArrow; else m.writtenArrow = v;
 }
-export const BARS: [string, string][] = [['', 'No bar'], ['+', 'Bar starts'], ['-', 'Bar ends']];
+export const BARS: [string, string][] = [['', 'No bar'], ['start', 'Bar starts'], ['end', 'Bar ends']];
 export { pieValue } from './diagram';
 
 export function dropBranch(m: Mindmap, i: number) {
@@ -93,34 +93,35 @@ export const endOf = (g: Gantt) => {
   const last = all[all.length - 1];
   return last ? addDays(last.start, last.days) : (starter('gantt') as Gantt).sections[0].tasks[0].start;
 };
-export const startOf = (t: Task) => (t.after === undefined ? 'date' : t.after === '' ? 'prev' : `after ${t.after}`);
-function waitsFor(all: Task[], x: Task, t: Task, seen = new Set<Task>()): boolean {
+export const startOf = (t: Task) => (!t.after ? 'date' : 'prev' in t.after ? 'prev' : `after ${t.after.ids.join(' ')}`);
+export const afterIds = (t: Task) => (t.after && 'ids' in t.after ? t.after.ids : []);
+function dependsOn(all: Task[], x: Task, t: Task, seen = new Set<Task>()): boolean {
   if (x === t) return true;
-  if (seen.has(x) || x.after === undefined) return false;
+  if (seen.has(x) || !x.after) return false;
   seen.add(x);
-  const before = x.after === '' ? [all[all.indexOf(x) - 1]] : x.after.split(' ').map((id) => all.find((y) => y.id === id));
-  return before.some((y) => !!y && waitsFor(all, y, t, seen));
+  const before = 'prev' in x.after ? [all[all.indexOf(x) - 1]] : x.after.ids.map((id) => all.find((y) => y.id === id));
+  return before.some((y) => !!y && dependsOn(all, y, t, seen));
 }
 export function startOptions(g: Gantt, t: Task) {
   const all = g.sections.flatMap((s) => s.tasks);
-  const others = all.map((x, k) => [x, k] as const).filter(([x]) => x !== t && !waitsFor(all, x, t));
+  const others = all.map((x, k) => [x, k] as const).filter(([x]) => x !== t && !dependsOn(all, x, t));
   const opts: [string, string][] = [['date', 'On a date'], ...(all[0] === t ? [] : [['prev', 'After the one before'] as [string, string]]),
     ...others.map(([x, k]) => [x.id ? `after ${x.id}` : `task ${k}`, `After “${x.name.trim() || 'Task'}”`] as [string, string])];
-  if (!opts.some(([v]) => v === startOf(t))) opts.push([startOf(t), `After ${t.after!.split(' ').map((id) => `“${taskName(g, id)}”`).join(' and ')}`]);
+  if (!opts.some(([v]) => v === startOf(t))) opts.push([startOf(t), `After ${afterIds(t).map((id) => `“${taskName(g, id)}”`).join(' and ')}`]);
   return opts;
 }
 export function setStart(g: Gantt, t: Task, v: string) {
   const all = g.sections.flatMap((s) => s.tasks);
   if (v === 'date') { t.start = ganttDates(g).get(t)!.start; delete t.after; return; }
-  if (v === 'prev') { t.after = ''; t.start = ''; return; }
+  if (v === 'prev') { t.after = { prev: true }; t.start = ''; return; }
   const k = /^task (\d+)$/.exec(v);
   if (k) { const x = all[+k[1]]; x.id ??= freshId('t', all.filter((y) => y.id).map((y) => ({ id: y.id! }))); v = `after ${x.id}`; }
-  t.after = v.replace(/^after /, '');
+  t.after = { ids: v.replace(/^after /, '').split(' ') };
   t.start = '';
 }
 export const taskName = (g: Gantt, id: string) => g.sections.flatMap((s) => s.tasks).find((x) => x.id === id)?.name.trim() || id;
 export function andAfterOptions(g: Gantt, t: Task) {
-  const has = new Set((t.after ?? '').split(' '));
+  const has = new Set(afterIds(t));
   const others = g.sections.flatMap((s) => s.tasks).map((x, k) => [x, k] as const).filter(([x]) => x !== t && !(x.id && has.has(x.id)));
   return [['', '+ And after…'] as [string, string], ...others.map(([x, k]) => [x.id ?? `task ${k}`, `And “${x.name.trim() || 'Task'}”`] as [string, string])];
 }
@@ -129,7 +130,7 @@ export function addAfter(g: Gantt, t: Task, v: string) {
   const all = g.sections.flatMap((s) => s.tasks);
   const k = /^task (\d+)$/.exec(v);
   if (k) { const x = all[+k[1]]; x.id ??= freshId('t', all.filter((y) => y.id).map((y) => ({ id: y.id! }))); v = x.id; }
-  t.after = `${t.after} ${v}`.trim();
+  t.after = { ids: [...afterIds(t), v] };
 }
 export const TAG_OPTIONS: [string, string][] = [
   ['', '—'], ['done', 'Done'], ['active', 'Active'], ['crit', 'Critical'], ['milestone', 'Milestone'],

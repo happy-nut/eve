@@ -7,13 +7,14 @@ export interface Row<T> {
   item: T;
   top: number;
   child: boolean;
+  key: string;
 }
 
 export function rows<T extends Branch<T>>(items: T[], open: ReadonlySet<number>): Row<T>[] {
   return items.flatMap((item, top) =>
     open.has(top) && item.sections?.length
-      ? [{ item, top, child: false }, ...item.sections.map((s) => ({ item: s, top, child: true }))]
-      : [{ item, top, child: false }],
+      ? [{ item, top, child: false, key: `${top}` }, ...item.sections.map((s, j) => ({ item: s, top, child: true, key: `${top}.${j}` }))]
+      : [{ item, top, child: false, key: `${top}` }],
   );
 }
 

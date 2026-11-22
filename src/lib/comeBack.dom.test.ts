@@ -1,6 +1,6 @@
 // Coming back to the window: the caret goes back where it was, but not over a click that brought the window back.
 import { test, expect, vi } from 'vitest';
-import { cameBack, WAIT } from './comeBack';
+import { cameBack, CLICK_WAIT_MS } from './comeBack';
 
 /** run with the clock in hand (put back before the shared after-test checks, which wait on real time) */
 const clocked = (f: () => void) => () => { vi.useFakeTimers({ toFake: ['setTimeout', 'performance'] }); try { f(); } finally { vi.useRealTimers(); } };
@@ -10,7 +10,7 @@ test('back by ⌘Tab or the Dock: the caret is put back', clocked(() => {
   vi.advanceTimersByTime(1000);
   const restore = vi.fn();
   cameBack(restore);
-  vi.advanceTimersByTime(WAIT);
+  vi.advanceTimersByTime(CLICK_WAIT_MS);
   expect(restore).toHaveBeenCalledOnce();
 }));
 
@@ -20,7 +20,7 @@ test('back by a click that lands just after the window\'s focus: the click keeps
   cameBack(restore);
   vi.advanceTimersByTime(10);
   press();
-  vi.advanceTimersByTime(WAIT);
+  vi.advanceTimersByTime(CLICK_WAIT_MS);
   expect(restore).not.toHaveBeenCalled();
 }));
 
@@ -30,6 +30,6 @@ test('back by a click that lands just before the window\'s focus: nothing is put
   vi.advanceTimersByTime(30);
   const restore = vi.fn();
   cameBack(restore);
-  vi.advanceTimersByTime(WAIT);
+  vi.advanceTimersByTime(CLICK_WAIT_MS);
   expect(restore).not.toHaveBeenCalled();
 }));

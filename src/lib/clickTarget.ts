@@ -14,7 +14,7 @@ export const ClickTarget = Extension.create({
   name: 'clickTarget',
   addProseMirrorPlugins() {
     let down: { x: number; y: number; block: number } | null = null;
-    let typed = 0;
+    let keysSinceClick = 0;
     return [
       new Plugin({
         props: {
@@ -23,14 +23,14 @@ export const ClickTarget = Extension.create({
               down = e.button === 0 && !e.shiftKey && e.detail === 1 ? { x: e.clientX, y: e.clientY, block: blockAt(view, e) } : null;
               return false;
             },
-            keydown: () => { typed++; return false; },
+            keydown: () => { keysSinceClick++; return false; },
             mouseup: (view, e) => {
               const d = down;
               down = null;
               if (!d || d.block < 0 || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) return false;
               // after ProseMirror has read the selection the browser made
-              const keys = typed;
-              setTimeout(() => { if (!view.isDestroyed && typed === keys) settle(view, d.block, d.x, d.y); }, 0);
+              const keys = keysSinceClick;
+              setTimeout(() => { if (!view.isDestroyed && keysSinceClick === keys) settle(view, d.block, d.x, d.y); }, 0);
               return false;
             },
           },

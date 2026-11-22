@@ -1,19 +1,21 @@
-import { fromCode, ganttDates, type Gantt, type Pie, type Timeline } from './diagram';
+import { fromCode, ganttDates, type Flowchart, type Gantt, type Pie, type Timeline } from './diagram';
 import { esc, laneSvg } from './lanes';
 import { mindSvg } from './mindmap';
 import { huesOf } from './chartHues';
 
+const lanesCanDraw = (d: Flowchart) => !!d.lanes?.length
+  || (d.nodes.length > 0 && (d.dir === 'TD' || d.dir === 'LR') && !d.keptLines?.length && !d.preamble?.length
+    && !d.nodes.some((n) => n.raw || n.mermaidClass) && !d.edges.some((e) => e.writtenArrow));
+
 export function chartHtml(code: string, laneMin = 0.64): string | null {
   const d = fromCode(code);
   if (!d) return null;
-  if (d.kind === 'flowchart' && d.lanes?.length) return laneSvg(d, laneMin);
-  if (d.kind === 'flowchart' && d.nodes.length && (d.dir === 'TD' || d.dir === 'LR') && !d.extra?.length && !d.pre?.length
-    && !d.nodes.some((n) => n.raw || n.cls) && !d.edges.some((e) => e.arrow)) return laneSvg(d, laneMin);
+  if (d.kind === 'flowchart' && lanesCanDraw(d)) return laneSvg(d, laneMin);
   if (d.kind === 'sequence' && !d.people.length) return `<div class="chart chart-empty"><p>Nothing to show yet</p></div>`;
   if (d.kind === 'mindmap') return mindSvg(d, laneMin);
   if (d.kind === 'pie') return pie(d);
   if (d.kind === 'timeline') return timeline(d);
-  if (d.kind === 'gantt') return d.extra?.length ? null : gantt(d);
+  if (d.kind === 'gantt') return d.keptLines?.length ? null : gantt(d);
   return null;
 }
 
@@ -59,8 +61,25 @@ function timeline(d: Timeline) {
 }
 
 const DAY = 864e5;
+const DECADE_DAYS = 3660;
+const MAX_AXIS_LABELS = 6;
 const dayNum = (iso: string) => Math.round(Date.parse(`${iso}T00:00:00Z`) / DAY);
 const md = (n: number) => { const d = new Date(n * DAY); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
+
+function ticksFor(from: number, to: number, span: number): number[] {
+  const ticks: number[] = [];
+  if (span <= 16) for (let n = from; n <= to; n++) ticks.push(n);
+  else if (span <= 120) for (let n = from; n <= to; n += 7) ticks.push(n);
+  else {
+    const d0 = new Date(from * DAY), years = span > DECADE_DAYS;
+    for (let y = d0.getUTCFullYear(), m = years ? 0 : d0.getUTCMonth() + 1; ; years ? y++ : m++) {
+      const n = Math.round(Date.UTC(y, m, 1) / DAY);
+      if (n > to) break;
+      if (n >= from) ticks.push(n);
+    }
+  }
+  return ticks;
+}
 
 function gantt(d: Gantt) {
   const dates = ganttDates(d);
@@ -70,19 +89,9 @@ function gantt(d: Gantt) {
   const to = Math.max(...tasks.map((t) => dayNum(t.start) + Math.max(1, t.days)));
   const span = Math.max(1, to - from);
   const pct = (n: number) => `${(((n - from) / span) * 100).toFixed(3)}%`;
-  const ticks: number[] = [];
-  if (span <= 16) for (let n = from; n <= to; n++) ticks.push(n);
-  else if (span <= 120) for (let n = from; n <= to; n += 7) ticks.push(n);
-  else {
-    const d0 = new Date(from * DAY), years = span > 3660;
-    for (let y = d0.getUTCFullYear(), m = years ? 0 : d0.getUTCMonth() + 1; ; years ? y++ : m++) {
-      const n = Math.round(Date.UTC(y, m, 1) / DAY);
-      if (n > to) break;
-      if (n >= from) ticks.push(n);
-    }
-  }
-  const label = span > 3660 ? (n: number) => String(new Date(n * DAY).getUTCFullYear()) : md;
-  const every = Math.ceil(ticks.length / 6);
+  const ticks = ticksFor(from, to, span);
+  const label = span > DECADE_DAYS ? (n: number) => String(new Date(n * DAY).getUTCFullYear()) : md;
+  const every = Math.ceil(ticks.length / MAX_AXIS_LABELS);
   const named = ticks.filter((_, i) => i % every === 0);
   const end = (n: number) => ((n - from) / span < 0.04 ? ' class="first"' : (n - from) / span > 0.96 ? ' class="last"' : '');
   const axis = named.map((n) => `<span${end(n)} style="left:${pct(n)}">${label(n)}</span>`).join('');

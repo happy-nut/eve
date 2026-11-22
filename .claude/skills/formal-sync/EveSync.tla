@@ -105,7 +105,7 @@ Pull(d) ==
             /\ pc' = [pc EXCEPT ![d] = "hash"]
   /\ UNCHANGED <<loc, rfile, rver, untouched, seen, agreed, readable, snap, tries, copies, typed, clock>>
 
-\* gather: takeEditorKeys(); `seen` and `untouched` from the note's hash, taken before `await hashes.file`
+\* gather: flushPendingEdits(); `seen` and `untouched` from the note's hash, taken before `await hashes.file`
 Hash(d) ==
   /\ pc[d] = "hash"
   /\ untouched' = [untouched EXCEPT ![d] = ~loc[d].none /\ ~prev[d].none /\ loc[d] = prev[d]]
@@ -139,7 +139,7 @@ KeepEarlier(d) ==
   /\ copies' = IF Earlier(d).w \ (Later(d).w \cup Agreed(d).w) # {} THEN copies \cup {Earlier(d).w} ELSE copies
   /\ loc' = [loc EXCEPT ![d] = Later(d)] /\ UNCHANGED clock
 
-\* decide: no wait left before mergeRemote; the note as it is now (takeEditorKeys() again first)
+\* decide: no wait left before mergeRemote; the note as it is now (flushPendingEdits() again first)
 Decide(d) ==
   /\ pc[d] = "decide"
   /\ IF untouched[d] /\ loc[d].w = seen[d].w

@@ -14,11 +14,13 @@ export function viewSize() {
  * bar along the bottom, and under that whatever an on-screen keyboard covers that the page was not shortened for
  * (visualViewport: Android shortens the page, a keyboard laid over it does not). 8px off the window's sides.
  */
+const MAC_TOOLBAR = 44, PHONE_NOTE_BAR = 60, PHONE_FORMAT_BAR = 64, WINDOW_EDGE = 8;
+
 export function screenInsets(): Insets {
-  if (!isMobile) return { top: 44, right: 8, bottom: 8, left: 8 };
+  if (!isMobile) return { top: MAC_TOOLBAR, right: WINDOW_EDGE, bottom: WINDOW_EDGE, left: WINDOW_EDGE };
   const vv = window.visualViewport;
   const keyboard = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
-  return { top: 60, right: 8, bottom: 64 + keyboard, left: 8 };
+  return { top: PHONE_NOTE_BAR, right: WINDOW_EDGE, bottom: PHONE_FORMAT_BAR + keyboard, left: WINDOW_EDGE };
 }
 
 export function floatAt(
@@ -55,12 +57,17 @@ export function floatAt(
   return room.below >= room.above ? put('below', room.below) : put('above', room.above);
 }
 
-export function placeAt(rect: DOMRect, want = 300, width = 220): string {
+function besideCaret(rect: DOMRect, want: number, width: number): string | null {
   const H = viewSize().h, ins = screenInsets();
-  if (isMobile && Math.max(H - ins.bottom - rect.bottom, rect.top - ins.top) - 4 < 140) {
-    const f = floatAt(rect, { w: width, h: want }, { prefer: 'side', gap: 12, avoid: { top: 4, right: 0, bottom: 4, left: 0 } });
-    if (f.side === 'left' || f.side === 'right') return `left:${f.left}px; top:${f.top}px; max-height:${f.maxHeight}px`;
-  }
+  if (!isMobile || Math.max(H - ins.bottom - rect.bottom, rect.top - ins.top) - 4 >= 140) return null;
+  const f = floatAt(rect, { w: width, h: want }, { prefer: 'side', gap: 12, avoid: { top: 4, right: 0, bottom: 4, left: 0 } });
+  return f.side === 'left' || f.side === 'right' ? `left:${f.left}px; top:${f.top}px; max-height:${f.maxHeight}px` : null;
+}
+
+export function placeAt(rect: DOMRect, want = 300, width = 220): string {
+  const beside = besideCaret(rect, want, width);
+  if (beside) return beside;
+  const H = viewSize().h;
   const f = floatAt(rect, { w: width, h: want });
   const floor = (room: number, edge: number) => Math.max(room, Math.min(72, edge));
   if (f.side === 'above') return `left:${f.left}px; bottom:${H - rect.top + 4}px; max-height:${floor(f.maxHeight, rect.top - 8)}px`;
@@ -115,7 +122,7 @@ export function focusNote() {
   document.querySelector<HTMLElement>('main .tiptap, main .calendar .day.cursor')?.focus();
 }
 
-export function held<T>(get: () => T | null | undefined): () => T {
+export function lastShown<T>(get: () => T | null | undefined): () => T {
   let last = get() as T;
   return () => (last = get() ?? last);
 }

@@ -38,20 +38,20 @@
   let grab = false, renamed = false, deciding = false;
   let docked = $state(false), barMax = $state(0);
   let tallest = 0, wide = 0, measured: string | null = null;
-  function measure() {
+  function measureSelection() {
     if (!layer) return;
     clearTimeout(retry);
     const el = sel ? find(sel) : null;
     rect = el ? box(el) : renamed || (rect && sel === measured) ? rect : null;
     measured = sel;
     if (el) renamed = false;
-    if (sel && !el && tries++ < 40) retry = setTimeout(measure, 50);
+    if (sel && !el && tries++ < 40) retry = setTimeout(measureSelection, 50);
     else tries = 0;
     if (el && (unseen || (addedIn !== null && addedIn !== version))) { unseen = false; addedIn = null; el.scrollIntoView?.({ block: 'center', inline: 'center' }); }
     tick().then(placeBar);
   }
-  $effect(() => { void version; void sel; tick().then(measure); });
-  function keepSides() {
+  $effect(() => { void version; void sel; tick().then(measureSelection); });
+  function pinMindmapBranchSides() {
     if (d.kind !== 'mindmap') return;
     const root = host.querySelector('[data-spot="root"]')?.getBoundingClientRect();
     if (!root) return;
@@ -60,7 +60,7 @@
       if (t && !held.sides.has(t)) held.sides.set(t, r.left + r.width / 2 > root.left + root.width / 2);
     }
   }
-  $effect(() => { void version; tick().then(keepSides); });
+  $effect(() => { void version; tick().then(pinMindmapBranchSides); });
   $effect(() => { if (!sel) held.hues.clear(); });
   let said = '';
 
@@ -88,7 +88,7 @@
   function commit() {
     const s = spot;
     if (!s || !sel) return;
-    if (s.onDone && text.trim() && text !== before) {
+    if (s.commitOnDone && text.trim() && text !== before) {
       const k = s.set(text.trim());
       if (k) { renamed = k !== sel; sel = k; }
       before = text;
@@ -98,7 +98,7 @@
     const s = spot;
     if (held.sides.has(said.trim())) { const side = held.sides.get(said.trim())!; held.sides.delete(said.trim()); held.sides.set(text.trim(), side); }
     said = text;
-    if (s && !s.onDone) s.set(text);
+    if (s && !s.commitOnDone) s.set(text);
   }
   function letField() {
     const a = document.activeElement;
@@ -151,31 +151,34 @@
     }
   }
   const chose = () => tick().then(() => { if (!field) return; field.focus({ preventScroll: true }); field.setSelectionRange(field.value.length, field.value.length); });
+  function finishTyping(e: KeyboardEvent) {
+    e.preventDefault();
+    if (!text.trim() && before.trim()) { text = before; spot?.set(before); }
+    fresh = null;
+    commit(); letField(); sel = null;
+  }
+  function backIntoBar(e: KeyboardEvent) {
+    const first = bar?.querySelector<HTMLElement>('button:not(:disabled), input, textarea');
+    if (first) { e.preventDefault(); first.focus(); if (first instanceof HTMLInputElement) first.select(); }
+  }
+  function runTabActOrCycleKind(e: KeyboardEvent) {
+    const a = spot?.acts.find((x) => x.onTab && !x.off);
+    const kind = !a ? spot?.fields.find((f) => f.kind === 'select') : null;
+    if (kind && kind.kind === 'select' && kind.options.length > 1) {
+      e.preventDefault();
+      const i = kind.options.findIndex(([v]) => v === kind.value);
+      kind.set(kind.options[(i + 1) % kind.options.length][0]);
+      return;
+    }
+    if (a && fresh === sel && text === before) e.preventDefault();
+    else if (a) { e.preventDefault(); void run(a); }
+  }
   function onKey(e: KeyboardEvent) {
     if (composing(e)) return;
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      if (!text.trim() && before.trim()) { text = before; spot?.set(before); }
-      fresh = null;
-      commit(); letField(); sel = null;
-    }
+    if (e.key === 'Enter' && !e.shiftKey) finishTyping(e);
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); escape(); }
-    else if (e.key === 'Tab' && e.shiftKey) {
-      const first = bar?.querySelector<HTMLElement>('button:not(:disabled), input, textarea');
-      if (first) { e.preventDefault(); first.focus(); if (first instanceof HTMLInputElement) first.select(); }
-    }
-    else if (e.key === 'Tab' && !e.shiftKey) {
-      const a = spot?.acts.find((x) => x.tab && !x.off);
-      const kind = !a ? spot?.fields.find((f) => f.kind === 'select') : null;
-      if (kind && kind.kind === 'select' && kind.options.length > 1) {
-        e.preventDefault();
-        const i = kind.options.findIndex(([v]) => v === kind.value);
-        kind.set(kind.options[(i + 1) % kind.options.length][0]);
-        return;
-      }
-      if (a && fresh === sel && text === before) e.preventDefault();
-      else if (a) { e.preventDefault(); void run(a); }
-    }
+    else if (e.key === 'Tab' && e.shiftKey) backIntoBar(e);
+    else if (e.key === 'Tab') runTabActOrCycleKind(e);
   }
 
   function onHostClick(e: MouseEvent) {
@@ -212,56 +215,72 @@
     hover = el && host.contains(el) && el.getAttribute('data-spot') !== sel && !layer.contains(e.target as Node) ? box(el) : null;
   }
 
-  function placeBar() {
-    if (!layer || !bar) return;
-    const o = layer.getBoundingClientRect(), W = layer.clientWidth, H = layer.clientHeight;
-    const r = rect ?? { x: 8, y: 8, w: 140, h: 32 };
-    const within = { left: o.left + 4, top: o.top + 4, right: o.left + W - 4, bottom: o.top + H - 4 };
-    const half = isMobile ? 20 : 17, fieldTop = r.y + r.h / 2 - half;
-    const size = { w: bar.offsetWidth, h: bar.offsetHeight };
-    const beside = { left: o.left + fieldLeft, right: o.left + fieldLeft + fieldW, top: o.top + fieldTop - (size.h - half * 2) / 2, bottom: o.top + fieldTop + half * 2 };
-    const around = { left: o.left + r.x, right: o.left + r.x + r.w, top: o.top + Math.min(r.y, fieldTop), bottom: o.top + Math.max(r.y + r.h, fieldTop + half * 2) };
+  type Placing = {
+    o: DOMRect; W: number; H: number; size: { w: number; h: number };
+    fieldTop: number; fieldBottom: number; around: Box; within: Box; covers: (f: { left: number; top: number }) => number;
+  };
+  type Box = { left: number; top: number; right: number; bottom: number };
+  const KEYBOARD_UP_PX = 120;
+  function phoneKeyboardHeight() {
+    const win = viewSize();
+    if (win.w !== wide) { wide = win.w; tallest = 0; }
+    tallest = Math.max(tallest, win.h);
+    return isMobile ? Math.max(screenInsets().bottom - 64, tallest - win.h) : 0;
+  }
+  function scrollFieldAbove(under: number) {
+    if (under <= 0) return;
+    let sc: HTMLElement | null = layer.parentElement;
+    while (sc && !(sc.scrollHeight > sc.clientHeight && /auto|scroll/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement;
+    if (sc) sc.scrollTop += under;
+  }
+  function dockAboveKeyboard(p: Placing) {
+    docked = true;
+    barMax = p.W - 8;
+    const top = viewSize().h - screenInsets().bottom - p.o.top - p.size.h - 4;
+    barAt = { left: 4, top };
+    scrollFieldAbove(p.fieldBottom + 8 - top);
+  }
+  function dockBelowOrAboveField(p: Placing) {
+    const { o, W, H, size, fieldTop, fieldBottom, covers } = p;
+    const seen = viewSize().h - screenInsets().bottom - o.top - size.h - 8, top0 = screenInsets().top - o.top + 4;
+    const offField = (t: number) => t >= fieldBottom + 6 || t + size.h <= fieldTop - 6;
+    const underDrawing = Math.min(H - (parseFloat(getComputedStyle(host).paddingBottom) || 0) + 6, seen);
+    const tops = [underDrawing, fieldBottom + 8, fieldTop - size.h - 8, Math.min(H + 4, seen)]
+      .filter((t) => t >= top0 && t <= seen && offField(t));
+    const cost = (t: number) => covers({ left: o.left + fieldLeft, top: o.top + t }) * 1e5 + Math.abs(t - fieldTop);
+    const top = tops.length ? tops.reduce((a, t) => (cost(t) < cost(a) ? t : a)) : fieldTop - size.h - 8;
+    const stop = [...(layer.parentElement?.parentElement?.querySelectorAll('.mermaid-expand, .mermaid-play, .dock') ?? [])].map((b) => b.getBoundingClientRect())
+      .filter((q) => q.top < o.top + top + size.h && q.bottom > o.top + top && q.left - o.left > 200).map((q) => q.left - o.left - 8);
+    barMax = Math.max(160, Math.min(W - 8, ...stop) - 4);
+    const w = Math.min(size.w, barMax);
+    barAt = { left: Math.max(4, Math.min(fieldLeft, 4 + barMax - w)), top };
+  }
+  function leastCoveringPlace(p: Placing) {
+    const { o, size, fieldTop, fieldBottom, around, within, covers } = p;
+    const beside = { left: o.left + fieldLeft, right: o.left + fieldLeft + fieldW, top: o.top + fieldTop - (size.h - (fieldBottom - fieldTop)) / 2, bottom: o.top + fieldBottom };
     const tries = [
       floatAt(beside, size, { prefer: 'side', within, gap: 6 }),
       floatAt(around, size, { prefer: 'below', within, gap: 8, align: 'start' }),
       floatAt(around, size, { prefer: 'above', within, gap: 8, align: 'start' }),
     ].filter((f, i) => (i === 0 ? f.side === 'right' || f.side === 'left' : f.side !== 'inside'));
+    return tries.reduce<(typeof tries)[number] | null>((a, f) => (!a || covers(f) < covers(a) ? f : a), null);
+  }
+  function placeBar() {
+    if (!layer || !bar) return;
+    const o = layer.getBoundingClientRect(), W = layer.clientWidth, H = layer.clientHeight;
+    const r = rect ?? { x: 8, y: 8, w: 140, h: 32 };
+    const within = { left: o.left + 4, top: o.top + 4, right: o.left + W - 4, bottom: o.top + H - 4 };
+    const half = isMobile ? 20 : 17, fieldTop = r.y + r.h / 2 - half, fieldBottom = fieldTop + half * 2;
+    const size = { w: bar.offsetWidth, h: bar.offsetHeight };
+    const around = { left: o.left + r.x, right: o.left + r.x + r.w, top: o.top + Math.min(r.y, fieldTop), bottom: o.top + Math.max(r.y + r.h, fieldBottom) };
     const others = [...host.querySelectorAll('[data-spot]'), ...(host.parentElement?.querySelectorAll('.mermaid-expand, .mermaid-play, .dock') ?? [])]
       .filter((el) => el.getAttribute('data-spot') !== sel).map((el) => el.getBoundingClientRect());
     const covers = (f: { left: number; top: number }) => others.filter((q) => q.width && q.left < f.left + size.w && q.right > f.left && q.top < f.top + size.h && q.bottom > f.top).length;
-    const best = tries.reduce<(typeof tries)[number] | null>((a, f) => (!a || covers(f) < covers(a) ? f : a), null);
-    const win = viewSize();
-    if (win.w !== wide) { wide = win.w; tallest = 0; }
-    tallest = Math.max(tallest, win.h);
-    const kb = isMobile ? Math.max(screenInsets().bottom - 64, tallest - win.h) : 0;
-    if (kb > 120) {
-      docked = true;
-      barMax = W - 8;
-      const top = viewSize().h - screenInsets().bottom - o.top - size.h - 4;
-      barAt = { left: 4, top };
-      const under = fieldTop + half * 2 + 8 - top;
-      if (under > 0) {
-        let sc: HTMLElement | null = layer.parentElement;
-        while (sc && !(sc.scrollHeight > sc.clientHeight && /auto|scroll/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement;
-        if (sc) sc.scrollTop += under;
-      }
-      return;
-    }
+    const p: Placing = { o, W, H, size, fieldTop, fieldBottom, around, within, covers };
+    const best = leastCoveringPlace(p);
+    if (phoneKeyboardHeight() > KEYBOARD_UP_PX) return dockAboveKeyboard(p);
     if (deciding && rect) { deciding = false; docked = !best || covers(best) > 0; }
-    if (docked) {
-      const seen = viewSize().h - screenInsets().bottom - o.top - size.h - 8, top0 = screenInsets().top - o.top + 4;
-      const offField = (t: number) => t >= fieldTop + half * 2 + 6 || t + size.h <= fieldTop - 6;
-      const tops = [Math.min(H - (parseFloat(getComputedStyle(host).paddingBottom) || 0) + 6, seen), fieldTop + half * 2 + 8, fieldTop - size.h - 8, Math.min(H + 4, seen)]
-        .filter((t) => t >= top0 && t <= seen && offField(t));
-      const cost = (t: number) => covers({ left: o.left + fieldLeft, top: o.top + t }) * 1e5 + Math.abs(t - fieldTop);
-      const top = tops.length ? tops.reduce((a, t) => (cost(t) < cost(a) ? t : a)) : fieldTop - size.h - 8;
-      const stop = [...(layer.parentElement?.parentElement?.querySelectorAll('.mermaid-expand, .mermaid-play, .dock') ?? [])].map((b) => b.getBoundingClientRect())
-        .filter((q) => q.top < o.top + top + size.h && q.bottom > o.top + top && q.left - o.left > 200).map((q) => q.left - o.left - 8);
-      barMax = Math.max(160, Math.min(W - 8, ...stop) - 4);
-      const w = Math.min(size.w, barMax);
-      barAt = { left: Math.max(4, Math.min(fieldLeft, 4 + barMax - w)), top };
-      return;
-    }
+    if (docked) return dockBelowOrAboveField(p);
     const f = best ?? floatAt(around, size, { prefer: 'below', within, gap: 8, align: 'start' });
     const at = f.side === 'inside' ? { left: r.x, top: r.y + r.h + 8 } : { left: f.left - o.left, top: f.top - o.top };
     barAt = { left: Math.max(4, Math.min(W - size.w - 4, at.left)), top: at.top };
@@ -275,7 +294,7 @@
       if (r.bottom + 24 > bottom || r.top < screenInsets().top) el.scrollIntoView?.({ block: 'center', inline: 'nearest' });
       deciding = true;
     }
-    measure();
+    measureSelection();
   }
   const barRo = new ResizeObserver(() => requestAnimationFrame(placeBar));
   $effect(() => { if (bar) { barRo.observe(bar); return () => bar && barRo.unobserve(bar); } });
@@ -284,13 +303,13 @@
     host.addEventListener('pointermove', onHostMove);
     const out = () => (hover = null);
     host.addEventListener('pointerleave', out);
-    host.addEventListener('scroll', measure, { passive: true });
-    const ro = new ResizeObserver(() => measure());
+    host.addEventListener('scroll', measureSelection, { passive: true });
+    const ro = new ResizeObserver(() => measureSelection());
     ro.observe(host);
     const vv = window.visualViewport;
     vv?.addEventListener('resize', resized);
     window.addEventListener('resize', resized);
-    document.addEventListener('scroll', measure, { passive: true, capture: true });
+    document.addEventListener('scroll', measureSelection, { passive: true, capture: true });
     untrack(() => { if (pick) tick().then(() => { select(pick); if (pickField) openField(pickField); }); });
     return () => {
       held.hues.clear();
@@ -299,10 +318,10 @@
       host.removeEventListener('click', onHostClick);
       host.removeEventListener('pointermove', onHostMove);
       host.removeEventListener('pointerleave', out);
-      host.removeEventListener('scroll', measure);
+      host.removeEventListener('scroll', measureSelection);
       vv?.removeEventListener('resize', resized);
       window.removeEventListener('resize', resized);
-      document.removeEventListener('scroll', measure, { capture: true });
+      document.removeEventListener('scroll', measureSelection, { capture: true });
       ro.disconnect();
       barRo.disconnect();
     };
@@ -320,12 +339,21 @@
     section: '<path d="M2.5 4.5h11M2.5 8h7M2.5 11.5h7" />',
   };
   const fieldW = $derived(Math.min(Math.max((rect?.w ?? 0) + 12, 72, Math.min(textW(text, isMobile ? 16 : 14) + 32, Math.max(320, (rect?.w ?? 0) + 12))), (layer?.clientWidth ?? 600) - 8));
-  let leftSet = $state(false);
-  const wideSpot = $derived(!!rect && leftSet);
-  $effect(() => { void rect; const el = sel && find(sel); leftSet = el instanceof HTMLElement && (/^(left|start)$/.test(getComputedStyle(el).textAlign) || el.getBoundingClientRect().width + 12 >= 120); rightSet = el instanceof HTMLElement && /^(right|end)$/.test(getComputedStyle(el).textAlign) && !leftSet; });
-  const fieldLeft0 = $derived(Math.max(4, Math.min((layer?.clientWidth ?? 600) - fieldW - 4, rect ? (wideSpot ? rect.x - 6 : rect.x + rect.w / 2 - fieldW / 2) : 8)));
-  let rightSet = $state(false);
-  const fieldLeft = $derived(rightSet && rect ? Math.max(4, rect.x + rect.w + 6 - fieldW) : fieldLeft0);
+  type FieldAlign = 'left' | 'right' | 'centre';
+  const WIDE_SPOT_PX = 120;
+  function fieldAlign(el: Element | null | undefined | ''): FieldAlign {
+    if (!(el instanceof HTMLElement)) return 'centre';
+    const ta = getComputedStyle(el).textAlign;
+    if (/^(left|start)$/.test(ta) || el.getBoundingClientRect().width + 12 >= WIDE_SPOT_PX) return 'left';
+    return /^(right|end)$/.test(ta) ? 'right' : 'centre';
+  }
+  let align = $state<FieldAlign>('centre');
+  $effect(() => { void rect; align = fieldAlign(sel && find(sel)); });
+  const fieldLeft = $derived.by(() => {
+    if (align === 'right' && rect) return Math.max(4, rect.x + rect.w + 6 - fieldW);
+    const want = !rect ? 8 : align === 'left' ? rect.x - 6 : rect.x + rect.w / 2 - fieldW / 2;
+    return Math.max(4, Math.min((layer?.clientWidth ?? 600) - fieldW - 4, want));
+  });
 </script>
 
 <div class="layer" bind:this={layer}>
@@ -334,7 +362,7 @@
   {/if}
   {#if sel && spot}
     {#key sel}
-    <input class="field" bind:this={field} style:opacity={rect ? null : 0} class:wide={wideSpot} class:right={rightSet} bind:value={text} aria-label={spot.label} placeholder={spot.label} oninput={typed} onkeydown={onKey} onblur={commit}
+    <input class="field" bind:this={field} style:opacity={rect ? null : 0} class:wide={!!rect && align === 'left'} class:right={align === 'right'} bind:value={text} aria-label={spot.label} placeholder={spot.label} oninput={typed} onkeydown={onKey} onblur={commit}
       style:left={`${fieldLeft}px`} style:top={`${rect ? rect.y + rect.h / 2 - (isMobile ? 20 : 17) : 8}px`} style:width={`${fieldW}px`}
       {@attach (el: HTMLInputElement) => { if (grab) { grab = false; el.focus({ preventScroll: true }); el.select(); } }} />
     {/key}
@@ -345,7 +373,7 @@
         <label class="f" class:top={f.kind === 'lines'}>
           <span>{f.label}</span>
           {#if f.kind === 'select'}
-            <Select label={f.label} value={f.value} options={f.options} onchange={(v) => f.set(v)} onpicked={chose} />
+            <Select label={f.label} value={f.value} options={f.options} onchange={(v) => f.set(v)} onclosed={chose} />
           {:else if f.kind === 'lines'}
             <textarea aria-label={f.label} {@attach (el: HTMLTextAreaElement) => { const v = f.value; if (document.activeElement !== el) el.value = v; }} rows={Math.min(6, Math.max(2, f.value.split('\n').length + 1))} placeholder="One per line" spellcheck="false"
               oninput={(e) => f.set(e.currentTarget.value)}></textarea>
@@ -360,9 +388,9 @@
       </span>{/if}
       <span class="grp acts">
       {#each spot.acts as a (a.label)}
-        <button type="button" class:danger={a.icon === 'trash'} aria-label={a.label} title={a.tab ? `${a.label} (Tab)` : a.label} disabled={a.off}
+        <button type="button" class:danger={a.icon === 'trash'} aria-label={a.label} title={a.onTab ? `${a.label} (Tab)` : a.label} disabled={a.off}
           onmousedown={(e) => e.preventDefault()} onclick={() => run(a)}>
-          <svg viewBox="0 0 16 16">{@html ICONS[a.icon]}</svg>{#if a.tab}<span class="lbl">{a.label.replace(/^Add (an? )?/, '').replace(/ (after|under|beside|in|from) (it|them)$/, '').replace(/^./, (c) => c.toUpperCase())}</span>{/if}
+          <svg viewBox="0 0 16 16">{@html ICONS[a.icon]}</svg>{#if a.onTab}<span class="lbl">{a.label.replace(/^Add (an? )?/, '').replace(/ (after|under|beside|in|from) (it|them)$/, '').replace(/^./, (c) => c.toUpperCase())}</span>{/if}
         </button>
       {/each}
       </span>

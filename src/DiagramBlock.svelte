@@ -9,6 +9,7 @@
   import { renderMermaid, themeKey } from './lib/mermaid';
   import { foldSeq, foldable, markFolds, type SeqBlock } from './lib/seqFold';
   import { spreadLabels } from './lib/edgeLabels';
+  import { mermaidBoxOf } from './lib/lanes';
   import { drawIn, flow as flowLines, focus, play, timeline } from './lib/diagramMotion';
   import { across, fromCode, isEmpty, toCode, whyCode, type Diagram } from './lib/diagram';
   import FlowEditor from './FlowEditor.svelte';
@@ -32,40 +33,40 @@
   } = $props();
 
   let root: HTMLDivElement, canvas = $state<HTMLDivElement | null>(null);
-  const first = untrack(() => ({ code, start }));
-  let d = $state<Diagram | null>(fromCode(first.code));
-  let active = $state(first.start && !!fromCode(first.code));
+  const initial = untrack(() => ({ code, start }));
+  let d = $state<Diagram | null>(fromCode(initial.code));
+  let active = $state(initial.start && !!fromCode(initial.code));
   const mine = $derived(d ? toCode(d) : null);
-  let base = untrack(() => mine);
-  let sent: string | null = null;
+  let lastSeen = untrack(() => mine);
+  let echo: string | null = null;
   let edited = $state(false);
-  let writeTimer: ReturnType<typeof setTimeout> | undefined;
+  let pendingWrite: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
     const c = mine;
-    if (c === null || c === base) return;
-    base = c;
-    sent = c;
+    if (c === null || c === lastSeen) return;
+    lastSeen = c;
+    echo = c;
     edited = true;
-    clearTimeout(writeTimer);
+    clearTimeout(pendingWrite);
     const at = untrack(() => code);
-    writeTimer = setTimeout(() => { writeTimer = undefined; if (code === at) onCode(c); }, 250);
+    pendingWrite = setTimeout(() => { pendingWrite = undefined; if (code === at) onCode(c); }, 250);
   });
   function flush() {
-    if (writeTimer === undefined) return;
-    clearTimeout(writeTimer);
-    writeTimer = undefined;
+    if (pendingWrite === undefined) return;
+    clearTimeout(pendingWrite);
+    pendingWrite = undefined;
     if (mine !== null && mine !== code) onCode(mine);
   }
   $effect(() => {
     const c = code;
     untrack(() => {
-      if (c === sent) return;
-      clearTimeout(writeTimer);
-      writeTimer = undefined;
-      sent = null;
+      if (c === echo) return;
+      clearTimeout(pendingWrite);
+      pendingWrite = undefined;
+      echo = null;
       edited = false;
       d = fromCode(c);
-      base = d ? toCode(d) : null;
+      lastSeen = d ? toCode(d) : null;
       if (!d) active = false;
     });
   });
@@ -97,7 +98,7 @@
     const a = r.getBoundingClientRect(), c = canvas.getBoundingClientRect();
     canvas.scrollLeft += a.left + a.width / 2 - c.left - canvas.clientWidth / 2;
   }
-  let labelled = $state(true);
+  let foldsOnDrawing = $state(true);
   $effect(() => {
     void svg;
     const list = shown, f = drawnFolds;
@@ -107,7 +108,7 @@
       if (isMobile && el instanceof SVGSVGElement && d && /^(sequence|class|state|er)$/.test(d.kind) && el.viewBox.baseVal?.width) el.style.minWidth = `${Math.round(el.viewBox.baseVal.width * 0.8)}px`;
       if (d && canvas) tagSpots(d, canvas);
       if (d?.kind === 'mindmap' && canvas && !centred && canvas.scrollWidth > canvas.clientWidth) centreRoot();
-      labelled = !list.some(foldable) || (!!el && markFolds(el, list, f));
+      foldsOnDrawing = !list.some(foldable) || (!!el && markFolds(el, list, f));
     });
   });
   let wasActive = false;
@@ -123,6 +124,11 @@
     if (playing) { playing(); return; }
     if (el instanceof SVGSVGElement) playing = play(el, () => (playing = null));
   }
+  function introThenFlow(el: SVGSVGElement) {
+    let flowing = introduced ? flowLines(el) : () => {};
+    const intro = introduced ? () => {} : drawIn(el, () => { introduced = true; flowing = flowLines(el); });
+    return () => { intro(); flowing(); };
+  }
   $effect(() => {
     void svg;
     playable = false;
@@ -131,11 +137,10 @@
     tick().then(() => {
       const el = canvas?.querySelector(':scope > svg');
       if (!(el instanceof SVGSVGElement)) return;
-      let flowing = introduced ? flowLines(el) : () => {};
-      const intro = introduced ? () => {} : drawIn(el, () => { introduced = true; flowing = flowLines(el); });
+      const moving = introThenFlow(el);
       const lit = focus(el);
       playable = new Set(timeline(el).map((t) => t.stage)).size > 1;
-      stop = () => { intro(); lit(); flowing(); playing?.(); };
+      stop = () => { moving(); lit(); playing?.(); };
     });
     return () => stop();
   });
@@ -144,7 +149,7 @@
     if (!next.delete(key)) next.add(key);
     folds = next;
   }
-  const chips = $derived(labelled || error ? [] : shown.filter(foldable));
+  const chips = $derived(foldsOnDrawing || error ? [] : shown.filter(foldable));
   onMount(() => {
     const again = () => (theme = themeKey());
     const scheme = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
@@ -159,39 +164,37 @@
       }
     };
     document.addEventListener('click', away, true);
+    const take = (e: KeyboardEvent) => { e.preventDefault(); e.stopPropagation(); return true; };
+    const stepHistory = (e: KeyboardEvent, h: 'undo' | 'redo') => { take(e); flush(); onHistory(h === 'redo'); return true; };
+    const drawingFromCode = (e: KeyboardEvent) => !active && codeShown && !!d && (e.metaKey || e.ctrlKey) && e.key === 'Enter' && (e.target as Element).closest?.('.tiptap') === root.closest('.tiptap') && take(e) && (toDrawing(), true);
+    function undoOnFullScreen(e: KeyboardEvent, t: Element, typing: boolean) {
+      const h = !e.altKey && historyKey(e);
+      return !!h && full && (!typing && root.contains(t) || t === document.body) && stepHistory(e, h);
+    }
+    function zoomOnFullScreen(e: KeyboardEvent, typing: boolean) {
+      if (!full || typing || e.metaKey || e.ctrlKey || e.altKey) return false;
+      if (e.key === 'Escape' && !active) { take(e); leaveFull(); return true; }
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomBy(1.25); return true; }
+      if (e.key === '-') { e.preventDefault(); zoomBy(0.8); return true; }
+      if (e.key === '0') { e.preventDefault(); fit(); return true; }
+      return false;
+    }
+    function undoFromRow(e: KeyboardEvent, t: Element, typing: boolean) {
+      const h = historyKey(e);
+      return !!h && typing && root.contains(t) && !t.closest('.layer') && stepHistory(e, h);
+    }
+    const escapeOut = (e: KeyboardEvent) => e.key === 'Escape' && take(e) && (backOrLeave(), true);
+    const holdSelectAll = (e: KeyboardEvent, t: Element) => (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && (t === document.body || root.contains(t)) && take(e);
+    const undoAtBody = (e: KeyboardEvent, t: Element) => { const h = historyKey(e); return !!h && t === document.body && stepHistory(e, h); };
+    const swallowStrayKey = (e: KeyboardEvent, t: Element) => !!chart && t === document.body && !e.metaKey && !e.ctrlKey && !e.altKey && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') && take(e);
     const keys = (e: KeyboardEvent) => {
-      if (!active && codeShown && d && (e.metaKey || e.ctrlKey) && e.key === 'Enter' && (e.target as Element).closest?.('.tiptap') === root.closest('.tiptap')) {
-        e.preventDefault(); e.stopPropagation(); toDrawing(); return;
-      }
-      if (e.defaultPrevented) return;
+      if (drawingFromCode(e) || e.defaultPrevented) return;
       const t = e.target as Element;
       if (t.closest?.('[aria-expanded="true"]')) return;
       const typing = t instanceof HTMLElement && t.matches('input:not(.armed), textarea, select');
-      if (full && !typing && root.contains(t) || full && t === document.body) {
-        if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y'))) {
-          e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y'); return;
-        }
-      }
-      if (full && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        if (e.key === 'Escape' && !active) { e.preventDefault(); e.stopPropagation(); leaveFull(); return; }
-        if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomBy(1.25); return; }
-        if (e.key === '-') { e.preventDefault(); zoomBy(0.8); return; }
-        if (e.key === '0') { e.preventDefault(); fit(); return; }
-      }
-      if (!active) return;
-      if (typing && root.contains(t) && !t.closest('.layer') && (e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y'))) {
-        e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y'); return;
-      }
+      if (undoOnFullScreen(e, t, typing) || zoomOnFullScreen(e, typing) || !active || undoFromRow(e, t, typing)) return;
       const ours = t === document.body || (root.contains(t) && !typing) || (!typing && t.closest?.('.tiptap') === root.closest('.tiptap'));
-      if (!ours) return;
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (!flowEd?.escape() && !chartEd?.escape()) leave(); }
-      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && (t === document.body || root.contains(t))) { e.preventDefault(); e.stopPropagation(); }
-      else if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y')) && t === document.body) {
-        e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y');
-      }
-      else if (chart && t === document.body && !e.metaKey && !e.ctrlKey && !e.altKey && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete')) {
-        e.preventDefault(); e.stopPropagation();
-      }
+      if (ours) void (escapeOut(e) || holdSelectAll(e, t) || undoAtBody(e, t) || swallowStrayKey(e, t));
     };
     const unclaim = claimKeys('global', { '*': keys }, { capture: true });
     return () => {
@@ -206,7 +209,7 @@
   $effect(() => { if (codeShown) active = false; });
   $effect(() => {
     if (!active) return;
-    const back = () => { if (!flowEd?.escape() && !chartEd?.escape()) leave(); };
+    const back = backOrLeave;
     hooks.diagramBack = back;
     return () => { if (hooks.diagramBack === back) hooks.diagramBack = undefined; };
   });
@@ -222,7 +225,7 @@
     if (codeShown) onCodeLeave();
     const g = (e.target as Element).closest?.('g.node');
     const spot = (e.target as Element).closest?.('[data-spot]');
-    pick = d.kind !== 'flowchart' ? spot?.getAttribute('data-spot') ?? null : g ? /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null : null;
+    pick = d.kind !== 'flowchart' ? spot?.getAttribute('data-spot') ?? null : g ? mermaidBoxOf(g) : null;
     pickField = d.kind !== 'flowchart' ? spot?.getAttribute('data-field') ?? null : null;
     letGo();
     active = true;
@@ -238,6 +241,12 @@
     active = true;
     return true;
   }
+  const historyKey = (e: KeyboardEvent): 'undo' | 'redo' | null => {
+    const k = e.key.toLowerCase();
+    if (!(e.metaKey || e.ctrlKey) || !(k === 'z' || (e.ctrlKey && k === 'y'))) return null;
+    return e.shiftKey || k === 'y' ? 'redo' : 'undo';
+  };
+  function backOrLeave() { if (!flowEd?.backOut() && !chartEd?.escape()) leave(); }
   function leave() {
     flush();
     active = false;
@@ -286,18 +295,20 @@
       { label: 'Edit code', sep: true, run: () => { active = false; onCodeEdit(); } },
     ];
   }
+  const STAY_PUT_FRAMES = 12;
   function stayPut(run: () => void) {
     const sc = root.closest<HTMLElement>('.scroll') ?? (document.scrollingElement as HTMLElement | null);
     const top = sc?.scrollTop ?? 0;
     run();
     if (!sc) return;
     let n = 0;
-    const hold = () => { sc.scrollTop = top; if (++n < 12) requestAnimationFrame(hold); };
+    const hold = () => { sc.scrollTop = top; if (++n < STAY_PUT_FRAMES) requestAnimationFrame(hold); };
     requestAnimationFrame(hold);
   }
   function menuFrom(e: MouseEvent, items: MenuItem[]) {
     e.stopPropagation();
-    ui.openMenu(under(e.currentTarget as HTMLElement), items.map((it) => ({ ...it, run: it.run && (() => requestAnimationFrame(() => it.run!())) })));
+    const afterMenuCloses = (run: () => void) => () => requestAnimationFrame(run);
+    ui.openMenu(under(e.currentTarget as HTMLElement), items.map((it) => ({ ...it, run: it.run && afterMenuCloses(it.run) })));
   }
   let flowEd = $state<ReturnType<typeof FlowEditor> | null>(null);
   const chart = $derived(active && d && d.kind !== 'flowchart' ? d : null);
@@ -306,13 +317,19 @@
 
   let full = $state(false), zoom = $state(1);
   const ZOOM_MIN = 0.1, ZOOM_MAX = 8;
+  function keepScroll(el: Element) {
+    const kept: [Element, number][] = [];
+    for (let s = el.parentElement; s; s = s.parentElement) if (s.scrollHeight > s.clientHeight) kept.push([s, s.scrollTop]);
+    return () => { for (const [s, top] of kept) s.scrollTop = top; };
+  }
+  function focusToReturn() {
+    const was = document.activeElement as HTMLElement | null;
+    return was && was !== document.body && !root.contains(was) ? was : root.closest<HTMLElement>('.tiptap');
+  }
   function enterFull() {
     if (codeShown) onCodeLeave();
-    const was = document.activeElement as HTMLElement | null;
-    const kept: [Element, number][] = [];
-    for (let s = root.parentElement; s; s = s.parentElement) if (s.scrollHeight > s.clientHeight) kept.push([s, s.scrollTop]);
-    const back = () => { for (const [s, top] of kept) s.scrollTop = top; };
-    ui.viewDiagram(() => { full = false; tick().then(() => { back(); requestAnimationFrame(back); }); }, was && was !== document.body && !root.contains(was) ? was : root.closest<HTMLElement>('.tiptap'));
+    const back = keepScroll(root);
+    ui.viewDiagram(() => { full = false; tick().then(() => { back(); requestAnimationFrame(back); }); }, focusToReturn());
     letGo();
     full = true;
     tick().then(fit);
@@ -325,17 +342,20 @@
       const vb = el.viewBox.baseVal;
       return vb && vb.width ? { el, w: vb.width, h: vb.height } : null;
     }
-    if (full && el.dataset.nw === undefined) {
-      if (el.dataset.style === undefined) el.dataset.style = el.getAttribute('style') ?? '';
-      el.style.zoom = '1';
-      el.style.maxWidth = 'none'; el.style.flex = 'none';
-      el.style.width = `${Math.min(720, window.innerWidth - 32)}px`;
-      el.dataset.nw = String(el.offsetWidth || 1);
-      el.dataset.nh = String(el.offsetHeight || 1);
-    }
     return { el, w: +(el.dataset.nw ?? el.offsetWidth) || 1, h: +(el.dataset.nh ?? el.offsetHeight) || 1 };
   }
+  function freezeHtmlWidth() {
+    const el = canvas?.firstElementChild;
+    if (!full || !(el instanceof HTMLElement) || el.dataset.nw !== undefined) return;
+    if (el.dataset.style === undefined) el.dataset.style = el.getAttribute('style') ?? '';
+    el.style.zoom = '1';
+    el.style.maxWidth = 'none'; el.style.flex = 'none';
+    el.style.width = `${Math.min(720, window.innerWidth - 32)}px`;
+    el.dataset.nw = String(el.offsetWidth || 1);
+    el.dataset.nh = String(el.offsetHeight || 1);
+  }
   function size() {
+    freezeHtmlWidth();
     const n = natural();
     if (!n) return;
     const { el } = n;
@@ -352,6 +372,7 @@
   }
   $effect(() => { void svg; void zoom; void full; tick().then(size); });
   function fit() {
+    freezeHtmlWidth();
     const n = natural();
     if (!canvas || !n) return;
     const bar = canvas.parentElement?.querySelector<HTMLElement>('.zoombar'), foot = bar ? bar.offsetHeight + 24 : 0;
@@ -412,10 +433,9 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="dblock" class:active class:full bind:this={root} onkeydown={onKey} oncontextmenu={menu} role={full ? 'dialog' : undefined} aria-modal={full ? 'true' : undefined} aria-label={full ? 'Diagram' : undefined}>
+<div class="dblock" class:active class:full bind:this={root} onkeydown={onKey} oncontextmenu={menu} role={full ? 'dialog' : 'group'} aria-modal={full ? 'true' : undefined} aria-label={full ? 'Diagram' : undefined}>
   <div class="pic">
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="mermaid-view diagram-canvas" class:error={!!error} bind:this={canvas} onclick={open} onwheel={onWheel} onpointerdown={onPanDown} {@attach scrollHint} {@attach pinchZoom}>
     {#if error}{error}{:else}{@html svg}{/if}
   </div>
@@ -428,7 +448,7 @@
       {/each}
     </div>
   {/if}
-  {#if flow && canvas && svg && !error}<FlowEditor bind:this={flowEd} {flow} host={canvas} version={svg} {pick} />{/if}
+  {#if flow && canvas && svg && !error}<FlowEditor bind:this={flowEd} {flow} host={canvas} version={svg} pickOnOpen={pick} />{/if}
   {#if chart && canvas && svg && !error}<ChartEditor bind:this={chartEd} d={chart} host={canvas} version={svg} {pick} {pickField} />{/if}
   {#if !error && svg}
     <div class="dock" class:on={active || codeShown} role="toolbar" aria-label="Diagram tools">
@@ -564,7 +584,7 @@
     background: light-dark(#f9fafb, #17181d); display: grid; grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: auto auto minmax(0, 1fr) auto; outline: none;
   }
-  :global(html:not(.mobile)) .dblock.full .foldchips { left: 86px; }
+  :global(html:not(.mobile)) .dblock.full .foldchips { left: var(--traffic-lights-end); }
   .dblock.full > .pic { grid-column: 1; grid-row: 3 / 5; min-height: 0; }
   .dblock.full > :global(.form) { grid-column: 2; grid-row: 3; width: min(380px, 40vw); overflow: auto; padding: 12px; background: var(--bg); border-left: 1px solid var(--border, var(--bg-hover)); }
   @media (max-width: 700px) {

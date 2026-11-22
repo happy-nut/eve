@@ -45,8 +45,8 @@ fn content(text: &str) -> Vec<Value> {
 fn schema(p: &Param) -> Value {
     let mut s = match p.kind {
         Kind::Text => json!({ "type": "string" }),
-        Kind::Number(lo, hi) => json!({ "type": "integer", "minimum": lo, "maximum": hi }),
-        Kind::Texts(lo, hi) => json!({ "type": "array", "items": { "type": "string" }, "minItems": lo, "maxItems": hi }),
+        Kind::Number { min, max } => json!({ "type": "integer", "minimum": min, "maximum": max }),
+        Kind::Texts { min, max } => json!({ "type": "array", "items": { "type": "string" }, "minItems": min, "maxItems": max }),
     };
     s["description"] = json!(p.help);
     s

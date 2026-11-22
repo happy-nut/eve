@@ -15,7 +15,7 @@ export const DatabaseBlock = Node.create({
   selectable: false,
 
   addOptions() {
-    return { page: (): string | null => notes.currentId };
+    return { hostNoteId: (): string | null => notes.currentId };
   },
 
   addAttributes() {
@@ -39,7 +39,7 @@ export const DatabaseBlock = Node.create({
         props: {
           schema: node.attrs.schema,
           commit: (schema: DbSchema) => editor.view.dispatch(editor.state.tr.setNodeMarkup(pos(), undefined, { ...editor.state.doc.nodeAt(pos())!.attrs, schema })),
-          page: () => this.options.page(),
+          page: () => this.options.hostNoteId(),
         },
       });
       return {

@@ -1,6 +1,7 @@
 import { Node, mergeAttributes, type Editor } from '@tiptap/core';
 import Suggestion, { type SuggestionOptions } from '@tiptap/suggestion';
 import { PluginKey } from '@tiptap/pm/state';
+import type { Attrs } from '@tiptap/pm/model';
 import type MarkdownIt from 'markdown-it';
 
 
@@ -39,6 +40,8 @@ export function typedDay(text: string): string | null {
   return daysFrom(iso, new Date(+m[1], +m[2] - 1, +m[3])) === null ? null : iso;
 }
 
+const toNextMonday = (today: number): number => ((8 - today) % 7) || 7;
+
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const KO_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 export function spokenDay(text: string, now: Date = new Date()): string | null {
@@ -52,16 +55,18 @@ export function spokenDay(text: string, now: Date = new Date()): string | null {
   const ahead = (n: number) => dayFrom(n, now);
   let m = /^in (\d{1,3}) (day|days|week|weeks)$/.exec(q) ?? /^(\d{1,3}) ?(일|주) ?(후|뒤)$/.exec(q);
   if (m) return ahead(+m[1] * (/^(week|weeks|주)$/.test(m[2]) ? 7 : 1));
-  if (q === 'next week' || q === '다음 주' || q === '다음주') return ahead(((8 - today) % 7) || 7);
+  if (q === 'next week' || q === '다음 주' || q === '다음주') return ahead(toNextMonday(today));
   m = /^(?:next |다음 ?주 )(.+)$/.exec(q);
   if (m) {
     const d = weekday(m[1]);
-    if (d >= 0) return ahead((((8 - today) % 7) || 7) + ((d + 6) % 7));
+    if (d >= 0) return ahead(toNextMonday(today) + ((d + 6) % 7));
   }
   const d = weekday(q);
   if (d >= 0) return ahead(((d - today + 7) % 7) || 7);
   return null;
 }
+
+const startsAWord = (label: string, q: string): boolean => label.toLowerCase().split(/\s+/).some((w) => w.startsWith(q));
 
 export function dayChoices(query: string, now: Date = new Date(), locale?: string) {
   const q = query.trim().toLowerCase();
@@ -72,7 +77,7 @@ export function dayChoices(query: string, now: Date = new Date(), locale?: strin
     { n: 1, alias: 'tomorrow' },
   ]
     .map(({ n, alias }) => ({ iso: dayFrom(n, now), label: dateLabel(dayFrom(n, now), now, locale), alias }))
-    .filter((d) => !q || d.label.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)) || d.alias.startsWith(q) || d.iso.startsWith(q));
+    .filter((d) => !q || startsAWord(d.label, q) || d.alias.startsWith(q) || d.iso.startsWith(q));
   const said = spokenDay(q, now);
   if (said && !days.some((d) => d.iso === said)) days.unshift({ iso: said, label: dateLabel(said, now, locale), alias: q });
   const out = days.map(({ iso, label, alias }) => ({ iso, label, exact: q === alias || q === label.toLowerCase() || q === iso }));
@@ -120,7 +125,10 @@ export const REMIND = '⏰';
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const isTime = (t: string): boolean => TIME.test(t);
 
-export function chipLabel(a: { readonly [attr: string]: any }, now: Date = new Date(), locale?: string): string {
+export interface DateChipAttrs { readonly date: string; readonly time?: string; readonly remind?: boolean }
+export const chipAttrs = (a: Attrs): DateChipAttrs => ({ date: a.date, time: a.time, remind: a.remind });
+
+export function chipLabel(a: DateChipAttrs, now: Date = new Date(), locale?: string): string {
   const day = dateLabel(a.date, now, locale);
   return a.remind && a.time ? `${REMIND} ${day} ${a.time}` : day;
 }
@@ -143,6 +151,9 @@ export interface LineReminder { at: number; day: string; time: string; line: str
 
 const IN_LINE = /(?<![\w@])@(\d{4}-\d{2}-\d{2}) ((?:[01]\d|2[0-3]):[0-5]\d) ⏰/g;
 
+const cardLineText = (line: string): string =>
+  line.replace(/^\s*"[^"]*":\s*"/, '').replace(/",?\s*$/, '').replace(/\\n/g, ' ');
+
 export function remindersIn(body: string): LineReminder[] {
   const out: LineReminder[] = [];
   let fence: string | null = null;
@@ -150,7 +161,7 @@ export function remindersIn(body: string): LineReminder[] {
     const open = /^\s*(?:```|~~~)(\w*)/.exec(line0);
     if (open) { fence = fence === null ? open[1] : null; continue; }
     if ((fence !== null && fence !== 'kanban') || /^\s*(?:[-*+]|\d+[.)])\s+\[[xX]\]/.test(line0)) continue;
-    const raw = fence === 'kanban' ? line0.replace(/^\s*"[^"]*":\s*"/, '').replace(/",?\s*$/, '').replace(/\\n/g, ' ') : line0;
+    const raw = fence === 'kanban' ? cardLineText(line0) : line0;
     for (const m of raw.matchAll(IN_LINE)) {
       if (daysFrom(m[1]) === null) continue;
       const [y, mo, d] = m[1].split('-').map(Number), [h, mi] = m[2].split(':').map(Number);
@@ -224,7 +235,7 @@ export const DateMention = Node.create<DateMentionOptions>({
     return [
       'span',
       mergeAttributes(HTMLAttributes, { 'data-date': node.attrs.date, class: 'datechip' }),
-      chipLabel(node.attrs),
+      chipLabel(chipAttrs(node.attrs)),
     ];
   },
 
@@ -235,7 +246,7 @@ export const DateMention = Node.create<DateMentionOptions>({
       const dom = document.createElement('span');
       dom.className = node.attrs.remind ? 'datechip remind' : 'datechip';
       dom.dataset.date = date;
-      dom.textContent = chipLabel(node.attrs);
+      dom.textContent = chipLabel(chipAttrs(node.attrs));
       dom.title = node.attrs.remind ? `${date} ${node.attrs.time}` : date; // the day itself, for when the chip says "yesterday"
       // a click opens its menu (a reminder's time, or one set); the chip is chosen by the click as before
       dom.addEventListener('click', () => { const pos = typeof getPos === 'function' ? getPos() : undefined; if (typeof pos === 'number' && editor.isEditable) onChip(editor, pos, dom); });

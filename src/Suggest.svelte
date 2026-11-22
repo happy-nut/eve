@@ -7,19 +7,19 @@
   import { placeAt } from './lib/popup';
 
   let items = $state<SuggestItem[]>([]);
-  let open = $state<ReadonlySet<number>>(new Set());
+  let expandedPages = $state<ReadonlySet<number>>(new Set());
   let sel = $state(0);
-  let place = $state('');
+  let placeStyle = $state('');
   let anchor: DOMRect | null = null;
   let pick: (t: SuggestItem) => void = () => {};
-  let pointed = false;
+  let pickedByPointer = false;
 
-  const shown = $derived(rows(items, open));
+  const shown = $derived(rows(items, expandedPages));
 
   export const ui: SuggestionUI = {
     show(next, rect, cb) {
-      items = next; open = new Set(); sel = 0; pick = cb; pointed = false;
-      if (rect) { anchor = rect; place = placeAt(rect, want(), list?.offsetWidth ?? 340); }
+      items = next; expandedPages = new Set(); sel = 0; pick = cb; pickedByPointer = false;
+      if (rect) { anchor = rect; placeStyle = placeAt(rect, want(), list?.offsetWidth ?? 340); }
     },
     move: (d) => { sel = (sel + d + shown.length) % shown.length; },
     select: () => {
@@ -29,30 +29,30 @@
       return true;
     },
     expand: () => {
-      const next = expand(items, open, sel);
-      if (next) ({ open, sel } = next);
+      const next = expand(items, expandedPages, sel);
+      if (next) ({ open: expandedPages, sel } = next);
       return !!next;
     },
     collapse: () => {
-      const next = collapse(items, open, sel);
-      if (next) ({ open, sel } = next);
+      const next = collapse(items, expandedPages, sel);
+      if (next) ({ open: expandedPages, sel } = next);
       return !!next;
     },
-    hide: () => { items = []; open = new Set(); },
+    hide: () => { items = []; expandedPages = new Set(); },
     visible: () => items.length > 0,
-    place: (rect) => { anchor = rect; place = placeAt(rect, want(), list?.offsetWidth ?? 340); },
-    chosen: () => pointed,
+    place: (rect) => { anchor = rect; placeStyle = placeAt(rect, want(), list?.offsetWidth ?? 340); },
+    chosen: () => pickedByPointer,
   };
 
   function toggle(i: number) {
     sel = i;
-    const next = expand(items, open, sel) ?? collapse(items, open, sel);
-    if (next) ({ open, sel } = next);
+    const next = expand(items, expandedPages, sel) ?? collapse(items, expandedPages, sel);
+    if (next) ({ open: expandedPages, sel } = next);
   }
 
   let list = $state<HTMLUListElement | null>(null);
   const want = () => Math.min(300, list?.scrollHeight || 300);
-  $effect(() => { shown; if (list && anchor) place = placeAt(anchor, want(), list.offsetWidth); });
+  $effect(() => { shown; if (list && anchor) placeStyle = placeAt(anchor, want(), list.offsetWidth); });
   $effect(() => {
     sel;
     const row = list?.querySelector('li.sel'), head = row?.previousElementSibling;
@@ -62,17 +62,17 @@
 </script>
 
 {#if items.length}
-  <ul class="suggest" bind:this={list} style={place} transition:fly|global={caretIn}>
-    {#each shown as row, i (i)}
+  <ul class="suggest" bind:this={list} style={placeStyle} transition:fly|global={caretIn}>
+    {#each shown as row, i (row.key)}
       {@const t = row.item}
       {#if !row.child && t.group && t.group !== shown[i - 1]?.item.group && t.group !== items[shown[i - 1]?.top]?.group}
         <li class="group" role="presentation">{t.group}</li>
       {/if}
       <li class:sel={i === sel} class:child={row.child}>
         <!-- a move, not mouseenter: the list drawn under a pointer resting there has not been pointed at -->
-        <button onmousedown={(e) => { e.preventDefault(); if (t.folder) toggle(i); else pick(t); }} onmousemove={() => { if (sel !== i || !pointed) { sel = i; pointed = true; } }}>
+        <button onmousedown={(e) => { e.preventDefault(); if (t.folder) toggle(i); else pick(t); }} onmousemove={() => { if (sel !== i || !pickedByPointer) { sel = i; pickedByPointer = true; } }}>
           {#if !row.child && t.sections?.length}
-            <svg class="chev" class:down={open.has(row.top)} viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5"/></svg>
+            <svg class="chev" class:down={expandedPages.has(row.top)} viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5"/></svg>
           {:else}<span class="chev"></span>{/if}
           {#if t.noteIcon}<span class="s-emoji"><Icon icon={t.noteIcon} size={14} /></span>
           {:else if t.swatch}<span class="s-swatch" style:background={t.swatch}></span>

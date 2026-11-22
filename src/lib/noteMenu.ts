@@ -9,6 +9,32 @@ import { imageMenu } from './image';
 import { highlightMenu } from './highlight';
 import { COLORS, colorAt, colorText } from './textColor';
 
+type At = { clientX: number; clientY: number };
+type LinkMark = NonNullable<ReturnType<typeof linkMarkAtCaret>>;
+
+const linkMarkAtCaret = (editor: Editor) => {
+  const $h = editor.state.selection.$head;
+  return [...$h.marks(), ...($h.nodeAfter?.marks ?? []), ...($h.nodeBefore?.marks ?? [])].find((m) => m.type.name === 'link');
+};
+
+function presentFromCaret(editor: Editor) {
+  const d = editor.view.domAtPos(editor.state.selection.from).node;
+  let b: Node | null = d;
+  while (b && b.parentNode !== editor.view.dom) b = b.parentNode;
+  ui.openPresent(editor.view.dom, b as Element | null);
+}
+
+function bookmarkMenu(editor: Editor, at: At, href: string) {
+  ui.openMenu(at, [{ label: 'Show as link', run: () => void cardToLink(editor) }, ...linkItems(href, null).map((i, n) => (n ? i : { ...i, sep: true }))]);
+}
+
+function linkMenu(editor: Editor, at: At, linkMark: LinkMark) {
+  const href = (linkMark.attrs.href as string | undefined) ?? '';
+  const unlink = () => editor.chain().focus().extendMarkRange('link').unsetLink().run();
+  const card = cardable(editor, href) ? [{ label: 'Show as card', run: () => void linkToCard(editor) }] : [];
+  ui.openMenu(at, [...card, ...linkItems(href, unlink).map((i, n) => (n || !card.length ? i : { ...i, sep: true }))]);
+}
+
 export function noteMenu(editor: Editor, event: MouseEvent | null) {
   if (event) {
     const at = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
@@ -16,15 +42,12 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
     if (at && (at.pos < sel.from || at.pos > sel.to)) editor.commands.setTextSelection(at.pos);
   }
   const empty = editor.state.selection.empty;
-  const $h = editor.state.selection.$head;
-  const linkMark = [...$h.marks(), ...($h.nodeAfter?.marks ?? []), ...($h.nodeBefore?.marks ?? [])].find((m) => m.type.name === 'link');
-  const linked = !!linkMark;
+  const linkMark = linkMarkAtCaret(editor);
   const caret = editor.view.coordsAtPos(editor.state.selection.head);
   const at = event ?? { clientX: Math.round(caret.left), clientY: Math.round(caret.bottom) };
   const sel = editor.state.selection as NodeSelection;
   if (sel.node?.type.name === 'bookmark') {
-    const href: string = sel.node.attrs.href;
-    ui.openMenu(at, [{ label: 'Show as link', run: () => void cardToLink(editor) }, ...linkItems(href, null).map((i, n) => (n ? i : { ...i, sep: true }))]);
+    bookmarkMenu(editor, at, sel.node.attrs.href);
     return;
   }
   if (sel.node?.type.name === 'image') {
@@ -34,12 +57,13 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
     return;
   }
   if (empty && linkMark) {
-    const href = (linkMark.attrs.href as string | undefined) ?? '';
-    const unlink = () => editor.chain().focus().extendMarkRange('link').unsetLink().run();
-    const card = cardable(editor, href) ? [{ label: 'Show as card', run: () => void linkToCard(editor) }] : [];
-    ui.openMenu(at, [...card, ...linkItems(href, unlink).map((i, n) => (n || !card.length ? i : { ...i, sep: true }))]);
+    linkMenu(editor, at, linkMark);
     return;
   }
+  textMenu(editor, at, empty, !!linkMark);
+}
+
+function textMenu(editor: Editor, at: At, empty: boolean, linked: boolean) {
   /** execCommand is the one path that keeps ProseMirror's own clipboard serializer (markdown, nodes) */
   const clip = (cmd: 'cut' | 'copy') => () => { editor.commands.focus(); document.execCommand(cmd); };
   const keys = (id: string) => shortcuts.keysFor(id);
@@ -59,13 +83,13 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
     { label: 'Select all', sep: true, keys: 'Mod-a', hide: !empty, run: () => editor.chain().focus().selectAll().run() },
     { label: 'Find & replace…', keys: keys('find'), hide: !empty, run: () => ui.openFind() },
     { label: 'Present', keys: keys('present'), hide: !empty, run: () => ui.openPresent(editor.view.dom) },
-    { label: 'Present from here', keys: keys('presentHere'), hide: !empty, run: () => { const d = editor.view.domAtPos(editor.state.selection.from).node; let b: Node | null = d; while (b && b.parentNode !== editor.view.dom) b = b.parentNode; ui.openPresent(editor.view.dom, b as Element | null); } },
+    { label: 'Present from here', keys: keys('presentHere'), hide: !empty, run: () => presentFromCaret(editor) },
     { label: 'Export…', sep: true, hide: !empty, run: () => exportMenu(at) },
   ];
   ui.openMenu(at, items);
 }
 
-function textColorMenu(editor: Editor, at: { clientX: number; clientY: number }) {
+function textColorMenu(editor: Editor, at: At) {
   const { from, to } = editor.state.selection;
   const now = colorAt(editor);
   ui.openMenu(at, [
@@ -83,14 +107,13 @@ function linkItems(href: string, unlink: (() => void) | null): MenuItem[] {
   ];
 }
 
-
 async function linkSelection(editor: Editor) {
   const href = (await ui.prompt('링크 주소', ''))?.trim();
   if (!href) return editor.commands.focus();
   editor.chain().focus().setLink({ href: /^[a-z]+:/i.test(href) ? href : `https://${href}` }).run();
 }
 
-export function exportMenu(at: { clientX: number; clientY: number }) {
+export function exportMenu(at: At) {
   const keys = (id: string) => shortcuts.keysFor(id);
   ui.openMenu(at, [
     { label: 'Markdown…', keys: keys('exportMd'), run: () => void exportCurrent('md') },

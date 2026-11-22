@@ -9,9 +9,7 @@ import { scrollHint } from './scrollHint';
 import { HTML_TAGS } from './html';
 import { inCell } from './blocks';
 
-
-
-function closing(src: string, start: number): number {
+function pandocClosingDollar(src: string, start: number): number {
   const first = src[start + 1];
   if (!first || first === '$' || /\s/.test(first)) return -1;
   for (let i = start + 1; ; ) {
@@ -29,7 +27,7 @@ export function hidePipesInMath(line: string, hide: string): string {
   let out = line;
   for (let i = line.indexOf('$'); i >= 0; i = line.indexOf('$', i + 1)) {
     if (line[i - 1] === '\\') continue;
-    const end = closing(line, i);
+    const end = pandocClosingDollar(line, i);
     if (end < 0) continue;
     for (let k = i + 1; k < end; k++) if (line[k] === '|' && line[k - 1] !== '\\') out = out.slice(0, k) + hide + out.slice(k + 1);
     i = end;
@@ -40,7 +38,7 @@ export function hidePipesInMath(line: string, hide: string): string {
 export const readsAsMath = (text: string): boolean => {
   for (let i = text.indexOf('$'); i >= 0; i = text.indexOf('$', i + 1)) {
     if (text[i - 1] === '\\') continue;
-    if (closing(text, i) > 0) return true;
+    if (pandocClosingDollar(text, i) > 0) return true;
   }
   return false;
 };
@@ -49,7 +47,7 @@ function inlineRule(md: MarkdownIt) {
   md.inline.ruler.after('escape', 'math_inline', (state, silent) => {
     const start = state.pos;
     if (state.src.charCodeAt(start) !== 0x24) return false;
-    const end = closing(state.src, start);
+    const end = pandocClosingDollar(state.src, start);
     if (end < 0) return false;
     if (!silent) {
       const t = state.push('math_inline', '', 0);
@@ -94,7 +92,10 @@ function blockRule(md: MarkdownIt) {
 }
 
 
-let openNext = false;
+let openOnFirstDraw = false;
+
+const insideOpenCodeSpan = (match: RegExpMatchArray): boolean =>
+  ((match.input ?? '').slice(0, (match.index ?? 0) + match[1].length).match(/`/g)?.length ?? 0) % 2 === 1;
 
 const formulaAt = (editor: Editor, pos: number | null | undefined) => {
   const n = pos == null ? null : editor.state.doc.nodeAt(pos);
@@ -108,11 +109,11 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
   const shown = document.createElement(display ? 'div' : 'span');
   shown.className = 'math-shown';
   dom.append(shown);
-  let current = node;
+  let drawnNode = node;
   let editing: MathEditing | null = null;
 
   const draw = () => {
-    const latex: string = current.attrs.latex;
+    const latex: string = drawnNode.attrs.latex;
     dom.classList.toggle('empty', !latex.trim());
     if (!latex.trim()) { shown.textContent = display ? 'New equation' : 'Equation'; return; }
     const m = mathNow();
@@ -126,7 +127,7 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     const p = getPos();
     if (p == null || !formulaAt(editor, p)) return;
     const tr = editor.state.tr;
-    const at = side > 0 ? p + current.nodeSize : p;
+    const at = side > 0 ? p + drawnNode.nodeSize : p;
     tr.setSelection(TextSelection.near(tr.doc.resolve(at), side));
     editor.view.dispatch(tr.scrollIntoView());
     editor.view.focus();
@@ -137,13 +138,13 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     // only into this very formula: the node there must be the one this view last drew
     // equal, not the same object: the note read anew (a sync, a note not in the editor's own spelling) keeps this view
     // for an equal node without telling it, and every change typed was refused and lost
-    if (p == null || !n || !n.eq(current) || n.attrs.latex === latex) return;
+    if (p == null || !n || !n.eq(drawnNode) || n.attrs.latex === latex) return;
     editor.view.dispatch(editor.state.tr.setNodeMarkup(p, undefined, { ...n.attrs, latex }));
   };
   const remove = () => {
     const p = getPos();
-    if (p == null || !formulaAt(editor, p)?.eq(current)) return;
-    const tr = editor.state.tr.delete(p, p + current.nodeSize);
+    if (p == null || !formulaAt(editor, p)?.eq(drawnNode)) return;
+    const tr = editor.state.tr.delete(p, p + drawnNode.nodeSize);
     tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(p, tr.doc.content.size)), -1));
     editor.view.dispatch(tr.scrollIntoView());
     editor.view.focus();
@@ -152,9 +153,9 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     if (editing || !editor.isEditable) return;
     dom.classList.add('editing');
     editing = mountMath(dom, {
-      latex: current.attrs.latex,
+      latex: drawnNode.attrs.latex,
       display,
-      at,
+      clickedAt: at,
       onInput: write,
       onDone: (how) => {
         close();
@@ -171,7 +172,7 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     editing = null;
     e.destroy();
     dom.classList.remove('editing');
-    if (!current.attrs.latex.trim()) queueMicrotask(remove); else draw();
+    if (!drawnNode.attrs.latex.trim()) queueMicrotask(remove); else draw();
   };
 
   dom.addEventListener('mousedown', (e) => {
@@ -180,15 +181,15 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     const m = e as MouseEvent;
     void open({ x: m.clientX, y: m.clientY });
   });
-  if (openNext) { openNext = false; queueMicrotask(() => open()); }
+  if (openOnFirstDraw) { openOnFirstDraw = false; queueMicrotask(() => open()); }
   const unhint = display ? scrollHint(dom) : null;
 
   return {
     dom,
     update: (n: PMNode) => {
-      if (n.type !== current.type) return false;
-      const was = current;
-      current = n;
+      if (n.type !== drawnNode.type) return false;
+      const was = drawnNode;
+      drawnNode = n;
       if (editing) { if (n.attrs.latex !== was.attrs.latex) editing.set(n.attrs.latex); }
       else if (n.attrs.latex !== was.attrs.latex) draw();
       return true;
@@ -250,7 +251,7 @@ const mathNode = (display: boolean) => Node.create({
           const $from = state.doc.resolve(range.from);
           if ($from.parent.type.name !== 'paragraph' || $from.parent.textContent.trim() !== '$$') return null;
           if (inCell($from)) return null;
-          openNext = true;
+          openOnFirstDraw = true;
           state.tr.replaceRangeWith($from.before(), $from.after(), this.type.create({ latex: '' }));
         },
       })];
@@ -258,7 +259,7 @@ const mathNode = (display: boolean) => Node.create({
     return [new InputRule({
       find: /(^|[^\\$\w])\$([^\s$](?:[^$]*[^\s$\\])?)\$$/,
       handler: ({ state, range, match }) => {
-        if (((match.input ?? '').slice(0, (match.index ?? 0) + match[1].length).match(/`/g)?.length ?? 0) % 2) return null;
+        if (insideOpenCodeSpan(match)) return null;
         // nor where a formula has no place (a toggle's title holds words only): it took the closing $ and drew nothing
         if (!state.doc.resolve(range.from).parent.type.contentMatch.matchType(this.type)) return null;
         const start = range.from + match[1].length;
@@ -446,10 +447,10 @@ export function insertMath(editor: Editor, display: boolean) {
   // a cell holds lines, not a block: the formula goes in the line (a block one cut the table in two)
   if (display && inCell(sel.$from)) display = false;
   const text = sel.empty ? '' : state.doc.textBetween(sel.from, sel.to, ' ');
-  openNext = true;
+  openOnFirstDraw = true;
   const node = display
     ? { type: 'mathBlock', attrs: { latex: text } }
     : { type: 'mathInline', attrs: { latex: text } };
   editor.chain().focus().insertContent(node).run();
-  if (openNext) openNext = false; // not drawn (no room for it here): nothing to open
+  if (openOnFirstDraw) openOnFirstDraw = false; // not drawn (no room for it here): nothing to open
 }

@@ -42,8 +42,8 @@ describe('chart parts', () => {
     expect(act(d, 'task:0:0', 'Add a task after it')).toBe('task:0:1');
     const [, added, visual] = d.sections[0].tasks;
     expect(added.id).toBeTruthy();
-    expect(visual.after).toBe(added.id);
-    expect(added.after).toBe('a1'); // after it by name: an id with a length alone reads as a start date
+    expect(visual.after).toEqual({ ids: [added.id] });
+    expect(added.after).toEqual({ ids: ['a1'] }); // after it by name: an id with a length alone reads as a start date
     expect(toCode(d)).toMatch(/Task : t\d, after a1, 2d\n {4}Visual : a2, after t\d/);
   });
 
@@ -143,8 +143,8 @@ describe('a new part in a Korean chart', () => {
     const s = fromCode('sequenceDiagram\n  participant 앱\n  participant 서버\n  앱->>서버: 요청') as Sequence;
     adders(s)[0].run();
     expect(s.people.at(-1)!.name).toBe('참여자 3');
-    spotOf(s, 'step:0')!.acts.find((a) => a.tab)!.run();
-    expect(s.messages[1]).toMatchObject({ text: '메시지' });
+    spotOf(s, 'step:0')!.acts.find((a) => a.onTab)!.run();
+    expect(s.steps[1]).toMatchObject({ text: '메시지' });
   });
   it('an English one keeps English words', () => {
     const m = fromCode('mindmap\n  root((Launch))\n    Ads') as import('./diagram').Mindmap;
@@ -159,17 +159,17 @@ describe('a new message pointed elsewhere', () => {
   const field = (s: Sequence, i: number, label: string) => spotOf(s, `step:${i}`)!.fields.find((f) => f.label === label)!;
   it('is sent, not a reply, unless it goes back the way the one before it came', () => {
     const s = fromCode('sequenceDiagram\n  participant A\n  participant B\n  participant C\n  A->>B: ask') as Sequence;
-    spotOf(s, 'step:0')!.acts.find((a) => a.tab)!.run();
-    expect(s.messages[1]).toMatchObject({ from: 'B', to: 'A', reply: true });
+    spotOf(s, 'step:0')!.acts.find((a) => a.onTab)!.run();
+    expect(s.steps[1]).toMatchObject({ from: 'B', to: 'A', reply: true });
     field(s, 1, 'To').set('C');
-    expect(s.messages[1]).toMatchObject({ from: 'B', to: 'C', reply: false });
+    expect(s.steps[1]).toMatchObject({ from: 'B', to: 'C', reply: false });
     field(s, 1, 'To').set('A');
-    expect(s.messages[1]).toMatchObject({ reply: true });
+    expect(s.steps[1]).toMatchObject({ reply: true });
   });
   it('one whose arrow was chosen keeps it', () => {
     const s = fromCode('sequenceDiagram\n  participant A\n  participant B\n  participant C\n  A->>B: ask\n  B-->>A: told') as Sequence;
     field(s, 1, 'How').set('-->>');
     field(s, 1, 'To').set('C');
-    expect(s.messages[1]).toMatchObject({ to: 'C', reply: true });
+    expect(s.steps[1]).toMatchObject({ to: 'C', reply: true });
   });
 });

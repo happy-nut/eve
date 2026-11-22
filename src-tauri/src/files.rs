@@ -64,10 +64,14 @@ pub(crate) fn assets_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-pub(crate) const ASSET_EXTS: [&str; 16] = [
-    "png", "jpg", "jpeg", "gif", "webp", "svg", "heic", "pdf", "mp4", "mov", "m4v", "webm",
-    "xlsx", "xls", "hwp", "hwpx",
+const ASSET_EXTS: [&str; 14] = [
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "heic", "pdf", "mp4", "mov", "m4v", "webm", "hwp", "hwpx",
 ];
+const QUICK_LOOK_EXTS: [&str; 2] = ["xlsx", "xls"];
+
+fn is_asset_ext(ext: &str) -> bool {
+    ASSET_EXTS.contains(&ext) || QUICK_LOOK_EXTS.contains(&ext)
+}
 
 pub(crate) fn safe_name(name: &str) -> Result<(), String> {
     let ok = !name.is_empty()
@@ -77,14 +81,16 @@ pub(crate) fn safe_name(name: &str) -> Result<(), String> {
     if ok { Ok(()) } else { Err("invalid asset name".into()) }
 }
 
-pub(crate) fn stamp_name(ext: &str) -> String {
+fn process_seed() -> u64 {
     use std::hash::{BuildHasher, Hasher};
+    static SEED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *SEED.get_or_init(|| std::collections::hash_map::RandomState::new().build_hasher().finish())
+}
+
+pub(crate) fn stamp_name(ext: &str) -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::OnceLock;
-    static START: OnceLock<u64> = OnceLock::new();
     static COUNT: AtomicU64 = AtomicU64::new(0);
-    let start = *START.get_or_init(|| std::collections::hash_map::RandomState::new().build_hasher().finish());
-    let n = start.wrapping_add(COUNT.fetch_add(1, Ordering::Relaxed)) & 0xff_ffff;
+    let n = process_seed().wrapping_add(COUNT.fetch_add(1, Ordering::Relaxed)) & 0xff_ffff;
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
@@ -132,7 +138,7 @@ pub(crate) fn import_asset(app: AppHandle, src: String) -> Result<String, String
         .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase())
-        .filter(|e| ASSET_EXTS.contains(&e.as_str()))
+        .filter(|e| is_asset_ext(e))
         .ok_or("unsupported file type")?;
     let mut from = fs::File::open(&src).map_err(|e| e.to_string())?;
     create_asset(&app, &ext, |to| std::io::copy(&mut from, to).map(|_| ()))
@@ -146,7 +152,7 @@ pub(crate) fn save_asset(app: AppHandle, request: tauri::ipc::Request<'_>) -> Re
         .and_then(|v| v.to_str().ok())
         .unwrap_or("png")
         .to_ascii_lowercase();
-    if !ASSET_EXTS.contains(&ext.as_str()) {
+    if !is_asset_ext(&ext) {
         return Err("unsupported file type".into());
     }
     let bytes = raw_body(&request)?;

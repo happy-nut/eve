@@ -22,7 +22,7 @@ vi.mock('@tauri-apps/plugin-global-shortcut', () => ({
   unregisterAll: async () => {},
   register: async (k: string) => { keys.push(k); },
 }));
-const { win, paintGround, autostart, setGlobalHotkey, revealWhenDrawn } = await import('./platform');
+const { win, paintWindowBackground, autostart, setGlobalHotkey, revealWhenDrawn } = await import('./platform');
 
 test('summoned, the window is seen only after the page has drawn in it: never a white page first', async () => {
   window.addEventListener('eve-summon', () => calls.push('eve-summon'), { once: true });
@@ -42,10 +42,10 @@ test('summoned, the window is seen only after the page has drawn in it: never a 
 test("the window's own ground is the page's: what shows before the page draws is the theme's colour, not white", async () => {
   calls.length = 0;
   document.documentElement.style.background = 'rgb(11, 12, 16)';
-  await paintGround();
+  await paintWindowBackground();
   expect(calls).toEqual(['set_ground {"r":11,"g":12,"b":16}']);
   calls.length = 0;
-  await paintGround(); // the same colour again is not sent again
+  await paintWindowBackground(); // the same colour again is not sent again
   expect(calls).toEqual([]);
 });
 
@@ -53,25 +53,31 @@ test("the window's own ground is the page's: what shows before the page draws is
 // kept apart from the app's, took itself for a first run and wrote itself in as the login item
 test('the login item is this Eve: on at the first launch, written again at each launch while on, never by a build run from the code', async () => {
   localStorage.removeItem('eve.autostart.init');
-  await autostart.keep(true);
+  vi.stubEnv('DEV', true);
+  await autostart.keep();
   expect(login).toEqual([]); // a build run from the code
-  await autostart.set(true, true);
+  await autostart.set(true);
   expect(login).toEqual([]);
-  await autostart.keep(false);
+  vi.stubEnv('DEV', false);
+  await autostart.keep();
   expect(login).toEqual(['enable']); // the first launch
-  await autostart.keep(false);
+  await autostart.keep();
   expect(login).toEqual(['enable', 'enable']); // on: written again, pointing at where this Eve runs from
-  await autostart.set(false, false);
+  await autostart.set(false);
   login.length = 0;
-  await autostart.keep(false);
+  await autostart.keep();
   expect(login).toEqual([]); // turned off in Settings: left off
+  vi.unstubAllEnvs();
 });
 
 test('a build run from the code takes no summon key: only the app answers it', async () => {
-  await setGlobalHotkey('Mod-Shift-e', true);
+  vi.stubEnv('DEV', true);
+  await setGlobalHotkey('Mod-Shift-e');
   expect(keys).toEqual([]);
-  await setGlobalHotkey('Mod-Shift-e', false);
+  vi.stubEnv('DEV', false);
+  await setGlobalHotkey('Mod-Shift-e');
   expect(keys).toEqual(['CmdOrCtrl+Shift+E']);
+  vi.unstubAllEnvs();
 });
 
 // summoned, the note's pane stayed white (the crumbs over it, a click or a scroll changing nothing) until another note
@@ -122,6 +128,8 @@ test('summoned or back, each scroller is scrolled a pixel and back, so WebKit dr
 
 test('summoning turned off takes no system-wide key from the other apps', async () => {
   keys.length = 0;
-  expect(await setGlobalHotkey('', false)).toBeNull();
+  vi.stubEnv('DEV', false);
+  expect(await setGlobalHotkey('')).toBeNull();
   expect(keys).toEqual([]);
+  vi.unstubAllEnvs();
 });

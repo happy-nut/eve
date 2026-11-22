@@ -19,14 +19,14 @@
 
   $effect(() => {
     if (!sync.enabled) { versions = []; return; }
-    sync.versions(id).then((v) => (versions = v), (e: Error) => (failed = syncError(e.message)));
+    sync.versions(id).then((v) => (versions = v), (e: unknown) => (failed = syncError(e)));
   });
   $effect(() => {
     const v = versions?.[chosen];
     body = null;
     if (!v) return;
     let gone = false;
-    sync.versionAt(id, v.sha).then((b) => { if (!gone) body = b; }, (e: Error) => { if (!gone) failed = syncError(e.message); });
+    sync.versionAt(id, v.sha).then((b) => { if (!gone) body = b; }, (e: unknown) => { if (!gone) failed = syncError(e); });
     return () => { gone = true; };
   });
 

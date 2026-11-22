@@ -48,7 +48,7 @@ const SHOWN: Record<LayerId, () => boolean> = {
  *  it closes */
 function open(id: LayerId) {
   OPENERS[id]();
-  const sel = ui.layers.top?.own;
+  const sel = ui.layers.top?.ownSelector;
   const box = document.createElement('div');
   for (const [, cls] of (sel ?? '').matchAll(/\.([\w-]+)/g)) box.classList.add(cls);
   for (const [, k, v] of (sel ?? '').matchAll(/\[([\w-]+)="([^"]*)"\]/g)) box.setAttribute(k, v);
@@ -79,7 +79,7 @@ test.each(IDS)('%s: back closes it and only it, and the keyboard goes back where
 
 test.each(IDS)('%s: Esc closes it if it says so', async (id) => {
   const box = open(id);
-  const esc = !!ui.layers.top?.esc;
+  const esc = !!ui.layers.top?.closesOnEsc;
   expect(ui.layers.escape()).toBe(esc);
   expect(ui.layers.has(id)).toBe(!esc);
   expect(SHOWN[id]()).toBe(!esc);
@@ -123,6 +123,14 @@ test('a sheet closing is off the stack at once: the next back is for what is und
   ui.layers.closeTop('back');
   expect(ui.layers.top?.id).toBe('card');
   unmount();
+  expect(ui.layers.top?.id).toBe('card');
+});
+
+test('a layer is off the stack before its close runs: what the close opens goes on top, not under it', () => {
+  let seen: LayerId | null | undefined;
+  ui.openedSheet(() => { seen = ui.layers.top?.id ?? null; OPENERS.card(); });
+  ui.layers.closeTop('back');
+  expect(seen).toBeNull();
   expect(ui.layers.top?.id).toBe('card');
 });
 
@@ -182,7 +190,7 @@ test.each(IDS.filter((id) => id !== 'sheet'))('%s: modal, it holds the app\'s sh
 // toolbar and the list's search behind them
 test.each(IDS.filter((id) => id !== 'sheet'))('%s: modal, Tab goes round its own controls', (id) => {
   const box = open(id);
-  if (ui.layers.top?.modal && ui.layers.top.own) {
+  if (ui.layers.top?.modal && ui.layers.top.ownSelector) {
     box.insertAdjacentHTML('beforeend', '<button>second</button>');
     const [first, last] = box.querySelectorAll('button');
     last.focus();

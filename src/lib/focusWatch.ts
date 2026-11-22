@@ -22,10 +22,10 @@ export const focusLossAllowed = () => allowed;
 
 export function watchFocus(report: (what: string) => void): () => void {
   let pressed = false, pressTimer: ReturnType<typeof setTimeout> | undefined;
-  let last: Element | null = null;
+  let lastFocused: Element | null = null;
   const pending = new Set<ReturnType<typeof setTimeout>>();
   const later = (look: () => void) => { const t = setTimeout(() => { pending.delete(t); look(); }); pending.add(t); };
-  let moves = 0;
+  let focusinCount = 0;
   const describe = (el: Element | null) => {
     if (!el) return 'nothing';
     const cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).join('.') : '';
@@ -39,13 +39,13 @@ export function watchFocus(report: (what: string) => void): () => void {
   };
   const out = (e: FocusEvent) => {
     const from = e.target as Element;
-    if (last === from) last = null;
+    if (lastFocused === from) lastFocused = null;
     if (meant || pressed) return;
-    const at = era, n = moves;
-    later(() => { if (moves === n) check(from, 'blur', at); });
+    const at = era, n = focusinCount;
+    later(() => { if (focusinCount === n) check(from, 'blur', at); });
   };
-  let lastAt = 0;
-  const into = (e: FocusEvent) => { last = e.target as Element; lastAt = era; moves++; };
+  let lastFocusedEra = 0;
+  const into = (e: FocusEvent) => { lastFocused = e.target as Element; lastFocusedEra = era; focusinCount++; };
   const press = () => {
     pressed = true;
     clearTimeout(pressTimer);
@@ -55,11 +55,11 @@ export function watchFocus(report: (what: string) => void): () => void {
   // up on <body>. That is the commonest loss of all, so removals are looked for too: polled, not observed (a
   // MutationObserver over the whole page made a 3000-line note's tests twice as slow in jsdom)
   const probe = () => {
-    if (last && lastAt !== era) last = null;
-    if (!last || last.isConnected || document.activeElement !== document.body || pressed) return;
-    const from = last, at = era, n = moves;
-    last = null;
-    later(() => { if (moves === n) check(from, 'removed', at); });
+    if (lastFocused && lastFocusedEra !== era) lastFocused = null;
+    if (!lastFocused || lastFocused.isConnected || document.activeElement !== document.body || pressed) return;
+    const from = lastFocused, at = era, n = focusinCount;
+    lastFocused = null;
+    later(() => { if (focusinCount === n) check(from, 'removed', at); });
   };
   const poll = setInterval(probe, 25);
   probes.add(probe);

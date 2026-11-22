@@ -28,6 +28,22 @@ fn take_pending_link(pending: tauri::State<PendingLink>) -> Option<String> {
     pending.0.lock().unwrap().take()
 }
 
+fn hide_instead_of_close(window: &tauri::Window, event: &WindowEvent) {
+    if let WindowEvent::CloseRequested { api, .. } = event {
+        api.prevent_close();
+        let _ = window::hide_app(window.app_handle().clone());
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn open_inbox_if_asked(app: &tauri::AppHandle, urls: &[tauri::Url]) -> bool {
+    let inbox = urls.iter().any(|u| u.scheme() == "eve" && u.host_str() == Some("inbox"));
+    if inbox {
+        let _ = app.emit("inbox", ());
+    }
+    inbox
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
@@ -95,12 +111,7 @@ pub fn run() {
             update::install_update,
             mem::mem_mark
         ])
-        .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window::hide_app(window.app_handle().clone());
-            }
-        })
+        .on_window_event(hide_instead_of_close)
         .build(tauri::generate_context!())
         .expect("error while building eve")
         .run(|app, event| {
@@ -116,10 +127,7 @@ pub fn run() {
                     app.state::<Pending>().0.lock().unwrap().extend(paths.clone());
                     let _ = app.emit("open-files", paths);
                 }
-                let inbox = urls.iter().any(|u| u.scheme() == "eve" && u.host_str() == Some("inbox"));
-                if inbox {
-                    let _ = app.emit("inbox", ());
-                }
+                let inbox = open_inbox_if_asked(app, &urls);
                 if let Some(link) = urls.iter().rev().find(|u| u.scheme() == "eve" && u.host_str() != Some("inbox")) {
                     *app.state::<PendingLink>().0.lock().unwrap() = Some(link.to_string());
                     let _ = app.emit("open-link", link.to_string());

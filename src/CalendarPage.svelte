@@ -17,7 +17,10 @@
   let today = $state(dayKey(new Date()));
   let cursor = $state(kept || dayKey(new Date()));
   $effect(() => { kept = cursor; });
-  onMount(() => { if (!document.activeElement || document.activeElement === document.body) void moveTo(cursor); });
+  function focusCursorIfNothingFocused() {
+    if (!document.activeElement || document.activeElement === document.body) void moveTo(cursor);
+  }
+  onMount(focusCursorIfNothingFocused);
   $effect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const check = () => {

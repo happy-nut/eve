@@ -43,46 +43,46 @@
   }
   async function dropPerson(s: Sequence, i: number) {
     const id = s.people[i].id;
-    const theirs = (st: Sequence['messages'][number]) => (isMessage(st) ? st.from === id || st.to === id : 'note' in st && st.who.includes(id));
-    const n = s.messages.filter((m) => isMessage(m) && theirs(m)).length;
+    const theirs = (st: Sequence['steps'][number]) => (isMessage(st) ? st.from === id || st.to === id : 'note' in st && st.who.includes(id));
+    const n = s.steps.filter((m) => isMessage(m) && theirs(m)).length;
     if (n && !(await ui.ask(`Remove “${s.people[i].name.trim() || id}” and the ${n} message${n > 1 ? 's' : ''} to or from them?`))) return;
     s.people.splice(i, 1);
-    s.messages = s.messages.filter((m) => !theirs(m));
+    s.steps = s.steps.filter((m) => !theirs(m));
   }
   function addNote(s: Sequence) {
     const who = s.people[0]?.id;
     if (!who) return;
-    s.messages.push({ note: 'right of', who: [who], text: '' });
+    s.steps.push({ note: 'right of', who: [who], text: '' });
     void focusLast('.s-step input.grow');
   }
   function addGroup(s: Sequence) {
     const [a, b] = [s.people[0]?.id, s.people[1]?.id ?? s.people[0]?.id];
     if (!a || !b) return;
-    s.messages.push({ block: 'loop', text: '' }, { from: a, to: b, text: '', reply: false }, { block: 'end', text: '' });
-    void focusAt('.s-step input.grow', s.messages.filter((x) => !('block' in x && x.block === 'end')).length - 2);
+    s.steps.push({ block: 'loop', text: '' }, { from: a, to: b, text: '', reply: false }, { block: 'end', text: '' });
+    void focusAt('.s-step input.grow', s.steps.filter((x) => !('block' in x && x.block === 'end')).length - 2);
   }
   function addMessage(s: Sequence) {
-    const last = s.messages.filter(isMessage).pop();
+    const last = s.steps.filter(isMessage).pop();
     const [a, b] = last ? [last.to, last.from] : [s.people[0]?.id, s.people[1]?.id ?? s.people[0]?.id];
     if (!a || !b) return;
-    s.messages.push({ from: a, to: b, text: '', reply: !!last && !last.reply });
+    s.steps.push({ from: a, to: b, text: '', reply: !!last && !last.reply });
     void focusLast('.s-step input.grow');
   }
   async function addInside(s: Sequence, end: number, step: 'message' | 'group' | BlockKind) {
     const [a, b] = [s.people[0]?.id, s.people[1]?.id ?? s.people[0]?.id];
     if (!a || !b) return;
     const msg = { from: a, to: b, text: '', reply: false };
-    s.messages.splice(end, 0, ...(step === 'group' ? [{ block: 'loop' as const, text: '' }, msg, { block: 'end' as const, text: '' }] : step === 'message' ? [msg] : [{ block: step, text: '' }]));
+    s.steps.splice(end, 0, ...(step === 'group' ? [{ block: 'loop' as const, text: '' }, msg, { block: 'end' as const, text: '' }] : step === 'message' ? [msg] : [{ block: step, text: '' }]));
     await tick();
     box.querySelectorAll('.s-step')[end]?.querySelector<HTMLElement>('input.grow')?.focus();
   }
   async function moveStep(s: Sequence, i: number, by: -1 | 1, from?: HTMLElement) {
     const j = i + by;
-    if (j < 0 || j >= s.messages.length) return;
-    const next = [...s.messages];
+    if (j < 0 || j >= s.steps.length) return;
+    const next = [...s.steps];
     [next[i], next[j]] = [next[j], next[i]];
-    if (wellFormed(s.messages) && !wellFormed(next)) return;
-    s.messages = next;
+    if (wellFormed(s.steps) && !wellFormed(next)) return;
+    s.steps = next;
     await tick();
     const row = box.querySelectorAll('.s-step')[j];
     const label = from?.getAttribute('aria-label');
@@ -211,7 +211,7 @@
   <button class="x mv" type="button" aria-label="Move up" title="Move up (⌥↑)" disabled={i === 0} onclick={(e) => moveStep(s, i, -1, e.currentTarget)}>
     <svg viewBox="0 0 16 16"><path d="M4.5 9.5 8 6l3.5 3.5" /></svg>
   </button>
-  <button class="x mv" type="button" aria-label="Move down" title="Move down (⌥↓)" disabled={i === s.messages.length - 1} onclick={(e) => moveStep(s, i, 1, e.currentTarget)}>
+  <button class="x mv" type="button" aria-label="Move down" title="Move down (⌥↓)" disabled={i === s.steps.length - 1} onclick={(e) => moveStep(s, i, 1, e.currentTarget)}>
     <svg viewBox="0 0 16 16"><path d="M4.5 6.5 8 10l3.5-3.5" /></svg>
   </button>
 {/snippet}
@@ -249,7 +249,7 @@
       <div class="head">Messages
         <label class="check"><input type="checkbox" bind:checked={seqD.numbered} />Numbered</label>
       </div>
-      {#each seqD.messages as st, i (i)}
+      {#each seqD.steps as st, i (i)}
         <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <div class="row s-step" class:s-msg={isMessage(st)} role="group" style:padding-left={`${depthAt(seqD, i) * 18}px`} onkeydown={(e) => stepKey(e, seqD, i)}>
           {#if 'raw' in st}
@@ -282,7 +282,7 @@
             <Select label="From" value={st.from} options={peopleOptions(seqD)} onchange={(v) => (st.from = v)} />
             <Select label="Sends or replies" value={arrowOf(st)} options={seqArrows(st)} onchange={(v) => setArrow(st, v)} />
             <Select label="To" value={st.to} options={peopleOptions(seqD)} onchange={(v) => (st.to = v)} />
-            <Select label="Activation" value={st.act ?? ''} options={BARS} onchange={(v) => { if (v) st.act = v as '+' | '-'; else delete st.act; }} />
+            <Select label="Activation" value={st.activation ?? ''} options={BARS} onchange={(v) => { if (v) st.activation = v as 'start' | 'end'; else delete st.activation; }} />
             <input class="grow" bind:value={st.text} placeholder="Message" aria-label="Message" onkeydown={(e) => rowEnter(e, '.s-msg input.grow', () => addMessage(seqD))} />
             <span class="tools">{@render moves(seqD, i)}{@render remove(() => dropStep(seqD, i), 'Remove message')}</span>
           {/if}
@@ -406,7 +406,7 @@
             {#if t.after === undefined}
               <input class="date" type="date" value={t.start} aria-label="Starts" oninput={(e) => { const v = e.currentTarget.value; if (plausible(v)) t.start = v; }} onblur={(e) => (e.currentTarget.value = t.start)} />
             {/if}
-            {#if t.after}
+            {#if t.after && 'ids' in t.after}
               <Select label="And after" value="" options={andAfterOptions(gantt, t)} onchange={(v) => addAfter(gantt, t, v)} />
             {/if}
             <Select label="Status" value={(t.tags ?? []).join(', ')} options={tagOptions(t)} onchange={(v) => setTags(t, v)} />
@@ -513,7 +513,7 @@
       {#if er.tables.length}{@render add(() => addRelation(er), 'Add relation')}{/if}
     </div>
   {/if}
-  {#if extra?.extra?.length}{@render keptLines(extra.extra)}{/if}
+  {#if extra?.keptLines?.length}{@render keptLines(extra.keptLines)}{/if}
 </div>
 
 <style>

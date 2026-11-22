@@ -26,23 +26,23 @@ pub fn parse_args(cmd: &Command, argv: &[String]) -> Result<Value, String> {
             Some((n, v)) => (n, Some(v.to_string())),
             None => (flag, None),
         };
-        let name = if name == "group" { "page" } else { name };
         let p = cmd
             .params
             .iter()
-            .find(|p| p.name == name)
+            .find(|p| p.name == name || p.old_name == Some(name))
             .ok_or_else(|| format!("eve {} has no --{name}. See: eve help {}", cmd.cli, cmd.cli))?;
+        let name = p.name;
         let value = match inline {
             Some(v) => v,
             None => words.next().cloned().ok_or_else(|| format!("--{name} needs a value."))?,
         };
         match p.kind {
-            Kind::Texts(..) => {
+            Kind::Texts { .. } => {
                 let list = out.entry(name).or_insert_with(|| json!([]));
                 list.as_array_mut().unwrap().push(json!(value));
             }
             _ if out.contains_key(name) => return Err(format!("--{name} is given twice.")),
-            Kind::Number(..) => {
+            Kind::Number { .. } => {
                 let n: u64 = value.trim().parse().map_err(|_| format!("--{name} takes a whole number, not \"{value}\"."))?;
                 out.insert(name.into(), json!(n));
             }
@@ -58,7 +58,7 @@ pub fn parse_args(cmd: &Command, argv: &[String]) -> Result<Value, String> {
             .find(|p| p.positional)
             .ok_or_else(|| format!("eve {} takes no bare words (\"{}\"). See: eve help {}", cmd.cli, bare.join(" "), cmd.cli))?;
         match p.kind {
-            Kind::Texts(..) => {
+            Kind::Texts { .. } => {
                 let list = out.entry(p.name).or_insert_with(|| json!([]));
                 list.as_array_mut().unwrap().extend(bare.into_iter().map(Value::from));
             }

@@ -17,6 +17,7 @@
   import { findUpdate } from './lib/update';
   import { askNotify } from './lib/reminder';
   import { claimKeys, PRIORITY } from './lib/keys';
+  import { closeKeepingFocus } from './lib/backdrop';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
 
@@ -28,7 +29,10 @@
   let dockHidden = $state(dock.hidden);
   function setSummon(on: boolean) {
     appearance.set({ summon: on });
-    if (!on && dock.hidden) { dockHidden = false; void dock.set(false); }
+    if (!on) showDockAgain();
+  }
+  function showDockAgain() {
+    if (dock.hidden) { dockHidden = false; void dock.set(false); }
   }
   let opensMarkdown = $state(false);
   let defaultAppError = $state<string | null>(null);
@@ -45,11 +49,11 @@
   let claudeBusy = $state(false);
   let claudeError = $state<string | null>(null);
   const claudeFound = $derived((claude ?? []).filter((c) => c.installed));
-  const claudeOn = $derived(claudeFound.length > 0 && claudeFound.every((c) => c.connected));
+  const claudeOn = $derived(claudeFound.length > 0 && claudeFound.every((c) => c.status === 'connected'));
   const claudeText = $derived(
     claude === null ? 'Looking for Claude…'
     : !claudeFound.length ? 'Install Claude Desktop or Claude Code first'
-    : claude.map((c) => `${c.name}: ${!c.installed ? 'not found' : c.connected ? '✓ connected' : c.stale ? 'points at another copy of Eve' : 'not connected'}`).join(' · '));
+    : claude.map((c) => `${c.name}: ${!c.installed ? 'not found' : c.status === 'connected' ? '✓ connected' : c.status === 'stale' ? 'points at another copy of Eve' : 'not connected'}`).join(' · '));
   async function connectClaude(on: boolean) {
     claudeBusy = true;
     claudeError = null;
@@ -94,16 +98,21 @@
     : sync.settings.lastSynced ? `Synced at ${new Date(sync.settings.lastSynced).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
     : 'Not synced yet');
 
+  const typesIntoNote = (keys: string) => !/(^|-)(Mod|Ctrl|Alt)-/.test(keys) && !/(^|-)F\d{1,2}$/.test(keys);
+  function resetRecordedToDefault(id: string) {
+    shortcuts.reset(id);
+    recording = null; conflict = null;
+  }
   function onKey(e: KeyboardEvent) {
     if (recording) {
       e.preventDefault(); e.stopPropagation();
       if (e.key === 'Escape') { recording = null; conflict = null; return; }
-      if (e.key === 'Backspace' && !e.metaKey && !e.ctrlKey && !e.altKey) { shortcuts.reset(recording); recording = null; conflict = null; return; }
+      if (e.key === 'Backspace' && !e.metaKey && !e.ctrlKey && !e.altKey) { resetRecordedToDefault(recording); return; }
       const keys = eventToKeys(e);
       if (!keys) return;
-      if (!/(^|-)(Mod|Ctrl|Alt)-/.test(keys) && !/(^|-)F\d{1,2}$/.test(keys)) { conflict = { id: recording, keys, with: '', bare: true }; return; }
-      const clash = shortcuts.set(recording, keys);
-      if (clash) { conflict = { id: recording, keys, with: clash.label }; return; }
+      if (typesIntoNote(keys)) { conflict = { id: recording, keys, with: '', bare: true }; return; }
+      const taken = shortcuts.set(recording, keys);
+      if (taken) { conflict = { id: recording, keys, with: 'reserved' in taken ? taken.reserved : taken.clash.label }; return; }
       conflict = null;
       recording = null;
       return;
@@ -124,9 +133,10 @@
     ];
     return () => off.forEach((f) => f());
   });
+  const swallowKeysWhileRecording = () =>
+    claimKeys('global', { '*': (e) => { onKey(e); e.stopPropagation(); return true; } }, { capture: true, whileTop: 'settings', priority: PRIORITY.record, composing: true });
   $effect(() => {
-    if (!recording) return;
-    return claimKeys('global', { '*': (e) => { onKey(e); e.stopPropagation(); return true; } }, { capture: true, whileTop: 'settings', priority: PRIORITY.record, composing: true });
+    if (recording) return swallowKeysWhileRecording();
   });
 
   function resetLook() {
@@ -136,7 +146,7 @@
 </script>
 
 
-<div class="backdrop" transition:fade|global={scrimFade} onmousedown={(e) => { e.preventDefault(); onClose(); }} role="presentation"></div>
+<div class="backdrop" transition:fade|global={scrimFade} onmousedown={closeKeepingFocus(onClose)} role="presentation"></div>
 <div class="panel" use:takeFocus transition:scale|global={panelIn} role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1">
   <header>
     <div class="seg" role="tablist">

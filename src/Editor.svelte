@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Editor as TipTap } from '@tiptap/core';
-  import { takeBody } from './lib/takeBody';
+  import { takeBody, sameBody } from './lib/takeBody';
   import { createEditor, applyKeymap, goToSection, runEditorCommand, clickBelow } from './lib/editor';
   import { isMobile, pickImage } from './lib/platform';
   import { GRADIENTS, coverCss, gradientCover, randomCover } from './lib/cover';
@@ -30,15 +30,15 @@
   let dateMenu: ReturnType<typeof DateMenu>;
   let emojiRow: ReturnType<typeof EmojiRow>;
 
-  let lastEmitted = '';
+  let lastHandedOver = '';
 
   onMount(() => {
-    const id = note.id;
-    lastEmitted = note.body;
+    const openedNoteId = note.id;
+    lastHandedOver = note.body;
     editor = createEditor({
       element: el,
       content: note.body,
-      onUpdate: (md) => { lastEmitted = md; notes.update(id, md); },
+      onUpdate: (md) => { lastHandedOver = md; notes.update(openedNoteId, md); },
       onNoteMove: (dir, onTitle) => (onTitle || openedFromList.id === note.id) && nudgeNote(note.id, dir),
       onOpenNote: (title) => {
         notes.flush(note.id);
@@ -50,7 +50,7 @@
         }
       },
       targets: () => notes.pages,
-      page: () => id,
+      page: () => openedNoteId,
       suggestionUI: suggest.ui,
       calendarUI: dateMenu.ui,
       emojiUI: emojiRow.ui,
@@ -100,11 +100,11 @@
       hooks.section = undefined;
       hooks.page = undefined;
       hooks.command = undefined;
-      if (editor) notes.cursor.set(id, editor.state.selection.from);
+      if (editor) notes.cursor.set(openedNoteId, editor.state.selection.from);
       editor?.destroy();
       // Svelte runs teardown with pre-update state visible, so a flush here would persist stale data
       // (it resurrected deleted notes). Flush right after the batch instead.
-      setTimeout(() => notes.flush(id), 0);
+      setTimeout(() => notes.flush(openedNoteId), 0);
     };
   });
 
@@ -129,9 +129,9 @@
     ]);
   }
 
-  let coverTop = $state(true);
+  let fadeWaitsForCover = $state(true);
   const COVER_H = isMobile ? 160 : 220;
-  const onScroll = () => { coverTop = !!note.cover && (scrollEl?.scrollTop ?? 0) < COVER_H - 72; };
+  const onScroll = () => { fadeWaitsForCover = !!note.cover && (scrollEl?.scrollTop ?? 0) < COVER_H - 72; };
   $effect(() => { void note.cover; onScroll(); });
 
   $effect(() => {
@@ -144,8 +144,8 @@
 
   $effect(() => {
     const body = note.body;
-    if (!editor || body.trimEnd() === lastEmitted.trimEnd()) return;
-    lastEmitted = body;
+    if (!editor || sameBody(body, lastHandedOver)) return;
+    lastHandedOver = body;
     takeBody(editor, body);
   });
   const crumbs = $derived.by(() => {
@@ -180,7 +180,7 @@
   }
 </script>
 
-<div class="scroll" bind:this={scrollEl} onscroll={onScroll} class:cover-top={coverTop && !!note.cover}
+<div class="scroll" bind:this={scrollEl} onscroll={onScroll} class:cover-top={fadeWaitsForCover && !!note.cover}
   style:--editor-width={note.wide ? 'none' : null} style:--font-size={note.small ? `${appearance.smallPx}px` : null}>
   {#if note.cover}
     <div class="cover" style:background={coverCss(note.cover)} style:height="{COVER_H}px">
@@ -212,8 +212,7 @@
     {/if}
     </div>
   </div>
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="editor has-head" bind:this={el} {@attach paneWidth}
+  <div class="editor has-head" role="presentation" bind:this={el} {@attach paneWidth}
     onkeydown={(e) => {
       // …but a row of a diagram's form keeps Tab: to the next row, as anywhere a form is filled in (a database's fields,
       // a chart part's bar too)

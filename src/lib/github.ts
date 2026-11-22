@@ -5,11 +5,16 @@ export interface RemoteFile { path: string; data: Uint8Array; prev?: string }
 const BRANCH = 'main';
 const PREFIX = 'notes/';
 
+export class EveError extends Error {}
+export class GitHubError extends Error {
+  readonly status: number;
+  constructor(status: number, why: string) { super(`${status} ${why}`.trim()); this.status = status; }
+}
 
 export function normHost(input: string): string {
   const h = input.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   if (!h || h === 'github.com' || h === 'www.github.com' || h === 'api.github.com') return '';
-  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d{1,5})?$/.test(h)) throw new Error(`"${input.trim()}" is not a server address`);
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d{1,5})?$/.test(h)) throw new EveError(`"${input.trim()}" is not a server address`);
   return h;
 }
 export const webBase = (host = '') => `https://${host || 'github.com'}`;
@@ -34,7 +39,7 @@ export const b64 = (d: Uint8Array) => {
 };
 const unb64 = (s: string) => Uint8Array.from(atob(s.replace(/\s/g, '')), (c) => c.charCodeAt(0));
 
-async function explain(res: Response): Promise<string> {
+async function refusal(res: Response): Promise<GitHubError> {
   let msg = '';
   try {
     const j = await res.json();
@@ -45,7 +50,7 @@ async function explain(res: Response): Promise<string> {
   } catch { }
   if (res.status === 401) msg = 'bad token';
   if (res.status === 404) msg = 'repository not found (check owner/name and the token\'s access)';
-  return `${res.status} ${msg}`.trim();
+  return new GitHubError(res.status, msg);
 }
 
 /** Promise.all in chunks — GitHub throttles at ~100 concurrent requests. */
@@ -85,17 +90,17 @@ export class Repo {
   }
   private async json(method: string, path: string, body?: unknown) {
     const res = await this.api(method, path, body);
-    if (!res.ok) throw new Error(await explain(res));
+    if (!res.ok) throw await refusal(res);
     return res.json();
   }
 
-  async pull(): Promise<RemoteFile[]> {
+  async pull(onPull?: (files: RemoteFile[]) => void | Promise<void>): Promise<RemoteFile[]> {
     const br = await this.api('GET', `/branches/${BRANCH}`);
     if (br.status === 404 || br.status === 409) { // no branch yet (empty repo) — or no such repo, which init() reports
       await this.init();
-      return this.pull();
+      return this.pull(onPull);
     }
-    if (!br.ok) throw new Error(await explain(br));
+    if (!br.ok) throw await refusal(br);
     const { commit } = await br.json();
     const head: string = commit.sha;
     if (head === this.s.head) return [];
@@ -112,9 +117,16 @@ export class Repo {
       data: await this.blob(e.sha),
       prev: this.s.known[e.path],
     }));
+    const before = { head: this.s.head, tree: this.s.tree, known: this.s.known };
     this.s.head = head;
     this.s.tree = t.sha;
     this.s.known = known;
+    try {
+      if (out.length) await onPull?.(out);
+    } catch (e) {
+      Object.assign(this.s, before);
+      throw e;
+    }
     return out;
   }
 
@@ -130,7 +142,7 @@ export class Repo {
   async fileAt(path: string, sha: string): Promise<Uint8Array | null> {
     const res = await this.api('GET', `/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${sha}`);
     if (res.status === 404) return null;
-    if (!res.ok) throw new Error(await explain(res));
+    if (!res.ok) throw await refusal(res);
     const f = await res.json();
     // ponytail: the contents API hands a file past 1 MB over without its content; read its blob by sha then
     return f.content ? unb64(f.content) : f.sha ? this.blob(f.sha) : null;
@@ -139,7 +151,7 @@ export class Repo {
   /** The git data API refuses an empty repository (409); the contents API creates the first commit + branch. */
   private async init() {
     const res = await this.api('PUT', `/contents/${PREFIX}.keep`, { message: 'eve: init', content: '', branch: BRANCH });
-    if (!res.ok) throw new Error(await explain(res));
+    if (!res.ok) throw await refusal(res);
   }
 
   async push(files: LocalFile[]): Promise<boolean> {
@@ -162,7 +174,7 @@ export class Repo {
     });
     const r = await this.api('PATCH', `/git/refs/heads/${BRANCH}`, { sha: c.sha });
     if (r.status === 422) return false;
-    if (!r.ok) throw new Error(await explain(r));
+    if (!r.ok) throw await refusal(r);
     this.s.head = c.sha;
     this.s.tree = t.sha;
     for (const e of tree) this.s.known[e.path] = e.sha;
@@ -176,14 +188,7 @@ export async function syncRound(
   onPull: (files: RemoteFile[]) => void | Promise<void>,
 ): Promise<void> {
   for (let i = 0; i < 3; i++) {
-    const before = { head: repo.s.head, tree: repo.s.tree, known: repo.s.known };
-    const pulled = await repo.pull();
-    try {
-      if (pulled.length) await onPull(pulled);
-    } catch (e) {
-      Object.assign(repo.s, before);
-      throw e;
-    }
+    await repo.pull(onPull);
     if (await repo.push(await local())) return;
   }
   throw new Error('branch keeps moving; try again');
@@ -205,28 +210,30 @@ export async function requestCode(post: Post, l: Login = {}): Promise<DeviceCode
   return { device_code: a.device_code, user_code: a.user_code, verification_uri: a.verification_uri, interval: Number(a.interval) || 5, expires_in: Number(a.expires_in) || 900 };
 }
 
-const OWN_WORDS = / exists but is | is not a server address| is not a user or organization name|already exists, but this sign-in/;
+const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e ?? ''));
 
-export function signInError(msg: string): string | null {
+export function signInError(e: unknown): string | null {
+  const msg = messageOf(e);
   if (/cancelled/i.test(msg)) return null;
-  if (OWN_WORDS.test(msg)) return msg;
+  if (e instanceof EveError) return msg;
   if (/denied/i.test(msg)) return 'Eve was not authorized on GitHub. Press Sign in with GitHub to try again.';
   if (/expired/i.test(msg)) return 'The sign-in code ran out. Press Sign in with GitHub for a new one.';
   if (/verif\w*.*email|email.*verif/i.test(msg)) return 'GitHub wants the account\'s email address confirmed first: open the link in the email GitHub sent, then sign in again.';
-  const answered = /^\d{3}\b/.test(msg);
+  const answered = e instanceof GitHubError;
   if (!answered && /could not reach|lookup address|network|\bdns\b|timed? ?out|connection|offline|error sending request/i.test(msg)) return 'Could not reach GitHub. Check the internet connection (or a VPN) and try again.';
-  if (/^401\b/.test(msg)) return 'GitHub did not accept this sign-in. Sign in again; a pasted token needs the repo scope.';
+  if (answered && e.status === 401) return 'GitHub did not accept this sign-in. Sign in again; a pasted token needs the repo scope.';
   return msg;
 }
 
-export function syncError(msg: string): string {
-  if (OWN_WORDS.test(msg)) return msg;
-  const answered = /^\d{3}\b/.test(msg);
-  if (!answered && /failed to fetch|load failed|networkerror|could not reach|lookup address|network|\bdns\b|timed? ?out|connection|offline|error sending request/i.test(msg)) return 'Could not reach GitHub. Eve tries again every minute; your notes are kept here meanwhile.';
-  if (/^401\b/.test(msg)) return 'GitHub no longer accepts this sign-in. Sign in again here to keep syncing.';
-  if (/^403\b/.test(msg) && /rate limit|abuse|secondary/i.test(msg)) return 'GitHub asked Eve to slow down. It tries again in a few minutes by itself.';
-  if (/^404\b/.test(msg)) return 'The notes repository is gone, or this sign-in can no longer see it. Sign in again to choose it.';
-  if (/^5\d\d\b/.test(msg)) return 'GitHub is having trouble right now. Eve tries again every minute.';
+export function syncError(e: unknown): string {
+  const msg = messageOf(e);
+  if (e instanceof EveError) return msg;
+  const status = e instanceof GitHubError ? e.status : null;
+  if (status === null && /failed to fetch|load failed|networkerror|could not reach|lookup address|network|\bdns\b|timed? ?out|connection|offline|error sending request/i.test(msg)) return 'Could not reach GitHub. Eve tries again every minute; your notes are kept here meanwhile.';
+  if (status === 401) return 'GitHub no longer accepts this sign-in. Sign in again here to keep syncing.';
+  if (status === 403 && /rate limit|abuse|secondary/i.test(msg)) return 'GitHub asked Eve to slow down. It tries again in a few minutes by itself.';
+  if (status === 404) return 'The notes repository is gone, or this sign-in can no longer see it. Sign in again to choose it.';
+  if (status !== null && status >= 500 && status < 600) return 'GitHub is having trouble right now. Eve tries again every minute.';
   if (/branch keeps moving/i.test(msg)) return 'Another device was syncing at the same moment. Eve tries again in a minute.';
   return msg.replace(/^\w*Error:\s*/, '');
 }
@@ -278,27 +285,27 @@ export async function ensureRepo(token: string, f: typeof fetch = (...a) => fetc
   } catch {
     throw new Error(`Could not reach ${webBase(opts.host)}. On a company network or VPN?`);
   }
-  if (!me.ok) throw new Error(await explain(me));
+  if (!me.ok) throw await refusal(me);
   const user: string = (await me.json()).login;
   const owner = opts.owner?.trim() || user;
-  if (!/^[\w.-]+$/.test(owner)) throw new Error(`"${owner}" is not a user or organization name`);
+  if (!/^[\w.-]+$/.test(owner)) throw new EveError(`"${owner}" is not a user or organization name`);
   const repo = `${owner}/${REPO_NAME}`;
   const r = await f(`${api}/repos/${repo}`, { headers });
   if (r.ok) {
     // private only: "internal" (a GitHub Enterprise visibility) shows the notes to everyone in the company
     const j = await r.json();
     const seen: string = j.visibility ?? (j.private ? 'private' : 'public');
-    if (seen !== 'private') throw new Error(`${repo} exists but is ${seen} — make it private or rename it`);
+    if (seen !== 'private') throw new EveError(`${repo} exists but is ${seen} — make it private or rename it`);
   } else if (r.status === 404) {
     const into = owner.toLowerCase() === user.toLowerCase() ? `${api}/user/repos` : `${api}/orgs/${owner}/repos`;
     const c = await f(into, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ name: REPO_NAME, private: true, description: 'Eve notes (synced by the app)' }) });
     if (!c.ok) {
-      const why = await explain(c);
+      const why = await refusal(c);
       // looked for and not found, yet there: this sign-in may not see it (a token for other repositories only,
       // an organization that has not let Eve in, single sign-on not authorized)
-      if (c.status === 422 && /already exists/i.test(why)) throw new Error(`${repo} already exists, but this sign-in cannot see it: give Eve (or the token) access to it on GitHub, or rename it`);
-      throw new Error(why);
+      if (c.status === 422 && /already exists/i.test(why.message)) throw new EveError(`${repo} already exists, but this sign-in cannot see it: give Eve (or the token) access to it on GitHub, or rename it`);
+      throw why;
     }
-  } else throw new Error(await explain(r));
+  } else throw await refusal(r);
   return { user, repo };
 }

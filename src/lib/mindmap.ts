@@ -4,20 +4,23 @@ import { esc, textW, wrap } from './lanes';
 
 type Node = { text: string; shape: MindShape; depth: number; spot: string; hue: number; kids: Node[]; lines: string[]; w: number; h: number; x: number; y: number; right: boolean };
 
-const LOOK = [
-  { size: 16, weight: 650, line: 21, px: 22, py: 13, max: 220 },
-  { size: 14, weight: 600, line: 19, px: 15, py: 9, max: 190 },
-  { size: 13.5, weight: 450, line: 18, px: 4, py: 6, max: 210 },
-];
-const look = (n: { depth: number; shape: MindShape }) => {
-  const l = LOOK[Math.min(n.depth, 2)];
-  return n.depth >= 2 && n.shape !== 'plain' ? { ...l, px: 12, py: 7 } : l;
+type Level = 'root' | 'branch' | 'leaf';
+const levelOf = (depth: number): Level => depth === 0 ? 'root' : depth === 1 ? 'branch' : 'leaf';
+
+const LOOK: Record<Level, { size: number; weight: number; line: number; px: number; py: number; max: number }> = {
+  root: { size: 16, weight: 650, line: 21, px: 22, py: 13, max: 220 },
+  branch: { size: 14, weight: 600, line: 19, px: 15, py: 9, max: 190 },
+  leaf: { size: 13.5, weight: 450, line: 18, px: 4, py: 6, max: 210 },
 };
-const GAP_X = [64, 44, 34];
-const GAP_Y = [22, 14, 6];
+const look = (n: { depth: number; shape: MindShape }) => {
+  const level = levelOf(n.depth), l = LOOK[level];
+  return level === 'leaf' && n.shape !== 'plain' ? { ...l, px: 12, py: 7 } : l;
+};
+const GAP_X: Record<Level, number> = { root: 64, branch: 44, leaf: 34 };
+const GAP_Y: Record<Level, number> = { root: 22, branch: 14, leaf: 6 };
 const PAD = 18;
 
-const span = (n: Node): number => n.kids.length ? Math.max(n.h, n.kids.reduce((a, k) => a + span(k), 0) + GAP_Y[Math.min(n.depth, 2)] * (n.kids.length - 1)) : n.h;
+const span = (n: Node): number => n.kids.length ? Math.max(n.h, n.kids.reduce((a, k) => a + span(k), 0) + GAP_Y[levelOf(n.depth)] * (n.kids.length - 1)) : n.h;
 
 function sized(n: Node) {
   const l = look(n);
@@ -35,10 +38,11 @@ function place(n: Node, x: number, top: number, right: boolean) {
   n.right = right;
   n.y = top + s / 2;
   n.x = right ? x : x - n.w;
-  const kidsH = n.kids.reduce((a, k) => a + span(k), 0) + GAP_Y[Math.min(n.depth, 2)] * Math.max(0, n.kids.length - 1);
+  const gy = GAP_Y[levelOf(n.depth)];
+  const kidsH = n.kids.reduce((a, k) => a + span(k), 0) + gy * Math.max(0, n.kids.length - 1);
   let y = top + (s - kidsH) / 2;
-  const gx = GAP_X[Math.min(n.depth, 2)], nx = right ? n.x + n.w + gx : n.x - gx;
-  for (const k of n.kids) { place(k, nx, y, right); y += span(k) + GAP_Y[Math.min(n.depth, 2)]; }
+  const gx = GAP_X[levelOf(n.depth)], nx = right ? n.x + n.w + gx : n.x - gx;
+  for (const k of n.kids) { place(k, nx, y, right); y += span(k) + gy; }
 }
 
 const plainWords = (n: Node) => n.depth >= 2 && n.shape === 'plain';
@@ -69,7 +73,7 @@ function shapeOf(n: Node) {
 
 import { held, huesOf } from './chartHues';
 
-export function mindSvg(d: Mindmap, minScale = 0.8): string {
+function buildTree(d: Mindmap): Node {
   const root: Node = { text: d.root.trim() || 'Idea', shape: d.rootShape ?? 'circle', depth: 0, spot: 'root', hue: 0, kids: [], lines: [], w: 0, h: 0, x: 0, y: 0, right: true };
   const stack: Node[] = [root];
   d.items.forEach((b, i) => {
@@ -80,10 +84,16 @@ export function mindSvg(d: Mindmap, minScale = 0.8): string {
     stack[depth - 1].kids.push(n);
     stack.push(n);
   });
+  return root;
+}
+
+function tintBranches(root: Node) {
   const hues = huesOf(root.kids.map((k) => k.text), root.kids.map((k) => k.spot), 5, 1);
   const tint = (n: Node, h: number) => { n.hue = h; n.kids.forEach((k) => tint(k, h)); };
   root.kids.forEach((k, i) => tint(k, hues[i]));
-  sized(root);
+}
+
+function splitSides(root: Node): { right: Node[]; left: Node[] } {
   const kids = root.kids;
   let cut = kids.length;
   if (kids.length >= 3) {
@@ -102,11 +112,27 @@ export function mindSvg(d: Mindmap, minScale = 0.8): string {
     }
     left.reverse();
   }
+  return { right, left };
+}
+
+function linkPath(p: Node, k: Node, root: Node): string {
+  const a = outPt(p), b = inPt(k);
+  const mx = (a.x + b.x) / 2;
+  const from = p.depth === 0 ? { x: k.right ? root.x + root.w - root.h / 2 : root.x + root.h / 2, y: 0 } : a;
+  const c1 = p.depth === 0 ? { x: k.right ? root.x + root.w + 8 : root.x - 8, y: b.y } : { x: mx, y: a.y };
+  return `<path class="mm-link c${k.hue}${p.depth === 0 ? ' trunk' : ''}" d="M${from.x.toFixed(1)} ${from.y.toFixed(1)}C${c1.x.toFixed(1)} ${c1.y.toFixed(1)} ${mx.toFixed(1)} ${b.y.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}"/>`;
+}
+
+export function mindSvg(d: Mindmap, minScale = 0.8): string {
+  const root = buildTree(d);
+  tintBranches(root);
+  sized(root);
+  const { right, left } = splitSides(root);
   root.x = -root.w / 2; root.y = 0;
   const side = (list: Node[], isRight: boolean) => {
-    const g = GAP_Y[0], H = list.reduce((a, k) => a + span(k), 0) + g * Math.max(0, list.length - 1);
+    const g = GAP_Y.root, H = list.reduce((a, k) => a + span(k), 0) + g * Math.max(0, list.length - 1);
     let y = -H / 2;
-    for (const k of list) { place(k, isRight ? root.x + root.w + GAP_X[0] : root.x - GAP_X[0], y, isRight); y += span(k) + g; }
+    for (const k of list) { place(k, isRight ? root.x + root.w + GAP_X.root : root.x - GAP_X.root, y, isRight); y += span(k) + g; }
   };
   side(right, true);
   side(left, false);
@@ -118,14 +144,7 @@ export function mindSvg(d: Mindmap, minScale = 0.8): string {
   const minY = Math.min(...all.map((n) => n.y - n.h / 2)) - PAD, maxY = Math.max(...all.map((n) => n.y + n.h / 2)) + PAD;
   const W = Math.ceil(maxX - minX), H = Math.ceil(maxY - minY);
 
-  const links: string[] = [];
-  for (const p of all) for (const k of p.kids) {
-    const a = outPt(p), b = inPt(k);
-    const mx = (a.x + b.x) / 2;
-    const from = p.depth === 0 ? { x: k.right ? root.x + root.w - root.h / 2 : root.x + root.h / 2, y: 0 } : a;
-    const c1 = p.depth === 0 ? { x: k.right ? root.x + root.w + 8 : root.x - 8, y: b.y } : { x: mx, y: a.y };
-    links.push(`<path class="mm-link c${k.hue}${p.depth === 0 ? ' trunk' : ''}" d="M${from.x.toFixed(1)} ${from.y.toFixed(1)}C${c1.x.toFixed(1)} ${c1.y.toFixed(1)} ${mx.toFixed(1)} ${b.y.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}"/>`);
-  }
+  const links = all.flatMap((p) => p.kids.map((k) => linkPath(p, k, root)));
   const nodes = all.map((n) => {
     const l = look(n), cls = n.depth === 0 ? 'mm-root' : n.depth === 1 ? 'mm-l1' : plainWords(n) ? 'mm-leaf' : 'mm-leaf shaped';
     const top = n.y - (n.lines.length * l.line) / 2 + l.line / 2;

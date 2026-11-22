@@ -6,17 +6,23 @@ export interface SwipeActions {
   enabled?: () => boolean;
 }
 
+const ARM_DISTANCE = 140;
+const SETTLE_MS = 240;
+const STRETCH_WITHOUT_ACTION = 24;
+const SWALLOW_CLICK_MS = 350;
+const RUN_AFTER_MS = 120;
+
 export function swipeRow(node: HTMLElement, actions: SwipeActions) {
   if (!isMobile) return;
   let start: { x: number; y: number; axis: '' | 'x' | 'y' } | null = null;
-  let dx = 0, armed = false, swallow = false, settle: ReturnType<typeof setTimeout> | undefined;
-  const mark = () => Math.min(140, node.offsetWidth / 3);
+  let dx = 0, armed = false, swallowNextClick = false, settle: ReturnType<typeof setTimeout> | undefined;
+  const mark = () => Math.min(ARM_DISTANCE, node.offsetWidth / 3);
   const set = (x: number) => {
     dx = x;
     node.style.setProperty('--sx', `${x}px`);
     clearTimeout(settle);
     if (x) { node.classList.toggle('to-left', x < 0); node.classList.toggle('to-right', x > 0); }
-    else settle = setTimeout(() => node.classList.remove('to-left', 'to-right'), 240);
+    else settle = setTimeout(() => node.classList.remove('to-left', 'to-right'), SETTLE_MS);
     const on = Math.abs(x) >= mark();
     if (on && !armed) navigator.vibrate?.(8);
     armed = on;
@@ -36,7 +42,7 @@ export function swipeRow(node: HTMLElement, actions: SwipeActions) {
     e.preventDefault();
     node.classList.add('swiping');
     const has = x < 0 ? actions.left : actions.right;
-    set(has ? x : Math.sign(x) * Math.min(24, Math.abs(x) / 4));
+    set(has ? x : Math.sign(x) * Math.min(STRETCH_WITHOUT_ACTION, Math.abs(x) / 4));
   };
   const up = () => {
     if (!start) return;
@@ -44,14 +50,14 @@ export function swipeRow(node: HTMLElement, actions: SwipeActions) {
     start = null;
     if (!wasX) return;
     const run = armed ? (dx < 0 ? actions.left : actions.right) : undefined;
-    swallow = true;
-    setTimeout(() => (swallow = false), 350);
+    swallowNextClick = true;
+    setTimeout(() => (swallowNextClick = false), SWALLOW_CLICK_MS);
     node.classList.remove('swiping');
     set(0);
-    if (run) setTimeout(run, 120);
+    if (run) setTimeout(run, RUN_AFTER_MS);
   };
   const cancel = () => { if (!start) return; start = null; node.classList.remove('swiping'); set(0); };
-  const click = (e: MouseEvent) => { if (swallow) { e.preventDefault(); e.stopPropagation(); } };
+  const click = (e: MouseEvent) => { if (swallowNextClick) { e.preventDefault(); e.stopPropagation(); } };
   node.addEventListener('touchstart', down, { passive: true });
   node.addEventListener('touchmove', move, { passive: false });
   node.addEventListener('touchend', up);

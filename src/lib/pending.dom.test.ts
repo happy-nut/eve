@@ -2,7 +2,7 @@ import { test, expect } from 'vitest';
 
 const { createEditor } = await import('./editor');
 const { type } = await import('./testEditor');
-const { takeEditorKeys } = await import('./pending');
+const { flushPendingEdits } = await import('./pending');
 
 function editor(content: string) {
   const sent: string[] = [];
@@ -27,10 +27,10 @@ test('a long note waits for a pause, and anything that reads it first gets the l
   const { ed, sent } = editor(long);
   type(ed, 'XYZ');
   expect(sent).toEqual([]); // not on every key
-  takeEditorKeys(); // what notes.flush, flushAll and an export run first
+  flushPendingEdits(); // what notes.flush, flushAll and an export run first
   expect(sent.length).toBe(1);
   expect(sent[0].trimEnd().endsWith('XYZ')).toBe(true);
-  takeEditorKeys();
+  flushPendingEdits();
   expect(sent.length).toBe(1); // nothing left to hand over
   ed.destroy();
 });

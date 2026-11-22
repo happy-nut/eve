@@ -10,15 +10,20 @@
   import { followPointer } from './lib/followPointer';
 
   const page = ui.present!, from = ui.presentFrom;
-  const sections = slides([...page.children]).map((blocks) => blocks.map((b) => {
+  const unsizeDiagram = (c: HTMLElement) => { for (const svg of c.querySelectorAll<SVGSVGElement>('.mermaid-view svg')) Object.assign(svg.style, { width: '', minWidth: '', maxWidth: '' }); };
+  const unholdTable = (c: HTMLElement) => {
+    for (const t of [c, ...c.querySelectorAll('.tableWrapper')]) t.classList.remove('held');
+    for (const cell of c.querySelectorAll<HTMLElement>('table, col, th, td')) Object.assign(cell.style, { width: '', minWidth: '' });
+  };
+  function slideCopy(b: Element) {
     const c = b.cloneNode(true) as HTMLElement;
     if (b === from) c.dataset.from = '';
     for (const e of [c, ...c.querySelectorAll('[contenteditable]')]) e.removeAttribute('contenteditable');
-    for (const svg of c.querySelectorAll<SVGSVGElement>('.mermaid-view svg')) Object.assign(svg.style, { width: '', minWidth: '', maxWidth: '' });
-    for (const t of [c, ...c.querySelectorAll('.tableWrapper')]) t.classList.remove('held');
-    for (const cell of c.querySelectorAll<HTMLElement>('table, col, th, td')) Object.assign(cell.style, { width: '', minWidth: '' });
+    unsizeDiagram(c);
+    unholdTable(c);
     return c;
-  }));
+  }
+  const sections = slides([...page.children]).map((blocks) => blocks.map(slideCopy));
   let at = $state(0);
   let pinned = $state<{ heads: string[]; at: string }>({ heads: [], at: '' });
   function pin() {
@@ -42,7 +47,22 @@
   at = Math.max(0, deck.findIndex((s) => s.some((b) => b.hasAttribute('data-from') && !b.classList.contains('again'))));
 
   const EASE = 'cubic-bezier(.2, .7, .2, 1)';
-  function turn(old: { el: HTMLElement; at: DOMRect; top: number } | null, back: boolean) {
+  type Shown = { el: HTMLElement; at: DOMRect; top: number };
+  function leaveCopy(old: Shown, [leave, enter]: [Keyframe[], Keyframe[]]) {
+    const rb = box.getBoundingClientRect(), { el } = old;
+    Object.assign(el.style, { position: 'absolute', left: `${old.at.left - rb.left}px`, top: `${old.at.top - rb.top}px`, width: `${old.at.width}px`, height: `${old.at.height}px`, margin: '0' });
+    el.classList.remove('first');
+    el.classList.add('leaving');
+    box.append(el);
+    el.scrollTop = old.top;
+    el.animate(leave, { duration: 260, easing: EASE, fill: 'forwards' }).finished.finally(() => el.remove());
+    body.animate(enter, { duration: 420, easing: EASE });
+  }
+  function buildLines(delay: number) {
+    [...body.children].filter((b) => !b.classList.contains('again')).slice(0, 14).forEach((b, n) =>
+      b.animate([{ opacity: 0, transform: 'translateY(.6em)' }, {}], { duration: 380, delay: delay + n * 55, easing: EASE, fill: 'backwards' }));
+  }
+  function turn(old: Shown | null, back: boolean) {
     if (matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     const head = (e: Element | null | undefined) => (e && /^H[1-6]$/.test(e.tagName) ? e.textContent : null);
     const same = !!old && head(old.el.firstElementChild) != null && head(old.el.firstElementChild) === head(body.firstElementChild);
@@ -54,19 +74,8 @@
       zoom: [[{ transform: 'scale(1.04)', opacity: 0 }], [{ transform: 'scale(.96)', opacity: 0 }, {}]],
     };
     const f = frames[kind];
-    if (old && f) {
-      const rb = box.getBoundingClientRect(), { el } = old;
-      Object.assign(el.style, { position: 'absolute', left: `${old.at.left - rb.left}px`, top: `${old.at.top - rb.top}px`, width: `${old.at.width}px`, height: `${old.at.height}px`, margin: '0' });
-      el.classList.remove('first');
-      el.classList.add('leaving');
-      box.append(el);
-      el.scrollTop = old.top;
-      el.animate(f[0], { duration: 260, easing: EASE, fill: 'forwards' }).finished.finally(() => el.remove());
-      body.animate(f[1], { duration: 420, easing: EASE });
-    }
-    if (!appearance.s.slideBuild) return;
-    [...body.children].filter((b) => !b.classList.contains('again')).slice(0, 14).forEach((b, n) =>
-      b.animate([{ opacity: 0, transform: 'translateY(.6em)' }, {}], { duration: 380, delay: (f && !same ? 120 : 0) + n * 55, easing: EASE, fill: 'backwards' }));
+    if (old && f) leaveCopy(old, f);
+    if (appearance.s.slideBuild) buildLines(f && !same ? 120 : 0);
   }
 
   let zoomed: { svg: SVGSVGElement; s: number; x: number; y: number } | null = null;
@@ -177,14 +186,14 @@
   const own = ownWholeScreen();
   const canWhole = own || !!document.fullscreenEnabled;
   let full = $state(false);
-  async function whole(on: boolean): Promise<boolean> {
-    try {
-      if (own) { const changed = await wholeScreen(on); full = on; return changed; }
-      if (on && !document.fullscreenElement) { await box.requestFullscreen(); return true; }
-      if (!on && document.fullscreenElement) { await document.exitFullscreen(); return true; }
-    } catch { }
+  async function turnWhole(on: boolean): Promise<boolean> {
+    if (own) { const changed = await wholeScreen(on); full = on; return changed; }
+    if (on && !document.fullscreenElement) { await box.requestFullscreen(); return true; }
+    if (!on && document.fullscreenElement) { await document.exitFullscreen(); return true; }
     return false;
   }
+  const refused = () => false;
+  const whole = (on: boolean): Promise<boolean> => turnWhole(on).catch(refused);
   const onFull = () => { if (!own) full = !!document.fullscreenElement; };
 
   onMount(() => {
@@ -201,7 +210,6 @@
   });
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="present" bind:this={box} role="dialog" aria-label="Presentation" tabindex="-1"
   transition:fade|global={scrimFade} onkeydown={onKey} onclick={onClick} onpointerdown={onDown} onwheel={onWheel}>
   <div class="tiptap slide" class:first={at === 0} class:hidden={ended} bind:this={body} onscroll={pin}></div>
@@ -232,12 +240,13 @@
 
 <style>
   .present {
+    --font-size: clamp(17px, min(2vw, 3.4vh), 48px);
     position: fixed; inset: 0; z-index: var(--z-photo); display: flex; align-items: center; justify-content: center;
     padding: calc(max(40px, 9vh) + var(--top, 0px)) 0 calc(40px + var(--bottom, 0px)); box-sizing: border-box;
     background: var(--bg); outline: none; cursor: default;
   }
   .slide {
-    --font-size: clamp(17px, min(2vw, 3.4vh), 48px); font-size: var(--font-size);
+    font-size: var(--font-size);
     width: calc(100% - 2 * max(24px, 5vw)); max-height: 100%; overflow-y: auto; scrollbar-width: none;
     margin: 0; align-self: flex-start; pointer-events: none; user-select: none;
   }
@@ -270,7 +279,7 @@
   .slide :global(:is(.tools, .codebar, .foldchips, .drag-handle, .block-handle)) { display: none !important; }
   .pinned {
     position: absolute; z-index: var(--z-raised); display: flex; gap: 0.5em; padding: 0 0 0.7em;
-    font-size: calc(clamp(17px, min(2vw, 3.4vh), 48px) * 0.55); line-height: 1.3; font-weight: 600; color: var(--fg-dim);
+    font-size: calc(var(--font-size) * 0.55); line-height: 1.3; font-weight: 600; color: var(--fg-dim);
     background: linear-gradient(var(--bg) 75%, transparent); pointer-events: none;
   }
   .pinned .sep { font-weight: 400; }

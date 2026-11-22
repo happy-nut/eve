@@ -7,19 +7,18 @@
   import { openAsset, qlPreview } from './lib/platform';
   import { hwpPages } from './lib/hwp';
   import { HWP_FILE, PDF_FILE } from './lib/drop';
-  import { viewSize } from './lib/popup';
+  import { viewSize, lastShown } from './lib/popup';
 
-  let last = ui.pdf!;
-  const req = $derived.by(() => (last = ui.pdf ?? last));
+  const req = $derived.by(lastShown(() => ui.pdf));
 
   const match = (re: RegExp) => re.test(req.src) || re.test(req.name);
   const kind = $derived(match(PDF_FILE) ? 'pdf' : match(HWP_FILE) ? 'hwp' : 'quicklook');
 
-  let src = $state('');
-  let page = $state('');
+  let frameUrl = $state('');
+  let frameDoc = $state('');
   let failed = $state('');
 
-  const sheet = (pages: string[]) =>
+  const hwpDocument = (pages: string[]) =>
     `<!doctype html><meta charset="utf-8"><style>` +
     `html{background:#f4f4f5}body{margin:0;padding:12px;display:flex;flex-direction:column;align-items:center;gap:12px}` +
     `svg{max-width:100%;height:auto;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.22)}` +
@@ -27,21 +26,21 @@
 
   $effect(() => {
     const doc = req.src, k = kind;
-    src = k === 'pdf' ? pdfSrc(doc) : '';
-    page = '';
+    frameUrl = k === 'pdf' ? pdfSrc(doc) : '';
+    frameDoc = '';
     failed = '';
     let live = true;
     if (k === 'quicklook') {
       void qlPreview(doc).then((u) => {
         if (!live) return;
-        if (u) src = u;
+        if (u) frameUrl = u;
         else failed = 'Quick Look has no preview for this file on this Mac.';
       });
     }
     if (k === 'hwp') {
       void hwpPages(doc)
         .then((d) => {
-          if (live) page = sheet(Array.from({ length: d.count }, (_, i) => d.page(i)));
+          if (live) frameDoc = hwpDocument(Array.from({ length: d.count }, (_, i) => d.page(i)));
         })
         .catch(() => {
           if (!live) return;
@@ -53,7 +52,7 @@
     return () => { live = false; };
   });
 
-  const BAR = 33;
+  const TITLE_BAR_H = 33;
   const EDGE = 7; // frame around the document: the grab handles live here, clear of the PDF view,
                   // which the webview draws itself and which swallows a press meant for the panel
 
@@ -61,17 +60,17 @@
   let h = $state(Math.min(780, Math.round(viewSize().h * 0.74)));
   let x = $state(Math.max(12, viewSize().w - Math.min(520, viewSize().w - 24) - 12));
   let y = $state(64);
-  let busy = $state(false);
+  let dragging = $state(false);
 
   function gesture(e: PointerEvent, step: (dx: number, dy: number) => void) {
     e.preventDefault();
     const handle = e.currentTarget as HTMLElement;
     handle.setPointerCapture(e.pointerId);
-    busy = true;
+    dragging = true;
     const x0 = e.clientX, y0 = e.clientY;
     const move = (m: PointerEvent) => step(m.clientX - x0, m.clientY - y0);
     const up = () => {
-      busy = false;
+      dragging = false;
       handle.releasePointerCapture(e.pointerId);
       handle.removeEventListener('pointermove', move);
       handle.removeEventListener('pointerup', up);
@@ -126,10 +125,9 @@
   });
 </script>
 
-<div class="pdf-panel" bind:this={panel} onpointerdowncapture={() => (touched = true)} class:busy style:left="{x}px" style:top="{y}px" style:width="{w}px" style:height="{h}px"
+<div class="pdf-panel" bind:this={panel} onpointerdowncapture={() => (touched = true)} class:dragging style:left="{x}px" style:top="{y}px" style:width="{w}px" style:height="{h}px"
   transition:scale|global={panelIn}>
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="pdf-bar" onpointerdown={drag}>
+  <div class="pdf-bar" role="toolbar" tabindex="-1" aria-label={req.name} onpointerdown={drag}>
     <span class="pdf-title">{req.name}</span>
     <!-- tooltips go above the bar: the webview draws the PDF over any HTML that lands on top of it -->
     <button class="icon tip-up" aria-label="Open outside" data-tip="Open outside" onclick={() => openAsset(req.src)}>
@@ -142,22 +140,21 @@
   <div class="pdf-doc" class:plain={kind !== 'pdf'}>
     {#if failed}
       <p class="pdf-none">{failed}</p>
-    {:else if src || page}
+    {:else if frameUrl || frameDoc}
       <!-- a PDF is laid out at twice the panel's size and drawn at half scale: the webview's own
            zoom/share HUD is a fixed size inside the document, so this is what keeps it from dwarfing
            the page. The other two are ordinary HTML and take the panel's size as it is. No title
            attribute either — the webview turns one into a tooltip that follows the pointer over the page. -->
       <!-- svelte-ignore a11y_missing_attribute -->
-      <iframe src={src || undefined} srcdoc={page || undefined} sandbox={page ? '' : undefined}
+      <iframe src={frameUrl || undefined} srcdoc={frameDoc || undefined} sandbox={frameDoc ? '' : undefined}
         style:width="{(w - EDGE * 2) * (kind === 'pdf' ? 2 : 1)}px"
-        style:height="{(h - BAR - EDGE) * (kind === 'pdf' ? 2 : 1)}px"></iframe>
+        style:height="{(h - TITLE_BAR_H - EDGE) * (kind === 'pdf' ? 2 : 1)}px"></iframe>
     {:else}
       <p class="pdf-none">Preparing preview…</p>
     {/if}
   </div>
   {#each HANDLES as sides}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="pdf-edge {sides}" onpointerdown={(e) => resize(e, sides)}>
+    <div class="pdf-edge {sides}" role="separator" aria-orientation={sides === 'e' || sides === 'w' ? 'vertical' : 'horizontal'} aria-label="Resize" onpointerdown={(e) => resize(e, sides)}>
       {#if sides === 'se'}<svg viewBox="0 0 12 12"><path d="M11 4.5 4.5 11M11 8.5 8.5 11"/></svg>{/if}
     </div>
   {/each}
@@ -179,7 +176,7 @@
   iframe { border: 0; display: block; transform: scale(0.5); transform-origin: 0 0; background: var(--bg); }
   .pdf-doc.plain iframe { transform: none; }
   .pdf-none { margin: 0; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 24px; color: var(--fg-dim); font-size: 12.5px; }
-  .busy iframe { pointer-events: none; }
+  .dragging iframe { pointer-events: none; }
   .pdf-edge { position: absolute; }
   .pdf-edge.n { top: 0; left: 18px; right: 18px; height: 6px; cursor: ns-resize; }
   .pdf-edge.s { bottom: 0; left: 18px; right: 18px; height: 7px; cursor: ns-resize; }

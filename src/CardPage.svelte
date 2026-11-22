@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { panelIn, scrimFade } from './lib/motion';
   import { isMobile } from './lib/platform';
@@ -17,10 +17,10 @@
   import Outline from './Outline.svelte';
   import TableTools from './TableTools.svelte';
   import { composing, handledBy } from './lib/keys';
+  import { closeKeepingFocus } from './lib/backdrop';
 
   let { req }: { req: CardReq & CardMore } = $props();
-  // svelte-ignore state_referenced_locally
-  let column = $state(req.column);
+  let column = $state(untrack(() => req.column));
   let el: HTMLDivElement;
   let scrollEl = $state<HTMLDivElement | null>(null);
   let suggest: ReturnType<typeof Suggest>;
@@ -57,10 +57,10 @@
     editor.view.focus();
     if (req.markdown !== undefined || (req.title.trim() && req.caret !== 'title')) editor.commands.focus('end');
     else editor.commands.focus(editor.state.doc.firstChild!.nodeSize - 1);
-    const again = requestAnimationFrame(() => { if (!el.contains(document.activeElement)) editor?.view.focus(); });
-    const under = hooks.cardCommand, mine = (id: string) => { if (editor) runEditorCommand(editor, id); };
-    hooks.cardCommand = mine;
-    return () => { cancelAnimationFrame(again); if (hooks.cardCommand === mine) hooks.cardCommand = under; editor?.destroy(); };
+    const refocusIfLost = requestAnimationFrame(() => { if (!el.contains(document.activeElement)) editor?.view.focus(); });
+    const outerCardCommand = hooks.cardCommand, ownCardCommand = (id: string) => { if (editor) runEditorCommand(editor, id); };
+    hooks.cardCommand = ownCardCommand;
+    return () => { cancelAnimationFrame(refocusIfLost); if (hooks.cardCommand === ownCardCommand) hooks.cardCommand = outerCardCommand; editor?.destroy(); };
   });
 
   const appear = (node: HTMLElement) => sheet(node, (n) => scale(n, panelIn), dy);
@@ -97,13 +97,16 @@
     view.dispatch(tr.setSelection(TextSelection.create(tr.doc, after + 1)).scrollIntoView());
   }
 
+  function keepTabInPage(e: KeyboardEvent) {
+    if (!e.defaultPrevented) e.preventDefault();
+  }
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape' && handledBy(e) !== 'taken') { e.preventDefault(); e.stopPropagation(); close(); }
-    if (e.key === 'Tab' && !e.defaultPrevented) e.preventDefault();
+    if (e.key === 'Tab') keepTabInPage(e);
   }
 </script>
 
-<div class="backdrop" transition:fade|global={scrimFade} style:opacity={dy ? Math.max(0.2, 1 - dy / 400) : null} onmousedown={(e) => { e.preventDefault(); close(); }} role="presentation"></div>
+<div class="backdrop" transition:fade|global={scrimFade} style:opacity={dy ? Math.max(0.2, 1 - dy / 400) : null} onmousedown={closeKeepingFocus(close)} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="card-page" transition:appear|global use:pull class:dragging class:with-del={isMobile && (!!req.onDelete || !!req.move)} style:translate={dy ? `0 ${dy}px` : null}
   role="dialog" tabindex="-1" onkeydown={onKey} onkeydowncapture={titleEnter}>
@@ -132,7 +135,7 @@
   <Outline {scrollEl} {editor} />
 </div>
 <!-- outside the card: it is transformed, which would clip a fixed bar hanging over the table's top -->
-<TableTools {editor} sheet />
+<TableTools {editor} overSheet />
 <Suggest bind:this={suggest} />
 <DateMenu bind:this={dateMenu} />
 <EmojiRow bind:this={emojiRow} />

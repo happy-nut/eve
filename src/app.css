@@ -1,4 +1,6 @@
 :root {
+  --weight-semibold: calc(var(--font-weight, 400) + 200);
+  --weight-bold: calc(var(--font-weight, 400) + 300);
   --fg: light-dark(#33363d, #d3d6dc);
   --fg-dim: light-dark(#636770, #8b909a);
   --bg: light-dark(#ffffff, #0b0c10);
@@ -42,6 +44,7 @@
   --panel-radius: 14px;
   --panel-shadow: 0 0 0 0.5px var(--line), 0 5px 10px light-dark(rgba(15, 15, 15, 0.1), rgba(0, 0, 0, 0.3)), 0 15px 40px light-dark(rgba(15, 15, 15, 0.2), rgba(0, 0, 0, 0.5));
   --scrim: light-dark(rgba(20, 22, 28, 0.18), rgba(0, 0, 0, 0.38));
+  --traffic-lights-end: 86px;
   color-scheme: light dark;
 }
 :root {
@@ -87,7 +90,7 @@ button.icon:active { transform: scale(0.9); }
 }
 @keyframes appear { from { opacity: 0; transform: scale(0.985); } }
 .dragbar { position: fixed; top: 0; left: 0; right: 0; height: 40px; z-index: var(--z-chrome); }
-.toolbar { position: fixed; top: 10px; left: 86px; display: flex; gap: 4px; z-index: var(--z-toolbar); }
+.toolbar { position: fixed; top: 10px; left: var(--traffic-lights-end); display: flex; gap: 4px; z-index: var(--z-toolbar); }
 .toolbar .icon { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
 .toolbar svg { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .note-more { position: absolute; top: 10px; right: 14px; z-index: var(--z-toolbar); width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
@@ -282,7 +285,7 @@ html.mobile .mhead .micon.on svg { fill: currentColor; }
 @media screen {
   html.mobile .big-icon { font-size: 44px; }
 }
-html.mobile .tiptap h1 { font-size: 1.65em; font-weight: calc(var(--font-weight, 400) + 300); }
+html.mobile .tiptap h1 { font-size: 1.65em; font-weight: var(--weight-bold); }
 html.mobile .tiptap h2 { font-size: 1.3em; }
 html.mobile .tiptap h3 { font-size: 1.1em; }
 main { flex: 1; min-width: 0; position: relative; }
@@ -315,7 +318,7 @@ main.tabbed .page { top: 71px; }
   font-size: var(--font-size, 15px);
 }
 .tiptap > * + * { margin-top: 0.5em; }
-.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5, .tiptap h6 { font-weight: calc(var(--font-weight, 400) + 200); line-height: 1.3; margin: calc(var(--font-size, 15px) * 1.1) 0 0.15em; letter-spacing: -0.01em; }
+.tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5, .tiptap h6 { font-weight: var(--weight-semibold); line-height: 1.3; margin: calc(var(--font-size, 15px) * 1.1) 0 0.15em; letter-spacing: -0.01em; }
 .tiptap h1 { font-size: 1.875em; margin-top: calc(var(--font-size, 15px) * 2); }
 .tiptap h2 { font-size: 1.5em; margin-top: calc(var(--font-size, 15px) * 1.4); }
 .tiptap h3 { font-size: 1.25em; }
@@ -324,7 +327,7 @@ main.tabbed .page { top: 71px; }
 .tiptap h6 { font-size: 0.85em; color: var(--fg-dim); }
 .tiptap > h1:first-child { margin-top: 0; }
 .tiptap p { margin: 0; }
-.tiptap strong { font-weight: calc(var(--font-weight, 400) + 300); }
+.tiptap strong { font-weight: var(--weight-bold); }
 .tiptap > :first-child.is-empty::before, .tiptap > p.is-empty:nth-child(2):last-child::before,
 .tiptap :is(h1, h2, h3, h4, h5, h6, summary, li p, blockquote > p).is-empty::before {
   content: attr(data-placeholder);
@@ -332,7 +335,7 @@ main.tabbed .page { top: 71px; }
   float: left; height: 0; pointer-events: none;
 }
 .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5, h6):first-child {
-  font-size: 2.5em; font-weight: calc(var(--font-weight, 400) + 300); line-height: 1.2; letter-spacing: -0.02em; margin-top: 0; color: var(--fg); text-transform: none;
+  font-size: 2.5em; font-weight: var(--weight-bold); line-height: 1.2; letter-spacing: -0.02em; margin-top: 0; color: var(--fg); text-transform: none;
 }
 html.mobile .editor.has-head .tiptap > :is(p, h1, h2, h3, h4, h5, h6):first-child { font-size: 2em; }
 .tiptap ul, .tiptap ol { padding-left: 1.75em; margin: 0; list-style: none; }
@@ -613,17 +616,16 @@ html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .dblock:not(.full) .
 .ProseMirror:not(.ProseMirror-focused) ~ .sel-layer > div { opacity: 0.45; }
 @media print { .sel-layer { display: none; } }
 .tiptap .pm-sel { background: var(--sel); }
-.tiptap .callout-emoji { user-select: none; -webkit-user-select: none; }
 
 .tiptap .callout {
   display: flex; gap: 10px; align-items: flex-start;
   background: var(--tint-gray); border-radius: 10px; padding: 16px 16px 16px 12px; margin: 0.6em 0;
 }
-.tiptap .callout-emoji { flex: none; width: 1.5em; text-align: center; font-size: 1.15em; line-height: calc(var(--line-height, 1.6) / 1.15); cursor: pointer; user-select: none; } /* one width, so every callout's text starts at one place */
+.tiptap .callout-emoji { flex: none; width: 1.5em; text-align: center; font-size: 1.15em; line-height: calc(var(--line-height, 1.6) / 1.15); cursor: pointer; user-select: none; -webkit-user-select: none; } /* one width, so every callout's text starts at one place */
 .tiptap .callout-emoji svg { width: 1.2em; height: 1.2em; vertical-align: -0.2em; }
 .tiptap .callout-body { flex: 1; min-width: 0; }
 .tiptap .callout-body > * + * { margin-top: 0.4em; }
-.tiptap .callout[data-titled] .callout-body > p:first-child { font-weight: calc(var(--font-weight, 400) + 200); }
+.tiptap .callout[data-titled] .callout-body > p:first-child { font-weight: var(--weight-semibold); }
 .tiptap .callout[data-color='blue'] { background: var(--tint-blue); }
 .tiptap .callout[data-color='cyan'] { background: var(--tint-cyan); }
 .tiptap .callout[data-color='green'] { background: var(--tint-green); }
@@ -683,7 +685,7 @@ html:not(.mobile) .tiptap .tableWrapper { margin-bottom: calc(0.7em + 18px); }
    the cell's line out with it and leaves the caret outside the cell, so the next syllable went in front: 결격 came
    out 격결. ponytail: typing with the mouse resting on the column's edge still positions it */
 .tiptap .selectedCell, .tiptap :is(th, td):has(> .column-resize-handle) { position: relative; }
-.tiptap th { background: var(--bg-input); font-weight: calc(var(--font-weight, 400) + 200); text-align: left; }
+.tiptap th { background: var(--bg-input); font-weight: var(--weight-semibold); text-align: left; }
 .tiptap th > p, .tiptap td > p { margin: 0; white-space: pre-wrap; } /* a wrapped word's space hangs at the end of the line, as text does: break-spaces (ProseMirror's) set it at the start of the next, or on a line of its own */
 html.mobile .tiptap table { table-layout: auto; }
 .editor .tiptap > .tableWrapper { position: relative; width: max-content; min-width: 100%; max-width: var(--reach); }
@@ -709,7 +711,6 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 .tiptap .img-fig[data-align='right'] .img-cap { text-align: right; }
 .tiptap .img-fig img { margin: 0; }
 .tiptap .img-fig.ProseMirror-selectednode img { outline: 2px solid var(--accent); box-shadow: var(--glow); }
-.tiptap .img-fig.ProseMirror-selectednode::selection, .tiptap .img-fig.ProseMirror-selectednode *::selection { background: transparent; }
 .tiptap .img-cap {
   margin-top: 5px; text-align: center; font-size: 0.85em; color: var(--fg-dim); outline: none;
   border-radius: 4px; padding: 1px 4px;
@@ -722,7 +723,6 @@ html.mobile .tiptap th, html.mobile .tiptap td { min-width: 6em; }
 .tiptap .img-cap:focus:empty::before { opacity: 0.6; }
 .tiptap .img-cap { user-select: none; -webkit-user-select: none; }
 .tiptap .img-cap.editing { user-select: text; -webkit-user-select: text; }
-.tiptap .img-fig img::selection, .tiptap .img-fig::selection { background: transparent; }
 .tiptap .img-fig.in-sel .img-cap { color: var(--fg); }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; } /* height, or a sideways bar keeps WebKit's chunky default */
@@ -787,7 +787,6 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
      scrolled halfway down would print with everything above the caret sliced off the first page */
   .scroll { display: contents; }
   .editor .tiptap { max-width: none; padding: 0; min-height: 0; }
-  .tiptap p, .tiptap h1, .tiptap h2, .tiptap h3, .tiptap h4, .tiptap h5 { overflow: visible; width: auto; max-width: none; }
   .editor.has-head .tiptap { min-height: 0; }
   .tiptap img, .tiptap .pdf-card, .tiptap .bookmark, .tiptap pre, .tiptap blockquote, .tiptap .callout { break-inside: avoid; }
   .tiptap h1, .tiptap h2, .tiptap h3 { break-after: avoid; }

@@ -1,9 +1,9 @@
 <script lang="ts" module>
-  const tallest = new Map<number, number>();
-  if (typeof window !== 'undefined') tallest.set(window.innerWidth, window.innerHeight);
+  const fullHeightByWidth = new Map<number, number>();
+  if (typeof window !== 'undefined') fullHeightByWidth.set(window.innerWidth, window.innerHeight);
 
-  function guessFull(w: number): number {
-    for (const [w0, h0] of tallest) if (Math.abs(h0 - w) <= 2) return w0;
+  function fullHeightAfterTurn(w: number): number {
+    for (const [w0, h0] of fullHeightByWidth) if (Math.abs(h0 - w) <= 2) return w0;
     const s = window.screen;
     if (s && Math.abs(s.height - w) <= 2) return s.width;
     if (s && Math.abs(s.width - w) <= 2) return s.height;
@@ -16,34 +16,36 @@
   import { hooks } from './lib/ui.svelte';
   import { scrollHint } from './lib/scrollHint';
 
+  const isNoteText = (el: Element | null) =>
+    !!el?.matches('.page .tiptap, .card-page .tiptap') && !el.closest('.dblock, .math-edit, .mermaid-host, .math-inline, .math-block');
+
   let editing = $state(false);
   let keyboard = $state(false);
 
   onMount(() => {
     const measure = () => {
-      const w = window.innerWidth, full = Math.max(tallest.get(w) ?? guessFull(w), window.innerHeight);
-      tallest.set(w, full);
+      const w = window.innerWidth, full = Math.max(fullHeightByWidth.get(w) ?? fullHeightAfterTurn(w), window.innerHeight);
+      fullHeightByWidth.set(w, full);
       keyboard = window.innerHeight < full - 120;
     };
     const check = () => {
-      const a = document.activeElement;
-      editing = !!a?.matches('.page .tiptap, .card-page .tiptap') && !a.closest('.dblock, .math-edit, .mermaid-host, .math-inline, .math-block');
+      editing = isNoteText(document.activeElement);
       measure();
     };
-    const out = () => setTimeout(check, 0);
+    const recheckAfterFocusMoves = () => setTimeout(check, 0);
     document.addEventListener('focusin', check);
-    document.addEventListener('focusout', out);
+    document.addEventListener('focusout', recheckAfterFocusMoves);
     window.addEventListener('resize', check);
     check();
     return () => {
       document.removeEventListener('focusin', check);
-      document.removeEventListener('focusout', out);
+      document.removeEventListener('focusout', recheckAfterFocusMoves);
       window.removeEventListener('resize', check);
     };
   });
 
   const run = (id: string) => (document.activeElement?.closest('.card-page') ? hooks.cardCommand : hooks.command)?.(id);
-  const done = () => (document.activeElement as HTMLElement | null)?.blur();
+  const hideKeyboard = () => (document.activeElement as HTMLElement | null)?.blur();
 
   const buttons: { id: string; label: string; icon: string }[] = [
     { id: 'taskList', label: 'To-do', icon: '<rect x="3" y="3.5" width="9" height="9" rx="2"/><path d="M5.3 8l1.7 1.7L10 6.5"/>' },
@@ -75,7 +77,7 @@
         </button>
       {/each}
     </div>
-    <button tabindex="-1" aria-label="Done" class="done" onclick={done}>
+    <button tabindex="-1" aria-label="Done" class="done" onclick={hideKeyboard}>
       <svg viewBox="0 0 16 16"><path d="M3.5 6l4.5 4.5L12.5 6"/></svg>
     </button>
   </div>

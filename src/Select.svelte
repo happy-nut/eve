@@ -6,18 +6,18 @@
   import { floatAt } from './lib/popup';
   import { claimKeys, PRIORITY } from './lib/keys';
 
-  let { value, options, onchange, onpicked, label = '' }: {
+  let { value, options, onchange, onclosed, label = '' }: {
     value: string;
     options: readonly (readonly [string, string])[];
     onchange: (v: string) => void;
-    onpicked?: () => void;
+    onclosed?: () => void;
     label?: string;
   } = $props();
 
   let open = $state(false);
   let wasOpen = false;
-  $effect(() => { if (wasOpen && !open) onpicked?.(); wasOpen = open; });
-  let at = $state(0);
+  $effect(() => { if (wasOpen && !open) onclosed?.(); wasOpen = open; });
+  let highlighted = $state(0);
   $effect(() => {
     if (!open || isMobile) return;
     return claimKeys('global', { Escape: (e) => { e.stopPropagation(); close(); return true; } }, { capture: true, priority: PRIORITY.top, composing: true });
@@ -32,14 +32,14 @@
   const current = $derived(options.find(([id]) => id === value)?.[1] ?? value);
 
   function show() {
-    at = Math.max(0, options.findIndex(([id]) => id === value));
+    highlighted = Math.max(0, options.findIndex(([id]) => id === value));
     if (btn && !isMobile) place(Math.max(btn.offsetWidth, 160), options.length * 34 + 8);
     open = true;
   }
   let list = $state<HTMLDivElement | null>(null);
   const option = (i: number) => list?.querySelectorAll<HTMLButtonElement>('[role="option"]')[i];
-  $effect(() => { if (open && list) option(at)?.focus(); });
-  function moveTo(i: number) { at = i; option(i)?.focus(); }
+  $effect(() => { if (open && list) option(highlighted)?.focus(); });
+  function moveTo(i: number) { highlighted = i; option(i)?.focus(); }
   function close() { open = false; btn?.focus(); }
   function place(w: number, h: number) {
     if (!btn) return;
@@ -60,11 +60,11 @@
     e.stopPropagation();
     if (e.key === 'Escape') close();
     else if (e.key === 'Tab') { close(); return; }
-    else if (e.key === 'ArrowDown') moveTo((at + 1) % options.length);
-    else if (e.key === 'ArrowUp') moveTo((at - 1 + options.length) % options.length);
+    else if (e.key === 'ArrowDown') moveTo((highlighted + 1) % options.length);
+    else if (e.key === 'ArrowUp') moveTo((highlighted - 1 + options.length) % options.length);
     else if (e.key === 'Home') moveTo(0);
     else if (e.key === 'End') moveTo(options.length - 1);
-    else if (e.key === 'Enter' || e.key === ' ') pick(at);
+    else if (e.key === 'Enter' || e.key === ' ') pick(highlighted);
     else return;
     e.preventDefault();
   }
@@ -77,7 +77,6 @@
 </button>
 
 {#if open && !isMobile}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="scrim" use:portal role="presentation" onmousedown={(e) => { e.preventDefault(); close(); }}></div>
 {/if}
 {#if open}
@@ -92,11 +91,10 @@
       {/each}
     </BottomSheet>
   {:else}
-    <!-- svelte-ignore a11y_interactive_supports_focus -->
-    <div class="pop" bind:this={list} class:up={pos.up} use:portal use:measured onkeydown={listKey} role="listbox" style="left: {pos.left}px; top: {pos.top}px; max-height: {pos.maxHeight}px; min-width: {Math.max(pos.width, 160) + 10}px"
+    <div class="pop" tabindex="-1" bind:this={list} class:up={pos.up} use:portal use:measured onkeydown={listKey} role="listbox" style="left: {pos.left}px; top: {pos.top}px; max-height: {pos.maxHeight}px; min-width: {Math.max(pos.width, 160) + 10}px"
       transition:scale|global={popIn}>
       {#each options as [id, text], i (id)}
-        <button role="option" aria-selected={id === value} class:at={i === at} tabindex="-1"
+        <button role="option" aria-selected={id === value} class:at={i === highlighted} tabindex="-1"
           onmouseenter={() => moveTo(i)} onmousedown={(e) => e.preventDefault()} onclick={() => pick(i)}>
           <span>{text}</span>
           {#if id === value}<svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg>{/if}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick, untrack } from 'svelte';
+  import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import { caretIn } from './lib/motion';
   import type { Editor } from '@tiptap/core';
@@ -29,8 +29,6 @@
     if (!e) return;
     const on = () => sync();
     e.on('transaction', on);
-    const q = untrack(() => query);
-    if (q) setQuery(e, q);
     sync();
     return () => { e.off('transaction', on); clearFind(e); };
   });
@@ -66,11 +64,13 @@
     return { destroy() { ro.disconnect(); scroll.style.paddingTop = ''; } };
   }
 
+  const inReplaceField = (e: KeyboardEvent) => replacing && !e.shiftKey && (e.target as HTMLElement).classList.contains('rep');
+
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
     else if (e.key !== 'Enter' || composing(e)) return;
     e.preventDefault();
-    if (replacing && !e.shiftKey && (e.target as HTMLElement).classList.contains('rep')) replaceNext();
+    if (inReplaceField(e)) replaceNext();
     else walk(e.shiftKey ? -1 : 1);
   }
 </script>
@@ -98,7 +98,7 @@
   </div>
   {#if replacing}
     <div class="line">
-      <span class="glass" aria-hidden="true"></span>
+      <span class="glass-gap" aria-hidden="true"></span>
       <input class="rep" placeholder="Replace with" spellcheck="false" bind:value={replacement} />
       <button class="icon" data-tip="Replace (↩)" aria-label="Replace" onclick={replaceNext}>
         <svg viewBox="0 0 16 16"><rect x="8.2" y="3" width="5.3" height="10" rx="1"/><path d="M2.5 8h4.3M4.7 5.9 6.8 8l-2.1 2.1"/></svg>
@@ -117,8 +117,8 @@
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }
   .line { display: flex; align-items: center; gap: 4px; }
-  .glass { width: 14px; height: 14px; margin: 0 2px 0 4px; flex: none; fill: none; stroke: var(--fg-dim); stroke-width: 1.4; stroke-linecap: round; }
-  span.glass { stroke: none; }
+  .glass, .glass-gap { width: 14px; height: 14px; margin: 0 2px 0 4px; flex: none; }
+  .glass { fill: none; stroke: var(--fg-dim); stroke-width: 1.4; stroke-linecap: round; }
   input {
     flex: 1; min-width: 0; border: 0; outline: none; background: var(--bg-input); color: inherit;
     font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 6px;

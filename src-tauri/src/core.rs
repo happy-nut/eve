@@ -7,7 +7,10 @@ const IDENTIFIER: &str = "dev.happynut.eve";
 /// tool output and moves anything past 25,000 out of the conversation into a file; this stays under the
 /// warning even if the estimate is off by 2.5x. A longer answer ends with a cursor to continue from.
 const BUDGET: usize = 9_000;
+const CLOSING: usize = 120;
 const MAX_FILE: u64 = 8 << 20;
+const DAILY_TEMPLATE_ID: &str = "daily-template";
+const CALENDAR_NOTE_ID: &str = "daily-calendar";
 
 pub fn notes_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("EVE_NOTES_DIR") {
@@ -28,7 +31,7 @@ pub struct Note {
     pub body: String,
     pub updated: i64,
     pub deleted: bool,
-    pub group: String,
+    pub legacy_folder: String,
     pub parent: Option<String>,
     pub clipped: bool,
 }
@@ -40,7 +43,7 @@ pub fn parse(text: &str) -> Option<Note> {
     let after = &rest[end + 3..];
     let body = after.strip_prefix('\n').unwrap_or(after);
     let mut id = None;
-    let (mut updated, mut deleted, mut group, mut parent) = (0, false, String::new(), None);
+    let (mut updated, mut deleted, mut legacy_folder, mut parent) = (0, false, String::new(), None);
     for line in meta.split('\n') {
         let Some(i) = line.find(':') else { continue };
         if i == 0 {
@@ -51,13 +54,13 @@ pub fn parse(text: &str) -> Option<Note> {
             "id" => id = Some(v.to_string()),
             "updated" => updated = v.parse::<f64>().map(|n| n as i64).unwrap_or(0),
             "deleted" => deleted = v == "true",
-            "group" => group = v.to_string(),
+            "group" => legacy_folder = v.to_string(),
             "parent" if !v.is_empty() => parent = Some(v.to_string()),
             _ => {}
         }
     }
     let id = id.filter(|s| !s.is_empty())?;
-    Some(Note { id, body: body.to_string(), updated, deleted, group, parent, clipped: false })
+    Some(Note { id, body: body.to_string(), updated, deleted, legacy_folder, parent, clipped: false })
 }
 
 pub fn plain(line: &str) -> String {
@@ -158,15 +161,32 @@ EVE_NOTES_DIR points the server at another folder.",
         .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("md"))
         .filter_map(|p| read_text(&p))
         .filter_map(|(t, clipped)| parse(&t).map(|n| Note { clipped, ..n }))
-        .filter(|n| !n.deleted && n.id != "daily-template" && n.id != "daily-calendar")
+        .filter(|n| !n.deleted && n.id != DAILY_TEMPLATE_ID && n.id != CALENDAR_NOTE_ID)
         .collect();
     out.sort_by(|a, b| b.updated.cmp(&a.updated).then_with(|| a.id.cmp(&b.id)));
     Ok(out)
 }
 
+#[derive(Clone, Copy, Default)]
+struct CharCount {
+    ascii: usize,
+    other: usize,
+}
+
+impl CharCount {
+    fn of(s: &str) -> Self {
+        s.chars().fold(Self::default(), |n, c| if c.is_ascii() { Self { ascii: n.ascii + 1, ..n } } else { Self { other: n.other + 1, ..n } })
+    }
+    fn plus(self, more: Self) -> Self {
+        Self { ascii: self.ascii + more.ascii, other: self.other + more.other }
+    }
+    fn tokens(self) -> usize {
+        self.ascii / 3 + self.other * 3 / 2 + 1
+    }
+}
+
 pub fn tokens(s: &str) -> usize {
-    let (ascii, other) = s.chars().fold((0, 0), |(a, o), c| if c.is_ascii() { (a + 1, o) } else { (a, o + 1) });
-    ascii / 3 + other * 3 / 2 + 1
+    CharCount::of(s).tokens()
 }
 
 pub fn fit(text: &str, from: usize, budget: usize) -> usize {
@@ -324,13 +344,16 @@ fn period(args: &Value) -> Result<Option<(i64, i64)>, String> {
     Ok(Some((start, end)))
 }
 
+const ID_RANDOM_TAIL: usize = 6;
+const ID_TIMES_2017_TO_2100: std::ops::Range<i64> = 1_500_000_000_000..4_102_444_800_000;
+
 pub fn created(n: &Note) -> Option<i64> {
     if let Some(key) = n.id.strip_prefix("daily-") {
         return span(key).filter(|_| key.len() == 10).map(|(s, _)| s);
     }
-    let head = n.id.get(..n.id.len().checked_sub(6)?)?;
+    let head = n.id.get(..n.id.len().checked_sub(ID_RANDOM_TAIL)?)?;
     let ms = i64::from_str_radix(head, 36).ok()?;
-    (1_500_000_000_000..4_102_444_800_000).contains(&ms).then_some(ms)
+    ID_TIMES_2017_TO_2100.contains(&ms).then_some(ms)
 }
 
 fn within(n: &Note, when: Option<(i64, i64)>) -> bool {
@@ -359,7 +382,7 @@ fn describe(n: &Note, notes: &[Note]) -> String {
 fn under_page(n: &Note, notes: &[Note], page: &str) -> bool {
     let g = page.trim().trim_matches('/');
     let under = |p: &str| p == g || p.starts_with(&format!("{g}/"));
-    if g.is_empty() || under(&n.group) {
+    if g.is_empty() || under(&n.legacy_folder) {
         return true;
     }
     let mut path = vec![title_of(&n.body)];
@@ -376,8 +399,8 @@ fn under_page(n: &Note, notes: &[Note], page: &str) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Kind {
     Text,
-    Number(u64, u64),
-    Texts(usize, usize),
+    Number { min: u64, max: u64 },
+    Texts { min: usize, max: usize },
 }
 
 #[derive(Debug)]
@@ -387,16 +410,20 @@ pub struct Param {
     pub help: &'static str,
     pub required: bool,
     pub positional: bool,
+    pub old_name: Option<&'static str>,
 }
 
 const fn text(name: &'static str, help: &'static str) -> Param {
-    Param { name, kind: Kind::Text, help, required: false, positional: false }
+    Param { name, kind: Kind::Text, help, required: false, positional: false, old_name: None }
 }
 const fn bare(p: Param) -> Param {
     Param { positional: true, ..p }
 }
 const fn needed(p: Param) -> Param {
     Param { required: true, ..p }
+}
+const fn once_called(old_name: &'static str, p: Param) -> Param {
+    Param { old_name: Some(old_name), ..p }
 }
 
 pub struct Command {
@@ -420,7 +447,7 @@ pub enum Effect {
     Rewrites,
 }
 
-const PAGE: Param = text("page", "Only under this note: the titles of the notes down to it, such as \"Work\" or \"Work/Projects\"");
+const PAGE: Param = once_called("group", text("page", "Only under this note: the titles of the notes down to it, such as \"Work\" or \"Work/Projects\""));
 const FROM: Param = text("from", "Made or changed on/after this month or day: 2026-09 or 2026-09-05 (local time)");
 const TO: Param = text("to", "…and on/before this month or day (inclusive)");
 const ID: Param = text("id", "The note's id, from list_notes or search_notes");
@@ -436,7 +463,7 @@ pub const COMMANDS: &[Command] = &[
             PAGE,
             FROM,
             TO,
-            Param { kind: Kind::Number(1, 500), ..text("limit", "At most this many (default 50)") },
+            Param { kind: Kind::Number { min: 1, max: 500 }, ..text("limit", "At most this many (default 50)") },
         ],
         effect: Effect::Reads,
         run: |_, notes, args| list_notes(notes, args),
@@ -451,7 +478,7 @@ pub const COMMANDS: &[Command] = &[
             PAGE,
             FROM,
             TO,
-            Param { kind: Kind::Number(1, 100), ..text("limit", "At most this many (default 20)") },
+            Param { kind: Kind::Number { min: 1, max: 100 }, ..text("limit", "At most this many (default 20)") },
         ],
         effect: Effect::Reads,
         run: |_, notes, args| search_notes(notes, args),
@@ -476,7 +503,7 @@ pub const COMMANDS: &[Command] = &[
         title: "Read notes",
         help: "Returns several notes whole, exactly as written, in the order given: pick them with list_notes or search_notes, then pass their ids. Up to 100 ids. When they do not fit one answer, the answer ends with a cursor: call again with the same ids and that cursor until it gives none. A long note may continue into the next answer; nothing is left out or shortened.",
         params: &[
-            Param { kind: Kind::Texts(1, MAX_IDS), ..needed(bare(text("ids", "Note ids, in the order to read them"))) },
+            Param { kind: Kind::Texts { min: 1, max: MAX_IDS }, ..needed(bare(text("ids", "Note ids, in the order to read them"))) },
             text("cursor", "Where the last answer stopped, when it said there is more"),
         ],
         effect: Effect::Reads,
@@ -496,7 +523,7 @@ pub const COMMANDS: &[Command] = &[
         cli: "pictures",
         title: "See a note's diagrams",
         help: "Returns the diagrams in a note (its ```mermaid blocks: flowcharts, swimlanes, sequences, pies, timelines, Gantt charts, mind maps…) as pictures, drawn by Eve exactly as the user sees them, each with its mermaid code. Give the note's title (as in a [[wiki link]]) or its id, and number to get one diagram (1 is the first in the note); without it, the first 6. Eve draws them, so it is started in the background if it was not running. Changes nothing.",
-        params: &[TITLE, ID, Param { kind: Kind::Number(1, 50), ..text("number", "Which diagram, counting from the top of the note: 1 is the first") }],
+        params: &[TITLE, ID, Param { kind: Kind::Number { min: 1, max: 50 }, ..text("number", "Which diagram, counting from the top of the note: 1 is the first") }],
         effect: Effect::Reads,
         run: diagram_images,
     },
@@ -508,7 +535,7 @@ pub const COMMANDS: &[Command] = &[
         params: &[
             needed(bare(text("title", "The new note's title"))),
             text("body", "Markdown under the title"),
-            text("page", "The note to put it under, by the titles down to it, such as \"Work\" or \"Work/Projects\": a note of each title is made where there is none (default: the top level)"),
+            once_called("group", text("page", "The note to put it under, by the titles down to it, such as \"Work\" or \"Work/Projects\": a note of each title is made where there is none (default: the top level)")),
             text("parent", "Title or id of the note to put it under, inside it"),
         ],
         effect: Effect::Adds,
@@ -623,8 +650,8 @@ fn wrap(text: &str, indent: &str, width: usize) -> String {
 fn placeholder(p: &Param) -> String {
     match p.kind {
         Kind::Text => format!("<{}>", p.name),
-        Kind::Number(..) => "<n>".into(),
-        Kind::Texts(..) => format!("<{}>...", p.name.trim_end_matches('s')),
+        Kind::Number { .. } => "<n>".into(),
+        Kind::Texts { .. } => format!("<{}>...", p.name.trim_end_matches('s')),
     }
 }
 
@@ -660,11 +687,11 @@ pub fn help(name: Option<&str>) -> Result<String, String> {
         let mut about = for_cli(p.help);
         match p.kind {
             // "(default 20)" -> "(default 20, 1–100)"
-            Kind::Number(lo, hi) => match about.strip_suffix(')') {
-                Some(open) => about = format!("{open}, {lo}–{hi})"),
-                None => about += &format!(" ({lo}–{hi})"),
+            Kind::Number { min, max } => match about.strip_suffix(')') {
+                Some(open) => about = format!("{open}, {min}–{max})"),
+                None => about += &format!(" ({min}–{max})"),
             },
-            Kind::Texts(_, hi) => about += &format!(" (up to {hi})"),
+            Kind::Texts { max, .. } => about += &format!(" (up to {max})"),
             Kind::Text => {}
         }
         if p.required {
@@ -680,8 +707,12 @@ fn arg_str<'a>(args: &'a Value, key: &str) -> &'a str {
     args.get(key).and_then(Value::as_str).unwrap_or("").trim()
 }
 
+fn arg_named<'a>(args: &'a Value, p: &Param) -> &'a str {
+    Some(arg_str(args, p.name)).filter(|v| !v.is_empty()).or_else(|| p.old_name.map(|old| arg_str(args, old))).unwrap_or("")
+}
+
 fn arg_page(args: &Value) -> &str {
-    Some(arg_str(args, "page")).filter(|p| !p.is_empty()).unwrap_or_else(|| arg_str(args, "group"))
+    arg_named(args, &PAGE)
 }
 
 fn arg_limit(args: &Value, default: usize, max: usize) -> usize {
@@ -704,12 +735,16 @@ pub fn list_notes(notes: &[Note], args: &Value) -> Result<String, String> {
 fn budgeted(head: String, lines: &[String], total: usize, tool: &str) -> String {
     let more = |n: usize| format!("[{n} more not shown. Call {tool} again with a page, from / to, or more words to narrow it down.]\n");
     let mut out = head;
+    let mut used = CharCount::of(&out);
+    let more_count = CharCount::of(&more(total));
     let mut shown = 0;
     for line in lines {
-        if tokens(&format!("{out}{line}{}", more(total))) > BUDGET {
+        let with_line = used.plus(CharCount::of(line));
+        if with_line.plus(more_count).tokens() > BUDGET {
             break;
         }
         out += line;
+        used = with_line;
         shown += 1;
     }
     if shown < total {
@@ -734,7 +769,12 @@ pub fn search_notes(notes: &[Note], args: &Value) -> Result<String, String> {
     let page = arg_page(args);
     let limit = arg_limit(args, 20, 100);
     let when = period(args)?;
-    let mut hits: Vec<(usize, &Note, String)> = Vec::new();
+    struct Hit<'a> {
+        words_in_title: usize,
+        note: &'a Note,
+        snippet: String,
+    }
+    let mut hits: Vec<Hit> = Vec::new();
     for n in notes.iter().filter(|n| under_page(n, notes, page) && within(n, when)) {
         let lower = n.body.to_lowercase();
         if !words.iter().all(|w| lower.contains(w.as_str())) {
@@ -747,13 +787,13 @@ pub fn search_notes(notes: &[Note], args: &Value) -> Result<String, String> {
         let at = first(skip).or_else(|| first(0)).unwrap_or(0);
         // lower-casing can change byte lengths; then the offset means nothing in the original text
         let at = if lower.len() == n.body.len() && n.body.is_char_boundary(at) { at } else { 0 };
-        hits.push((in_title, n, snippet(&n.body, at, 60)));
+        hits.push(Hit { words_in_title: in_title, note: n, snippet: snippet(&n.body, at, 60) });
     }
     if hits.is_empty() {
         return Ok(format!("No notes match \"{query}\"."));
     }
-    hits.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.updated.cmp(&a.1.updated)));
-    let lines: Vec<String> = hits.iter().take(limit).map(|(_, n, s)| format!("- {}\n  {}\n", describe(n, notes), s)).collect();
+    hits.sort_by(|a, b| b.words_in_title.cmp(&a.words_in_title).then_with(|| b.note.updated.cmp(&a.note.updated)));
+    let lines: Vec<String> = hits.iter().take(limit).map(|h| format!("- {}\n  {}\n", describe(h.note, notes), h.snippet)).collect();
     Ok(budgeted(format!("{} match(es), best first:\n", hits.len()), &lines, hits.len(), "search_notes"))
 }
 
@@ -785,15 +825,39 @@ fn section<'a>(body: &'a str, name: &str) -> Option<&'a str> {
 
 /// `offset~updated`: where the last answer stopped in `text` (the note, or the section read), in the
 /// version of the note it read.
+struct Cursor<'a> {
+    offset: usize,
+    version: &'a str,
+}
+
+const BAD_CURSOR: &str = "That cursor is not one Eve gave out.";
+
+impl<'a> Cursor<'a> {
+    fn parse(cursor: &'a str) -> Result<Self, &'static str> {
+        let (offset, version) = cursor.split_once('~').ok_or(BAD_CURSOR)?;
+        Ok(Self { offset: offset.parse().map_err(|_| BAD_CURSOR)?, version })
+    }
+}
+
+struct ManyCursor<'a> {
+    index: usize,
+    rest: &'a str,
+}
+
+impl<'a> ManyCursor<'a> {
+    fn parse(cursor: &'a str) -> Option<Self> {
+        let (index, rest) = cursor.split_once(':')?;
+        Some(Self { index: index.parse().ok()?, rest })
+    }
+}
+
 fn cursor_at(cursor: &str, note: &Note, text: &str) -> Result<usize, String> {
-    const BAD: &str = "That cursor is not one Eve gave out.";
-    let (at, version) = cursor.split_once('~').ok_or(BAD)?;
-    let at: usize = at.parse().map_err(|_| BAD)?;
+    let Cursor { offset: at, version } = Cursor::parse(cursor)?;
     if version != note.updated.to_string() {
         return Err("The note changed since that cursor was given; read it again from the start.".into());
     }
     if at > text.len() || !text.is_char_boundary(at) {
-        return Err(BAD.into());
+        return Err(BAD_CURSOR.into());
     }
     Ok(at)
 }
@@ -814,10 +878,11 @@ fn pick<'a>(notes: &'a [Note], args: &'a Value) -> Result<(&'a Note, &'a str, Ve
         notes.iter().find(|n| n.id == id).ok_or_else(|| format!("No note with id \"{id}\"."))?
     } else if !title.is_empty() {
         let low = title.to_lowercase();
-        let mut same = notes.iter().filter(|n| title_of(&n.body).to_lowercase() == low);
-        match same.next() {
-            Some(n) => {
-                twins = same.map(|n| format!("{} (updated {})", n.id, stamp(n.updated))).collect();
+        let mut same: Vec<&Note> = notes.iter().filter(|n| title_of(&n.body).to_lowercase() == low).collect();
+        same.sort_by(|a, b| b.updated.cmp(&a.updated).then_with(|| a.id.cmp(&b.id)));
+        match same.split_first() {
+            Some((&n, rest)) => {
+                twins = rest.iter().map(|n| format!("{} (updated {})", n.id, stamp(n.updated))).collect();
                 n
             }
             None => {
@@ -857,7 +922,7 @@ pub fn read_note(notes: &[Note], args: &Value) -> Result<String, String> {
         out += &format!("[… continued from {}%]\n", from * 100 / body.len().max(1));
     }
     let heads = if wanted.is_empty() && from == 0 { outline(&note.body) } else { Vec::new() };
-    let tail = 120 + heads.iter().map(|h| tokens(h) + 1).sum::<usize>();
+    let tail = CLOSING + heads.iter().map(|h| tokens(h) + 1).sum::<usize>();
     let end = fit(body, from, BUDGET.saturating_sub(tokens(&out) + tail));
     out += &piece(&body[from..end]);
     if end < body.len() {
@@ -947,6 +1012,21 @@ pub fn ask_app(dir: &Path, ask: Value) -> Result<String, String> {
     Ok(v.get("text").and_then(Value::as_str).unwrap_or("").to_string())
 }
 
+fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
+    let part = path.with_extension("part");
+    std::fs::write(&part, text)?;
+    std::fs::rename(&part, path)
+}
+
+#[cfg(not(test))]
+fn tell_app_to_look_in_inbox() -> Result<(), String> {
+    launch("eve://inbox", true)
+}
+#[cfg(test)]
+fn tell_app_to_look_in_inbox() -> Result<(), String> {
+    Ok(())
+}
+
 pub fn ask_app_for(dir: &Path, mut ask: Value) -> Result<Value, String> {
     use std::sync::atomic::{AtomicU32, Ordering};
     static NEXT: AtomicU32 = AtomicU32::new(0);
@@ -955,13 +1035,11 @@ pub fn ask_app_for(dir: &Path, mut ask: Value) -> Result<Value, String> {
     let millis = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
     let id = format!("{millis}-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
     ask["ask"] = Value::from(id.as_str());
-    let (part, ready, reply) = (inbox.join(format!("{id}.part")), inbox.join(format!("{id}.json")), inbox.join(format!("{id}.reply")));
-    std::fs::write(&part, ask.to_string()).and_then(|_| std::fs::rename(&part, &ready)).map_err(|e| format!("Could not hand the change to Eve ({e})."))?;
-    if !cfg!(test) {
-        if let Err(e) = launch("eve://inbox", true) {
-            let _ = std::fs::remove_file(&ready);
-            return Err(e);
-        }
+    let (ready, reply) = (inbox.join(format!("{id}.json")), inbox.join(format!("{id}.reply")));
+    write_atomic(&ready, &ask.to_string()).map_err(|e| format!("Could not hand the change to Eve ({e})."))?;
+    if let Err(e) = tell_app_to_look_in_inbox() {
+        let _ = std::fs::remove_file(&ready);
+        return Err(e);
     }
     let start = std::time::Instant::now();
     while start.elapsed() < ANSWER_WITHIN {
@@ -1066,16 +1144,14 @@ pub fn read_notes(notes: &[Note], args: &Value) -> Result<String, String> {
         (0, 0)
     } else {
         const BAD: &str = "That cursor is not one read_notes gave out for these ids.";
-        let (i, rest) = cursor.split_once(':').ok_or(BAD)?;
-        let i: usize = i.parse().map_err(|_| BAD)?;
-        let note = ids.get(i).and_then(|id| find(id)).ok_or(BAD)?;
-        (i, cursor_at(rest, note, &note.body)?)
+        let ManyCursor { index, rest } = ManyCursor::parse(cursor).ok_or(BAD)?;
+        let note = ids.get(index).and_then(|id| find(id)).ok_or(BAD)?;
+        (index, cursor_at(rest, note, &note.body)?)
     };
     let mut out = format!("{} note(s), as asked.\n", ids.len());
     if start > 0 || offset > 0 {
         out += &format!("[… continued from note {}]\n", start + 1);
     }
-    const CLOSING: usize = 120;
     let mut next = None;
     for (i, id) in ids.iter().enumerate().skip(start) {
         let from = if i == start { offset } else { 0 };
@@ -1117,8 +1193,8 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn note(id: &str, updated: i64, group: &str, body: &str) -> Note {
-        Note { id: id.into(), body: body.into(), updated, deleted: false, group: group.into(), parent: None, clipped: false }
+    fn note(id: &str, updated: i64, legacy_folder: &str, body: &str) -> Note {
+        Note { id: id.into(), body: body.into(), updated, deleted: false, legacy_folder: legacy_folder.into(), parent: None, clipped: false }
     }
 
     #[test]
@@ -1127,7 +1203,7 @@ mod tests {
         assert_eq!(n.id, "abc");
         assert_eq!(n.updated, 1_700_000_000_000);
         assert!(!n.deleted);
-        assert_eq!(n.group, "Work/Alpha");
+        assert_eq!(n.legacy_folder, "Work/Alpha");
         assert_eq!(n.parent.as_deref(), Some("p1"));
         assert_eq!(n.body, "# Hello\n\nbody\n");
         assert!(parse("---\nid: x\ndeleted: true\n---\n").unwrap().deleted);
@@ -1139,6 +1215,10 @@ mod tests {
 
     #[test]
     fn titles_match_the_app() {
+        let cases: Vec<(String, String)> = serde_json::from_str(include_str!("../../src/lib/plainCases.json")).unwrap();
+        for (line, text) in cases {
+            assert_eq!(plain(&line), text, "{line}");
+        }
         assert_eq!(title_of("# **Project** `Alpha`\nx"), "Project Alpha");
         assert_eq!(title_of("\n\n- [[Linked]] item"), "Linked item");
         assert_eq!(title_of("12. numbered"), "numbered");

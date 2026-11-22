@@ -1,5 +1,5 @@
 import { Node, type Editor } from '@tiptap/core';
-import { Selection, TextSelection } from '@tiptap/pm/state';
+import { Selection, TextSelection, type Transaction } from '@tiptap/pm/state';
 import { ui } from './ui.svelte';
 import { mount, unmount } from 'svelte';
 import Board from '../Kanban.svelte';
@@ -20,9 +20,11 @@ export async function deleteBoard(editor: Editor, pos: number) {
   editor.chain().deleteRange({ from: pos, to: pos + node.nodeSize }).focus().run();
 }
 
+const joinUndoStep = (tr: Transaction, group: string) => tr.setMeta('composition', group);
+
 export function commitBoard(editor: Editor, pos: number, columns: Column[], group?: string) {
   const tr = editor.state.tr.setNodeMarkup(pos, undefined, { ...editor.state.doc.nodeAt(pos)!.attrs, columns });
-  if (group) tr.setMeta('composition', group);
+  if (group) joinUndoStep(tr, group);
   editor.view.dispatch(tr);
 }
 

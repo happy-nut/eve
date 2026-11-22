@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { tree, pageIdOf } from './tree.svelte';
+import { tree, stablePageIdOfGroup } from './tree.svelte';
 import { notes, titleOf } from './notes.svelte';
 
 const written = (body: string, parent?: string) => { const n = notes.create(body, parent); notes.touched(n.id); return n; };
@@ -30,7 +30,7 @@ test("an older version's groups become pages where they stood, their notes and g
 
   expect(tree.groups).toEqual([]);
   expect(notes.all.some((n) => n.group)).toBe(false);
-  const W = pageIdOf('Work'), P = pageIdOf('Work/Projects'), H = pageIdOf('Home');
+  const W = stablePageIdOfGroup('Work'), P = stablePageIdOfGroup('Work/Projects'), H = stablePageIdOfGroup('Home');
   expect([titleOf(at(W)), at(W).icon, at(W).parent]).toEqual(['Work', '💼', undefined]);
   expect([titleOf(at(P)), at(P).parent]).toEqual(['Projects', W]);
   expect([at(plan.id).parent, at(sub.id).parent, at(alpha.id).parent, at(milk.id).parent]).toEqual([W, plan.id, P, H]);
@@ -42,14 +42,14 @@ test("an older version's groups become pages where they stood, their notes and g
 
   // nothing left to do the second time, and the same group on another device makes the same page
   expect(tree.toPages()).toBe(false);
-  expect(pageIdOf('Work')).toBe(W);
-  expect(pageIdOf('Work/Projects')).not.toBe(W);
+  expect(stablePageIdOfGroup('Work')).toBe(W);
+  expect(stablePageIdOfGroup('Work/Projects')).not.toBe(W);
 });
 
 test('a group come in again (an older device, a note restored from the Trash) goes into the page it made before', () => {
   const a = old('# A\n', 'Trip');
   tree.toPages();
-  const page = pageIdOf('Trip');
+  const page = stablePageIdOfGroup('Trip');
   notes.remove(page);
   const b = old('# B\n', 'Trip');
   expect(tree.toPages()).toBe(true);
@@ -60,7 +60,7 @@ test('a group come in again (an older device, a note restored from the Trash) go
 test("a group's page moved since stays where it was put; a note never goes under itself or its own sub-page", () => {
   const plan = old('# Plan\n', 'Desk');
   tree.toPages();
-  const page = pageIdOf('Desk');
+  const page = stablePageIdOfGroup('Desk');
   notes.setParent(plan.id, null);
   notes.setParent(page, plan.id); // the user puts Desk under Plan
   at(plan.id).group = 'Desk'; // an older device puts Plan back in the group Desk

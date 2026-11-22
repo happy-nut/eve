@@ -1,5 +1,5 @@
 export const RELEASES = 'https://api.github.com/repos/happy-nut/eve/releases?per_page=10';
-export const APK_PREFIX = 'https://github.com/happy-nut/eve/releases/download/';
+export const TRUSTED_DOWNLOAD_PREFIX = 'https://github.com/happy-nut/eve/releases/download/';
 
 export function newer(a: string, b: string): boolean {
   const parts = (v: string) => (/\d+(?:\.\d+)*/.exec(v)?.[0] ?? '0').split('.').map((x) => Number(x) || 0);
@@ -40,7 +40,7 @@ export async function findUpdate(current: string, f: typeof fetch = (...a) => fe
   let best: Update | null = null;
   for (const r of (await res.json()) as { tag_name: string; draft: boolean; prerelease?: boolean; assets?: Asset[] }[]) {
     const file = r.draft || r.prerelease ? undefined : assetFor(target, r.tag_name, r.assets ?? []);
-    if (!file || !file.browser_download_url.startsWith(APK_PREFIX)) continue;
+    if (!file || !file.browser_download_url.startsWith(TRUSTED_DOWNLOAD_PREFIX)) continue;
     const version = /\d+(?:\.\d+)*/.exec(r.tag_name)?.[0] ?? r.tag_name;
     if (!best || newer(version, best.version)) best = { version, url: file.browser_download_url, ...(file.digest ? { sha256: file.digest } : {}) };
   }

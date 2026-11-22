@@ -4,25 +4,33 @@
   import { isMobile } from './lib/platform';
   import { scrollHint } from './lib/scrollHint';
 
-  let { editor, sheet = false }: { editor: Editor | undefined; sheet?: boolean } = $props();
+  let { editor, overSheet = false }: { editor: Editor | undefined; overSheet?: boolean } = $props();
 
   let at = $state<{ x: number; y: number } | null>(null);
+
+  const editorHoldsCaret = (e: Editor) => !!document.activeElement && e.view.dom.contains(document.activeElement);
+
+  function tableAtCaret(e: Editor): HTMLTableElement | null {
+    const dom = e.view.domAtPos(e.state.selection.from).node;
+    return (dom instanceof HTMLElement ? dom : dom.parentElement)?.closest('table') ?? null;
+  }
+
+  function stickyTop(table: HTMLElement, r: DOMRect, barH: number, scrollerTop: number): number {
+    const roomAbove = gap(table, -1, r) >= barH + 3;
+    return roomAbove ? Math.min(Math.max(r.top, scrollerTop + 4 + barH + 8), r.bottom) : r.top;
+  }
 
   function place() {
     if (!isMobile) { at = null; return; }
     const e = editor;
-    if (!e || e.isDestroyed) { at = null; return; }
-    const caretIn = document.activeElement && e.view.dom.contains(document.activeElement);
-    if (!caretIn || !e.isActive('table')) { at = null; return; }
-    const dom = e.view.domAtPos(e.state.selection.from).node;
-    const el = (dom instanceof HTMLElement ? dom : dom.parentElement)?.closest('table');
+    if (!e || e.isDestroyed || !editorHoldsCaret(e) || !e.isActive('table')) { at = null; return; }
+    const el = tableAtCaret(e);
     if (!el) { at = null; return; }
     const r = el.getBoundingClientRect();
     if (!bar) requestAnimationFrame(() => { if (bar) place(); });
     const h = bar?.offsetHeight ?? 32, w = bar?.offsetWidth ?? 0;
-    const above = gap(el, -1, r), ins = screenInsets(), top = scrollTop(el);
-    const shown = above >= h + 3 ? Math.min(Math.max(r.top, top + 4 + h + 8), r.bottom) : r.top;
-    const f = floatAt({ left: r.left, right: r.right, top: shown, bottom: r.bottom }, { w, h },
+    const ins = screenInsets(), top = scrollTop(el);
+    const f = floatAt({ left: r.left, right: r.right, top: stickyTop(el, r, h, top), bottom: r.bottom }, { w, h },
       { prefer: 'above', gap: 8, avoid: { ...ins, top: Math.max(ins.top, top + 4) } });
     at = { x: f.left, y: f.top + h };
   }
@@ -96,7 +104,7 @@
 </script>
 
 {#if at}
-  <div class="tbl-tools" class:sheet bind:this={bar} {@attach scrollHint} style:left="{at.x}px" style:top="{at.y}px" onmousedown={hold} role="toolbar" tabindex="-1" aria-label="Table">
+  <div class="tbl-tools" class:sheet={overSheet} bind:this={bar} {@attach scrollHint} style:left="{at.x}px" style:top="{at.y}px" onmousedown={hold} role="toolbar" tabindex="-1" aria-label="Table">
     {#each GROUPS as group, g}
       {#if g}<span class="tbl-sep"></span>{/if}
       {#each group as b}

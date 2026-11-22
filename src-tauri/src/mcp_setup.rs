@@ -4,27 +4,29 @@
 //! order, and the file as it was before Eve first touched it saved beside it.
 //! Claude Code keeps its own in ~/.claude.json, a file it rewrites constantly, so that one goes
 //! through its CLI (`claude mcp add --scope user`) instead of being edited under its feet.
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::Value;
-use std::path::{Path, PathBuf};
+use serde::Serialize;
+use std::path::PathBuf;
 
 const NAME: &str = "eve";
+
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum Registration {
+    Connected,
+    Stale,
+    Off,
+}
 
 #[derive(Serialize, Clone)]
 pub(crate) struct Client {
     id: &'static str,
     name: &'static str,
     installed: bool,
-    connected: bool,
-    stale: bool,
+    status: Registration,
 }
 
 fn home() -> PathBuf {
     PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
-}
-
-fn desktop_config() -> PathBuf {
-    home().join("Library/Application Support/Claude/claude_desktop_config.json")
 }
 
 fn exe() -> Result<String, String> {
@@ -37,239 +39,252 @@ fn exe() -> Result<String, String> {
     Ok(path)
 }
 
-pub(crate) fn registered(config: &str) -> Option<String> {
-    let v: Value = serde_json::from_str(config).ok()?;
-    v.get("mcpServers")?.get(NAME)?.get("command")?.as_str().map(str::to_string)
+fn status(command: Option<String>, me: &str) -> Registration {
+    match command {
+        Some(c) if c == me => Registration::Connected,
+        Some(_) => Registration::Stale,
+        None => Registration::Off,
+    }
 }
 
-/// JSON that keeps the order of an object's keys as written. serde_json's own Map sorts them unless its
-/// `preserve_order` feature is on, and Cargo would turn that on for Tauri's JSON too; this stays local.
-#[derive(Debug, Clone, PartialEq)]
-enum Json {
-    Null,
-    Bool(bool),
-    Num(serde_json::Number),
-    Str(String),
-    Arr(Vec<Json>),
-    Obj(Vec<(String, Json)>),
-}
+mod desktop {
+    use super::{home, status, Client, NAME};
+    use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+    use serde_json::Value;
+    use std::path::{Path, PathBuf};
 
-impl<'de> Deserialize<'de> for Json {
-    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        struct V;
-        impl<'de> de::Visitor<'de> for V {
-            type Value = Json;
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                f.write_str("JSON")
-            }
-            fn visit_unit<E>(self) -> Result<Json, E> {
-                Ok(Json::Null)
-            }
-            fn visit_bool<E>(self, b: bool) -> Result<Json, E> {
-                Ok(Json::Bool(b))
-            }
-            fn visit_i64<E>(self, n: i64) -> Result<Json, E> {
-                Ok(Json::Num(n.into()))
-            }
-            fn visit_u64<E>(self, n: u64) -> Result<Json, E> {
-                Ok(Json::Num(n.into()))
-            }
-            fn visit_f64<E: de::Error>(self, n: f64) -> Result<Json, E> {
-                serde_json::Number::from_f64(n).map(Json::Num).ok_or_else(|| E::custom("not a finite number"))
-            }
-            fn visit_str<E>(self, s: &str) -> Result<Json, E> {
-                Ok(Json::Str(s.to_string()))
-            }
-            fn visit_string<E>(self, s: String) -> Result<Json, E> {
-                Ok(Json::Str(s))
-            }
-            fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Json, A::Error> {
-                let mut out = Vec::new();
-                while let Some(v) = seq.next_element()? {
-                    out.push(v);
+    fn desktop_config() -> PathBuf {
+        home().join("Library/Application Support/Claude/claude_desktop_config.json")
+    }
+
+    pub(super) fn registered(config: &str) -> Option<String> {
+        let v: Value = serde_json::from_str(config).ok()?;
+        v.get("mcpServers")?.get(NAME)?.get("command")?.as_str().map(str::to_string)
+    }
+
+    /// JSON that keeps the order of an object's keys as written. serde_json's own Map sorts them unless its
+    /// `preserve_order` feature is on, and Cargo would turn that on for Tauri's JSON too; this stays local.
+    #[derive(Debug, Clone, PartialEq)]
+    pub(super) enum Json {
+        Null,
+        Bool(bool),
+        Num(serde_json::Number),
+        Str(String),
+        Arr(Vec<Json>),
+        Obj(Vec<(String, Json)>),
+    }
+
+    impl<'de> Deserialize<'de> for Json {
+        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+            struct V;
+            impl<'de> de::Visitor<'de> for V {
+                type Value = Json;
+                fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    f.write_str("JSON")
                 }
-                Ok(Json::Arr(out))
-            }
-            fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Json, A::Error> {
-                let mut out = Vec::new();
-                while let Some(kv) = map.next_entry()? {
-                    out.push(kv);
+                fn visit_unit<E>(self) -> Result<Json, E> {
+                    Ok(Json::Null)
                 }
-                Ok(Json::Obj(out))
-            }
-        }
-        d.deserialize_any(V)
-    }
-}
-
-impl Serialize for Json {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::{SerializeMap, SerializeSeq};
-        match self {
-            Json::Null => s.serialize_unit(),
-            Json::Bool(b) => s.serialize_bool(*b),
-            Json::Num(n) => n.serialize(s),
-            Json::Str(v) => s.serialize_str(v),
-            Json::Arr(items) => {
-                let mut seq = s.serialize_seq(Some(items.len()))?;
-                for v in items {
-                    seq.serialize_element(v)?;
+                fn visit_bool<E>(self, b: bool) -> Result<Json, E> {
+                    Ok(Json::Bool(b))
                 }
-                seq.end()
-            }
-            Json::Obj(pairs) => {
-                let mut map = s.serialize_map(Some(pairs.len()))?;
-                for (k, v) in pairs {
-                    map.serialize_entry(k, v)?;
+                fn visit_i64<E>(self, n: i64) -> Result<Json, E> {
+                    Ok(Json::Num(n.into()))
                 }
-                map.end()
+                fn visit_u64<E>(self, n: u64) -> Result<Json, E> {
+                    Ok(Json::Num(n.into()))
+                }
+                fn visit_f64<E: de::Error>(self, n: f64) -> Result<Json, E> {
+                    serde_json::Number::from_f64(n).map(Json::Num).ok_or_else(|| E::custom("not a finite number"))
+                }
+                fn visit_str<E>(self, s: &str) -> Result<Json, E> {
+                    Ok(Json::Str(s.to_string()))
+                }
+                fn visit_string<E>(self, s: String) -> Result<Json, E> {
+                    Ok(Json::Str(s))
+                }
+                fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Json, A::Error> {
+                    let mut out = Vec::new();
+                    while let Some(v) = seq.next_element()? {
+                        out.push(v);
+                    }
+                    Ok(Json::Arr(out))
+                }
+                fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<Json, A::Error> {
+                    let mut out = Vec::new();
+                    while let Some(kv) = map.next_entry()? {
+                        out.push(kv);
+                    }
+                    Ok(Json::Obj(out))
+                }
+            }
+            d.deserialize_any(V)
+        }
+    }
+
+    impl Serialize for Json {
+        fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+            use serde::ser::{SerializeMap, SerializeSeq};
+            match self {
+                Json::Null => s.serialize_unit(),
+                Json::Bool(b) => s.serialize_bool(*b),
+                Json::Num(n) => n.serialize(s),
+                Json::Str(v) => s.serialize_str(v),
+                Json::Arr(items) => {
+                    let mut seq = s.serialize_seq(Some(items.len()))?;
+                    for v in items {
+                        seq.serialize_element(v)?;
+                    }
+                    seq.end()
+                }
+                Json::Obj(pairs) => {
+                    let mut map = s.serialize_map(Some(pairs.len()))?;
+                    for (k, v) in pairs {
+                        map.serialize_entry(k, v)?;
+                    }
+                    map.end()
+                }
             }
         }
     }
-}
 
-/// `config` with `mcpServers.eve` set to run `exe mcp` (or removed); None when that changes nothing.
-/// Every other key stays where it was; a new `eve` goes last among the servers.
-pub(crate) fn with_eve(config: &str, exe: Option<&str>) -> Result<Option<String>, String> {
-    let mut root = if config.trim().is_empty() {
-        Json::Obj(Vec::new())
-    } else {
-        serde_json::from_str(config).map_err(|e| format!("Claude's config is not valid JSON ({e}); fix or remove it first."))?
-    };
-    let Json::Obj(top) = &mut root else { return Err("Claude's config is not a JSON object.".into()) };
-    let at = match top.iter().position(|(k, _)| k == "mcpServers") {
-        Some(i) => i,
-        None if exe.is_none() => return Ok(None),
-        None => {
-            top.push(("mcpServers".into(), Json::Obj(Vec::new())));
-            top.len() - 1
-        }
-    };
-    let Json::Obj(servers) = &mut top[at].1 else { return Err("mcpServers in Claude's config is not an object.".into()) };
-    let mine = servers.iter().position(|(k, _)| k == NAME);
-    match (exe, mine) {
-        (None, None) => return Ok(None),
-        (None, Some(i)) => {
-            servers.remove(i);
-        }
-        (Some(exe), mine) => {
-            let entry = Json::Obj(vec![
-                ("command".into(), Json::Str(exe.into())),
-                ("args".into(), Json::Arr(vec![Json::Str("mcp".into())])),
-            ]);
-            match mine {
-                Some(i) if servers[i].1 == entry => return Ok(None),
-                Some(i) => servers[i].1 = entry,
-                None => servers.push((NAME.into(), entry)),
+    /// `config` with `mcpServers.eve` set to run `exe mcp` (or removed); None when that changes nothing.
+    /// Every other key stays where it was; a new `eve` goes last among the servers.
+    pub(super) fn with_eve(config: &str, exe: Option<&str>) -> Result<Option<String>, String> {
+        let mut root = if config.trim().is_empty() {
+            Json::Obj(Vec::new())
+        } else {
+            serde_json::from_str(config).map_err(|e| format!("Claude's config is not valid JSON ({e}); fix or remove it first."))?
+        };
+        let Json::Obj(top) = &mut root else { return Err("Claude's config is not a JSON object.".into()) };
+        let at = match top.iter().position(|(k, _)| k == "mcpServers") {
+            Some(i) => i,
+            None if exe.is_none() => return Ok(None),
+            None => {
+                top.push(("mcpServers".into(), Json::Obj(Vec::new())));
+                top.len() - 1
+            }
+        };
+        let Json::Obj(servers) = &mut top[at].1 else { return Err("mcpServers in Claude's config is not an object.".into()) };
+        let mine = servers.iter().position(|(k, _)| k == NAME);
+        match (exe, mine) {
+            (None, None) => return Ok(None),
+            (None, Some(i)) => {
+                servers.remove(i);
+            }
+            (Some(exe), mine) => {
+                let entry = Json::Obj(vec![
+                    ("command".into(), Json::Str(exe.into())),
+                    ("args".into(), Json::Arr(vec![Json::Str("mcp".into())])),
+                ]);
+                match mine {
+                    Some(i) if servers[i].1 == entry => return Ok(None),
+                    Some(i) => servers[i].1 = entry,
+                    None => servers.push((NAME.into(), entry)),
+                }
             }
         }
+        serde_json::to_string_pretty(&root).map(|s| Some(s + "\n")).map_err(|e| e.to_string())
     }
-    serde_json::to_string_pretty(&root).map(|s| Some(s + "\n")).map_err(|e| e.to_string())
-}
 
-fn status(command: Option<String>, me: &str) -> (bool, bool) {
-    let connected = command.as_deref() == Some(me);
-    (connected, command.is_some() && !connected)
-}
-
-// ---- Claude Desktop -------------------------------------------------------------
-fn desktop(me: &str) -> Client {
-    let path = desktop_config();
-    let installed = Path::new("/Applications/Claude.app").exists()
-        || home().join("Applications/Claude.app").exists()
-        || path.parent().is_some_and(Path::exists);
-    let command = std::fs::read_to_string(&path).ok().and_then(|c| registered(&c));
-    let (connected, stale) = status(command, me);
-    Client { id: "desktop", name: "Claude Desktop", installed, connected, stale }
-}
-
-fn desktop_set(on: bool, me: &str) -> Result<(), String> {
-    let path = desktop_config();
-    let old = match std::fs::read_to_string(&path) {
-        Ok(s) => s,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(e.to_string()),
-    };
-    let Some(new) = with_eve(&old, on.then_some(me))? else { return Ok(()) };
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    pub(super) fn client(me: &str) -> Client {
+        let path = desktop_config();
+        let installed = Path::new("/Applications/Claude.app").exists()
+            || home().join("Applications/Claude.app").exists()
+            || path.parent().is_some_and(Path::exists);
+        let command = std::fs::read_to_string(&path).ok().and_then(|c| registered(&c));
+        Client { id: "desktop", name: "Claude Desktop", installed, status: status(command, me) }
     }
-    // the file as it was before Eve ever changed it: kept once, never overwritten
-    let backup = path.with_file_name("claude_desktop_config.json.eve-backup");
-    if !old.is_empty() && !backup.exists() {
-        std::fs::write(&backup, &old).map_err(|e| format!("Could not back up Claude's config: {e}"))?;
+
+    pub(super) fn set(on: bool, me: &str) -> Result<(), String> {
+        let path = desktop_config();
+        let old = match std::fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(e) => return Err(e.to_string()),
+        };
+        let Some(new) = with_eve(&old, on.then_some(me))? else { return Ok(()) };
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        // the file as it was before Eve ever changed it: kept once, never overwritten
+        let backup = path.with_file_name("claude_desktop_config.json.eve-backup");
+        if !old.is_empty() && !backup.exists() {
+            std::fs::write(&backup, &old).map_err(|e| format!("Could not back up Claude's config: {e}"))?;
+        }
+        crate::files::write_atomic(&path, new.as_bytes())
     }
-    crate::files::write_atomic(&path, new.as_bytes())
 }
 
-// ---- Claude Code ------------------------------------------------------------------
-/// `sh`-quoted, for a line handed to the user's shell.
-fn quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', r"'\''"))
-}
+mod code {
+    use super::{home, status, Client, Registration, NAME};
 
-/// Run a line in the user's login shell: an app started from the Dock gets a bare PATH, and the
-/// `claude` CLI (and the node it may need) live wherever the shell's profile says.
-fn shell(line: &str) -> Result<std::process::Output, String> {
-    let sh = std::env::var("SHELL").ok().filter(|s| s.starts_with('/')).unwrap_or_else(|| "/bin/zsh".into());
-    let home = home();
-    let extra = [".local/bin", ".claude/local", ".npm-global/bin", ".bun/bin", ".volta/bin"]
-        .iter()
-        .map(|d| home.join(d).to_string_lossy().into_owned())
-        .chain(["/opt/homebrew/bin".to_string(), "/usr/local/bin".to_string()])
-        .collect::<Vec<_>>()
-        .join(":");
-    let mut cmd = std::process::Command::new(sh);
-    cmd.arg("-ilc")
-        .arg(format!("export PATH=\"$PATH:{extra}\"; {line}"))
-        .stdin(std::process::Stdio::null());
-    crate::mac::run_with_deadline(cmd, std::time::Duration::from_secs(30))
-}
-
-/// The command `claude mcp get eve` reports for Eve ("  Command: /Applications/Eve.app/…/eve").
-pub(crate) fn command_in(get: &str) -> Option<String> {
-    get.lines().find_map(|l| l.trim().strip_prefix("Command:")).map(|c| c.trim().to_string()).filter(|c| !c.is_empty())
-}
-
-/// What Claude Code itself says: whether its CLI runs here, and what it would start for `eve`. Asked of the
-/// CLI rather than read from ~/.claude.json, so it is what `claude mcp list` shows, wherever the CLI keeps
-/// its config. `command -v` only says whether there is a `claude` at all: an alias (the local installer
-/// makes one) counts, where a path check would miss it.
-fn code(me: &str) -> Client {
-    let asked = shell(&format!("command -v claude >/dev/null 2>&1 || exit 127; claude mcp get {NAME}"));
-    let installed = asked.as_ref().is_ok_and(|o| o.status.code() != Some(127));
-    let command = asked.ok().filter(|o| o.status.success()).and_then(|o| command_in(&String::from_utf8_lossy(&o.stdout)));
-    let (connected, stale) = status(command, me);
-    Client { id: "code", name: "Claude Code", installed, connected, stale }
-}
-
-fn code_set(on: bool, me: &str) -> Result<(), String> {
-    // `add` refuses a name that exists, so an old entry (another path) goes first
-    let mut line = format!("claude mcp remove --scope user {NAME} >/dev/null 2>&1;");
-    if on {
-        line += &format!(" claude mcp add --scope user {NAME} -- {} mcp", quote(me));
-    } else {
-        line += " true";
+    /// `sh`-quoted, for a line handed to the user's shell.
+    pub(super) fn quote(s: &str) -> String {
+        format!("'{}'", s.replace('\'', r"'\''"))
     }
-    let out = shell(&line)?;
-    let now = code(me);
-    if now.connected == on && !(!on && now.stale) {
-        return Ok(());
+
+    /// Run a line in the user's login shell: an app started from the Dock gets a bare PATH, and the
+    /// `claude` CLI (and the node it may need) live wherever the shell's profile says.
+    fn shell(line: &str) -> Result<std::process::Output, String> {
+        let sh = std::env::var("SHELL").ok().filter(|s| s.starts_with('/')).unwrap_or_else(|| "/bin/zsh".into());
+        let home = home();
+        let extra = [".local/bin", ".claude/local", ".npm-global/bin", ".bun/bin", ".volta/bin"]
+            .iter()
+            .map(|d| home.join(d).to_string_lossy().into_owned())
+            .chain(["/opt/homebrew/bin".to_string(), "/usr/local/bin".to_string()])
+            .collect::<Vec<_>>()
+            .join(":");
+        let mut cmd = std::process::Command::new(sh);
+        cmd.arg("-ilc")
+            .arg(format!("export PATH=\"$PATH:{extra}\"; {line}"))
+            .stdin(std::process::Stdio::null());
+        crate::mac::run_with_deadline(cmd, std::time::Duration::from_secs(30))
     }
-    let said = [String::from_utf8_lossy(&out.stderr), String::from_utf8_lossy(&out.stdout)]
-        .iter()
-        .flat_map(|t| t.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect::<Vec<_>>())
-        .last()
-        .unwrap_or_else(|| "no output".into());
-    Err(format!(
-        "Claude Code did not take it ({said}). Run it yourself: claude mcp add --scope user {NAME} -- {} mcp",
-        quote(me)
-    ))
+
+    /// The command `claude mcp get eve` reports for Eve ("  Command: /Applications/Eve.app/…/eve").
+    pub(super) fn command_in(get: &str) -> Option<String> {
+        get.lines().find_map(|l| l.trim().strip_prefix("Command:")).map(|c| c.trim().to_string()).filter(|c| !c.is_empty())
+    }
+
+    /// What Claude Code itself says: whether its CLI runs here, and what it would start for `eve`. Asked of the
+    /// CLI rather than read from ~/.claude.json, so it is what `claude mcp list` shows, wherever the CLI keeps
+    /// its config. `command -v` only says whether there is a `claude` at all: an alias (the local installer
+    /// makes one) counts, where a path check would miss it.
+    pub(super) fn client(me: &str) -> Client {
+        let asked = shell(&format!("command -v claude >/dev/null 2>&1 || exit 127; claude mcp get {NAME}"));
+        let installed = asked.as_ref().is_ok_and(|o| o.status.code() != Some(127));
+        let command = asked.ok().filter(|o| o.status.success()).and_then(|o| command_in(&String::from_utf8_lossy(&o.stdout)));
+        Client { id: "code", name: "Claude Code", installed, status: status(command, me) }
+    }
+
+    pub(super) fn set(on: bool, me: &str) -> Result<(), String> {
+        // `add` refuses a name that exists, so an old entry (another path) goes first
+        let mut line = format!("claude mcp remove --scope user {NAME} >/dev/null 2>&1;");
+        if on {
+            line += &format!(" claude mcp add --scope user {NAME} -- {} mcp", quote(me));
+        } else {
+            line += " true";
+        }
+        let out = shell(&line)?;
+        if client(me).status == if on { Registration::Connected } else { Registration::Off } {
+            return Ok(());
+        }
+        let said = [String::from_utf8_lossy(&out.stderr), String::from_utf8_lossy(&out.stdout)]
+            .iter()
+            .flat_map(|t| t.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect::<Vec<_>>())
+            .last()
+            .unwrap_or_else(|| "no output".into());
+        Err(format!(
+            "Claude Code did not take it ({said}). Run it yourself: claude mcp add --scope user {NAME} -- {} mcp",
+            quote(me)
+        ))
+    }
 }
 
 fn clients() -> Result<Vec<Client>, String> {
     let me = exe()?;
-    Ok(vec![desktop(&me), code(&me)])
+    Ok(vec![desktop::client(&me), code::client(&me)])
 }
 
 #[tauri::command]
@@ -283,8 +298,8 @@ pub(crate) async fn mcp_connect(on: bool) -> Result<Vec<Client>, String> {
     let mut errors = Vec::new();
     for c in clients()?.into_iter().filter(|c| c.installed) {
         let done = match c.id {
-            "desktop" => desktop_set(on, &me),
-            _ => code_set(on, &me),
+            "desktop" => desktop::set(on, &me),
+            _ => code::set(on, &me),
         };
         if let Err(e) = done {
             errors.push(e);
@@ -295,6 +310,8 @@ pub(crate) async fn mcp_connect(on: bool) -> Result<Vec<Client>, String> {
 
 #[cfg(test)]
 mod tests {
+    use super::code::*;
+    use super::desktop::*;
     use super::*;
 
     #[test]
@@ -343,8 +360,8 @@ mod tests {
 
     #[test]
     fn stale_means_registered_elsewhere() {
-        assert_eq!(status(Some("/me".into()), "/me"), (true, false));
-        assert_eq!(status(Some("/old".into()), "/me"), (false, true));
-        assert_eq!(status(None, "/me"), (false, false));
+        assert_eq!(status(Some("/me".into()), "/me"), Registration::Connected);
+        assert_eq!(status(Some("/old".into()), "/me"), Registration::Stale);
+        assert_eq!(status(None, "/me"), Registration::Off);
     }
 }

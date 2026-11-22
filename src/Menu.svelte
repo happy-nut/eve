@@ -7,10 +7,10 @@
   import { eventToKeys, prettyKeys } from './lib/shortcuts.svelte';
   import { hints } from './lib/hints.svelte';
   import { popIn } from './lib/motion';
-  import { floatAt, held } from './lib/popup';
+  import { floatAt, lastShown } from './lib/popup';
   import { claimKeys, PRIORITY } from './lib/keys';
 
-  const req = $derived.by(held(() => ui.menu));
+  const req = $derived.by(lastShown(() => ui.menu));
   let el = $state<HTMLUListElement | null>(null);
   let q = $state('');
   $effect(() => { if (ui.menu) q = ''; });
@@ -77,9 +77,9 @@
   $effect(() => {
     if (ui.menu && el) untrack(() => autofocus(el!));
   });
-  // WebKit does not focus a clicked button, it blurs the menu — which would close it mid-click
   const iconed = $derived(req.items.some((it) => it.icon));
-  const hold = (e: MouseEvent) => { e.preventDefault(); (e.currentTarget as HTMLElement).focus(); };
+  // WebKit does not focus a clicked button, it blurs the menu — which would close it mid-click
+  const focusWithoutBlur = (e: MouseEvent) => { e.preventDefault(); (e.currentTarget as HTMLElement).focus(); };
 </script>
 
 {#snippet ico(it: MenuItem)}{#if it.swatch}<span class="swatch" style:background={it.swatch}></span>{:else if iconed}<svg class="ico" viewBox="0 0 16 16" aria-hidden="true">{@html it.icon ?? ''}</svg>{/if}{/snippet}
@@ -96,7 +96,6 @@
     </ul>
   </BottomSheet>
 {:else}
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <ul bind:this={el} class="menu" role="menu" tabindex="-1" style="left: {x}px; top: {y}px" style:max-height={maxH === null ? null : `min(${maxH}px, 360px, 70vh)`}
   transition:scale|global={popIn} onkeydown={onKey}>
   {#if req.search}
@@ -106,7 +105,7 @@
   {#each shown as it, i (i)}
     <li role="none" class:sep={it.sep}>
       <button role="menuitem" class:danger={it.danger} class:on={it.checked} disabled={it.disabled}
-        onmousedown={hold} onmouseenter={(e) => e.currentTarget.focus()} onclick={() => pick(it)}>
+        onmousedown={focusWithoutBlur} onmouseenter={(e) => e.currentTarget.focus()} onclick={() => pick(it)}>
         <span class="label">{@render ico(it)}{it.label}</span>{#if it.checked}{@render check()}{/if}{#if it.keys}<kbd>{prettyKeys(it.keys)}</kbd>{/if}
       </button>
     </li>

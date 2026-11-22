@@ -18,6 +18,8 @@ export async function seal(account: Account): Promise<{ body: string; path: stri
   return { body: b64url(body), path: hex(crypto.getRandomValues(new Uint8Array(16))), key: b64url(raw) };
 }
 
+const isServerAddress = (host: string) => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d{1,5})?$/.test(host);
+
 export async function open(body: string, key: string): Promise<Account> {
   const bytes = unb64url(body.trim());
   const k = await crypto.subtle.importKey('raw', unb64url(key), 'AES-GCM', false, ['decrypt']);
@@ -25,7 +27,7 @@ export async function open(body: string, key: string): Promise<Account> {
   const a = JSON.parse(new TextDecoder().decode(pt));
   if (typeof a.token !== 'string' || !/^[\w.-]+\/[\w.-]+$/.test(a.repo)) throw new Error('not an Eve sign-in');
   const host = typeof a.host === 'string' ? a.host : '';
-  if (host && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d{1,5})?$/.test(host)) throw new Error(`"${host}" is not a server address`);
+  if (host && !isServerAddress(host)) throw new Error(`"${host}" is not a server address`);
   return { user: String(a.user ?? ''), repo: a.repo, token: a.token, host };
 }
 
@@ -33,13 +35,19 @@ export const ticketLink = (t: Ticket, version?: string) =>
   `${PHONE_PAGE}?${version && /^\d+(\.\d+){1,3}$/.test(version) ? `v=${version}&` : ''}t=${Date.now().toString(36)}` +
   `#h=${encodeURIComponent(t.host)}&p=${t.path}&k=${t.key}`;
 
+const OLD_SIGNIN_PATH = 'connect';
+const TICKET_LINK = new RegExp(`^eve://(?:signin|${OLD_SIGNIN_PATH})\\?(.*)$`);
+
+function isPrivateLanHost(host: string): boolean {
+  const ip = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}:\d{1,5}$/.exec(host);
+  return !!ip && (ip[1] === '10' || (ip[1] === '192' && ip[2] === '168') || (ip[1] === '172' && +ip[2] >= 16 && +ip[2] <= 31));
+}
+
 export function parseTicket(url: string): Ticket | null {
-  const m = /^eve:\/\/(?:signin|connect)\?(.*)$/.exec(url);
+  const m = TICKET_LINK.exec(url);
   if (!m) return null;
   const q = new URLSearchParams(m[1]);
   const host = q.get('h') ?? '', path = q.get('p') ?? '', key = q.get('k') ?? '';
-  const ip = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}:\d{1,5}$/.exec(host);
-  const lan = ip && (ip[1] === '10' || (ip[1] === '192' && ip[2] === '168') || (ip[1] === '172' && +ip[2] >= 16 && +ip[2] <= 31));
-  if (!lan || !/^[0-9a-f]{32}$/.test(path) || !/^[\w-]{43}$/.test(key)) return null;
+  if (!isPrivateLanHost(host) || !/^[0-9a-f]{32}$/.test(path) || !/^[\w-]{43}$/.test(key)) return null;
   return { host, path, key };
 }

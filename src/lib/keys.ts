@@ -9,6 +9,7 @@ export interface ClaimOptions {
   priority?: number;
   keyup?: boolean;
   composing?: boolean;
+  onlyKeysAfterClaim?: boolean;
 }
 
 export const PRIORITY = {
@@ -18,7 +19,7 @@ export const PRIORITY = {
   app: -100,
 } as const;
 
-interface Claim { owner: HTMLElement | 'global'; map: KeyMap; o: ClaimOptions; seq: number; live: boolean }
+interface Claim { owner: HTMLElement | 'global'; map: KeyMap; o: ClaimOptions; seq: number; live: boolean; claimedAt: number }
 
 /**
  * A key typed while an IME is putting a word together. WebKit sends the Enter that ends a Korean word with
@@ -55,6 +56,7 @@ function dispatch(e: KeyboardEvent, list: Claim[] | undefined) {
   const path = e.composedPath();
   for (const c of [...list]) {
     if (!c.live || (ime && !c.o.composing)) continue;
+    if (c.o.onlyKeysAfterClaim && e.timeStamp < c.claimedAt) continue;
     if (c.o.whileTop && c.o.whileTop !== top) continue;
     if (c.owner !== 'global' && !path.includes(c.owner)) continue;
     const h = handlerFor(c.map, e);
@@ -67,7 +69,7 @@ function dispatch(e: KeyboardEvent, list: Claim[] | undefined) {
 
 export function claimKeys(owner: HTMLElement | 'global', map: KeyMap, o: ClaimOptions = {}): () => void {
   install();
-  const c: Claim = { owner, map, o, seq: seq++, live: true };
+  const c: Claim = { owner, map, o, seq: seq++, live: true, claimedAt: performance.now() };
   const key = listOf(o);
   const list = lists.get(key) ?? [];
   list.push(c);

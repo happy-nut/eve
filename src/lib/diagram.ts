@@ -4,27 +4,27 @@ export type Line = 'solid' | 'dotted' | 'thick';
 export interface FlowNode {
   id: string; label: string; shape: Shape; lane?: string;
   raw?: { open: string; close: string; as: Shape };
-  cls?: string;
-  step?: number;
+  mermaidClass?: string;
+  presentStep?: number;
 }
 export interface Lane { id: string; label: string }
 export interface FlowEdge {
   from: string; to: string; label: string; line: Line;
-  arrow?: string;
+  writtenArrow?: string;
   animate?: boolean;
 }
 export interface Flowchart {
   kind: 'flowchart'; dir: 'LR' | 'TD' | 'RL' | 'BT'; nodes: FlowNode[]; edges: FlowEdge[]; lanes?: Lane[];
-  extra?: string[]; pre?: string[];
+  keptLines?: string[]; preamble?: string[];
 }
 export const across = (d: Pick<Flowchart, 'dir'>) => d.dir === 'LR' || d.dir === 'RL';
 
 export interface Person { id: string; name: string; actor: boolean }
 export interface Message {
   from: string; to: string; text: string; reply: boolean;
-  guessed?: true;
-  arrow?: string;
-  act?: '+' | '-';
+  replyGuessed?: true;
+  writtenArrow?: string;
+  activation?: 'start' | 'end';
 }
 export type NoteAt = 'over' | 'left of' | 'right of';
 export interface SeqNote { note: NoteAt; who: string[]; text: string }
@@ -33,7 +33,7 @@ export interface SeqBlock { block: BlockKind; text: string }
 export interface Raw { raw: string }
 export type Step = Message | SeqNote | SeqBlock | Raw;
 export const isMessage = (s: Step): s is Message => 'from' in s;
-export interface Sequence { kind: 'sequence'; people: Person[]; messages: Step[]; numbered: boolean }
+export interface Sequence { kind: 'sequence'; people: Person[]; steps: Step[]; numbered: boolean }
 
 export interface Slice { label: string; value: number }
 export interface Pie { kind: 'pie'; title: string; slices: Slice[]; showData: boolean }
@@ -48,27 +48,28 @@ export interface Timeline { kind: 'timeline'; title: string; periods: Period[] }
 export interface Task {
   name: string; start: string; days: number;
   id?: string; tags?: string[];
-  after?: string;
+  after?: After;
 }
+export type After = { prev: true } | { ids: string[] };
 export interface Phase { name: string; tasks: Task[] }
-export interface Gantt { kind: 'gantt'; title: string; sections: Phase[]; extra?: string[]; skipWeekends?: true; noToday?: true }
+export interface Gantt { kind: 'gantt'; title: string; sections: Phase[]; keptLines?: string[]; skipWeekends?: true; noToday?: true }
 
 export type Dir = 'TB' | 'BT' | 'LR' | 'RL';
-export interface ClassBox { id: string; name: string; members: string[]; decl?: true }
+export interface ClassBox { id: string; name: string; members: string[]; standalone?: true }
 export interface ClassLink { from: string; to: string; arrow: string; label: string; fromCard: string; toCard: string }
-export interface ClassDiagram { kind: 'class'; dir?: Dir; classes: ClassBox[]; links: ClassLink[]; extra?: string[] }
+export interface ClassDiagram { kind: 'class'; dir?: Dir; classes: ClassBox[]; links: ClassLink[]; keptLines?: string[] }
 
 export interface StateBox {
-  id: string; name: string; desc: string; decl?: true;
+  id: string; name: string; desc: string; standalone?: true;
   kind?: 'choice' | 'fork' | 'join'; parent?: string; note?: { side: 'left' | 'right'; text: string };
 }
 export interface StateLink { from: string; to: string; label: string; in?: string }
-export interface StateDiagram { kind: 'state'; v2: boolean; dir?: Dir; states: StateBox[]; links: StateLink[]; extra?: string[] }
+export interface StateDiagram { kind: 'state'; v2: boolean; dir?: Dir; states: StateBox[]; links: StateLink[]; keptLines?: string[] }
 
 export interface Column { type: string; name: string; keys: string; comment: string }
-export interface Table { id: string; name: string; columns: Column[]; decl?: true }
+export interface Table { id: string; name: string; columns: Column[]; standalone?: true }
 export interface Relation { from: string; to: string; left: string; right: string; dashed: boolean; label: string }
-export interface ErDiagram { kind: 'er'; dir?: Dir; tables: Table[]; links: Relation[]; extra?: string[] }
+export interface ErDiagram { kind: 'er'; dir?: Dir; tables: Table[]; links: Relation[]; keptLines?: string[] }
 
 export type Diagram = Flowchart | Sequence | Pie | Mindmap | Timeline | Gantt | ClassDiagram | StateDiagram | ErDiagram;
 export type Kind = Diagram['kind'];
@@ -121,7 +122,7 @@ export function starter(kind: Kind, today = iso(new Date())): Diagram {
     case 'sequence': return {
       kind, numbered: false,
       people: [{ id: 'p1', name: 'Me', actor: true }, { id: 'p2', name: 'App', actor: false }],
-      messages: [{ from: 'p1', to: 'p2', text: 'Ask', reply: false }, { from: 'p2', to: 'p1', text: 'Answer', reply: true }],
+      steps: [{ from: 'p1', to: 'p2', text: 'Ask', reply: false }, { from: 'p2', to: 'p1', text: 'Answer', reply: true }],
     };
     case 'pie': return { kind, title: '', showData: false, slices: [{ label: 'A', value: 50 }, { label: 'B', value: 30 }, { label: 'C', value: 20 }] };
     case 'mindmap': return { kind, root: 'Idea', items: [{ text: 'One', depth: 1 }, { text: 'Detail', depth: 2 }, { text: 'Two', depth: 1 }, { text: 'Three', depth: 1 }] };
@@ -200,9 +201,9 @@ const ARROWS: Record<Line, string> = { solid: '-->', dotted: '-.->', thick: '==>
 const lineOf = (arrow: string): Line => (arrow.includes('=') ? 'thick' : arrow.includes('.') ? 'dotted' : 'solid');
 
 function flowCode(d: Flowchart) {
-  const lines = [...(d.pre ?? []), `flowchart ${d.dir}`];
+  const lines = [...(d.preamble ?? []), `flowchart ${d.dir}`];
   const shapeOf = (n: FlowNode) => (n.raw && n.raw.as === n.shape ? [n.raw.open, n.raw.close] : SHAPES[n.shape]);
-  const nodeLine = (n: FlowNode, pad: string) => { const [a, b] = shapeOf(n); return `${pad}${n.id}${a}${brQuoted(n.label)}${b}${n.cls ? `:::${n.cls}` : ''}`; };
+  const nodeLine = (n: FlowNode, pad: string) => { const [a, b] = shapeOf(n); return `${pad}${n.id}${a}${brQuoted(n.label)}${b}${n.mermaidClass ? `:::${n.mermaidClass}` : ''}`; };
   const lanes = d.lanes ?? [];
   for (const l of lanes) {
     lines.push(`  subgraph ${l.id}[${quoted(l.label)}]`, `    direction ${d.dir}`);
@@ -217,35 +218,38 @@ function flowCode(d: Flowchart) {
   const nextId = () => { while (ids.has(`e${k}`)) k++; return `e${k++}`; };
   for (const e of d.edges) {
     if (!ids.has(e.from) || !ids.has(e.to)) continue;
-    const arrow = e.arrow && lineOf(e.arrow) === e.line ? e.arrow : ARROWS[e.line];
+    const arrow = e.writtenArrow && lineOf(e.writtenArrow) === e.line ? e.writtenArrow : ARROWS[e.line];
     const id = e.animate ? nextId() : '';
     if (id) moving.push(id);
     lines.push(`  ${e.from} ${id ? `${id}@` : ''}${arrow}${one(e.label) ? `|${brQuoted(e.label)}|` : ''} ${e.to}`);
   }
   for (const id of moving) lines.push(`  ${id}@{ animate: true }`);
-  const steps = [...new Set(d.nodes.flatMap((n) => (n.step ? [n.step] : [])))].sort((a, b) => a - b);
-  for (const k of steps) lines.push(`  class ${d.nodes.filter((n) => n.step === k).map((n) => n.id).join(',')} step${k}`);
-  for (const x of d.extra ?? []) lines.push(`  ${x}`);
+  const steps = [...new Set(d.nodes.flatMap((n) => (n.presentStep ? [n.presentStep] : [])))].sort((a, b) => a - b);
+  for (const k of steps) lines.push(`  class ${d.nodes.filter((n) => n.presentStep === k).map((n) => n.id).join(',')} step${k}`);
+  for (const x of d.keptLines ?? []) lines.push(`  ${x}`);
   return lines.join('\n');
 }
 
-const OPENS: [string, string[], Shape, boolean][] = [
-  ['(((', [')))'], 'circle', true], ['([', ['])'], 'pill', false], ['[[', [']]'], 'box', true], ['[(', [')]'], 'db', false],
-  ['((', ['))'], 'circle', false], ['{{', ['}}'], 'diamond', true], ['[/', ['/]', '\\]'], 'box', true], ['[\\', ['\\]', '/]'], 'box', true],
-  ['[', [']'], 'box', false], ['(', [')'], 'round', false], ['{', ['}'], 'diamond', false], ['>', [']'], 'box', true],
+const OPENS: { open: string; closes: string[]; shape: Shape; keepRaw: boolean }[] = [
+  { open: '(((', closes: [')))'], shape: 'circle', keepRaw: true }, { open: '([', closes: ['])'], shape: 'pill', keepRaw: false },
+  { open: '[[', closes: [']]'], shape: 'box', keepRaw: true }, { open: '[(', closes: [')]'], shape: 'db', keepRaw: false },
+  { open: '((', closes: ['))'], shape: 'circle', keepRaw: false }, { open: '{{', closes: ['}}'], shape: 'diamond', keepRaw: true },
+  { open: '[/', closes: ['/]', '\\]'], shape: 'box', keepRaw: true }, { open: '[\\', closes: ['\\]', '/]'], shape: 'box', keepRaw: true },
+  { open: '[', closes: [']'], shape: 'box', keepRaw: false }, { open: '(', closes: [')'], shape: 'round', keepRaw: false },
+  { open: '{', closes: ['}'], shape: 'diamond', keepRaw: false }, { open: '>', closes: [']'], shape: 'box', keepRaw: true },
 ];
 // an id: letters and digits of any script (시작 --> 끝), and _ (a "-" would run into the arrow after it)
 const ID = /^[\p{L}\p{N}_]+/u;
-function readNode(s: string): { id: string; label?: string; shape?: Shape; raw?: FlowNode['raw']; cls?: string; rest: string } | null {
+function readNode(s: string): { id: string; label?: string; shape?: Shape; raw?: FlowNode['raw']; mermaidClass?: string; rest: string } | null {
   const m = ID.exec(s);
   if (!m) return null;
   const id = m[0];
   let rest = s.slice(id.length);
-  const withClass = <T extends { rest: string; cls?: string }>(n: T): T => {
+  const withClass = <T extends { rest: string; mermaidClass?: string }>(n: T): T => {
     const c = /^:::([\w-]+)/.exec(n.rest);
-    return c ? { ...n, cls: c[1], rest: n.rest.slice(c[0].length) } : n;
+    return c ? { ...n, mermaidClass: c[1], rest: n.rest.slice(c[0].length) } : n;
   };
-  for (const [open, closes, shape, kept] of OPENS) {
+  for (const { open, closes, shape, keepRaw } of OPENS) {
     if (!rest.startsWith(open)) continue;
     const q = rest[open.length] === '"' ? rest.indexOf('"', open.length + 1) : open.length - 1;
     if (q < 0) return null;
@@ -254,7 +258,7 @@ function readNode(s: string): { id: string; label?: string; shape?: Shape; raw?:
     const [close, end] = found;
     const label = unlines(rest.slice(open.length, end));
     rest = rest.slice(end + close.length);
-    return withClass({ id, label, shape, ...(kept ? { raw: { open, close, as: shape } } : {}), rest });
+    return withClass({ id, label, shape, ...(keepRaw ? { raw: { open, close, as: shape } } : {}), rest });
   }
   return withClass({ id, rest });
 }
@@ -284,6 +288,7 @@ function readArrow(s: string): { arrow: string; label: string; rest: string; id?
   return { arrow: bare[1] + bare[2] + bare[3], label: bare[4] ?? '', rest: s.slice(bare[0].length) };
 }
 function statements(line: string): string[] {
+  if (KEPT.test(line)) return [line];
   const out: string[] = [];
   let depth = 0, quote = false, from = 0;
   for (let i = 0; i < line.length; i++) {
@@ -296,55 +301,51 @@ function statements(line: string): string[] {
   out.push(line.slice(from));
   return out.map((x) => x.trim()).filter(Boolean);
 }
-const STEP = /^class\s+([\p{L}\p{N}_]+(?:\s*,\s*[\p{L}\p{N}_]+)*)\s+step([1-9]\d*)\s*;?$/u;
+const PRESENT_STEP_CLASS = /^class\s+([\p{L}\p{N}_]+(?:\s*,\s*[\p{L}\p{N}_]+)*)\s+step([1-9]\d*)\s*;?$/u;
 const KEPT = /^(%%|style\s|classDef\s|class\s|linkStyle\s|click\s|accTitle\b|accDescr\b)/;
 
-function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart | null {
+function flowRead(lines: string[], head: string, preamble: string[] = []): Flowchart | null {
   const dir = /^(?:flowchart|graph)\s+(LR|RL|TD|TB|BT)\s*;?$/.exec(head) ?? (/^(?:flowchart|graph)\s*;?$/.test(head) ? [head, 'TD'] : null);
   if (!dir) return null;
   const d: Flowchart = { kind: 'flowchart', dir: dir[1] === 'TB' ? 'TD' : (dir[1] as Flowchart['dir']), nodes: [], edges: [] };
-  if (pre.length) d.pre = pre;
+  if (preamble.length) d.preamble = preamble;
   const seen = new Map<string, FlowNode>();
-  let lane: Lane | null = null;
+  let openLane: Lane | null = null;
   // a line to or from a lane itself (Lane1 -.-> Lane2): mermaid joins the two groups, the lanes cannot (it was drawn
   // as two boxes named Lane1 and Lane2); the chart is mermaid's to draw
   let toLane = false;
-  const node = (n: { id: string; label?: string; shape?: Shape; raw?: FlowNode['raw']; cls?: string }) => {
+  const node = (n: { id: string; label?: string; shape?: Shape; raw?: FlowNode['raw']; mermaidClass?: string }) => {
     if (d.lanes?.some((l) => l.id === n.id)) toLane = true;
     let have = seen.get(n.id);
     if (!have) { have = { id: n.id, label: n.label ?? n.id, shape: n.shape ?? 'box' }; seen.set(n.id, have); d.nodes.push(have); }
     else if (n.label !== undefined) { have.label = n.label; have.shape = n.shape!; delete have.raw; }
     if (n.raw) have.raw = n.raw;
-    if (n.cls) have.cls = n.cls;
+    if (n.mermaidClass) have.mermaidClass = n.mermaidClass;
     // in a lane: the lane it is first named in (mermaid's own rule: a box mentioned in a subgraph is in it)
-    if (lane && !have.lane) have.lane = lane.id;
+    if (openLane && !have.lane) have.lane = openLane.id;
     return have;
   };
-  const keep = (x: string) => (d.extra ??= []).push(x);
+  const keep = (x: string) => (d.keptLines ??= []).push(x);
   const edgeIds = new Map<string, FlowEdge>(), told: [string, boolean][] = [], steps: [string[], number, string][] = [];
   for (const raw of lines) {
-    const whole = raw.trim();
-    const step = STEP.exec(whole);
-    if (step) { steps.push([step[1].split(/\s*,\s*/), +step[2], whole]); continue; }
-    if (KEPT.test(whole)) { keep(whole); continue; }
-    for (const line of statements(whole)) {
-      const st = STEP.exec(line);
+    for (const line of statements(raw.trim())) {
+      const st = PRESENT_STEP_CLASS.exec(line);
       if (st) { steps.push([st[1].split(/\s*,\s*/), +st[2], line]); continue; }
       if (KEPT.test(line)) { keep(line); continue; }
       const sub = /^subgraph\s+([\p{L}\p{N}_]+)\s*(?:\[(.*)\])?$/u.exec(line) ?? /^subgraph\s+(.+)$/.exec(line);
       if (sub) {
-        if (lane) return null;
+        if (openLane) return null;
         const words = sub.length === 2 || (sub[2] === undefined && /\s/.test(sub[1]));
         const id = words ? freshId('L', [...(d.lanes ?? []), ...d.nodes]) : sub[1];
         if ((d.lanes ?? []).some((l) => l.id === id) || seen.has(id)) return null;
-        lane = { id, label: words ? unquote(sub[1]) : sub[2] === undefined ? sub[1] : unquote(sub[2]) };
-        (d.lanes ??= []).push(lane);
+        openLane = { id, label: words ? unquote(sub[1]) : sub[2] === undefined ? sub[1] : unquote(sub[2]) };
+        (d.lanes ??= []).push(openLane);
         continue;
       }
-      if (line === 'end') { if (!lane) return null; lane = null; continue; }
+      if (line === 'end') { if (!openLane) return null; openLane = null; continue; }
       const set = /^([\p{L}\p{N}_]+)@\{\s*animate:\s*(true|false)\s*\}$/u.exec(line);
       if (set) { told.push([set[1], set[2] === 'true']); continue; }
-      if (/^direction\s+(LR|RL|TB|TD|BT)$/.test(line)) { if (!lane) return null; continue; }
+      if (/^direction\s+(LR|RL|TB|TD|BT)$/.test(line)) { if (!openLane) return null; continue; }
       let group = readNodes(line);
       if (!group) return null;
       let from = group.nodes.map(node);
@@ -357,7 +358,7 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
         const to = group.nodes.map(node);
         const line_ = lineOf(arrow.arrow);
         for (const a of from) for (const b of to) {
-          const e: FlowEdge = { from: a.id, to: b.id, label: unlines(arrow.label), line: line_, ...(arrow.arrow !== ARROWS[line_] ? { arrow: arrow.arrow } : {}) };
+          const e: FlowEdge = { from: a.id, to: b.id, label: unlines(arrow.label), line: line_, ...(arrow.arrow !== ARROWS[line_] ? { writtenArrow: arrow.arrow } : {}) };
           if (arrow.id) { if (edgeIds.has(arrow.id) || seen.has(arrow.id)) return null; edgeIds.set(arrow.id, e); }
           d.edges.push(e);
         }
@@ -366,12 +367,12 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
       }
     }
   }
-  if (lane || toLane) return null;
+  if (openLane || toLane) return null;
   for (const [id, on] of told) { const e = edgeIds.get(id); if (!e) return null; if (on) e.animate = true; else delete e.animate; }
-  const styled = new Set((d.extra ?? []).flatMap((x) => /^classDef\s+(?:[\w-]+\s*,\s*)*step([1-9]\d*)\b/.exec(x)?.[1] ?? []).map(Number));
+  const styledStepClasses = new Set((d.keptLines ?? []).flatMap((x) => /^classDef\s+(?:[\w-]+\s*,\s*)*step([1-9]\d*)\b/.exec(x)?.[1] ?? []).map(Number));
   for (const [ids, k, line] of steps) {
     const ns = ids.map((i) => seen.get(i));
-    if (!styled.has(k) && ns.every((n) => n && !n.step)) for (const n of ns) n!.step = k;
+    if (!styledStepClasses.has(k) && ns.every((n) => n && !n.presentStep)) for (const n of ns) n!.presentStep = k;
     else keep(line);
   }
   return d;
@@ -399,7 +400,7 @@ function seqCode(d: Sequence) {
   let depth = 1;
   const pad = (n: number) => '  '.repeat(Math.max(1, n));
   const says = (text: string) => (one(text) ? `: ${ent(one(text), ';#')}` : ':');
-  for (const st of d.messages) {
+  for (const st of d.steps) {
     if ('raw' in st) { lines.push(`${pad(depth)}${st.raw}`); continue; }
     if ('block' in st) {
       if (st.block === 'end') { depth = Math.max(1, depth - 1); lines.push(`${pad(depth)}end`); continue; }
@@ -414,13 +415,14 @@ function seqCode(d: Sequence) {
       continue;
     }
     if (!ids.has(st.from) || !ids.has(st.to)) continue;
-    const arrow = st.arrow && replies(st.arrow) === st.reply ? st.arrow : st.reply ? '-->>' : '->>';
-    lines.push(`${pad(depth)}${st.from}${arrow}${st.act ?? ''}${st.to}${says(st.text)}`);
+    const arrow = st.writtenArrow && replies(st.writtenArrow) === st.reply ? st.writtenArrow : st.reply ? '-->>' : '->>';
+    const activation = st.activation === 'start' ? '+' : st.activation === 'end' ? '-' : '';
+    lines.push(`${pad(depth)}${st.from}${arrow}${activation}${st.to}${says(st.text)}`);
   }
   return lines.join('\n');
 }
 function seqRead(lines: string[]): Sequence | null {
-  const d: Sequence = { kind: 'sequence', people: [], messages: [], numbered: false };
+  const d: Sequence = { kind: 'sequence', people: [], steps: [], numbered: false };
   const person = (id: string) => { if (!d.people.some((p) => p.id === id)) d.people.push({ id, name: id, actor: false }); };
   for (const raw of lines) {
     const line = raw.trim();
@@ -436,22 +438,22 @@ function seqRead(lines: string[]): Sequence | null {
     if (m) {
       person(m[1]); person(m[4]);
       const msg: Message = { from: m[1], to: m[4], text: unent((m[5] ?? '').trim()), reply: replies(m[2]) };
-      if (m[2] !== '->>' && m[2] !== '-->>') msg.arrow = m[2];
-      if (m[3]) msg.act = m[3] as '+' | '-';
-      d.messages.push(msg);
+      if (m[2] !== '->>' && m[2] !== '-->>') msg.writtenArrow = m[2];
+      if (m[3]) msg.activation = m[3] === '+' ? 'start' : 'end';
+      d.steps.push(msg);
       continue;
     }
     const n = NOTE.exec(line);
     if (n) {
       const who = [n[2], ...(n[3] ? [n[3]] : [])];
       who.forEach(person);
-      d.messages.push({ note: n[1].toLowerCase() as NoteAt, who, text: unent(n[4].trim()) });
+      d.steps.push({ note: n[1].toLowerCase() as NoteAt, who, text: unent(n[4].trim()) });
       continue;
     }
-    if (line === 'end') { d.messages.push({ block: 'end', text: '' }); continue; }
+    if (line === 'end') { d.steps.push({ block: 'end', text: '' }); continue; }
     const b = BLOCK.exec(line);
-    if (b) { d.messages.push({ block: b[1] as BlockKind, text: unent(b[2].trim()) }); continue; }
-    d.messages.push({ raw: line });
+    if (b) { d.steps.push({ block: b[1] as BlockKind, text: unent(b[2].trim()) }); continue; }
+    d.steps.push({ raw: line });
   }
   return d;
 }
@@ -490,8 +492,9 @@ const shaped = (shape: MindShape | undefined, id: string, text: string) => {
   const b = MIND_BRACKETS.find(([s]) => s === shape);
   return b ? `${id}${b[1]}${branch(text)}${b[2]}` : branch(text);
 };
+const LONGEST_OPEN_FIRST = [...MIND_BRACKETS].sort((a, b) => b[1].length - a[1].length);
 function readIdea(text: string): { text: string; shape: MindShape } | null {
-  for (const [shape, open, close] of MIND_BRACKETS) {
+  for (const [shape, open, close] of LONGEST_OPEN_FIRST) {
     const m = new RegExp(String.raw`^[\p{L}\p{N}_-]*${open.replace(/./g, '\\$&')}(.*)${close.replace(/./g, '\\$&')}$`, 'u').exec(text);
     if (m && !/[()[\]{}]/.test(m[1])) return { text: unent(m[1]), shape };
   }
@@ -540,17 +543,17 @@ function timeCode(d: Timeline) {
 }
 function timeRead(lines: string[]): Timeline | null {
   const d: Timeline = { kind: 'timeline', title: '', periods: [] };
-  let section: string | undefined;
+  let pendingSection: string | undefined;
   for (const raw of lines) {
     const line = raw.trim();
     const t = /^title\s+(.*)$/i.exec(line);
     if (t) { d.title = unent(t[1].trim()); continue; }
     const sec = /^section\s+(.*)$/i.exec(line);
-    if (sec) { section = unent(sec[1].trim()); continue; }
+    if (sec) { pendingSection = unent(sec[1].trim()); continue; }
     const [label, ...events] = line.split(/\s*:(?:\s+|$)/).map((s) => unent(s.trim()));
     if (!label) { const last = d.periods[d.periods.length - 1]; if (!last) return null; last.events.push(...events); continue; }
-    d.periods.push(section === undefined ? { label, events } : { label, events, section });
-    section = undefined;
+    d.periods.push(pendingSection === undefined ? { label, events } : { label, events, section: pendingSection });
+    pendingSection = undefined;
   }
   return d;
 }
@@ -565,47 +568,46 @@ function onWeekdays(start: string, n: number): [string, number] {
   return [at, days];
 }
 export function ganttDates(d: Gantt): Map<Task, { start: string; days: number }> {
-  const out = new Map<Task, { start: string; days: number }>();
   const all = d.sections.flatMap((s) => s.tasks);
   const first = all.filter((t) => t.after === undefined).map((t) => t.start).sort()[0] ?? iso(new Date());
   const byId = new Map(all.filter((t) => t.id).map((t) => [t.id!, t]));
-  const end = (t: Task | undefined) => { const r = t && out.get(t); return r ? addDays(r.start, r.days) : null; };
-  for (let pass = 0; pass <= all.length; pass++) {
-    let moved = false, prev: Task | undefined;
-    for (const t of all) {
-      const start = t.after === undefined ? t.start
-        : t.after === '' ? end(prev) ?? first
-        : t.after.split(' ').map((id) => end(byId.get(id))).filter((x): x is string => !!x).sort().pop() ?? first;
-      const [at, days] = d.skipWeekends ? onWeekdays(start, t.days) : [start, t.days];
-      if (out.get(t)?.start !== at || out.get(t)?.days !== days) { out.set(t, { start: at, days }); moved = true; }
-      prev = t;
-    }
-    if (!moved) break;
-  }
-  return out;
+  const dated = new Map<Task, { start: string; days: number }>(), dating = new Set<Task>();
+  const end = (t: Task | undefined) => { const r = t && dateOf(t); return r ? addDays(r.start, r.days) : null; };
+  const dateOf = (t: Task): { start: string; days: number } | undefined => {
+    if (dated.has(t) || dating.has(t)) return dated.get(t);
+    dating.add(t);
+    const start = !t.after ? t.start
+      : 'prev' in t.after ? end(all[all.indexOf(t) - 1]) ?? first
+      : t.after.ids.map((id) => end(byId.get(id))).filter((x): x is string => !!x).sort().pop() ?? first;
+    const [at, days] = d.skipWeekends ? onWeekdays(start, t.days) : [start, t.days];
+    dated.set(t, { start: at, days });
+    return dated.get(t);
+  };
+  return new Map(all.map((t) => [t, dateOf(t)!]));
 }
+const DAY_TICKS_UP_TO_DAYS = 8, WEEK_TICKS_UP_TO_DAYS = 120;
 function ganttCode(d: Gantt) {
   const lines = ['gantt', '  dateFormat YYYY-MM-DD'];
   const dates = ganttDates(d);
   // a tick a day for a fortnight, a week for a season, else a month: mermaid's own choice put hours under days
   const spans = [...dates.values()];
-  if (spans.length && !(d.extra ?? []).some((x) => /^(tickInterval|axisFormat)\b/i.test(x))) {
+  if (spans.length && !(d.keptLines ?? []).some((x) => /^(tickInterval|axisFormat)\b/i.test(x))) {
     const from = spans.map((t) => t.start).sort()[0], to = spans.map((t) => addDays(t.start, t.days)).sort().pop()!;
     const span = (Date.parse(to) - Date.parse(from)) / 864e5;
-    lines.push(span <= 8 ? '  tickInterval 1day' : span <= 120 ? '  tickInterval 1week' : '  tickInterval 1month');
-    if (span > 120) lines.push('  axisFormat %Y-%m');
+    lines.push(span <= DAY_TICKS_UP_TO_DAYS ? '  tickInterval 1day' : span <= WEEK_TICKS_UP_TO_DAYS ? '  tickInterval 1week' : '  tickInterval 1month');
+    if (span > WEEK_TICKS_UP_TO_DAYS) lines.push('  axisFormat %Y-%m');
   }
   if (one(d.title)) lines.push(`  title ${ent(one(d.title), '#;')}`);
   if (d.skipWeekends) lines.push('  excludes weekends');
   if (d.noToday) lines.push('  todayMarker off');
-  for (const x of d.extra ?? []) lines.push(`  ${x}`);
+  for (const x of d.keptLines ?? []) lines.push(`  ${x}`);
   for (const s of d.sections) {
     lines.push(`  section ${ent(one(s.name) || 'Tasks', '#;')}`);
     for (const t of s.tasks) {
       const days = `${Math.max(t.tags?.includes('milestone') ? 0 : 1, Math.round(t.days) || 0)}d`;
       // after the one before it: the length alone, as mermaid reads it; with an id too, its date (an id and a length
       // alone would be read as a start and a length)
-      const start = t.after === undefined ? t.start : t.after ? `after ${t.after}` : t.id ? dates.get(t)!.start : null;
+      const start = !t.after ? t.start : 'ids' in t.after ? `after ${t.after.ids.join(' ')}` : t.id ? dates.get(t)!.start : null;
       const meta = [...(t.tags ?? []), ...(t.id ? [t.id] : []), ...(start ? [start] : []), days];
       lines.push(`    ${unkeyword(ent(one(t.name) || 'Task', ':#;'))} : ${meta.join(', ')}`);
     }
@@ -614,6 +616,7 @@ function ganttCode(d: Gantt) {
 }
 const realDay = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); const t = new Date(Date.UTC(y, m - 1, d)); return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d; };
 const isDay = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && realDay(s);
+const MAX_TASK_DAYS = 36500;
 const GANTT_KEPT = /^(excludes|includes|todayMarker|weekday|weekend|axisFormat|tickInterval|displayMode|inclusiveEndDates|topAxis|accTitle|accDescr)\b/i;
 function ganttRead(lines: string[]): Gantt | null {
   const d: Gantt = { kind: 'gantt', title: '', sections: [] };
@@ -623,7 +626,7 @@ function ganttRead(lines: string[]): Gantt | null {
     if (/^dateFormat\b/i.test(line)) return null;
     if (/^excludes\s+weekends$/i.test(line)) { d.skipWeekends = true; continue; }
     if (/^todayMarker\s+off$/i.test(line)) { d.noToday = true; continue; }
-    if (GANTT_KEPT.test(line)) { (d.extra ??= []).push(line); continue; }
+    if (GANTT_KEPT.test(line)) { (d.keptLines ??= []).push(line); continue; }
     const t = /^title\s+(.*)$/i.exec(line);
     if (t) { d.title = unent(t[1].trim()); continue; }
     const s = /^section\s+(.*)$/i.exec(line);
@@ -638,15 +641,15 @@ function ganttRead(lines: string[]): Gantt | null {
     const [id, from, len] = meta.length === 3 ? meta : meta.length === 2 ? [undefined, ...meta] : [undefined, undefined, meta[0]];
     if (id !== undefined && !/^[\w-]+$/.test(id)) return null;
     const task: Task = { name: unent(k[1]), start: '', days: 0 };
-    if (from === undefined) task.after = '';
-    else if (/^after\s+[\w-]+(\s+[\w-]+)*$/.test(from)) task.after = from.replace(/^after\s+/, '').replace(/\s+/g, ' ');
+    if (from === undefined) task.after = { prev: true };
+    else if (/^after\s+[\w-]+(\s+[\w-]+)*$/.test(from)) task.after = { ids: from.replace(/^after\s+/, '').split(/\s+/) };
     else if (isDay(from)) task.start = from;
     else return null;
     const n = /^(\d+)([dw])$/.exec(len);
     if (n) task.days = +n[1] * (n[2] === 'w' ? 7 : 1);
     else if (isDay(len) && task.start) task.days = Math.round((Date.parse(len) - Date.parse(task.start)) / 864e5);
     else return null;
-    if (task.days > 36500 || task.days < 0 || (!task.days && !tags.includes('milestone'))) return null;
+    if (task.days > MAX_TASK_DAYS || task.days < 0 || (!task.days && !tags.includes('milestone'))) return null;
     if (id) task.id = id;
     if (tags.length) task.tags = tags;
     if (!d.sections.length) d.sections.push({ name: 'Tasks', tasks: [] });
@@ -687,7 +690,7 @@ function classCode(d: ClassDiagram) {
       lines.push(`  class ${c.id}["${one(c.name).replace(/"/g, "'")}"]`);
       for (const m of members) lines.push(`  ${c.id} : ${m}`);
     } else if (members.length) lines.push(`  class ${c.id} {`, ...members.map((m) => `    ${m}`), '  }');
-    else if (c.decl || !d.links.some((l) => l.from === c.id || l.to === c.id)) lines.push(`  class ${c.id}`);
+    else if (c.standalone || !d.links.some((l) => l.from === c.id || l.to === c.id)) lines.push(`  class ${c.id}`);
   }
   const ids = new Set(d.classes.map((c) => c.id));
   const card = (s: string) => one(s).replace(/"/g, '');
@@ -696,7 +699,7 @@ function classCode(d: ClassDiagram) {
     const a = card(l.fromCard), b = card(l.toCard);
     lines.push(`  ${l.from}${a ? ` "${a}"` : ''} ${l.arrow} ${b ? `"${b}" ` : ''}${l.to}${one(l.label) ? ` : ${one(l.label)}` : ''}`);
   }
-  for (const x of d.extra ?? []) lines.push(kept(x));
+  for (const x of d.keptLines ?? []) lines.push(kept(x));
   return lines.join('\n');
 }
 function classRead(lines: string[]): ClassDiagram | null {
@@ -721,7 +724,7 @@ function classRead(lines: string[]): ClassDiagram | null {
         b.members.push(...all.slice(i + 1, end).filter(Boolean));
         i = end;
       }
-      if (c[2] === undefined) b.decl = true;
+      if (c[2] === undefined) b.standalone = true;
       continue;
     }
     const l = CLASS_LINK.exec(line);
@@ -734,11 +737,11 @@ function classRead(lines: string[]): ClassDiagram | null {
     if (m) { box(m[1]).members.push(m[2].trim()); continue; }
     const a = CLASS_NOTE.exec(line);
     if (a) { box(a[2]).members.unshift(a[1]); continue; }
-    if (line.endsWith('{')) { const end = blockEnd(all, i); (d.extra ??= []).push(block(lines, i, end)); i = end; continue; }
-    (d.extra ??= []).push(line);
+    if (line.endsWith('{')) { const end = blockEnd(all, i); (d.keptLines ??= []).push(block(lines, i, end)); i = end; continue; }
+    (d.keptLines ??= []).push(line);
   }
   // declared on a line of its own only when that is all there is of it (members or a label write it anyway)
-  for (const b of d.classes) if (b.decl && (b.members.length || b.name !== b.id)) delete b.decl;
+  for (const b of d.classes) if (b.standalone && (b.members.length || b.name !== b.id)) delete b.standalone;
   return d;
 }
 
@@ -784,7 +787,7 @@ function stateWritten(d: StateDiagram) {
       const desc = st.kind || kids ? [] : st.desc.split('\n').map(one).filter(Boolean);
       if (st.kind) lines.push(`${pad}state ${st.id} <<${st.kind}>>`);
       else if (one(st.name) && (one(st.name) !== st.id || desc.length)) lines.push(`${pad}state "${one(st.name).replace(/"/g, "'")}" as ${st.id}`);
-      else if (st.decl) lines.push(`${pad}state ${st.id}`);
+      else if (st.standalone) lines.push(`${pad}state ${st.id}`);
       // a state with nothing else to say and on no line (one just added): its id alone, which mermaid draws (it
       // leaves out a `state X` with nothing after it)
       else if (!desc.length && !kids && !d.links.some((l) => l.from === st.id || l.to === st.id)) lines.push(`${pad}${st.id}`);
@@ -803,7 +806,7 @@ function stateWritten(d: StateDiagram) {
     });
   };
   write(undefined, '  ');
-  for (const x of d.extra ?? []) lines.push(kept(x));
+  for (const x of d.keptLines ?? []) lines.push(kept(x));
   return { lines, order };
 }
 /** the links of a class, state or table chart in the order they are written, so drawn: each line mermaid draws, by its
@@ -837,7 +840,7 @@ function stateRead(lines: string[], v2: boolean): StateDiagram | null {
       const named = STATE_NAMED.exec(line);
       if (named) { within(box(named[2])).name = named[1]; continue; }
       const bare = STATE_BARE.exec(line);
-      if (bare) { within(box(bare[1])).decl = true; continue; }
+      if (bare) { within(box(bare[1])).standalone = true; continue; }
       const l = STATE_LINK.exec(line);
       if (l) {
         for (const id of [l[1], l[2]]) if (id !== '[*]') within(box(id));
@@ -862,20 +865,20 @@ function stateRead(lines: string[], v2: boolean): StateDiagram | null {
       }
       if (parent) return false; // only the rows' lines inside one (rowsOnly said so)
       // a note over lines of its own, or a state of states the rows cannot show: kept whole
-      if (end >= 0) { (d.extra ??= []).push(block(lines, i, end)); i = end; continue; }
+      if (end >= 0) { (d.keptLines ??= []).push(block(lines, i, end)); i = end; continue; }
       if (/^note\s+(left|right)\s+of\s+\S+$/i.test(line)) {
         const close = all.findIndex((x, j) => j > i && /^end\s+note$/i.test(x));
         if (close < 0) return false;
-        (d.extra ??= []).push(block(lines, i, close));
+        (d.keptLines ??= []).push(block(lines, i, close));
         i = close;
         continue;
       }
-      (d.extra ??= []).push(line);
+      (d.keptLines ??= []).push(line);
     }
     return true;
   };
   if (!read(0, all.length, undefined)) return null;
-  for (const st of d.states) if (st.decl && (st.name !== st.id || d.states.some((x) => x.parent === st.id))) delete st.decl;
+  for (const st of d.states) if (st.standalone && (st.name !== st.id || d.states.some((x) => x.parent === st.id))) delete st.standalone;
   return d;
 }
 
@@ -895,13 +898,13 @@ function erCode(d: ErDiagram) {
       lines.push(`  ${head} {`);
       for (const c of cols) lines.push(`    ${bare(c.type)} ${bare(c.name)}${one(c.keys) ? ` ${one(c.keys)}` : ''}${one(c.comment) ? ` "${one(c.comment).replace(/"/g, "'")}"` : ''}`);
       lines.push('  }');
-    } else if (t.decl || head !== t.id) lines.push(`  ${head}`);
+    } else if (t.standalone || head !== t.id) lines.push(`  ${head}`);
   }
   const ids = new Set(d.tables.map((t) => t.id));
   // a label of one word bare, of more quoted, none as ""
   const label = (s: string) => (/^[\p{L}\p{N}_]+$/u.test(one(s)) ? one(s) : `"${one(s).replace(/"/g, "'")}"`);
   for (const l of d.links) if (ids.has(l.from) && ids.has(l.to)) lines.push(`  ${l.from} ${l.left}${l.dashed ? '..' : '--'}${l.right} ${l.to} : ${label(l.label)}`);
-  for (const x of d.extra ?? []) lines.push(kept(x));
+  for (const x of d.keptLines ?? []) lines.push(kept(x));
   return lines.join('\n');
 }
 function erRead(lines: string[]): ErDiagram | null {
@@ -923,7 +926,7 @@ function erRead(lines: string[]): ErDiagram | null {
         if (end < 0) return null;
         const cols = all.slice(i + 1, end).filter(Boolean).map((c) => COLUMN.exec(c));
         // a column the form cannot show: the table kept as written
-        if (cols.some((c) => !c)) { (d.extra ??= []).push(block(lines, i, end)); i = end; continue; }
+        if (cols.some((c) => !c)) { (d.keptLines ??= []).push(block(lines, i, end)); i = end; continue; }
         const t = table(head[1]);
         if (head[2] !== undefined) t.name = head[2];
         t.columns.push(...cols.map((c) => ({ type: c![1], name: c![2], keys: c![3]?.replace(/\s*,\s*/g, ', ') ?? '', comment: c![4] ?? '' })));
@@ -931,7 +934,7 @@ function erRead(lines: string[]): ErDiagram | null {
       } else {
         const t = table(head[1]);
         if (head[2] !== undefined) t.name = head[2];
-        else t.decl = true;
+        else t.standalone = true;
       }
       continue;
     }
@@ -941,9 +944,9 @@ function erRead(lines: string[]): ErDiagram | null {
       d.links.push({ from: l[1], to: l[5], left: l[2], right: l[4], dashed: l[3] === '..', label: l[6].trim().replace(/^"(.*)"$/, '$1') });
       continue;
     }
-    (d.extra ??= []).push(line);
+    (d.keptLines ??= []).push(line);
   }
-  for (const t of d.tables) if (t.decl && (t.columns.length || t.name !== t.id)) delete t.decl;
+  for (const t of d.tables) if (t.standalone && (t.columns.length || t.name !== t.id)) delete t.standalone;
   return d;
 }
 export function toCode(d: Diagram): string {
@@ -1008,7 +1011,7 @@ export function whyCode(code: string): { kind: string } | { line: string } | { o
 export function isEmpty(d: Diagram): boolean {
   switch (d.kind) {
     case 'flowchart': return !d.nodes.length;
-    case 'sequence': return !d.people.length && !d.messages.length;
+    case 'sequence': return !d.people.length && !d.steps.length;
     case 'pie': return !d.slices.length;
     case 'mindmap': return !d.root.trim() && !d.items.length;
     case 'timeline': return !d.periods.length;

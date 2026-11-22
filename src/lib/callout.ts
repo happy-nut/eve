@@ -1,5 +1,6 @@
 import { Extension, Node, mergeAttributes } from '@tiptap/core';
-import { Plugin, Selection, TextSelection } from '@tiptap/pm/state';
+import { Plugin, Selection, TextSelection, type EditorState } from '@tiptap/pm/state';
+import type { EditorView } from '@tiptap/pm/view';
 import { liftTarget } from '@tiptap/pm/transform';
 import { ui } from './ui.svelte';
 import { isMobile } from './platform';
@@ -28,6 +29,45 @@ function splitTitle(p: Element): void {
   }
 }
 
+const calloutBody = (el: HTMLElement): HTMLElement => el.querySelector<HTMLElement>(':scope > .callout-body') ?? el;
+
+const dropTitleWithoutLine = () => new Plugin({
+  appendTransaction: (trs, _old, state) => {
+    if (!trs.some((t) => t.docChanged)) return null;
+    let tr = null as ReturnType<typeof state.tr.setNodeAttribute> | null;
+    state.doc.descendants((n, pos) => {
+      if (n.type.name !== 'callout' || !n.attrs.titled) return;
+      const first = n.firstChild;
+      if (first?.type.name === 'paragraph' && first.content.size) return;
+      tr = (tr ?? state.tr).setNodeAttribute(pos, 'titled', false);
+    });
+    return tr;
+  },
+});
+
+function stepTitleOut(state: EditorState, view: EditorView): boolean {
+  const { $from, empty } = state.selection;
+  const callout = $from.depth > 1 ? $from.node(-1) : null;
+  if (!empty || $from.parentOffset !== 0 || callout?.type.name !== 'callout' || !callout.attrs.titled || $from.index(-1) !== 0) return false;
+  const tr = state.tr.setNodeAttribute($from.before(-1), 'titled', false);
+  const range = tr.doc.resolve($from.pos).blockRange();
+  const target = range && liftTarget(range);
+  if (!range || target == null) return false;
+  view.dispatch(tr.lift(range, target).scrollIntoView());
+  return true;
+}
+
+function enterCalloutFromLineAbove(state: EditorState, view: EditorView): boolean {
+  const { $from, empty } = state.selection;
+  if (!empty || !$from.parent.isTextblock || $from.depth === 0 || $from.parentOffset !== $from.parent.content.size) return false;
+  if (state.doc.resolve($from.after()).nodeAfter?.type.name !== 'callout') return false;
+  const tr = state.tr;
+  if (!$from.parent.content.size) tr.delete($from.before(), $from.after());
+  const into = Selection.findFrom(tr.doc.resolve(tr.mapping.map($from.after()) + 1), 1, true);
+  if (into) view.dispatch(tr.setSelection(into).scrollIntoView());
+  return !!into;
+}
+
 export const Callout = Node.create({
   name: 'callout',
   group: 'block',
@@ -42,7 +82,7 @@ export const Callout = Node.create({
     };
   },
   parseHTML() {
-    return [{ tag: 'div[data-callout]', contentElement: (el) => (el as HTMLElement).querySelector<HTMLElement>(':scope > .callout-body') ?? (el as HTMLElement) }];
+    return [{ tag: 'div[data-callout]', contentElement: (el) => calloutBody(el as HTMLElement) }];
   },
   renderHTML({ node, HTMLAttributes }) {
     return [
@@ -94,19 +134,7 @@ export const Callout = Node.create({
     };
   },
   addProseMirrorPlugins() {
-    return [new Plugin({
-      appendTransaction: (trs, _old, state) => {
-        if (!trs.some((t) => t.docChanged)) return null;
-        let tr = null as ReturnType<typeof state.tr.setNodeAttribute> | null;
-        state.doc.descendants((n, pos) => {
-          if (n.type.name !== 'callout' || !n.attrs.titled) return;
-          const first = n.firstChild;
-          if (first?.type.name === 'paragraph' && first.content.size) return;
-          tr = (tr ?? state.tr).setNodeAttribute(pos, 'titled', false);
-        });
-        return tr;
-      },
-    })];
+    return [dropTitleWithoutLine()];
   },
   addKeyboardShortcuts() {
     return {
@@ -190,30 +218,8 @@ export const CalloutEdges = Extension.create({
   priority: 1000,
   addKeyboardShortcuts() {
     return {
-      Backspace: ({ editor }) => {
-        const { state, view } = editor;
-        const { $from, empty } = state.selection;
-        const callout = $from.depth > 1 ? $from.node(-1) : null;
-        if (!empty || $from.parentOffset !== 0 || callout?.type.name !== 'callout' || !callout.attrs.titled || $from.index(-1) !== 0) return false;
-        // the range read off the note with the title cleared: lift copies the callout around what it lifts out
-        const tr = state.tr.setNodeAttribute($from.before(-1), 'titled', false);
-        const range = tr.doc.resolve($from.pos).blockRange();
-        const target = range && liftTarget(range);
-        if (!range || target == null) return false;
-        view.dispatch(tr.lift(range, target).scrollIntoView());
-        return true;
-      },
-      Delete: ({ editor }) => {
-        const { state, view } = editor;
-        const { $from, empty } = state.selection;
-        if (!empty || !$from.parent.isTextblock || $from.depth === 0 || $from.parentOffset !== $from.parent.content.size) return false;
-        if (state.doc.resolve($from.after()).nodeAfter?.type.name !== 'callout') return false;
-        const tr = state.tr;
-        if (!$from.parent.content.size) tr.delete($from.before(), $from.after());
-        const into = Selection.findFrom(tr.doc.resolve(tr.mapping.map($from.after()) + 1), 1, true);
-        if (into) view.dispatch(tr.setSelection(into).scrollIntoView());
-        return !!into;
-      },
+      Backspace: ({ editor }) => stepTitleOut(editor.state, editor.view),
+      Delete: ({ editor }) => enterCalloutFromLineAbove(editor.state, editor.view),
     };
   },
 });

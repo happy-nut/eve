@@ -1,7 +1,7 @@
 import { freshId, ganttDates, isMessage, linkOrder, type Diagram, type Sequence, type Pie, type Mindmap, type Timeline, type Gantt, type Task, type ClassDiagram, type StateDiagram, type ErDiagram, type MindShape, type BlockKind } from './diagram';
 import {
   dropStep, DIVIDERS, OPENERS, SPLITS, wellFormed, seqArrows, arrowOf, setArrow, pieValue, MIND_SHAPES, ROOT_SHAPES, movePeriod, plausible, endOf,
-  startOf, startOptions, setStart, tagOptions, setTags, rename, NAME_ID, TABLE_ID, drop, options, arrowOptions, STATE_KINDS, insideOptions, renameState,
+  startOf, afterIds, startOptions, setStart, tagOptions, setTags, rename, NAME_ID, TABLE_ID, drop, options, arrowOptions, STATE_KINDS, insideOptions, renameState,
   dropState, LEFT, RIGHT,
 } from './diagramOps';
 
@@ -11,11 +11,11 @@ export type Field =
   | { kind: 'number' | 'date' | 'text'; label: string; value: string; set: (v: string) => void }
   | { kind: 'lines'; label: string; value: string; set: (v: string) => void };
 export type Icon = 'plus' | 'child' | 'up' | 'down' | 'left' | 'right' | 'trash' | 'note' | 'section';
-export interface Act { label: string; icon: Icon; run: () => string | null | void | Promise<string | null | void>; tab?: true; off?: boolean }
+export interface Act { label: string; icon: Icon; run: () => string | null | void | Promise<string | null | void>; onTab?: true; off?: boolean }
 export interface Spot {
   text: string; label: string;
   set: (v: string) => string | void;
-  onDone?: true;
+  commitOnDone?: true;
   fields: Field[]; acts: Act[];
 }
 
@@ -65,7 +65,7 @@ export function adders(d: Diagram): { label: string; run: () => string | null }[
     case 'mindmap': return [{ label: '+ Branch', run: () => { d.items.push({ text: w(d, 'Idea'), depth: 1 }); return `branch:${d.items.length - 1}`; } }];
     case 'sequence': return [
       { label: '+ Person', run: () => { const id = freshId('p', d.people); d.people.push({ id, name: `${w(d, 'Person')} ${d.people.length + 1}`, actor: false }); return `person:${id}`; } },
-      ...(d.people.length ? [{ label: '+ Message', run: () => addMessage(d, d.messages.length) }] : []),
+      ...(d.people.length ? [{ label: '+ Message', run: () => addMessage(d, d.steps.length) }] : []),
     ];
     case 'class': return [{ label: '+ Class', run: () => { const id = freshId('Class', d.classes); d.classes.push({ id, name: id, members: [] }); return `class:${id}`; } }];
     case 'state': return [{ label: '+ State', run: () => { const id = freshId('State', d.states); d.states.push({ id, name: id, desc: '' }); return `state:${id}`; } }];
@@ -92,7 +92,7 @@ function pieSpot(d: Pie, key: string): Spot | null {
     text: s.label, label: 'Part name', set: (v) => { s.label = v; },
     fields: [{ kind: 'number', label: 'Value', value: String(s.value), set: (v) => { s.value = pieValue(+v); } }],
     acts: [
-      { label: 'Add a part after it', icon: 'plus', tab: true, run: () => { d.slices.splice(i + 1, 0, { label: w(d, 'Part'), value: 10 }); return `slice:${i + 1}`; } },
+      { label: 'Add a part after it', icon: 'plus', onTab: true, run: () => { d.slices.splice(i + 1, 0, { label: w(d, 'Part'), value: 10 }); return `slice:${i + 1}`; } },
       { label: 'Move up', icon: 'up', off: i === 0, run: () => (move(d.slices, i, -1) ? `slice:${i - 1}` : null) },
       { label: 'Move down', icon: 'down', off: i === d.slices.length - 1, run: () => (move(d.slices, i, 1) ? `slice:${i + 1}` : null) },
       { label: 'Delete', icon: 'trash', run: () => { d.slices.splice(i, 1); } },
@@ -113,7 +113,7 @@ function timeSpot(d: Timeline, key: string): Spot | null {
     text: p.label, label: 'When', set: (v) => { p.label = v; },
     fields: [],
     acts: [
-      { label: 'Add an event', icon: 'child', tab: true, run: () => addEvent(p.events.length) },
+      { label: 'Add an event', icon: 'child', onTab: true, run: () => addEvent(p.events.length) },
       { label: 'Add a period after it', icon: 'plus', run: () => { d.periods.splice(i + 1, 0, { label: w(d, 'When'), events: [''] }); return `period:${i + 1}`; } },
       { label: 'Start a section here', icon: 'section', off: p.section !== undefined, run: () => { p.section = w(d, 'Section'); return `section:${i}`; } },
       { label: 'Move up', icon: 'up', off: i === 0, run: () => { movePeriod(d, i, -1); return `period:${i - 1}`; } },
@@ -130,7 +130,7 @@ function timeSpot(d: Timeline, key: string): Spot | null {
       text: p.events[j] ?? '', label: 'What happened', set: (v) => { if (j < p.events.length) p.events[j] = v; else p.events.push(v); },
       fields: [],
       acts: [
-        { label: 'Add an event after it', icon: 'plus', tab: true, run: () => addEvent(j + 1) },
+        { label: 'Add an event after it', icon: 'plus', onTab: true, run: () => addEvent(j + 1) },
         { label: 'Move up', icon: 'up', off: j === 0, run: () => (move(p.events, j, -1) ? `event:${i}:${j - 1}` : null) },
         { label: 'Move down', icon: 'down', off: j >= p.events.length - 1, run: () => (move(p.events, j, 1) ? `event:${i}:${j + 1}` : null) },
         { label: 'Delete', icon: 'trash', run: () => { p.events.splice(j, 1); if (!p.events.length) p.events.push(''); } },
@@ -153,7 +153,7 @@ function ganttSpot(d: Gantt, key: string): Spot | null {
     text: s.name, label: 'Section', set: (v) => { s.name = v; },
     fields: [],
     acts: [
-      { label: 'Add a task', icon: 'child', tab: true, run: () => {
+      { label: 'Add a task', icon: 'child', onTab: true, run: () => {
         if (s.tasks.length === 1 && s.tasks[0].name === w(d, 'Task')) return `task:${si}:0`;
         s.tasks.push({ name: w(d, 'Task'), start: endOf(d), days: 2 }); return `task:${si}:${s.tasks.length - 1}`;
       } },
@@ -174,15 +174,15 @@ function ganttSpot(d: Gantt, key: string): Spot | null {
     text: t.name, label: 'Task', set: (v) => { t.name = v; },
     fields,
     acts: [
-      { label: 'Add a task after it', icon: 'plus', tab: true, run: () => {
-        const all = d.sections.flatMap((y) => y.tasks), next: Task = { name: w(d, 'Task'), start: '', after: '', days: 2 };
+      { label: 'Add a task after it', icon: 'plus', onTab: true, run: () => {
+        const all = d.sections.flatMap((y) => y.tasks), next: Task = { name: w(d, 'Task'), start: '', after: { prev: true }, days: 2 };
         if (t.id) {
-          const waiting = all.filter((x) => x.after?.split(' ').includes(t.id!));
+          const waiting = all.filter((x) => afterIds(x).includes(t.id!));
           if (waiting.length) {
             // after it by name: an id and the length alone would be read as a start date
             next.id = freshId('t', all.filter((y) => y.id).map((y) => ({ id: y.id! })));
-            next.after = t.id;
-            for (const x of waiting) x.after = x.after!.split(' ').map((id) => (id === t.id ? next.id! : id)).join(' ');
+            next.after = { ids: [t.id] };
+            for (const x of waiting) x.after = { ids: afterIds(x).map((id) => (id === t.id ? next.id! : id)) };
           }
         }
         s.tasks.splice(ti + 1, 0, next); return `task:${si}:${ti + 1}`;
@@ -193,8 +193,8 @@ function ganttSpot(d: Gantt, key: string): Spot | null {
         const was = ganttDates(d), flat = d.sections.flatMap((y) => y.tasks), at = flat.indexOf(t);
         const [gone] = s.tasks.splice(ti, 1);
         const next = flat[at + 1];
-        if (next?.after === '') { next.start = was.get(next)!.start; delete next.after; }
-        if (gone.id) for (const x of d.sections.flatMap((y) => y.tasks)) if (x.after?.split(' ').includes(gone.id)) { x.after = x.after.split(' ').filter((id) => id !== gone.id).join(' '); if (!x.after) { x.start = was.get(x)?.start || endOf(d); delete x.after; } }
+        if (next?.after && 'prev' in next.after) { next.start = was.get(next)!.start; delete next.after; }
+        if (gone.id) for (const x of d.sections.flatMap((y) => y.tasks)) if (afterIds(x).includes(gone.id)) { const ids = afterIds(x).filter((id) => id !== gone.id); if (ids.length) x.after = { ids }; else { x.start = was.get(x)?.start || endOf(d); delete x.after; } }
       } },
     ],
   };
@@ -206,7 +206,7 @@ function mindSpot(m: Mindmap, key: string): Spot | null {
   if (key === 'root') return {
     text: m.root, label: 'Center', set: (v) => { m.root = v; },
     fields: [shape(m.rootShape ?? 'circle', (v) => { if (v === 'circle') delete m.rootShape; else m.rootShape = v; }, ROOT_SHAPES)],
-    acts: [{ label: 'Add a branch', icon: 'child', tab: true, run: () => { m.items.push({ text: w(m, 'Idea'), depth: 1 }); return `branch:${m.items.length - 1}`; } }],
+    acts: [{ label: 'Add a branch', icon: 'child', onTab: true, run: () => { m.items.push({ text: w(m, 'Idea'), depth: 1 }); return `branch:${m.items.length - 1}`; } }],
   };
   const [k, n] = at(key), i = +n, b = m.items[i];
   if (k !== 'branch' || !b) return null;
@@ -224,7 +224,7 @@ function mindSpot(m: Mindmap, key: string): Spot | null {
     text: b.text, label: 'Idea', set: (v) => { b.text = v; },
     fields: [shape(b.shape ?? 'plain', (v) => { if (v === 'plain') delete b.shape; else b.shape = v; }, MIND_SHAPES)],
     acts: [
-      { label: 'Add an idea under it', icon: 'child', tab: true, run: () => { const e = subtreeEnd(m, i); m.items.splice(e, 0, { text: w(m, 'Idea'), depth: b.depth + 1 }); return `branch:${e}`; } },
+      { label: 'Add an idea under it', icon: 'child', onTab: true, run: () => { const e = subtreeEnd(m, i); m.items.splice(e, 0, { text: w(m, 'Idea'), depth: b.depth + 1 }); return `branch:${e}`; } },
       { label: 'Add an idea beside it', icon: 'plus', run: () => { const e = subtreeEnd(m, i); m.items.splice(e, 0, { text: w(m, 'Idea'), depth: b.depth }); return `branch:${e}`; } },
       { label: 'Move up', icon: 'up', off: sibling(-1) < 0, run: () => { const j = sibling(-1); return j < 0 ? null : `branch:${swap(j)}`; } },
       { label: 'Move down', icon: 'down', off: sibling(1) < 0, run: () => { const j = sibling(1); return j < 0 ? null : `branch:${swap(j)}`; } },
@@ -234,11 +234,11 @@ function mindSpot(m: Mindmap, key: string): Spot | null {
 }
 
 function addMessage(s: Sequence, at: number, from?: string): string | null {
-  const before = s.messages.slice(0, at).filter(isMessage).pop();
+  const before = s.steps.slice(0, at).filter(isMessage).pop();
   const pi = from ? s.people.findIndex((p) => p.id === from) : -1;
   const [a, b] = from ? [from, s.people[(pi + 1) % s.people.length]?.id ?? from] : before ? [before.to, before.from] : [s.people[0]?.id, s.people[1]?.id ?? s.people[0]?.id];
   if (!a || !b) return null;
-  s.messages.splice(at, 0, { from: a, to: b, text: w(s, 'Message'), reply: !from && !!before && !before.reply, guessed: true });
+  s.steps.splice(at, 0, { from: a, to: b, text: w(s, 'Message'), reply: !from && !!before && !before.reply, replyGuessed: true });
   return `step:${at}`;
 }
 function seqSpot(s: Sequence, key: string): Spot | null {
@@ -250,46 +250,46 @@ function seqSpot(s: Sequence, key: string): Spot | null {
       text: p.name, label: 'Participant', set: (v) => { p.name = v; },
       fields: [{ kind: 'select', label: 'Drawn as', value: p.actor ? 'actor' : 'box', options: [['box', 'System'], ['actor', 'Person']], set: (v) => { p.actor = v === 'actor'; } }],
       acts: [
-        { label: 'Add a message from them', icon: 'child', run: () => addMessage(s, s.messages.length, p.id) },
-        { label: 'Add a participant after them', icon: 'plus', tab: true, run: () => { const id = freshId('p', s.people); s.people.splice(i + 1, 0, { id, name: `${w(s, 'Person')} ${s.people.length + 1}`, actor: false }); return `person:${id}`; } },
+        { label: 'Add a message from them', icon: 'child', run: () => addMessage(s, s.steps.length, p.id) },
+        { label: 'Add a participant after them', icon: 'plus', onTab: true, run: () => { const id = freshId('p', s.people); s.people.splice(i + 1, 0, { id, name: `${w(s, 'Person')} ${s.people.length + 1}`, actor: false }); return `person:${id}`; } },
         { label: 'Move left', icon: 'left', off: i === 0, run: () => { move(s.people, i, -1); return key; } },
         { label: 'Move right', icon: 'right', off: i === s.people.length - 1, run: () => { move(s.people, i, 1); return key; } },
         { label: 'Delete them and their messages', icon: 'trash', run: () => {
-          const theirs = (st: Sequence['messages'][number]) => (isMessage(st) ? st.from === p.id || st.to === p.id : 'note' in st && st.who.includes(p.id));
+          const theirs = (st: Sequence['steps'][number]) => (isMessage(st) ? st.from === p.id || st.to === p.id : 'note' in st && st.who.includes(p.id));
           s.people.splice(i, 1);
-          s.messages = s.messages.filter((m) => !theirs(m));
+          s.steps = s.steps.filter((m) => !theirs(m));
         } },
       ],
     };
   }
-  const i = +n, st = s.messages[i];
+  const i = +n, st = s.steps[i];
   if (k !== 'step' || !st) return null;
   const moves: Act[] = [-1, 1].map((by) => ({
-    label: by < 0 ? 'Move up' : 'Move down', icon: by < 0 ? 'up' : 'down', off: by < 0 ? i === 0 : i === s.messages.length - 1,
+    label: by < 0 ? 'Move up' : 'Move down', icon: by < 0 ? 'up' : 'down', off: by < 0 ? i === 0 : i === s.steps.length - 1,
     run: () => {
-      const next = [...s.messages];
-      if (!move(next, i, by as -1 | 1) || (wellFormed(s.messages) && !wellFormed(next))) return null;
-      s.messages = next;
+      const next = [...s.steps];
+      if (!move(next, i, by as -1 | 1) || (wellFormed(s.steps) && !wellFormed(next))) return null;
+      s.steps = next;
       return `step:${i + by}`;
     },
   }));
   const del: Act = { label: 'Delete', icon: 'trash', run: () => { dropStep(s, i); } };
   const people = s.people.map((p) => [p.id, p.name.trim() || '(no name)'] as const);
   const guess = () => {
-    if (!isMessage(st) || !st.guessed || st.arrow) return;
-    const prev = s.messages.slice(0, i).filter(isMessage).pop();
+    if (!isMessage(st) || !st.replyGuessed || st.writtenArrow) return;
+    const prev = s.steps.slice(0, i).filter(isMessage).pop();
     st.reply = !!prev && !prev.reply && st.from === prev.to && st.to === prev.from;
   };
   if (isMessage(st)) return {
     text: st.text, label: 'Message', set: (v) => { st.text = v; },
     fields: [
       { kind: 'select', label: 'From', value: st.from, options: people, set: (v) => { st.from = v; guess(); } },
-      { kind: 'select', label: 'How', value: arrowOf(st), options: seqArrows(st), set: (v) => { delete st.guessed; setArrow(st, v); } },
+      { kind: 'select', label: 'How', value: arrowOf(st), options: seqArrows(st), set: (v) => { delete st.replyGuessed; setArrow(st, v); } },
       { kind: 'select', label: 'To', value: st.to, options: people, set: (v) => { st.to = v; guess(); } },
     ],
     acts: [
-      { label: 'Add a message after it', icon: 'plus', tab: true, run: () => addMessage(s, i + 1) },
-      { label: 'Add a note after it', icon: 'note', run: () => { s.messages.splice(i + 1, 0, { note: 'over', who: st.from === st.to ? [st.from] : [st.from, st.to], text: w(s, 'Note') }); return `step:${i + 1}`; } },
+      { label: 'Add a message after it', icon: 'plus', onTab: true, run: () => addMessage(s, i + 1) },
+      { label: 'Add a note after it', icon: 'note', run: () => { s.steps.splice(i + 1, 0, { note: 'over', who: st.from === st.to ? [st.from] : [st.from, st.to], text: w(s, 'Note') }); return `step:${i + 1}`; } },
       ...moves, del,
     ],
   };
@@ -298,14 +298,14 @@ function seqSpot(s: Sequence, key: string): Spot | null {
     fields: [{ kind: 'select', label: 'Where', value: `${st.note}|${st.who.join(',')}`, options: noteOptions(s, st), set: (v) => {
       const [at, who] = v.split('|'); st.note = at as typeof st.note; st.who = who.split(',');
     } }],
-    acts: [{ label: 'Add a message after it', icon: 'plus', tab: true, run: () => addMessage(s, i + 1) }, ...moves, del],
+    acts: [{ label: 'Add a message after it', icon: 'plus', onTab: true, run: () => addMessage(s, i + 1) }, ...moves, del],
   };
   if ('block' in st && st.block !== 'end') {
     const divider = DIVIDERS.has(st.block);
     return {
       text: st.text, label: divider ? 'Otherwise' : 'Condition', set: (v) => { st.text = v; },
       fields: [{ kind: 'select', label: 'Group', value: st.block, options: divider ? SPLITS : OPENERS, set: (v) => { st.block = v as BlockKind; } }],
-      acts: [{ label: 'Add a message in it', icon: 'child', tab: true, run: () => addMessage(s, i + 1) }, del],
+      acts: [{ label: 'Add a message in it', icon: 'child', onTab: true, run: () => addMessage(s, i + 1) }, del],
     };
   }
   return null;
@@ -329,13 +329,13 @@ function classSpot(c: ClassDiagram, key: string): Spot | null {
   const i = c.classes.findIndex((x) => x.id === n), cl = c.classes[i];
   if (k !== 'class' || !cl) return null;
   return {
-    text: cl.name, label: 'Class', onDone: true, set: (v) => { rename(c.classes, c.links, cl, v, NAME_ID); return `class:${cl.id}`; },
+    text: cl.name, label: 'Class', commitOnDone: true, set: (v) => { rename(c.classes, c.links, cl, v, NAME_ID); return `class:${cl.id}`; },
     fields: [
       { kind: 'lines', label: 'Members', value: cl.members.join('\n'), set: (v) => { cl.members = v.split('\n').map((x) => x.trim()).filter(Boolean); } },
       ...linkTo(c.classes, cl.id, c.links, (to) => c.links.push({ from: cl.id, to, arrow: '-->', label: '', fromCard: '', toCard: '' })),
     ],
     acts: [
-      { label: 'Add a class linked to it', icon: 'plus', tab: true, run: () => { const id = freshId('Class', c.classes); c.classes.push({ id, name: id, members: [] }); c.links.push({ from: cl.id, to: id, arrow: '-->', label: '', fromCard: '', toCard: '' }); return `class:${id}`; } },
+      { label: 'Add a class linked to it', icon: 'plus', onTab: true, run: () => { const id = freshId('Class', c.classes); c.classes.push({ id, name: id, members: [] }); c.links.push({ from: cl.id, to: id, arrow: '-->', label: '', fromCard: '', toCard: '' }); return `class:${id}`; } },
       { label: 'Delete it and its lines', icon: 'trash', run: () => drop(c.classes, c.links, i) },
     ],
   };
@@ -360,10 +360,10 @@ function stateSpot(s: StateDiagram, key: string): Spot | null {
   fields.push({ kind: 'select', label: 'Inside', value: st.parent ?? '', options: insideOptions(s, st), set: (v) => { if (v) st.parent = v; else delete st.parent; } });
   fields.push(...linkTo(s.states, st.id, s.links, (to) => s.links.push({ from: st.id, to, label: '' })));
   return {
-    text: st.name, label: 'State', onDone: true, set: (v) => { renameState(s, st, v); return `state:${st.id}`; },
+    text: st.name, label: 'State', commitOnDone: true, set: (v) => { renameState(s, st, v); return `state:${st.id}`; },
     fields,
     acts: [
-      { label: 'Add a state it goes to', icon: 'plus', tab: true, run: () => { const id = freshId('State', s.states); s.states.push(st.parent ? { id, name: id, desc: '', parent: st.parent } : { id, name: id, desc: '' }); s.links.push({ from: st.id, to: id, label: '' }); return `state:${id}`; } },
+      { label: 'Add a state it goes to', icon: 'plus', onTab: true, run: () => { const id = freshId('State', s.states); s.states.push(st.parent ? { id, name: id, desc: '', parent: st.parent } : { id, name: id, desc: '' }); s.links.push({ from: st.id, to: id, label: '' }); return `state:${id}`; } },
       { label: 'Add an end after it', icon: 'child', off: s.links.some((l) => l.from === st.id && l.to === '[*]'), run: () => { s.links.push({ from: st.id, to: '[*]', label: '' }); } },
       { label: 'Delete it and its lines', icon: 'trash', run: () => dropState(s, i) },
     ],
@@ -388,10 +388,10 @@ function erSpot(e: ErDiagram, key: string): Spot | null {
   const i = e.tables.findIndex((x) => x.id === n), t = e.tables[i];
   if (!t) return null;
   if (k === 'table') return {
-    text: t.name, label: 'Table', onDone: true, set: (v) => { rename(e.tables, e.links, t, v, TABLE_ID); return `table:${t.id}`; },
+    text: t.name, label: 'Table', commitOnDone: true, set: (v) => { rename(e.tables, e.links, t, v, TABLE_ID); return `table:${t.id}`; },
     fields: [...linkTo(e.tables, t.id, e.links, (to) => e.links.push({ from: t.id, to, left: '||', right: 'o{', dashed: false, label: '' }))],
     acts: [
-      { label: 'Add a column', icon: 'child', tab: true, run: () => { t.columns.push({ type: 'string', name: 'column', keys: '', comment: '' }); return `col:${t.id}:${t.columns.length - 1}`; } },
+      { label: 'Add a column', icon: 'child', onTab: true, run: () => { t.columns.push({ type: 'string', name: 'column', keys: '', comment: '' }); return `col:${t.id}:${t.columns.length - 1}`; } },
       { label: 'Add a table linked to it', icon: 'plus', run: () => { const id = freshId('TABLE', e.tables); e.tables.push({ id, name: id, columns: [{ type: 'int', name: 'id', keys: 'PK', comment: '' }] }); e.links.push({ from: t.id, to: id, left: '||', right: 'o{', dashed: false, label: '' }); return `table:${id}`; } },
       { label: 'Delete it and its lines', icon: 'trash', run: () => drop(e.tables, e.links, i) },
     ],
@@ -406,7 +406,7 @@ function erSpot(e: ErDiagram, key: string): Spot | null {
       { kind: 'text', label: 'Comment', value: col.comment, set: (v) => { col.comment = v; } },
     ],
     acts: [
-      { label: 'Add a column after it', icon: 'plus', tab: true, run: () => { t.columns.splice(j + 1, 0, { type: 'string', name: 'column', keys: '', comment: '' }); return `col:${t.id}:${j + 1}`; } },
+      { label: 'Add a column after it', icon: 'plus', onTab: true, run: () => { t.columns.splice(j + 1, 0, { type: 'string', name: 'column', keys: '', comment: '' }); return `col:${t.id}:${j + 1}`; } },
       { label: 'Move up', icon: 'up', off: j === 0, run: () => (move(t.columns, j, -1) ? `col:${t.id}:${j - 1}` : null) },
       { label: 'Move down', icon: 'down', off: j === t.columns.length - 1, run: () => (move(t.columns, j, 1) ? `col:${t.id}:${j + 1}` : null) },
       { label: 'Delete', icon: 'trash', run: () => { t.columns.splice(j, 1); } },
@@ -463,7 +463,7 @@ export function tagSpots(d: Diagram, root: Element) {
   if (d.kind === 'sequence') {
     // by the name each says, not by order: mermaid draws them last to first (and again along the foot)
     byWords([...root.querySelectorAll('text.actor')], d.people.map((p) => ({ key: `person:${p.id}`, says: p.name.trim() || p.id })), (t) => t.parentElement!);
-    const steps = d.messages.map((st, i) => [st, i] as const);
+    const steps = d.steps.map((st, i) => [st, i] as const);
     tag([...root.querySelectorAll('text.messageText')], steps.filter(([st]) => isMessage(st)).map(([, i]) => `step:${i}`));
     tag([...root.querySelectorAll('text.noteText')].map((t) => t.parentElement!), steps.filter(([st]) => 'note' in st).map(([, i]) => `step:${i}`));
     const groups = steps.filter(([st]) => 'block' in st && st.block !== 'end').map(([st, i]) => ({ key: `step:${i}`, says: `[${('text' in st ? String(st.text) : '').trim()}]` }));

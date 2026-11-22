@@ -1,5 +1,6 @@
-import { setWindowSize, isMobile, paintGround } from './platform';
+import { setWindowSize, isMobile, paintWindowBackground } from './platform';
 import codeThemes from './codeThemes.json';
+import tauriConf from '../../src-tauri/tauri.conf.json';
 import { saved, save } from './stored';
 const LS = 'eve.appearance';
 
@@ -50,11 +51,13 @@ export const SIZE_MIN = 12, SIZE_MAX = 28;
 export const WEIGHT_MIN = 300, WEIGHT_MAX = 600;
 export const weightName = (w: number): string => ({ 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'Semibold' })[w] ?? String(w);
 const ZOOMS = [0.5, 0.58, 0.67, 0.73, 0.8, 0.9, 1, 1.12, 1.25, 1.37, 1.5, 1.73, 2, 2.24, 2.5, 2.74, 3], ZOOM_MIN = 9, ZOOM_MAX = 48;
-const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, weight: 400, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: 1104, winH: 832, summon: true, slideTurn: 'push', slideBuild: true, codeTheme: 'eve', codeShade: 'auto' };
+const [MAIN_WINDOW] = tauriConf.app.windows;
+const OLD_DEFAULT_WIDTH = 820;
+const DEFAULTS: Appearance = { theme: 'system', font: 'system', custom: '', size: isMobile ? 17 : 15, weight: 400, lineHeight: isMobile ? 1.65 : 1.6, width: 900, zoom: 0, closeSidebarOnWrite: false, autoIcon: true, autoCorrect: false, tableCopyMarkdown: true, highlights: [...PASTELS], dailyNotes: false, dailyReminder: false, reminderAt: '21:00', dailyInWidget: false, winW: MAIN_WINDOW.width, winH: MAIN_WINDOW.height, summon: true, slideTurn: 'push', slideBuild: true, codeTheme: 'eve', codeShade: 'auto' };
 
 function load(): Appearance {
   const { hideSidebarOnEdit: _, ...kept } = saved<Partial<Appearance> & { hideSidebarOnEdit?: unknown }>(LS, {});
-  if (kept.width === 820) delete kept.width;
+  if (kept.width === OLD_DEFAULT_WIDTH) delete kept.width;
   return { ...DEFAULTS, ...kept };
 }
 
@@ -90,9 +93,9 @@ class AppearanceStore {
       r.setProperty('--editor-width', `${this.widthPx}px`);
       r.setProperty('--hl-plain', this.s.highlights[0] ?? PASTELS[0]);
       for (const [k, v] of Object.entries(codeColors(this.s.codeTheme))) { if (v) r.setProperty(k, v); else r.removeProperty(k); }
-      void paintGround();
+      void paintWindowBackground();
     });
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => void paintGround());
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => void paintWindowBackground());
     $effect(() => { void setWindowSize(this.s.winW, this.s.winH); });
   }
 }

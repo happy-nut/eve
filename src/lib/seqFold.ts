@@ -74,26 +74,26 @@ function parse(code: string): Parsed | null {
   const meet = (id: string) => { if (!order.has(id)) order.set(id, order.size); };
   const blocks: SeqBlock[] = [];
   const seen = new Map<string, number>();
-  const stack: number[] = [];
-  const inside = (f: (b: SeqBlock) => void) => { for (const i of stack) if (i >= 0) f(blocks[i]); };
+  const stack: (number | 'box')[] = [];
+  const inside = (f: (b: SeqBlock) => void) => { for (const i of stack) if (i !== 'box') f(blocks[i]); };
   const use = (ids: string[]) => { for (const id of ids) meet(id); inside((b) => { for (const id of ids) if (!b.who.includes(id)) b.who.push(id); }); };
   for (let i = head + 1; i < lines.length; i++) {
     const l = rd[i];
     if (l.t === 'open') {
-      if (l.kind === 'box') { stack.push(-2); continue; }
+      if (l.kind === 'box') { stack.push('box'); continue; }
       const id = `${l.kind}:${l.text}`;
       const n = seen.get(id) ?? 0;
       seen.set(id, n + 1);
-      const parent = [...stack].reverse().find((s) => s >= 0) ?? -1;
+      const parent = [...stack].reverse().find((s) => s !== 'box') ?? -1;
       blocks.push({ key: `${id}#${n}`, kind: l.kind, text: l.text, open: i, close: -1, parent, sections: 1, messages: 0, notes: 0, who: [] });
       stack.push(blocks.length - 1);
     } else if (l.t === 'end') {
       const b = stack.pop();
       if (b === undefined) return null;
-      if (b >= 0) blocks[b].close = i;
+      if (b !== 'box') blocks[b].close = i;
     } else if (l.t === 'section') {
       const b = stack[stack.length - 1];
-      if (b !== undefined && b >= 0) blocks[b].sections++;
+      if (b !== undefined && b !== 'box') blocks[b].sections++;
     } else if (l.t === 'decl') meet(l.id);
     else if (l.t === 'msg') { use([l.from, l.to]); inside((b) => b.messages++); }
     else if (l.t === 'note') { use(l.who); inside((b) => b.notes++); }

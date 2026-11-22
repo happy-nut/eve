@@ -2,6 +2,8 @@ import { chartHtml } from './charts';
 import { FONT } from './lanes';
 import { isMobile } from './platform';
 
+export const LABEL_RING = 5;
+
 type Mermaid = typeof import('mermaid').default;
 let lib: Promise<Mermaid> | null = null;
 let theme = '';
@@ -78,7 +80,7 @@ function config(mode: 'light' | 'dark') {
       .flowchart-link { stroke-width: 1.4px; } .marker { fill: ${c.line}; stroke: ${c.line}; }
       .edgeLabel foreignObject { overflow: visible; }
       .edgeLabel, .edgeLabel p { font-size: 12px; color: ${c.dim}; }
-      .edgeLabel .labelBkg { background: ${c.node}; border-radius: 6px; box-shadow: 0 0 0 4px ${c.node}, 0 0 0 5px ${c.border}; }
+      .edgeLabel .labelBkg { background: ${c.node}; border-radius: 6px; box-shadow: 0 0 0 ${LABEL_RING - 1}px ${c.node}, 0 0 0 ${LABEL_RING}px ${c.border}; }
       .edgeLabel .labelBkg:has(.edgeLabel:empty) { box-shadow: none; background: none; }
       .edgeLabel .labelBkg span, .edgeLabel .labelBkg p { background: transparent !important; } /* mermaid's own label fill: only the chip shows */
       .lineWrapper line { stroke: ${c.line}; stroke-width: 2px; } [id$='arrowhead'] path { fill: ${c.line}; }
@@ -166,6 +168,9 @@ function load(): Promise<Mermaid> {
  *  third undrawn). */
 let queue: Promise<unknown> = Promise.resolve();
 const MIN_SCALE = isMobile ? 0.6 : 0.8;
+const LANE_SCALE = 0.9;
+const fitToNote = (svg: string) =>
+  svg.replace(/(<svg[^>]*?style="max-width: )([\d.]+)px;/, (_, head, w) => `${head}min(100%, ${w}px); width: ${w}px; min-width: ${Math.round(+w * MIN_SCALE)}px;`);
 
 export function renderMermaid(code: string): Promise<{ svg: string } | { error: string }> {
   const next = queue.then(() => draw(code));
@@ -175,12 +180,12 @@ export function renderMermaid(code: string): Promise<{ svg: string } | { error: 
 
 async function draw(code: string): Promise<{ svg: string } | { error: string }> {
   if (!code.trim()) return { error: 'An empty diagram' };
-  const chart = chartHtml(code, 0.9);
+  const chart = chartHtml(code, LANE_SCALE);
   if (chart) return { svg: chart };
   try {
     const m = await load();
     const { svg } = await m.render(`eve-mermaid-${++seq}`, code);
-    const sized = svg.replace(/(<svg[^>]*?style="max-width: )([\d.]+)px;/, (_, head, w) => `${head}min(100%, ${w}px); width: ${w}px; min-width: ${Math.round(+w * MIN_SCALE)}px;`);
+    const sized = fitToNote(svg);
     return { svg: sized.includes('actor-man') ? smallActors(sized) : sized };
   } catch (e) {
     // mermaid leaves its error drawing in the page when a render fails
@@ -195,7 +200,7 @@ async function draw(code: string): Promise<{ svg: string } | { error: string }> 
  * a fixed size, its head poking out above the boxes and its name below them, so the one person in a diagram stood
  * a head taller than everything beside it: the figure is drawn at 75% with its head halved (mermaid's is near half the figure), inside the boxes' height, its name under it.
  */
-const ACTOR_SCALE = 0.75, HEAD_SCALE = 0.5;
+const ACTOR_SCALE = 0.75, HEAD_SCALE = 0.5, FIGURE_DROP_IN_HEADS = 0.6, NAME_GAP_PX = 4;
 export function smallActors(svg: string): string {
   return svg.replace(/(<g class="actor-man[^"]*"[^>]*>)([\s\S]*?)(<text[^>]*?\sy=")([\d.-]+)("[\s\S]*?<\/g>)/g, (all, open: string, figure: string, textHead: string, y: string, rest: string) => {
     const head = /<circle[^>]*?cx="([\d.-]+)"[^>]*?cy="([\d.-]+)"[^>]*?r="([\d.]+)"/.exec(figure);
@@ -205,8 +210,8 @@ export function smallActors(svg: string): string {
     const neck = Math.min(...ys), r = r0 * HEAD_SCALE, cy = neck - r;
     figure = figure.replace(head[0], head[0].replace(/cy="[\d.-]+"/, `cy="${cy}"`).replace(/r="[\d.]+"/, `r="${r}"`));
     const top = cy - r, feet = Math.max(...ys);
-    const to = top + r * 0.6;
-    const label = to + (feet - top) * ACTOR_SCALE + (+y - feet) + 4;
+    const to = top + r * FIGURE_DROP_IN_HEADS;
+    const label = to + (feet - top) * ACTOR_SCALE + (+y - feet) + NAME_GAP_PX;
     return `${open}<g transform="translate(${cx} ${to}) scale(${ACTOR_SCALE}) translate(${-cx} ${-top})">${figure}</g>${textHead}${label.toFixed(1)}${rest}`;
   });
 }

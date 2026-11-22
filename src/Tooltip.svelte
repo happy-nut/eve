@@ -6,7 +6,7 @@
 
   let tip = $state<{ text: string; keys: string; at: DOMRect; up: boolean; right: boolean; side?: boolean } | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let current: HTMLElement | null = null;
+  let tipOwner: HTMLElement | null = null;
   let box = $state<HTMLDivElement | null>(null);
   let pos = $state<{ left: number; top: number } | null>(null);
   $effect(() => {
@@ -18,9 +18,9 @@
 
   function over(e: MouseEvent) {
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-tip]');
-    if (el === current) return;
+    if (el === tipOwner) return;
     clearTimeout(timer);
-    current = el;
+    tipOwner = el;
     if (!el) { tip = null; return; }
     timer = setTimeout(() => {
       const r = el.getBoundingClientRect();
@@ -29,15 +29,15 @@
     }, 400);
   }
   function out(e?: MouseEvent) {
-    if (e && current && e.relatedTarget instanceof Node && current.contains(e.relatedTarget)) return;
-    clearTimeout(timer); tip = null; current = null;
+    if (e && tipOwner && e.relatedTarget instanceof Node && tipOwner.contains(e.relatedTarget)) return;
+    clearTimeout(timer); tip = null; tipOwner = null;
   }
   $effect(() => claimKeys('global', { '*': () => out() }, { capture: true, priority: PRIORITY.watch, composing: true }));
 </script>
 
 <!-- controls can vanish under a still pointer (e.g. the group tools folding away): re-check hover on movement -->
 <svelte:document onmouseover={over} onmouseout={out} onmousedown={() => out()}
-  onmousemove={() => current && !current.matches(':hover') && out()} onscrollcapture={() => out()} onvisibilitychange={() => out()} />
+  onmousemove={() => tipOwner && !tipOwner.matches(':hover') && out()} onscrollcapture={() => out()} onvisibilitychange={() => out()} />
 <svelte:window onblur={() => out()} onmouseout={(e) => !e.relatedTarget && out()} />
 
 {#if tip}

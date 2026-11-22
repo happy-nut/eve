@@ -7,6 +7,11 @@ export interface Reorder {
   cancel(): void;
 }
 
+const HOLD_MS = 420;
+const MOVE_SLOP = 8;
+const EDGE_ZONE = 56;
+const LIFT_GAP = 14;
+
 export function touchReorder(tree: HTMLElement, list: Reorder) {
   if (!isMobile) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -25,7 +30,7 @@ export function touchReorder(tree: HTMLElement, list: Reorder) {
     document.body.append(ghost);
     navigator.vibrate?.(12);
   };
-  const follow = () => { if (ghost) ghost.style.top = `${y - liftH - 14}px`; };
+  const follow = () => { if (ghost) ghost.style.top = `${y - liftH - LIFT_GAP}px`; };
   const land = () => { ghost?.remove(); ghost = null; };
   const down = (e: TouchEvent) => {
     const t = e.target as HTMLElement;
@@ -41,17 +46,17 @@ export function touchReorder(tree: HTMLElement, list: Reorder) {
       lift(row);
       list.lift(row);
       follow();
-    }, 420);
+    }, HOLD_MS);
   };
   const move = (e: TouchEvent) => {
     if (!start) return;
     x = e.touches[0].clientX; y = e.touches[0].clientY;
     if (!lifted) {
-      if (Math.hypot(x - start.x, y - start.y) > 8) { clearTimeout(timer); start = null; }
+      if (Math.hypot(x - start.x, y - start.y) > MOVE_SLOP) { clearTimeout(timer); start = null; }
       return;
     }
     e.preventDefault();
-    if (Math.hypot(x - start.x, y - start.y) > 8) moved = true;
+    if (Math.hypot(x - start.x, y - start.y) > MOVE_SLOP) moved = true;
     follow();
     list.over(x, y);
     edge();
@@ -61,7 +66,7 @@ export function touchReorder(tree: HTMLElement, list: Reorder) {
     cancelAnimationFrame(frame);
     if (!lifted || !start) return;
     const r = tree.getBoundingClientRect();
-    const step = y < r.top + 56 ? -8 : y > r.bottom - 56 ? 8 : 0;
+    const step = y < r.top + EDGE_ZONE ? -8 : y > r.bottom - EDGE_ZONE ? 8 : 0;
     if (!step) return;
     tree.scrollTop += step;
     list.over(x, y);

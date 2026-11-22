@@ -39,9 +39,9 @@ The model was last checked to describe the code at `f723a17`. Each action names 
 | `Delete` | `notes.remove` (a tombstone, the body kept) |
 | `Make` | `notes.dayNote` (a day's note, fixed id `daily-<date>`, dated `OLDER_THAN_ANY_SYNC` = 0) |
 | `Start` → `Pull` | `Sync.now` → `syncRound` → `Repo.pull` (head, `known`, `f.prev`) |
-| `Hash` | `gather` (sync.svelte.ts): `takeEditorKeys()`, then `seen` and `untouched` from `serialize(local)`, taken before `await hashes.file` |
+| `Hash` | `gather` (sync.svelte.ts): `flushPendingEdits()`, then `seen` and `untouched` from `serialize(local)`, taken before `await hashes.file` |
 | `Base` | `gather`: the agreed version (`agreed`): `seen` when untouched, `await repo.blob(f.prev)` when both changed it, else none for now |
-| `Decide` | `decide`, after the last await, its own `takeEditorKeys()` first: untouched and unchanged since `seen` → `mergeRemote(force)`; else `agreed` (or, for a `sameIdNoneAgreed` note `writtenOnBoth`, `''` judged now) → `merge3`; else `whichStands` (the later, or an erasure over a tombstone) and the earlier is a `keepConflictCopy` if `wordsOnlyIn` it; none agreed → lww |
+| `Decide` | `decide`, after the last await, its own `flushPendingEdits()` first: untouched and unchanged since `seen` → `mergeRemote(force)`; else `agreed` (or, for a `sameIdNoneAgreed` note `writtenOnBoth`, `''` judged now) → `merge3`; else `whichStands` (the later, or an erasure over a tombstone) and the earlier is a `keepConflictCopy` if `wordsOnlyIn` it; none agreed → lww |
 | `Snap` / `Push` | `local()` (`serialize` now, hashed after), `Repo.push` (nothing changed → done; ref PATCH 422 → pull again, 3 tries) |
 
 Each `await` in the code is a gap between two actions, where the other device and the person may act. Bounds:
@@ -67,7 +67,7 @@ Found by this model on 2026-11-17 and fixed the same day (each has a case in `sr
 Found by a review of that fix (`/dev:review`, three models) and by this model once it was brought up to the code, and
 fixed on 2026-11-17 by deciding only after the last wait:
 - a key typed while sync waited, into a note whose two versions could not be put together, or a day's note, or a long
-  note whose keys were still in the editor (the second `takeEditorKeys()`), or into a day's note still only its template;
+  note whose keys were still in the editor (the second `flushPendingEdits()`), or into a day's note still only its template;
 - copies of a version that loses nothing (erased, a template, deleted unchanged, untouched since signing in again):
   `wordsOnlyIn`; and an erasure undone by a later tombstone.
 

@@ -1,7 +1,7 @@
 // Sync engine self-check. Default: in-memory fake GitHub. Real API: EVE_TEST_REPO=owner/name EVE_TEST_TOKEN=... npm test
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { Repo, FileHashes, syncRound, blobSha, deviceLogin, pollToken, normHost, apiBase, ensureRepo, signInError, syncError } from './github.ts';
+import { Repo, FileHashes, syncRound, blobSha, deviceLogin, pollToken, normHost, apiBase, ensureRepo, signInError, syncError, EveError, GitHubError } from './github.ts';
 import { fakeGitHub } from './fakeGitHub.mjs';
 
 const gitSha = (buf) => createHash('sha1').update(`blob ${buf.length}\0`).update(buf).digest('hex');
@@ -117,17 +117,17 @@ await assert.rejects(deviceLogin(post, () => {}, ac.signal, async () => {}), /ca
 // a failed sign-in in words someone new to GitHub can act on; cancelling is no failure
 assert.equal(signInError('sign-in cancelled'), null);
 // a word in a name the user chose is not a network failure: GitHub answered, or the message is Eve's own
-assert.match(signInError('403 Although you appear to have the correct authorization credentials, the `acme-network` organization has enabled OAuth App access restrictions'), /^403 /);
-assert.match(signInError('dnsmith/eve-notes exists but is public — make it private or rename it'), /^dnsmith\/eve-notes exists/);
-assert.match(signInError('"git.mynetwork.corp/x y" is not a server address'), /is not a server address/);
+assert.match(signInError(new GitHubError(403, 'Although you appear to have the correct authorization credentials, the `acme-network` organization has enabled OAuth App access restrictions')), /^403 /);
+assert.match(signInError(new EveError('dnsmith/eve-notes exists but is public — make it private or rename it')), /^dnsmith\/eve-notes exists/);
+assert.match(signInError(new EveError('"git.mynetwork.corp/x y" is not a server address')), /is not a server address/);
 assert.match(signInError('error sending request for url (https://github.com/login/device/code)'), /internet connection/);
 assert.match(signInError('The authorization request was denied by the user.'), /not authorized/);
 assert.match(signInError('the sign-in code expired; start again'), /new one/);
 assert.match(signInError('Could not reach https://github.com. On a company network or VPN?'), /internet connection/);
 assert.match(signInError('io: failed to lookup address information'), /internet connection/);
-assert.match(signInError('403 You need to verify your email address first'), /email address confirmed/);
-assert.match(signInError('401 bad token'), /did not accept/);
-assert.equal(signInError('owner/eve-notes exists but is public — make it private or rename it'), 'owner/eve-notes exists but is public — make it private or rename it');
+assert.match(signInError(new GitHubError(403, 'You need to verify your email address first')), /email address confirmed/);
+assert.match(signInError(new GitHubError(401, 'bad token')), /did not accept/);
+assert.equal(signInError(new EveError('owner/eve-notes exists but is public — make it private or rename it')), 'owner/eve-notes exists but is public — make it private or rename it');
 
 // a phone polling with the Mac's code: expiry is an error, not a hang
 const expired = async () => '{"error":"expired_token","error_description":"This \'device_code\' has expired."}';
@@ -214,9 +214,9 @@ if (fake) {
     if ((init.method ?? 'GET') === 'GET') return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 });
     return new Response(JSON.stringify({ message: 'Repository creation failed.', errors: [{ resource: 'Repository', code: 'custom', field: 'name', message: 'name already exists on this account' }] }), { status: 422 });
   };
-  const err = await ensureRepo('t', hidden).catch((e) => e.message);
-  assert.match(err, /me\/eve-notes already exists, but this sign-in cannot see it/);
-  assert.equal(signInError(err), err); // said as it is, not turned into something else
+  const err = await ensureRepo('t', hidden).catch((e) => e);
+  assert.match(err.message, /me\/eve-notes already exists, but this sign-in cannot see it/);
+  assert.equal(signInError(err), err.message); // said as it is, not turned into something else
 }
 
 // Cancel ends the wait between asks at once, and a code that ran out as Cancel was pressed is no failure
@@ -256,12 +256,12 @@ if (fake) {
 assert.match(syncError('TypeError: Load failed'), /^Could not reach GitHub/);
 assert.match(syncError('Failed to fetch'), /^Could not reach GitHub/);
 assert.match(syncError('error sending request for url (https://api.github.com/…)'), /^Could not reach GitHub/);
-assert.match(syncError('401 bad token'), /Sign in again/);
-assert.match(syncError('403 API rate limit exceeded for 1.2.3.4.'), /slow down/);
-assert.match(syncError('404 repository not found (check owner/name and the token\'s access)'), /repository/);
-assert.match(syncError('502 Bad Gateway'), /GitHub is having trouble/);
+assert.match(syncError(new GitHubError(401, 'bad token')), /Sign in again/);
+assert.match(syncError(new GitHubError(403, 'API rate limit exceeded for 1.2.3.4.')), /slow down/);
+assert.match(syncError(new GitHubError(404, 'repository not found (check owner/name and the token\'s access)')), /repository/);
+assert.match(syncError(new GitHubError(502, 'Bad Gateway')), /GitHub is having trouble/);
 assert.match(syncError('branch keeps moving; try again'), /another device/i);
 assert.ok(!/Error:|^\d{3} /.test(syncError('TypeError: Load failed')));
-assert.equal(syncError('dnsmith/eve-notes exists but is public — make it private or rename it'), 'dnsmith/eve-notes exists but is public — make it private or rename it');
+assert.equal(syncError(new EveError('dnsmith/eve-notes exists but is public — make it private or rename it')), 'dnsmith/eve-notes exists but is public — make it private or rename it');
 
 console.log('SYNC_OK');

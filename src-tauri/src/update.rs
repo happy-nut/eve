@@ -42,9 +42,45 @@ fn run(cmd: &str, args: &[&std::ffi::OsStr]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-const DOWNLOAD_FAILED: &str = "Download failed";
+enum InstallError {
+    Download(String),
+    Other(String),
+}
 
-fn download(app: &AppHandle, url: &str, to: &Path) -> Result<(), String> {
+impl From<String> for InstallError {
+    fn from(e: String) -> Self {
+        InstallError::Other(e)
+    }
+}
+
+impl From<&str> for InstallError {
+    fn from(e: &str) -> Self {
+        InstallError::Other(e.into())
+    }
+}
+
+impl std::fmt::Display for InstallError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            InstallError::Download(e) => write!(f, "Download failed: {e}"),
+            InstallError::Other(e) => f.write_str(e),
+        }
+    }
+}
+
+#[derive(Clone, serde::Serialize)]
+struct UpdateProgress {
+    state: &'static str,
+    progress: Option<u64>,
+}
+
+fn report(app: &AppHandle, state: &'static str, progress: Option<u64>) {
+    let _ = app.emit("eve-update", UpdateProgress { state, progress });
+}
+
+const BREW_DEADLINE: std::time::Duration = std::time::Duration::from_secs(20 * 60);
+
+fn download(app: &AppHandle, url: &str, to: &Path) -> Result<(), InstallError> {
     use std::io::{Read, Write};
     let agent = ureq::Agent::config_builder()
         .https_only(true)
@@ -52,28 +88,43 @@ fn download(app: &AppHandle, url: &str, to: &Path) -> Result<(), String> {
         .timeout_global(Some(std::time::Duration::from_secs(600)))
         .build()
         .new_agent();
-    let mut res = agent.get(url).call().map_err(|e| format!("{DOWNLOAD_FAILED}: {e}"))?;
+    let mut res = agent.get(url).call().map_err(|e| InstallError::Download(e.to_string()))?;
     let total: u64 = res.headers().get("content-length").and_then(|v| v.to_str().ok()).and_then(|v| v.parse().ok()).unwrap_or(0);
     let mut body = res.body_mut().with_config().limit(200 << 20).reader();
     let mut file = std::fs::File::create(to).map_err(|e| e.to_string())?;
-    let (mut buf, mut done, mut shown) = (vec![0u8; 64 * 1024], 0u64, -1i64);
+    let (mut buf, mut done, mut shown) = (vec![0u8; 64 * 1024], 0u64, 0u64);
     loop {
-        let n = body.read(&mut buf).map_err(|e| format!("{DOWNLOAD_FAILED}: {e}"))?;
+        let n = body.read(&mut buf).map_err(|e| InstallError::Download(e.to_string()))?;
         if n == 0 {
             break;
         }
         file.write_all(&buf[..n]).map_err(|e| e.to_string())?;
         done += n as u64;
-        let p = if total > 0 { (done * 100 / total) as i64 } else { -1 };
-        if p >= 0 && p / 5 != shown / 5 {
-            shown = p;
-            let _ = app.emit("eve-update", format!("downloading:{p}"));
+        if total > 0 {
+            let p = done * 100 / total;
+            if p / 5 != shown / 5 {
+                shown = p;
+                report(app, "downloading", Some(p));
+            }
         }
     }
-    file.sync_all().map_err(|e| e.to_string())
+    Ok(file.sync_all().map_err(|e| e.to_string())?)
 }
 
-fn install(app: &AppHandle, url: &str, sha256: &str, version: &str) -> Result<(), String> {
+fn relaunch_when_gone(bundle: &Path) -> Result<(), String> {
+    std::process::Command::new("/bin/sh")
+        .args(["-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; /usr/bin/open -a \"$2\" eve://updated", "sh"])
+        .arg(std::process::id().to_string())
+        .arg(bundle)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Updated, but could not restart: {e}. Open Eve again."))
+}
+
+fn install(app: &AppHandle, url: &str, sha256: &str, version: &str) -> Result<(), InstallError> {
     if !allowed(url) {
         return Err("That download is not an Eve release.".into());
     }
@@ -90,15 +141,15 @@ fn install(app: &AppHandle, url: &str, sha256: &str, version: &str) -> Result<()
     std::fs::create_dir(&work).map_err(|e| {
         format!("Eve cannot write to {} ({e}). Homebrew can install it instead.", dir.display())
     })?;
-    let result = (|| {
+    let result = (|| -> Result<(), InstallError> {
         let zip = work.join("Eve.zip");
-        let _ = app.emit("eve-update", "downloading");
+        report(app, "downloading", None);
         download(app, url, &zip)?;
         let got = run("/usr/bin/shasum", &["-a".as_ref(), "256".as_ref(), zip.as_os_str()])?;
         if got.split_whitespace().next() != Some(want.as_str()) {
             return Err("The download does not match the release's SHA-256; nothing was changed.".into());
         }
-        let _ = app.emit("eve-update", "installing");
+        report(app, "installing", None);
         run("/usr/bin/ditto", &["-x".as_ref(), "-k".as_ref(), zip.as_os_str(), work.as_os_str()])?;
         let new = work.join("Eve.app");
         let plist = new.join("Contents/Info.plist");
@@ -107,7 +158,7 @@ fn install(app: &AppHandle, url: &str, sha256: &str, version: &str) -> Result<()
             return Err("The download is not Eve; nothing was changed.".into());
         }
         if read("CFBundleShortVersionString")? != version {
-            return Err(format!("The download is not Eve {version}; nothing was changed."));
+            return Err(format!("The download is not Eve {version}; nothing was changed.").into());
         }
         let _ = run("/usr/bin/xattr", &["-dr".as_ref(), "com.apple.quarantine".as_ref(), new.as_os_str()]);
         let old = work.join("Eve-old.app");
@@ -117,23 +168,15 @@ fn install(app: &AppHandle, url: &str, sha256: &str, version: &str) -> Result<()
         })?;
         if let Err(e) = std::fs::rename(&new, &bundle) {
             let _ = std::fs::rename(&old, &bundle);
-            return Err(format!("Could not put the new Eve in place: {e}"));
+            return Err(format!("Could not put the new Eve in place: {e}").into());
         }
         Ok(())
     })();
     // the old app's files may go: this process already has what it runs from open
     let _ = std::fs::remove_dir_all(&work);
     result?;
-    let _ = app.emit("eve-update", "restarting");
-    std::process::Command::new("/bin/sh")
-        .args(["-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; /usr/bin/open -a \"$2\" eve://updated", "sh"])
-        .arg(std::process::id().to_string())
-        .arg(&bundle)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map_err(|e| format!("Updated, but could not restart: {e}. Open Eve again."))?;
+    report(app, "restarting", None);
+    relaunch_when_gone(&bundle)?;
     app.exit(0);
     Ok(())
 }
@@ -187,7 +230,7 @@ fn tail(log: &Path, lines: usize) -> String {
 }
 
 fn brew(app: &AppHandle) -> Result<(), String> {
-    let _ = app.emit("eve-update", "brew");
+    report(app, "brew", None);
     let shell = std::env::var("SHELL").ok().filter(|s| s.starts_with('/') && Path::new(s).exists()).unwrap_or_else(|| "/bin/zsh".into());
     let home = std::env::var("HOME").map_err(|e| e.to_string())?;
     let log = Path::new(&home).join("Library/Logs/Eve/brew-update.log");
@@ -201,7 +244,7 @@ fn brew(app: &AppHandle) -> Result<(), String> {
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut child = cmd.spawn().map_err(|e| format!("Could not start Homebrew: {e}"))?;
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20 * 60);
+    let deadline = std::time::Instant::now() + BREW_DEADLINE;
     let status = loop {
         match child.try_wait().map_err(|e| e.to_string())? {
             Some(status) => break status,
@@ -215,7 +258,7 @@ fn brew(app: &AppHandle) -> Result<(), String> {
     };
     match status.code() {
         Some(0) => {
-            let _ = app.emit("eve-update", "restarting");
+            report(app, "restarting", None);
             Ok(())
         }
         Some(127) => Err("Homebrew is not installed on this Mac, so it could not take over.".into()),
@@ -229,8 +272,8 @@ pub(crate) async fn install_update(app: AppHandle, url: String, sha256: String, 
         return Err("Updating in place is for the Mac.".into());
     }
     tauri::async_runtime::spawn_blocking(move || match install(&app, &url, &sha256, &version) {
-        Err(e) if e.starts_with(DOWNLOAD_FAILED) => brew(&app).map_err(|b| format!("{e}\n{b}")),
-        done => done,
+        Err(e @ InstallError::Download(_)) => brew(&app).map_err(|b| format!("{e}\n{b}")),
+        done => done.map_err(|e| e.to_string()),
     })
     .await
     .map_err(|e| e.to_string())?

@@ -1,6 +1,6 @@
 import { untrack } from 'svelte';
 import { storage, memMark } from './platform';
-import { takeEditorKeys } from './pending';
+import { flushPendingEdits } from './pending';
 import { appearance } from './appearance.svelte';
 import { randomIcon } from './icons';
 import { ui } from './ui.svelte';
@@ -159,7 +159,7 @@ class NotesStore {
     if (id === CALENDAR_NOTE_ID) id = CALENDAR;
     if (id === this._cur) return;
     const left = this._cur;
-    takeEditorKeys();
+    flushPendingEdits();
     if (id) {
       this.history = this.history.slice(0, this.hIndex + 1).filter((h) => h !== id);
       this.history.push(id);
@@ -192,7 +192,7 @@ class NotesStore {
 
   private blankSinceMade = new Set<string>();
   private leave(id: string | null) {
-    takeEditorKeys();
+    flushPendingEdits();
     if (!id || !this.blankSinceMade.has(id)) return;
     this.blankSinceMade.delete(id);
     const n = this.all.find((x) => x.id === id);
@@ -216,19 +216,19 @@ class NotesStore {
   get visible(): readonly Note[] { return this.#visible; }
   #visible = $derived(this.all.filter(inList).sort((a, b) => a.order - b.order || b.updatedAt - a.updatedAt));
   #pages = $derived(this.#visible.filter((n) => n.id !== CALENDAR_NOTE_ID));
-  sidebar: { shown: () => readonly Note[]; all: () => readonly Note[] } = { shown: () => this.visible, all: () => this.visible };
+  listOrder: { shown: () => readonly Note[]; all: () => readonly Note[] } = { shown: () => this.visible, all: () => this.visible };
   firstPage(): Note | undefined {
     const page = (n: Note) => n.id !== CALENDAR_NOTE_ID;
-    return this.sidebar.shown().find(page) ?? this.sidebar.all().find(page);
+    return this.listOrder.shown().find(page) ?? this.listOrder.all().find(page);
   }
   private neighbourOf(id: string): Note | undefined {
     const page = (n: Note) => n.id !== id && n.id !== CALENDAR_NOTE_ID;
-    for (const list of [this.sidebar.shown(), this.sidebar.all()]) {
+    for (const list of [this.listOrder.shown(), this.listOrder.all()]) {
       const i = list.findIndex((n) => n.id === id);
       const nb = i < 0 ? undefined : list.slice(i + 1).find(page) ?? list.slice(0, i).findLast(page);
       if (nb) return nb;
     }
-    return this.sidebar.shown().find(page) ?? this.sidebar.all().find(page);
+    return this.listOrder.shown().find(page) ?? this.listOrder.all().find(page);
   }
 
   get daily(): readonly Note[] { return this.#daily; }
@@ -327,6 +327,9 @@ class NotesStore {
   get current() {
     return this.all.find((n) => n.id === this.currentId) ?? null;
   }
+  exists(id: string) {
+    return this.all.some((n) => n.id === id && !n.deleted);
+  }
 
   async load() {
     await storage.path();
@@ -334,7 +337,7 @@ class NotesStore {
     this.all = texts.map(parse).filter((n): n is Note => !!n);
     for (const n of this.all) this.titles.set(n.id, titleOf(n));
     const last = lastSeen();
-    this.resumed = !!last && (last === CALENDAR ? appearance.s.dailyNotes : this.all.some((n) => n.id === last && !n.deleted));
+    this.resumed = !!last && (last === CALENDAR ? appearance.s.dailyNotes : this.exists(last));
     this.currentId = this.resumed ? last : this.firstPage()?.id ?? null;
     if (!this.currentId) history.quietly(() => this.create());
     this.loaded = true;
@@ -385,10 +388,10 @@ class NotesStore {
     this.dirty++;
   }
 
-  flushAll() { takeEditorKeys(); for (const id of [...this.timers.keys()]) this.flush(id); }
+  flushAll() { flushPendingEdits(); for (const id of [...this.timers.keys()]) this.flush(id); }
 
   flush(id: string) {
-    takeEditorKeys();
+    flushPendingEdits();
     const n = this.all.find((x) => x.id === id);
     if (!n) return;
     clearTimeout(this.timers.get(id));

@@ -2,7 +2,7 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey, NodeSelection, Selection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
-import { ui, under, type MenuItem } from './ui.svelte';
+import { ui, under, keepingScroll, type MenuItem } from './ui.svelte';
 import { ICONS } from './lineIcons';
 
 interface Block { pos: number; node: PMNode; dom: HTMLElement; item?: boolean }
@@ -17,27 +17,38 @@ const kindOf = (n: PMNode) => (n.type.name === 'paragraph' ? 'paragraph' : n.typ
 export function moveBlockTo(state: EditorState, from: number, target: number, copy = false): Transaction | null {
   const node = state.doc.nodeAt(from);
   if (!node) return null;
-  let start = from, end = from + node.nodeSize;
-  if (!copy && target >= start && target <= end) return null;
-  const $f = state.doc.resolve(from);
-  const list = /Item$/.test(node.type.name) ? $f.parent : null;
+  if (!copy && target >= from && target <= from + node.nodeSize) return null;
+  const list = /Item$/.test(node.type.name) ? state.doc.resolve(from).parent : null;
   const where = placeFor(state, target, node, list);
   if (!where) return null;
-  const { put } = where;
-  if (list && !copy && list.childCount === 1) { start = $f.before(); end = $f.after(); }
-  const $s = state.doc.resolve(start), alone = !copy && $s.depth > 0 && $s.parent.childCount === 1;
-  const tr = copy ? state.tr : alone ? state.tr.replaceWith(start, end, state.schema.nodes.paragraph.create()) : state.tr.delete(start, end);
+  const tr = copy ? state.tr : removeSource(state, sourceRange(state, from, node, list));
   let at = tr.mapping.map(where.pos);
-  if (where.split) {
-    const $at = tr.doc.resolve(at), cut = $at.parent;
-    tr.split(at);
-    at += 1;
-    if (cut.type.name === 'orderedList') tr.setNodeAttribute(at, 'start', (cut.attrs.start ?? 1) + $at.index());
-  }
-  tr.insert(at, put);
+  if (where.split) at = splitListAt(tr, at);
+  tr.insert(at, where.put);
+  openFoldedToggles(tr, at);
+  return tr.setSelection(selectionAfterPut(tr, at, where.put !== node)).scrollIntoView();
+}
+function sourceRange(state: EditorState, from: number, node: PMNode, list: PMNode | null): [number, number] {
+  if (!list || list.childCount !== 1) return [from, from + node.nodeSize];
+  const $f = state.doc.resolve(from);
+  return [$f.before(), $f.after()];
+}
+function removeSource(state: EditorState, [start, end]: [number, number]): Transaction {
+  const $s = state.doc.resolve(start), alone = $s.depth > 0 && $s.parent.childCount === 1;
+  return alone ? state.tr.replaceWith(start, end, state.schema.nodes.paragraph.create()) : state.tr.delete(start, end);
+}
+function splitListAt(tr: Transaction, at: number): number {
+  const $at = tr.doc.resolve(at), cut = $at.parent;
+  tr.split(at);
+  if (cut.type.name === 'orderedList') tr.setNodeAttribute(at + 1, 'start', (cut.attrs.start ?? 1) + $at.index());
+  return at + 1;
+}
+function openFoldedToggles(tr: Transaction, at: number) {
   const $at = tr.doc.resolve(at);
   for (let d = $at.depth; d > 0; d--) if ($at.node(d).type.name === 'details' && !$at.node(d).attrs.open) tr.setNodeAttribute($at.before(d), 'open', true);
-  return tr.setSelection(NodeSelection.create(tr.doc, put === node ? at : at + 1)).scrollIntoView();
+}
+function selectionAfterPut(tr: Transaction, at: number, wrappedInList: boolean): Selection {
+  return NodeSelection.create(tr.doc, wrappedInList ? at + 1 : at);
 }
 function placeFor(state: EditorState, pos: number, node: PMNode, list: PMNode | null): { pos: number; put: PMNode; split?: boolean } | null {
   if (fitsAt(state, pos, node)) return { pos, put: node };
@@ -53,20 +64,22 @@ const fitsAt = (state: EditorState, pos: number, node: PMNode) => { const $p = s
 const asList = (list: PMNode, item: PMNode) => list.type.create(list.type.name === 'orderedList' ? { ...list.attrs, start: 1 } : list.attrs, item);
 
 type Placed = Block & { top: number; bottom: number; depth: number };
-const HOLDS = /^(detailsContent|callout|blockquote)$/;
+const HOLDS = /^(details|detailsContent|callout|blockquote)$/;
+const isTitle = (depth: number, index: number) => depth === 0 && index === 0;
+const isToggleSummary = (node: PMNode) => node.type.name === 'detailsSummary';
+const isToggleBody = (node: PMNode) => node.type.name === 'detailsContent';
 function blocks(view: EditorView): Placed[] {
   const out: Placed[] = [];
   const walk = (parent: PMNode, start: number, depth: number) => parent.forEach((node, offset, i) => {
     const pos = start + offset;
-    if (depth === 0 && i === 0) return;
-    if (node.type.name === 'detailsSummary') return;
-    if (node.type.name === 'detailsContent') { walk(node, pos + 1, depth); return; }
+    if (isTitle(depth, i) || isToggleSummary(node)) return;
+    if (isToggleBody(node)) { walk(node, pos + 1, depth); return; }
     const dom = view.nodeDOM(pos);
     if (!(dom instanceof HTMLElement)) return;
     const r = dom.getBoundingClientRect(), cs = getComputedStyle(dom);
     if (!r.height) return;
     out.push({ pos, node, dom, depth, top: r.top - (parseFloat(cs.marginTop) || 0), bottom: r.bottom + (parseFloat(cs.marginBottom) || 0) });
-    if (node.type.name === 'details' || HOLDS.test(node.type.name)) walk(node, pos + 1, depth + 1);
+    if (HOLDS.test(node.type.name)) walk(node, pos + 1, depth + 1);
   });
   walk(view.state.doc, 0, 0);
   return out;
@@ -84,15 +97,27 @@ function items(view: EditorView): Placed[] {
   });
   return out;
 }
+function ownTextRange(doc: PMNode, node: PMNode, pos: number): TextSelection | null {
+  const end = pos + node.nodeSize;
+  if (node.type.name === 'table') return null;
+  const first = Selection.findFrom(doc.resolve(pos), 1, true), last = Selection.findFrom(doc.resolve(end), -1, true);
+  if (!first || !last || first.from < pos || first.from >= end || last.to <= pos || last.to > end || first.from > last.to) return null;
+  return TextSelection.create(doc, first.from, last.to);
+}
 const deepest = (all: Placed[], y: number) => all.filter((b) => y >= b.top && y < b.bottom).sort((a, b) => b.depth - a.depth)[0];
+
+const HANDLE_HALF_HEIGHT = 12;
+const HANDLE_WIDTH = 46;
+const TABLE_HANDLES_WIDTH = 12;
+const SLACK_PX = 2;
 
 class Handle {
   private el = document.createElement('div');
-  private line = document.createElement('div');
+  private dropLine = document.createElement('div');
   private host: HTMLElement;
   private cur: Block | null = null;
   private dragFrom: number | null = null;
-  private zone: HTMLElement | null = null;
+  private dragScroller: HTMLElement | null = null;
   private frame = 0;
 
   constructor(private view: EditorView, private run: (id: string) => boolean) {
@@ -100,8 +125,8 @@ class Handle {
     this.el.className = 'block-handle';
     this.el.innerHTML = `<button class="plus" type="button" tabindex="-1" aria-label="Add a block below" data-tip="Add a block below"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg></button><button class="grip" type="button" tabindex="-1" draggable="true" aria-label="Block menu" data-tip="Drag to move, click for the menu"><svg viewBox="0 0 16 16"><circle cx="6" cy="4" r="1.2"/><circle cx="10" cy="4" r="1.2"/><circle cx="6" cy="8" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="6" cy="12" r="1.2"/><circle cx="10" cy="12" r="1.2"/></svg></button>`;
     this.el.setAttribute('aria-hidden', 'true');
-    this.line.className = 'block-drop';
-    this.host.append(this.el, this.line);
+    this.dropLine.className = 'block-drop';
+    this.host.append(this.el, this.dropLine);
     const [plus, grip] = this.el.querySelectorAll('button');
     // pressing + keeps the caret and the focus in the note. Not ⋮⋮: a press the page turns down is no drag to WebKit,
     // and the block never moved (the menu and the drop put the focus back in the note themselves)
@@ -150,22 +175,29 @@ class Handle {
   private show(b: Block) {
     this.cur = b;
     const host = this.host.getBoundingClientRect();
+    this.el.style.top = `${Math.round(this.handleTop(b) - host.top)}px`;
+    const left = Math.round(this.handleLeft(b) - host.left);
+    this.el.style.left = `${left}px`;
+    this.el.style.setProperty('--bridge', `${Math.max(0, -(left + this.el.offsetWidth)) + SLACK_PX}px`);
+    this.el.classList.add('on');
+  }
+  private handleTop(b: Block): number {
+    const box = b.dom.getBoundingClientRect();
+    const first = Selection.findFrom(this.view.state.doc.resolve(b.pos), 1, true);
+    let mid = box.top + Math.min(HANDLE_HALF_HEIGHT, box.height / 2);
+    if (first && first.from < b.pos + b.node.nodeSize) {
+      const c = this.view.coordsAtPos(first.from), m = (c.top + c.bottom) / 2;
+      if (c.bottom > c.top && m >= box.top - SLACK_PX && m <= box.bottom + SLACK_PX) mid = m;
+    }
+    return mid - HANDLE_HALF_HEIGHT;
+  }
+  private handleLeft(b: Block): number {
     const page = this.view.dom.getBoundingClientRect();
     const column = page.left + (parseFloat(getComputedStyle(this.view.dom).paddingLeft) || 0);
     const box = b.dom.getBoundingClientRect();
-    const first = Selection.findFrom(this.view.state.doc.resolve(b.pos), 1, true);
-    let mid = box.top + Math.min(12, box.height / 2);
-    if (first && first.from < b.pos + b.node.nodeSize) {
-      const c = this.view.coordsAtPos(first.from), m = (c.top + c.bottom) / 2;
-      if (c.bottom > c.top && m >= box.top - 2 && m <= box.bottom + 2) mid = m;
-    }
-    this.el.style.top = `${Math.round(mid - host.top - 12)}px`;
     const list = b.item ? b.dom.parentElement : null;
-    const edge = (list ? list.getBoundingClientRect().left : Math.min(column, box.left)) - (b.node.type.name === 'table' ? 12 : 0);
-    const left = Math.round(Math.max(this.seen() + 2, edge - 46) - host.left);
-    this.el.style.left = `${left}px`;
-    this.el.style.setProperty('--bridge', `${Math.max(0, -(left + this.el.offsetWidth)) + 2}px`);
-    this.el.classList.add('on');
+    const edge = (list ? list.getBoundingClientRect().left : Math.min(column, box.left)) - (b.node.type.name === 'table' ? TABLE_HANDLES_WIDTH : 0);
+    return Math.max(this.seen() + SLACK_PX, edge - HANDLE_WIDTH);
   }
   hide() { this.cur = null; this.el.classList.remove('on'); }
 
@@ -206,13 +238,12 @@ class Handle {
     if (!b) return;
     const { pos, node } = b, end = pos + node.nodeSize;
     const { doc } = this.view.state;
-    const r = from.getBoundingClientRect(), scroller = this.scroller(), top = scroller?.scrollTop ?? 0;
-    const first = Selection.findFrom(doc.resolve(pos), 1, true), last = Selection.findFrom(doc.resolve(end), -1, true);
-    const own = first && last && node.type.name !== 'table' && first.from >= pos && first.from < end && last.to > pos && last.to <= end && first.from <= last.to;
-    const sel = own ? TextSelection.create(doc, first!.from, last!.to) : NodeSelection.create(doc, pos);
-    this.view.dispatch(this.view.state.tr.setSelection(sel));
-    this.view.focus();
-    if (scroller) scroller.scrollTop = top;
+    const r = from.getBoundingClientRect();
+    const text = ownTextRange(doc, node, pos), own = !!text;
+    keepingScroll(this.view.dom, () => {
+      this.view.dispatch(this.view.state.tr.setSelection(text ?? NodeSelection.create(doc, pos)));
+      this.view.focus();
+    });
     const kind = kindOf(node);
     const items: MenuItem[] = [
       { label: 'Delete', icon: ICONS.trash, danger: true, run: () => {
@@ -258,11 +289,21 @@ class Handle {
     this.view.dragging = { slice, move: true };
     this.dragFrom = b.pos;
     document.documentElement.classList.add('block-drag');
-    this.zone = this.scroller();
-    if (this.zone && this.zone !== this.host) {
-      this.zone.addEventListener('dragover', this.onHostOver);
-      this.zone.addEventListener('drop', this.onHostDrop);
+    this.listenBeyondEditor();
+  }
+  private listenBeyondEditor() {
+    this.dragScroller = this.scroller();
+    if (this.dragScroller && this.dragScroller !== this.host) {
+      this.dragScroller.addEventListener('dragover', this.onHostOver);
+      this.dragScroller.addEventListener('drop', this.onHostDrop);
     }
+  }
+  private stopListeningBeyondEditor() {
+    if (this.dragScroller && this.dragScroller !== this.host) {
+      this.dragScroller.removeEventListener('dragover', this.onHostOver);
+      this.dragScroller.removeEventListener('drop', this.onHostDrop);
+    }
+    this.dragScroller = null;
   }
 
   private target(y: number): { pos: number; y: number; left?: number; width?: number } | null {
@@ -298,8 +339,8 @@ class Handle {
     const host = this.host.getBoundingClientRect(), page = this.view.dom.getBoundingClientRect();
     const pad = parseFloat(getComputedStyle(this.view.dom).paddingLeft) || 0;
     const left = t.left ?? page.left + pad, width = t.width ?? page.width - 2 * pad;
-    Object.assign(this.line.style, { top: `${Math.round(t.y - host.top - 2)}px`, left: `${Math.round(left - host.left)}px`, width: `${Math.round(width)}px` });
-    this.line.classList.add('on');
+    Object.assign(this.dropLine.style, { top: `${Math.round(t.y - host.top - 2)}px`, left: `${Math.round(left - host.left)}px`, width: `${Math.round(width)}px` });
+    this.dropLine.classList.add('on');
   }
 
   drop(e: DragEvent): boolean {
@@ -314,14 +355,10 @@ class Handle {
   }
 
   endDrag() {
-    if (this.zone && this.zone !== this.host) {
-      this.zone.removeEventListener('dragover', this.onHostOver);
-      this.zone.removeEventListener('drop', this.onHostDrop);
-    }
-    this.zone = null;
+    this.stopListeningBeyondEditor();
     this.dragFrom = null;
     this.view.dragging = null;
-    this.line.classList.remove('on');
+    this.dropLine.classList.remove('on');
     document.documentElement.classList.remove('block-drag');
   }
 
@@ -337,7 +374,7 @@ class Handle {
     this.host.removeEventListener('drop', this.onHostDrop);
     this.endDrag();
     this.el.remove();
-    this.line.remove();
+    this.dropLine.remove();
   }
 }
 

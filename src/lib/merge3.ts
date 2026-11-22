@@ -33,8 +33,10 @@ export function merge3(...versions: [base: string, ours: string, theirs: string]
   return lines && lines.join('\n');
 }
 
+const MAX_TABLE_CELLS = 4_000_000;
+
 function merge(b: string[], o: string[], t: string[], line?: (b: string, o: string, t: string) => string | null): string[] | null {
-  if ((b.length + 1) * Math.max(o.length + 1, t.length + 1) > 4_000_000) return null;
+  if ((b.length + 1) * Math.max(o.length + 1, t.length + 1) > MAX_TABLE_CELLS) return null;
   const bo = kept(b, o), bt = kept(b, t);
   const out: string[] = [];
   let bi = 0, oi = 0, ti = 0;

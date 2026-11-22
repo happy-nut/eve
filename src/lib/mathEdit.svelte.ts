@@ -5,7 +5,7 @@ export type MathDone = 'after' | 'before' | 'remove' | 'away';
 type Props = {
   latex: string;
   display: boolean;
-  at?: { x: number; y: number } | null;
+  clickedAt?: { x: number; y: number } | null;
   onInput: (latex: string) => void;
   onDone: (how: MathDone) => void;
   onHistory: (redo: boolean) => void;

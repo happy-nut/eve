@@ -1,5 +1,5 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
-import { takeEditorKeys } from './pending';
+import { flushPendingEdits } from './pending';
 import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText, memMark } from './platform';
 import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, signInError, syncError, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
@@ -42,7 +42,7 @@ async function gather(files: RemoteFile[], repo: Repo, hashes: FileHashes): Prom
     if (!f.path.endsWith('.md')) continue;
     const r = parse(dec.decode(f.data));
     if (!r) continue;
-    takeEditorKeys();
+    flushPendingEdits();
     const local = notes.all.find((n) => n.id === r.id);
     const seen = local?.body;
     const untouched = !!(local && f.prev && (await hashes.file(f.path, serialize(local))).sha === f.prev);
@@ -57,7 +57,7 @@ async function gather(files: RemoteFile[], repo: Repo, hashes: FileHashes): Prom
 }
 
 function decide(pulled: Pulled[]) {
-  takeEditorKeys();
+  flushPendingEdits();
   const lww: Note[] = [], force: Note[] = [], copies: Note[] = [];
   for (const p of pulled) {
     const { r } = p;
@@ -134,7 +134,7 @@ class Sync {
       await this.now();
     } catch (e) {
       this.pending = null;
-      const said = signInError(e instanceof Error ? e.message : String(e));
+      const said = signInError(e);
       this.status = said === null ? 'idle' : 'error';
       this.error = said ?? '';
     } finally {
@@ -229,7 +229,7 @@ class Sync {
     } catch (e) {
       this.persist();
       this.status = 'error';
-      this.error = syncError(e instanceof Error ? e.message : String(e));
+      this.error = syncError(e);
       return false;
     }
   }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { notes, titleOf, OWN_KEYS, propName, type Note, type PropValue } from './lib/notes.svelte';
   import { ui, under, type MenuItem } from './lib/ui.svelte';
   import { previewOf } from './lib/markdown';
@@ -10,8 +11,7 @@
   } from './lib/database';
 
   let { schema: initial, commit, page }: { schema: DbSchema; commit: (d: DbSchema) => void; page: () => string | null } = $props();
-  // svelte-ignore state_referenced_locally
-  let d = $state.raw(initial);
+  let d = $state.raw(untrack(() => initial));
   export function set(next: DbSchema) { d = next; }
 
   type Step = { undo: () => void; redo: () => void };

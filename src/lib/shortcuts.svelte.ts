@@ -1,6 +1,5 @@
 import { saved, save } from './stored';
 
-
 export type Scope = 'global' | 'app' | 'editor';
 export interface Action {
   id: string;
@@ -8,8 +7,9 @@ export interface Action {
   scope: Scope;
   keys: string;
 }
+export type KeyTaken = { reserved: string } | { clash: Action };
 
-const FIXED: [keys: string, label: string][] = [
+const RESERVED: [keys: string, label: string][] = [
   ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n): [string, string] => [`Mod-${n}`, `Jump to the note at ${n}`]),
   ['Mod-z', 'Undo'], ['Mod-Shift-z', 'Redo'], ['Mod-c', 'Copy'], ['Mod-x', 'Cut'], ['Mod-v', 'Paste'],
 ];
@@ -88,11 +88,11 @@ class Shortcuts {
   keysFor(id: string) {
     return this.actions.find((a) => a.id === id)?.keys ?? '';
   }
-  set(id: string, keys: string): Action | null {
-    const fixed = FIXED.find(([k]) => k === keys);
-    if (fixed) return { id: 'fixed', label: fixed[1], scope: 'app', keys };
+  set(id: string, keys: string): KeyTaken | null {
+    const reserved = RESERVED.find(([k]) => k === keys);
+    if (reserved) return { reserved: reserved[1] };
     const clash = this.actions.find((a) => a.keys === keys && a.id !== id);
-    if (clash) return clash;
+    if (clash) return { clash };
     this.overrides[id] = keys;
     save(LS_KEY, this.overrides);
     return null;
@@ -115,7 +115,7 @@ function load(): Record<string, string> {
 
 const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
 
-const UNSHIFTED: Record<string, string> = {
+const US_UNSHIFTED: Record<string, string> = {
   Period: '.', Comma: ',', Slash: '/', Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']',
   Backslash: '\\', Backquote: '`', Equal: '=',
 };
@@ -130,7 +130,7 @@ export function eventToKeys(e: KeyboardEvent): string {
     const code = e.code;
     if (/^Key[A-Z]$/.test(code)) key = code[3].toLowerCase();
     else if (/^Digit\d$/.test(code)) key = code[5];
-    else if (e.shiftKey && code in UNSHIFTED) key = UNSHIFTED[code];
+    else if (e.shiftKey && code in US_UNSHIFTED) key = US_UNSHIFTED[code];
     else key = key.toLowerCase();
   }
   const mods = [

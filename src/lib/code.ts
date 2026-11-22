@@ -1,7 +1,7 @@
 import CodeBlockBase from '@tiptap/extension-code-block';
 import { textblockTypeInputRule, type Editor } from '@tiptap/core';
 import { NodeSelection, Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/state';
-import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
+import { Decoration, DecorationSet, type EditorView, type ViewMutationRecord } from '@tiptap/pm/view';
 import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import { ui, under } from './ui.svelte';
 import { composing } from './keys';
@@ -56,10 +56,10 @@ function spansOf(node: PMNode) {
   return got;
 }
 
-function highlight(doc: PMNode, round = 0): DecorationSet {
+function highlight(doc: PMNode, redraw = 0): DecorationSet {
   if (!lowlight) return DecorationSet.empty;
   const out: Decoration[] = [];
-  const attrs = (cls: string) => (round ? { class: cls, 'data-round': String(round) } : { class: cls });
+  const attrs = (cls: string) => (redraw ? { class: cls, 'data-redraw': String(redraw) } : { class: cls });
   doc.descendants((node, pos) => {
     if (node.type.name !== 'codeBlock') return true;
     for (const [from, to, cls] of spansOf(node)) out.push(Decoration.inline(pos + 1 + from, pos + 1 + to, attrs(cls)));
@@ -67,14 +67,24 @@ function highlight(doc: PMNode, round = 0): DecorationSet {
   });
   return DecorationSet.create(doc, out);
 }
-let round = 0;
+const REDRAW = 'redraw';
+let redraws = 0;
+export type DomObserver = { flush?(): void; forceFlush?(): void };
+export const domObserverOf = (view: EditorView) => (view as unknown as { domObserver?: DomObserver }).domObserver;
+
+function redrawAfterComposition(view: EditorView) {
+  if (view.isDestroyed || view.composing) return;
+  domObserverOf(view)?.forceFlush?.();
+  view.dispatch(view.state.tr.setMeta(HIGHLIGHT, REDRAW));
+}
+
 const highlighter = new Plugin<DecorationSet>({
   key: HIGHLIGHT,
   state: {
     init: (_, { doc }) => highlight(doc),
     apply: (tr, set, _old, now) =>
-      tr.getMeta(HIGHLIGHT) === 'redraw' ? highlight(now.doc, ++round)
-        : tr.getMeta(HIGHLIGHT) || tr.docChanged ? highlight(now.doc, round) : set,
+      tr.getMeta(HIGHLIGHT) === REDRAW ? highlight(now.doc, ++redraws)
+        : tr.getMeta(HIGHLIGHT) || tr.docChanged ? highlight(now.doc, redraws) : set,
   },
   props: {
     decorations: (state) => HIGHLIGHT.getState(state),
@@ -83,23 +93,19 @@ const highlighter = new Plugin<DecorationSet>({
         if (!lowlight || !view.state.selection.$from.parent.type.spec.code) return false;
         // only once the editor has read the word in: it does so 20ms after this event (prosemirror-view's
         // endComposition); drawn before that, the screen would be drawn from a note without the word in it
-        setTimeout(() => {
-          if (view.isDestroyed || view.composing) return;
-          (view as any).domObserver?.forceFlush?.();
-          view.dispatch(view.state.tr.setMeta(HIGHLIGHT, 'redraw'));
-        }, 60);
+        setTimeout(() => redrawAfterComposition(view), 60);
         return false;
       },
     },
   },
 });
 
-const COMMAND = /^(?:\.{0,2}\/[\w./-]+|git|gh|npm|npx|yarn|pnpm|bun|deno|node|cd|ls|curl|wget|docker|docker-compose|kubectl|helm|brew|apt|apt-get|yum|pip|pip3|python|python3|java|javac|gradle|mvn|make|cargo|rustup|go|export|echo|mkdir|rm|cp|mv|cat|touch|chmod|chown|ln|ssh|scp|grep|tail|head|tar|unzip|source|which|open|aws|gcloud|terraform|psql|mysql|redis-cli|xcodebuild|xcrun|sed|awk|find|kill|ps|env|sh|bash|zsh)$/;
-const DRAWING = /[←-⇿─-╿■-◿]/;
-const KIN = [['javascript', 'typescript'], ['c', 'cpp'], ['css', 'scss']];
+const SHELL_COMMAND = /^(?:\.{0,2}\/[\w./-]+|git|gh|npm|npx|yarn|pnpm|bun|deno|node|cd|ls|curl|wget|docker|docker-compose|kubectl|helm|brew|apt|apt-get|yum|pip|pip3|python|python3|java|javac|gradle|mvn|make|cargo|rustup|go|export|echo|mkdir|rm|cp|mv|cat|touch|chmod|chown|ln|ssh|scp|grep|tail|head|tar|unzip|source|which|open|aws|gcloud|terraform|psql|mysql|redis-cli|xcodebuild|xcrun|sed|awk|find|kill|ps|env|sh|bash|zsh)$/;
+const TEXT_ART = /[←-⇿─-╿■-◿]/;
+const SIBLING_LANGUAGES = [['javascript', 'typescript'], ['c', 'cpp'], ['css', 'scss']];
 export function guessLanguage(code: string, ll: Lowlight | null): string | null {
   const text = code.trim();
-  if (!text || DRAWING.test(text)) return null;
+  if (!text || TEXT_ART.test(text)) return null;
   if (/^[[{]/.test(text)) { try { JSON.parse(text); return 'json'; } catch { } }
   if (/^<[a-z!?]/i.test(text) && /<\/?[a-z][^>]*>$/i.test(text)) return 'xml';
   const lines = text.split('\n'), commands: string[] = [];
@@ -107,9 +113,9 @@ export function guessLanguage(code: string, ll: Lowlight | null): string | null 
     const l = line.trim();
     if (l && !l.startsWith('#') && !lines[i - 1]?.trimEnd().endsWith('\\')) commands.push(l.replace(/^\$\s+/, '').replace(/^sudo\s+/, ''));
   });
-  if (commands.length && commands.every((l) => COMMAND.test(l.split(/\s/)[0]))) return 'bash';
+  if (commands.length && commands.every((l) => SHELL_COMMAND.test(l.split(/\s/)[0]))) return 'bash';
   if (!ll) return null;
-  const kin = (a: string, b: string) => a === b || KIN.some((k) => k.includes(a) && k.includes(b));
+  const kin = (a: string, b: string) => a === b || SIBLING_LANGUAGES.some((k) => k.includes(a) && k.includes(b));
   const scores = LANGUAGES.map(([v]) => v).filter((v) => v && v !== 'mermaid' && v !== 'markdown' && ll.registered(v))
     .map((v) => [v, ll.highlight(v, text).data?.relevance ?? 0] as const).sort((a, b) => b[1] - a[1]);
   const [best, rival] = [scores[0], scores.find(([v]) => !kin(v, scores[0][0]))];
@@ -220,7 +226,16 @@ export function matchLanguage(typed: string): [value: string, label: string] | n
     ?? LANGUAGES.find(([, l]) => l.toLowerCase().includes(q))
     ?? null;
 }
-let askLanguage = false;
+const passedToNewNodeViews = <T>(name: string) => {
+  const key = new PluginKey<T | null>(name);
+  const plugin = new Plugin<T | null>({
+    key,
+    state: { init: () => null, apply: (tr, was) => tr.getMeta(key) ?? (tr.getMeta('appendedTransaction') ? was : null) },
+  });
+  return { key, plugin, read: (state: EditorState) => key.getState(state) ?? null };
+};
+const ASK_LANGUAGE = passedToNewNodeViews<true>('ask-language');
+const START_DIAGRAM = passedToNewNodeViews<string>('start-diagram');
 
 const labelOf = (language: string | null) => LANGUAGES.find(([v]) => v === (language ?? ''))?.[1] ?? language ?? 'Plain text';
 
@@ -297,6 +312,7 @@ export function isDrawn(view: EditorView, node: PMNode | null | undefined, pos: 
   const dom = view.nodeDOM(pos);
   return !(dom instanceof HTMLElement && dom.classList.contains('mermaid-error'));
 }
+const diagramOpeners = new WeakMap<Node, () => boolean>();
 const selectBlock = (state: EditorState, pos: number) => state.tr.setSelection(NodeSelection.create(state.doc, pos)).scrollIntoView();
 export const selectedDiagram = (state: EditorState) => {
   const sel = state.selection;
@@ -333,7 +349,7 @@ const typeBelow = new Plugin({
 
 export const CodeBlock = CodeBlockBase.extend({
   priority: 1000,
-  addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, guessing, editingDiagram, caretInSight, typeBelow]; },
+  addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, guessing, editingDiagram, caretInSight, typeBelow, ASK_LANGUAGE.plugin, START_DIAGRAM.plugin]; },
   addKeyboardShortcuts() {
     const into = (dir: 'up' | 'down') => () => {
       const { view, state } = this.editor;
@@ -357,7 +373,7 @@ export const CodeBlock = CodeBlockBase.extend({
       ArrowUp: (p) => into('up')() || (stock.ArrowUp?.(p) ?? false),
       Enter: (p) => {
         const sel = selectedDiagram(this.editor.state);
-        if (sel) return !!(this.editor.view.nodeDOM(sel.from) as any)?.__openDiagram?.();
+        if (sel) { const dom = this.editor.view.nodeDOM(sel.from); return !!(dom && diagramOpeners.get(dom)?.()); }
         return stock.Enter?.(p) ?? false;
       },
       Backspace: () => {
@@ -390,7 +406,7 @@ export const CodeBlock = CodeBlockBase.extend({
     const make = now.handler;
     now.handler = (props) => {
       if (inCell(props.state.selection.$from)) return null;
-      askLanguage = true;
+      props.state.tr.setMeta(ASK_LANGUAGE.key, true);
       return make(props);
     };
     return [now, ...['```', '~~~'].map((fence) => {
@@ -468,23 +484,22 @@ export const CodeBlock = CodeBlockBase.extend({
       const posNow = () => getPos();
       let block: ReturnType<typeof mountDiagram> | null = null;
       let lastLine: number | null = null;
-      let shown = false;
-      let shownNode: PMNode = node;
+      let codeShown = false;
+      let drawnNode: PMNode = node;
       const setDiagram = (n: PMNode) => {
         const on = n.attrs.language === 'mermaid';
         dom.classList.toggle('mermaid', on);
         if (!on) { block?.destroy(); block = null; dom.classList.remove('mermaid-error'); return; }
-        if (block) { block.set({ code: n.textContent, codeShown: shown }); return; }
-        const start = startNext !== null && startNext === n.textContent;
-        if (start) startNext = null;
+        if (block) { block.set({ code: n.textContent, codeShown }); return; }
+        const start = START_DIAGRAM.read(editor.state) === n.textContent;
         block = mountDiagram(host, {
-          code: n.textContent, start, codeShown: shown,
+          code: n.textContent, start, codeShown,
           onCode: (code) => {
             if (editor.isDestroyed) return;
             const p = posNow();
             const cur = p == null ? null : editor.state.doc.nodeAt(p);
             // equal, not the same object: the note read anew keeps this view for an equal node without telling it
-            if (p == null || !cur || !cur.eq(shownNode) || cur.textContent === code) return;
+            if (p == null || !cur || !cur.eq(drawnNode) || cur.textContent === code) return;
             const line = editedLine(cur.textContent, code);
             const tr = editor.state.tr.replaceWith(p + 1, p + cur.nodeSize - 1, code ? editor.schema.text(code) : []);
             if (line === null || line !== lastLine) closeHistory(tr);
@@ -526,7 +541,7 @@ export const CodeBlock = CodeBlockBase.extend({
         });
       };
       setDiagram(node);
-      (dom as any).__openDiagram = () => block?.edit() ?? false;
+      diagramOpeners.set(dom, () => block?.edit() ?? false);
 
       const language = (): string => {
         const pos = posNow();
@@ -617,21 +632,22 @@ export const CodeBlock = CodeBlockBase.extend({
         const value = matchLanguage(typed)?.[0] ?? typed.toLowerCase();
         if (value !== (cur.attrs.language ?? '')) editor.view.dispatch(editor.state.tr.setNodeMarkup(p, undefined, { ...cur.attrs, language: value || null }));
       });
-      if (askLanguage) { askLanguage = false; queueMicrotask(() => { if (dom.isConnected) openField(); }); }
+      if (ASK_LANGUAGE.read(editor.state)) queueMicrotask(() => { if (dom.isConnected) openField(); });
 
       const owns = (target: EventTarget | Node | null) => target instanceof Node && (chip.contains(target) || host.contains(target) || ask.contains(target));
+      const ownMutation = (m: ViewMutationRecord) => owns(m.target) || (m.type === 'attributes' && m.target === dom);
       return {
         dom,
         contentDOM: code,
         update: (updated, decorations) => {
           if (updated.type !== node.type) return false;
           chip.textContent = labelOf(updated.attrs.language);
-          shown = decorations.some((d) => d.spec.editing);
-          shownNode = updated;
+          codeShown = decorations.some((d) => d.spec.editing);
+          drawnNode = updated;
           setDiagram(updated);
           return true;
         },
-        ignoreMutation: (m) => owns(m.target) || (m.type === 'attributes' && m.target === dom),
+        ignoreMutation: ownMutation,
         stopEvent: (e) => owns(e.target),
         selectNode: () => dom.classList.add('ProseMirror-selectednode'),
         deselectNode: () => dom.classList.remove('ProseMirror-selectednode'),
@@ -647,7 +663,6 @@ export const CodeBlock = CodeBlockBase.extend({
   },
 }).configure({ languageClassPrefix: 'language-', enableTabIndentation: true, tabSize: 4 });
 
-let startNext: string | null = null;
 
 export function starterCode(kind: Kind | Diagram, noteText: string): string {
   const d = typeof kind === 'string' ? starter(kind) : kind;
@@ -655,10 +670,9 @@ export function starterCode(kind: Kind | Diagram, noteText: string): string {
 }
 export function insertDiagram(editor: Editor, kind: Kind | Diagram) {
   const code = starterCode(kind, editor.state.doc.textContent);
-  startNext = code;
   const { from } = editor.state.selection;
   const c = isMobile ? editor.chain() : editor.chain().focus();
-  c.insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: code }] }).run();
+  c.setMeta(START_DIAGRAM.key, code).insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: code }] }).run();
   const $at = editor.state.doc.resolve(Math.min(editor.state.selection.from, editor.state.doc.content.size));
   for (let d = $at.depth; d > 0; d--) {
     if ($at.node(d).type.name !== 'codeBlock' || $at.before(d) < from - 2) continue;

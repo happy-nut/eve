@@ -80,12 +80,14 @@ export const asList = (v: PropValue | undefined): string[] => (v === undefined ?
 export const linksIn = (v: PropValue | undefined): string[] => asList(v).map((x) => /^\[\[(.*?)(\|.*)?\]\]$/.exec(x.trim())?.[1] ?? x.trim()).filter(Boolean);
 export const asLink = (title: string) => `[[${title}]]`;
 
+export const IS_EMPTY = '';
+
 export function passes(n: Pick<Note, 'props'>, f: DbSchema['filter'], value?: (by: string) => string): boolean {
   if (!f) return true;
   const v = n.props?.[f.by];
   if (f.is === 'checked') return v === 'true';
-  if (value && v === undefined) { const x = value(f.by); return f.is === '' ? !x : x === f.is; }
-  if (f.is === '') return asList(v).length === 0;
+  if (value && v === undefined) { const x = value(f.by); return f.is === IS_EMPTY ? !x : x === f.is; }
+  if (f.is === IS_EMPTY) return asList(v).length === 0;
   return asList(v).includes(f.is);
 }
 

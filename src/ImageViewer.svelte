@@ -3,32 +3,39 @@
   import { fade, scale } from 'svelte/transition';
   import { panelIn, scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
-  import { held } from './lib/popup';
+  import { lastShown } from './lib/popup';
 
-  const req = $derived.by(held(() => ui.photo));
+  const req = $derived.by(lastShown(() => ui.photo));
   let box: HTMLDivElement;
+  let picture: HTMLImageElement;
 
   onMount(() => box.focus());
 
-  function onPicture(e: MouseEvent) {
-    if (!req.menu) return;
+  function openMenu(e: MouseEvent) {
+    if (e.target !== picture || !req.menu) return false;
     e.preventDefault();
     e.stopPropagation();
     req.menu(e);
+    return true;
   }
+
+  const isMenuKey = (e: KeyboardEvent) => e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10');
 
   function onKey(e: KeyboardEvent) {
     e.stopPropagation();
-    if (['Escape', 'Enter', ' '].includes(e.key)) { e.preventDefault(); ui.closeImage(); }
+    if (req.menu && isMenuKey(e)) {
+      e.preventDefault();
+      const r = picture.getBoundingClientRect();
+      req.menu({ clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 });
+    } else if (['Escape', 'Enter', ' '].includes(e.key)) { e.preventDefault(); ui.closeImage(); }
     else if (e.key === 'Tab') e.preventDefault();
   }
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="viewer" bind:this={box} role="dialog" aria-label={req.alt || 'Picture'} tabindex="-1"
-  transition:fade|global={scrimFade} onkeydown={onKey} onclick={() => ui.closeImage()}>
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-  <img src={req.src} alt={req.alt} class:menu={!!req.menu} transition:scale|global={panelIn} onclick={onPicture} oncontextmenu={onPicture} />
+  transition:fade|global={scrimFade} onkeydown={onKey} onclick={(e) => { if (!openMenu(e)) ui.closeImage(); }} oncontextmenu={openMenu}>
+  <img bind:this={picture} src={req.src} alt={req.alt} class:menu={!!req.menu} transition:scale|global={panelIn} />
   {#if req.alt}<p class="cap">{req.alt}</p>{/if}
 </div>
 

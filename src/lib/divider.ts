@@ -9,7 +9,7 @@ const inList = ($from: any) => {
   return false;
 };
 
-let justMade = false;
+let swallowEnterAfterTypedDivider = false;
 
 type Dir = 1 | -1;
 type Probe = 'forward' | 'backward' | 'up' | 'down';
@@ -48,7 +48,7 @@ export const Divider = HorizontalRule.extend({
         const $from = props.state.selection.$from;
         if (inList($from) || $from.parent.type.name === 'detailsSummary' || /^table(Cell|Header)$/.test($from.node(-1)?.type.name ?? '')) return null;
         const made = run(props);
-        if (made !== null) justMade = true;
+        if (made !== null) swallowEnterAfterTypedDivider = true;
         return made;
       };
       return rule;
@@ -71,14 +71,14 @@ export const Divider = HorizontalRule.extend({
         key: new PluginKey('dividerClick'),
         props: {
           handleKeyDown(view, event) {
-            if (!justMade) return false;
-            justMade = false;
+            if (!swallowEnterAfterTypedDivider) return false;
+            swallowEnterAfterTypedDivider = false;
             if (event.key !== 'Enter' || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;
             const { $from, empty } = view.state.selection;
             const before = $from.depth > 0 ? view.state.doc.resolve($from.before()).nodeBefore : null;
             return empty && $from.parent.type.name === 'paragraph' && !$from.parent.content.size && before?.type.name === 'horizontalRule';
           },
-          handleDOMEvents: { mousedown: () => { justMade = false; return false; } },
+          handleDOMEvents: { mousedown: () => { swallowEnterAfterTypedDivider = false; return false; } },
           handleClickOn(view, _pos, node, nodePos, event) {
             if (node.type.name !== 'horizontalRule') return false;
             event.preventDefault();

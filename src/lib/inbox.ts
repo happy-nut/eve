@@ -8,6 +8,7 @@ export interface Ask {
   id?: string;
   body?: string;
   page?: string;
+  /** @deprecated an older server's name for `page` */
   group?: string;
   parent?: string;
   text?: string;

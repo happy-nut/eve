@@ -29,31 +29,49 @@ export type CloseReason = 'back' | 'esc' | 'putAway';
 export interface Layer {
   id: LayerId;
   close(reason: CloseReason): void;
-  esc?: boolean;
-  keys?: boolean;
+  closesOnEsc?: boolean;
+  grabsKeys?: boolean;
   modal?: boolean;
   from: Element | null;
-  own?: string;
-  yields?: boolean;
-  phone?: boolean;
-  settle?: number;
+  ownSelector?: string;
+  keepsMovedFocus?: boolean;
+  restoresOnPhone?: boolean;
+  focusBackDelayMs?: number;
 }
 
-export function focusBack(from: Element | null, own?: string) {
-  const ok = (e: HTMLElement | null) => !!e?.isConnected && e !== document.body && !(own && e.closest(own)) && typeof e.focus === 'function';
+const EMOJI_FOCUS_BACK_DELAY_MS = 60;
+
+export function keepingScroll(el: Element, act: () => void) {
+  const kept: [Element, number, number][] = [];
+  for (let s = el.parentElement; s; s = s.parentElement) if (s.scrollHeight > s.clientHeight || s.scrollWidth > s.clientWidth) kept.push([s, s.scrollTop, s.scrollLeft]);
+  act();
+  const put = () => { for (const [s, top, left] of kept) { s.scrollTop = top; s.scrollLeft = left; } };
+  put();
+  requestAnimationFrame(put);
+}
+
+function visibleItems(items: MenuItem[]): MenuItem[] {
+  const shown: MenuItem[] = [];
+  let sep = false;
+  for (const i of items) {
+    sep ||= !!i.sep;
+    if (i.hide) continue;
+    shown.push({ ...i, sep: sep && shown.length > 0 });
+    sep = false;
+  }
+  return shown;
+}
+
+function keyboardNowhere(t: Element | null): boolean {
+  return !t || t === document.body || t === document.documentElement;
+}
+
+export function focusBack(from: Element | null, ownSelector?: string) {
+  const ok = (e: HTMLElement | null) => !!e?.isConnected && e !== document.body && !(ownSelector && e.closest(ownSelector)) && typeof e.focus === 'function';
   // nowhere to go back to (a button WebKit gave no focus, so <body>): the note, kept where it was read too — the ⋯
   // menu closed on Esc took a note scrolled far down back up to its caret
   const el = ok(from as HTMLElement | null) ? (from as HTMLElement) : isMobile ? null : document.querySelector<HTMLElement>('main .tiptap, main .calendar .day.cursor');
-  if (el) {
-    // what it is in stays where it was: the note, focused, has the webview bring its caret into sight all the same
-    // (preventScroll or not), and a diagram put back from the whole screen left the note at its end
-    const kept: [Element, number, number][] = [];
-    for (let s = el.parentElement; s; s = s.parentElement) if (s.scrollHeight > s.clientHeight || s.scrollWidth > s.clientWidth) kept.push([s, s.scrollTop, s.scrollLeft]);
-    el.focus({ preventScroll: true });
-    const put = () => { for (const [s, top, left] of kept) { s.scrollTop = top; s.scrollLeft = left; } };
-    put();
-    requestAnimationFrame(put);
-  }
+  if (el) keepingScroll(el, () => el.focus({ preventScroll: true }));
 }
 
 class Layers {
@@ -67,7 +85,7 @@ class Layers {
   get count() { return this.shown.length; }
   has(id: LayerId) { return this.shown.some((l) => l.id === id); }
   get(id: LayerId) { return this.shown.findLast((l) => l.id === id) ?? null; }
-  get grabbing() { return this.shown.some((l) => l.keys); }
+  get grabbing() { return this.shown.some((l) => l.grabsKeys); }
   get modal() { return this.shown.some((l) => l.modal); }
 
   push(layer: Omit<Layer, 'from'> & { from?: Element | null }): () => void {
@@ -79,14 +97,14 @@ class Layers {
   closeTop(reason: CloseReason): boolean {
     const l = this.items.at(-1);
     if (!l) return false;
-    this.shut(l, reason);
+    this.removeThenClose(l, reason);
     return true;
   }
   closeAll(reason: CloseReason) {
-    for (let l = this.items.at(-1); l; l = this.items.at(-1)) this.shut(l, reason);
+    for (let l = this.items.at(-1); l; l = this.items.at(-1)) this.removeThenClose(l, reason);
   }
   trapTab(e: KeyboardEvent): boolean {
-    const l = this.items.at(-1), all = l?.modal && l.own ? document.querySelectorAll<HTMLElement>(l.own) : null, box = all?.[all.length - 1];
+    const l = this.items.at(-1), all = l?.modal && l.ownSelector ? document.querySelectorAll<HTMLElement>(l.ownSelector) : null, box = all?.[all.length - 1];
     if (e.key !== 'Tab' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || !box) return false;
     const els = [...box.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])')]
       .filter((el) => !(el as HTMLButtonElement).disabled && (el.checkVisibility?.() ?? true));
@@ -98,9 +116,9 @@ class Layers {
     return true;
   }
   escape(): boolean {
-    return !!this.items.at(-1)?.esc && this.closeTop('esc');
+    return !!this.items.at(-1)?.closesOnEsc && this.closeTop('esc');
   }
-  private shut(l: Layer, reason: CloseReason) {
+  private removeThenClose(l: Layer, reason: CloseReason) {
     shifting(() => {
       this.set(this.items.filter((x) => x !== l));
       l.close(reason);
@@ -113,15 +131,15 @@ class Layers {
     shifting(() => this.giveBack(l));
   }
   private giveBack(l: Layer) {
-    if (isMobile && !l.phone) return;
+    if (isMobile && !l.restoresOnPhone) return;
     const go = () => {
       const a = document.activeElement;
-      if (l.yields && a && a !== document.body && a.isConnected && !(l.own && a.closest(l.own))) return;
-      focusBack(l.from, l.own);
+      if (l.keepsMovedFocus && a && a !== document.body && a.isConnected && !(l.ownSelector && a.closest(l.ownSelector))) return;
+      focusBack(l.from, l.ownSelector);
     };
-    if (!l.settle) return go();
+    if (!l.focusBackDelayMs) return go();
     const done = shiftingUntil();
-    setTimeout(() => { done(); shifting(go); }, l.settle);
+    setTimeout(() => { done(); shifting(go); }, l.focusBackDelayMs);
   }
 }
 
@@ -132,7 +150,7 @@ class Ui {
   private emojiOff: (() => void) | undefined;
   pickEmoji(anchor: HTMLElement | DOMRect, current = ''): Promise<string | null> {
     const r = anchor instanceof DOMRect ? anchor : anchor.getBoundingClientRect();
-    this.emojiOff ??= this.layers.push({ id: 'emoji', close: () => this.emojiDone(null), keys: true, modal: true, own: '[aria-label="Choose an icon"]', yields: true, settle: 60 });
+    this.emojiOff ??= this.layers.push({ id: 'emoji', close: () => this.emojiDone(null), grabsKeys: true, modal: true, ownSelector: '[aria-label="Choose an icon"]', keepsMovedFocus: true, focusBackDelayMs: EMOJI_FOCUS_BACK_DELAY_MS });
     return new Promise((res) => { this.emoji = { at: r, current, resolve: res }; });
   }
   emojiDone(v: string | null) {
@@ -146,7 +164,7 @@ class Ui {
   get card(): CardReq | null { return this.cards.at(-1) ?? null; }
   private pushCard(c: CardReq) {
     this.cards.push(c);
-    this.cardOffs.push(this.layers.push({ id: 'card', close: () => this.closeCard(), esc: true, own: '.card-page', phone: true }));
+    this.cardOffs.push(this.layers.push({ id: 'card', close: () => this.closeCard(), closesOnEsc: true, ownSelector: '.card-page', restoresOnPhone: true }));
   }
   openCard(c: { title: string; body: string; note?: string }, onChange: CardReq['onChange'], onDelete?: () => void): Promise<void> {
     return new Promise((res) => this.pushCard({ ...c, onChange, onDelete, resolve: res }));
@@ -163,7 +181,7 @@ class Ui {
   diagramView = $state<(() => void) | null>(null);
   private diagramOff: (() => void) | undefined;
   viewDiagram(close: () => void, from: HTMLElement | null = document.activeElement as HTMLElement | null) {
-    this.diagramOff ??= this.layers.push({ id: 'diagramView', close: () => this.closeDiagramView(), keys: true, modal: true, from });
+    this.diagramOff ??= this.layers.push({ id: 'diagramView', close: () => this.closeDiagramView(), grabsKeys: true, modal: true, from });
     this.diagramView = close;
   }
   closeDiagramView() {
@@ -177,7 +195,7 @@ class Ui {
   photo = $state<{ src: string; alt: string; menu?: (at: { clientX: number; clientY: number }) => void } | null>(null);
   private photoOff: (() => void) | undefined;
   viewImage(src: string, alt = '', menu?: (at: { clientX: number; clientY: number }) => void) {
-    this.photoOff ??= this.layers.push({ id: 'photo', close: () => this.closeImage(), esc: true, keys: true, modal: true, own: '.viewer', phone: true });
+    this.photoOff ??= this.layers.push({ id: 'photo', close: () => this.closeImage(), closesOnEsc: true, grabsKeys: true, modal: true, ownSelector: '.viewer', restoresOnPhone: true });
     this.photo = { src, alt, menu };
   }
   closeImage() {
@@ -189,7 +207,7 @@ class Ui {
   pdf = $state<{ src: string; name: string } | null>(null);
   private pdfOff: (() => void) | undefined;
   openPdf(src: string, name: string) {
-    this.pdfOff ??= this.layers.push({ id: 'pdf', close: () => this.closePdf(), esc: true, own: '.pdf-panel', yields: true });
+    this.pdfOff ??= this.layers.push({ id: 'pdf', close: () => this.closePdf(), closesOnEsc: true, ownSelector: '.pdf-panel', keepsMovedFocus: true });
     this.pdf = { src, name };
   }
   closePdf() {
@@ -208,16 +226,8 @@ class Ui {
   openMenu(at: { clientX: number; clientY: number; from?: Box }, items: MenuItem[], onclose?: () => void, search?: string) {
     this.menuClosed?.();
     this.menuClosed = onclose;
-    this.menuOff ??= this.layers.push({ id: 'menu', close: () => this.closeMenu(), esc: true, keys: true, modal: true, own: '.menu', phone: true });
-    const shown: MenuItem[] = [];
-    let sep = false;
-    for (const i of items) {
-      sep ||= !!i.sep;
-      if (i.hide) continue;
-      shown.push({ ...i, sep: sep && shown.length > 0 });
-      sep = false;
-    }
-    this.menu = { x: at.clientX, y: at.clientY, from: at.from, items: shown, search };
+    this.menuOff ??= this.layers.push({ id: 'menu', close: () => this.closeMenu(), closesOnEsc: true, grabsKeys: true, modal: true, ownSelector: '.menu', restoresOnPhone: true });
+    this.menu = { x: at.clientX, y: at.clientY, from: at.from, items: visibleItems(items), search };
   }
   closeMenu() {
     this.menu = null;
@@ -235,17 +245,17 @@ class Ui {
     return this.layers.closeTop('back');
   }
   editingMath(close: () => void) {
-    return this.layers.push({ id: 'math', close, esc: true, own: '.math-edit', yields: true });
+    return this.layers.push({ id: 'math', close, closesOnEsc: true, ownSelector: '.math-edit', keepsMovedFocus: true });
   }
   openedSettings(close: () => void) {
-    return this.layers.push({ id: 'settings', close, keys: true, modal: true, own: '[role="dialog"][aria-label="Settings"]', yields: true });
+    return this.layers.push({ id: 'settings', close, grabsKeys: true, modal: true, ownSelector: '[role="dialog"][aria-label="Settings"]', keepsMovedFocus: true });
   }
 
   #find = $state(false);
   get find() { return this.#find; }
   private findOff: (() => void) | undefined;
   openFind() {
-    this.findOff ??= this.layers.push({ id: 'find', close: () => this.closeFind(), esc: true, own: '.find', phone: true, from: document.querySelector('main .tiptap') });
+    this.findOff ??= this.layers.push({ id: 'find', close: () => this.closeFind(), closesOnEsc: true, ownSelector: '.find', restoresOnPhone: true, from: document.querySelector('main .tiptap') });
     this.#find = true;
   }
   closeFind() {
@@ -256,7 +266,7 @@ class Ui {
   trash = $state(false);
   private trashOff: (() => void) | undefined;
   openTrash() {
-    this.trashOff ??= this.layers.push({ id: 'trash', close: () => this.closeTrash(), esc: true, keys: true, modal: true, own: '.rpanel[data-panel="trash"]', phone: true });
+    this.trashOff ??= this.layers.push({ id: 'trash', close: () => this.closeTrash(), closesOnEsc: true, grabsKeys: true, modal: true, ownSelector: '.rpanel[data-panel="trash"]', restoresOnPhone: true });
     this.trash = true;
   }
   closeTrash() {
@@ -268,7 +278,7 @@ class Ui {
   presentFrom: Element | null = null;
   private presentOff: (() => void) | undefined;
   openPresent(page: HTMLElement, from: Element | null = null) {
-    this.presentOff ??= this.layers.push({ id: 'present', close: () => this.closePresent(), esc: true, keys: true, modal: true, own: '.present', phone: true });
+    this.presentOff ??= this.layers.push({ id: 'present', close: () => this.closePresent(), closesOnEsc: true, grabsKeys: true, modal: true, ownSelector: '.present', restoresOnPhone: true });
     this.presentFrom = from;
     this.present = page;
   }
@@ -281,7 +291,7 @@ class Ui {
   historyOf = $state<string | null>(null);
   private historyOff: (() => void) | undefined;
   openHistory(id: string) {
-    this.historyOff ??= this.layers.push({ id: 'history', close: () => this.closeHistory(), esc: true, keys: true, modal: true, own: '.rpanel[data-panel="history"]', phone: true });
+    this.historyOff ??= this.layers.push({ id: 'history', close: () => this.closeHistory(), closesOnEsc: true, grabsKeys: true, modal: true, ownSelector: '.rpanel[data-panel="history"]', restoresOnPhone: true });
     this.historyOf = id;
   }
   closeHistory() {
@@ -293,7 +303,7 @@ class Ui {
   pending = $state<Pending | null>(null);
   private pendingOff: (() => void) | undefined;
   private asking(p: Pending) {
-    this.pendingOff ??= this.layers.push({ id: 'confirm', close: () => this.done(null), keys: true, modal: true, own: '.box[role="dialog"]', phone: true });
+    this.pendingOff ??= this.layers.push({ id: 'confirm', close: () => this.done(null), grabsKeys: true, modal: true, ownSelector: '.box[role="dialog"]', restoresOnPhone: true });
     this.pending = p;
   }
   focusOwner = $state<'editor' | 'sidebar'>('editor');
@@ -308,11 +318,14 @@ class Ui {
     return new Promise((res) => this.asking({ message, input: initial, ...more, resolve: res }));
   }
   done(v: string | null) {
+    this.takePendingGivingFocusBack()?.resolve(v);
+  }
+  private takePendingGivingFocusBack(): Pending | null {
     const p = this.pending;
     this.pending = null;
     this.pendingOff?.();
     this.pendingOff = undefined;
-    p?.resolve(v);
+    return p;
   }
 
   toastMsg = $state<{ message: string; action?: ToastAction; id: number } | null>(null);
@@ -344,7 +357,7 @@ class Ui {
     if (e.key.toLowerCase() !== 'z' || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return false;
     const t = e.target as Element | null;
     if (t?.closest?.('input, textarea, select, [contenteditable="true"], .tiptap')) return false;
-    if (!t || t === document.body || t === document.documentElement) return false;
+    if (keyboardNowhere(t)) return false;
     if (!history.undo()) return false;
     this.dismissToast();
     return true;

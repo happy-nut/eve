@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeEach } from 'vitest';
 import { watchFocus, resetFocusWatch, allowFocusLoss, focusLossAllowed, probeFocus } from './focusWatch';
 
+globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
+
 // Every DOM test is also a test that the keyboard is never left on <body> by accident (focusWatch.ts): a loss in a
 // test fails it, unless the test says it means to (allowFocusLoss). Only focusWatch is imported here: a module
 // loaded by the setup is shared with the test file, and a test that mocks './platform' (a phone) must still be

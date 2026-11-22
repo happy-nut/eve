@@ -3,11 +3,11 @@
   import { fade, scale } from 'svelte/transition';
   import { panelIn, scrimFade } from './lib/motion';
   import { ui } from './lib/ui.svelte';
-  import { sheet, held } from './lib/popup';
+  import { sheet, lastShown } from './lib/popup';
   import { claimKeys } from './lib/keys';
   import { copyText } from './lib/platform';
 
-  const p = $derived.by(held(() => ui.pending));
+  const p = $derived.by(lastShown(() => ui.pending));
   const done = (v: string | null) => ui.done(v);
   let value = $state('');
   $effect(() => { value = p.input ?? ''; });
@@ -21,19 +21,16 @@
 
   let box: HTMLDivElement;
   const appear = (node: Element) => sheet(node, (n) => scale(n, panelIn));
-  let openedAt = performance.now();
   let input = $state<HTMLInputElement>();
   let yes = $state<HTMLButtonElement>();
   $effect(() => {
     if (!ui.pending) return;
-    openedAt = performance.now();
     const el = input ?? yes;
     el?.focus();
     if (el instanceof HTMLInputElement) tick().then(() => el.select());
   });
   function onKey(e: KeyboardEvent) {
     e.stopPropagation();
-    if (e.timeStamp < openedAt) return;
     if (e.key === 'Escape') { e.preventDefault(); done(null); }
     if (found.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
       e.preventDefault();
@@ -53,7 +50,10 @@
       els[(els.indexOf(document.activeElement as HTMLElement) + (e.shiftKey ? -1 : 1) + els.length) % els.length]?.focus();
     }
   }
-  $effect(() => claimKeys('global', { '*': onKey }, { whileTop: 'confirm' }));
+  $effect(() => {
+    if (!ui.pending) return;
+    return claimKeys('global', { '*': onKey }, { whileTop: 'confirm', onlyKeysAfterClaim: true });
+  });
 </script>
 
 

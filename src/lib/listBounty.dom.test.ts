@@ -1,7 +1,7 @@
 // The list's finds of the second UI bounty: where notes go and stay, and the keys the app keeps for itself
 import { test, expect, beforeEach } from 'vitest';
 import { notes } from './notes.svelte';
-import { nudgeNote, nestNote } from './moves';
+import { nudgeNote, nestNote, canNudge, canNest } from './moves';
 import { tree } from './tree.svelte';
 import { appearance } from './appearance.svelte';
 import { CALENDAR_NOTE_ID } from './daily';
@@ -23,7 +23,7 @@ test('a page moved under another takes its sub-pages along, all the way down', (
 test('a sub-page whose page was deleted (shown at the top level) still moves with ⌥↑ / ⌥↓', () => {
   const a = make('Above'), p = make('Parent'), kid = make('Kid', p);
   notes.remove(p);
-  expect(nudgeNote(kid, -1, true) || nudgeNote(kid, 1, true)).toBe(true);
+  expect(canNudge(kid, -1) || canNudge(kid, 1)).toBe(true);
   void a;
 });
 
@@ -42,7 +42,7 @@ test('beside such a sub-page, ⌥↑ / ⌥↓ really move a page past it (they s
   // Move out on it: it is at the top already, not lifted into the deleted page's own page
   const g = make('G'), q = make('Q', g), orphan = make('Orphan', q);
   notes.remove(q);
-  expect(nestNote(orphan, 'out', undefined, true)).toBe(false);
+  expect(canNest(orphan, 'out')).toBe(false);
   nestNote(orphan, 'out');
   expect(at(orphan).parent).not.toBe(g);
 });
@@ -77,6 +77,6 @@ test('⌥↓ takes a note above the daily notes\' row past it, ⌥↑ back; ⌥�
   expect(nudgeNote(top, -1)).toBe(true);
   expect(at(top)).toBe(at(cal.id) - 1);
   notes.place(top, '', order()[at(cal.id) + 1] ?? null);
-  expect(nestNote(top, 'in', cal.id, true)).toBe(false);
+  expect(canNest(top, 'in', cal.id)).toBe(false);
   appearance.s.dailyNotes = false;
 });

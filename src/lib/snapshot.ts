@@ -1,6 +1,6 @@
 import { FLOW } from './diagramMotion';
 const SCALE = 2;
-const PAD = 16;
+const CARD_MARGIN = 16;
 
 export async function pictureOf(el: Element, background: string): Promise<Blob> {
   let width = 0, height = 0;
@@ -24,12 +24,12 @@ export async function pictureOf(el: Element, background: string): Promise<Blob> 
   img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   await img.decode();
   const canvas = document.createElement('canvas');
-  canvas.width = (width + 2 * PAD) * SCALE;
-  canvas.height = (height + 2 * PAD) * SCALE;
+  canvas.width = (width + 2 * CARD_MARGIN) * SCALE;
+  canvas.height = (height + 2 * CARD_MARGIN) * SCALE;
   const g = canvas.getContext('2d')!;
   g.fillStyle = background;
   g.fillRect(0, 0, canvas.width, canvas.height);
-  g.drawImage(img, PAD * SCALE, PAD * SCALE, width * SCALE, height * SCALE);
+  g.drawImage(img, CARD_MARGIN * SCALE, CARD_MARGIN * SCALE, width * SCALE, height * SCALE);
   return await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('no picture'))), 'image/png'));
 }
 
@@ -52,7 +52,7 @@ export function drawnCopy(el: Element): Element {
     const w = +(fo.getAttribute('width') ?? 0), h = +(fo.getAttribute('height') ?? 0);
     if (!chip || !w || !h) continue;
     const x = +(fo.getAttribute('x') ?? 0), y = +(fo.getAttribute('y') ?? 0), r = parseFloat(chip.style.borderRadius) || 0;
-    const rings = [...chip.style.boxShadow.matchAll(/(rgba?\([^)]*\))\s+0px\s+0px\s+0px\s+([\d.]+)px/g)].map((m) => ({ color: m[1], out: +m[2] }));
+    const rings = ringsOf(chip.style.boxShadow);
     const layers = [...rings.sort((a, b) => b.out - a.out), { color: chip.style.backgroundColor, out: 0 }].filter((l) => l.color && !/rgba\(0, 0, 0, 0\)|transparent/.test(l.color));
     for (const l of layers) {
       const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -67,7 +67,10 @@ export function drawnCopy(el: Element): Element {
   return copy;
 }
 
-const PAINT = [
+const ringsOf = (boxShadow: string) =>
+  [...boxShadow.matchAll(/(rgba?\([^)]*\))\s+0px\s+0px\s+0px\s+([\d.]+)px/g)].map((m) => ({ color: m[1], out: +m[2] }));
+
+const SVG_PAINT_PROPS = [
   'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-linecap',
   'stroke-linejoin', 'stroke-opacity', 'opacity', 'color', 'visibility', 'display', 'filter', 'clip-path', 'paint-order',
   'transform', 'transform-origin', 'transform-box', 'font-family', 'font-size', 'font-weight', 'font-style',
@@ -78,7 +81,7 @@ function styled(from: Element, copy: Element) {
   const cs = getComputedStyle(from);
   const to = (copy as HTMLElement | SVGElement).style;
   if (to) {
-    if (from instanceof SVGElement && !(from instanceof SVGSVGElement)) for (const p of PAINT) to.setProperty(p, cs.getPropertyValue(p));
+    if (from instanceof SVGElement && !(from instanceof SVGSVGElement)) for (const p of SVG_PAINT_PROPS) to.setProperty(p, cs.getPropertyValue(p));
     else for (let i = 0; i < cs.length; i++) to.setProperty(cs[i], cs.getPropertyValue(cs[i]));
   }
   for (let i = 0; i < from.children.length; i++) styled(from.children[i], copy.children[i]);

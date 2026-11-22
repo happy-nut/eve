@@ -13,18 +13,18 @@ export const customUrl = (c: CustomIcon) =>
 export const RANDOM_ICONS = ['📝', '📌', '📎', '📚', '📖', '📒', '📓', '🗂️', '🗒️', '💡', '🔥', '⭐', '✨', '🌟', '🎯', '🚀', '🛰️', '🧭', '🗺️', '🧩', '🧠', '🎨', '🎬', '🎧', '🎮', '🏗️', '🔧', '🛠️', '⚙️', '🔬', '🧪', '🧬', '💎', '🌱', '🌿', '🍀', '🌸', '🌊', '🌈', '☀️', '🌙', '⚡', '❄️', '🍎', '🍋', '🍉', '🥑', '🍕', '☕', '🍵', '🐢', '🐙', '🦊', '🐼', '🦉', '🐳', '🦋', '🏠', '🏔️', '🗽', '🎈', '🎁', '🏆', '🔑', '🔒', '💬', '📣', '🧲'];
 
 export const EMOJI_PAD = 1.4;
+const PRINT_SCALE = 3;
 const painted = new Map<string, string>();
 export function emojiImage(ch: string, size = 56): string {
   const key = `${ch}@${size}`;
   const had = painted.get(key);
   if (had !== undefined) return had;
-  const scale = 3;
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = Math.round(size * EMOJI_PAD) * scale;
+  canvas.width = canvas.height = Math.round(size * EMOJI_PAD) * PRINT_SCALE;
   const g = canvas.getContext('2d');
   let url = '';
   if (g) {
-    g.font = `${size * scale}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
+    g.font = `${size * PRINT_SCALE}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(ch, canvas.width / 2, canvas.height / 2);

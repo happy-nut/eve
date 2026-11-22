@@ -5,7 +5,7 @@
   import type { CalendarUI } from './lib/slash';
   import { chipLabel, dateLabel, isoDay, remindTime, monthGrid, monthName, sameMonth, shiftDays, shiftMonths, weekdayNames } from './lib/date';
 
-  let day = $state('');
+  let day = $state<string | null>(null);
   let today = $state('');
   let place = $state('');
   let pick: (iso: string) => void = () => {};
@@ -16,7 +16,7 @@
 
   export const ui: CalendarUI = {
     show(iso, rect, cb, at) {
-      day = iso ?? '';
+      day = iso || null;
       remind = !!at;
       today = isoDay(new Date());
       pick = cb;
@@ -25,22 +25,22 @@
     move: (n) => { if (day) day = shiftDays(day, n); },
     month: (n) => { if (day) day = shiftMonths(day, n); },
     select: () => { if (!day) return false; pick(day); return true; },
-    hide: () => { day = ''; },
-    visible: () => !!day,
+    hide: () => { day = null; },
+    visible: () => day !== null,
     place: (rect) => { place = placeAt(rect, 290, 250); },
   };
 
-  const grab = (run: () => void) => (e: MouseEvent) => { e.preventDefault(); run(); };
+  const onMouseDownKeepingCaret = (run: () => void) => (e: MouseEvent) => { e.preventDefault(); run(); };
 </script>
 
 {#if day}
   <div class="cal" style={place} transition:fly|global={caretIn}>
     <div class="cal-bar">
-      <button class="cal-step" aria-label="Previous month" onmousedown={grab(() => ui.month(-1))}>
+      <button class="cal-step" aria-label="Previous month" onmousedown={onMouseDownKeepingCaret(() => ui.month(-1))}>
         <svg viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5" /></svg>
       </button>
       <span class="cal-month">{monthName(day)}</span>
-      <button class="cal-step" aria-label="Next month" onmousedown={grab(() => ui.month(1))}>
+      <button class="cal-step" aria-label="Next month" onmousedown={onMouseDownKeepingCaret(() => ui.month(1))}>
         <svg viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5" /></svg>
       </button>
     </div>
@@ -53,7 +53,7 @@
             class:out={!sameMonth(d, day)}
             class:on={d === day}
             class:now={d === today}
-            onmousedown={grab(() => pick(d))}>{+d.slice(-2)}</button>
+            onmousedown={onMouseDownKeepingCaret(() => pick(d))}>{+d.slice(-2)}</button>
         {/each}
       {/each}
     </div>

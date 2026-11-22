@@ -18,8 +18,6 @@ export const memMark = (what: string) => { if (desktop) void invoke('mem_mark', 
 
 const LS = 'eve.notes.';
 
-let notesDir = '';
-
 export const storage = {
   async list(): Promise<string[]> {
     if (isTauri) return invoke<string[]>('list_notes');
@@ -32,11 +30,8 @@ export const storage = {
     localStorage.setItem(LS + id, text);
   },
   async path(): Promise<string> {
-    if (notesDir) return notesDir;
-    if (!isTauri) return (notesDir = 'localStorage');
-    const { invoke: inv, convertFileSrc } = await import('@tauri-apps/api/core');
-    convertFileSrcSync = convertFileSrc;
-    return (notesDir = await inv<string>('notes_path'));
+    if (!isTauri) return 'localStorage';
+    return (await assetMapper()).notesDir;
   },
 };
 
@@ -87,10 +82,16 @@ export const assetName = (src: string): string | null => (/^assets\//.test(src) 
 
 export function assetUrl(src: string | undefined): string | undefined {
   if (!src || !isTauri || /^(https?:|data:|asset:|file:)/.test(src)) return src;
-  if (!notesDir) return src;
-  return convertFileSrcSync(`${notesDir}/${onDisk(src)}`);
+  if (!mapper) return src;
+  return mapper.toUrl(`${mapper.notesDir}/${onDisk(src)}`);
 }
-let convertFileSrcSync: (p: string) => string = (p) => p;
+interface AssetMapper { notesDir: string; toUrl: (path: string) => string }
+let mapper: AssetMapper | null = null;
+async function assetMapper(): Promise<AssetMapper> {
+  if (mapper) return mapper;
+  const { invoke: inv, convertFileSrc } = await import('@tauri-apps/api/core');
+  return (mapper = { notesDir: await inv<string>('notes_path'), toUrl: convertFileSrc });
+}
 
 export async function saveAsset(file: File | Blob): Promise<string> {
   if (!isTauri) {
@@ -102,7 +103,7 @@ export async function saveAsset(file: File | Blob): Promise<string> {
   const named = file instanceof File ? /\.([a-z0-9]+)$/i.exec(file.name)?.[1].toLowerCase() : undefined;
   const ext = named ?? (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg');
   const { invoke: inv } = await import('@tauri-apps/api/core');
-  await storage.path();
+  await assetMapper();
   return inv<string>('save_asset', new Uint8Array(await file.arrayBuffer()), { headers: { 'x-ext': ext } });
 }
 
@@ -123,7 +124,7 @@ export async function pickImage(): Promise<string | null> {
   const { open } = await import('@tauri-apps/plugin-dialog');
   const path = await open({ multiple: false, filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic'] }] });
   if (!path) return null;
-  await storage.path();
+  await assetMapper();
   return invoke<string>('import_asset', { src: path });
 }
 
@@ -143,8 +144,7 @@ export async function qlPreview(src: string): Promise<string | null> {
   if (!isTauri || !name) return null;
   try {
     const path = await invoke<string>('ql_preview', { name });
-    await storage.path();
-    return convertFileSrcSync(path);
+    return (await assetMapper()).toUrl(path);
   } catch {
     return null;
   }
@@ -155,7 +155,7 @@ export async function pickVideo(): Promise<string | null> {
   const { open } = await import('@tauri-apps/plugin-dialog');
   const path = await open({ multiple: false, filters: [{ name: 'Videos', extensions: ['mp4', 'mov', 'm4v', 'webm'] }] });
   if (!path) return null;
-  await storage.path();
+  await assetMapper();
   return invoke<string>('import_asset', { src: path });
 }
 
@@ -308,24 +308,26 @@ export const defaultApp = {
   set: (on: boolean) => (isTauri ? invoke<void>('set_default_for_markdown', { on }) : Promise.reject(new Error('desktop only'))),
 };
 
-export interface McpClient { id: string; name: string; installed: boolean; connected: boolean; stale: boolean }
+export interface McpClient { id: string; name: string; installed: boolean; status: 'connected' | 'stale' | 'off' }
 export const mcp = {
   clients: () => (desktop ? invoke<McpClient[]>('mcp_clients') : Promise.resolve([] as McpClient[])),
   connect: (on: boolean) => (desktop ? invoke<McpClient[]>('mcp_connect', { on }) : Promise.reject(new Error('desktop only'))),
 };
 
+const runFromSource = () => import.meta.env.DEV;
+
 export const autostart = {
   async get() { if (!desktop) return false; return (await import('@tauri-apps/plugin-autostart')).isEnabled(); },
-  async set(on: boolean, dev = import.meta.env.DEV) {
-    if (!desktop || dev) return;
+  async set(on: boolean) {
+    if (!desktop || runFromSource()) return;
     const m = await import('@tauri-apps/plugin-autostart');
     await (on ? m.enable() : m.disable());
   },
-  async keep(dev = import.meta.env.DEV) {
-    if (!desktop || dev) return;
+  async keep() {
+    if (!desktop || runFromSource()) return;
     if (!localStorage.getItem('eve.autostart.init')) {
-      await autostart.set(true, dev).finally(() => localStorage.setItem('eve.autostart.init', '1'));
-    } else if (await autostart.get()) await autostart.set(true, dev);
+      await autostart.set(true).finally(() => localStorage.setItem('eve.autostart.init', '1'));
+    } else if (await autostart.get()) await autostart.set(true);
   },
 };
 
@@ -383,7 +385,7 @@ export async function revealWhenDrawn(n: number) {
 }
 if (desktop) void import('@tauri-apps/api/event').then(({ listen }) => listen<number>('eve-reveal', (e) => void revealWhenDrawn(e.payload)));
 let ground = '';
-export async function paintGround() {
+export async function paintWindowBackground() {
   if (!desktop) return;
   const m = getComputedStyle(document.documentElement).backgroundColor.match(/\d+/g);
   if (!m || m.join() === ground) return;
@@ -440,8 +442,8 @@ export async function onBack(cb: () => void): Promise<() => void> {
   return () => void l.unregister();
 }
 
-export async function setGlobalHotkey(keys: string, dev = import.meta.env.DEV): Promise<string | null> {
-  if (!desktop || dev) return null;
+export async function setGlobalHotkey(keys: string): Promise<string | null> {
+  if (!desktop || runFromSource()) return null;
   const gs = await import('@tauri-apps/plugin-global-shortcut');
   await gs.unregisterAll();
   if (!keys) return null;

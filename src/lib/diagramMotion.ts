@@ -4,8 +4,10 @@
 // along its lines, a box pointed at lights the way through it, and ▶ tells it a step at a time. Nothing is hidden at
 // rest: the finished picture is what is drawn, and the motion only plays over it (none with the system's Reduce motion).
 
-const UNIT = 0.6;
-const MAX = 2.4;
+const LEVEL_S = 0.6;
+const INTRO_MAX_S = 2.4;
+const LIFELINES_AT_S = 0.2, MESSAGES_FROM_S = 0.4;
+const LINE_AFTER_SOURCE_S = 0.25, LINE_BEFORE_TARGET_S = 0.4, LABEL_AFTER_LINE_S = 0.15;
 const FADE = 400, POP = 520;
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -15,11 +17,11 @@ export function timeline(svg: SVGSVGElement): Step[] {
   const kind = svg.getAttribute('aria-roledescription');
   if (kind === 'sequence') {
     const msgs = [...svg.querySelectorAll<SVGLineElement | SVGPathElement>(':is(line, path)[class^="messageLine"]')];
-    const u = Math.min(UNIT, MAX / Math.max(1, msgs.length));
+    const u = Math.min(LEVEL_S, INTRO_MAX_S / Math.max(1, msgs.length));
     const steps: Step[] = [...svg.querySelectorAll('rect.actor, text.actor, g.actor-man')].map((el) => ({ el, at: 0, stage: 0 }));
-    for (const el of svg.querySelectorAll('line.actor-line')) steps.push({ el, at: 0.2, stage: 0 });
+    for (const el of svg.querySelectorAll('line.actor-line')) steps.push({ el, at: LIFELINES_AT_S, stage: 0 });
     msgs.forEach((line, i) => {
-      const at = 0.4 + i * u;
+      const at = MESSAGES_FROM_S + i * u;
       steps.push({ el: line, at, stage: i + 1, line });
       const t = line.previousElementSibling;
       if (t?.classList.contains('messageText')) steps.push({ el: t, at, stage: i + 1 });
@@ -30,15 +32,15 @@ export function timeline(svg: SVGSVGElement): Step[] {
   if (!parts) return [];
   const { nodes, lines, labels } = parts;
   const level = numbered(levels([...nodes.keys()], lines.flatMap((l) => (l.ends ? [l.ends] : []))), nodes);
-  const u = Math.min(UNIT, MAX / (Math.max(0, ...level.values()) + 1));
+  const u = Math.min(LEVEL_S, INTRO_MAX_S / (Math.max(0, ...level.values()) + 1));
   const steps: Step[] = [...nodes].map(([id, el]) => ({ el, at: level.get(id)! * u, stage: level.get(id)! }));
   for (const { p, ends } of lines) {
     const [s, d] = ends ?? ['', ''];
-    const at = Math.max((level.get(s) ?? 0) * u + 0.25 * (u / UNIT), (level.get(d) ?? 0) * u - 0.4 * (u / UNIT));
+    const at = Math.max((level.get(s) ?? 0) * u + LINE_AFTER_SOURCE_S * (u / LEVEL_S), (level.get(d) ?? 0) * u - LINE_BEFORE_TARGET_S * (u / LEVEL_S));
     const stage = Math.max(level.get(s) ?? 0, level.get(d) ?? 0);
     steps.push({ el: p, at, stage, line: p });
     const label = labels.get(p.dataset.id!);
-    if (label) steps.push({ el: label, at: at + 0.15, stage });
+    if (label) steps.push({ el: label, at: at + LABEL_AFTER_LINE_S, stage });
   }
   return steps;
 }
@@ -111,7 +113,14 @@ const len = (l: SVGPathElement | SVGLineElement) => {
 
 export const DRAWING = 'eve-drawing';
 const heads = new WeakMap<Element, ReturnType<typeof setTimeout>>();
-const settle = (svg: SVGSVGElement) => { for (const l of svg.querySelectorAll(`.${DRAWING}`)) { clearTimeout(heads.get(l)); heads.delete(l); l.classList.remove(DRAWING); } };
+const showHead = (line: Element) => { clearTimeout(heads.get(line)); heads.delete(line); line.classList.remove(DRAWING); };
+const restoreHeads = (svg: SVGSVGElement) => { for (const l of svg.querySelectorAll(`.${DRAWING}`)) showHead(l); };
+function hideHeadUntil(line: Element, ms: number) {
+  clearTimeout(heads.get(line));
+  line.classList.add(DRAWING);
+  heads.set(line, setTimeout(() => showHead(line), ms));
+  return () => showHead(line);
+}
 
 function enter({ el, line }: Step, delay: number): Animation {
   if (!line && el.matches('g.node, rect.actor, g.actor-man')) {
@@ -124,16 +133,12 @@ function enter({ el, line }: Step, delay: number): Animation {
     { strokeDasharray: `${n}`, strokeDashoffset: `${n}` },
     { strokeDasharray: `${n}`, strokeDashoffset: '0' },
   ], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' });
-  clearTimeout(heads.get(line));
-  line.classList.add(DRAWING);
-  const back = () => { clearTimeout(heads.get(line)); heads.delete(line); line.classList.remove(DRAWING); };
-  heads.set(line, setTimeout(back, delay + FADE));
-  a.addEventListener?.('cancel', back);
+  a.addEventListener?.('cancel', hideHeadUntil(line, delay + FADE));
   return a;
 }
 
 export function stepper(svg: SVGSVGElement): { count: number; show(k: number): void } {
-  settle(svg);
+  restoreHeads(svg);
   const steps = timeline(svg);
   const count = steps.length ? Math.max(...steps.map((s) => s.stage)) + 1 : 0;
   let shown = count - 1;
@@ -151,15 +156,15 @@ export function stepper(svg: SVGSVGElement): { count: number; show(k: number): v
   };
 }
 
-export function drawIn(svg: SVGSVGElement, played?: () => void): () => void {
+export function drawIn(svg: SVGSVGElement, onIntroEnd?: () => void): () => void {
   if (reduced() || typeof IntersectionObserver === 'undefined' || !svg.animate) return () => {};
-  settle(svg);
+  restoreHeads(svg);
   const steps = timeline(svg);
   if (!steps.length) return () => {};
   const running: Animation[] = [];
   const play = () => {
     for (const s of steps) running.push(enter(s, s.at * 1000));
-    Promise.all(running.map((a) => a.finished)).then(() => played?.(), () => {});
+    Promise.all(running.map((a) => a.finished)).then(() => onIntroEnd?.(), () => {});
   };
   const io = new IntersectionObserver(([e]) => { if (e?.isIntersecting) { io.disconnect(); play(); } }, { threshold: 0.3 });
   io.observe(svg);
@@ -167,12 +172,8 @@ export function drawIn(svg: SVGSVGElement, played?: () => void): () => void {
 }
 
 
-export function focus(svg: SVGSVGElement): () => void {
-  const parts = flowParts(svg);
-  if (!parts) return () => {};
-  const { nodes, lines, labels } = parts;
-  const ids = new Map([...nodes].map(([id, el]) => [el, id]));
-  const back = new Set<(typeof lines)[number]>(), seen = new Set<string>(), stack = new Set<string>();
+function loopLines<L extends { ends: [string, string] | null }>(nodes: Map<string, Element>, lines: L[]): Set<L> {
+  const back = new Set<L>(), seen = new Set<string>(), stack = new Set<string>();
   const walk = (at: string) => {
     seen.add(at); stack.add(at);
     for (const l of lines) if (l.ends?.[0] === at) {
@@ -183,7 +184,16 @@ export function focus(svg: SVGSVGElement): () => void {
   };
   const pointed = new Set(lines.map((l) => l.ends?.[1]));
   for (const id of [...nodes.keys()].sort((a, b) => +pointed.has(a) - +pointed.has(b))) if (!seen.has(id)) walk(id);
-  const on = lines.filter((l) => l.ends && !back.has(l));
+  return back;
+}
+
+export function focus(svg: SVGSVGElement): () => void {
+  const parts = flowParts(svg);
+  if (!parts) return () => {};
+  const { nodes, lines, labels } = parts;
+  const ids = new Map([...nodes].map(([id, el]) => [el, id]));
+  const loops = loopLines(nodes, lines);
+  const on = lines.filter((l) => l.ends && !loops.has(l));
   const reach = (from: string, way: 0 | 1) => {
     const got = new Set([from]);
     for (let todo = [from]; todo.length;) {
@@ -222,7 +232,7 @@ export function focus(svg: SVGSVGElement): () => void {
   return () => { clear(); svg.removeEventListener('pointerover', over); svg.removeEventListener('pointerleave', clear); };
 }
 
-const BEAT = 900;
+const STEP_MS = 900;
 export function play(svg: SVGSVGElement, done: () => void): () => void {
   const s = stepper(svg), steps = timeline(svg);
   if (!s.count) { done(); return () => {}; }
@@ -247,7 +257,7 @@ export function play(svg: SVGSVGElement, done: () => void): () => void {
     if (++k >= s.count) return end();
     s.show(k);
     mark();
-  }, BEAT);
+  }, STEP_MS);
   return end;
 }
 

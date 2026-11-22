@@ -6,17 +6,22 @@
   import { ui } from './lib/ui.svelte';
   import { isMobile } from './lib/platform';
   import { CUSTOM_ICONS, customUrl, randomIcon } from './lib/icons';
-  import { floatAt, held, screenInsets, viewSize } from './lib/popup';
+  import { floatAt, lastShown, screenInsets, viewSize } from './lib/popup';
   import { claimKeys, composing } from './lib/keys';
 
-  const req = $derived.by(held(() => ui.emoji));
+  const req = $derived.by(lastShown(() => ui.emoji));
   let el: HTMLElement & { i18n?: unknown };
   const W = 352, H = 400;
-  const below = $derived(floatAt(req.at, { w: W, h: H }, { gap: 6 }));
-  const at = $derived(below.maxHeight >= H ? below : (() => { const s = floatAt(req.at, { w: W, h: H }, { gap: 6, prefer: 'side' }); return s.side === 'left' || s.side === 'right' ? { ...s, maxHeight: H } : below; })());
-  const x = $derived(at.left), y = $derived(at.maxHeight >= H ? at.top : Math.max(screenInsets().top, viewSize().h - screenInsets().bottom - H));
+  function placePicker(from: typeof req.at) {
+    const below = floatAt(from, { w: W, h: H }, { gap: 6 });
+    if (below.maxHeight >= H) return { x: below.left, y: below.top };
+    const side = floatAt(from, { w: W, h: H }, { gap: 6, prefer: 'side' });
+    if (side.side === 'left' || side.side === 'right') return { x: side.left, y: side.top };
+    return { x: below.left, y: Math.max(screenInsets().top, viewSize().h - screenInsets().bottom - H) };
+  }
+  const { x, y } = $derived(placePicker(req.at));
 
-  const en = {
+  const ENGLISH_LABELS = {
     categoriesLabel: 'Categories', emojiUnsupportedMessage: 'Your browser does not support color emoji.',
     favoritesLabel: 'Recently used', loadingMessage: 'Loading…', networkErrorMessage: 'Could not load emoji.',
     regionLabel: 'Emoji picker', searchDescription: 'When search results are available, press up or down to select and enter to choose.',
@@ -30,7 +35,7 @@
   };
   $effect(() => {
     if (!el) return;
-    el.i18n = en;
+    el.i18n = ENGLISH_LABELS;
     (el as any).customEmoji = CUSTOM_ICONS.map((c) => ({ name: c.label, shortcodes: [c.name], url: customUrl(c), category: 'Eve' }));
     // the element always lists custom icons first; move that tab to the far right and mark the
     // selected tab by background instead of the sliding indicator (which assumes source order)
@@ -49,7 +54,7 @@
       if (!tab || !root?.querySelector('.tabpanel button.emoji')) { if (waits++ < 80) setTimeout(firstTab, 25); return; }
       const inGrid = !!root?.activeElement?.matches('button.emoji');
       if (root?.querySelector('.nav-button[data-group-id="-1"][aria-selected="true"]')) tab.click();
-      if (inGrid && root) void firstCellOnceDrawn(root, () => !root.activeElement?.matches('button.emoji') || !(root.activeElement as HTMLElement).offsetParent);
+      if (inGrid && root) keepKeyboardInGrid(root);
       else focusSearch();
     };
     firstTab();
@@ -68,12 +73,51 @@
     const d = (e as CustomEvent).detail;
     ui.emojiDone(d.unicode ?? `:${d.emoji.shortcodes[0]}:`);
   }
+  const cellGone = (root: ShadowRoot) => !root.activeElement?.matches('button.emoji') || !(root.activeElement as HTMLElement).offsetParent;
+  const keepKeyboardInGrid = (root: ShadowRoot) => void firstCellOnceDrawn(root, () => cellGone(root));
   async function firstCellOnceDrawn(root: ShadowRoot, waiting: () => boolean) {
     for (let waited = 0; waited < 5000; waited += 50) {
       await new Promise((r) => setTimeout(r, 50));
       if (!root.host.isConnected || !waiting()) return;
       const first = [...root.querySelectorAll<HTMLButtonElement>('.tabpanel button.emoji')].find((c) => c.offsetParent);
       if (first) { first.focus(); first.scrollIntoView({ block: 'nearest' }); void showCell(first); return; }
+    }
+  }
+  function cellOnAdjacentLine(cells: HTMLButtonElement[], from: HTMLButtonElement, dir: 1 | -1) {
+    const r = from.getBoundingClientRect();
+    let best: HTMLButtonElement | null = null, bestTop = 0, bestDx = Infinity;
+    for (const c of cells) {
+      const b = c.getBoundingClientRect();
+      if (dir * (b.top - r.top) < r.height / 2) continue;
+      const dx = Math.abs(b.left - r.left);
+      if (!best || dir * (b.top - bestTop) < -1 || (Math.abs(b.top - bestTop) <= 1 && dx < bestDx)) { best = c; bestTop = b.top; bestDx = dx; }
+    }
+    return best;
+  }
+  const take = (e: KeyboardEvent) => { e.preventDefault(); e.stopPropagation(); };
+  function goTo(e: KeyboardEvent, cell: HTMLElement) { take(e); cell.focus(); cell.scrollIntoView({ block: 'nearest' }); void showCell(cell); }
+  function onSearchKey(e: KeyboardEvent, root: ShadowRoot, input: HTMLInputElement | null, cells: HTMLButtonElement[]) {
+    if (e.key === 'ArrowDown' && !composing(e)) {
+      if (cells.length) goTo(e, cells[0]);
+      else { take(e); void firstCellOnceDrawn(root, () => root.activeElement === input); }
+    }
+    else if (e.key === 'Enter' && !composing(e) && input?.value.trim() && root.querySelector('#search-results') && cells.length) {
+      take(e); cells[0].click();
+    }
+  }
+  function onCellKey(e: KeyboardEvent, root: ShadowRoot, input: HTMLInputElement, cells: HTMLButtonElement[], i: number) {
+    if (e.key === 'ArrowRight') { if (i + 1 < cells.length) goTo(e, cells[i + 1]); else e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { if (i > 0) goTo(e, cells[i - 1]); else goTo(e, input); }
+    else if (e.key === 'ArrowDown') { const c = cellOnAdjacentLine(cells, cells[i], 1); if (c) goTo(e, c); else { take(e); void openAdjacentCategory(root, 1, cells[i]); } }
+    else if (e.key === 'ArrowUp') {
+      const c = cellOnAdjacentLine(cells, cells[i], -1);
+      if (c) goTo(e, c);
+      else { take(e); void openAdjacentCategory(root, -1, cells[i]).then((moved) => moved || input.focus()); }
+    }
+    else if (e.key === 'Enter' || e.key === ' ') { take(e); cells[i].click(); }
+    else if (e.key === 'Backspace' || e.key.length === 1 || e.key === 'Process' || composing(e)) {
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
     }
   }
   function onGridKey(e: KeyboardEvent) {
@@ -83,45 +127,11 @@
     const cells = [...root.querySelectorAll<HTMLButtonElement>('.tabpanel button.emoji')].filter((c) => c.offsetParent);
     const at = e.composedPath()[0];
     const i = cells.indexOf(at as HTMLButtonElement);
-    const go = (cell: HTMLElement) => { e.preventDefault(); e.stopPropagation(); cell.focus(); cell.scrollIntoView({ block: 'nearest' }); void showCell(cell); };
-    if (at === input) {
-      if (e.key === 'ArrowDown' && !composing(e)) {
-        if (cells.length) go(cells[0]);
-        else { e.preventDefault(); e.stopPropagation(); void firstCellOnceDrawn(root, () => root.activeElement === input); }
-      }
-      else if (e.key === 'Enter' && !composing(e) && input?.value.trim() && root.querySelector('#search-results') && cells.length) {
-        e.preventDefault(); e.stopPropagation(); cells[0].click();
-      }
-      return;
-    }
-    if (i < 0 || !input) return;
-    const line = (dir: 1 | -1) => {
-      const r = cells[i].getBoundingClientRect();
-      let best: HTMLButtonElement | null = null, bestTop = 0, bestDx = Infinity;
-      for (const c of cells) {
-        const b = c.getBoundingClientRect();
-        if (dir * (b.top - r.top) < r.height / 2) continue;
-        const dx = Math.abs(b.left - r.left);
-        if (!best || dir * (b.top - bestTop) < -1 || (Math.abs(b.top - bestTop) <= 1 && dx < bestDx)) { best = c; bestTop = b.top; bestDx = dx; }
-      }
-      return best;
-    };
-    if (e.key === 'ArrowRight') { if (i + 1 < cells.length) go(cells[i + 1]); else e.preventDefault(); }
-    else if (e.key === 'ArrowLeft') { if (i > 0) go(cells[i - 1]); else go(input); }
-    else if (e.key === 'ArrowDown') { const c = line(1); if (c) go(c); else { e.preventDefault(); e.stopPropagation(); void category(root, 1, cells[i]); } }
-    else if (e.key === 'ArrowUp') {
-      const c = line(-1);
-      if (c) go(c);
-      else { e.preventDefault(); e.stopPropagation(); void category(root, -1, cells[i]).then((moved) => moved || input.focus()); }
-    }
-    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); cells[i].click(); }
-    else if (e.key === 'Backspace' || e.key.length === 1 || e.key === 'Process' || composing(e)) {
-      input.focus();
-      input.setSelectionRange(input.value.length, input.value.length);
-    }
+    if (at === input) onSearchKey(e, root, input, cells);
+    else if (i >= 0 && input) onCellKey(e, root, input, cells, i);
   }
 
-  async function category(root: ShadowRoot, dir: 1 | -1, from: HTMLElement): Promise<boolean> {
+  async function openAdjacentCategory(root: ShadowRoot, dir: 1 | -1, from: HTMLElement): Promise<boolean> {
     if (root.querySelector('#search-results')) return false;
     const tabs = [...root.querySelectorAll<HTMLButtonElement>('.nav-button')]
       .sort((a, b) => Number(a.dataset.groupId === '-1') - Number(b.dataset.groupId === '-1'));
@@ -164,7 +174,7 @@
 
 <div class="backdrop" transition:fade|global={scrimFade} onmousedown={() => ui.emojiDone(null)} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="panel" style="left: {x}px; top: {y}px; width: {W}px" transition:scale|global={popIn} role="dialog" aria-label="Choose an icon" onkeydowncapture={onGridKey}>
+<div class="panel" style="left: {x}px; top: {y}px; width: {W}px; --picker-h: {H}px" transition:scale|global={popIn} role="dialog" aria-label="Choose an icon" onkeydowncapture={onGridKey}>
   <header>
     {#if isMobile}
       <button class="act back" aria-label="Close" onclick={() => ui.emojiDone(null)}>
@@ -197,7 +207,7 @@
 <style>
   .backdrop { position: fixed; inset: 0; z-index: var(--z-popover-scrim); }
   .panel {
-    position: fixed; z-index: var(--z-popover); overflow: hidden;
+    position: fixed; z-index: var(--z-popover); overflow: hidden; display: flex; flex-direction: column;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
     transform-origin: top left;
   }
@@ -215,11 +225,10 @@
   :global(html.mobile) .act svg { width: 22px; height: 22px; }
   :global(html.mobile) .act.back { margin: 0 2px 0 -10px; }
   :global(html.mobile) .tab { flex: 1; }
-  :global(html.mobile) .panel { display: flex; flex-direction: column; }
-  :global(html.mobile) emoji-picker { flex: 1; min-height: 0; height: auto; }
+  :global(html:not(.mobile)) .panel { height: var(--picker-h); }
   :global(html.mobile) .preview { display: none; }
   emoji-picker {
-    width: 100%; height: 312px;
+    width: 100%; flex: 1; min-height: 0; height: auto;
     --background: var(--bg-pop); --border-color: var(--line); --border-size: 0;
     --indicator-color: var(--accent); --input-border-color: transparent; --input-font-color: var(--fg);
     --input-placeholder-color: var(--fg-dim); --input-border-radius: 8px; --input-padding: 7px 10px; --input-font-size: 13px;

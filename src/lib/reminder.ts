@@ -4,7 +4,7 @@ import { dailyId, dayKey, isWritten } from './daily';
 import { isMobile, isTauri, widget } from './platform';
 import { remindersIn } from './date';
 
-const LAST = 'eve.reminder.last';
+const DAILY_REMINDED_DAY_KEY = 'eve.reminder.last';
 
 export function syncPhoneReminder() {
   const s = appearance.s;
@@ -18,7 +18,7 @@ async function look() {
   const now = new Date(), key = dayKey(now);
   const [h, m] = s.reminderAt.split(':').map(Number);
   if (now.getHours() * 60 + now.getMinutes() < h * 60 + m) return;
-  try { if (localStorage.getItem(LAST) === key) return; localStorage.setItem(LAST, key); } catch { return; }
+  try { if (localStorage.getItem(DAILY_REMINDED_DAY_KEY) === key) return; localStorage.setItem(DAILY_REMINDED_DAY_KEY, key); } catch { return; }
   const n = notes.all.find((x) => x.id === dailyId(key) && !x.deleted);
   if (n && isWritten(n.body, notes.dailyTemplate, key)) return;
   const { sendNotification, isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification');
@@ -26,7 +26,7 @@ async function look() {
   sendNotification({ title: "Today's daily note", body: 'Nothing written yet today. A line or two?' });
 }
 
-const LINES = 'eve.remind.through';
+const NOTE_REMINDERS_RANG_THROUGH_KEY = 'eve.remind.through';
 
 export function dueReminders(all: readonly { id: string; body: string; deleted: boolean }[], since: number, now: number) {
   const from = Math.max(since, now - 86_400_000);
@@ -37,7 +37,7 @@ async function lookLines() {
   if (!notes.loaded) return;
   const now = Date.now();
   let since: number;
-  try { since = Number(localStorage.getItem(LINES)) || now; localStorage.setItem(LINES, String(now)); } catch { return; }
+  try { since = Number(localStorage.getItem(NOTE_REMINDERS_RANG_THROUGH_KEY)) || now; localStorage.setItem(NOTE_REMINDERS_RANG_THROUGH_KEY, String(now)); } catch { return; }
   const due = dueReminders(notes.all, since, now);
   if (!due.length) return;
   const { sendNotification, isPermissionGranted } = await import('@tauri-apps/plugin-notification');

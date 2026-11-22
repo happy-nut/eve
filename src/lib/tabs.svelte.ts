@@ -12,19 +12,24 @@ class Tabs {
 
   get front(): number { return this.list.findIndex((t) => t.id === notes.currentId); }
 
+  private restoreDeletedTab(cur: string, back: { at: number; by: string | null }) {
+    const i = Math.min(back.at, this.list.length);
+    if (back.by && this.list[i]?.id === back.by) this.list[i] = { id: cur };
+    else this.list.splice(i, 0, { id: cur });
+  }
+
+  private replaceFrontTab(prev: string, at: number, cur: string, live: (id: string) => boolean) {
+    if (!live(prev)) this.gone.set(prev, { at, by: cur });
+    this.list[at] = { id: cur };
+  }
+
   follow(prev: string | null) {
-    const live = (id: string) => (id === CALENDAR && appearance.s.dailyNotes) || id === notes.currentId || notes.all.some((n) => n.id === id && !n.deleted);
+    const live = (id: string) => (id === CALENDAR && appearance.s.dailyNotes) || id === notes.currentId || notes.exists(id);
     const cur = notes.currentId;
     const at = prev ? this.list.findIndex((t) => t.id === prev && !t.pinned) : -1;
     const back = cur ? this.gone.get(cur) : undefined;
-    if (cur && back && !this.list.some((t) => t.id === cur)) {
-      const i = Math.min(back.at, this.list.length);
-      if (back.by && this.list[i]?.id === back.by) this.list[i] = { id: cur };
-      else this.list.splice(i, 0, { id: cur });
-    } else if (cur && at >= 0 && !this.list.some((t) => t.id === cur)) {
-      if (!live(prev!)) this.gone.set(prev!, { at, by: cur });
-      this.list[at] = { id: cur };
-    }
+    if (cur && back && !this.list.some((t) => t.id === cur)) this.restoreDeletedTab(cur, back);
+    else if (cur && at >= 0 && !this.list.some((t) => t.id === cur)) this.replaceFrontTab(prev!, at, cur, live);
     if (cur) this.gone.delete(cur);
     this.list.forEach((t, i) => { if (!live(t.id)) this.gone.set(t.id, { at: i, by: null }); });
     this.list = this.list.filter((t) => live(t.id));
@@ -50,7 +55,7 @@ class Tabs {
   reopen(): boolean {
     while (this.closed.length) {
       const t = this.closed.pop()!;
-      if (t.id !== CALENDAR && !notes.all.some((n) => n.id === t.id && !n.deleted)) continue;
+      if (t.id !== CALENDAR && !notes.exists(t.id)) continue;
       this.open(t.id);
       return true;
     }

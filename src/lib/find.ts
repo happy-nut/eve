@@ -3,7 +3,7 @@ import { Plugin, PluginKey, TextSelection, type Transaction } from '@tiptap/pm/s
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { chipLabel } from './date';
+import { chipAttrs, chipLabel } from './date';
 
 export const FIND = new PluginKey<FindState>('eve-find');
 
@@ -12,7 +12,7 @@ export interface FindState { query: string; index: number; hits: Hit[] }
 
 function shown(node: PMNode): string {
   if (node.type.name === 'wikiLink') return node.attrs.alias || node.attrs.title || '';
-  if (node.type.name === 'dateMention') return chipLabel(node.attrs);
+  if (node.type.name === 'dateMention') return chipLabel(chipAttrs(node.attrs));
   if (node.type.name === 'hardBreak') return '\n';
   return '\ufffc';
 }
@@ -91,13 +91,13 @@ export const Find = Extension.create({
 
 export const findState = (editor: Editor): FindState => FIND.getState(editor.state) ?? { query: '', index: 0, hits: [] };
 
-const home = new WeakMap<Editor, { anchor: number; head: number }>();
+const caretBeforeFind = new WeakMap<Editor, { anchor: number; head: number }>();
 
 export function setQuery(editor: Editor, query: string) {
-  if (!findState(editor).query || !home.has(editor)) home.set(editor, { anchor: editor.state.selection.anchor, head: editor.state.selection.head });
+  if (!findState(editor).query || !caretBeforeFind.has(editor)) caretBeforeFind.set(editor, { anchor: editor.state.selection.anchor, head: editor.state.selection.head });
   editor.view.dispatch(editor.state.tr.setMeta(FIND, { query, index: 0 }));
-  show(editor, 0);
-  const was = home.get(editor)!;
+  selectHit(editor, 0);
+  const was = caretBeforeFind.get(editor)!;
   if (findState(editor).hits.length) return;
   const max = editor.state.doc.content.size;
   const at = (n: number) => editor.state.doc.resolve(Math.min(Math.max(0, n), max));
@@ -107,7 +107,7 @@ export function setQuery(editor: Editor, query: string) {
 export function step(editor: Editor, dir: 1 | -1) {
   const { hits, index } = findState(editor);
   if (!hits.length) return;
-  show(editor, (index + dir + hits.length) % hits.length);
+  selectHit(editor, (index + dir + hits.length) % hits.length);
 }
 
 /**
@@ -117,17 +117,17 @@ export function step(editor: Editor, dir: 1 | -1) {
  * It only scrolls when the match is not comfortably on screen: the bar covers the top of the note, and
  * a page that jumps at every keystroke is worse than one that stays put.
  */
-const BAR = 96;
+const FIND_BAR_FALLBACK_BOTTOM = 96;
 function reveal(editor: Editor, from: number) {
   const box = editor.view.coordsAtPos(from);
-  const bar = document.querySelector('.find')?.getBoundingClientRect().bottom ?? BAR;
-  if (box.top > Math.max(BAR, bar + 4) && box.bottom < window.innerHeight - 24) return;
+  const bar = document.querySelector('.find')?.getBoundingClientRect().bottom ?? FIND_BAR_FALLBACK_BOTTOM;
+  if (box.top > Math.max(FIND_BAR_FALLBACK_BOTTOM, bar + 4) && box.bottom < window.innerHeight - 24) return;
   const dom = editor.view.domAtPos(from).node;
   const el = dom.nodeType === Node.TEXT_NODE ? dom.parentElement : (dom as HTMLElement);
   el?.scrollIntoView({ block: 'center' });
 }
 
-function show(editor: Editor, index: number) {
+function selectHit(editor: Editor, index: number) {
   const { hits } = findState(editor);
   const hit = hits[index];
   const tr = editor.state.tr.setMeta(FIND, { index });
@@ -158,7 +158,7 @@ export function replaceOne(editor: Editor, text: string) {
   const left = findState(editor).hits;
   if (!left.length) return;
   const next = left.findIndex((h) => h.from >= hit.from + text.length);
-  show(editor, next >= 0 ? next : 0);
+  selectHit(editor, next >= 0 ? next : 0);
 }
 
 export function replaceAll(editor: Editor, text: string) {

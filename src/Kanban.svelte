@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { flip } from 'svelte/animate';
   import { crossfade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
@@ -14,13 +14,15 @@
     template: () => CardTemplate | null; saveTemplate: (t: CardTemplate) => void;
     exit: (where: 'before' | 'after') => void; remove: () => void; undo: () => void; redo: () => void;
   } = $props();
-  // svelte-ignore state_referenced_locally
-  let columns = $state.raw(initial);
+  let columns = $state.raw(untrack(() => initial));
   export async function set(c: Column[]) {
     const a = document.activeElement as HTMLElement | null;
     columns = c;
     if (!a || !root?.contains(a)) return;
     await tick();
+    refocusById(a);
+  }
+  function refocusById(a: HTMLElement) {
     const now = document.activeElement as HTMLElement | null;
     const id = a.dataset.id ?? '', colId = a.closest<HTMLElement>('.kb-col')?.dataset.id ?? '';
     const leaving = (el: HTMLElement) => el.dataset.kb === 'card' && !columns.some((c) => c.cards.some((k) => k.id === el.dataset.id));
@@ -235,42 +237,39 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="kb-wrap" bind:this={root} onkeydown={onKey} onfocusin={(e) => { last = e.target as HTMLElement; focused = last.dataset.kb ?? null; }} onfocusout={() => (focused = null)}>
+<div class="kb-wrap" bind:this={root} onfocusin={(e) => { last = e.target as HTMLElement; focused = last.dataset.kb ?? null; }} onfocusout={() => (focused = null)}>
 <div class="kb" {@attach scrollHint}>
   {#each view as col (col.id)}
-    <div class="kb-col" data-id={col.id} animate:flip={{ duration: 220 }} ondragover={(e) => dragOver(e, col)} ondrop={drop}>
+    <div class="kb-col" data-id={col.id} role="group" aria-label={col.title || 'Untitled'} animate:flip={{ duration: 220 }} ondragover={(e) => dragOver(e, col)} ondrop={drop}>
       {#if editing === col.id}
         <input class="kb-rename" value={col.title} use:focusInput onkeydown={(e) => renameKey(e, col)} onblur={(e) => editing === col.id && rename(col, e.currentTarget.value, false)} spellcheck="false" />
       {:else}
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <div class="kb-head" data-kb="head" tabindex="0" role="button" onclick={() => (editing = col.id)}>
+        <div class="kb-head" data-kb="head" tabindex="0" role="button" onclick={() => (editing = col.id)} onkeydown={onKey}>
           <span class="kb-title" class:dim={!col.title}>{col.title || 'Untitled'}</span>
           <span class="kb-count">{col.cards.length}</span>
           <button class="icon kb-del" tabindex="-1" aria-label="Delete column" data-tip="Delete column" onclick={(e) => { e.stopPropagation(); removeColumn(col); }}>×</button>
         </div>
       {/if}
       {#each col.cards as card (card.id)}
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div class="kb-card" class:ghost={dragging?.id === card.id} data-kb="card" data-id={card.id} tabindex="0" role="button" draggable="true"
           animate:flip={{ duration: 220 }} in:receive={{ key: card.id }} out:send={{ key: card.id }}
-          ondragstart={(e) => dragStart(e, card, col)} ondragend={dragEnd} onclick={() => open(card)}>
+          ondragstart={(e) => dragStart(e, card, col)} ondragend={dragEnd} onclick={() => open(card)} onkeydown={onKey}>
           <span class="kb-ctitle" class:dim={!card.title}>{card.title || 'Untitled'}</span>
           {#if card.body}<span class="kb-cbody">{firstLine(card.body)}</span>{/if}
         </div>
       {/each}
-      <button class="kb-add" data-kb="add" onclick={() => addCard(col)}>+ New</button>
+      <button class="kb-add" data-kb="add" onclick={() => addCard(col)} onkeydown={onKey}>+ New</button>
     </div>
   {/each}
   <div class="kb-end">
-    <button class="icon kb-addcol" class:on={focused === 'addcol'} data-kb="addcol" aria-label="Add column" data-tip="Add column" onclick={addColumn}>+</button>
+    <button class="icon kb-addcol" class:on={focused === 'addcol'} data-kb="addcol" aria-label="Add column" data-tip="Add column" onclick={addColumn} onkeydown={onKey}>+</button>
   </div>
 </div>
   <div class="kb-foot">
-    <button class="icon kb-tpl" tabindex="-1" aria-label="Card template" data-tip="Card template" onclick={editTemplate}>
+    <button class="icon kb-tpl" tabindex="-1" aria-label="Card template" data-tip="Card template" onclick={editTemplate} onkeydown={onKey}>
       <svg viewBox="0 0 16 16"><path d="M4 1.5h5L12.5 5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h3"/></svg>
     </button>
-    <button class="icon kb-x" class:on={focused === 'x'} data-kb="x" tabindex="-1" aria-label="Delete board" data-tip="Delete board" onclick={remove}>×</button>
+    <button class="icon kb-x" class:on={focused === 'x'} data-kb="x" tabindex="-1" aria-label="Delete board" data-tip="Delete board" onclick={remove} onkeydown={onKey}>×</button>
   </div>
 </div>
 

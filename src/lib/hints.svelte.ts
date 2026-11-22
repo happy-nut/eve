@@ -3,8 +3,8 @@ import { isMobile } from './platform';
 import { saved, save } from './stored';
 
 const LS = 'eve.hints';
-const TIMES = 3;
-const GAP = 25_000;
+const TIMES_SHOWN = 3;
+const GAP_MS = 25_000;
 
 interface Saved { off: boolean; seen: Record<string, number> }
 function load(): Saved {
@@ -24,7 +24,7 @@ class Hints {
   show(key: string, text: string, keys: string | string[]) {
     const list = (Array.isArray(keys) ? keys : [keys]).filter(Boolean);
     if (isMobile || this.saved.off || !list.length) return;
-    if ((this.saved.seen[key] ?? 0) >= TIMES || Date.now() - this.last < GAP) return;
+    if ((this.saved.seen[key] ?? 0) >= TIMES_SHOWN || Date.now() - this.last < GAP_MS) return;
     this.saved.seen[key] = (this.saved.seen[key] ?? 0) + 1;
     this.persist();
     this.last = Date.now();

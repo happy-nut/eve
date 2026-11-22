@@ -1,5 +1,6 @@
 import { Extension } from '@tiptap/core';
 import { NodeSelection, Plugin } from '@tiptap/pm/state';
+import { CellSelection } from '@tiptap/pm/tables';
 import type { EditorView } from '@tiptap/pm/view';
 
 /**
@@ -69,7 +70,7 @@ class Layer {
     const boxes: DOMRect[] = [];
     let firstRange: Range | undefined;
     const clips = new Map<Element, DOMRect | null>();
-    const cells = '$anchorCell' in sel;
+    const cells = sel instanceof CellSelection;
     if (!sel.empty && !(sel instanceof NodeSelection) && !cells && view.dom.isConnected) {
       const { from, to } = sel;
       view.state.doc.nodesBetween(from, to, (node, pos) => {

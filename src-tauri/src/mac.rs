@@ -82,7 +82,7 @@ pub(crate) fn end_page(app: &AppHandle) {
 /// The window seen or not, while it stays shown (and so drawn into): its alpha. Shown with alpha 0, WebKit takes the
 /// page as on screen and draws it (its own check of whether the window is covered is off, `keep_page_awake`); nothing
 /// white is seen meanwhile. `then` hears, before the window is seen, whether macOS took it as on screen.
-pub(crate) fn set_seen(app: &AppHandle, seen: bool, then: Option<Box<dyn FnOnce(Option<bool>) + Send>>) {
+pub(crate) fn set_opaque(app: &AppHandle, opaque: bool, then: Option<Box<dyn FnOnce(Option<bool>) + Send>>) {
     #[cfg(target_os = "macos")]
     if let Some(window) = app.get_webview_window("main") {
         let w = window.clone();
@@ -91,13 +91,13 @@ pub(crate) fn set_seen(app: &AppHandle, seen: bool, then: Option<Box<dyn FnOnce(
             if let Ok(ns) = w.ns_window() {
                 let ns: &objc2_app_kit::NSWindow = unsafe { &*(ns as *mut objc2_app_kit::NSWindow) };
                 visible = Some(ns.occlusionState().contains(objc2_app_kit::NSWindowOcclusionState::Visible));
-                ns.setAlphaValue(if seen { 1.0 } else { 0.0 });
+                ns.setAlphaValue(if opaque { 1.0 } else { 0.0 });
             }
             if let Some(then) = then { then(visible) }
         });
     }
     #[cfg(not(target_os = "macos"))]
-    { let _ = (app, seen); if let Some(then) = then { then(None) } }
+    { let _ = (app, opaque); if let Some(then) = then { then(None) } }
 }
 
 #[tauri::command]
@@ -148,21 +148,23 @@ pub(crate) async fn pdf_thumb(app: AppHandle, name: String) -> Result<tauri::ipc
         .join("thumbs");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let png = dir.join(format!("{name}.png")); // qlmanage names it after the whole file name
-    if !png.is_file() {
-        let out = std::process::Command::new("/usr/bin/qlmanage")
-            .args(["-t", "-s", "320", "-o"])
-            .arg(&dir)
-            .arg(&src)
-            .output()
-            .map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || {
         if !png.is_file() {
-            return Err(format!("no thumbnail: {}", String::from_utf8_lossy(&out.stderr)));
+            let mut cmd = std::process::Command::new("/usr/bin/qlmanage");
+            cmd.args(["-t", "-s", "320", "-o"]).arg(&dir).arg(&src);
+            let out = run_with_deadline(cmd, QUICK_LOOK_DEADLINE)?;
+            if !png.is_file() {
+                return Err(format!("no thumbnail: {}", String::from_utf8_lossy(&out.stderr)));
+            }
         }
-    }
-    Ok(tauri::ipc::Response::new(
-        fs::read(&png).map_err(|e| e.to_string())?,
-    ))
+        fs::read(&png).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map(tauri::ipc::Response::new)
 }
+
+const QUICK_LOOK_DEADLINE: std::time::Duration = std::time::Duration::from_secs(20);
 
 /// Run a command, but never wait on it forever: Quick Look hangs indefinitely on a format no
 /// generator on this Mac handles (a .hwp without Hancom Office does exactly that), and a hung
@@ -207,7 +209,7 @@ pub(crate) async fn ql_preview(app: AppHandle, name: String) -> Result<String, S
     tauri::async_runtime::spawn_blocking(move || {
         let mut cmd = std::process::Command::new("/usr/bin/qlmanage");
         cmd.args(["-p", "-o"]).arg(&dir).arg(&src);
-        let out = run_with_deadline(cmd, std::time::Duration::from_secs(20))?;
+        let out = run_with_deadline(cmd, QUICK_LOOK_DEADLINE)?;
         if !html.is_file() {
             return Err(format!(
                 "no preview: {}",
@@ -330,7 +332,7 @@ pub(crate) mod default_app {
     use core_foundation::base::{CFRelease, TCFType};
     use core_foundation::string::{CFString, CFStringRef};
 
-    pub const TYPES: [&str; 2] = ["net.daringfireball.markdown", "public.plain-text"];
+    pub const MD_AND_TXT_UTIS: [&str; 2] = ["net.daringfireball.markdown", "public.plain-text"];
     const ALL_ROLES: u32 = 0xFFFF_FFFF;
 
     #[link(name = "CoreServices", kind = "framework")]
@@ -372,7 +374,7 @@ fn opens_with_eve(app: &AppHandle, t: &str) -> bool {
 pub(crate) fn is_default_for_markdown(app: AppHandle) -> bool {
     #[cfg(target_os = "macos")]
     {
-        return default_app::TYPES.iter().all(|t| opens_with_eve(&app, t));
+        return default_app::MD_AND_TXT_UTIS.iter().all(|t| opens_with_eve(&app, t));
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -389,7 +391,7 @@ pub(crate) fn release_unclaimed_markdown(app: &AppHandle) {
         if marker.exists() {
             return;
         }
-        let [md, txt] = default_app::TYPES;
+        let [md, txt] = default_app::MD_AND_TXT_UTIS;
         if opens_with_eve(app, md) && !opens_with_eve(app, txt) {
             let _ = default_app::set(md, "com.apple.TextEdit");
         }
@@ -405,7 +407,7 @@ pub(crate) fn set_default_for_markdown(app: AppHandle, on: bool) -> Result<(), S
     #[cfg(target_os = "macos")]
     {
         let id = if on { app.config().identifier.clone() } else { "com.apple.TextEdit".to_string() };
-        for t in default_app::TYPES {
+        for t in default_app::MD_AND_TXT_UTIS {
             default_app::set(t, &id)?;
         }
         return Ok(());

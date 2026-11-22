@@ -7,23 +7,23 @@
 
   let marks = $state<{ top: number; text: string; preview: string; on: boolean; el: HTMLElement }[]>([]);
   let overflow = $state(false);
-  let hover = $state<number | null>(null);
-  let peek = $state<number | null>(null);
+  let stretched = $state<number | null>(null);
+  let peeked = $state<number | null>(null);
   let peekTimer: ReturnType<typeof setTimeout> | undefined;
   const PEEK_WAIT = 500;
-  const tickWidth = (i: number) => (hover === null ? 5 : ([28, 21, 15][Math.abs(i - hover)] ?? 5));
+  const tickWidth = (i: number) => (stretched === null ? 5 : ([28, 21, 15][Math.abs(i - stretched)] ?? 5));
   let raf = 0;
 
   function enter(i: number) {
-    hover = i;
+    stretched = i;
     clearTimeout(peekTimer);
-    if (peek !== null) { peek = i; return; }
-    peekTimer = setTimeout(() => (peek = i), PEEK_WAIT);
+    if (peeked !== null) { peeked = i; return; }
+    peekTimer = setTimeout(() => (peeked = i), PEEK_WAIT);
   }
   function leave() {
     clearTimeout(peekTimer);
-    hover = null;
-    peek = null;
+    stretched = null;
+    peeked = null;
   }
 
   function textOf(el: Element): string {
@@ -67,14 +67,12 @@
     });
   }
   function go(top: number, el: HTMLElement) {
-    if (editor && !editor.isDestroyed && el.isConnected) {
-      try {
-        const { doc } = editor.state, inside = doc.resolve(editor.view.posAtDOM(el, 0));
-        if (inside.depth > 0) {
-          editor.view.dispatch(editor.state.tr.setSelection(Selection.near(doc.resolve(inside.end(1)), -1)));
-          editor.view.focus();
-        }
-      } catch { }
+    if (editor && !editor.isDestroyed && editor.view.dom.contains(el)) {
+      const { doc } = editor.state, inside = doc.resolve(editor.view.posAtDOM(el, 0));
+      if (inside.depth > 0) {
+        editor.view.dispatch(editor.state.tr.setSelection(Selection.near(doc.resolve(inside.end(1)), -1)));
+        editor.view.focus();
+      }
     }
     scrollEl?.scrollTo({ top: Math.max(0, top - 44), behavior: 'smooth' });
   }
@@ -99,12 +97,12 @@
 </script>
 
 {#if overflow && marks.length > 1}
-  <nav class="outline" class:peeking={hover !== null} aria-label="Sections" onmouseleave={leave}>
+  <nav class="outline" class:peeking={stretched !== null} aria-label="Sections" onmouseleave={leave}>
     {#each marks as h, i (i)}
-      <button class="tick" tabindex="-1" class:on={h.on} class:hov={hover === i} style="--w: {tickWidth(i)}px" onmouseenter={() => enter(i)}
+      <button class="tick" tabindex="-1" class:on={h.on} class:hov={stretched === i} style="--w: {tickWidth(i)}px" onmouseenter={() => enter(i)}
         onmousedown={(e) => e.preventDefault()} onclick={() => go(h.top, h.el)}>
         <i></i>
-        {#if peek === i}
+        {#if peeked === i}
           <span class="peek"><span class="peek-in" in:fade={{ duration: 180 }}>
             <b>{h.text || '…'}</b>{#if h.preview}<span class="pv">{h.preview}</span>{/if}
           </span></span>

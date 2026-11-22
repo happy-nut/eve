@@ -16,7 +16,7 @@ const flow = { kind: 'flowchart', dir: 'TD', nodes: [{ id: 'n1', label: tricky, 
   edges: [{ from: 'n1', to: 'n2', label: tricky, line: 'thick' }] };
 assert.deepEqual(fromCode(toCode(flow)), flow);
 const seq = { kind: 'sequence', numbered: true, people: [{ id: 'p1', name: 'Ann Lee; #1', actor: true }, { id: 'p2', name: 'B', actor: false }],
-  messages: [{ from: 'p1', to: 'p2', text: tricky, reply: false }] };
+  steps: [{ from: 'p1', to: 'p2', text: tricky, reply: false }] };
 assert.deepEqual(fromCode(toCode(seq)), seq);
 const pie = { kind: 'pie', title: 'T', showData: true, slices: [{ label: tricky, value: 1.5 }] };
 assert.deepEqual(fromCode(toCode(pie)), pie);
@@ -206,13 +206,13 @@ console.log('empty ok');
   const d = fromCode(code);
   assert.ok(d, 'read');
   assert.equal(d.dir, 'LR');
-  assert.deepEqual(d.edges.map((e) => [e.from, e.to, e.label, e.line, e.arrow ?? '']), [
+  assert.deepEqual(d.edges.map((e) => [e.from, e.to, e.label, e.line, e.writtenArrow ?? '']), [
     ['시작', '결제', '', 'solid', ''], ['결제', '포장', '예', 'solid', ''], ['포장', '배송', '', 'solid', ''], ['결제', '시작', '아니오', 'dotted', ''],
     ['A', 'C', '', 'solid', ''], ['B', 'C', '', 'solid', ''], ['C', 'D', '', 'solid', '---'], ['D', 'E', '', 'solid', '--o'], ['E', 'F', '', 'solid', '<-->'],
   ]);
   assert.deepEqual(d.nodes.find((n) => n.id === '포장').raw, { open: '[[', close: ']]', as: 'box' });
   assert.deepEqual(d.nodes.find((n) => n.id === '배송').raw, { open: '[/', close: '/]', as: 'box' });
-  assert.equal(d.nodes.find((n) => n.id === 'C').cls, 'hot');
+  assert.equal(d.nodes.find((n) => n.id === 'C').mermaidClass, 'hot');
   assert.equal(d.lanes[0].label, '물류 팀');
   // written back: what it showed as it was, what it could not show kept, and read again the same
   const out = toCode(d);
@@ -266,15 +266,15 @@ function settles(code, kind) {
     '  end',
   ].join('\n'), 'sequence');
   assert.deepEqual(d.people.map((p) => [p.id, p.name, p.actor]), [['사용자', '사용자', true], ['앱', '모바일 앱', false], ['서버', '서버', false]]);
-  assert.deepEqual(d.messages[0], { raw: '%% a comment' });
-  assert.deepEqual(d.messages[1], { from: '사용자', to: '앱', text: '로그인', reply: false, act: '+' });
-  assert.deepEqual(d.messages[2], { block: 'loop', text: '세 번까지' });
-  assert.deepEqual(d.messages[4], { from: '서버', to: '앱', text: '실패', reply: true, arrow: '--x' });
-  assert.deepEqual(d.messages.find((m) => m.note === 'over'), { note: 'over', who: ['앱', '서버'], text: '암호화' });
-  assert.deepEqual(d.messages.find((m) => m.raw === 'activate 서버'), { raw: 'activate 서버' });
+  assert.deepEqual(d.steps[0], { raw: '%% a comment' });
+  assert.deepEqual(d.steps[1], { from: '사용자', to: '앱', text: '로그인', reply: false, activation: 'start' });
+  assert.deepEqual(d.steps[2], { block: 'loop', text: '세 번까지' });
+  assert.deepEqual(d.steps[4], { from: '서버', to: '앱', text: '실패', reply: true, writtenArrow: '--x' });
+  assert.deepEqual(d.steps.find((m) => m.note === 'over'), { note: 'over', who: ['앱', '서버'], text: '암호화' });
+  assert.deepEqual(d.steps.find((m) => m.raw === 'activate 서버'), { raw: 'activate 서버' });
   for (const kept of ['  %% a comment', '사용자->>+앱: 로그인', '  loop 세 번까지\n    앱->>서버: 확인', '서버--x앱: 실패', '  else 실패\n    앱-)사용자: 알림', 'Note over 앱,서버: 암호화', 'Note right of 사용자: 기다림', 'activate 서버', 'rect rgb(240, 240, 255)', '앱->사용자: 끝']) assert.ok(out.includes(kept), `${kept} in\n${out}`);
   // an arrow of its own turned into a reply: the forms' reply arrow
-  d.messages[4].reply = false;
+  d.steps[4].reply = false;
   assert.match(toCode(d), /서버->>앱: 실패/);
   console.log('pasted sequence ok');
 }
@@ -294,10 +294,10 @@ function settles(code, kind) {
   ].join('\n'), 'gantt');
   const tasks = d.sections.flatMap((s) => s.tasks);
   assert.deepEqual(tasks[0], { name: '설계', start: '2026-01-05', days: 3, id: 'a1', tags: ['done'] });
-  assert.deepEqual(tasks[1], { name: '구현', start: '', days: 14, id: 'a2', tags: ['crit', 'active'], after: 'a1' });
-  assert.deepEqual(tasks[2], { name: '리뷰', start: '', days: 2, after: '' });
+  assert.deepEqual(tasks[1], { name: '구현', start: '', days: 14, id: 'a2', tags: ['crit', 'active'], after: { ids: ['a1'] } });
+  assert.deepEqual(tasks[2], { name: '리뷰', start: '', days: 2, after: { prev: true } });
   assert.equal(tasks[4].days, 3, 'an end date is a length');
-  assert.equal(d.skipWeekends, true); assert.equal(d.extra, undefined); // a box to tick, not a kept line too
+  assert.equal(d.skipWeekends, true); assert.equal(d.keptLines, undefined); // a box to tick, not a kept line too
   assert.ok(out.includes('excludes weekends'), out);
   assert.ok(out.includes('구현 : crit, active, a2, after a1, 14d'), out);
   assert.ok(out.includes('리뷰 : 2d'), out);
@@ -332,7 +332,7 @@ function settles(code, kind) {
   assert.equal(d.dir, 'LR');
   assert.deepEqual(d.classes.map((c) => [c.id, c.name, c.members.length]), [['동물', '동물', 3], ['개', '개', 0], ['Cat', '고양이', 1], ['주인', '주인', 0], ['List~int~', 'List~int~', 0]]);
   assert.deepEqual(d.links[2], { from: '주인', to: '개', arrow: '-->', label: '산책시킨다', fromCard: '1', toCard: '*' });
-  assert.deepEqual(d.extra, ['note for 개 "충성스럽다"', 'namespace 집 {\n  class 방\n}', 'classDef hot fill:#f96']);
+  assert.deepEqual(d.keptLines, ['note for 개 "충성스럽다"', 'namespace 집 {\n  class 방\n}', 'classDef hot fill:#f96']);
   for (const kept of ['class 개\n', 'class Cat["고양이"]', 'Cat : +야옹()', '주인 "1" --> "*" 개 : 산책시킨다', 'note for 개', 'classDef hot']) assert.ok(out.includes(kept), `${kept} in\n${out}`);
   console.log('pasted class ok');
 }
@@ -357,7 +357,7 @@ function settles(code, kind) {
   // a state of states, a choice: rows of their own; a note over lines of its own kept as written
   assert.deepEqual(d.states.map((s) => [s.id, s.name, s.desc, s.parent ?? '', s.kind ?? '']), [['대기', '대기', '', '', ''], ['처리', '처리 중', '서버가 일한다', '', ''], ['검토', '검토', '', '', ''], ['1차', '1차', '', '검토', ''], ['분기', '분기', '', '', 'choice']]);
   assert.deepEqual(d.links.map((l) => [l.from, l.to, l.label]), [['[*]', '대기', ''], ['대기', '처리', '요청'], ['[*]', '1차', ''], ['1차', '[*]', ''], ['처리', '검토', ''], ['검토', '[*]', '']]);
-  assert.equal(d.extra.length, 1);
+  assert.equal(d.keptLines.length, 1);
   for (const kept of ['state "처리 중" as 처리', '처리 : 서버가 일한다', '  state 검토 {\n    [*] --> 1차', 'end note', 'state 분기 <<choice>>']) assert.ok(out.includes(kept), `${kept} in\n${out}`);
   console.log('pasted state ok');
 }
@@ -380,7 +380,7 @@ function settles(code, kind) {
   ].join('\n'), 'state');
   assert.deepEqual(d.states.map((s) => [s.id, s.parent ?? '', s.kind ?? '']), [['주문', '', ''], ['결제', '주문', ''], ['카드', '결제', ''], ['갈래', '', 'fork'], ['모임', '', 'join']]);
   assert.deepEqual(d.states[0].note, { side: 'left', text: '고객이 시작' });
-  assert.equal(d.extra, undefined);
+  assert.equal(d.keptLines, undefined);
   assert.match(out, /state 주문 \{\n {4}state 결제 \{\n {6}\[\*\] --> 카드\n {4}\}\n {4}\[\*\] --> 결제\n {4}결제 --> \[\*\]\n {2}\}/);
   // a state moved out of the one it was in: its lines go with it
   d.states[2].parent = undefined;
@@ -416,7 +416,7 @@ function settles(code, kind) {
   ]);
   assert.deepEqual(d.tables[0].columns, [{ type: 'string', name: 'name', keys: '', comment: '고객 이름' }, { type: 'string', name: 'email', keys: 'UK', comment: '' }, { type: 'int', name: 'id', keys: 'PK, FK', comment: '' }]);
   assert.equal(d.tables.find((t) => t.id === 'p').name, '사람');
-  assert.deepEqual(d.extra, ['ODD {\n  string[] tags\n  weird\n}'], 'a table the form cannot show is kept as written');
+  assert.deepEqual(d.keptLines, ['ODD {\n  string[] tags\n  weird\n}'], 'a table the form cannot show is kept as written');
   for (const kept of ['ORDER ||--|{ LINE-ITEM : "contains many"', 'CUSTOMER }|..|{ DELIVERY-ADDRESS : uses', 'string name "고객 이름"', 'int id PK, FK', 'p["사람"] {', 'weird']) assert.ok(out.includes(kept), `${kept} in\n${out}`);
   console.log('pasted er ok');
 }
@@ -478,23 +478,23 @@ assert.match(laneSvg({ kind: 'flowchart', dir: 'LR', lanes: [{ id: 'A', label: '
 {
   const code = 'flowchart TD\n  A["a"]\n  B["b"]\n  C["c"]\n  A --> B\n  B --> C\n  class B step1\n  class A,C step2';
   const d = fromCode(code);
-  assert.deepEqual(d.nodes.map((n) => n.step), [2, 1, 2]);
-  assert.equal(d.extra, undefined);
+  assert.deepEqual(d.nodes.map((n) => n.presentStep), [2, 1, 2]);
+  assert.equal(d.keptLines, undefined);
   assert.equal(toCode(d), code);
-  delete d.nodes[1].step;
+  delete d.nodes[1].presentStep;
   assert.equal(toCode(d), 'flowchart TD\n  A["a"]\n  B["b"]\n  C["c"]\n  A --> B\n  B --> C\n  class A,C step2');
   const odd = fromCode('flowchart TD\n  A --> B\n  class Z step1\n  class A step1\n  class A step3');
-  assert.deepEqual(odd.nodes.map((n) => n.step), [1, undefined]);
-  assert.deepEqual(odd.extra, ['class Z step1', 'class A step3']);
+  assert.deepEqual(odd.nodes.map((n) => n.presentStep), [1, undefined]);
+  assert.deepEqual(odd.keptLines, ['class Z step1', 'class A step3']);
 }
 
 // a step after a `;` is read as one (mermaid draws it); a class of that name the chart styles itself is its colour
 {
   const semi = fromCode('flowchart TD\n  A --> B; class A step2');
-  assert.equal(semi.nodes[0].step, 2);
-  assert.equal(semi.extra, undefined);
+  assert.equal(semi.nodes[0].presentStep, 2);
+  assert.equal(semi.keptLines, undefined);
   const styled = fromCode('flowchart TD\n  A --> B\n  classDef step1 fill:#f96\n  class A step1');
-  assert.equal(styled.nodes[0].step, undefined);
+  assert.equal(styled.nodes[0].presentStep, undefined);
   assert.match(toCode(styled), /class A step1/);
 }
 

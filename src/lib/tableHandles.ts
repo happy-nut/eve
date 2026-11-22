@@ -76,6 +76,12 @@ const PLUS = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-
 
 interface Over { pos: number; table: HTMLTableElement; wrap: HTMLElement; row: number; col: number; cellEl?: HTMLTableCellElement; x: number; y: number }
 const EDGE_REACH = 14;
+const ROW_GRIP = { width: 12, height: 24 }, COL_GRIP = { width: 24, height: 16 };
+const ADD_HERE_SIZE = 16, ADD_BAR_THICKNESS = 16, ADD_BAR_GAP = 3;
+
+const tablePosOf = (view: EditorView, table: HTMLTableElement): number => view.posAtDOM(table.tBodies[0] ?? table, 0) - 1;
+const columnAt = (view: EditorView, map: TableMap, tablePos: number, cellEl: HTMLTableCellElement): number =>
+  map.colCount(view.posAtDOM(cellEl, 0) - 1 - (tablePos + 1));
 
 class Handles {
   private host: HTMLElement;
@@ -127,12 +133,12 @@ class Handles {
       const right = Math.min(t.right, r.right);
       if (x < t.left - 28 || x > right + 28 || y < t.top - 20 || y > t.bottom + 24) continue;
       const rows = [...table.rows], cells = [...(rows[0]?.cells ?? [])];
-      const pos = this.view.posAtDOM(table.tBodies[0] ?? table, 0) - 1;
+      const pos = tablePosOf(this.view, table);
       if (this.view.state.doc.nodeAt(pos)?.type.name !== 'table' || !rows.length) continue;
       const row = rows.findIndex((tr) => y < tr.getBoundingClientRect().bottom);
       const cellEl = cells.find((c) => x < c.getBoundingClientRect().right) ?? cells[cells.length - 1];
       const map = TableMap.get(this.view.state.doc.nodeAt(pos)!);
-      const col = cellEl ? map.colCount(this.view.posAtDOM(cellEl, 0) - 1 - (pos + 1)) : 0;
+      const col = cellEl ? columnAt(this.view, map, pos, cellEl) : 0;
       return { pos, table, wrap, row: row < 0 ? rows.length - 1 : row, col, cellEl, x, y };
     }
     return null;
@@ -158,23 +164,23 @@ class Handles {
       if (box.height !== undefined) el.style.height = `${Math.round(box.height)}px`;
       el.classList.add('on');
     };
-    put(this.rowGrip, { left: left - 6, top: row.top + row.height / 2 - 12 });
-    if (cell.left >= left - 1 && cell.right <= right + 1) put(this.colGrip, { left: cell.left + cell.width / 2 - 12, top: t.top - 8 });
+    put(this.rowGrip, { left: left - ROW_GRIP.width / 2, top: row.top + row.height / 2 - ROW_GRIP.height / 2 });
+    if (cell.left >= left - 1 && cell.right <= right + 1) put(this.colGrip, { left: cell.left + cell.width / 2 - COL_GRIP.width / 2, top: t.top - COL_GRIP.height / 2 });
     else this.colGrip.classList.remove('on');
-    put(this.addRow, { left, top: t.bottom + 3, width: right - left, height: 16 });
-    put(this.addCol, { left: right + 3, top: t.top, width: 16, height: t.height });
+    put(this.addRow, { left, top: t.bottom + ADD_BAR_GAP, width: right - left, height: ADD_BAR_THICKNESS });
+    put(this.addCol, { left: right + ADD_BAR_GAP, top: t.top, width: ADD_BAR_THICKNESS, height: t.height });
     const cols = [...o.table.rows[0].cells].map((c, i, all) => (i ? all[i - 1].getBoundingClientRect().right : c.getBoundingClientRect().left));
     const rows = [...o.table.rows].map((r) => r.getBoundingClientRect().top).slice(1);
     const nearest = (edges: number[], at: number) => edges.reduce((b, e, i) => (Math.abs(e - at) < Math.abs(edges[b] - at) ? i : b), 0);
     const c = nearest(cols, o.x), r = rows.length ? nearest(rows, o.y) : -1;
     if (Math.abs(o.y - t.top) <= EDGE_REACH && Math.abs(cols[c] - o.x) <= EDGE_REACH && cols[c] >= left - 1) {
       this.here = { what: 'col', edge: c };
-      put(this.addHere, { left: cols[c] - 8, top: t.top - 8 });
+      put(this.addHere, { left: cols[c] - ADD_HERE_SIZE / 2, top: t.top - ADD_HERE_SIZE / 2 });
       this.colGrip.classList.remove('on');
       if (c === 0) this.rowGrip.classList.remove('on');
     } else if (r >= 0 && Math.abs(o.x - left) <= EDGE_REACH && Math.abs(rows[r] - o.y) <= EDGE_REACH) {
       this.here = { what: 'row', edge: r + 1 };
-      put(this.addHere, { left: left - 8, top: rows[r] - 8 });
+      put(this.addHere, { left: left - ADD_HERE_SIZE / 2, top: rows[r] - ADD_HERE_SIZE / 2 });
       this.rowGrip.classList.remove('on');
     } else this.addHere.classList.remove('on');
   }

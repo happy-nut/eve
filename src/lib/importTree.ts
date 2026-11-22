@@ -21,7 +21,9 @@ const embedOf = (name: string, src: string) => (DOC_FILE.test(name) || VIDEO_FIL
 const byName = (a: Source, b: Source) => a.path.localeCompare(b.path, undefined, { numeric: true });
 /** a file's or a folder's name as a title: Notion's export puts the page's id after it (`Trip 1a2b…`), left off */
 const titled = (name: string) => name.replace(/ [0-9a-f]{32}$/, '').trim();
-const heading = (t: string) => `# ${escapeTitle(t).replace(/^([-+>])/, '\\$1').replace(/^(\d+)([.)])/, '$1\\$2')}`;
+const escapeLineStart = (t: string) => t.replace(/^([-+>])/, '\\$1').replace(/^(\d+)([.)])/, '$1\\$2');
+const heading = (t: string) => `# ${escapeLineStart(escapeTitle(t))}`;
+const MD_LINK = /(!?)\[([^\]\n]*)\]\(\s*<?([^)\s>]+)>?(\s+"[^"]*")?\s*\)/g;
 
 function frontMatter(yaml: string): Record<string, PropValue> {
   const out: Record<string, PropValue> = {};
@@ -41,39 +43,17 @@ function frontMatter(yaml: string): Record<string, PropValue> {
   return out;
 }
 
-/**
- * A tree of files as notes, the shape it came in:
- *
- * - its folders become pages of their names, under `into` (a page's id, '' = the top), what is in them pages under
- *   them, as Notion has a folder;
- * - a folder beside a note of its name (`Trip.md` and `Trip/`, as Notion and Obsidian export pages) is that
- *   note's sub-pages, not a page of its own;
- * - a link or a picture a file reaches by a relative path (`![](img/a.png)`, Obsidian's `![[a.png]]`) comes with
- *   it, into the note rather than as a note of its own; a link to another file of the import becomes a [[link]];
- * - Google Keep's notes (a Takeout export: a .json per note) are read as Keep notes, in Keep's order.
- *
- * Files outside any folder go to `looseInto`.
- */
-export async function importTree(sources: Source[], into = '', looseInto = into): Promise<Made[]> {
-  const all = [...sources].sort(byName);
-  const at = new Map(all.map((s) => [s.path, s]));
-  const named = new Map<string, Source>();
-  for (const s of all) if (!named.has(nameOf(s.path).toLowerCase())) named.set(nameOf(s.path).toLowerCase(), s);
-  const made: Made[] = [];
+interface ImportRun {
+  all: Source[];
+  at: Map<string, Source>;
+  made: Made[];
+  taken: Set<string>;
+  pageFor: (dirs: string[], loose?: boolean) => string | undefined;
+}
 
-  const folders = new Map<string, string>();
-  const pageFor = (dirs: string[], loose = true): string | undefined => {
-    let up = (loose && !dirs.length ? looseInto : into) || undefined;
-    dirs.forEach((d, i) => {
-      const key = dirs.slice(0, i + 1).join('/');
-      let id = folders.get(key);
-      if (!id) folders.set(key, (id = notes.addImported(`${heading(titled(d))}\n`, Date.now(), up).id));
-      up = id;
-    });
-    return up;
-  };
+const assetOrNone = (file: Source): Promise<string | undefined> => new Promise<string>((ok) => ok(file.asset())).catch(() => undefined);
 
-  const taken = new Set<string>();
+async function importKeep({ all, at, made, taken, pageFor }: ImportRun): Promise<void> {
   const keep: (FromKeep & { dirs: string[]; source: Source })[] = [];
   for (const s of all.filter((x) => /\.json$/i.test(x.path))) {
     let json: unknown;
@@ -89,14 +69,19 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
         if (!file) continue;
         taken.add(file.path);
         if (json.isTrashed || copied[a.filePath]) continue;
-        try { copied[a.filePath] = await file.asset(); } catch { }
+        const src = await assetOrNone(file);
+        if (src !== undefined) copied[a.filePath] = src;
       }
     }
     const note = keepToNote(json, copied);
     if (note) keep.push({ ...note, source: s, dirs: [...(dir ? dir.split('/') : []), ...(note.sub ? note.sub.split('/') : [])] });
   }
   for (const k of keep.sort(keepOrder)) made.push({ note: notes.addImported(k.body, k.updatedAt || Date.now(), pageFor(k.dirs)), source: k.source });
+}
 
+async function importFiles({ all, at, made, taken, pageFor }: ImportRun): Promise<void> {
+  const byFileName = new Map<string, Source>();
+  for (const s of all) if (!byFileName.has(nameOf(s.path).toLowerCase())) byFileName.set(nameOf(s.path).toLowerCase(), s);
   const texts = all.filter((s) => !taken.has(s.path) && TEXT_FILE.test(s.path));
   const bodies = new Map<string, string>(), props = new Map<string, Record<string, PropValue>>();
   const used = new Set<string>();
@@ -115,15 +100,15 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
   }
   const title = (path: string) => titleOf({ body: bodies.get(path)! });
 
-  const pageOf = new Map<string, string>();
-  for (const s of texts) pageOf.set(s.path.replace(/\.[^./]+$/, ''), s.path);
+  const pageFileOfFolder = new Map<string, string>();
+  for (const s of texts) pageFileOfFolder.set(s.path.replace(/\.[^./]+$/, ''), s.path);
 
   const copies = new Map<string, Promise<string>>();
   const copy = (s: Source) => { let c = copies.get(s.path); if (!c) copies.set(s.path, (c = s.asset())); return c; };
   const inside = new Set<string>();
   async function relink(body: string, dir: string): Promise<string> {
     const jobs: Promise<[string, string]>[] = [];
-    for (const m of body.matchAll(/(!?)\[([^\]\n]*)\]\(\s*<?([^)\s>]+)>?(\s+"[^"]*")?\s*\)/g)) {
+    for (const m of body.matchAll(MD_LINK)) {
       const [whole, bang, label, target] = m;
       const path = resolveLink(dir, target);
       const file = path && (at.get(path) ?? [...at.values()].find((s) => s.path.toLowerCase() === path.toLowerCase()));
@@ -141,7 +126,7 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
     }
     // Obsidian's ![[a.png]]: a file found by its name alone
     for (const m of body.matchAll(/!\[\[([^\]|#\n]+)(?:\|[^\]\n]*)?\]\]/g)) {
-      const file = named.get(m[1].trim().toLowerCase());
+      const file = byFileName.get(m[1].trim().toLowerCase());
       if (!file || bodies.has(file.path) || taken.has(file.path) || !IMPORTABLE.test(file.path)) continue;
       inside.add(file.path);
       jobs.push(copy(file).then((src) => [m[0], embedOf(nameOf(file.path), src)]));
@@ -160,10 +145,10 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
     const dirs = s.path.includes('/') ? dirOf(s.path).split('/') : [];
     const prefix = (i: number) => dirs.slice(0, i + 1).join('/');
     // the folders up to the first that is a page's are pages of their own; the page it sits deepest in is its parent
-    let j = dirs.findIndex((_, i) => pageOf.has(prefix(i)));
+    let j = dirs.findIndex((_, i) => pageFileOfFolder.has(prefix(i)));
     if (j < 0) j = dirs.length;
     let parent: string | undefined;
-    for (let i = dirs.length - 1; i >= j && !parent; i--) parent = ids.get(pageOf.get(prefix(i)) ?? '');
+    for (let i = dirs.length - 1; i >= j && !parent; i--) parent = ids.get(pageFileOfFolder.get(prefix(i)) ?? '');
 
     let body = bodies.get(s.path), embed: string | undefined;
     if (body === undefined) {
@@ -174,5 +159,40 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
     ids.set(s.path, note.id);
     made.push({ note, source: s, embed });
   }
+}
+
+/**
+ * A tree of files as notes, the shape it came in:
+ *
+ * - its folders become pages of their names, under `into` (a page's id, '' = the top), what is in them pages under
+ *   them, as Notion has a folder;
+ * - a folder beside a note of its name (`Trip.md` and `Trip/`, as Notion and Obsidian export pages) is that
+ *   note's sub-pages, not a page of its own;
+ * - a link or a picture a file reaches by a relative path (`![](img/a.png)`, Obsidian's `![[a.png]]`) comes with
+ *   it, into the note rather than as a note of its own; a link to another file of the import becomes a [[link]];
+ * - Google Keep's notes (a Takeout export: a .json per note) are read as Keep notes, in Keep's order.
+ *
+ * Files outside any folder go to `looseInto`.
+ */
+export async function importTree(sources: Source[], into = '', looseInto = into): Promise<Made[]> {
+  const all = [...sources].sort(byName);
+  const at = new Map(all.map((s) => [s.path, s]));
+  const made: Made[] = [];
+
+  const folders = new Map<string, string>();
+  const pageFor = (dirs: string[], loose = true): string | undefined => {
+    let up = (loose && !dirs.length ? looseInto : into) || undefined;
+    dirs.forEach((d, i) => {
+      const key = dirs.slice(0, i + 1).join('/');
+      let id = folders.get(key);
+      if (!id) folders.set(key, (id = notes.addImported(`${heading(titled(d))}\n`, Date.now(), up).id));
+      up = id;
+    });
+    return up;
+  };
+
+  const run: ImportRun = { all, at, made, taken: new Set<string>(), pageFor };
+  await importKeep(run);
+  await importFiles(run);
   return made;
 }

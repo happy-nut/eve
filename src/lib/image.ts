@@ -7,17 +7,22 @@ import { assetUrl, copyImage } from './platform';
 import { MIN_WIDTH, alignOf, escapeWidth, nameOf, sizeGrip, widthOf, withAlign, withWidth } from './resize';
 import type { Editor } from '@tiptap/core';
 
-export function imageMarkdown(state: any, node: PMNode): string {
-  const alt = withAlign(withWidth(escapeWidth(state.esc(node.attrs.alt ?? '')), node.attrs.width), node.attrs.align);
-  const src: string = node.attrs.src ?? '';
+function linkDestination(src: string): string {
   // ...but one with a space, a "<" or ">", or a ")" with no "(" before it ends the link early (the rest was
   // read back as text): markdown's <…> holds those
   let depth = 0;
   for (const c of src) if ((depth += c === '(' ? 1 : c === ')' ? -1 : 0) < 0) break;
-  const dest = depth || /[\s<>]/.test(src) ? `<${src.replace(/[<>]/g, '\\$&')}>` : src;
+  return depth || /[\s<>]/.test(src) ? `<${src.replace(/[<>]/g, '\\$&')}>` : src;
+}
+
+export function imageMarkdown(state: any, node: PMNode): string {
+  const alt = withAlign(withWidth(escapeWidth(state.esc(node.attrs.alt ?? '')), node.attrs.width), node.attrs.align);
+  const dest = linkDestination(node.attrs.src ?? '');
   const title = node.attrs.title ? ` "${state.esc(node.attrs.title).replace(/"/g, '\\"')}"` : '';
   return `![${alt}](${dest}${title})`;
 }
+
+const keepEscapedPipe = (t: { content: string; markup: string }) => (t.content === '|' ? t.markup : t.content);
 
 /**
  * A caption as it was written, out of the tokens markdown read it into. markdown-it's own alt text drops a
@@ -28,7 +33,7 @@ function captionOf(tokens: any[]): string {
   let out = '';
   for (const t of tokens) {
     if (t.type === 'text') out += t.content;
-    else if (t.type === 'text_special') out += t.content === '|' ? t.markup : t.content;
+    else if (t.type === 'text_special') out += keepEscapedPipe(t);
     else if (t.type === 'code_inline') out += t.markup + t.content + t.markup;
     else if (t.type === 'math_inline') out += `$${t.content}$`;
     else if (t.type === 'softbreak' || t.type === 'hardbreak') out += '\n';
@@ -41,6 +46,22 @@ function captionOf(tokens: any[]): string {
 }
 
 const keptTags = new WeakSet<object>();
+function keepPercentWidthImgTags(md: any) {
+  md.core.ruler.after('inline', 'eve-img-width', (state: any) => {
+    const keep = (t: any) => {
+      if (/^<img\b[^>]*\bwidth\s*=\s*["']?\s*\d+(\.\d+)?%/i.test(t.content) && /^<img\b[^<]*>\s*$/i.test(t.content)) {
+        t.content = t.content.replace(/^<img/i, `<img data-eve-img="${t.content.trim().replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`);
+      }
+    };
+    for (const t of state.tokens) {
+      if (t.type === 'html_block') keep(t);
+      for (const c of t.children ?? []) if (c.type === 'html_inline') keep(c);
+    }
+  });
+}
+
+const htmlWidth = (el: HTMLElement) => (Number(el.getAttribute('width')) ? Math.max(MIN_WIDTH, Number(el.getAttribute('width'))) : null);
+
 function asWritten(node: PMNode): string | null {
   const html: string | null = node.attrs.html;
   if (!html || node.attrs.width || node.attrs.align) return null;
@@ -56,7 +77,7 @@ export const LocalImage = Image.extend({
       ...this.parent?.(),
       width: {
         default: null,
-        parseHTML: (el) => widthOf(el.getAttribute('alt')) ?? (Number(el.getAttribute('width')) ? Math.max(MIN_WIDTH, Number(el.getAttribute('width'))) : null),
+        parseHTML: (el) => widthOf(el.getAttribute('alt')) ?? htmlWidth(el),
         renderHTML: (attrs: any) => (attrs.width ? { style: `width:${attrs.width}px` } : {}),
       },
       alt: { default: null, parseHTML: (el: HTMLElement) => nameOf(el.getAttribute('alt')) || null },
@@ -86,17 +107,7 @@ export const LocalImage = Image.extend({
           setup(md: any) {
             if (!keptTags.has(md)) {
               keptTags.add(md);
-              md.core.ruler.after('inline', 'eve-img-width', (state: any) => {
-                const keep = (t: any) => {
-                  if (/^<img\b[^>]*\bwidth\s*=\s*["']?\s*\d+(\.\d+)?%/i.test(t.content) && /^<img\b[^<]*>\s*$/i.test(t.content)) {
-                    t.content = t.content.replace(/^<img/i, `<img data-eve-img="${t.content.trim().replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`);
-                  }
-                };
-                for (const t of state.tokens) {
-                  if (t.type === 'html_block') keep(t);
-                  for (const c of t.children ?? []) if (c.type === 'html_inline') keep(c);
-                }
-              });
+              keepPercentWidthImgTags(md);
             }
             md.renderer.rules.image = (tokens: any[], i: number, opts: any, _env: any, self: any) => {
               tokens[i].attrSet('alt', captionOf(tokens[i].children ?? []));

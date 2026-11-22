@@ -3,7 +3,7 @@ import { OrderedList } from '@tiptap/extension-list';
 import TaskItem from '@tiptap/extension-task-item';
 import { Plugin, TextSelection } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
-import type { Node as PMNode } from '@tiptap/pm/model';
+import type { Fragment, Node as PMNode } from '@tiptap/pm/model';
 import { suggestionVisible } from './slash';
 import { indentLines, switchItem, joinNextItem, joinListBelow, itemAbove, liftCounting } from './blocks';
 
@@ -26,24 +26,14 @@ export function readsLoose(list: PMNode): boolean {
   return two;
 }
 
-export function looseLists(editor: Editor) {
-  const serializer = (editor.storage as any).markdown.serializer;
-  const nodesOf = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(serializer), 'nodes')?.get;
-  if (!nodesOf) return;
-  Object.defineProperty(serializer, 'nodes', {
-    configurable: true,
-    get() {
-      const nodes = nodesOf.call(serializer);
-      for (const name of ['bulletList', 'orderedList', 'taskList']) {
-        const write = nodes[name];
-        if (!write) continue;
-        nodes[name] = (state: any, node: PMNode, parent: PMNode, index: number) =>
-          write(state, node.attrs.tight && readsLoose(node) ? node.type.create({ ...node.attrs, tight: false }, node.content, node.marks) : node, parent, index);
-      }
-      return nodes;
-    },
-  });
+const asWritten = (list: PMNode) => (list.attrs.tight && readsLoose(list) ? list.type.create({ ...list.attrs, tight: false }, list.content, list.marks) : list);
+function writeBullets(this: { editor: Editor }, state: any, node: PMNode) {
+  const marker = (this.editor.storage as any).markdown.options.bulletListMarker || '-';
+  state.renderList(asWritten(node), '  ', () => `${marker} `);
 }
+export const bulletsMarkdown = () => ({ markdown: { serialize: writeBullets } });
+
+export const startsAtOne = (parent: PMNode | Fragment | null | undefined) => /Item$/.test((parent as PMNode | undefined)?.type?.name ?? '');
 
 export const NumberedList = OrderedList.extend({
   // written as tiptap-markdown does (")" for every other of two numbered lists in a row, so they stay two), but a
@@ -52,13 +42,12 @@ export const NumberedList = OrderedList.extend({
   addStorage: () => ({
     markdown: {
       serialize(state: any, node: PMNode, parent: PMNode, index: number) {
-        const nested = /Item$/.test((parent as any)?.type?.name ?? '');
-        const start = nested ? 1 : node.attrs.start || 1;
+        const start = startsAtOne(parent) ? 1 : node.attrs.start || 1;
         const width = String(start + node.childCount - 1).length;
         let run = 0;
         while (index - run > 0 && parent.child(index - run - 1).type.name === node.type.name) run++;
         const sep = run % 2 ? ') ' : '. ';
-        state.renderList(node, state.repeat(' ', width + 2), (i: number) => {
+        state.renderList(asWritten(node), state.repeat(' ', width + 2), (i: number) => {
           const n = String(start + i);
           return state.repeat(' ', width - n.length) + n + sep;
         });
@@ -71,9 +60,12 @@ export const NumberedList = OrderedList.extend({
   },
 });
 
+const AHEAD_OF_LIST_DEFAULTS = 101;
+const AHEAD_OF_LINE_INDENT = AHEAD_OF_LIST_DEFAULTS + 1;
+
 export const ListSwitch = Extension.create({
   name: 'listSwitch',
-  priority: 102,
+  priority: AHEAD_OF_LINE_INDENT,
   addInputRules() {
     const n = this.editor.schema.nodes;
     const rule = (find: RegExp, list: string, item: string, attrs?: (m: RegExpMatchArray) => Record<string, unknown>, itemAttrs?: (m: RegExpMatchArray) => Record<string, unknown>) =>
@@ -88,52 +80,55 @@ export const ListSwitch = Extension.create({
 
 export const JoinNextItem = Extension.create({
   name: 'joinNextItem',
-  priority: 102,
+  priority: AHEAD_OF_LINE_INDENT,
   addKeyboardShortcuts() {
     return { Delete: () => this.editor.commands.command(joinNextItem) || this.editor.commands.command(joinListBelow) };
   },
 });
 
+const indent = (editor: Editor, dir: 1 | -1) => !suggestionVisible(editor) && editor.commands.command(indentLines(dir));
+function outdentChanged(editor: Editor) {
+  const doc = editor.state.doc;
+  return indent(editor, -1) && editor.state.doc !== doc;
+}
+function backspaceInSubItem(editor: Editor) {
+  if (editor.commands.command(liftCounting(false))) return true;
+  const { $from, empty } = editor.state.selection;
+  if (!empty || $from.parentOffset !== 0 || !$from.parent.isTextblock || $from.depth < 4 || $from.index(-1) !== 0) return false;
+  if (!/Item$/.test($from.node(-1).type.name) || !/Item$/.test($from.node(-3).type.name)) return false;
+  const item = $from.node(-1);
+  if (!$from.parent.content.size && item.childCount === 1) {
+    const { state, view } = editor;
+    const list = $from.node(-2);
+    const from = list.childCount === 1 ? $from.before(-2) : $from.before(-1);
+    const to = list.childCount === 1 ? $from.after(-2) : $from.after(-1);
+    const tr = state.tr.delete(from, to);
+    view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(from), -1)).scrollIntoView());
+    return true;
+  }
+  return outdentChanged(editor);
+}
+function enterInSubItem(editor: Editor) {
+  const c = editor.commands;
+  if (c.command(itemAbove) || c.command(liftCounting(true))) return true;
+  const { $from, empty } = editor.state.selection;
+  if (!empty || $from.parent.content.size || $from.depth < 4 || $from.index(-1) !== 0) return false;
+  const item = $from.node(-1), owner = $from.node(-3);
+  if (!/Item$/.test(item.type.name) || !/Item$/.test(owner.type.name)) return false;
+  const last = $from.index(-2) === $from.node(-2).childCount - 1;
+  if (last && owner.type === item.type && $from.node(-2).type === $from.node(-4).type) return false;
+  return outdentChanged(editor);
+}
+
 export const LineIndent = Extension.create({
   name: 'lineIndent',
-  priority: 101,
+  priority: AHEAD_OF_LIST_DEFAULTS,
   addKeyboardShortcuts() {
-    const run = (dir: 1 | -1) => () => !suggestionVisible(this.editor) && this.editor.commands.command(indentLines(dir));
-    const stepOut = () => {
-      const doc = this.editor.state.doc;
-      return run(-1)() && this.editor.state.doc !== doc;
-    };
     return {
-      Tab: run(1),
-      'Shift-Tab': run(-1),
-      Backspace: () => {
-        if (this.editor.commands.command(liftCounting(false))) return true;
-        const { $from, empty } = this.editor.state.selection;
-        if (!empty || $from.parentOffset !== 0 || !$from.parent.isTextblock || $from.depth < 4 || $from.index(-1) !== 0) return false;
-        if (!/Item$/.test($from.node(-1).type.name) || !/Item$/.test($from.node(-3).type.name)) return false;
-        const item = $from.node(-1);
-        if (!$from.parent.content.size && item.childCount === 1) {
-          const { state, view } = this.editor;
-          const list = $from.node(-2);
-          const from = list.childCount === 1 ? $from.before(-2) : $from.before(-1);
-          const to = list.childCount === 1 ? $from.after(-2) : $from.after(-1);
-          const tr = state.tr.delete(from, to);
-          view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(from), -1)).scrollIntoView());
-          return true;
-        }
-        return stepOut();
-      },
-      Enter: () => {
-        const c = this.editor.commands;
-        if (c.command(itemAbove) || c.command(liftCounting(true))) return true;
-        const { $from, empty } = this.editor.state.selection;
-        if (!empty || $from.parent.content.size || $from.depth < 4 || $from.index(-1) !== 0) return false;
-        const item = $from.node(-1), owner = $from.node(-3);
-        if (!/Item$/.test(item.type.name) || !/Item$/.test(owner.type.name)) return false;
-        const last = $from.index(-2) === $from.node(-2).childCount - 1;
-        if (last && owner.type === item.type && $from.node(-2).type === $from.node(-4).type) return false;
-        return stepOut();
-      },
+      Tab: () => indent(this.editor, 1),
+      'Shift-Tab': () => indent(this.editor, -1),
+      Backspace: () => backspaceInSubItem(this.editor),
+      Enter: () => enterInSubItem(this.editor),
     };
   },
 });
@@ -157,7 +152,7 @@ export const JoinLists = Extension.create({
         scan(state.doc, 0);
         const restart: number[] = [], loose: number[] = [];
         state.doc.descendants((node, pos, parent) => {
-          if (node.type.name === 'orderedList' && (node.attrs.start ?? 1) !== 1 && parent && /Item$/.test(parent.type.name)) restart.push(pos);
+          if (node.type.name === 'orderedList' && (node.attrs.start ?? 1) !== 1 && startsAtOne(parent)) restart.push(pos);
           if (/List$/.test(node.type.name) && node.attrs.tight && readsLoose(node)) loose.push(pos);
         });
         if (!at.length && !restart.length && !loose.length) return null;
@@ -170,6 +165,47 @@ export const JoinLists = Extension.create({
     })];
   },
 });
+
+function tightenRuns(state: any) {
+  const t = state.tokens, lines: string[] = state.src.split('\n');
+  const blank = (n: number) => n >= 0 && n < lines.length && !lines[n].replace(/^\s*(>\s?)*/, '').trim();
+  for (let i = 0; i < t.length; i++) {
+    if (t[i].type !== 'bullet_list_open') continue;
+    const level = t[i].level;
+    const items: { open: number; task: boolean }[] = [];
+    let end = i + 1;
+    for (; end < t.length && !(t[end].type === 'bullet_list_close' && t[end].level === level); end++) {
+      if (t[end].type !== 'list_item_open' || t[end].level !== level + 1) continue;
+      const first = t[end + 2];
+      items.push({ open: end, task: first?.type === 'inline' && /^\[[ xX]\](\s|$)/.test(first.content) });
+    }
+    if (!items.some((x) => x.task) || items.every((x) => x.task)) continue;
+    const hasBlankLine = (k: number, last: boolean) => {
+      const [from, to] = t[items[k].open].map ?? [0, 0];
+      for (let n = from; n < (last ? to - 1 : t[items[k + 1].open].map[0]); n++) if (blank(n)) return true;
+      return false;
+    };
+    const twoParagraphs = (k: number, to: number) => {
+      let paras = 0;
+      for (let m = items[k].open; m < to; m++) if (t[m].type === 'paragraph_open' && t[m].level === level + 2) paras++;
+      return paras > 1;
+    };
+    for (let a = 0; a < items.length; ) {
+      let b = a;
+      while (b + 1 < items.length && items[b + 1].task === items[a].task) b++;
+      const stop = b + 1 < items.length ? items[b + 1].open : end;
+      let tight = true;
+      for (let k = a; k <= b && tight; k++) if (hasBlankLine(k, k === b)) tight = false;
+      for (let k = a; k <= b && tight; k++) if (twoParagraphs(k, k < b ? items[k + 1].open : stop)) tight = false;
+      if (tight) {
+        for (let k = items[a].open; k < stop; k++) {
+          if ((t[k].type === 'paragraph_open' || t[k].type === 'paragraph_close') && t[k].level === level + 2) t[k].hidden = true;
+        }
+      }
+      a = b + 1;
+    }
+  }
+}
 
 export const ListMarkdown = Extension.create({
   name: 'listMarkdown',
@@ -190,44 +226,7 @@ export const ListMarkdown = Extension.create({
           // line the two lists are written with makes that one list loose: each run came back loose (spaced
           // out) and was written so, the note changing on the first read. A run with no blank line inside it
           // is tight again; the runs are split apart later (updateDOM).
-          md.core.ruler.after('block', 'eve-tight-runs', (state: any) => {
-            const t = state.tokens, lines: string[] = state.src.split('\n');
-            const blank = (n: number) => n >= 0 && n < lines.length && !lines[n].replace(/^\s*(>\s?)*/, '').trim();
-            for (let i = 0; i < t.length; i++) {
-              if (t[i].type !== 'bullet_list_open') continue;
-              const level = t[i].level;
-              const items: { open: number; task: boolean }[] = [];
-              let end = i + 1;
-              for (; end < t.length && !(t[end].type === 'bullet_list_close' && t[end].level === level); end++) {
-                if (t[end].type !== 'list_item_open' || t[end].level !== level + 1) continue;
-                const first = t[end + 2];
-                items.push({ open: end, task: first?.type === 'inline' && /^\[[ xX]\](\s|$)/.test(first.content) });
-              }
-              if (!items.some((x) => x.task) || items.every((x) => x.task)) continue;
-              for (let a = 0; a < items.length; ) {
-                let b = a;
-                while (b + 1 < items.length && items[b + 1].task === items[a].task) b++;
-                let tight = true;
-                for (let k = a; k <= b && tight; k++) {
-                  const [from, to] = t[items[k].open].map ?? [0, 0];
-                  for (let n = from; n < (k < b ? t[items[k + 1].open].map[0] : to) - (k < b ? 0 : 1); n++) if (blank(n)) { tight = false; break; }
-                }
-                const stop = b + 1 < items.length ? items[b + 1].open : end;
-                for (let k = a; k <= b && tight; k++) {
-                  const to = k < b ? items[k + 1].open : stop;
-                  let paras = 0;
-                  for (let m = items[k].open; m < to; m++) if (t[m].type === 'paragraph_open' && t[m].level === level + 2) paras++;
-                  if (paras > 1) tight = false;
-                }
-                if (tight) {
-                  for (let k = items[a].open; k < stop; k++) {
-                    if ((t[k].type === 'paragraph_open' || t[k].type === 'paragraph_close') && t[k].level === level + 2) t[k].hidden = true;
-                  }
-                }
-                a = b + 1;
-              }
-            }
-          });
+          md.core.ruler.after('block', 'eve-tight-runs', tightenRuns);
         },
         // markdown-it wraps a loose list item's content in a <p>; ProseMirror then splits that paragraph
         // around the block image, leaving the item with an empty first line above the picture. Unwrap an
@@ -283,8 +282,8 @@ export const ToDoItem = TaskItem.extend({
     return [wrappingInputRule({ find: /^\s*(\[([( |x])?\])[^\S\n]$/, type: this.type, getAttributes: (m) => ({ checked: m[m.length - 1] === 'x' }) })];
   },
   parseHTML() {
-    const content = (el: HTMLElement) => (el.querySelector(':scope > label') && el.querySelector<HTMLElement>(':scope > div')) || el;
-    return [{ tag: `li[data-type="${this.name}"]`, priority: 51, contentElement: content }];
+    const ownContent = (el: HTMLElement) => (el.querySelector(':scope > label') && el.querySelector<HTMLElement>(':scope > div')) || el;
+    return [{ tag: `li[data-type="${this.name}"]`, priority: 51, contentElement: ownContent }];
   },
   // the box and its hidden label are the view's own: tiptap rewrites the label on every update and WebKit
   // touches the box's style after a drag, and ProseMirror read either back as an edit of the item, so a

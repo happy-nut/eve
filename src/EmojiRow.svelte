@@ -9,11 +9,11 @@
   let sel = $state(0);
   let place = $state('');
   let pick: (e: EmojiEntry) => void = () => {};
-  let pointed = false;
+  let pointerChose = false;
 
   export const ui: EmojiUI = {
     show(list, rect, cb) {
-      items = list; sel = 0; pick = cb; pointed = false;
+      items = list; sel = 0; pick = cb; pointerChose = false;
       if (rect) place = placeAt(rect, 64, 260);
     },
     move: (d) => { if (items.length) sel = (sel + d + items.length) % items.length; },
@@ -21,7 +21,7 @@
     hide: () => { items = []; },
     visible: () => items.length > 0,
     place: (rect) => { place = placeAt(rect, 64, 260); },
-    chosen: () => pointed,
+    chosen: () => pointerChose,
   };
 </script>
 
@@ -30,7 +30,7 @@
     <div class="cells">
       {#each items as e, i (e.emoji)}
         <button class="cell" class:sel={i === sel} role="option" aria-selected={i === sel} title={`:${e.code}:`}
-          onmousedown={(ev) => { ev.preventDefault(); pick(e); }} onmouseenter={() => (sel = i)} onmousemove={() => (pointed = true)}>{e.emoji}</button>
+          onmousedown={(ev) => { ev.preventDefault(); pick(e); }} onmouseenter={() => (sel = i)} onmousemove={() => (pointerChose = true)}>{e.emoji}</button>
       {/each}
     </div>
     <div class="name">:{items[sel]?.code}:</div>
