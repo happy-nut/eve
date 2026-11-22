@@ -263,13 +263,13 @@
   }
 
   function rowClick(e: MouseEvent, n: Note) {
-    const icon = (e.target as Element).closest<HTMLElement>('.ico-slot');
-    if (icon && !isMobile) {
-      e.stopPropagation();
-      void pickIcon(n, icon);
-      return;
-    }
     if (e.metaKey && !isMobile && n.id !== CALENDAR_NOTE_ID) tabs.open(n.id); else void openNote(n);
+  }
+  /** WebKit gives a clicked button no focus, so the keyboard is put on the icon's row */
+  function pickIconHere(e: MouseEvent, n: Note) {
+    const icon = e.currentTarget as HTMLElement;
+    icon.parentElement?.querySelector<HTMLElement>('[data-row]')?.focus({ preventScroll: true });
+    void pickIcon(n, icon);
   }
   async function pickIcon(n: Note, anchor?: HTMLElement) {
     const el = anchor ?? document.querySelector<HTMLElement>(`aside [data-note="${n.id}"]`);
@@ -279,7 +279,7 @@
   }
 
   function rowMenu(e: MouseEvent | KeyboardEvent, from?: HTMLElement) {
-    const row = from ?? (e.target as HTMLElement).closest<HTMLElement>('[data-row]');
+    const row = from ?? (e.target as HTMLElement).closest('.note-row')?.querySelector<HTMLElement>('[data-row]');
     if (!row) return;
     e.preventDefault();
     e.stopPropagation();
@@ -305,8 +305,8 @@
     if (items.length) ui.openMenu(at, items);
   }
 
+  $effect(() => { if (searchHasKeyboard) return ui.searching(() => (ui.search = '')); });
   function onSearchKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') { ui.search = ''; e.preventDefault(); focusNote(); }
     if (e.key === 'Enter' && hits[0] && !composing(e)) { e.preventDefault(); const n = hits[0]; ui.search = ''; void openNote(n); }
     if (e.key === 'ArrowDown' && !composing(e)) { rowsNow()[0]?.focus(); e.preventDefault(); }
   }
@@ -415,14 +415,18 @@
             {@const swipe = n.id === CALENDAR_NOTE_ID ? {} : { left: () => removeNote(n), enabled: () => !drag }}
             <div class="note-row" class:collapsed={tree.isFolded(n.id)} draggable={!isMobile && !q} ondragstart={(e) => dragStartNote(e, n)} ondragend={dragEnd}
               ondragover={(e) => overNote(e, n)} ondrop={drop} role="presentation" use:swipeRow={swipe}>
+              {#snippet glyph()}
+                {#if jumpNumbers.has(n.id)}<span class="num">{jumpNumbers.get(n.id)}</span>
+                {:else if n.icon}<Icon icon={n.icon} />{:else}
+                <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>{/if}
+              {/snippet}
+              {#if !isMobile}
+                <button class="ico-slot" tabindex="-1" aria-label="Change icon" data-tip="Change icon" onclick={(e) => pickIconHere(e, n)}>{@render glyph()}</button>
+              {/if}
               <button data-row data-note={n.id} class:active={n.id === CALENDAR_NOTE_ID ? onCalendar : n.id === notes.currentId}
                 class:enter={searchHasKeyboard && !!q && n.id === hits[0]?.id} onclick={(e) => rowClick(e, n)}>
                 <span class="title">
-                  <span class="ico-slot" tabindex="-1" data-tip="Change icon">
-                    {#if jumpNumbers.has(n.id)}<span class="num">{jumpNumbers.get(n.id)}</span>
-                    {:else if n.icon}<Icon icon={n.icon} />{:else}
-                    <svg class="ico" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h5"/></svg>{/if}
-                  </span>
+                  {#if isMobile}<span class="ico-slot">{@render glyph()}</span>{/if}
                   <span class="t">{titleOf(n)}</span>
                   {#if isMobile && n.id !== CALENDAR_NOTE_ID}<span class="when">{editedLabel(n.updatedAt)}</span>{/if}
                 </span>
@@ -503,7 +507,9 @@
   .row.dragging { opacity: 0.4; }
   .ico { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; opacity: 0.75; }
   .ico-slot { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: none; border-radius: 4px; transition: background 0.12s; }
-  .ico-slot:hover { background: var(--bg-active); }
+  button.ico-slot { position: absolute; left: 6px; top: 50%; translate: 0 -50%; padding: 0; border: 0; background: none; color: inherit; font: inherit; }
+  button.ico-slot:hover { background: var(--bg-active); }
+  .note-row > .ico-slot + [data-row] { padding-left: 30px; }
   .num {
     width: 16px; height: 16px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;
     font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent-text);
@@ -528,14 +534,14 @@
     background: var(--accent); box-shadow: var(--glow); pointer-events: none; z-index: var(--z-raised);
   }
   .row.drop-after::after { top: auto; bottom: -1px; }
-  .note-row { display: flex; align-items: center; border-radius: 6px; transition: background 0.12s; }
-  .note-row > button:first-child {
+  .note-row { position: relative; display: flex; align-items: center; border-radius: 6px; transition: background 0.12s; }
+  .note-row > [data-row] {
     flex: 1; min-width: 0; text-align: left; border: 0; background: none; color: inherit; font: inherit;
     padding: 5px 6px; border-radius: 6px; display: flex; flex-direction: column;
     cursor: default; transition: background 0.12s, transform 0.12s;
   }
   :global(html[data-hover]) .note-row:hover { background: var(--bg-hover); }
-  .note-row > button:first-child:active { transform: scale(0.985); }
+  .note-row > [data-row]:active { transform: scale(0.985); }
   .note-row:has(> button.active) { background: var(--bg-active); }
   .note-row > button.enter { background: color-mix(in srgb, var(--accent) 12%, transparent); }
   .note-row > button.active.enter { background: color-mix(in srgb, var(--accent) 12%, transparent); }

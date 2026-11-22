@@ -1,3 +1,5 @@
+export type PathsNotKept = readonly string[];
+export type OnPull = (files: RemoteFile[]) => void | PathsNotKept | Promise<void | PathsNotKept>;
 export interface RepoState { repo: string; token: string; head: string; tree: string; known: Record<string, string>; host?: string }
 export interface LocalFile { path: string; data: Uint8Array; sha?: string }
 export interface RemoteFile { path: string; data: Uint8Array; prev?: string }
@@ -94,7 +96,7 @@ export class Repo {
     return res.json();
   }
 
-  async pull(onPull?: (files: RemoteFile[]) => void | Promise<void>): Promise<RemoteFile[]> {
+  async pull(onPull?: OnPull): Promise<RemoteFile[]> {
     const br = await this.api('GET', `/branches/${BRANCH}`);
     if (br.status === 404 || br.status === 409) { // no branch yet (empty repo) — or no such repo, which init() reports
       await this.init();
@@ -117,16 +119,11 @@ export class Repo {
       data: await this.blob(e.sha),
       prev: this.s.known[e.path],
     }));
-    const before = { head: this.s.head, tree: this.s.tree, known: this.s.known };
+    const notKept = (out.length && (await onPull?.(out))) || [];
+    for (const path of notKept) delete known[path];
     this.s.head = head;
     this.s.tree = t.sha;
     this.s.known = known;
-    try {
-      if (out.length) await onPull?.(out);
-    } catch (e) {
-      Object.assign(this.s, before);
-      throw e;
-    }
     return out;
   }
 
@@ -185,7 +182,7 @@ export class Repo {
 export async function syncRound(
   repo: Repo,
   local: () => LocalFile[] | Promise<LocalFile[]>,
-  onPull: (files: RemoteFile[]) => void | Promise<void>,
+  onPull: OnPull,
 ): Promise<void> {
   for (let i = 0; i < 3; i++) {
     await repo.pull(onPull);

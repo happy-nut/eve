@@ -92,22 +92,38 @@
 
   const MIN_W = 280, MIN_H = 200;
   const HANDLES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+  const maxW = () => viewSize().w - x - 8, maxH = () => viewSize().h - y - 8;
+  function resizeFrom(start: { w: number; h: number; x: number; y: number }, sides: string, dx: number, dy: number) {
+    const { w: w0, h: h0, x: x0, y: y0 } = start;
+    if (sides.includes('e')) w = Math.max(MIN_W, Math.min(maxW(), w0 + dx));
+    if (sides.includes('s')) h = Math.max(MIN_H, Math.min(maxH(), h0 + dy));
+    if (sides.includes('w')) {
+      const left = Math.min(x0 + w0 - MIN_W, Math.max(8, x0 + dx));
+      w = w0 + (x0 - left);
+      x = left;
+    }
+    if (sides.includes('n')) {
+      const top = Math.min(y0 + h0 - MIN_H, Math.max(0, y0 + dy));
+      h = h0 + (y0 - top);
+      y = top;
+    }
+  }
   function resize(e: PointerEvent, sides: string) {
-    const w0 = w, h0 = h, x0 = x, y0 = y;
-    gesture(e, (dx, dy) => {
-      if (sides.includes('e')) w = Math.max(MIN_W, Math.min(viewSize().w - x - 8, w0 + dx));
-      if (sides.includes('s')) h = Math.max(MIN_H, Math.min(viewSize().h - y - 8, h0 + dy));
-      if (sides.includes('w')) {
-        const left = Math.min(x0 + w0 - MIN_W, Math.max(8, x0 + dx));
-        w = w0 + (x0 - left);
-        x = left;
-      }
-      if (sides.includes('n')) {
-        const top = Math.min(y0 + h0 - MIN_H, Math.max(0, y0 + dy));
-        h = h0 + (y0 - top);
-        y = top;
-      }
-    });
+    const start = { w, h, x, y };
+    gesture(e, (dx, dy) => resizeFrom(start, sides, dx, dy));
+  }
+  /** the right edge and the bottom one take the keyboard too: arrows move them, by more with ⇧ */
+  const KEY_STEP = 16, KEY_STEP_BIG = 64;
+  const KEYED: Record<string, { label: string; grow: string; shrink: string }> = {
+    e: { label: 'Width', grow: 'ArrowRight', shrink: 'ArrowLeft' },
+    s: { label: 'Height', grow: 'ArrowDown', shrink: 'ArrowUp' },
+  };
+  function resizeKey(e: KeyboardEvent, sides: string) {
+    const k = KEYED[sides], step = e.shiftKey ? KEY_STEP_BIG : KEY_STEP;
+    const by = e.key === k.grow ? step : e.key === k.shrink ? -step : 0;
+    if (!by || e.metaKey || e.ctrlKey || e.altKey) return;
+    e.preventDefault();
+    resizeFrom({ w, h, x, y }, sides, sides === 'e' ? by : 0, sides === 's' ? by : 0);
   }
 
   // The document (WebKit's PDF view, an iframe) can take the keyboard by itself as it loads; the panel sits
@@ -154,7 +170,13 @@
     {/if}
   </div>
   {#each HANDLES as sides}
-    <div class="pdf-edge {sides}" role="separator" aria-orientation={sides === 'e' || sides === 'w' ? 'vertical' : 'horizontal'} aria-label="Resize" onpointerdown={(e) => resize(e, sides)}>
+    {@const keyed = KEYED[sides]}
+    <!-- Svelte takes every separator for a static element; a focusable one with a value is a widget in WAI-ARIA -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+    <div class="pdf-edge {sides}" role="separator" aria-orientation={sides === 'e' || sides === 'w' ? 'vertical' : 'horizontal'} aria-label={keyed?.label ?? 'Resize'}
+      tabindex={keyed ? 0 : undefined} aria-valuenow={keyed ? (sides === 'e' ? w : h) : undefined}
+      aria-valuemin={keyed ? (sides === 'e' ? MIN_W : MIN_H) : undefined} aria-valuemax={keyed ? (sides === 'e' ? maxW() : maxH()) : undefined}
+      onkeydown={keyed ? (e) => resizeKey(e, sides) : undefined} onpointerdown={(e) => resize(e, sides)}>
       {#if sides === 'se'}<svg viewBox="0 0 12 12"><path d="M11 4.5 4.5 11M11 8.5 8.5 11"/></svg>{/if}
     </div>
   {/each}
@@ -177,7 +199,8 @@
   .pdf-doc.plain iframe { transform: none; }
   .pdf-none { margin: 0; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 24px; color: var(--fg-dim); font-size: 12.5px; }
   .dragging iframe { pointer-events: none; }
-  .pdf-edge { position: absolute; }
+  .pdf-edge { position: absolute; outline: none; }
+  .pdf-edge:focus-visible { background: var(--accent-soft); }
   .pdf-edge.n { top: 0; left: 18px; right: 18px; height: 6px; cursor: ns-resize; }
   .pdf-edge.s { bottom: 0; left: 18px; right: 18px; height: 7px; cursor: ns-resize; }
   .pdf-edge.w { left: 0; top: 6px; bottom: 18px; width: 7px; cursor: ew-resize; }

@@ -117,6 +117,10 @@ pub(crate) fn hide_app(app: AppHandle) -> Result<(), String> {
 /// the hotkey, Finder "Open With" or `open -a Eve`; key equivalents (⌘C/V/Z/Q…) still route through the hidden menu.
 #[tauri::command]
 pub(crate) fn set_dock_hidden(app: AppHandle, hidden: bool) -> Result<(), String> {
+    let saved = dock_file(&app);
+    if saved.as_deref().and_then(dock_hidden_in) == Some(hidden) {
+        return Ok(());
+    }
     // becoming an accessory app deactivates it, and its window drops behind the app below. Eve started by a link
     // (eve://updated after an update, `eve open`) has just shown its window, then the page applies this: Eve
     // looked like it never came back. At login there is no link, and the window stays out of the way as before.
@@ -125,6 +129,9 @@ pub(crate) fn set_dock_hidden(app: AppHandle, hidden: bool) -> Result<(), String
         let front = is_front(app.clone()) && app.state::<crate::PendingLink>().0.lock().unwrap().is_some();
         app.set_activation_policy(if hidden { tauri::ActivationPolicy::Accessory } else { tauri::ActivationPolicy::Regular })
             .map_err(|e| e.to_string())?;
+        if let Some(path) = saved {
+            let _ = std::fs::write(path, if hidden { "hidden" } else { "shown" });
+        }
         // the deactivation lands a moment later: shown again at once, it was undone (a test app needed ≥50 ms)
         if front {
             std::thread::spawn(move || {
@@ -138,9 +145,41 @@ pub(crate) fn set_dock_hidden(app: AppHandle, hidden: bool) -> Result<(), String
     Ok(())
 }
 
+fn dock_file(app: &AppHandle) -> Option<std::path::PathBuf> {
+    let dir = app.path().app_data_dir().ok()?;
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("dock"))
+}
+
+fn dock_hidden_in(path: &std::path::Path) -> Option<bool> {
+    match std::fs::read_to_string(path).ok()?.trim() {
+        "hidden" => Some(true),
+        "shown" => Some(false),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn hide_dock_as_saved(app: &AppHandle) {
+    if dock_file(app).and_then(|p| dock_hidden_in(&p)).unwrap_or(true) {
+        let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::stuck;
+    use super::{dock_hidden_in, stuck};
+
+    #[test]
+    fn the_dock_choice_is_read_back() {
+        let path = std::env::temp_dir().join(format!("eve-dock-{}", std::process::id()));
+        assert_eq!(dock_hidden_in(&path), None);
+        std::fs::write(&path, "shown").unwrap();
+        assert_eq!(dock_hidden_in(&path), Some(false));
+        std::fs::write(&path, "hidden\n").unwrap();
+        assert_eq!(dock_hidden_in(&path), Some(true));
+        std::fs::remove_file(&path).unwrap();
+    }
 
     /// a page that drew for the summon (or a later one) is left alone; one that said nothing, on screen, is loaded
     /// again (it stayed white for good); one put away before it could draw is not

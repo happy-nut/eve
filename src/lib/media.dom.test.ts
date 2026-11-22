@@ -353,3 +353,22 @@ test('a link card shows its whole address on one line, cut only by the card\'s w
   ed.commands.setTextSelection(posOf(ed, '끝'));
   expect(url()).toBe('github.com/happy-nut/eve/pull/190/files#diff-0123456789abcdef');
 });
+
+test('a picture of the note\'s own is dragged wide as far as the pane\'s edge less the gap app.css sets, and no further', () => {
+  document.body.innerHTML = '<div class="editor"><div class="tiptap"><figure class="img-fig"><img></figure></div></div>';
+  const pane = document.querySelector<HTMLElement>('.editor')!, tip = document.querySelector<HTMLElement>('.tiptap')!;
+  const media = document.querySelector<HTMLElement>('img')!;
+  Object.defineProperty(pane, 'clientWidth', { value: 1000 });
+  Object.defineProperty(tip, 'clientWidth', { value: 600 });
+  tip.style.setProperty('--pane-edge-gap', '30px');
+  media.getBoundingClientRect = () => new DOMRect(0, 0, 300, 100);
+  const grip = sizeGrip(media, () => {});
+  grip.setPointerCapture = grip.releasePointerCapture = () => {}; // jsdom has no pointer capture
+  const at = (type: string, clientX: number) => grip.dispatchEvent(new MouseEvent(type, { clientX, bubbles: true, cancelable: true }));
+  at('pointerdown', 0);
+  at('pointermove', 900);
+  at('pointerup', 900);
+  // the column (600) and, to its right, half of what the pane has beside it (200) less the gap (30)
+  expect(media.style.width).toBe('770px');
+  document.body.innerHTML = '';
+});

@@ -133,3 +133,18 @@ test('summoning turned off takes no system-wide key from the other apps', async 
   expect(keys).toEqual([]);
   vi.unstubAllEnvs();
 });
+
+test('put away, what asked to know is told by name, and nothing that waits for the page to be hidden or shown is woken', async () => {
+  const { onWindowHide } = await import('./platform');
+  const told: string[] = [];
+  const stop = onWindowHide(() => told.push('hidden'));
+  const woken = vi.fn();
+  document.addEventListener('visibilitychange', woken);
+  calls.length = 0;
+  await win.hide();
+  expect([told, woken.mock.calls.length, calls]).toEqual([['hidden'], 0, ['hide_app']]);
+  stop();
+  await win.hide();
+  expect(told).toEqual(['hidden']);
+  document.removeEventListener('visibilitychange', woken);
+});

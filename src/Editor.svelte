@@ -18,6 +18,7 @@
   import Find from './Find.svelte';
   import { randomIcon } from './lib/icons';
   import { nudgeNote, openedFromList } from './lib/moves';
+  import { claimKeys } from './lib/keys';
 
   let { note }: { note: Note } = $props();
 
@@ -31,6 +32,10 @@
   let emojiRow: ReturnType<typeof EmojiRow>;
 
   let lastHandedOver = '';
+
+  const formRowsKeepingTab = '.dblock .form, .dblock .layer .bar, .db';
+  const keepTabInNote = (e: KeyboardEvent) => { if (!e.defaultPrevented && !(e.target as HTMLElement).closest?.(formRowsKeepingTab)) e.preventDefault(); };
+  $effect(() => claimKeys(el, { Tab: keepTabInNote }, { composing: true }));
 
   onMount(() => {
     const openedNoteId = note.id;
@@ -214,10 +219,7 @@
   </div>
   <div class="editor has-head" role="presentation" bind:this={el} {@attach paneWidth}
     onkeydown={(e) => {
-      // …but a row of a diagram's form keeps Tab: to the next row, as anywhere a form is filled in (a database's fields,
-      // a chart part's bar too)
-      if (e.key === 'Tab' && !e.defaultPrevented && !(e.target as HTMLElement).closest?.('.dblock .form, .dblock .layer .bar, .db')) e.preventDefault();
-      // any other key (or a click, below) means the note is being written in: ⌥↑ / ⌥↓ move lines again
+      // a key (or a click, below) means the note is being written in: ⌥↑ / ⌥↓ move lines again
       if (!(e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown'))) openedFromList.id = '';
     }}
     onmousedown={() => (openedFromList.id = '')}

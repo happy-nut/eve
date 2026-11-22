@@ -10,6 +10,7 @@ export interface ClaimOptions {
   keyup?: boolean;
   composing?: boolean;
   onlyKeysAfterClaim?: boolean;
+  letType?: boolean;
 }
 
 export const PRIORITY = {
@@ -49,8 +50,10 @@ function handlerFor(map: KeyMap, e: KeyboardEvent): KeyHandler | undefined {
   return (combo && map[combo]) || map[e.key] || map['*'];
 }
 
+const typedInto = new WeakSet<Event>();
+
 function dispatch(e: KeyboardEvent, list: Claim[] | undefined) {
-  if (!list?.length) return;
+  if (!list?.length || typedInto.has(e)) return;
   const ime = composing(e);
   const top = ui.layers.top?.id;
   const path = e.composedPath();
@@ -61,7 +64,8 @@ function dispatch(e: KeyboardEvent, list: Claim[] | undefined) {
     if (c.owner !== 'global' && !path.includes(c.owner)) continue;
     const h = handlerFor(c.map, e);
     if (h?.(e) === true) {
-      e.preventDefault();
+      if (c.o.letType) typedInto.add(e);
+      else e.preventDefault();
       return;
     }
   }
@@ -87,5 +91,5 @@ export function leaveToApp(e: KeyboardEvent) { forApp.add(e); }
 
 export function handledBy(e: KeyboardEvent): 'app' | 'taken' | null {
   if (forApp.has(e)) return 'app';
-  return e.defaultPrevented ? 'taken' : null;
+  return e.defaultPrevented || typedInto.has(e) ? 'taken' : null;
 }

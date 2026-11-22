@@ -3,6 +3,7 @@ import { importTree, type Source } from './importTree';
 import { files, importAsset, pickFiles, pickFolders, listFolder, pickSavePath, savePdf, savePng, isMobile, widget } from './platform';
 import { commonDir, dirOf } from './paths';
 import { ui, errorText } from './ui.svelte';
+import { assetIfTaken } from './drop';
 import { flushPendingEdits } from './pending';
 
 export async function importPaths(paths: string[], from?: string, into = ''): Promise<Note | null> {
@@ -10,7 +11,7 @@ export async function importPaths(paths: string[], from?: string, into = ''): Pr
   const sources: Source[] = paths.map((p) => ({
     path: p.slice(root.length).replace(/^\//, ''),
     text: () => files.read(p),
-    asset: () => importAsset(p),
+    asset: () => assetIfTaken(p, () => importAsset(p)),
   }));
   const one = paths.length === 1 && !from;
   const made = await importTree(sources, into, one ? (notes.current?.parent ?? '') : into);

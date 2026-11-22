@@ -13,7 +13,7 @@ const fresh = () => {
 };
 const get = (id: string) => notes.all.find((n) => n.id === id)!;
 
-test('a note is made where asked, the open note left open', () => {
+test('a note is made where asked, the open note left open', async () => {
   const open = fresh();
   // under a path of pages: each found by its title, or made (an older server asks for it as a group)
   const made = apply({ ask: '1', op: 'create', body: '# Plan\n\n- [ ] ship\n', page: 'Work/Q3' });
@@ -21,7 +21,9 @@ test('a note is made where asked, the open note left open', () => {
   const plan = notes.visible.find((n) => titleOf(n) === 'Plan')!, q3 = get(plan.parent!), work = get(q3.parent!);
   expect(made.text).toContain(plan.id);
   expect([plan.body, titleOf(q3), titleOf(work), work.parent, notes.currentId]).toEqual(['# Plan\n\n- [ ] ship\n', 'Q3', 'Work', undefined, open.id]);
-  expect(apply({ ask: '2', op: 'create', body: '# Retro\n', group: 'work / q3' }).ok).toBe(true); // the same pages, not new ones
+  const said: Answer[] = [];
+  await applyAll([JSON.stringify({ ask: '2', op: 'create', body: '# Retro\n', group: 'work / q3' })], (_, a) => said.push(a));
+  expect(said.map((a) => a.ok)).toEqual([true]); // the same pages, not new ones
   expect(get(notes.visible.find((n) => titleOf(n) === 'Retro')!.id).parent).toBe(q3.id);
   expect(notes.visible.filter((n) => titleOf(n) === 'Work')).toHaveLength(1);
   // under a page asked by its id: there, whatever path was asked

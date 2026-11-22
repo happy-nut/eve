@@ -18,6 +18,7 @@
   import ChartEditor from './ChartEditor.svelte';
   import { tagSpots, adders, toggles } from './lib/spots';
   import { followPointer } from './lib/followPointer';
+  import { WriteBack } from './lib/writeBack';
 
   let { code, start, codeShown, onCode, onCodeEdit, onCodeLeave, onError, onHistory, onLeave, onDelete }: {
     code: string;
@@ -37,38 +38,21 @@
   let d = $state<Diagram | null>(fromCode(initial.code));
   let active = $state(initial.start && !!fromCode(initial.code));
   const mine = $derived(d ? toCode(d) : null);
-  let lastSeen = untrack(() => mine);
-  let echo: string | null = null;
   let edited = $state(false);
-  let pendingWrite: ReturnType<typeof setTimeout> | undefined;
+  const writeBack = new WriteBack(untrack(() => mine), (c) => onCode(c), () => code);
   $effect(() => {
     const c = mine;
-    if (c === null || c === lastSeen) return;
-    lastSeen = c;
-    echo = c;
-    edited = true;
-    clearTimeout(pendingWrite);
-    const at = untrack(() => code);
-    pendingWrite = setTimeout(() => { pendingWrite = undefined; if (code === at) onCode(c); }, 250);
+    untrack(() => { if (writeBack.drawn(c)) edited = true; });
   });
-  function flush() {
-    if (pendingWrite === undefined) return;
-    clearTimeout(pendingWrite);
-    pendingWrite = undefined;
-    if (mine !== null && mine !== code) onCode(mine);
-  }
+  const flush = () => writeBack.flush(mine);
   $effect(() => {
     const c = code;
-    untrack(() => {
-      if (c === echo) return;
-      clearTimeout(pendingWrite);
-      pendingWrite = undefined;
-      echo = null;
+    untrack(() => writeBack.arrived(c, () => {
       edited = false;
       d = fromCode(c);
-      lastSeen = d ? toCode(d) : null;
       if (!d) active = false;
-    });
+      return d ? toCode(d) : null;
+    }));
   });
   const drawn = $derived(edited && mine !== null ? mine : code);
 
@@ -230,6 +214,11 @@
     letGo();
     active = true;
   }
+  const opensFromKeys = $derived(!active && !error);
+  function openFromKeys(e: KeyboardEvent) {
+    if (e.target !== canvas || (e.key !== 'Enter' && e.key !== ' ') || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (edit()) e.preventDefault();
+  }
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape' && active && !e.defaultPrevented) { e.preventDefault(); e.stopPropagation(); leave(); }
   }
@@ -307,8 +296,7 @@
   }
   function menuFrom(e: MouseEvent, items: MenuItem[]) {
     e.stopPropagation();
-    const afterMenuCloses = (run: () => void) => () => requestAnimationFrame(run);
-    ui.openMenu(under(e.currentTarget as HTMLElement), items.map((it) => ({ ...it, run: it.run && afterMenuCloses(it.run) })));
+    ui.openMenu(under(e.currentTarget as HTMLElement), items);
   }
   let flowEd = $state<ReturnType<typeof FlowEditor> | null>(null);
   const chart = $derived(active && d && d.kind !== 'flowchart' ? d : null);
@@ -316,6 +304,7 @@
   let rows = $state(false);
 
   let full = $state(false), zoom = $state(1);
+  const dockTab = $derived(active || codeShown || full ? 0 : -1);
   const ZOOM_MIN = 0.1, ZOOM_MAX = 8;
   function keepScroll(el: Element) {
     const kept: [Element, number][] = [];
@@ -435,8 +424,8 @@
 
 <div class="dblock" class:active class:full bind:this={root} onkeydown={onKey} oncontextmenu={menu} role={full ? 'dialog' : 'group'} aria-modal={full ? 'true' : undefined} aria-label={full ? 'Diagram' : undefined}>
   <div class="pic">
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="mermaid-view diagram-canvas" class:error={!!error} bind:this={canvas} onclick={open} onwheel={onWheel} onpointerdown={onPanDown} {@attach scrollHint} {@attach pinchZoom}>
+  <div class="mermaid-view diagram-canvas" class:error={!!error} bind:this={canvas} role="button" aria-label="Edit diagram" tabindex={opensFromKeys ? 0 : -1}
+    onclick={open} onkeydown={openFromKeys} onwheel={onWheel} onpointerdown={onPanDown} {@attach scrollHint} {@attach pinchZoom}>
     {#if error}{error}{:else}{@html svg}{/if}
   </div>
   {#if chips.length}
@@ -454,16 +443,16 @@
     <div class="dock" class:on={active || codeShown} role="toolbar" aria-label="Diagram tools">
       {#if active && d}
         {#if addItems().length}
-          <button type="button" style="--i: 0" aria-label="Add" data-tip="Add" onmousedown={(e) => e.preventDefault()} onclick={(e) => menuFrom(e, addItems())}>
+          <button type="button" tabindex={dockTab} style="--i: 0" aria-label="Add" data-tip="Add" onmousedown={(e) => e.preventDefault()} onclick={(e) => menuFrom(e, addItems())}>
             <svg viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9" /></svg>
           </button>
         {/if}
-        <button type="button" style="--i: 1" aria-label="More" data-tip="Layout, list and code" onmousedown={(e) => e.preventDefault()} onclick={(e) => menuFrom(e, moreItems())}>
+        <button type="button" tabindex={dockTab} style="--i: 1" aria-label="More" data-tip="Layout, list and code" onmousedown={(e) => e.preventDefault()} onclick={(e) => menuFrom(e, moreItems())}>
           <svg viewBox="0 0 16 16"><circle cx="3.6" cy="8" r="1.1" /><circle cx="8" cy="8" r="1.1" /><circle cx="12.4" cy="8" r="1.1" /></svg>
         </button>
         <i class="sep"></i>
       {:else if codeShown && d}
-        <button type="button" style="--i: 1" aria-label="Edit as drawing" data-tip="Edit as a drawing (⌘↵)" onmousedown={(e) => e.preventDefault()} onclick={toDrawing}>
+        <button type="button" tabindex={dockTab} style="--i: 1" aria-label="Edit as drawing" data-tip="Edit as a drawing (⌘↵)" onmousedown={(e) => e.preventDefault()} onclick={toDrawing}>
           <svg viewBox="0 0 16 16"><rect x="2.5" y="3" width="5" height="4" rx="1.2" /><rect x="8.5" y="9" width="5" height="4" rx="1.2" /><path d="M5 7v2.5a1.5 1.5 0 0 0 1.5 1.5h2" /></svg>
         </button>
         <i class="sep"></i>
@@ -482,13 +471,13 @@
         </button>
       {/if}
       <i class="sep edit"></i>
-      <button type="button" class="edit" style="--i: 3" aria-label="Undo" data-tip="Undo (⌘Z)" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); stayPut(() => onHistory(false)); }}>
+      <button type="button" tabindex={dockTab} class="edit" style="--i: 3" aria-label="Undo" data-tip="Undo (⌘Z)" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); stayPut(() => onHistory(false)); }}>
         <svg viewBox="0 0 16 16"><path d="M5.5 4 2.5 7l3 3M2.5 7h7a4 4 0 0 1 0 8H8" /></svg>
       </button>
-      <button type="button" class="edit" style="--i: 4" aria-label="Redo" data-tip="Redo (⇧⌘Z)" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); stayPut(() => onHistory(true)); }}>
+      <button type="button" tabindex={dockTab} class="edit" style="--i: 4" aria-label="Redo" data-tip="Redo (⇧⌘Z)" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); stayPut(() => onHistory(true)); }}>
         <svg viewBox="0 0 16 16"><path d="M10.5 4l3 3-3 3M13.5 7h-7a4 4 0 0 0 0 8H8" /></svg>
       </button>
-      <button type="button" class="danger edit" style="--i: 5" aria-label="Delete diagram" data-tip="Delete diagram" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); active = false; onDelete(true); }}>
+      <button type="button" tabindex={dockTab} class="danger edit" style="--i: 5" aria-label="Delete diagram" data-tip="Delete diagram" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); active = false; onDelete(true); }}>
         <svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg>
       </button>
     </div>

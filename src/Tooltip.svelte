@@ -3,6 +3,7 @@
   import { claimKeys, PRIORITY } from './lib/keys';
 
   import { floatAt } from './lib/popup';
+  import { onWindowHide } from './lib/platform';
 
   let tip = $state<{ text: string; keys: string; at: DOMRect; up: boolean; right: boolean; side?: boolean } | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -33,6 +34,7 @@
     clearTimeout(timer); tip = null; tipOwner = null;
   }
   $effect(() => claimKeys('global', { '*': () => out() }, { capture: true, priority: PRIORITY.watch, composing: true }));
+  $effect(() => onWindowHide(() => out()));
 </script>
 
 <!-- controls can vanish under a still pointer (e.g. the group tools folding away): re-check hover on movement -->

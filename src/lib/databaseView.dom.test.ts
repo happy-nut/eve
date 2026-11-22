@@ -55,6 +55,32 @@ test("the table's ⌘Z takes back a cell, a new row, a property; ⌘⇧Z does th
   expect(schema().sort).toBeUndefined();
 });
 
+test("in a note, the table's ⌘Z is the table's: neither the note's undo nor the app's hears it first", async () => {
+  const { editorWith, type, md } = await import('./testEditor');
+  const { claimKeys, handledBy, PRIORITY } = await import('./keys');
+  const page = notes.create('# Tasks\n'); notes.touched(page.id);
+  notes.currentId = page.id;
+  const ed = editorWith('# T\n\nwords\n\n```database\n{"title": "Tasks", "props": [], "view": "table"}\n```');
+  ed.commands.setTextSelection(ed.state.doc.child(1).nodeSize + ed.state.doc.child(0).nodeSize - 1);
+  type(ed, '!');
+  await settle();
+  const appHeard: string[] = [];
+  const off = claimKeys('global', { '*': (e) => void (handledBy(e) !== 'taken' && appHeard.push(e.key)) }, { priority: PRIORITY.app });
+  (ed.view.dom.querySelector('.db th .head') as HTMLElement).click();
+  await settle();
+  ui.closeMenu(ui.menu!.items.find((i) => i.label === 'Sort descending'));
+  await settle();
+  const sorted = () => JSON.parse(md(ed).split('```database\n')[1].split('\n```')[0]).sort;
+  expect(sorted()).toEqual({ by: 'Name', desc: true });
+  key(ed.view.dom.querySelector('.db')!);
+  await settle();
+  off();
+  expect(sorted()).toBeUndefined();
+  expect(md(ed)).toContain('words!');
+  expect(appHeard).toEqual([]);
+  ed.commands.focus();
+});
+
 test('a relation links pages; a rollup sums what they say; a formula works over the row; errors show as such', async () => {
   const projects = notes.create('# Projects\n'); notes.touched(projects.id);
   notes.addRow(projects.id, 'Alpha', { Hours: '3' });
@@ -107,7 +133,7 @@ test('the calendar puts rows on their days, + makes one on a day; the gallery sh
 });
 
 // as Menu.svelte picks: the menu closes first, then the item runs
-const pick = (label: string) => { const it = ui.menu!.items.find((i) => i.label === label)!; ui.closeMenu(); it.run!(); };
+const pick = (label: string) => { const it = ui.menu!.items.find((i) => i.label === label)!; ui.closeMenu(it); };
 
 test('a property is added as the menus ask for it: its kind, its name, then what it needs (a formula)', async () => {
   const page = notes.create('# Shop\n'); notes.touched(page.id);

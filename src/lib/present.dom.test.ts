@@ -65,6 +65,23 @@ test('→ walks the diagram a step at a time, then turns the page; ← goes back
   expect(document.activeElement).toBe(page);
 });
 
+test('a diagram on a slide is a picture: it takes no focus, so turning the page past it keeps the keys on the presentation', async () => {
+  document.body.innerHTML = `<main><div class="tiptap" tabindex="0" contenteditable="true">
+    <h1>Talk</h1><div class="mermaid-view" role="button" tabindex="0">${CHART}</div><h2>Next</h2><p>more</p></div></main>`;
+  const page = document.querySelector<HTMLElement>('.tiptap')!;
+  page.focus();
+  ui.openPresent(page);
+  app = mount(Present, { target: document.body });
+  await settle();
+  const box = document.querySelector<HTMLElement>('.present')!;
+  const views = [...box.querySelectorAll('.mermaid-view')];
+  expect(views.length).toBeGreaterThan(0);
+  expect(views.map((v) => [v.getAttribute('tabindex'), v.getAttribute('role')])).toEqual(views.map(() => [null, null]));
+  expect(document.querySelector('.tiptap .mermaid-view')!.getAttribute('tabindex')).toBe('0');
+  ui.closePresent();
+  await settle();
+});
+
 test('a phone: its status and navigation bars hidden while it is up (its webview has no fullscreen), shown again after', async () => {
   const calls: boolean[] = [];
   (globalThis as { EveAndroid?: unknown }).EveAndroid = { immersive: (on: boolean) => calls.push(on) };

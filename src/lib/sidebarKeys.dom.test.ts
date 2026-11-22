@@ -39,3 +39,39 @@ test('→ on an open page goes to the first note under it; on a folded one it op
   key('ArrowRight'); flushSync(); await new Promise((r) => setTimeout(r, 0)); await new Promise((r) => setTimeout(r, 0));
   expect(on()).toBe(bo.id);
 });
+
+test('a row\'s icon is a button of its own beside the row, and clicking it picks an icon without opening the note', async () => {
+  const { ui } = await import('./ui.svelte');
+  const open = notes.addImported('# Here\n\nnow\n');
+  const other = notes.addImported('# There\n\nthen\n');
+  notes.currentId = open.id;
+  app = mount(Sidebar, { target: document.body, props: { open: true, searchEl: null, cmdHeld: false, onSettings: () => {}, onNew: () => {} } });
+  flushSync(); await new Promise((r) => setTimeout(r, 0));
+  expect(document.querySelectorAll('aside button button')).toHaveLength(0);
+  const icon = document.querySelector(`aside .note-row:has([data-note="${other.id}"]) .ico-slot`)!;
+  expect(icon.tagName).toBe('BUTTON');
+  (icon as HTMLElement).click();
+  expect(ui.emoji).not.toBeNull();
+  expect(notes.currentId).toBe(open.id);
+  expect(document.activeElement).toBe(document.querySelector(`aside [data-note="${other.id}"]`));
+  ui.emojiDone(null);
+});
+
+test('Esc in the search is the layers\' Esc: what was typed goes, the keyboard goes to the note, and nothing under it hears it', async () => {
+  const { ui } = await import('./ui.svelte');
+  const main = document.body.appendChild(document.createElement('main'));
+  main.innerHTML = '<div class="tiptap" tabindex="0" contenteditable="true"></div>';
+  app = mount(Sidebar, { target: document.body, props: { open: true, searchEl: null, cmdHeld: false, onSettings: () => {}, onNew: () => {} } });
+  flushSync();
+  const field = document.querySelector<HTMLInputElement>('aside .search input')!;
+  field.focus();
+  ui.search = 'pla';
+  flushSync();
+  expect(ui.layers.top?.id).toBe('search');
+  expect(key('Escape')).toBe(true);
+  expect(ui.layers.escape()).toBe(true);
+  flushSync();
+  expect(ui.search).toBe('');
+  expect(document.activeElement).toBe(main.querySelector('.tiptap'));
+  expect(ui.layers.has('search')).toBe(false);
+});

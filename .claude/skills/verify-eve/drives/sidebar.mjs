@@ -7,10 +7,10 @@ export const notes = {
 };
 
 const list = (t) => t.page.evaluate(() => [...document.querySelectorAll('aside [data-row]')]
-  .map((r) => getComputedStyle(r.closest('li')).getPropertyValue('--d').trim() + '|' + r.textContent.replace(/\s+/g, ' ').trim()));
+  .map((r) => getComputedStyle(r.closest('li')).getPropertyValue('--d').trim() + '|' + ((r) => ((r.querySelector('.ico-slot') ? '' : r.closest('.note-row')?.querySelector('.ico-slot')?.textContent ?? '') + r.textContent).replace(/\s+/g, ' ').trim())(r)));
 const same = (got, want) => JSON.stringify(got) === JSON.stringify(want);
 const listIs = (t, want) => async () => same(await list(t), want);
-const focusedRow = (t) => t.page.evaluate(() => document.activeElement?.closest('[data-row]')?.textContent.replace(/\s+/g, ' ').trim() ?? null);
+const focusedRow = (t) => t.page.evaluate(() => { const r = document.activeElement?.closest('[data-row]'); return r ? ((r) => ((r.querySelector('.ico-slot') ? '' : r.closest('.note-row')?.querySelector('.ico-slot')?.textContent ?? '') + r.textContent).replace(/\s+/g, ' ').trim())(r) : null; });
 const inNote = (t) => t.page.evaluate(() => !!document.activeElement?.closest('.tiptap'));
 
 export default async (t) => {
@@ -27,7 +27,7 @@ export default async (t) => {
     && /\nparent: a\n/.test(await t.page.evaluate(() => localStorage.getItem('eve.notes.d'))), 'after a reload Garden is still under Plan and saved with parent: a');
   await t.shot('drag-nest-kept', 'aside');
 
-  await t.click('aside [data-note="c"] .ico-slot');
+  await t.click('aside .note-row:has([data-note="c"]) .ico-slot');
   await t.page.waitForSelector('[aria-label="Choose an icon"] emoji-picker button.emoji');
   // the grid is drawn once the picker's emoji data is read; its favourites row before it (a slower CI clicked then)
   await t.page.waitForFunction(() => { const tab = document.querySelector('emoji-picker')?.shadowRoot?.querySelector('.tabpanel'); return !!tab && !tab.classList.contains('gone') && !!tab.querySelector('button.emoji'); });
@@ -43,7 +43,7 @@ export default async (t) => {
   await t.click('aside [data-note="a"]');
   await t.click('.tiptap');
   await t.page.keyboard.down('Meta');
-  await t.ok('sidebar-jump', () => t.page.evaluate(() => [...document.querySelectorAll('aside [data-row]')].map((r) => r.querySelector('.num')?.textContent ?? '-').join('') === '1234'),
+  await t.ok('sidebar-jump', () => t.page.evaluate(() => [...document.querySelectorAll('aside [data-row]')].map((r) => r.closest('.note-row')?.querySelector('.num')?.textContent ?? '-').join('') === '1234'),
     'holding the command key shows 1 to 4 on the rows in list order, sub-pages included');
   await t.shot('cmd-held', 'aside');
   await t.page.keyboard.press('Digit3');

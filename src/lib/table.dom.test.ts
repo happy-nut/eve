@@ -162,8 +162,15 @@ describe('a selection from text into a cell, cleared: the text out of the table 
     ['a word', 'X', 'aX', 'Xelow'],
     ['lines', 'X\nY', 'aX\n\nY', 'X\n\nYelow'],
     ['a list', '- X\n- Y', 'a\n\n- X\n- Y', '- X\n- Y\n\nelow'],
-  ])('paste of %s: cleared, then put in out of the table, as at the end (the start) of a line', (_what, text, top, bottom) => {
-    const { after } = cleared(`above\n\n${grid}`, ['bove'], ['a1', true], (ed) => { ed.view.dom.dispatchEvent(clip('paste', { 'text/plain': text }).e); });
+  ])('paste of %s: cleared, then put in out of the table, as at the end (the start) of a line, in one step', (_what, text, top, bottom) => {
+    let steps = 0;
+    const { after } = cleared(`above\n\n${grid}`, ['bove'], ['a1', true], (ed) => {
+      const count = ({ transaction }: { transaction: { docChanged: boolean } }) => { if (transaction.docChanged) steps++; };
+      ed.on('transaction', count);
+      ed.view.dom.dispatchEvent(clip('paste', { 'text/plain': text }).e);
+      ed.off('transaction', count);
+    });
+    expect(steps).toBe(1);
     expect(after).toBe(`${top}\n\n|  |  |\n| --- | --- |\n|  | a2 |\n| b1 | b2 |\n`);
     const { after: below } = cleared(`${grid}\n\nbelow`, ['b1', true], ['elow'], (ed) => { ed.view.dom.dispatchEvent(clip('paste', { 'text/plain': text }).e); });
     expect(below).toBe(`| h1 | h2 |\n| --- | --- |\n| a1 | a2 |\n| b1 |  |\n\n${bottom}`);

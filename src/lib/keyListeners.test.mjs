@@ -14,7 +14,6 @@ const KEYS = 'lib/keys.ts';
 /** key listeners on an element of a part's own, each with why it is not a claim */
 const ALLOWED = [
   { file: 'MathEdit.svelte', on: 'f', why: "the formula's own math-field: its Esc, Enter, Tab and ⌫ before MathLive's, inside it only" },
-  { file: 'lib/code.ts', on: 'field', why: "a code block's language box: its keys are its own, kept from the note and the app" },
   { file: 'lib/image.ts', on: 'cap', why: "a picture's caption while it is written in: ⌘A selects the caption, not the note" },
   { file: 'lib/keys.dom.test.ts', on: 'box', why: "the test's own input, to see a capture claim come before it" },
 ];

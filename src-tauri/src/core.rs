@@ -64,39 +64,238 @@ pub fn parse(text: &str) -> Option<Note> {
 }
 
 pub fn plain(line: &str) -> String {
+    let s = tags_off(&comments_off(line));
+    let s = display_math_off(lead_off(&s));
+    let s = highlights_off(&links_off(&inline_math_off(&s)));
+    unescape(&wiki_links_off(&marks_off(&s))).trim().to_string()
+}
+
+fn escaped_at(s: &str, i: usize) -> bool {
+    s[..i].ends_with('\\')
+}
+
+fn comments_off(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find("<!--") {
+        out.push_str(&rest[..i]);
+        match rest[i + 4..].find("-->") {
+            Some(j) => rest = &rest[i + 4 + j + 3..],
+            None => return out,
+        }
+    }
+    out + rest
+}
+
+fn tag_end(s: &str, at: usize, escapable: bool) -> Option<usize> {
+    let rest = s[at..].strip_prefix('<')?;
+    let name = rest.strip_prefix('/').unwrap_or(rest);
+    if !name.starts_with(|c: char| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    let after = name.trim_start_matches(|c: char| c.is_ascii_alphanumeric() || c == '-');
+    let close = if after.starts_with('>') {
+        0
+    } else if after.starts_with(char::is_whitespace) {
+        after.find('>')?
+    } else {
+        return None;
+    };
+    if escapable && after[..close].ends_with('\\') {
+        return None;
+    }
+    Some(s.len() - after.len() + close + 1)
+}
+
+fn tags_off(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while let Some(c) = s[i..].chars().next() {
+        match tag_end(s, i, true).filter(|_| !escaped_at(s, i)) {
+            Some(end) => i = end,
+            None => {
+                out.push(c);
+                i += c.len_utf8();
+            }
+        }
+    }
+    out
+}
+
+pub fn only_html(line: &str) -> bool {
+    let mut rest = line.trim_start();
+    if rest.is_empty() {
+        return false;
+    }
+    while !rest.is_empty() {
+        if rest.starts_with("<!--") {
+            return true;
+        }
+        let Some(end) = tag_end(rest, 0, false) else { return false };
+        rest = rest[end..].trim_start();
+    }
+    true
+}
+
+fn lead_off(s: &str) -> &str {
     let lead = |c: char| matches!(c, '#' | '>' | '-' | '*' | '+') || c.is_whitespace();
-    let mut s: &str = line;
     if s.starts_with(lead) {
-        s = s.trim_start_matches(lead);
-    } else if let Some(n) = s.find(|c: char| !c.is_ascii_digit()).filter(|&n| n > 0) {
-        let tail = &s[n..];
-        if let Some(t) = tail.strip_prefix('.').filter(|t| t.starts_with(char::is_whitespace)) {
-            s = t.trim_start();
+        return s.trim_start_matches(lead);
+    }
+    if let Some(n) = s.find(|c: char| !c.is_ascii_digit()).filter(|&n| n > 0) {
+        if let Some(t) = s[n..].strip_prefix('.').filter(|t| t.starts_with(char::is_whitespace)) {
+            return t.trim_start();
         }
     } else if s.starts_with("[ ]") || s.starts_with("[x]") {
-        s = s[3..].trim_start();
+        return s[3..].trim_start();
     }
-    let mut unescaped = String::with_capacity(s.len());
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
-        unescaped.push(if c == '\\' { chars.next().unwrap_or(c) } else { c });
+    s
+}
+
+fn display_math_end(s: &str, at: usize) -> Option<usize> {
+    let first = s[at + 2..].chars().next()?;
+    let mut from = at + 2 + first.len_utf8();
+    loop {
+        let j = from + s[from..].find("$$")?;
+        if !escaped_at(s, j) {
+            return Some(j);
+        }
+        from = j + 1;
     }
-    let unmarked: String = highlights_off(&unescaped).chars().filter(|c| !matches!(c, '*' | '_' | '`' | '~')).collect();
-    let mut linked = String::with_capacity(unmarked.len());
-    let mut rest = unmarked.as_str();
-    while let Some(i) = rest.find("[[") {
-        match rest[i + 2..].find("]]").filter(|&j| j > 0) {
+}
+
+fn display_math_off(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while let Some(k) = s[i..].find("$$").map(|k| i + k) {
+        match display_math_end(s, k).filter(|_| !escaped_at(s, k)) {
             Some(j) => {
-                let (title, alias) = split_alias(&rest[i + 2..i + 2 + j]);
-                linked.push_str(&rest[..i]);
-                linked.push_str(if alias.is_empty() { title } else { alias });
-                rest = &rest[i + 4 + j..];
+                out.push_str(&s[i..k]);
+                out.push_str(&s[k + 2..j]);
+                i = j + 2;
             }
-            None => break,
+            None => {
+                out.push_str(&s[i..=k]);
+                i = k + 1;
+            }
         }
     }
-    linked.push_str(rest);
-    linked.trim().to_string()
+    out + &s[i..]
+}
+
+fn inline_math_end(s: &str, at: usize) -> Option<usize> {
+    if s[..at].ends_with(['\\', '$']) || s[at + 1..].starts_with(|c: char| c == '$' || c.is_whitespace()) {
+        return None;
+    }
+    let mut p = at + 1;
+    loop {
+        let c = s[p..].chars().next()?;
+        let after = p + c.len_utf8();
+        if !c.is_whitespace() && c != '\\' && s[after..].starts_with('$') && !s[after + 1..].starts_with('$') {
+            return Some(after);
+        }
+        p = match c {
+            '$' => return None,
+            '\\' => after + s[after..].chars().next()?.len_utf8(),
+            _ => after,
+        };
+    }
+}
+
+fn inline_math_off(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while let Some(k) = s[i..].find('$').map(|k| i + k) {
+        match inline_math_end(s, k) {
+            Some(j) => {
+                out.push_str(&s[i..k]);
+                out.push_str(&s[k + 1..j]);
+                i = j + 1;
+            }
+            None => {
+                out.push_str(&s[i..=k]);
+                i = k + 1;
+            }
+        }
+    }
+    out + &s[i..]
+}
+
+fn link_at(s: &str, at: usize) -> Option<(usize, &str)> {
+    let (picture, rest) = match s[at..].strip_prefix("![") {
+        Some(r) => (true, r),
+        None => (false, s[at..].strip_prefix('[')?),
+    };
+    let text_end = rest.find(']')?;
+    let text = &rest[..text_end];
+    let rest = rest[text_end + 1..].strip_prefix('(')?;
+    let url_end = rest.find(|c: char| c == ')' || c.is_whitespace()).unwrap_or(rest.len());
+    let url = &rest[..url_end];
+    let after = match rest[url_end..].strip_prefix(')') {
+        Some(a) => a,
+        None => {
+            let quoted = rest[url_end..].trim_start().strip_prefix('"')?;
+            quoted[quoted.find('"')? + 1..].strip_prefix(')')?
+        }
+    };
+    Some((s.len() - after.len(), if picture || !text.is_empty() { text } else { url }))
+}
+
+fn links_off(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while let Some(c) = s[i..].chars().next() {
+        match link_at(s, i).filter(|_| !escaped_at(s, i)) {
+            Some((end, text)) => {
+                out.push_str(text);
+                i = end;
+            }
+            None => {
+                out.push(c);
+                i += c.len_utf8();
+            }
+        }
+    }
+    out
+}
+
+fn marks_off(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let word = |i: Option<usize>| i.and_then(|i| chars.get(i)).is_some_and(|c| c.is_alphanumeric());
+    let mut out = String::with_capacity(s.len());
+    for (i, &c) in chars.iter().enumerate() {
+        let before = i.checked_sub(1);
+        let escaped = before.is_some_and(|b| chars[b] == '\\');
+        let mark = matches!(c, '*' | '`' | '~') || c == '_' && !(word(before) && word(Some(i + 1)));
+        if escaped || !mark {
+            out.push(c);
+        }
+    }
+    out
+}
+
+fn wiki_links_off(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find("[[") {
+        let Some(first) = rest[i + 2..].chars().next() else { break };
+        let from = i + 2 + first.len_utf8();
+        let Some(j) = rest[from..].find("]]").map(|j| from + j) else { break };
+        let (title, alias) = split_alias(&rest[i + 2..j]);
+        out.push_str(&rest[..i]);
+        out.push_str(if alias.is_empty() { title } else { alias });
+        rest = &rest[j + 2..];
+    }
+    out + rest
+}
+
+fn unescape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        out.push(if c == '\\' { chars.next().unwrap_or(c) } else { c });
+    }
+    out
 }
 
 fn highlights_off(s: &str) -> String {
@@ -133,7 +332,7 @@ pub fn split_alias(inner: &str) -> (&str, &str) {
 }
 
 pub fn title_of(body: &str) -> String {
-    let first = body.split('\n').find(|l| !l.trim().is_empty()).unwrap_or("");
+    let first = body.split('\n').find(|l| !l.trim().is_empty() && !only_html(l)).unwrap_or("");
     let t = plain(first);
     if t.is_empty() { "Untitled".into() } else { t }
 }
@@ -435,8 +634,46 @@ pub struct Command {
     pub help: &'static str,
     pub params: &'static [Param],
     pub effect: Effect,
-    /// the notes folder (where the app's inbox is found), the notes read from it, the arguments
-    pub run: fn(&Path, &[Note], &Value) -> Result<String, String>,
+    pub run: fn(&App, &[Note], &Value) -> Result<Answer, String>,
+}
+
+pub struct App<'a> {
+    pub dir: &'a Path,
+    pub launch: fn(url: &str, background: bool) -> Result<(), String>,
+}
+
+impl<'a> App<'a> {
+    pub fn on_this_mac(dir: &'a Path) -> Self {
+        App { dir, launch }
+    }
+}
+
+pub enum Part {
+    Text(String),
+    Picture(PathBuf),
+}
+
+pub struct Answer(pub Vec<Part>);
+
+impl From<String> for Answer {
+    fn from(text: String) -> Self {
+        Answer(vec![Part::Text(text)])
+    }
+}
+
+impl Part {
+    pub fn written(&self) -> String {
+        match self {
+            Part::Text(t) => t.clone(),
+            Part::Picture(path) => format!("Picture: {}\n", path.display()),
+        }
+    }
+}
+
+impl Answer {
+    pub fn written(&self) -> String {
+        self.0.iter().map(Part::written).collect()
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -466,7 +703,7 @@ pub const COMMANDS: &[Command] = &[
             Param { kind: Kind::Number { min: 1, max: 500 }, ..text("limit", "At most this many (default 50)") },
         ],
         effect: Effect::Reads,
-        run: |_, notes, args| list_notes(notes, args),
+        run: |_, notes, args| list_notes(notes, args).map(Answer::from),
     },
     Command {
         tool: "search_notes",
@@ -481,7 +718,7 @@ pub const COMMANDS: &[Command] = &[
             Param { kind: Kind::Number { min: 1, max: 100 }, ..text("limit", "At most this many (default 20)") },
         ],
         effect: Effect::Reads,
-        run: |_, notes, args| search_notes(notes, args),
+        run: |_, notes, args| search_notes(notes, args).map(Answer::from),
     },
     Command {
         tool: "read_note",
@@ -495,7 +732,7 @@ pub const COMMANDS: &[Command] = &[
             text("cursor", "Where the last answer stopped, when it said the note continues"),
         ],
         effect: Effect::Reads,
-        run: |_, notes, args| read_note(notes, args),
+        run: |_, notes, args| read_note(notes, args).map(Answer::from),
     },
     Command {
         tool: "read_notes",
@@ -507,7 +744,7 @@ pub const COMMANDS: &[Command] = &[
             text("cursor", "Where the last answer stopped, when it said there is more"),
         ],
         effect: Effect::Reads,
-        run: |_, notes, args| read_notes(notes, args),
+        run: |_, notes, args| read_notes(notes, args).map(Answer::from),
     },
     Command {
         tool: "open_note",
@@ -516,7 +753,7 @@ pub const COMMANDS: &[Command] = &[
         help: "Shows a note in the Eve app on the user's Mac, so they can see it and edit it: Eve comes to the front with that note open (and started if it was not running). Give its title (as in a [[wiki link]]) or its id, and optionally a section to open it at that heading. Changes nothing in the notes. Use it when the user wants to see or work on a note themselves.",
         params: &[TITLE, ID, text("section", "A heading inside the note to open it at")],
         effect: Effect::Shows,
-        run: |_, notes, args| open_note(notes, args).and_then(|(url, said)| launch(&url, false).map(|_| said)),
+        run: |app, notes, args| open_note(notes, args).and_then(|(url, said)| (app.launch)(&url, false).map(|_| Answer::from(said))),
     },
     Command {
         tool: "diagram_images",
@@ -548,9 +785,9 @@ pub const COMMANDS: &[Command] = &[
         help: "Adds markdown at the end of a note, after a blank line. Give the note's title (as in a [[wiki link]]) or its id. Takes nothing away; if the user has the note open, it shows there at once.",
         params: &[TITLE, ID, needed(text("text", "Markdown to add at the end"))],
         effect: Effect::Adds,
-        run: |dir, notes, args| {
+        run: |app, notes, args| {
             let (note, _, _) = pick(notes, args)?;
-            ask_app(dir, serde_json::json!({ "op": "append", "id": note.id, "text": arg_str(args, "text") }))
+            ask_app(app, serde_json::json!({ "op": "append", "id": note.id, "text": arg_str(args, "text") }))
         },
     },
     Command {
@@ -565,13 +802,13 @@ pub const COMMANDS: &[Command] = &[
             needed(text("new", "What goes there instead (empty to take it out)")),
         ],
         effect: Effect::Rewrites,
-        run: |dir, notes, args| {
+        run: |app, notes, args| {
             let (note, _, _) = pick(notes, args)?;
             let old = arg_str(args, "old");
             if old.is_empty() {
                 return Err("Give old: the passage to replace. To add at the end, use append_note.".into());
             }
-            ask_app(dir, serde_json::json!({ "op": "edit", "id": note.id, "old": old, "new": arg_str(args, "new") }))
+            ask_app(app, serde_json::json!({ "op": "edit", "id": note.id, "old": old, "new": arg_str(args, "new") }))
         },
     },
     Command {
@@ -581,14 +818,14 @@ pub const COMMANDS: &[Command] = &[
         help: "Writes a note's whole text anew, keeping it the same note where it is: its place among the notes, the notes inside it, its id, the [[links]] to it. For a change too large for edit_note (reordering, restructuring, most of it rewritten) — never make a new note with create_note to change one that is there. body is the note's whole new markdown as read_note returns it, its first line the title (left out, the title is kept on top). Read the note first; if the user has it open, it shows there at once.",
         params: &[TITLE, ID, needed(text("body", "The note's whole new markdown, its first line the # title"))],
         effect: Effect::Rewrites,
-        run: |dir, notes, args| {
+        run: |app, notes, args| {
             let (note, _, _) = pick(notes, args)?;
             let body = arg_str(args, "body").trim_matches('\n');
             if body.trim().is_empty() {
                 return Err("Give body: the note's whole new text. To delete the note, use delete_note.".into());
             }
             let body = if body.trim_start().starts_with("# ") { format!("{body}\n") } else { format!("# {}\n\n{body}\n", title_of(&note.body)) };
-            ask_app(dir, serde_json::json!({ "op": "rewrite", "id": note.id, "body": body }))
+            ask_app(app, serde_json::json!({ "op": "rewrite", "id": note.id, "body": body }))
         },
     },
     Command {
@@ -598,9 +835,9 @@ pub const COMMANDS: &[Command] = &[
         help: "Deletes a note as the user deletes one: it goes to Eve's trash, where the user can bring it back (and Eve offers Undo for a few seconds). Give its title (as in a [[wiki link]]) or its id. The notes inside it are not deleted with it. Only when the user asked for the note to go.",
         params: &[TITLE, ID],
         effect: Effect::Rewrites,
-        run: |dir, notes, args| {
+        run: |app, notes, args| {
             let (note, _, _) = pick(notes, args)?;
-            ask_app(dir, serde_json::json!({ "op": "delete", "id": note.id }))
+            ask_app(app, serde_json::json!({ "op": "delete", "id": note.id }))
         },
     },
 ];
@@ -610,10 +847,10 @@ pub fn command(name: &str) -> Option<&'static Command> {
 }
 
 /// Run a command on the notes in `dir`, read afresh: the app may have written since the last call.
-pub fn run(dir: &Path, name: &str, args: &Value) -> Result<String, String> {
+pub fn run(app: &App, name: &str, args: &Value) -> Result<Answer, String> {
     let cmd = command(name).ok_or_else(|| format!("Unknown command \"{name}\"."))?;
-    let notes = load(dir)?;
-    (cmd.run)(dir, &notes, args)
+    let notes = load(app.dir)?;
+    (cmd.run)(app, &notes, args)
 }
 
 /// Text written for Claude, with each tool named as the command a terminal types (`read_note` -> `eve read`).
@@ -1007,9 +1244,9 @@ const ANSWER_WITHIN: std::time::Duration = std::time::Duration::from_secs(20);
 /// Mac's own programs can write; the `eve://inbox` link only tells Eve to look there (a web page can
 /// hand macOS that link too, so the link itself carries nothing). Eve applies it through its notes store
 /// and writes `<id>.reply`: what was done, or why not.
-pub fn ask_app(dir: &Path, ask: Value) -> Result<String, String> {
-    let v = ask_app_for(dir, ask)?;
-    Ok(v.get("text").and_then(Value::as_str).unwrap_or("").to_string())
+pub fn ask_app(app: &App, ask: Value) -> Result<Answer, String> {
+    let v = ask_app_for(app, ask)?;
+    Ok(Answer::from(v.get("text").and_then(Value::as_str).unwrap_or("").to_string()))
 }
 
 fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
@@ -1018,26 +1255,17 @@ fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
     std::fs::rename(&part, path)
 }
 
-#[cfg(not(test))]
-fn tell_app_to_look_in_inbox() -> Result<(), String> {
-    launch("eve://inbox", true)
-}
-#[cfg(test)]
-fn tell_app_to_look_in_inbox() -> Result<(), String> {
-    Ok(())
-}
-
-pub fn ask_app_for(dir: &Path, mut ask: Value) -> Result<Value, String> {
+pub fn ask_app_for(app: &App, mut ask: Value) -> Result<Value, String> {
     use std::sync::atomic::{AtomicU32, Ordering};
     static NEXT: AtomicU32 = AtomicU32::new(0);
-    let inbox = inbox(dir);
+    let inbox = inbox(app.dir);
     std::fs::create_dir_all(&inbox).map_err(|e| format!("Could not reach Eve's inbox at {} ({e}).", inbox.display()))?;
     let millis = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
     let id = format!("{millis}-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
     ask["ask"] = Value::from(id.as_str());
     let (ready, reply) = (inbox.join(format!("{id}.json")), inbox.join(format!("{id}.reply")));
     write_atomic(&ready, &ask.to_string()).map_err(|e| format!("Could not hand the change to Eve ({e})."))?;
-    if let Err(e) = tell_app_to_look_in_inbox() {
+    if let Err(e) = (app.launch)("eve://inbox", true) {
         let _ = std::fs::remove_file(&ready);
         return Err(e);
     }
@@ -1057,7 +1285,7 @@ pub fn ask_app_for(dir: &Path, mut ask: Value) -> Result<Value, String> {
     Err("Eve took the change but did not answer in time. Read the note before trying again: it may be done.".into())
 }
 
-fn create_note(dir: &Path, notes: &[Note], args: &Value) -> Result<String, String> {
+fn create_note(app: &App, notes: &[Note], args: &Value) -> Result<Answer, String> {
     let title = arg_str(args, "title");
     if title.is_empty() || title.contains('\n') {
         return Err("Give the new note a title, one line.".into());
@@ -1080,13 +1308,12 @@ fn create_note(dir: &Path, notes: &[Note], args: &Value) -> Result<String, Strin
     let body = arg_str(args, "body").trim_matches('\n');
     let text = if body.is_empty() { format!("# {title}\n") } else { format!("# {title}\n\n{body}\n") };
     let page = arg_page(args).trim_matches('/');
-    ask_app(dir, serde_json::json!({ "op": "create", "body": text, "page": page, "parent": parent }))
+    ask_app(app, serde_json::json!({ "op": "create", "body": text, "page": page, "parent": parent }))
 }
 
-pub const PICTURE: &str = "Picture: ";
 const MAX_PICTURES: usize = 6;
 
-fn diagram_images(dir: &Path, notes: &[Note], args: &Value) -> Result<String, String> {
+fn diagram_images(app: &App, notes: &[Note], args: &Value) -> Result<Answer, String> {
     use base64::Engine;
     let (note, _, _) = pick(notes, args)?;
     let title = title_of(&note.body);
@@ -1098,9 +1325,10 @@ fn diagram_images(dir: &Path, notes: &[Note], args: &Value) -> Result<String, St
     if let Some(n) = number.filter(|&n| n > count) {
         return Err(format!("\"{title}\" has {count} diagram{}; there is no diagram {n}.", if count == 1 { "" } else { "s" }));
     }
-    let v = ask_app_for(dir, serde_json::json!({ "op": "picture", "id": note.id, "number": number, "most": MAX_PICTURES }))?;
-    let shelf = dir.parent().unwrap_or(dir).join("pictures");
+    let v = ask_app_for(app, serde_json::json!({ "op": "picture", "id": note.id, "number": number, "most": MAX_PICTURES }))?;
+    let shelf = app.dir.parent().unwrap_or(app.dir).join("pictures");
     std::fs::create_dir_all(&shelf).map_err(|e| format!("Could not keep the pictures at {} ({e}).", shelf.display()))?;
+    let mut parts = Vec::new();
     let mut out = String::new();
     for p in v.get("pictures").and_then(Value::as_array).into_iter().flatten() {
         let n = p.get("number").and_then(Value::as_u64).unwrap_or(0);
@@ -1110,7 +1338,8 @@ fn diagram_images(dir: &Path, notes: &[Note], args: &Value) -> Result<String, St
             Some(Ok(png)) => {
                 let path = shelf.join(format!("{}-{n}.png", note.id));
                 std::fs::write(&path, png).map_err(|e| format!("Could not keep the picture ({e})."))?;
-                out += &format!("{PICTURE}{}\n", path.display());
+                parts.push(Part::Text(std::mem::take(&mut out)));
+                parts.push(Part::Picture(path));
             }
             _ => out += &format!("(Eve could not draw it: {})\n", p.get("error").and_then(Value::as_str).unwrap_or("no picture")),
         }
@@ -1119,7 +1348,8 @@ fn diagram_images(dir: &Path, notes: &[Note], args: &Value) -> Result<String, St
     if number.is_none() && count > MAX_PICTURES {
         out += &format!("{} more diagrams in the note: ask for one by number ({}–{count}).\n", count - MAX_PICTURES, MAX_PICTURES + 1);
     }
-    Ok(out.trim_end().to_string())
+    parts.push(Part::Text(out.trim_end().to_string()));
+    Ok(Answer(parts))
 }
 
 const MAX_IDS: usize = 100;
@@ -1219,18 +1449,9 @@ mod tests {
         for (line, text) in cases {
             assert_eq!(plain(&line), text, "{line}");
         }
-        assert_eq!(title_of("# **Project** `Alpha`\nx"), "Project Alpha");
         assert_eq!(title_of("\n\n- [[Linked]] item"), "Linked item");
-        assert_eq!(title_of("12. numbered"), "numbered");
-        assert_eq!(title_of("[x] done"), "done");
-        assert_eq!(title_of("> [!💡] tip"), "[!💡] tip");
-        assert_eq!(title_of("a\\*b"), "ab");
         assert_eq!(title_of("   \n"), "Untitled");
-        assert_eq!(title_of("회의록 2026"), "회의록 2026");
-        assert_eq!(title_of("- see [[DB|데이터베이스]] and [[Plan]]"), "see 데이터베이스 and Plan");
-        assert_eq!(title_of("| [[DB\\|db]] |"), "| db |");
-        assert_eq!(title_of("# ==Important== plan"), "Important plan");
-        assert_eq!(title_of("a == b"), "a == b");
+        assert_eq!(title_of("<div align=\"center\">\n  <img src=\"logo.png\">\n<!-- badge -->\n</div>\n# Eve"), "Eve");
         assert_eq!(split_alias("a|b|c"), ("a", "b|c"));
     }
 

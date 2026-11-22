@@ -1,4 +1,4 @@
-use crate::core::{self, command, notes_dir, Command, Kind};
+use crate::core::{self, command, notes_dir, App, Command, Kind};
 use serde_json::{json, Map, Value};
 use std::io::Write;
 
@@ -88,7 +88,7 @@ pub fn main(argv: Vec<String>) -> Option<i32> {
         _ if first.starts_with('-') => return None,
         _ => match command(first) {
             Some(cmd) if rest.iter().any(|a| a == "--help" || a == "-h") => core::help(Some(cmd.cli)),
-            Some(cmd) => parse_args(cmd, rest).and_then(|args| core::run(&notes_dir(), cmd.tool, &args)),
+            Some(cmd) => parse_args(cmd, rest).and_then(|args| core::run(&App::on_this_mac(&notes_dir()), cmd.tool, &args).map(|a| a.written())),
             None => Err(format!("Unknown command \"{first}\". See: eve help")),
         },
     };

@@ -15,6 +15,7 @@
   import { onMount } from 'svelte';
   import { hooks } from './lib/ui.svelte';
   import { scrollHint } from './lib/scrollHint';
+  import { widget } from './lib/platform';
 
   const isNoteText = (el: Element | null) =>
     !!el?.matches('.page .tiptap, .card-page .tiptap') && !el.closest('.dblock, .math-edit, .mermaid-host, .math-inline, .math-block');
@@ -23,14 +24,15 @@
   let keyboard = $state(false);
 
   onMount(() => {
-    const measure = () => {
+    const stopInset = widget.onKeyboardInset((px) => (keyboard = px > 0));
+    const guessKeyboard = () => {
       const w = window.innerWidth, full = Math.max(fullHeightByWidth.get(w) ?? fullHeightAfterTurn(w), window.innerHeight);
       fullHeightByWidth.set(w, full);
       keyboard = window.innerHeight < full - 120;
     };
     const check = () => {
       editing = isNoteText(document.activeElement);
-      measure();
+      if (!stopInset) guessKeyboard();
     };
     const recheckAfterFocusMoves = () => setTimeout(check, 0);
     document.addEventListener('focusin', check);
@@ -41,6 +43,7 @@
       document.removeEventListener('focusin', check);
       document.removeEventListener('focusout', recheckAfterFocusMoves);
       window.removeEventListener('resize', check);
+      stopInset?.();
     };
   });
 

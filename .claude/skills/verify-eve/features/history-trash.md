@@ -39,7 +39,7 @@ Preconditions: the default three notes plus `e.md` `# Old idea` / `Gone soon.`. 
 `localStorage.getItem('eve.notes.<id>')` (`deleted: true|false`). Run: `node .claude/skills/verify-eve/drives/run.mjs history-trash`
 
 - `trash-delete` **Delete by ×.** The × shows only once the mouse has moved over the row (`html[data-hover]`) and the tools slid
-  open: `await t.page.hover('aside [data-note="c"]', { position: { x: 20, y: 10 } }); await t.page.hover('aside [data-note="c"]', { position: { x: 60, y: 14 } }); await t.wait(400); await t.click('aside [data-note="c"] ~ .tools button[aria-label="Delete note"]'); await t.key('Enter');`
+  open: `await t.page.hover('aside .note-row:has([data-note="c"])', { position: { x: 20, y: 10 } }); await t.page.hover('aside .note-row:has([data-note="c"])', { position: { x: 60, y: 14 } }); await t.wait(400); await t.click('aside [data-note="c"] ~ .tools button[aria-label="Delete note"]'); await t.key('Enter');`
   Reading list leaves the list, `deleted: true`, the toast `Deleted “Reading list”  Undo` is at the bottom.
 - `trash-delete` **Delete by key.** Open Old idea, `` await t.key(`${t.mod}+Shift+Backspace`); await t.click('button.primary:has-text("Delete")'); ``
   The next note (Groceries) opens.

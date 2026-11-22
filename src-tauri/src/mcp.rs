@@ -1,30 +1,32 @@
-use crate::core::{self, notes_dir, Effect, Kind, Param, COMMANDS};
+use crate::core::{self, notes_dir, Answer, App, Effect, Kind, Param, Part, COMMANDS};
 use serde_json::{json, Value};
 use std::io::{BufRead, Write};
-use std::path::Path;
 
 const PROTOCOLS: [&str; 4] = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 
-fn call(dir: &Path, params: &Value) -> Value {
+fn call(app: &App, params: &Value) -> Value {
     let name = params.get("name").and_then(Value::as_str).unwrap_or("");
     let empty = json!({});
     let args = params.get("arguments").unwrap_or(&empty);
     let result = match COMMANDS.iter().find(|c| c.tool == name) {
-        Some(c) => core::run(dir, c.tool, args),
+        Some(c) => core::run(app, c.tool, args),
         None => Err(format!("Unknown tool \"{name}\".")),
     };
     match result {
-        Ok(text) => json!({ "content": content(&text) }),
+        Ok(answer) => json!({ "content": content(&answer) }),
         Err(text) => json!({ "content": [{ "type": "text", "text": text }], "isError": true }),
     }
 }
 
-fn content(text: &str) -> Vec<Value> {
+fn content(answer: &Answer) -> Vec<Value> {
     use base64::Engine;
     let mut out = Vec::new();
     let mut words = String::new();
-    for line in text.split_inclusive('\n') {
-        let png = line.trim_end().strip_prefix(core::PICTURE).and_then(|p| std::fs::read(p).ok());
+    for part in &answer.0 {
+        let png = match part {
+            Part::Picture(path) => std::fs::read(path).ok(),
+            Part::Text(_) => None,
+        };
         match png {
             Some(png) => {
                 if !words.trim().is_empty() {
@@ -33,7 +35,7 @@ fn content(text: &str) -> Vec<Value> {
                 words.clear();
                 out.push(json!({ "type": "image", "data": base64::engine::general_purpose::STANDARD.encode(png), "mimeType": "image/png" }));
             }
-            None => words.push_str(line),
+            None => words.push_str(&part.written()),
         }
     }
     if !words.trim().is_empty() || out.is_empty() {
@@ -76,7 +78,7 @@ fn tools() -> Value {
 }
 
 /// One incoming message -> the reply to write, if any (notifications get none).
-pub fn handle(dir: &Path, msg: &Value) -> Option<Value> {
+pub fn handle(app: &App, msg: &Value) -> Option<Value> {
     let id = msg.get("id")?.clone();
     let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
     let params = msg.get("params").cloned().unwrap_or(json!({}));
@@ -93,7 +95,7 @@ pub fn handle(dir: &Path, msg: &Value) -> Option<Value> {
         }
         "ping" => json!({}),
         "tools/list" => json!({ "tools": tools() }),
-        "tools/call" => call(dir, &params),
+        "tools/call" => call(app, &params),
         _ => return Some(json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": format!("Method not found: {method}") } })),
     };
     Some(json!({ "jsonrpc": "2.0", "id": id, "result": result }))
@@ -101,6 +103,7 @@ pub fn handle(dir: &Path, msg: &Value) -> Option<Value> {
 
 pub fn serve() {
     let dir = notes_dir();
+    let app = App::on_this_mac(&dir);
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout().lock();
     for line in stdin.lock().lines() {
@@ -110,10 +113,10 @@ pub fn serve() {
         }
         let reply = match serde_json::from_str::<Value>(&line) {
             Ok(Value::Array(batch)) => {
-                let out: Vec<Value> = batch.iter().filter_map(|m| handle(&dir, m)).collect();
+                let out: Vec<Value> = batch.iter().filter_map(|m| handle(&app, m)).collect();
                 if out.is_empty() { None } else { Some(Value::Array(out)) }
             }
-            Ok(msg) => handle(&dir, &msg),
+            Ok(msg) => handle(&app, &msg),
             Err(e) => Some(json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32700, "message": e.to_string() } })),
         };
         if let Some(reply) = reply {
@@ -128,6 +131,10 @@ pub fn serve() {
 mod tests {
     use super::*;
 
+    fn quiet(dir: &std::path::Path) -> App<'_> {
+        App { dir, launch: |_, _| Ok(()) }
+    }
+
     fn text(v: &Value) -> &str {
         v["result"]["content"][0]["text"].as_str().unwrap()
     }
@@ -141,12 +148,12 @@ mod tests {
         std::fs::write(dir.join("a.tmp"), "---\nid: t\n---\n# Temp").unwrap();
         std::fs::write(dir.join("daily-template.md"), "---\nid: daily-template\nupdated: 3\n---\n# {{date}}").unwrap();
 
-        let init = handle(&dir, &json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2025-06-18" } })).unwrap();
+        let init = handle(&quiet(&dir), &json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2025-06-18" } })).unwrap();
         assert_eq!(init["result"]["protocolVersion"], "2025-06-18");
         assert!(init["result"]["capabilities"]["tools"].is_object() && init["result"]["capabilities"].get("prompts").is_none());
-        assert!(handle(&dir, &json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })).is_none());
+        assert!(handle(&quiet(&dir), &json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })).is_none());
 
-        let list = handle(&dir, &json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" })).unwrap();
+        let list = handle(&quiet(&dir), &json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" })).unwrap();
         let tools = list["result"]["tools"].as_array().unwrap();
         assert_eq!(tools.len(), 11);
         for t in tools {
@@ -156,11 +163,11 @@ mod tests {
             assert_eq!(t["annotations"]["destructiveHint"] == true, ["edit_note", "rewrite_note", "delete_note"].contains(&name), "{t}");
         }
 
-        let out = handle(&dir, &json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": { "name": "list_notes", "arguments": {} } })).unwrap();
+        let out = handle(&quiet(&dir), &json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": { "name": "list_notes", "arguments": {} } })).unwrap();
         assert!(text(&out).starts_with("1 note(s)") && text(&out).contains("Alpha"), "{out}");
-        let out = handle(&dir, &json!({ "jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": { "name": "read_note", "arguments": { "title": "Gone" } } })).unwrap();
+        let out = handle(&quiet(&dir), &json!({ "jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": { "name": "read_note", "arguments": { "title": "Gone" } } })).unwrap();
         assert_eq!(out["result"]["isError"], true);
-        let out = handle(&dir, &json!({ "jsonrpc": "2.0", "id": 5, "method": "nope" })).unwrap();
+        let out = handle(&quiet(&dir), &json!({ "jsonrpc": "2.0", "id": 5, "method": "nope" })).unwrap();
         assert_eq!(out["error"]["code"], -32601);
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -176,7 +183,7 @@ mod tests {
         let list = tools.as_array().unwrap().iter().find(|t| t["name"] == "list_notes").unwrap();
         assert!(list["inputSchema"].get("required").is_none());
         let dir = std::env::temp_dir();
-        let out = handle(&dir, &json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "list", "arguments": {} } })).unwrap();
+        let out = handle(&quiet(&dir), &json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "list", "arguments": {} } })).unwrap();
         assert_eq!(out["result"]["isError"], true);
     }
 
@@ -214,7 +221,7 @@ mod tests {
                 }
             })
         };
-        let call = |args: Value| handle(&dir, &json!({ "jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": { "name": "diagram_images", "arguments": args } })).unwrap();
+        let call = |args: Value| handle(&quiet(&dir), &json!({ "jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": { "name": "diagram_images", "arguments": args } })).unwrap();
         let out = call(json!({ "title": "Flow" }));
         let parts = out["result"]["content"].as_array().unwrap();
         let kinds: Vec<&str> = parts.iter().map(|p| p["type"].as_str().unwrap()).collect();
@@ -225,7 +232,7 @@ mod tests {
         assert!(parts[0]["text"].as_str().unwrap().starts_with("Diagram 1 of 2 in \"Flow\""));
         let rest = parts[2]["text"].as_str().unwrap();
         assert!(rest.contains("```mermaid\nflowchart LR") && rest.contains("Diagram 2 of 2") && rest.contains("could not draw it: Parse error"), "{rest}");
-        assert!(!rest.contains(core::PICTURE), "no path left for Claude to read instead");
+        assert!(!rest.contains(".png"), "no path left for Claude to read instead");
         let asked = eve.join().unwrap();
         assert_eq!((&asked["op"], &asked["id"]), (&json!("picture"), &json!("f")));
         assert_eq!(call(json!({ "title": "Plain" }))["result"]["isError"], true);
@@ -265,7 +272,9 @@ mod tests {
                 asked
             })
         };
-        let call = |name: &str, args: Value| handle(&dir, &json!({ "jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": { "name": name, "arguments": args } })).unwrap();
+        static LAUNCHED: std::sync::Mutex<Vec<(String, bool)>> = std::sync::Mutex::new(Vec::new());
+        let app = App { dir: &dir, launch: |url, background| Ok(LAUNCHED.lock().unwrap().push((url.into(), background))) };
+        let call = |name: &str, args: Value| handle(&app, &json!({ "jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": { "name": name, "arguments": args } })).unwrap();
         let out = call("create_note", json!({ "title": "Plan", "body": "- [ ] ship\n", "page": "/Work/", "parent": "Projects" }));
         assert_eq!(text(&out), "Made it.");
         let out = call("edit_note", json!({ "title": "Projects", "old": "nope", "new": "x" }));
@@ -286,6 +295,10 @@ mod tests {
         assert_eq!(call("rewrite_note", json!({ "title": "Projects", "body": "" }))["result"]["isError"], true);
         assert_eq!(call("edit_note", json!({ "id": "p", "old": "", "new": "x" }))["result"]["isError"], true);
         assert_eq!(std::fs::read_dir(&inbox).unwrap().count(), 0, "nothing left in the inbox");
+        assert_eq!(LAUNCHED.lock().unwrap()[..3], [("eve://inbox".into(), true), ("eve://inbox".into(), true), ("eve://inbox".into(), true)]);
+        assert!(!text(&call("open_note", json!({ "title": "Projects" }))).is_empty());
+        let (url, background) = LAUNCHED.lock().unwrap().last().cloned().unwrap();
+        assert!(url.starts_with("eve://") && url.contains('p') && !background, "{url}");
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

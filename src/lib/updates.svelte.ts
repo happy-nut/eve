@@ -71,13 +71,9 @@ class Updates {
     this.state = state;
     this.progress = progress ?? -1;
   }
-  private reportPhone(detail: string) {
-    const [state, pct] = detail.split(':');
-    this.report({ state: state as UpdateState, progress: pct === undefined ? null : Number(pct) });
-  }
   start() {
     if (!isTauri) return;
-    if (isMobile) window.addEventListener('eve-update', (e) => this.reportPhone(String((e as CustomEvent<string>).detail)));
+    if (isMobile) window.addEventListener('eve-update', (e) => this.report((e as CustomEvent<UpdateProgress>).detail));
     else void import('@tauri-apps/api/event').then(({ listen }) => listen<UpdateProgress>('eve-update', (e) => this.report(e.payload)));
     document.addEventListener('visibilitychange', () => { if (!document.hidden) void this.check(false, FRESH); });
     // the Mac stays open for days, hidden rather than quit: asked again each time it is summoned (the page's

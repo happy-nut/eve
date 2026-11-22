@@ -383,25 +383,6 @@ pub(crate) fn is_default_for_markdown(app: AppHandle) -> bool {
     }
 }
 
-pub(crate) fn release_unclaimed_markdown(app: &AppHandle) {
-    #[cfg(target_os = "macos")]
-    {
-        let Ok(dir) = app.path().app_data_dir() else { return };
-        let marker = dir.join(".md-handed-back");
-        if marker.exists() {
-            return;
-        }
-        let [md, txt] = default_app::MD_AND_TXT_UTIS;
-        if opens_with_eve(app, md) && !opens_with_eve(app, txt) {
-            let _ = default_app::set(md, "com.apple.TextEdit");
-        }
-        let _ = fs::create_dir_all(&dir);
-        let _ = fs::write(marker, b"");
-    }
-    #[cfg(not(target_os = "macos"))]
-    let _ = app;
-}
-
 #[tauri::command]
 pub(crate) fn set_default_for_markdown(app: AppHandle, on: bool) -> Result<(), String> {
     #[cfg(target_os = "macos")]

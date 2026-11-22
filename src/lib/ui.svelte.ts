@@ -24,7 +24,7 @@ export interface CardReq {
 
 interface EmojiReq { at: DOMRect; current: string; resolve: (v: string | null) => void }
 
-export type LayerId = 'photo' | 'math' | 'sheet' | 'emoji' | 'menu' | 'confirm' | 'diagramView' | 'find' | 'pdf' | 'card' | 'settings' | 'trash' | 'history' | 'present';
+export type LayerId = 'photo' | 'math' | 'sheet' | 'emoji' | 'menu' | 'confirm' | 'diagramView' | 'find' | 'pdf' | 'card' | 'settings' | 'trash' | 'history' | 'present' | 'search';
 export type CloseReason = 'back' | 'esc' | 'putAway';
 export interface Layer {
   id: LayerId;
@@ -37,6 +37,7 @@ export interface Layer {
   keepsMovedFocus?: boolean;
   restoresOnPhone?: boolean;
   focusBackDelayMs?: number;
+  endsWhenFocusLeaves?: boolean;
 }
 
 const EMOJI_FOCUS_BACK_DELAY_MS = 60;
@@ -128,7 +129,7 @@ class Layers {
   private remove(l: Layer) {
     if (!this.items.includes(l)) return;
     this.set(this.items.filter((x) => x !== l));
-    shifting(() => this.giveBack(l));
+    if (!l.endsWhenFocusLeaves) shifting(() => this.giveBack(l));
   }
   private giveBack(l: Layer) {
     if (isMobile && !l.restoresOnPhone) return;
@@ -229,16 +230,21 @@ class Ui {
     this.menuOff ??= this.layers.push({ id: 'menu', close: () => this.closeMenu(), closesOnEsc: true, grabsKeys: true, modal: true, ownSelector: '.menu', restoresOnPhone: true });
     this.menu = { x: at.clientX, y: at.clientY, from: at.from, items: visibleItems(items), search };
   }
-  closeMenu() {
+  closeMenu(picked?: MenuItem) {
+    const closed = this.menuClosed;
     this.menu = null;
-    this.menuClosed?.();
     this.menuClosed = undefined;
     this.menuOff?.();
     this.menuOff = undefined;
+    picked?.run?.();
+    closed?.();
   }
 
   openedSheet(close: () => void) {
     return this.layers.push({ id: 'sheet', close, modal: true });
+  }
+  searching(close: () => void) {
+    return this.layers.push({ id: 'search', close, closesOnEsc: true, from: null, endsWhenFocusLeaves: true });
   }
   closeSheet(): boolean {
     if (this.layers.top?.id !== 'sheet') return false;

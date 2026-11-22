@@ -3,7 +3,8 @@
   import { across, freshId, type Flowchart, type FlowEdge, type Line, type Shape } from './lib/diagram';
   import { ui, under } from './lib/ui.svelte';
   import { letGo } from './lib/focusWatch';
-  import { claimKeys, composing } from './lib/keys';
+  import { claimKeys } from './lib/keys';
+  import NameField from './NameField.svelte';
   import { isMobile } from './lib/platform';
   import { floatAt } from './lib/popup';
   import { mermaidBoxOf } from './lib/lanes';
@@ -724,10 +725,10 @@
     {#if hb && i >= 0}
       <div class="ring" style:left={`${hb.x - 2}px`} style:top={`${hb.y - 2}px`} style:width={`${hb.w + 4}px`} style:height={`${hb.h + 4}px`}></div>
       {#key lid}{#if laneEditing === lid || (armed && 'lane' in armed)}
-        <input class={laneEditing === lid ? 'lane-name' : 'armed'} bind:value={laneText} aria-label="Lane name" placeholder="Lane" {@attach focusAndSelect}
-          style:left={`${clampX(hb.x + hb.w / 2, 140)}px`} style:top={`${hb.y + hb.h / 2 - 16}px`} oninput={() => { if (!laneEditing) laneEditing = lid; }}
-          onkeydown={(e) => { if (composing(e) || !laneEditing) return; if (e.key === 'Enter') { e.preventDefault(); commitLane(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); doneTyping(); laneEditing = null; } }}
-          onblur={(e) => { const el = e.currentTarget; queueMicrotask(() => { if (el.isConnected && laneEditing === lid) commitLane(); }); }} />
+        <NameField bind:value={laneText} editing={laneEditing === lid} shown="lane-name" label="Lane name" placeholder="Lane" grab={focusAndSelect}
+          left={clampX(hb.x + hb.w / 2, 140)} top={hb.y + hb.h / 2 - 16} onstart={() => (laneEditing = lid)}
+          oncommit={commitLane} oncancel={() => { doneTyping(); laneEditing = null; }}
+          onblur={(el) => queueMicrotask(() => { if (el.isConnected && laneEditing === lid) commitLane(); })} />
       {/if}{/key}
       {#if laneEditing !== lid}
         {@const at = { left: clampX(hb.x + hb.w / 2, 240), top: Math.max(4, hb.y + hb.h / 2 - 21) }}
@@ -767,9 +768,10 @@
   {#if editing || (armed && 'node' in armed)}
     {@const at = editing ?? (armed as { node: string }).node}
     {@const b = boxOf(at) ?? { id: at, x: pendingAt.x - 70, y: pendingAt.y - 16, w: 140, h: 32 }}
-    <input class={editing ? 'rename' : 'armed'} bind:value={editText} aria-label="Step name" oninput={() => { if (!editing) editing = at; typed(); }}
-      style:left={`${clampX(b.x + b.w / 2, Math.min(Math.max(b.w, 140), (layer?.clientWidth ?? 600) - 8))}px`} style:top={`${b.y + b.h / 2 - 16}px`} style:width={`${Math.min(Math.max(b.w, 140), (layer?.clientWidth ?? 600) - 8)}px`}
-      onkeydown={(e) => { if (composing(e) || !editing) return; if (e.key === 'Enter') { e.preventDefault(); commitEdit(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelEdit(); } else if (e.key === 'Tab') { e.preventDefault(); const from = editing; commitEdit(); if (from) addAfter(from, { intoLine: true }); } }}
+    {@const w = Math.min(Math.max(b.w, 140), (layer?.clientWidth ?? 600) - 8)}
+    <NameField bind:value={editText} editing={!!editing} shown="rename" label="Step name" left={clampX(b.x + b.w / 2, w)} top={b.y + b.h / 2 - 16} width={w}
+      onstart={() => (editing = at)} ontype={typed} oncommit={commitEdit} oncancel={cancelEdit}
+      ontab={() => { const from = editing; commitEdit(); if (from) addAfter(from, { intoLine: true }); }}
       onblur={() => { if (editing) commitEdit(); }} />
   {/if}
 
@@ -863,18 +865,8 @@
   .wire { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
   .wire line { stroke: var(--accent-text); stroke-width: 2; stroke-dasharray: 5 4; }
   .wire circle { fill: var(--accent-text); }
-  .lane-name {
-    position: absolute; width: 140px; height: 32px; box-sizing: border-box; padding: 0 10px; border: 0; border-radius: 10px; text-align: center;
-    font: inherit; font-size: 13px; font-weight: 600; color: var(--fg); background: var(--bg-pop); box-shadow: 0 0 0 2px var(--accent), 0 4px 14px rgba(0, 0, 0, 0.15); outline: none;
-  }
-  .armed { position: absolute; width: 140px; height: 32px; opacity: 0; pointer-events: none; }
   .bar button:disabled { opacity: 0.35; }
   .bar button .lbl { max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
-  .rename {
-    position: absolute; height: 32px; box-sizing: border-box; padding: 0 10px; border: 0; border-radius: 10px; text-align: center;
-    font: inherit; font-size: 14px; color: var(--fg); background: var(--bg-pop); outline: none;
-    border-radius: 16px; box-shadow: 0 0 0 1.5px var(--accent), 0 0 0 5px var(--accent-soft);
-  }
   .bar {
     position: absolute; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 12px;
     background: var(--bg-pop); box-shadow: var(--pop-shadow), 0 0 0 0.5px var(--line); white-space: nowrap;

@@ -21,8 +21,8 @@ const trashRows = (t) => t.page.evaluate((s) => [...document.querySelectorAll(`$
 const inTrashSearch = (t) => t.page.evaluate((s) => document.activeElement === document.querySelector(`${s} input[placeholder="Search the trash"]`), trash);
 
 const hoverX = async (t, id) => {
-  await t.page.hover(`aside [data-note="${id}"]`, { position: { x: 20, y: 10 } });
-  await t.page.hover(`aside [data-note="${id}"]`, { position: { x: 60, y: 14 } });
+  await t.page.hover(`aside .note-row:has([data-note="${id}"])`, { position: { x: 20, y: 10 } });
+  await t.page.hover(`aside .note-row:has([data-note="${id}"])`, { position: { x: 60, y: 14 } });
   await t.wait(400);
   await t.click(`aside [data-note="${id}"] ~ .tools button[aria-label="Delete note"]`);
 };

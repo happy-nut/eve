@@ -33,3 +33,14 @@ test('an update that fails says so in a dialog, with the Homebrew command to cop
   expect(ui.pending?.command).toBe(BY_HAND);
   ui.done(null);
 });
+
+test("the phone's download reports the same { state, progress } the Mac sends", async () => {
+  vi.resetModules();
+  vi.doMock('./platform', async (original) => ({ ...(await original<typeof import('./platform')>()), isTauri: true, isMobile: true }));
+  const { updates: phone } = await import('./updates.svelte');
+  phone.start();
+  window.dispatchEvent(new CustomEvent('eve-update', { detail: { state: 'downloading', progress: 40 } }));
+  expect([phone.state, phone.progress]).toEqual(['downloading', 40]);
+  window.dispatchEvent(new CustomEvent('eve-update', { detail: { state: 'installing', progress: null } }));
+  expect([phone.state, phone.progress]).toEqual(['installing', -1]);
+});

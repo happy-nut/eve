@@ -33,14 +33,14 @@ import { FootnoteRef, FootnoteText } from './footnote';
 import { CodeBlock } from './code';
 import { Pdf } from './pdf';
 import { Video } from './video';
-import { TableNodes, asCopy, cellBulletRule, cellEnter, cellUnbullet, dropEmptyTable, clearForPaste, toggleCellBullet, upAboveTable, copying } from './table';
+import { TableNodes, cellBulletRule, cellEnter, cellUnbullet, dropEmptyTable, clearForPaste, toggleCellBullet, upAboveTable } from './table';
 import { Find } from './find';
 import { SelectionLayer } from './selectionLayer';
 import { BlockHandle } from './blockHandle';
 import { TableHandles } from './tableHandles';
 import { ClickTarget } from './clickTarget';
 import { Divider } from './divider';
-import { MathBlock, MathInline, Text as DollarSafeText, insertMath } from './math';
+import { MathBlock, MathInline, DollarSafeText, insertMath } from './math';
 import { ui, under } from './ui.svelte';
 import { notes, titleOf, type Note } from './notes.svelte';
 import { headingsOf, splitLink } from './markdown';
@@ -371,11 +371,11 @@ const selectLine: Command = (state, dispatch) => {
 export const runEditorCommand = (editor: Editor, id: string): boolean => editorCommands(editor)[id]?.() ?? false;
 
 /** all the text from `from` to `to` (in one line) inline code */
-function allCode(state: EditorState, from: number, to: number) {
+function allCode(doc: PMNode, from: number, to: number) {
   if (from === to) return false;
   let all = true;
-  state.doc.nodesBetween(from, to, (n) => {
-    if (n.isInline && !state.schema.marks.code.isInSet(n.marks)) all = false;
+  doc.nodesBetween(from, to, (n) => {
+    if (n.isInline && !doc.type.schema.marks.code.isInSet(n.marks)) all = false;
   });
   return all;
 }
@@ -417,8 +417,8 @@ export function outOfEmptyItem(tr: Transaction, block: PMNode | null | undefined
  * of it kept: a list pasted into a list came in as a loose sublist under an empty item, a to-do's text began with a
  * space, and "# H" in the middle of a heading cut the heading in three. `lead` and `trail` are spaces kept at the ends.
  */
-function pasteMarkdown(view: EditorView, html: string, lead = '', trail = ''): Transaction {
-  const { state } = view, { schema } = state, $from = state.selection.$from;
+function pasteMarkdown(view: EditorView, tr: Transaction, html: string, lead = '', trail = ''): true {
+  const schema = tr.doc.type.schema, $from = tr.selection.$from;
   const el = document.createElement('div');
   el.innerHTML = html;
   // open into the lines, not into a table's cells: a table pasted is a table (as ProseMirror's own paste does)
@@ -438,7 +438,6 @@ function pasteMarkdown(view: EditorView, html: string, lead = '', trail = ''): T
   if (fitted) slice = new Slice(fitted, fitted.firstChild?.isTextblock ? 1 : 0, fitted.lastChild?.isTextblock ? 1 : 0);
   const only = slice.content.childCount === 1 ? slice.content.firstChild! : null;
   if (item && only && LISTS.test(only.type.name) && only.type !== $from.node(-2).type) slice = new Slice(Fragment.from(asList(only, $from.node(-2), item)), slice.openStart, slice.openEnd);
-  const tr = state.tr;
   outOfEmptyItem(tr, slice.content.firstChild);
   if (lead) tr.replaceSelectionWith(schema.text(lead), false);
   // a list (a heading, a quote) pasted at the start or the end of a line goes before or after that line, a list in a
@@ -455,7 +454,7 @@ function pasteMarkdown(view: EditorView, html: string, lead = '', trail = ''): T
   // the space after it is plain, and so is what is typed next: inserted as text, it took the last mark of what was
   // pasted (" `y` " then "z" gave "`y z`")
   if (trail) tr.insert(tr.selection.from, schema.text(trail)).setStoredMarks([]);
-  return tr.scrollIntoView();
+  return true;
 }
 
 /**
@@ -984,12 +983,19 @@ function joinParagraphLines(content: Fragment, serializer: any): string {
     .replace(/(?:&#(?:32|9);)+(?=\\\n)/g, spaces);
 }
 
+function copySerializer(serializer: any) {
+  const copying = (write: (state: any, ...rest: unknown[]) => void) => (state: any, ...rest: unknown[]) => { state.options.copying = true; write(state, ...rest); };
+  return Object.create(serializer, {
+    nodes: { get: () => Object.fromEntries(Object.entries<any>(serializer.nodes).map(([name, write]) => [name, write && copying(write)])) },
+  });
+}
+
 function copyText(slice: Slice, view: EditorView, serializer: any): string {
   const { $from, $to } = view.state.selection;
   if (view.state.selection instanceof CellSelection) return copiedCells(view.state.selection, slice, serializer);
   const inLine = $from.sameParent($to) && $from.parent.isTextblock;
   if (inLine && $from.parent.type.spec.code) return slice.content.textBetween(0, slice.content.size, '\n');
-  if (inLine && allCode(view.state, $from.pos, $to.pos)) return view.state.doc.textBetween($from.pos, $to.pos);
+  if (inLine && allCode(view.state.doc, $from.pos, $to.pos)) return view.state.doc.textBetween($from.pos, $to.pos);
   if (inLine) return joinParagraphLines(Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))), serializer);
   let content = dropOuterLists(slice.content, slice.openStart);
   for (let d = $from.depth; d > 0; d--) {
@@ -1055,64 +1061,69 @@ type Clip = { pasted: string; text: string; html: string; vscode: string | undef
 
 const parseMarkdown = (editor: Editor, md: string) => (editor.storage as any).markdown.parser.parse(md);
 
-function pasteIntoCode(editor: Editor, view: EditorView, { pasted }: Clip): true | null {
-  const { state } = view, { from, to, empty } = state.selection, code = state.schema.marks.code;
-  if (!pasted || editor.isActive('codeBlock') || !(empty ? code.isInSet(state.storedMarks ?? state.selection.$from.marks()) : allCode(state, from, to))) return null;
-  const marks = empty ? state.storedMarks ?? state.selection.$from.marks() : state.doc.nodeAt(from)!.marks;
-  view.dispatch(state.tr.replaceWith(from, to, state.schema.text(pasted.replace(/\r?\n/g, ' '), marks)).scrollIntoView());
+const inCodeBlock = ({ $from, $to }: Selection) => $from.parent.type.name === 'codeBlock' && $to.parent === $from.parent;
+
+function pasteIntoCode(tr: Transaction, { pasted }: Clip): boolean {
+  const { from, to, empty, $from } = tr.selection, { schema } = tr.doc.type, code = schema.marks.code;
+  if (!pasted || inCodeBlock(tr.selection) || !(empty ? code.isInSet(tr.storedMarks ?? $from.marks()) : allCode(tr.doc, from, to))) return false;
+  const marks = empty ? tr.storedMarks ?? $from.marks() : tr.doc.nodeAt(from)!.marks;
+  tr.replaceWith(from, to, schema.text(pasted.replace(/\r?\n/g, ' '), marks));
   return true;
 }
 
-function linkSelection(editor: Editor, view: EditorView, { text }: Clip): boolean | null {
-  if (!URL_RE.test(text) || view.state.selection.empty) return null;
-  return editor.chain().focus().setLink({ href: text }).run();
+function linkSelection(tr: Transaction, { text }: Clip): boolean {
+  if (!URL_RE.test(text) || tr.selection.empty) return false;
+  const link = tr.doc.type.schema.marks.link, doc = tr.doc;
+  for (const { $from, $to } of tr.selection.ranges) {
+    doc.nodesBetween($from.pos, $to.pos, (n, pos) => {
+      if (n.isInline) tr.addMark(Math.max(pos, $from.pos), Math.min(pos + n.nodeSize, $to.pos), link.create({ ...link.isInSet(n.marks)?.attrs, href: text }));
+    });
+  }
+  tr.setMeta('preventAutolink', true);
+  return true;
 }
 
-function pasteVsCode(editor: Editor, view: EditorView, { pasted, text, vscode }: Clip): true | null {
-  const { state } = view, $from = state.selection.$from;
-  if (!vscode || !text || editor.isActive('codeBlock') || inCell($from) || $from.parent.type.name !== 'paragraph') return null;
+function pasteVsCode(editor: Editor, view: EditorView, tr: Transaction, { pasted, text, vscode }: Clip): boolean {
+  const { $from, empty } = tr.selection, { schema } = tr.doc.type;
+  if (!vscode || !text || inCodeBlock(tr.selection) || inCell($from) || $from.parent.type.name !== 'paragraph') return false;
   const code = pasted.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').trimEnd();
-  if (!$from.parent.content.size && state.selection.empty) {
-    const block = state.schema.nodes.codeBlock.create({ language: vscodeLanguage(vscode) }, state.schema.text(code));
-    const tr = state.tr.replaceRangeWith($from.before(), $from.after(), block);
-    view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map($from.before()) + block.nodeSize - 1), -1)).scrollIntoView());
+  if (!$from.parent.content.size && empty) {
+    const block = schema.nodes.codeBlock.create({ language: vscodeLanguage(vscode) }, schema.text(code));
+    tr.replaceRangeWith($from.before(), $from.after(), block);
+    tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map($from.before()) + block.nodeSize - 1), -1));
     return true;
   }
-  const { paragraph, doc } = state.schema.nodes;
-  const asTyped = doc.create(null, code.split('\n').map((l) => paragraph.create(null, l ? state.schema.text(l) : null)));
-  view.dispatch(pasteMarkdown(view, parseMarkdown(editor, (editor.storage as any).markdown.serializer.serialize(asTyped))));
-  return true;
+  const { paragraph, doc } = schema.nodes;
+  const asTyped = doc.create(null, code.split('\n').map((l) => paragraph.create(null, l ? schema.text(l) : null)));
+  return pasteMarkdown(view, tr, parseMarkdown(editor, (editor.storage as any).markdown.serializer.serialize(asTyped)));
 }
 
-function pasteIntoOneLine(view: EditorView, { text }: Clip): true | null {
-  const { state } = view, $from = state.selection.$from;
-  if (!/\n/.test(text) || !$from.parent.isTextblock || $from.parent.type.spec.code || $from.parent.type.contentMatch.matchType(state.schema.nodes.hardBreak)) return null;
-  view.dispatch(state.tr.insertText(text.replace(/\s*\r?\n\s*/g, ' ')).scrollIntoView());
+function pasteIntoOneLine(tr: Transaction, { text }: Clip): boolean {
+  const { parent } = tr.selection.$from;
+  if (!/\n/.test(text) || !parent.isTextblock || parent.type.spec.code || parent.type.contentMatch.matchType(tr.doc.type.schema.nodes.hardBreak)) return false;
+  tr.insertText(text.replace(/\s*\r?\n\s*/g, ' '));
   return true;
 }
 
 // blocks copied in Notion: its markdown says what they were, its HTML does not (notionPaste.ts)
-function pasteNotion(editor: Editor, view: EditorView, { pasted, text, html }: Clip): true | null {
-  if (!text || !NOTION_COPY.test(html) || editor.isActive('codeBlock') || inCell(view.state.selection.$from)) return null;
-  view.dispatch(pasteMarkdown(view, parseMarkdown(editor, fromNotion(pasted))));
-  return true;
+function pasteNotion(editor: Editor, view: EditorView, tr: Transaction, { pasted, text, html }: Clip): boolean {
+  if (!text || !NOTION_COPY.test(html) || inCodeBlock(tr.selection) || inCell(tr.selection.$from)) return false;
+  return pasteMarkdown(view, tr, parseMarkdown(editor, fromNotion(pasted)));
 }
 
-function pasteMarkdownText(editor: Editor, view: EditorView, { pasted, text, html }: Clip): true | null {
-  if (!text || !LITERAL_MARKDOWN.test(text) || RICH_HTML.test(html) || editor.isActive('codeBlock')) return null;
+function pasteMarkdownText(editor: Editor, view: EditorView, tr: Transaction, { pasted, text, html }: Clip): boolean {
+  if (!text || !LITERAL_MARKDOWN.test(text) || RICH_HTML.test(html) || inCodeBlock(tr.selection)) return false;
   const lead = pasted.includes('\n') ? '' : /^[ \t]+/.exec(pasted)?.[0] ?? '', trail = pasted.includes('\n') ? '' : /[ \t]+$/.exec(pasted)?.[0] ?? '';
-  view.dispatch(pasteMarkdown(view, parseMarkdown(editor, pasted), lead, trail));
-  return true;
+  return pasteMarkdown(view, tr, parseMarkdown(editor, pasted), lead, trail);
 }
 
-function pastePlainLines(editor: Editor, view: EditorView, { pasted, text, html }: Clip): true | null {
-  const $from = view.state.selection.$from;
-  if (!text || !/\n/.test(text) || RICH_HTML.test(html) || html.includes('data-pm-slice') || $from.parent.type.name !== 'paragraph' || inCell($from)) return null;
+function pastePlainLines(editor: Editor, view: EditorView, tr: Transaction, { pasted, text, html }: Clip): boolean {
+  const $from = tr.selection.$from;
+  if (!text || !/\n/.test(text) || RICH_HTML.test(html) || html.includes('data-pm-slice') || $from.parent.type.name !== 'paragraph' || inCell($from)) return false;
   const lines = pasted.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '').split('\n');
   const indent = (ws: string) => ws.replace(/ /g, '&#32;').replace(/\t/g, '&#9;');
   const md = lines.map((l) => (l.trim() ? l.replace(/^[ \t]+/, indent) : BLANK)).join('\n\n');
-  view.dispatch(pasteMarkdown(view, parseMarkdown(editor, md)));
-  return true;
+  return pasteMarkdown(view, tr, parseMarkdown(editor, md));
 }
 
 const NoRawNewlines = Extension.create({
@@ -1265,6 +1276,194 @@ function cellLines(view: EditorView, content: Fragment, $at: ResolvedPos): Fragm
   return Fragment.from(out);
 }
 
+// A link ends where its words do, as in Notion: typed on at its end (or before it), the words were taken into the
+// link (stock links grow while autolink is on), and → at its end typed a space into the note each time
+const LinkEndsAtItsWords = Link.extend({
+  inclusive: () => false, exitable: false,
+  // an address with a space in it (a search's ?q=a b, a path) goes in <…>: bare, markdown ends the address at the
+  // space, and read back the link was gone and its [words](…) showed as text
+  addStorage() {
+    const plain = defaultMarkdownSerializer.marks.link;
+    const open = (state: any, mark: any, parent: any, index: number) => {
+      const w = (plain.open as any)(state, mark, parent, index);
+      const node = parent.child(index), next = index + 1 < parent.childCount ? parent.child(index + 1) : null;
+      if (state.options.copying && !state.inAutolink && node.isText && mark.attrs.href === `mailto:${node.text}` && !mark.isInSet(next?.marks ?? [])) state.inAutolink = true;
+      return state.options.copying && state.inAutolink ? '' : w;
+    };
+    return { markdown: { serialize: { ...plain, open, close: (state: any, mark: any, parent: any, index: number) => {
+      const href = String(mark.attrs.href ?? '');
+      if (state.options.copying && state.inAutolink) { state.inAutolink = undefined; return ''; }
+      if (state.inAutolink || !/\s/.test(href)) return (plain.close as any)(state, mark, parent, index);
+      state.inAutolink = undefined;
+      return `](<${href.replace(/[<>]/g, (c) => encodeURIComponent(c))}>${mark.attrs.title ? ` "${String(mark.attrs.title).replace(/"/g, '\\"')}"` : ''})`;
+    } } } };
+  },
+  // Words a link was taken off stay words: autolink linked the last word again at every space or ↩ typed after
+  // it. Where a link is removed is kept (mapped as the note changes) and a link autolink puts back there is taken
+  // off in the same step; a link put on them by hand clears the place.
+  addProseMirrorPlugins() {
+    const link = this.type;
+    type Span = { from: number; to: number };
+    const key = new PluginKey<Span[]>('unlinked');
+    const unlinked = new Plugin<Span[]>({
+      key,
+      state: {
+        init: () => [],
+        apply(tr, spans) {
+          let next = spans.map((s) => ({ from: tr.mapping.map(s.from, 1), to: tr.mapping.map(s.to, -1) })).filter((s) => s.from < s.to);
+          if (tr.getMeta('appendedTransaction')) return next;
+          tr.steps.forEach((st, i) => {
+            if (!(st instanceof RemoveMarkStep || st instanceof AddMarkStep) || st.mark.type !== link) return;
+            const rest = tr.mapping.slice(i + 1), from = rest.map(st.from, 1), to = rest.map(st.to, -1);
+            next = next.filter((s) => s.to <= from || s.from >= to);
+            if (st instanceof RemoveMarkStep && from < to) next.push({ from, to });
+          });
+          return next;
+        },
+      },
+      appendTransaction(_trs, _old, state) {
+        const tr = state.tr;
+        for (const s of key.getState(state) ?? []) if (state.doc.rangeHasMark(s.from, s.to, link)) tr.removeMark(s.from, s.to, link);
+        return tr.steps.length ? tr : null;
+      },
+    });
+    return [...(this.parent?.() ?? []), unlinked];
+  },
+}).configure({ openOnClick: false, autolink: true });
+
+// code inside a link ([run `npm i` first](u)) stays in it: stock code shuts out every other mark, so the link
+// was cut in two around it. Formatting still goes (nothing in code is bold).
+// Inline code all deleted, the next text typed there is not code again. The webview deletes the letters
+// itself, and ProseMirror keeps the deleted letters' marks for the next keys (as with bold): after `abc` was
+// cleared out (in WebKit), everything typed after it came out as code.
+const CodeInsideLinks = Code.extend({
+  excludes: 'bold italic strike underline highlight',
+  // → at the end of a line ending in code is markExit's, as for every mark. The stock exit typed a space there,
+  // one more each time the caret came by
+  exitable: false,
+  // its spaces as written (`a  b`, `  `): read as any text, a run of them was one space when the note opened,
+  // and code of spaces only went altogether
+  parseHTML() {
+    return [
+      {
+        tag: 'code',
+        getAttrs: (el) => (!el.closest('pre') && [...el.childNodes].every((n) => n.nodeType === 3) ? null : false),
+        getContent: (el, schema) => {
+          const text = el.textContent!.replace(/\r?\n/g, ' ');
+          return text ? Fragment.from(schema.text(text)) : Fragment.empty;
+        },
+      },
+      { tag: 'code' },
+    ];
+  },
+  addStorage() {
+    // the fence one backtick longer than any run in the code, with a space inside it where the code has a backtick
+    // or a space at both ends (markdown takes one off each: ` x ` read back "x")
+    const fence = (n: PMNode, side: -1 | 1) => {
+      const text = n.isText ? n.text! : '';
+      const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((r) => r.length));
+      const ticks = '`'.repeat(longest + 1), pad = longest || /^ [^]*[^ ][^]* $/.test(text) ? ' ' : '';
+      return side < 0 ? ticks + pad : pad + ticks;
+    };
+    return {
+      markdown: {
+        serialize: {
+          open: (_st: unknown, _m: unknown, parent: PMNode, i: number) => fence(parent.child(i), -1),
+          close: (_st: unknown, _m: unknown, parent: PMNode, i: number) => fence(parent.child(i - 1), 1),
+          escape: false,
+        },
+        parse: {},
+      },
+    };
+  },
+  addProseMirrorPlugins() {
+    return [...(this.parent?.() ?? []), new Plugin({
+      key: new PluginKey('codeNotCarried'),
+      appendTransaction: (trs, _old, state) => {
+        const code = state.schema.marks.code, stored = state.storedMarks, $cur = (state.selection as TextSelection).$cursor;
+        if (!stored || !$cur || !trs.some((tr) => tr.docChanged) || !code.isInSet(stored) || code.isInSet($cur.marks())) return null;
+        return state.tr.setStoredMarks(code.removeFromSet(stored));
+      },
+    })];
+  },
+});
+
+// TipTap runs the markdown rules on Enter too, as if a newline had been typed: "-", "1.", "#" or ">" alone on
+// a line and then Enter made a list, heading or toggle instead of a new line. The rules here and below take
+// a typed space only (any whitespace but a newline).
+const BulletOnTypedSpace = BulletList.extend({
+  addStorage: bulletsMarkdown,
+  addInputRules() {
+    return [wrappingInputRule({ find: /^\s*([-+*])[^\S\n]$/, type: this.type })];
+  },
+});
+
+// a heading is one line in markdown: a line break in it goes out as `<br>` (as in a table cell), not as the
+// usual backslash and newline, which read back as a heading ending in "\" and a paragraph under it
+// (six, as markdown has: a note brought in with ###### lost the heading at its first save)
+const OneLineHeading = Heading.configure({ levels: [1, 2, 3, 4, 5, 6] }).extend({
+  // ⌫ at the start of a heading makes it text, where it is (Notion's); the next ⌫ joins it to the line above.
+  // Not the title, which is the note's name whatever it is written as
+  addKeyboardShortcuts() {
+    return {
+      Backspace: () => {
+        const { $from, empty } = this.editor.state.selection;
+        if (!empty || $from.parentOffset !== 0 || $from.parent.type !== this.type) return false;
+        if ($from.depth === 1 && $from.index(0) === 0) return false;
+        return this.editor.commands.setNode('paragraph');
+      },
+    };
+  },
+  addInputRules() {
+    return this.options.levels.map((level: number) => textblockTypeInputRule({ find: new RegExp(`^(#{1,${level}})[^\\S\\n]$`), type: this.type, getAttributes: { level } }));
+  },
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state: any, node: PMNode) {
+          state.write(`${state.repeat('#', node.attrs.level)} `);
+          const inTable = state.inTable;
+          state.inTable = true;
+          state.renderInline(node, false);
+          state.inTable = inTable;
+          state.closeBlock(node);
+        },
+      },
+    };
+  },
+});
+
+const QuoteJoiningLines = Blockquote.extend({
+  // ⌫ at the start of a quote's second (or later) line joins it to the line above, as a callout's and a toggle's
+  // do; the stock key lifted the line out and cut the quote in two
+  addKeyboardShortcuts() {
+    return {
+      ...this.parent?.(),
+      Backspace: () => {
+        const { state, view } = this.editor;
+        const { $from, empty } = state.selection;
+        if (!empty || $from.parentOffset !== 0 || $from.depth < 2 || $from.node(-1).type !== this.type || $from.index(-1) === 0) return false;
+        // a list just above: the line's words go on the end of its last line, as in a callout or a toggle. The stock
+        // join put the line back into the list as a bullet, which the next ⌫ made text again, round and round
+        const above = $from.node(-1).child($from.index(-1) - 1);
+        if (/List$/.test(above.type.name) && $from.parent.type.name === 'paragraph') {
+          const into = Selection.findFrom(state.doc.resolve($from.before()), -1, true);
+          if (into?.$from.parent.inlineContent && !into.$from.parent.type.spec.code) {
+            const tr = state.tr.delete($from.before(), $from.after()).insert(into.from, $from.parent.content);
+            view.dispatch(tr.setSelection(TextSelection.create(tr.doc, into.from)).scrollIntoView());
+            return true;
+          }
+        }
+        return this.editor.commands.joinBackward();
+      },
+    };
+  },
+  addInputRules() {
+    // "| " as before, and '" ' as Notion makes one (a Mac may have curled it already)
+    return [wrappingInputRule({ find: /^\s*[|"“][^\S\n]$/, type: this.type })];
+  },
+});
+
 export function createEditor(opts: {
   element: HTMLElement;
   content: string;
@@ -1305,7 +1504,7 @@ export function createEditor(opts: {
     editorProps: {
       attributes: { class: 'prose' },
       ...(isMobile ? { scrollMargin: PHONE_BAR_MARGIN, scrollThreshold: PHONE_BAR_MARGIN } : { scrollMargin: MAC_TOOLBAR_MARGIN, scrollThreshold: MAC_TOOLBAR_MARGIN }),
-      clipboardTextSerializer: (slice, view) => asCopy(() => copyText(slice, view, (editor.storage as any).markdown.serializer)),
+      clipboardTextSerializer: (slice, view) => copyText(slice, view, copySerializer((editor.storage as any).markdown.serializer)),
       transformPasted: (slice, view) => {
         if (view.state.selection.$from.parent.type.name === 'detailsSummary') return pasteInToggleTitle(view, slice.content, (editor.storage as any).markdown.serializer);
         const fitted = rowsAsTable(view, slice.content) ?? pasteInCell(view, slice.content);
@@ -1315,19 +1514,19 @@ export function createEditor(opts: {
       },
       handlePaste: (view, event, slice): boolean => {
         if (insertFiles(editor, event.clipboardData?.files)) return true;
-        clearForPaste(view);
+        const tr = view.state.tr;
+        clearForPaste(tr);
         const pasted = event.clipboardData?.getData('text/plain') ?? '';
         const clip: Clip = { pasted, text: pasted.trim(), html: event.clipboardData?.getData('text/html') ?? '', vscode: event.clipboardData?.getData('vscode-editor-data') };
-        const took = pasteIntoCode(editor, view, clip) ?? linkSelection(editor, view, clip) ?? pasteVsCode(editor, view, clip) ?? pasteIntoOneLine(view, clip)
-          ?? pasteNotion(editor, view, clip) ?? pasteMarkdownText(editor, view, clip) ?? pastePlainLines(editor, view, clip);
-        if (took !== null) return took;
-        const tr = view.state.tr;
-        outOfEmptyItem(tr, slice.content.firstChild);
-        if (tr.docChanged) {
-          view.dispatch(tr.replaceSelection(slice).setMeta('paste', true).setMeta('uiEvent', 'paste').scrollIntoView());
-          return true;
+        const ours = pasteIntoCode(tr, clip) || linkSelection(tr, clip) || pasteVsCode(editor, view, tr, clip) || pasteIntoOneLine(tr, clip)
+          || pasteNotion(editor, view, tr, clip) || pasteMarkdownText(editor, view, tr, clip) || pastePlainLines(editor, view, tr, clip);
+        if (!ours) {
+          outOfEmptyItem(tr, slice.content.firstChild);
+          if (!tr.docChanged) return false;
+          tr.replaceSelection(slice).setMeta('uiEvent', 'paste');
         }
-        return false;
+        view.dispatch(tr.setMeta('paste', true).scrollIntoView());
+        return true;
       },
       // links open in the browser: the editor's own webview must not navigate away from the app
       handleDOMEvents: {
@@ -1387,191 +1586,13 @@ export function createEditor(opts: {
       markExit,
       codeEdges,
       hangulKeys,
-      // A link ends where its words do, as in Notion: typed on at its end (or before it), the words were taken into the
-      // link (stock links grow while autolink is on), and → at its end typed a space into the note each time
-      Link.extend({
-        inclusive: () => false, exitable: false,
-        // an address with a space in it (a search's ?q=a b, a path) goes in <…>: bare, markdown ends the address at the
-        // space, and read back the link was gone and its [words](…) showed as text
-        addStorage() {
-          const plain = defaultMarkdownSerializer.marks.link;
-          const open = (state: any, mark: any, parent: any, index: number) => {
-            const w = (plain.open as any)(state, mark, parent, index);
-            const node = parent.child(index), next = index + 1 < parent.childCount ? parent.child(index + 1) : null;
-            if (copying && !state.inAutolink && node.isText && mark.attrs.href === `mailto:${node.text}` && !mark.isInSet(next?.marks ?? [])) state.inAutolink = true;
-            return copying && state.inAutolink ? '' : w;
-          };
-          return { markdown: { serialize: { ...plain, open, close: (state: any, mark: any, parent: any, index: number) => {
-            const href = String(mark.attrs.href ?? '');
-            if (copying && state.inAutolink) { state.inAutolink = undefined; return ''; }
-            if (state.inAutolink || !/\s/.test(href)) return (plain.close as any)(state, mark, parent, index);
-            state.inAutolink = undefined;
-            return `](<${href.replace(/[<>]/g, (c) => encodeURIComponent(c))}>${mark.attrs.title ? ` "${String(mark.attrs.title).replace(/"/g, '\\"')}"` : ''})`;
-          } } } };
-        },
-        // Words a link was taken off stay words: autolink linked the last word again at every space or ↩ typed after
-        // it. Where a link is removed is kept (mapped as the note changes) and a link autolink puts back there is taken
-        // off in the same step; a link put on them by hand clears the place.
-        addProseMirrorPlugins() {
-          const link = this.type;
-          type Span = { from: number; to: number };
-          const key = new PluginKey<Span[]>('unlinked');
-          const unlinked = new Plugin<Span[]>({
-            key,
-            state: {
-              init: () => [],
-              apply(tr, spans) {
-                let next = spans.map((s) => ({ from: tr.mapping.map(s.from, 1), to: tr.mapping.map(s.to, -1) })).filter((s) => s.from < s.to);
-                if (tr.getMeta('appendedTransaction')) return next;
-                tr.steps.forEach((st, i) => {
-                  if (!(st instanceof RemoveMarkStep || st instanceof AddMarkStep) || st.mark.type !== link) return;
-                  const rest = tr.mapping.slice(i + 1), from = rest.map(st.from, 1), to = rest.map(st.to, -1);
-                  next = next.filter((s) => s.to <= from || s.from >= to);
-                  if (st instanceof RemoveMarkStep && from < to) next.push({ from, to });
-                });
-                return next;
-              },
-            },
-            appendTransaction(_trs, _old, state) {
-              const tr = state.tr;
-              for (const s of key.getState(state) ?? []) if (state.doc.rangeHasMark(s.from, s.to, link)) tr.removeMark(s.from, s.to, link);
-              return tr.steps.length ? tr : null;
-            },
-          });
-          return [...(this.parent?.() ?? []), unlinked];
-        },
-      }).configure({ openOnClick: false, autolink: true }),
-      // code inside a link ([run `npm i` first](u)) stays in it: stock code shuts out every other mark, so the link
-      // was cut in two around it. Formatting still goes (nothing in code is bold).
-      // Inline code all deleted, the next text typed there is not code again. The webview deletes the letters
-      // itself, and ProseMirror keeps the deleted letters' marks for the next keys (as with bold): after `abc` was
-      // cleared out (in WebKit), everything typed after it came out as code.
-      Code.extend({
-        excludes: 'bold italic strike underline highlight',
-        // → at the end of a line ending in code is markExit's, as for every mark. The stock exit typed a space there,
-        // one more each time the caret came by
-        exitable: false,
-        // its spaces as written (`a  b`, `  `): read as any text, a run of them was one space when the note opened,
-        // and code of spaces only went altogether
-        parseHTML() {
-          return [
-            {
-              tag: 'code',
-              getAttrs: (el) => (!el.closest('pre') && [...el.childNodes].every((n) => n.nodeType === 3) ? null : false),
-              getContent: (el, schema) => {
-                const text = el.textContent!.replace(/\r?\n/g, ' ');
-                return text ? Fragment.from(schema.text(text)) : Fragment.empty;
-              },
-            },
-            { tag: 'code' },
-          ];
-        },
-        addStorage() {
-          // the fence one backtick longer than any run in the code, with a space inside it where the code has a backtick
-          // or a space at both ends (markdown takes one off each: ` x ` read back "x")
-          const fence = (n: PMNode, side: -1 | 1) => {
-            const text = n.isText ? n.text! : '';
-            const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((r) => r.length));
-            const ticks = '`'.repeat(longest + 1), pad = longest || /^ [^]*[^ ][^]* $/.test(text) ? ' ' : '';
-            return side < 0 ? ticks + pad : pad + ticks;
-          };
-          return {
-            markdown: {
-              serialize: {
-                open: (_st: unknown, _m: unknown, parent: PMNode, i: number) => fence(parent.child(i), -1),
-                close: (_st: unknown, _m: unknown, parent: PMNode, i: number) => fence(parent.child(i - 1), 1),
-                escape: false,
-              },
-              parse: {},
-            },
-          };
-        },
-        addProseMirrorPlugins() {
-          return [...(this.parent?.() ?? []), new Plugin({
-            key: new PluginKey('codeNotCarried'),
-            appendTransaction: (trs, _old, state) => {
-              const code = state.schema.marks.code, stored = state.storedMarks, $cur = (state.selection as TextSelection).$cursor;
-              if (!stored || !$cur || !trs.some((tr) => tr.docChanged) || !code.isInSet(stored) || code.isInSet($cur.marks())) return null;
-              return state.tr.setStoredMarks(code.removeFromSet(stored));
-            },
-          })];
-        },
-      }),
-      // TipTap runs the markdown rules on Enter too, as if a newline had been typed: "-", "1.", "#" or ">" alone on
-      // a line and then Enter made a list, heading or toggle instead of a new line. The rules here and below take
-      // a typed space only (any whitespace but a newline).
-      BulletList.extend({
-        addStorage: bulletsMarkdown,
-        addInputRules() {
-          return [wrappingInputRule({ find: /^\s*([-+*])[^\S\n]$/, type: this.type })];
-        },
-      }),
-      // a heading is one line in markdown: a line break in it goes out as `<br>` (as in a table cell), not as the
-      // usual backslash and newline, which read back as a heading ending in "\" and a paragraph under it
-      // (six, as markdown has: a note brought in with ###### lost the heading at its first save)
-      Heading.configure({ levels: [1, 2, 3, 4, 5, 6] }).extend({
-        // ⌫ at the start of a heading makes it text, where it is (Notion's); the next ⌫ joins it to the line above.
-        // Not the title, which is the note's name whatever it is written as
-        addKeyboardShortcuts() {
-          return {
-            Backspace: () => {
-              const { $from, empty } = this.editor.state.selection;
-              if (!empty || $from.parentOffset !== 0 || $from.parent.type !== this.type) return false;
-              if ($from.depth === 1 && $from.index(0) === 0) return false;
-              return this.editor.commands.setNode('paragraph');
-            },
-          };
-        },
-        addInputRules() {
-          return this.options.levels.map((level: number) => textblockTypeInputRule({ find: new RegExp(`^(#{1,${level}})[^\\S\\n]$`), type: this.type, getAttributes: { level } }));
-        },
-        addStorage() {
-          return {
-            markdown: {
-              serialize(state: any, node: PMNode) {
-                state.write(`${state.repeat('#', node.attrs.level)} `);
-                const inTable = state.inTable;
-                state.inTable = true;
-                state.renderInline(node, false);
-                state.inTable = inTable;
-                state.closeBlock(node);
-              },
-            },
-          };
-        },
-      }),
+      LinkEndsAtItsWords,
+      CodeInsideLinks,
+      BulletOnTypedSpace,
+      OneLineHeading,
       MathInline,
       MathBlock,
-      Blockquote.extend({
-        // ⌫ at the start of a quote's second (or later) line joins it to the line above, as a callout's and a toggle's
-        // do; the stock key lifted the line out and cut the quote in two
-        addKeyboardShortcuts() {
-          return {
-            ...this.parent?.(),
-            Backspace: () => {
-              const { state, view } = this.editor;
-              const { $from, empty } = state.selection;
-              if (!empty || $from.parentOffset !== 0 || $from.depth < 2 || $from.node(-1).type !== this.type || $from.index(-1) === 0) return false;
-              // a list just above: the line's words go on the end of its last line, as in a callout or a toggle. The stock
-              // join put the line back into the list as a bullet, which the next ⌫ made text again, round and round
-              const above = $from.node(-1).child($from.index(-1) - 1);
-              if (/List$/.test(above.type.name) && $from.parent.type.name === 'paragraph') {
-                const into = Selection.findFrom(state.doc.resolve($from.before()), -1, true);
-                if (into?.$from.parent.inlineContent && !into.$from.parent.type.spec.code) {
-                  const tr = state.tr.delete($from.before(), $from.after()).insert(into.from, $from.parent.content);
-                  view.dispatch(tr.setSelection(TextSelection.create(tr.doc, into.from)).scrollIntoView());
-                  return true;
-                }
-              }
-              return this.editor.commands.joinBackward();
-            },
-          };
-        },
-        addInputRules() {
-          // "| " as before, and '" ' as Notion makes one (a Mac may have curled it already)
-          return [wrappingInputRule({ find: /^\s*[|"“][^\S\n]$/, type: this.type })];
-        },
-      }),
+      QuoteJoiningLines,
       ...Toggle,
       // An image pasted onto an empty list item takes that line. Stock list items are `paragraph block*`, so
       // the image could only go *after* the item's paragraph and the empty line stayed above it.

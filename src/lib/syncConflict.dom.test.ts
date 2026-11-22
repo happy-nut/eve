@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest';
+import { test, expect, vi } from 'vitest';
 import { mount, flushSync, tick } from 'svelte';
 import Editor from '../Editor.svelte';
 (globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
@@ -8,6 +8,7 @@ import { fakeGitHub } from './fakeGitHub.mjs';
 import { Repo } from './github';
 import { notes, serialize, parse, type Note } from './notes.svelte';
 import { sync } from './sync.svelte';
+import { assets } from './platform';
 
 const gh = fakeGitHub();
 let duringFetch: ((url: string, init?: RequestInit) => void) | null = null;
@@ -331,4 +332,36 @@ test('a day here still only its template, the other device\'s written day arrive
   expect(w.done).toBe(true);
   const all = await findable(day.id);
   for (const words of ['written there', 'typed here meanwhile']) expect(all).toContain(words);
+});
+
+test('a pull whose files could not be taken in is not counted as had: the next pull brings them again', async () => {
+  const id = made('# Pulled\n\nonce');
+  expect(await sync.now()).toBe(true);
+  await otherWrites(id, '# Pulled\n\ntwice');
+  const here = new Repo({ repo: 'o/r', token: 'tok', head: '', tree: '', known: {} }, gh.fetch);
+  const headWhileTaking: string[] = [];
+  await expect(here.pull(() => { headWhileTaking.push(here.s.head); throw new Error('disk full'); })).rejects.toThrow('disk full');
+  expect([headWhileTaking, here.s]).toEqual([[''], expect.objectContaining({ head: '', tree: '', known: {} })]);
+  const again = await here.pull();
+  expect(again.some((f) => f.path === path(id))).toBe(true);
+  expect(here.s.known[path(id)]).toBeTruthy();
+});
+
+test('a picture from the other device that could not be written here is fetched again at a later sync', async () => {
+  const pic = 'notes/assets/drawn-there.png';
+  await otherDevice.pull();
+  expect(await otherDevice.push([{ path: pic, data: new Uint8Array([1, 2, 3]) }])).toBe(true);
+  const written: string[] = [];
+  const write = vi.spyOn(assets, 'write').mockRejectedValue(new Error('no room'));
+  try { expect(await sync.now()).toBe(true); } finally { write.mockRestore(); }
+  expect(pic in sync.settings.known).toBe(false);
+  vi.spyOn(assets, 'write').mockImplementation(async (name) => { written.push(name); });
+  const id = made('# Later\n\nmoves the head');
+  try {
+    expect(await sync.now()).toBe(true);
+    await otherWrites(id, '# Later\n\nmoved there');
+    expect(await sync.now()).toBe(true);
+  } finally { vi.restoreAllMocks(); }
+  expect(written).toEqual(['drawn-there.png']);
+  expect(pic in sync.settings.known).toBe(true);
 });

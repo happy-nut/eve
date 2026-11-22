@@ -39,8 +39,7 @@
   });
 
   function pick(it: MenuItem) {
-    ui.closeMenu();
-    it.run?.();
+    ui.closeMenu(it);
     if (it.keys) hints.show('menu:' + it.label, `${it.label.replace(/…$/, '')} has a shortcut`, it.keys);
   }
   const keyed = (e: KeyboardEvent) => {
@@ -62,7 +61,7 @@
     else if (e.key === 'ArrowDown') items[(i + 1) % items.length]?.focus();
     else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length]?.focus();
     else if (e.key === 'Escape') ui.closeMenu();
-    else if (keyed(e)) { const it = keyed(e)!; ui.closeMenu(); it.run?.(); }
+    else if (keyed(e)) ui.closeMenu(keyed(e));
     else return;
     e.preventDefault();
     e.stopPropagation();
@@ -96,7 +95,7 @@
     </ul>
   </BottomSheet>
 {:else}
-<ul bind:this={el} class="menu" role="menu" tabindex="-1" style="left: {x}px; top: {y}px" style:max-height={maxH === null ? null : `min(${maxH}px, 360px, 70vh)`}
+<ul bind:this={el} class="menu" role="menu" tabindex="-1" inert={!ui.menu} style="left: {x}px; top: {y}px" style:max-height={maxH === null ? null : `min(${maxH}px, 360px, 70vh)`}
   transition:scale|global={popIn} onkeydown={onKey}>
   {#if req.search}
     <li role="none" class="search"><input bind:value={q} placeholder={req.search} aria-label={req.search} spellcheck="false" autocomplete="off" autocapitalize="off" /></li>

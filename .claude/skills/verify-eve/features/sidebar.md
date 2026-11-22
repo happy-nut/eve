@@ -43,7 +43,7 @@ Preconditions: the default three notes plus `d.md` with front matter (a real `up
 - `sidebar-drag-nest` **Nest by drag.** `await t.page.dragAndDrop('aside [data-note="d"]', 'aside [data-note="a"]', { targetPosition: { x: 40, y: 25 } });`
   Garden is `1|` under Plan, above Groceries. After `t.page.reload()` it is still there, and
   `localStorage.getItem('eve.notes.d')` has `parent: a`.
-- `sidebar-icon` **Icon.** `await t.click('aside [data-note="c"] .ico-slot'); await t.page.waitForSelector('[aria-label="Choose an icon"] emoji-picker button.emoji'); await t.click('emoji-picker button.emoji >> nth=3');`
+- `sidebar-icon` **Icon.** `await t.click('aside .note-row:has([data-note="c"]) .ico-slot'); await t.page.waitForSelector('[aria-label="Choose an icon"] emoji-picker button.emoji'); await t.click('emoji-picker button.emoji >> nth=3');`
   (the locator reaches into the picker's shadow root). The row reads `😄  Reading list`; open it and the page's head
   shows the big 😄 over `Add cover`.
 - `sidebar-jump` **Jump.** `await t.click('.tiptap'); await t.page.keyboard.down('Meta'); await t.wait(800);` shot the sidebar: 1 2 3 4

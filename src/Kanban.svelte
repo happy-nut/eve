@@ -53,6 +53,8 @@
   const focusCard = (colId: string, id: string) => q(`.kb-col[data-id="${colId}"] .kb-card[data-id="${id}"]`);
   const focusHead = (colId?: string) => q(`.kb-col[data-id="${colId}"] .kb-head`);
   const focusAdd = (colId: string) => q(`.kb-col[data-id="${colId}"] .kb-add`);
+  // WebKit gives a clicked button no focus; the card that opened must hold it so closing the card comes back to it
+  const holdFocus = (e: MouseEvent) => (e.currentTarget as HTMLElement).focus({ preventScroll: true });
   const firstLine = (body: string) => body.split('\n').map(plain).find(Boolean) ?? '';
 
   let dragging = $state<{ id: string; colId: string } | null>(null);
@@ -244,19 +246,21 @@
       {#if editing === col.id}
         <input class="kb-rename" value={col.title} use:focusInput onkeydown={(e) => renameKey(e, col)} onblur={(e) => editing === col.id && rename(col, e.currentTarget.value, false)} spellcheck="false" />
       {:else}
-        <div class="kb-head" data-kb="head" tabindex="0" role="button" onclick={() => (editing = col.id)} onkeydown={onKey}>
-          <span class="kb-title" class:dim={!col.title}>{col.title || 'Untitled'}</span>
-          <span class="kb-count">{col.cards.length}</span>
-          <button class="icon kb-del" tabindex="-1" aria-label="Delete column" data-tip="Delete column" onclick={(e) => { e.stopPropagation(); removeColumn(col); }}>×</button>
+        <div class="kb-headrow">
+          <button class="kb-head" data-kb="head" onclick={(e) => { holdFocus(e); editing = col.id; }} onkeydown={onKey}>
+            <span class="kb-title" class:dim={!col.title}>{col.title || 'Untitled'}</span>
+            <span class="kb-count">{col.cards.length}</span>
+          </button>
+          <button class="icon kb-del" tabindex="-1" aria-label="Delete column" data-tip="Delete column" onclick={() => { focusHead(col.id); removeColumn(col); }}>×</button>
         </div>
       {/if}
       {#each col.cards as card (card.id)}
-        <div class="kb-card" class:ghost={dragging?.id === card.id} data-kb="card" data-id={card.id} tabindex="0" role="button" draggable="true"
+        <button class="kb-card" class:ghost={dragging?.id === card.id} data-kb="card" data-id={card.id} draggable="true"
           animate:flip={{ duration: 220 }} in:receive={{ key: card.id }} out:send={{ key: card.id }}
-          ondragstart={(e) => dragStart(e, card, col)} ondragend={dragEnd} onclick={() => open(card)} onkeydown={onKey}>
+          ondragstart={(e) => dragStart(e, card, col)} ondragend={dragEnd} onclick={(e) => { holdFocus(e); open(card); }} onkeydown={onKey}>
           <span class="kb-ctitle" class:dim={!card.title}>{card.title || 'Untitled'}</span>
           {#if card.body}<span class="kb-cbody">{firstLine(card.body)}</span>{/if}
-        </div>
+        </button>
       {/each}
       <button class="kb-add" data-kb="add" onclick={() => addCard(col)} onkeydown={onKey}>+ New</button>
     </div>
@@ -291,10 +295,12 @@
     display: flex; align-items: center; gap: 7px; min-height: 1.87em; padding: 0 8px; border-radius: 6px; font-size: 0.87em; font-weight: 500;
     outline: none; border: 0; background: none; color: var(--fg); font-family: inherit; width: 100%;
   }
-  .kb-head:hover { background: var(--bg-hover); }
-  .kb-del { margin-left: auto; width: 20px; height: 20px; font-size: 14px; flex: none; opacity: 0; transition: opacity 0.12s, background 0.12s; }
-  .kb-head:hover .kb-del { opacity: 1; }
-  :global(html.mobile) .kb-del { opacity: 1; width: 40px; height: 40px; margin: -6px -8px -6px auto; font-size: 17px; color: var(--fg-dim); }
+  .kb-headrow { display: flex; align-items: center; border-radius: 6px; }
+  .kb-headrow:hover { background: var(--bg-hover); }
+  .kb-head { flex: 1; min-width: 0; }
+  .kb-del { margin-right: 8px; width: 20px; height: 20px; font-size: 14px; flex: none; opacity: 0; transition: opacity 0.12s, background 0.12s; }
+  .kb-headrow:hover .kb-del { opacity: 1; }
+  :global(html.mobile) .kb-del { opacity: 1; width: 40px; height: 40px; margin: -6px 0; font-size: 17px; color: var(--fg-dim); }
   :global(html.mobile) .kb-x { opacity: 1; }
   /* keyboard focus ring: decided by the app's own input tracking (App.svelte sets data-input), not by the browser's
      :focus-visible guess, which drops the ring after stepping between the editor and the board */
@@ -304,7 +310,8 @@
   .kb-count { color: var(--fg-dim); font-weight: 400; font-size: 0.92em; }
   .dim { color: var(--fg-dim); }
   .kb-card {
-    display: flex; flex-direction: column; gap: 3px; padding: 8px 11px; border-radius: 8px; font-size: 0.9em; line-height: 1.4; outline: none;
+    display: flex; flex-direction: column; gap: 3px; padding: 8px 11px; border-radius: 8px; font: inherit; font-size: 0.9em; line-height: 1.4; outline: none;
+    border: 0; color: var(--fg); text-align: left; width: 100%;
     background: var(--bg-pop); box-shadow: 0 0 0 1px var(--line), 0 1px 3px rgba(0, 0, 0, 0.06);
     transition: background 0.12s, box-shadow 0.15s, transform 0.15s, opacity 0.15s;
   }

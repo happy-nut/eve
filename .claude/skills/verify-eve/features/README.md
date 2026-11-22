@@ -86,6 +86,7 @@ missing here). A new screen gets a feature file, or a sub-feature in one, proved
 - `CardPage.svelte`: [database](./database.md), [calendar](./calendar.md)
 - `DiagramBlock.svelte`: [diagrams](./diagrams.md)
 - `FlowEditor.svelte`: [diagrams](./diagrams.md)
+- `NameField.svelte`: [diagrams](./diagrams.md)
 - `ChartEditor.svelte`: [diagrams](./diagrams.md)
 - `DiagramForm.svelte`: [diagrams](./diagrams.md)
 - `MathEdit.svelte`: [math](./math.md)

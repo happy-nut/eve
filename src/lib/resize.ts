@@ -16,8 +16,6 @@ export const nameOf = (text: string | null | undefined) =>
 export const escapeWidth = (name: string) => name.replace(/\|(\d{2,4})$/, '\\|$1').replace(/\|(center|right)$/, '\\|$1');
 export const withWidth = (name: string, width: number | null | undefined) => (width ? `${name}|${width}` : name);
 
-const PANE_EDGE_GAP = 24;
-
 function roomFor(media: HTMLElement): number {
   const tip = media.closest<HTMLElement>('.tiptap'), frame = media.closest<HTMLElement>('.img-fig');
   if (!tip) return Infinity;
@@ -25,7 +23,7 @@ function roomFor(media: HTMLElement): number {
   const column = tip.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
   const pane = tip.closest<HTMLElement>('.editor')?.clientWidth;
   if (!frame || frame.parentElement !== tip || !pane) return column;
-  const side = (pane - column) / 2 - PANE_EDGE_GAP;
+  const side = (pane - column) / 2 - (parseFloat(pad.getPropertyValue('--pane-edge-gap')) || 0);
   return Math.max(column, frame.dataset.align === 'center' ? column + 2 * side : column + side);
 }
 

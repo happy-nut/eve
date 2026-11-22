@@ -24,7 +24,7 @@
   import Menu from './Menu.svelte';
   import Toast from './Toast.svelte';
   import { ui, hooks } from './lib/ui.svelte';
-  import { droppedFiles, isAsset, type Dropped } from './lib/drop';
+  import { assetIfTaken, droppedFiles, isAsset, type Dropped } from './lib/drop';
   import { importTree } from './lib/importTree';
   import { importPaths, exportCurrent } from './lib/transfer';
   import { exportMenu } from './lib/noteMenu';
@@ -74,7 +74,7 @@
   if (import.meta.env.DEV) Object.assign(window as any, { __notes: notes, __sync: sync, __appearance: appearance });
   onMount(() => {
     void autostart.keep().catch(() => {});
-    if (dock.hidden) dock.set(true);
+    void dock.set(dock.hidden);
     notes.load().then(() => {
       if (isMobile && notes.resumed) sidebarOpen = false;
       void files.onOpen(async (paths) => {
@@ -319,11 +319,6 @@
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
     else toList();
   }
-  function leaveNote() {
-    ui.closeDiagramView();
-    ui.closeCard();
-  }
-  $effect(() => { void notes.currentId; untrack(leaveNote); });
   $effect(() => { if (notes.loaded && tree.groups.length) untrack(() => tree.toPages()); });
   let lastOpen: string | null = null;
   $effect(() => {
@@ -387,7 +382,7 @@
   function listTarget(target: EventTarget | null): { into: string; row: HTMLElement | null } | null {
     const el = target as HTMLElement | null;
     if (!el?.closest?.('aside')) return null;
-    const n = el.closest<HTMLElement>('[data-note]');
+    const n = el.closest('.note-row')?.querySelector<HTMLElement>('[data-note]');
     const note = n && notes.all.find((x) => x.id === n.dataset.note);
     if (note) return { into: note.parent ?? '', row: n };
     return { into: '', row: null };
@@ -422,7 +417,7 @@
     const made = await importTree(dropped.map(({ file, dir }) => ({
       path: dir ? `${dir}/${file.name}` : file.name,
       text: () => file.text(),
-      asset: () => saveAsset(file),
+      asset: () => assetIfTaken(file.name, () => saveAsset(file)),
     })), on?.into ?? '', on?.into ?? notes.current?.parent ?? '');
     if (made.length) ui.focusOwner = 'editor';
     if (on) return;
@@ -442,9 +437,6 @@
     const linkKeys = shortcuts.keysFor('link');
     const emptyLinkIsSearch = !!linkKeys && eventToKeys(e) === linkKeys;
     return shortcuts.match(e, ['app']) ?? (plusIsBigger ? action('textBigger') : undefined) ?? (emptyLinkIsSearch ? action('search') : undefined);
-  }
-  function searchOrSettingsTakesEscape() {
-    return settingsOpen || document.activeElement === searchEl;
   }
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Meta' && !e.shiftKey && !e.altKey && !e.ctrlKey) cmdDown();
@@ -469,7 +461,6 @@
     if (ui.undoKey(e)) { e.preventDefault(); return; }
     const a = matchAppAction(e);
     if (!a) return;
-    if (a.id === 'hide' && searchOrSettingsTakesEscape()) return;
     e.preventDefault();
     if (ui.card && (a.id === 'search' || a.id === 'focusSidebar')) { flushPendingEdits(); ui.closeCard(); }
     if (a.id === 'settings' && !settingsOpen && ui.card) { flushPendingEdits(); while (ui.card) ui.closeCard(); }

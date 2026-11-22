@@ -5,6 +5,7 @@ import { matchLanguage, guessLanguage, starterCode } from './code';
 import { swimlaneStarter } from './diagram';
 import { lowlight } from './grammars';
 import { takeBody } from './takeBody';
+import { claimKeys, handledBy, PRIORITY } from './keys';
 
 afterEach(() => { document.body.innerHTML = ''; });
 
@@ -130,6 +131,21 @@ describe('``` typed: a code block at once, the keyboard in its language field', 
     expect(ed.state.selection.$from.parent.textContent).toBe('``');
     type(ed, '`'); // and the third again: the block again
     expect(ed.state.selection.$from.parent.type.name).toBe('codeBlock');
+  });
+
+  test("what is typed in it is the field's: the app's shortcuts never hear it, and it still types", async () => {
+    const ed = editorWith('# T\n\nz');
+    const f = await typed(ed);
+    const appHeard: string[] = [];
+    const off = claimKeys('global', { '*': (e) => void appHeard.push(e.key) }, { priority: PRIORITY.app });
+    const e = new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true, cancelable: true });
+    f.dispatchEvent(e);
+    key(f, 'r');
+    off();
+    expect(appHeard).toEqual([]);
+    expect(handledBy(e)).toBe('taken');
+    expect(e.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(f);
   });
 
   test('a click away keeps what was typed', async () => {
@@ -494,6 +510,15 @@ describe('a language picked for pasted code', () => {
     // a note read in is left as it was written: only what is pasted is given a language
     const read = editorWith('# T\n\n```\n{"c": 3}\n```');
     expect(md(read)).toBe('# T\n\n```\n{"c": 3}\n```');
+  });
+
+  test('a fence with no language pasted as markdown text, or copied from Notion: the block takes the one picked', () => {
+    for (const html of ['', '<!-- notionvc: x --><p>{}</p>']) {
+      const ed = editorWith('# T\n\n');
+      ed.commands.setTextSelection(posOf(ed, 'T') + 3);
+      paste(ed, '```\n{\n  "a": 1\n}\n```', html);
+      expect(md(ed)).toContain('```json\n{\n  "a": 1\n}\n```');
+    }
   });
 });
 

@@ -11,6 +11,7 @@
 
   const page = ui.present!, from = ui.presentFrom;
   const unsizeDiagram = (c: HTMLElement) => { for (const svg of c.querySelectorAll<SVGSVGElement>('.mermaid-view svg')) Object.assign(svg.style, { width: '', minWidth: '', maxWidth: '' }); };
+  const drawingOnly = (c: HTMLElement) => { for (const v of [c, ...c.querySelectorAll('.mermaid-view')].filter((e) => e.matches('.mermaid-view'))) { v.removeAttribute('tabindex'); v.removeAttribute('role'); } };
   const unholdTable = (c: HTMLElement) => {
     for (const t of [c, ...c.querySelectorAll('.tableWrapper')]) t.classList.remove('held');
     for (const cell of c.querySelectorAll<HTMLElement>('table, col, th, td')) Object.assign(cell.style, { width: '', minWidth: '' });
@@ -20,6 +21,7 @@
     if (b === from) c.dataset.from = '';
     for (const e of [c, ...c.querySelectorAll('[contenteditable]')]) e.removeAttribute('contenteditable');
     unsizeDiagram(c);
+    drawingOnly(c);
     unholdTable(c);
     return c;
   }

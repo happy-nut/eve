@@ -1,6 +1,7 @@
 import { test, expect, beforeEach, afterEach } from 'vitest';
 import { ui, type LayerId } from './ui.svelte';
 import { watchFocus, allowFocusLoss } from './focusWatch';
+import { notes } from './notes.svelte';
 
 // Every layer (ui.layers) in one place: whatever opens over the app must close on a phone's back, one at a time and
 // the newest first, on Esc if it says so, all at once when a note is brought up from outside, and leave the keyboard
@@ -18,7 +19,7 @@ afterEach(() => {
 });
 
 /** what each layer's component does with its close (Settings: App's settingsOpen; a sheet: its owner's open) */
-const own = { math: false, sheet: false, settings: false };
+const own = { math: false, sheet: false, settings: false, search: false };
 const OPENERS = {
   photo: () => ui.viewImage('pic.png'),
   math: () => { own.math = true; const off = ui.editingMath(() => { own.math = false; off(); }); },
@@ -34,6 +35,7 @@ const OPENERS = {
   trash: () => ui.openTrash(),
   history: () => ui.openHistory('n1'),
   present: () => ui.openPresent(note),
+  search: () => { own.search = true; ui.searching(() => (own.search = false)); },
 } satisfies Record<LayerId, () => void>;
 const IDS = Object.keys(OPENERS) as LayerId[];
 
@@ -42,6 +44,7 @@ const SHOWN: Record<LayerId, () => boolean> = {
   photo: () => !!ui.photo, math: () => own.math, sheet: () => own.sheet, emoji: () => !!ui.emoji, menu: () => !!ui.menu,
   confirm: () => !!ui.pending, diagramView: () => ui.diagramView !== null, find: () => ui.find, pdf: () => !!ui.pdf,
   card: () => !!ui.card, settings: () => own.settings, trash: () => ui.trash, history: () => ui.historyOf !== null, present: () => !!ui.present,
+  search: () => own.search,
 };
 
 /** opened, the keyboard goes into it as its component takes it (a button of its own DOM), which leaves the page as
@@ -143,6 +146,21 @@ test('opened from something since gone, the keyboard goes to the note', () => {
   expect(document.activeElement).toBe(note);
 });
 
+test('the list\'s search ends as the keyboard leaves it, and leaves the keyboard where it went', () => {
+  const field = document.body.appendChild(document.createElement('input'));
+  const row = document.body.appendChild(document.createElement('button'));
+  field.focus();
+  let off = () => {};
+  field.addEventListener('focus', () => { off = ui.searching(() => {}); });
+  field.addEventListener('blur', () => off());
+  field.blur();
+  field.focus();
+  expect(ui.layers.top?.id).toBe('search');
+  row.focus();
+  expect(ui.layers.has('search')).toBe(false);
+  expect(document.activeElement).toBe(row);
+});
+
 test('a layer that is not modal (a PDF) leaves the keyboard where it has gone since', () => {
   OPENERS.pdf();
   const b = document.body.appendChild(document.createElement('button'));
@@ -203,4 +221,16 @@ test.each(IDS.filter((id) => id !== 'sheet'))('%s: modal, Tab goes round its own
   }
   ui.layers.closeAll('esc');
   box.remove();
+});
+
+test('another note opened: a card and a diagram open over the one left close with it; a card opened over the new one stays', () => {
+  const [a, b] = [notes.create('# Left\n\nx'), notes.create('# Opened\n\ny')];
+  notes.currentId = a.id;
+  OPENERS.card();
+  OPENERS.diagramView();
+  notes.currentId = b.id;
+  expect([!!ui.card, ui.diagramView]).toEqual([false, null]);
+  notes.currentId = a.id;
+  OPENERS.card();
+  expect(!!ui.card).toBe(true);
 });

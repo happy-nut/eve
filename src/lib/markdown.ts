@@ -78,9 +78,10 @@ export function splitLink(link: string, isTitle?: (title: string) => boolean): [
  * the two fields apart, so the card page composes the document when it opens and splits it back on every edit
  * — one editing host, so a drag that starts in the title runs on into the body.
  */
-export const cardDoc = (title: string, body: string) => `# ${escapeTitle(title)}\n\n${body}`;
+export const cardDoc = (title: string, body: string) => `# ${escapeInlineMarkup(title)}\n\n${body}`;
 /** a card's title is plain text: what markdown would read as markup in it (`2*3*4` italic, `<b>` a tag) stays as typed */
-export const escapeTitle = (t: string) => t.replace(/[\\`*_[\]<>&~=$|#!]/g, '\\$&');
+const escapeInlineMarkup = (t: string) => t.replace(/[\\`*_[\]<>&~=$|#!]/g, '\\$&');
+export const escapeTitle = (t: string) => escapeInlineMarkup(t).replace(/^([-+])/, '\\$1').replace(/^(\d+)([.)])/, '$1\\$2');
 
 export function splitCard(md: string): { title: string; body: string } {
   const nl = md.indexOf('\n');

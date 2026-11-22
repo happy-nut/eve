@@ -5,6 +5,8 @@ export const PDF_FILE = /\.pdf$/i;
 export const DOC_FILE = /\.(pdf|xlsx|xls|hwp|hwpx)$/i;
 export const HWP_FILE = /\.hwpx?$/i;
 export const VIDEO_FILE = /\.(mp4|mov|m4v|webm)$/i;
+export const ASSET_FILE = /\.(pdf|xlsx?|hwpx?|png|jpe?g|gif|webp|svg|heic|mp4|mov|m4v|webm)$/i;
+export const assetIfTaken = (name: string, copy: () => Promise<string>): Promise<string | null> => (ASSET_FILE.test(name) ? copy() : Promise.resolve(null));
 
 const isDoc = (f: File) => f.type === 'application/pdf' || DOC_FILE.test(f.name);
 const isVideo = (f: File) => f.type.startsWith('video/') || VIDEO_FILE.test(f.name);

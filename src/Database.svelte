@@ -3,10 +3,11 @@
   import { notes, titleOf, OWN_KEYS, propName, type Note, type PropValue } from './lib/notes.svelte';
   import { ui, under, type MenuItem } from './lib/ui.svelte';
   import { previewOf } from './lib/markdown';
+  import { claimKeys } from './lib/keys';
   import { isoDay, monthGrid, monthName, sameMonth, shiftMonths, weekdayNames } from './lib/date';
   import { evaluate, type Val } from './lib/formula';
   import {
-    NAME, ROLLUPS, TYPES, VIEWS, asLink, asList, byDay, columnsOf, computed, linksIn, parseDb, rollup, shown, tagColor, viewRows, withChoice,
+    IS_EMPTY, NAME, ROLLUPS, TYPES, VIEWS, asLink, asList, byDay, columnsOf, computed, linksIn, parseDb, rollup, shown, tagColor, viewRows, withChoice,
     type DbSchema, type PropDef, type PropType, type ViewKind,
   } from './lib/database';
 
@@ -25,15 +26,15 @@
   }
   const apply = (next: DbSchema) => { d = next; commit(next); };
   const put = (next: DbSchema) => { const was = d; step(() => apply(next), () => apply(was)); };
-  export function undoKey(e: KeyboardEvent): boolean {
+  function undoKey(e: KeyboardEvent): boolean {
     if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' || e.altKey) return false;
     if ((e.target as HTMLElement).matches?.('input[type="text"], input[type="number"], input:not([type]), textarea')) return false;
-    e.preventDefault();
     const s = e.shiftKey ? undone.pop() : done.pop();
     if (!s) return true;
     if (e.shiftKey) { s.redo(); done.push(s); } else { s.undo(); undone.push(s); }
     return true;
   }
+  $effect(() => claimKeys(root, { '*': undoKey }, { capture: true }));
 
   const pageId = $derived(page());
   const rows = $derived(pageId ? notes.all.filter((n) => n.parent === pageId && !n.deleted) : []);
@@ -81,10 +82,7 @@
   };
   type Where = { clientX: number; clientY: number };
   function choose<T>(where: Where, items: { label: string; value: T; checked?: boolean; sep?: boolean }[]): Promise<T | null> {
-    return new Promise((res) => {
-      let picked = false;
-      ui.openMenu(where, items.map((i) => ({ label: i.label, checked: i.checked, sep: i.sep, run: () => { picked = true; res(i.value); } })), () => setTimeout(() => { if (!picked) res(null); }));
-    });
+    return new Promise((res) => ui.openMenu(where, items.map((i) => ({ label: i.label, checked: i.checked, sep: i.sep, run: () => res(i.value) })), () => res(null)));
   }
   const open = (n: Note) => { if (pageId) notes.flush(pageId); notes.currentId = n.id; };
 
@@ -112,7 +110,7 @@
     const named = d.view === 'table' ? 'Untitled' : await ui.prompt('Name', '');
     if (named === null || !pageId) return;
     const f = d.filter;
-    const given = { ...(f && f.is !== 'checked' && f.is !== '' ? { [f.by]: def(f.by)?.type === 'multi' ? [f.is] : f.is } : f?.is === 'checked' ? { [f.by]: 'true' } : {}), ...props };
+    const given = { ...(f && f.is !== 'checked' && f.is !== IS_EMPTY ? { [f.by]: def(f.by)?.type === 'multi' ? [f.is] : f.is } : f?.is === 'checked' ? { [f.by]: 'true' } : {}), ...props };
     const id = notes.addRow(pageId, named.trim() || 'Untitled', given).id;
     if (d.view === 'table') fresh = id;
     done.push({ undo: () => notes.setGone(id, true), redo: () => notes.setGone(id, false) });
@@ -269,7 +267,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="db" role="group" aria-label="Database" tabindex="-1" bind:this={root} onkeydown={undoKey}>
+<div class="db" role="group" aria-label="Database" tabindex="-1" bind:this={root}>
   <div class="db-top">
     <input class="db-title" value={d.title} placeholder="Untitled database" spellcheck="false" aria-label="Database title"
       onchange={(e) => put({ ...d, title: e.currentTarget.value })} onkeydown={enterKeeps} />

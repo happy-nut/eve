@@ -193,6 +193,8 @@ class NotesStore {
   private blankSinceMade = new Set<string>();
   private leave(id: string | null) {
     flushPendingEdits();
+    ui.closeDiagramView();
+    ui.closeCard();
     if (!id || !this.blankSinceMade.has(id)) return;
     this.blankSinceMade.delete(id);
     const n = this.all.find((x) => x.id === id);
@@ -343,14 +345,15 @@ class NotesStore {
     this.loaded = true;
   }
 
-  create(body = '', parent?: string): Note {
+  create(body = '', parent?: string, { linkedFromParent = false } = {}): Note {
+    if (linkedFromParent && parent) this.flush(parent);
     const step = history.record();
     const first = this.visible.find((x) => (x.parent ?? '') === (parent ?? ''));
     const n: Note = { id: newId(), body, updatedAt: Date.now(), deleted: false, parent, order: first ? first.order - 1 : 0, icon: autoIcon() };
     if (step) this.madeInStep.add(n.id);
     this.all.push(n);
     this.titles.set(n.id, titleOf(n));
-    this.blankSinceMade.add(n.id);
+    if (!linkedFromParent) this.blankSinceMade.add(n.id);
     this.currentId = n.id;
     void storage.write(n.id, serialize(n));
     this.dirty++;

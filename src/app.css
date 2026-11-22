@@ -162,7 +162,7 @@ html.mobile .cal-wd, html.mobile .cal-foot { font-size: 13px !important; }
 html.mobile .find input { font-size: 16px !important; }
 
 html.mobile .box {
-  top: auto !important; bottom: 0 !important; left: 0 !important; right: 0; transform: none !important; width: auto !important;
+  top: auto !important; bottom: 0 !important; left: 0 !important; right: 0; transform: none; width: auto !important;
   border-radius: 20px 20px 0 0 !important; padding: 22px 20px calc(18px + var(--bottom)) !important; font-size: 16px !important;
   max-height: calc(100dvh - var(--top) - 8px); overflow-y: auto;
 }
@@ -182,7 +182,7 @@ html.mobile .choice button {
   font-size: 16px !important; padding: 10px 12px !important; min-height: 52px; border-radius: 12px !important;
 }
 html.mobile .card-page {
-  top: calc(var(--top) + 28px) !important; bottom: 0 !important; left: 0 !important; right: 0; transform: none !important;
+  top: calc(var(--top) + 28px) !important; bottom: 0 !important; left: 0 !important; right: 0;
   width: auto !important; height: auto !important; border-radius: 20px 20px 0 0 !important; border: 0 !important;
   padding-bottom: var(--bottom); box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18) !important;
 }
@@ -247,7 +247,7 @@ html.mobile aside .tree { padding: 2px 8px 96px; scrollbar-width: none; }
 html.mobile aside .tree::-webkit-scrollbar { display: none; }
 html.mobile :is(aside, .lifted) [data-row] { border-radius: 12px; min-height: 48px; }
 html.mobile :is(aside, .lifted) .ico-slot:has(> svg.ico) { display: none; }
-html.mobile :is(aside, .lifted) .note-row > button:first-child { padding: 11px 12px; justify-content: center; gap: 3px; }
+html.mobile :is(aside, .lifted) .note-row > [data-row] { padding: 11px 12px; justify-content: center; gap: 3px; }
 html.mobile :is(aside, .lifted) .title { gap: 8px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; }
 html.mobile :is(aside, .lifted) .title .t { flex: 1; min-width: 0; }
 html.mobile :is(aside, .lifted) .when {
@@ -260,7 +260,7 @@ html.mobile :is(aside, .lifted) .preview {
 html.mobile :is(aside, .lifted) .note-row > button:has(.ico-slot > :is(.emoji, .cico, .painted, .num)) .preview { padding-left: 32px; }
 html.mobile aside .note-row > button.active, html.mobile aside .note-row > [data-row].active:focus { background: var(--bg-hover); }
 html.mobile aside .note-row > [data-row]:not(.active):focus { background: none; }
-html.mobile aside .note-row > button:first-child:active { background: var(--bg-active); transform: none; }
+html.mobile aside .note-row > [data-row]:active { background: var(--bg-active); transform: none; }
 html.mobile :is(aside, .lifted) .fold { width: 44px; height: 44px; }
 
 html.mobile :is(aside, .lifted) .note-row { position: relative; touch-action: pan-y; --sx: 0px; }
@@ -389,7 +389,7 @@ html.mobile .tiptap, html.mobile input, html.mobile textarea { caret-color: var(
   :root[data-code='dark'] :is(.tiptap .code-block:not(.mermaid), .code-sample) { color-scheme: dark; }
   :root:is([data-code='light'], [data-code='dark']) :is(.tiptap .code-block:not(.mermaid), .code-sample) pre { background: var(--code-solid); color: var(--fg); }
 }
-.editor .tiptap { --reach: max(100%, calc(100% + (var(--pane, 100%) - 100%) / 2 - 24px)); }
+.editor .tiptap { --pane-edge-gap: 24px; --reach: max(100%, calc(100% + (var(--pane, 100%) - 100%) / 2 - var(--pane-edge-gap))); }
 html:not(.mobile) .editor .tiptap { --reach: max(100%, calc(100% + (var(--pane, 100%) - 100%) / 2 - 56px)); }
 .editor .tiptap > .code-block:has(.dblock.full) { left: 0; translate: none; }
 .tiptap .code-lang {
@@ -564,7 +564,8 @@ html.mobile .tiptap .mermaid-view .spot-hit { stroke-width: 22px; }
 @media (hover: hover) { .tiptap .mermaid-view:hover { box-shadow: inset 0 0 0 1.5px var(--accent-soft); } }
 .tiptap .code-block.mermaid:not(.mermaid-error) .dblock:not(.full) .diagram-canvas { padding-top: 46px; padding-bottom: 30px; }
 html.mobile .tiptap .code-block.mermaid:not(.mermaid-error) .dblock:not(.full) .diagram-canvas { padding-top: 54px; }
-.tiptap .code-block.mermaid.ProseMirror-selectednode:not(.mermaid-error):not(:has(.dblock.active)) .mermaid-view { outline: 2px solid var(--accent); box-shadow: var(--glow); }
+.tiptap .code-block.mermaid.ProseMirror-selectednode:not(.mermaid-error):not(:has(.dblock.active)) .mermaid-view,
+.tiptap .dblock:not(.active) .mermaid-view:focus-visible { outline: 2px solid var(--accent); box-shadow: var(--glow); }
 .tiptap .code-block.mermaid.editing .mermaid-view { margin-top: -0.2em; cursor: default; }
 .tiptap .code-block.mermaid-error .mermaid-view, .diagram-canvas.error {
   justify-content: flex-start; align-items: flex-start; color: #ff453a; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;

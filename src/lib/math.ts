@@ -433,7 +433,7 @@ const mathSafeText = {
   },
   parse: { setup(md: MarkdownIt) { linkify = md.linkify; } },
 };
-export const Text = Node.create({ name: 'text', group: 'inline', addStorage: () => ({ markdown: mathSafeText }) });
+export const DollarSafeText = Node.create({ name: 'text', group: 'inline', addStorage: () => ({ markdown: mathSafeText }) });
 
 /** the / menu's and the shortcut's formula: a block, or one in the line (the selected text its TeX), open to type in */
 export function insertMath(editor: Editor, display: boolean) {

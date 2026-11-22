@@ -81,7 +81,7 @@ async function newNote(page, mobile) {
 
   await check(page, 'menu (right click)', '.menu', () => row().click({ button: 'right' }), esc);
   await check(page, '"+" menu', '.menu, .plus-menu', async () => { await row().focus(); await page.keyboard.press('ControlOrMeta+n'); }, esc);
-  await check(page, 'emoji picker', '.panel', () => row().locator('.ico-slot').click(), esc);
+  await check(page, 'emoji picker', '.panel', () => page.locator('aside .note-row').last().locator('.ico-slot').click(), esc);
   await check(page, 'confirm', '.box', async () => { await row().focus(); await page.keyboard.press('Backspace'); }, esc);
   await page.locator('.tiptap').click();
   await page.keyboard.press('End');
@@ -94,6 +94,9 @@ async function newNote(page, mobile) {
   await page.waitForTimeout(300); // the emoji list loads once; after that the row comes up as you type
   await esc();
   for (let i = 0; i < 3; i++) await page.keyboard.press('Backspace');
+  // gone before it is typed for again: brought back while it still goes, Svelte turns that going round from where it
+  // is, and a row only just going comes back with no animation of its own to count
+  await page.waitForFunction(() => !document.querySelector('.emoji-row'), null, { timeout: 10_000 });
   await check(page, ':emoji row', '.emoji-row', () => page.keyboard.type(':sm'), async () => { await esc(); for (let i = 0; i < 3; i++) await page.keyboard.press('Backspace'); });
   await check(page, '@ calendar', '.cal', () => page.keyboard.type('@'), async () => { await esc(); await page.keyboard.press('Backspace'); });
   await page.keyboard.type('```');
@@ -163,14 +166,14 @@ async function newNote(page, mobile) {
   await dropdown('code language menu', async () => { await hoverOn('.code-block'); await page.locator('.code-lang').click(); });
   await dropdown('note menu (…)', () => page.locator('button.note-more').click());
   await dropdown('sidebar row menu', () => page.locator('aside [data-note]').last().click({ button: 'right' }));
-  await dropdown('emoji picker', () => page.locator('aside [data-note]').last().locator('.ico-slot').click());
+  await dropdown('emoji picker', () => page.locator('aside .note-row').last().locator('.ico-slot').click());
   {
     // ↓ pressed the moment it opens, before its emoji are drawn (a first open on a slow machine): it lands on the first
     // one once they are, rather than being lost
     await page.evaluate(() => indexedDB.databases?.().then((dbs) => dbs.forEach((d) => indexedDB.deleteDatabase(d.name))));
     await page.reload();
     await page.waitForSelector('.tiptap');
-    await page.locator('aside [data-note]').last().locator('.ico-slot').click();
+    await page.locator('aside .note-row').last().locator('.ico-slot').click();
     await page.waitForFunction(() => document.querySelector('emoji-picker')?.shadowRoot?.activeElement?.matches('input'), null, { timeout: 10_000 }).catch(() => {});
     await page.keyboard.press('ArrowDown');
     const onCell = await page.waitForFunction(() => document.querySelector('emoji-picker')?.shadowRoot?.activeElement?.matches('button.emoji'), null, { timeout: 10_000 }).then(() => true, () => false);

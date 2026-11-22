@@ -62,7 +62,8 @@ pub fn run() {
         .manage(PendingLink::default())
         .manage(mem::Marks::default())
         .setup(|app| {
-            mac::release_unclaimed_markdown(app.handle());
+            #[cfg(target_os = "macos")]
+            window::hide_dock_as_saved(app.handle());
             mac::keep_page_awake(app.handle());
             mac::menu_without_close(app.handle())?;
             mem::watch(app.handle());

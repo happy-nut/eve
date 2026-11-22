@@ -1,6 +1,6 @@
 import { notes, parse, serialize, type Note } from './notes.svelte';
 import { flushPendingEdits } from './pending';
-import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText, memMark } from './platform';
+import { assets, github, openUrl, isTauri, isMobile, widget, share, copyText, memMark, onWindowHide } from './platform';
 import { Repo, FileHashes, syncRound, deviceLogin, ensureRepo, normHost, signInError, syncError, type LocalFile, type RemoteFile } from './github';
 import { seal, open, ticketLink, type Ticket } from './handoff';
 import { merge3 } from './merge3';
@@ -30,15 +30,13 @@ const UNREADABLE = null;
 
 interface Pulled { r: Note; seen?: string; untouched: boolean; agreed?: string | typeof UNREADABLE; sameIdNoneAgreed: boolean }
 
-async function takeAssetOrAskAgain(repo: Repo, f: RemoteFile) {
-  try { await assets.write(f.path.slice(ASSETS.length), f.data); } catch { delete repo.s.known[f.path]; }
-}
+const tookAsset = (f: RemoteFile) => assets.write(f.path.slice(ASSETS.length), f.data).then(() => true, () => false);
 
-async function gather(files: RemoteFile[], repo: Repo, hashes: FileHashes): Promise<Pulled[]> {
+async function gather(files: RemoteFile[], repo: Repo, hashes: FileHashes, notKept: string[]): Promise<Pulled[]> {
   const dec = new TextDecoder();
   const pulled: Pulled[] = [];
   for (const f of files) {
-    if (f.path.startsWith(ASSETS)) { await takeAssetOrAskAgain(repo, f); continue; }
+    if (f.path.startsWith(ASSETS)) { if (!(await tookAsset(f))) notKept.push(f.path); continue; }
     if (!f.path.endsWith('.md')) continue;
     const r = parse(dec.decode(f.data));
     if (!r) continue;
@@ -221,7 +219,11 @@ class Sync {
         const unsynced = (await assets.list()).filter((name) => !(ASSETS + name in repo.s.known));
         for (const name of unsynced) out.push({ path: ASSETS + name, data: await assets.read(name) });
         return out;
-      }, async (files: RemoteFile[]) => decide(await gather(files, repo, this.hashes)));
+      }, async (files: RemoteFile[]) => {
+        const notKept: string[] = [];
+        decide(await gather(files, repo, this.hashes, notKept));
+        return notKept;
+      });
       this.save({ lastSynced: Date.now() });
       this.status = 'ok';
       this.error = '';
@@ -241,7 +243,8 @@ class Sync {
     window.addEventListener('focus', () => this.now());
     // a phone: back from the background pulls, and leaving pushes before the OS may kill the app
     document.addEventListener('visibilitychange', () => { if (document.hidden) notes.flushAll(); void this.now(); });
-    return () => clearInterval(iv);
+    const unhide = onWindowHide(() => void this.now());
+    return () => { clearInterval(iv); unhide(); };
   }
 }
 

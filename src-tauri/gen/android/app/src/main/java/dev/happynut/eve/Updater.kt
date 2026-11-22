@@ -18,14 +18,14 @@ import java.net.URL
 object Updater {
   private const val PREFIX = "https://github.com/happy-nut/eve/releases/download/"
 
-  /** state goes to `report`: "permission", "downloading", "downloading:<percent>", "installing", or "error" */
-  fun install(activity: Activity, url: String, report: (String) -> Unit) {
-    if (!url.startsWith(PREFIX) || !url.endsWith(".apk")) return report("error")
+  /** `report` gets "permission", "downloading" (with the percent once it is known), "installing", or "error" */
+  fun install(activity: Activity, url: String, report: (state: String, progress: Int?) -> Unit) {
+    if (!url.startsWith(PREFIX) || !url.endsWith(".apk")) return report("error", null)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !activity.packageManager.canRequestPackageInstalls()) {
       activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}")))
-      return report("permission")
+      return report("permission", null)
     }
-    report("downloading")
+    report("downloading", null)
     Thread {
       val apk = File(activity.cacheDir, "update.apk")
       val ok = runCatching {
@@ -52,20 +52,20 @@ object Updater {
               out.write(buf, 0, n)
               done += n
               val p = if (total > 0) (done * 100 / total).toInt() else -1
-              if (p >= 0 && p / 5 != shown / 5) { shown = p; activity.runOnUiThread { report("downloading:$p") } }
+              if (p >= 0 && p / 5 != shown / 5) { shown = p; activity.runOnUiThread { report("downloading", p) } }
             }
           }
         }
         conn.disconnect()
       }.isSuccess
       activity.runOnUiThread {
-        if (!ok) return@runOnUiThread report("error")
+        if (!ok) return@runOnUiThread report("error", null)
         val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", apk)
         activity.startActivity(Intent(Intent.ACTION_VIEW).apply {
           setDataAndType(uri, "application/vnd.android.package-archive")
           addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         })
-        report("installing")
+        report("installing", null)
       }
     }.start()
   }

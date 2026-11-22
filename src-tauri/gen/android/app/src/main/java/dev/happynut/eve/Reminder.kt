@@ -128,33 +128,41 @@ object LineReminders {
   private val IN_LINE = Regex("(?<![\\w@])@(\\d{4}-\\d{2}-\\d{2}) ((?:[01]\\d|2[0-3]):[0-5]\\d) ⏰")
   private val DONE = Regex("^\\s*(?:[-*+]|\\d+[.)])\\s+\\[[xX]\\]")
   private val MARKS = Regex("^\\s*(?:>\\s*)*(?:#{1,6}\\s+|[-*+]\\s+(?:\\[[ xX]\\]\\s+)?|\\d+[.)]\\s+)?")
+  // Java's \s is ASCII only; JavaScript's, which date.ts reads with, takes in a no-break space too
+  private val SPACES = Regex("(?U)\\s+")
 
   data class Due(val at: Long, val id: String, val title: String, val line: String)
+  data class Found(val at: Long, val day: String, val time: String, val line: String)
 
   /** every reminder in every note, a note's own deleted ones left out */
   fun all(context: Context): List<Due> {
     val out = mutableListOf<Due>()
-    val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).apply { isLenient = false }
     for (file in NotesWidget.notesDir(context).listFiles { f -> f.isFile && f.name.endsWith(".md") } ?: emptyArray()) {
       val text = runCatching { file.readText() }.getOrNull() ?: continue
       if (!text.contains('⏰')) continue
       val front = dev.happynut.eve.widget.frontmatter(text)
       if (front?.get("deleted") == "true") continue
       val body = if (front != null) text.substring(text.indexOf("\n---", 4) + 4).trimStart('\n') else text
-      var title = ""
-      // the fence a line is in ("" a plain one): code is code, but a board's cards are words (date.ts's remindersIn)
-      var fence: String? = null
-      for (line0 in body.split("\n")) {
-        if (title.isEmpty() && line0.isNotBlank()) title = line0.replace(Regex("^#+\\s*"), "").trim()
-        val opening = Regex("^\\s*(?:```|~~~)(\\w*)").find(line0)
-        if (opening != null) { fence = if (fence == null) opening.groupValues[1] else null; continue }
-        if ((fence != null && fence != "kanban") || DONE.containsMatchIn(line0)) continue
-        val raw = if (fence == "kanban") line0.replace(Regex("^\\s*\"[^\"]*\":\\s*\""), "").replace(Regex("\",?\\s*$"), "").replace("\\n", " ") else line0
-        for (m in IN_LINE.findAll(raw)) {
-          val at = runCatching { fmt.parse("${m.groupValues[1]} ${m.groupValues[2]}")?.time }.getOrNull() ?: continue
-          val line = MARKS.replace(raw.replace(IN_LINE, ""), "").replace(Regex("\\s+"), " ").trim()
-          out += Due(at, file.name.removeSuffix(".md"), title.ifEmpty { "Untitled" }, line.ifEmpty { "${m.groupValues[1]} ${m.groupValues[2]}" })
-        }
+      val title = body.split("\n").firstOrNull { it.isNotBlank() }?.replace(Regex("^#+\\s*"), "")?.trim().orEmpty()
+      for (f in inBody(body)) out += Due(f.at, file.name.removeSuffix(".md"), title.ifEmpty { "Untitled" }, f.line.ifEmpty { "${f.day} ${f.time}" })
+    }
+    return out
+  }
+
+  fun inBody(body: String): List<Found> {
+    val out = mutableListOf<Found>()
+    val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).apply { isLenient = false }
+    // the fence a line is in ("" a plain one): code is code, but a board's cards are words (date.ts's remindersIn)
+    var fence: String? = null
+    for (line0 in body.split("\n")) {
+      val opening = Regex("^\\s*(?:```|~~~)(\\w*)").find(line0)
+      if (opening != null) { fence = if (fence == null) opening.groupValues[1] else null; continue }
+      if ((fence != null && fence != "kanban") || DONE.containsMatchIn(line0)) continue
+      val raw = if (fence == "kanban") line0.replace(Regex("^\\s*\"[^\"]*\":\\s*\""), "").replace(Regex("\",?\\s*$"), "").replace("\\n", " ") else line0
+      for (m in IN_LINE.findAll(raw)) {
+        val at = runCatching { fmt.parse("${m.groupValues[1]} ${m.groupValues[2]}")?.time }.getOrNull() ?: continue
+        val line = MARKS.replace(raw.replace(IN_LINE, ""), "").replace(SPACES, " ").trim()
+        out += Found(at, m.groupValues[1], m.groupValues[2], line)
       }
     }
     return out

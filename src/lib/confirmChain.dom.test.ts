@@ -25,3 +25,19 @@ test('a question asked as the one before it is answered (a property\'s name, the
   ui.done(null);
   await second;
 });
+
+test('the keyboard is back where it was before the answer is given: what the answer opens next takes it from there', async () => {
+  document.body.innerHTML = '<main><div class="tiptap" tabindex="0" contenteditable="true"></div></main>';
+  const note = document.querySelector<HTMLElement>('main .tiptap')!;
+  note.focus();
+  const asked = ui.prompt('Property name', 'Formula');
+  app = mount(Confirm, { target: document.body });
+  flushSync();
+  expect(document.activeElement).toBe(document.querySelector('[role="dialog"] input'));
+  const answer = ui.pending!.resolve;
+  let keyboardAtAnswer: Element | null = null;
+  ui.pending!.resolve = (v) => { keyboardAtAnswer = document.activeElement; answer(v); };
+  ui.done('Cost');
+  expect(keyboardAtAnswer).toBe(note);
+  expect(await asked).toBe('Cost');
+});

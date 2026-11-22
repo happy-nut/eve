@@ -35,7 +35,7 @@ export const storage = {
   },
 };
 
-type Bridge = { takeIntent(): string; notesChanged(): void; showKeyboard(): void; account(repo: string, token: string, host: string): void; export(kind: string, title: string, body: string): void; pinWidget(noteId: string): boolean; widgetTop(): string; setReminder?(on: boolean, at: string, template: string): void; askNotify?(): void; widgetDaily?(on: boolean): void; installUpdate(url: string): void; immersive?(on: boolean): void };
+type Bridge = { takeIntent(): string; notesChanged(): void; showKeyboard(): void; account(repo: string, token: string, host: string): void; export(kind: string, title: string, body: string): void; pinWidget(noteId: string): boolean; widgetTop(): string; setReminder?(on: boolean, at: string, template: string): void; askNotify?(): void; widgetDaily?(on: boolean): void; installUpdate(url: string): void; immersive?(on: boolean): void; keyboardInset?(): number };
 const android = () => (globalThis as { EveAndroid?: Bridge }).EveAndroid;
 let widgetTimer: ReturnType<typeof setTimeout> | undefined;
 export const widget = {
@@ -61,6 +61,14 @@ export const widget = {
     });
   },
   keyboard() { android()?.showKeyboard(); },
+  onKeyboardInset(cb: (px: number) => void): (() => void) | undefined {
+    const bridge = android();
+    if (!bridge?.keyboardInset) return undefined;
+    const on = (e: Event) => cb((e as CustomEvent<number>).detail);
+    window.addEventListener('eve-keyboard', on);
+    cb(bridge.keyboardInset());
+    return () => window.removeEventListener('eve-keyboard', on);
+  },
   onOpen(cb: (ask: string) => void) {
     if (!isMobile) return;
     const drain = () => { const ask = android()?.takeIntent(); if (ask) cb(ask); };
@@ -393,8 +401,14 @@ export async function paintWindowBackground() {
   const [r, g, b] = m.map(Number);
   await invoke<void>('set_ground', { r, g, b });
 }
+const onHide = new Set<() => void>();
+/** Eve put away by its own hotkey or ⌘W/⌘H: a hidden Mac app's page stays `visible`, so no visibilitychange comes. */
+export function onWindowHide(cb: () => void): () => void {
+  onHide.add(cb);
+  return () => { onHide.delete(cb); };
+}
 async function dismiss() {
-  document.dispatchEvent(new Event('visibilitychange'));
+  for (const cb of onHide) cb();
   // a half-typed 한글 syllable would otherwise still be composing when the window comes back, and a
   // composing view reads no keystroke at all (App ends it on the way in too, for the paths with no blur)
   for (const pm of document.querySelectorAll('.tiptap')) pm.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));

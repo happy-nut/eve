@@ -27,7 +27,7 @@ export default async (t) => {
   await t.page.locator(':has(> .label:has-text("Daily notes")) input.switch').first().click();
   await t.shot('settings-switch');
   await t.key('Escape');
-  await t.ok('daily-on', () => t.page.evaluate(() => document.querySelector('aside [data-row]')?.textContent.trim().replace(/\s+/g, ' ') === '🗓️ Daily notes'),
+  await t.ok('daily-on', () => t.page.evaluate(() => (() => { const r = document.querySelector('aside [data-row]'); return r && ((r) => ((r.querySelector('.ico-slot') ? '' : r.closest('.note-row')?.querySelector('.ico-slot')?.textContent ?? '') + r.textContent).replace(/\s+/g, ' ').trim())(r); })() === '🗓️ Daily notes'),
     'the sidebar list starts with a 🗓️ Daily notes row');
   await t.shot('daily-row', 'aside');
 
@@ -101,7 +101,7 @@ export default async (t) => {
 
   await t.page.fill('.calendar input.name', 'Journal');
   await t.key('Enter');
-  await t.ok('calendar-rename', () => t.page.evaluate(() => document.querySelector('aside [data-row]')?.textContent.trim().replace(/\s+/g, ' ') === '🗓️ Journal'),
+  await t.ok('calendar-rename', () => t.page.evaluate(() => (() => { const r = document.querySelector('aside [data-row]'); return r && ((r) => ((r.querySelector('.ico-slot') ? '' : r.closest('.note-row')?.querySelector('.ico-slot')?.textContent ?? '') + r.textContent).replace(/\s+/g, ' ').trim())(r); })() === '🗓️ Journal'),
     'the name typed in the calendar head renames its sidebar row to 🗓️ Journal');
   await t.wait(800);
   await t.page.reload();

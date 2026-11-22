@@ -11,6 +11,8 @@ const cmdZ = (target: Element, shift = false) => {
 };
 
 import { history } from './history.svelte';
+import { editorWith, md, posOf } from './testEditor';
+import { slashItems } from './slash';
 
 /** one action done, as the app does it: its step closes a moment after (history.svelte.ts) */
 const done = () => new Promise((r) => setTimeout(r, 0));
@@ -118,4 +120,20 @@ test('a note deleted for good stays gone: ⌘Z on its delete does not raise it a
   notes.erase([a.id]); await done();
   history.undo();
   expect(where(a.id).deleted).toBe(true);
+});
+
+test('a line moved to another note: one ⌘Z in the note takes it out of the other note and puts it back here', async () => {
+  const there = made('# There\n\nold'), here = made('# Here\n\nfirst\n\nmoving\n\nlast'); await done();
+  const thereNow = () => notes.all.find((n) => n.id === there.id)!.body;
+  const ed = editorWith(here.body);
+  ed.commands.setTextSelection(posOf(ed, 'moving'));
+  slashItems('moveto').find((i) => i.label === 'Move to')!.run!(ed);
+  await done();
+  ui.menu!.items.find((i) => i.label === 'There')!.run!();
+  expect(thereNow()).toBe('# There\n\nold\n\nmoving\n');
+  expect(md(ed)).not.toContain('moving');
+  expect(ui.toastUndoKey(cmdZ(ed.view.dom))).toBe(true);
+  expect(thereNow()).toBe('# There\n\nold');
+  expect(md(ed)).toBe('# Here\n\nfirst\n\nmoving\n\nlast');
+  ed.destroy();
 });

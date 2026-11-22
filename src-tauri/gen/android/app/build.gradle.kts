@@ -82,6 +82,7 @@ dependencies {
     // the widget's list, handed to the system whole (backported below Android 12)
     implementation("androidx.core:core-remoteviews:1.1.0")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")
 }

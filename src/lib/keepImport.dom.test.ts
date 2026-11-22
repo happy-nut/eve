@@ -11,10 +11,11 @@ const disk: Record<string, string> = {
   '/t/Keep/Labels.txt': 'Home\n',
   '/t/Keep/readme.md': '# Mine\n\nnot from Keep',
 };
+const copied: string[] = [];
 vi.mock('./platform', async (original) => ({
   ...(await original<typeof import('./platform')>()),
   files: { read: async (p: string) => { if (!(p in disk)) throw new Error('no such file'); return disk[p]; }, write: async () => {} },
-  importAsset: async (p: string) => { if (!(p in disk)) throw new Error('no such file'); return `assets/${p.split('/').pop()}`; },
+  importAsset: async (p: string) => { copied.push(p); if (!(p in disk)) throw new Error('no such file'); return `assets/${p.split('/').pop()}`; },
 }));
 const { importPaths } = await import('./transfer');
 const { notes, titleOf } = await import('./notes.svelte');
@@ -29,4 +30,19 @@ test('a Takeout Keep folder: its notes in Keep order and labels, the rest of the
   expect(titleOf(first!)).toBe('Pinned');
   expect(notes.all.find((n) => titleOf(n) === 'Pinned')!.body).toContain('![](assets/pic.jpg)');
   expect(notes.all.find((n) => titleOf(n) === 'Groceries')!.updatedAt).toBe(3e12);
+});
+
+test('a Keep attachment of a kind notes do not keep (a voice memo): not copied, the note saying it was left behind', async () => {
+  Object.assign(disk, {
+    '/u/Keep/Voice.json': JSON.stringify({ title: 'Voice', textContent: 'said', isTrashed: false, attachments: [{ filePath: 'rec.3gp', mimetype: 'audio/3gpp' }, { filePath: 'shot.png', mimetype: 'image/png' }] }),
+    '/u/Keep/rec.3gp': '',
+    '/u/Keep/shot.png': '',
+  });
+  copied.length = 0;
+  await importPaths(['/u/Keep/Voice.json', '/u/Keep/rec.3gp', '/u/Keep/shot.png'], '/u');
+  expect(copied).toEqual(['/u/Keep/shot.png']);
+  const voice = notes.all.find((n) => titleOf(n) === 'Voice')!;
+  expect(voice.body).toContain('![](assets/shot.png)');
+  expect(voice.body).toContain('*(not brought over from Keep: rec.3gp)*');
+  expect(notes.all.some((n) => !n.deleted && titleOf(n) === 'rec')).toBe(false);
 });

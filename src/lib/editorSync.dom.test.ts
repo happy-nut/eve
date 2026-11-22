@@ -143,3 +143,17 @@ test('in a table, the caret stays in its own cell when another cell of it change
     expect($from.parentOffset).toBe('delta'.length);
   }
 });
+
+test('Tab stays in the note, from its text or a box of its own that has no use for it; a form row inside it keeps Tab for its next field', () => {
+  const { id } = notes.create('# Tabs\n\nline\n');
+  const ed = open(notes.all.find((x) => x.id === id)!);
+  const pane = ed.view.dom.closest('.editor') as HTMLElement;
+  const tab = (at: Element) => { const e = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }); at.dispatchEvent(e); return e.defaultPrevented; };
+  const own = pane.appendChild(document.createElement('input'));
+  const form = pane.appendChild(document.createElement('div'));
+  form.className = 'db';
+  const field = form.appendChild(document.createElement('input'));
+  expect(tab(own)).toBe(true);
+  expect(tab(field)).toBe(false);
+  ed.commands.focus();
+});

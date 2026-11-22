@@ -112,11 +112,6 @@ function wideTables(md: any) {
 }
 
 const WIDTHS = 'eve:widths';
-export let copying = false;
-export function asCopy<T>(write: () => T): T {
-  copying = true;
-  try { return write(); } finally { copying = false; }
-}
 const WIDTHS_RE = new RegExp(`^<!--\\s*${WIDTHS}((?:\\s+(?:\\d+|-))+)\\s*-->\\s*$`);
 
 function tableWidths(md: any) {
@@ -174,7 +169,7 @@ const tableMarkdown = {
       // other apps do not show) holds them, "-" for a column left to size itself
       const widths: (number | null)[] = Array(width).fill(null);
       node.forEach((row) => row.forEach((cell, _o, i) => { widths[i] ??= cell.attrs.colwidth?.[0] ?? null; }));
-      if (!copying && widths.some((w) => w)) {
+      if (!state.options.copying && widths.some((w) => w)) {
         state.write(`<!-- ${WIDTHS} ${widths.map((w) => w || '-').join(' ')} -->`);
         state.closeBlock(node);
       }
@@ -208,26 +203,25 @@ function outOfTable(view: EditorView, dir: 1 | -1): boolean {
 }
 
 function clearKeepingCells(view: EditorView, text = '', out = false) {
-  view.dispatch(clearedKeepingCells(view.state, text, out).scrollIntoView());
+  view.dispatch(clearedKeepingCells(view.state.tr, text, out).scrollIntoView());
   return true;
 }
 
-function clearedKeepingCells(state: EditorState, text: string, out: boolean): Transaction {
-  const { from, to } = state.selection;
-  const $cell = cellAround(state.selection.$to) ?? cellAround(state.selection.$from)!;
+function clearedKeepingCells(tr: Transaction, text: string, out: boolean): Transaction {
+  const { from, to } = tr.selection;
+  const $cell = cellAround(tr.selection.$to) ?? cellAround(tr.selection.$from)!;
   const start = $cell.before(-1), end = $cell.after(-1);
   const parts: [number, number][] = [start > from ? [from, start] : [end, to]];
   const lo = Math.max(from, start), hi = Math.min(to, end);
-  state.doc.nodesBetween(lo, hi, (node, pos) => {
+  tr.doc.nodesBetween(lo, hi, (node, pos) => {
     if (!/^table(Cell|Header)$/.test(node.type.name)) return true;
     const a = Math.max(lo, pos + 1), b = Math.min(hi, pos + node.nodeSize - 1);
     if (a < b) parts.push([a, b]);
     return false;
   });
-  const tr = state.tr;
   for (const [a, b] of parts.sort((x, y) => y[0] - x[0])) {
     const $a = tr.doc.resolve(a);
-    if (/^table(Cell|Header)$/.test($a.parent.type.name) && b === $a.end()) tr.replaceWith(a, b, state.schema.nodes.paragraph.create());
+    if (/^table(Cell|Header)$/.test($a.parent.type.name) && b === $a.end()) tr.replaceWith(a, b, tr.doc.type.schema.nodes.paragraph.create());
     else tr.delete(a, b);
   }
   const below = out && start <= from ? Selection.findFrom(tr.doc.resolve(tr.mapping.map(end, -1)), 1, true) : null;
@@ -236,20 +230,9 @@ function clearedKeepingCells(state: EditorState, text: string, out: boolean): Tr
   return tr;
 }
 
-export function clearForPaste(view: EditorView) {
-  if (!halfInTable(view.state.selection)) return;
-  const tr = clearedKeepingCells(view.state, '', true);
-  view.dispatch(tr);
-  pasting = tr;
-  queueMicrotask(() => { pasting = null; });
+export function clearForPaste(tr: Transaction) {
+  if (halfInTable(tr.selection)) clearedKeepingCells(tr, '', true);
 }
-let pasting: Transaction | null = null;
-const pasteAfterClear = new Plugin({
-  filterTransaction: (tr) => {
-    if (pasting && tr !== pasting && tr.docChanged && !tr.getMeta('appendedTransaction')) tr.setMeta('appendedTransaction', pasting);
-    return true;
-  },
-});
 
 function lineAbove(view: EditorView) {
   const tr = view.state.tr.insert(0, view.state.schema.nodes.paragraph.create());
@@ -542,7 +525,7 @@ export const TableNodes = [
   Table.extend({
     addStorage: () => tableMarkdown,
     addProseMirrorPlugins() {
-      return [dragOutOfTable, chosenTable, pasteAfterClear, holdWidths, holdColumnsForDrag, ...(this.parent?.() ?? []).map((p) => (p.spec.key === tableEditingKey ? letTextSelectionsLeaveTables(p) : p))];
+      return [dragOutOfTable, chosenTable, holdWidths, holdColumnsForDrag, ...(this.parent?.() ?? []).map((p) => (p.spec.key === tableEditingKey ? letTextSelectionsLeaveTables(p) : p))];
     },
   }).configure({ resizable: true }),
   TableRow.extend({ addStorage: () => writtenByTable }),

@@ -4,7 +4,7 @@ import { NodeSelection, Plugin, PluginKey, TextSelection, type EditorState } fro
 import { Decoration, DecorationSet, type EditorView, type ViewMutationRecord } from '@tiptap/pm/view';
 import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import { ui, under } from './ui.svelte';
-import { composing } from './keys';
+import { claimKeys, composing, PRIORITY } from './keys';
 import { isMobile } from './platform';
 import { inKorean, starter, toCode, type Diagram, type Kind } from './diagram';
 import { mountDiagram } from './diagramBlock.svelte';
@@ -123,13 +123,7 @@ export function guessLanguage(code: string, ll: Lowlight | null): string | null 
   return best[0] === 'c' && text.includes('::') ? 'cpp' : best[0];
 }
 
-let pasting = false;
 const guessing = new Plugin({
-  props: {
-    handleDOMEvents: {
-      paste: () => { pasting = true; setTimeout(() => { pasting = false; }); return false; },
-    },
-  },
   view(view) {
     return {
       update() {
@@ -150,7 +144,7 @@ const guessing = new Plugin({
     };
   },
   appendTransaction(trs, old, state) {
-    if (!pasting && !trs.some((tr) => tr.getMeta('paste') || tr.getMeta('uiEvent') === 'paste')) return null;
+    if (!trs.some((tr) => tr.getMeta('paste'))) return null;
     if (!trs.some((tr) => tr.docChanged)) return null;
     const before = new Set<PMNode>();
     old.doc.descendants((n) => { if (n.type.name === 'codeBlock') before.add(n); return !n.isTextblock; });
@@ -605,9 +599,8 @@ export const CodeBlock = CodeBlockBase.extend({
         editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, p + 1)).scrollIntoView());
         editor.view.focus();
       };
-      field.addEventListener('keydown', (e) => {
-        e.stopPropagation();
-        if (composing(e)) return;
+      const fieldKey = (e: KeyboardEvent) => {
+        if (composing(e)) return true;
         if (e.key === 'ArrowDown' || e.key === 'Tab' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); intoCode(true); }
         else if (e.key === 'Escape') { e.preventDefault(); intoCode(false); }
         else if (e.key === 'Backspace' && !field.value) {
@@ -616,12 +609,14 @@ export const CodeBlock = CodeBlockBase.extend({
           editor.view.focus();
           const p = posNow();
           const cur = p == null ? null : editor.state.doc.nodeAt(p);
-          if (p == null || !cur) return;
+          if (p == null || !cur) return true;
           const para = editor.schema.nodes.paragraph.create(null, [editor.schema.text('``'), ...(cur.content.size ? [editor.schema.text(cur.textContent)] : [])]);
           const tr = editor.state.tr.replaceWith(p, p + cur.nodeSize, para);
           editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, p + 3)).scrollIntoView());
         }
-      });
+        return true;
+      };
+      const unclaimField = claimKeys(field, { '*': fieldKey }, { capture: true, priority: PRIORITY.app, composing: true, letType: true });
       field.addEventListener('blur', () => {
         if (!asking) return;
         const typed = field.value.trim();
@@ -652,6 +647,7 @@ export const CodeBlock = CodeBlockBase.extend({
         selectNode: () => dom.classList.add('ProseMirror-selectednode'),
         deselectNode: () => dom.classList.remove('ProseMirror-selectednode'),
         destroy: () => {
+          unclaimField();
           asking = false;
           const a = document.activeElement;
           const had = owns(a) || ((!a || a === document.body) && !!host.querySelector('.dblock.active, .dblock.full'));

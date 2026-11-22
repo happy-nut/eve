@@ -1,6 +1,8 @@
 import type { Editor } from '@tiptap/core';
 import { Fragment } from '@tiptap/pm/model';
 import { Selection } from '@tiptap/pm/state';
+import { closeHistory, undoDepth } from '@tiptap/pm/history';
+import { flushPendingEdits } from './pending';
 import { insertKanban } from './kanban';
 import { insertDatabase } from './databaseNode';
 import { insertFootnote } from './footnote';
@@ -387,12 +389,13 @@ function lineRange(editor: Editor): { from: number; to: number } {
   return { from: $from.before(d), to: $from.after(d) };
 }
 
-function deleteLine(editor: Editor) {
+function deleteLine(editor: Editor): boolean {
   const { from, to } = lineRange(editor);
-  if (from === 0) return void editor.commands.focus();
+  if (from === 0) return void editor.commands.focus(), false;
   const tr = editor.state.tr.delete(from, to);
   editor.view.dispatch(tr.setSelection(Selection.near(tr.doc.resolve(Math.min(from, tr.doc.content.size)), -1)).scrollIntoView());
   editor.commands.focus();
+  return true;
 }
 
 async function moveLine(editor: Editor) {
@@ -412,9 +415,17 @@ async function moveLine(editor: Editor) {
       const first = slice.firstChild;
       if (first && /Item$/.test(first.type.name)) slice = Fragment.from(state.doc.resolve(from).parent.copy(slice));
       const md = (editor.storage as any).markdown.serializer.serialize(state.schema.topNodeType.create(null, slice)).trim();
-      notes.update(n.id, `${n.body.trimEnd()}\n\n${md}\n`);
-      deleteLine(editor);
-      ui.toast(`Moved to “${titleOf(n)}”`);
+      const was = n.body;
+      notes.update(n.id, `${was.trimEnd()}\n\n${md}\n`);
+      const moved = n.body;
+      editor.view.dispatch(closeHistory(editor.state.tr));
+      const deleted = deleteLine(editor);
+      flushPendingEdits();
+      const steps = undoDepth(editor.state);
+      ui.toast(`Moved to “${titleOf(n)}”`, { label: 'Undo', byKey: true, run: () => {
+        if (n.body === moved) notes.update(n.id, was);
+        if (deleted && !editor.isDestroyed && undoDepth(editor.state) === steps) editor.commands.undo();
+      } });
     } }))
     : [{ label: 'No other note to move it to', disabled: true }]);
 }
@@ -430,8 +441,6 @@ export function newPage(editor: Editor, named = '') {
   const parent = notes.current;
   const title = untitled(named.trim() || 'Untitled');
   editor.chain().focus().insertContent([{ type: 'wikiLink', attrs: { title } }, { type: 'text', text: ' ' }]).run();
-  if (parent) notes.flush(parent.id);
   notes.selectTitle = !named.trim();
-  const page = notes.create(`# ${title}\n\n`, parent?.id);
-  notes.touched(page.id);
+  notes.create(`# ${title}\n\n`, parent?.id, { linkedFromParent: true });
 }

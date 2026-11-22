@@ -23,6 +23,7 @@ class MainActivity : TauriActivity() {
   /** What the home-screen widget asked for ("note:<id>" or "new"), until the page takes it. */
   @Volatile private var pending = ""
   private var webView: WebView? = null
+  @Volatile private var keyboardInset = 0
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
@@ -37,7 +38,12 @@ class MainActivity : TauriActivity() {
     // status and navigation bars stay the page's to handle (CSS safe-area insets).
     val content = findViewById<View>(android.R.id.content)
     ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
-      v.setPadding(0, 0, 0, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
+      val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+      v.setPadding(0, 0, 0, ime)
+      if (ime != keyboardInset) {
+        keyboardInset = ime
+        webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('eve-keyboard', { detail: $ime }))", null)
+      }
       insets
     }
   }
@@ -92,6 +98,9 @@ class MainActivity : TauriActivity() {
     @JavascriptInterface
     fun takeIntent(): String = pending.also { pending = "" }
 
+    @JavascriptInterface
+    fun keyboardInset(): Int = this@MainActivity.keyboardInset
+
     /** A presentation on the whole screen: the status and navigation bars hidden (a swipe from an edge shows them a moment). */
     @JavascriptInterface
     fun immersive(on: Boolean) = runOnUiThread {
@@ -133,8 +142,8 @@ class MainActivity : TauriActivity() {
     /** Download a release APK and open the system installer; progress as 'eve-update' events. */
     @JavascriptInterface
     fun installUpdate(url: String) = runOnUiThread {
-      Updater.install(this@MainActivity, url) { state ->
-        webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('eve-update', { detail: '$state' }))", null)
+      Updater.install(this@MainActivity, url) { state, progress ->
+        webView?.evaluateJavascript("window.dispatchEvent(new CustomEvent('eve-update', { detail: { state: '$state', progress: $progress } }))", null)
       }
     }
 

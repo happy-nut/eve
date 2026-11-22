@@ -33,3 +33,18 @@ test('a menu opened from a menu item has the keyboard, as the first one did', ()
   flushSync();
   expect(document.activeElement?.classList.contains('tiptap')).toBe(true);
 });
+
+test('a picked item runs once the menu is gone and the keyboard is back where it was, and before the menu says it closed', () => {
+  document.body.innerHTML = '<main><div class="tiptap" tabindex="0" contenteditable="true">words</div></main>';
+  const note = document.querySelector<HTMLElement>('.tiptap')!;
+  note.focus();
+  const seen: string[] = [];
+  ui.openMenu({ clientX: 10, clientY: 10 }, [{ label: 'Lane', run: () => seen.push(`run: menu ${ui.menu ? 'open' : 'gone'}, ${ui.layers.has('menu') ? 'a layer' : 'no layer'}, keyboard ${document.activeElement === note ? 'back' : 'away'}`) }],
+    () => seen.push('closed'));
+  const m = mount(Menu, { target: document.body });
+  off.push(() => unmount(m));
+  flushSync();
+  expect(inMenu()).toBe(true);
+  [...document.querySelectorAll<HTMLButtonElement>('.menu button')].find((b) => b.textContent?.includes('Lane'))!.click();
+  expect(seen).toEqual(['run: menu gone, no layer, keyboard back', 'closed']);
+});

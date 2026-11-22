@@ -8,8 +8,6 @@ export interface Ask {
   id?: string;
   body?: string;
   page?: string;
-  /** @deprecated an older server's name for `page` */
-  group?: string;
   parent?: string;
   text?: string;
   old?: string;
@@ -35,7 +33,7 @@ export function apply(a: Ask): Answer {
   if (a.op === 'create') {
     const up = a.parent ? live(a.parent) : undefined;
     if (a.parent && !up) return no('The parent note is not there any more (deleted since it was found).');
-    const path = (a.page || a.group || '').split('/').map((t) => t.trim()).filter(Boolean);
+    const path = (a.page || '').split('/').map((t) => t.trim()).filter(Boolean);
     const n = notes.addImported(a.body ?? '', Date.now(), up?.id ?? pageAt(path));
     const where = up ? ` under "${titleOf(up)}"` : path.length ? ` under ${path.join(' / ')}` : '';
     return { ok: true, text: `Made "${titleOf(n)}"${where} in Eve (id ${n.id}).` };
@@ -82,10 +80,13 @@ async function picture(a: Ask): Promise<Answer> {
   return { ok: true, text: '', pictures: got };
 }
 
+type Sent = Ask & { group?: string };
+const asAsk = ({ group: olderServersPage, ...a }: Sent): Ask => ({ ...a, page: a.page || olderServersPage });
+
 export async function applyAll(texts: string[], answer: (ask: string, a: Answer) => void) {
   for (const t of texts) {
     let a: Ask;
-    try { a = JSON.parse(t); } catch { continue; }
+    try { a = asAsk(JSON.parse(t)); } catch { continue; }
     let out: Answer;
     try { out = a.op === 'picture' ? await picture(a) : apply(a); } catch (e) { out = no(`Eve could not do it: ${e}`); }
     answer(a.ask, out);
