@@ -5,12 +5,11 @@
   import type { EmojiEntry } from './lib/emoji';
   import { placeAt } from './lib/popup';
 
-  // `:smile` in a note: the best few emoji in one row under the caret; ←→ choose, ↩ or ⇥ puts it in
   let items = $state<EmojiEntry[]>([]);
   let sel = $state(0);
   let place = $state('');
   let pick: (e: EmojiEntry) => void = () => {};
-  let pointed = false; // the pointer chose one since the row was shown (↩ picks only then, or after ←→: slash.ts)
+  let pointed = false;
 
   export const ui: EmojiUI = {
     show(list, rect, cb) {
@@ -30,7 +29,6 @@
   <div class="emoji-row" style={place} transition:fly|global={caretIn} role="listbox" aria-label="Emoji">
     <div class="cells">
       {#each items as e, i (e.emoji)}
-        <!-- mousedown, not click: the editor keeps the caret, so the pick lands where the colon was -->
         <button class="cell" class:sel={i === sel} role="option" aria-selected={i === sel} title={`:${e.code}:`}
           onmousedown={(ev) => { ev.preventDefault(); pick(e); }} onmouseenter={() => (sel = i)} onmousemove={() => (pointed = true)}>{e.emoji}</button>
       {/each}

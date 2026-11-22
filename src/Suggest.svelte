@@ -6,29 +6,25 @@
   import Icon from './Icon.svelte';
   import { placeAt } from './lib/popup';
 
-  // popup for the [[ and / menus; the editor drives it through `ui` (bind:this to reach it)
   let items = $state<SuggestItem[]>([]);
-  let open = $state<ReadonlySet<number>>(new Set()); // pages showing their sections ([[ only)
+  let open = $state<ReadonlySet<number>>(new Set());
   let sel = $state(0);
-  let place = $state(''); // its left/top-or-bottom/max-height (lib/popup.ts)
-  let anchor: DOMRect | null = null; // the caret it was placed at, to place it again once its width is known
+  let place = $state('');
+  let anchor: DOMRect | null = null;
   let pick: (t: SuggestItem) => void = () => {};
-  let pointed = false; // the pointer chose a row since the list was shown (↩ after "a /" picks only then: slash.ts)
+  let pointed = false;
 
-  // what is actually on screen: the items, with the sections of an opened page folded in after it
   const shown = $derived(rows(items, open));
 
   export const ui: SuggestionUI = {
     show(next, rect, cb) {
-      // a keystroke rebuilds the list, so nothing stays open across one: the page under row 3 is not
-      // the page that was there before the letter was typed
       items = next; open = new Set(); sel = 0; pick = cb; pointed = false;
       if (rect) { anchor = rect; place = placeAt(rect, want(), list?.offsetWidth ?? 340); }
     },
     move: (d) => { sel = (sel + d + shown.length) % shown.length; },
     select: () => {
       if (!shown.length) return false;
-      if (shown[sel].item.folder) { toggle(sel); return true; } // opens (or folds) what is in it, picks nothing
+      if (shown[sel].item.folder) { toggle(sel); return true; }
       pick(shown[sel].item);
       return true;
     },
@@ -48,7 +44,6 @@
     chosen: () => pointed,
   };
 
-  /** a folder row (the / menu's Heading, Diagram) opened or folded, the cursor staying on it */
   function toggle(i: number) {
     sel = i;
     const next = expand(items, open, sel) ?? collapse(items, open, sel);
@@ -56,12 +51,8 @@
   }
 
   let list = $state<HTMLUListElement | null>(null);
-  /** the room it needs: a short list fits under the caret where a full one (300) would not */
   const want = () => Math.min(300, list?.scrollHeight || 300);
-  // placed by its real width, once drawn: it was placed as if 200 px wide, and a menu of long titles (up to 340)
-  // near the right edge of the window ran off it
   $effect(() => { shown; if (list && anchor) place = placeAt(anchor, want(), list.offsetWidth); });
-  // keep the highlighted suggestion visible while arrowing through a long list
   $effect(() => {
     sel;
     const row = list?.querySelector('li.sel'), head = row?.previousElementSibling;
@@ -72,8 +63,6 @@
 
 {#if items.length}
   <ul class="suggest" bind:this={list} style={place} transition:fly|global={caretIn}>
-    <!-- keyed by place: a page with two headings of the same name ("TODO" twice) gave two rows the same key, and
-         Svelte stopped with an error as soon as the page was opened into its sections -->
     {#each shown as row, i (i)}
       {@const t = row.item}
       {#if !row.child && t.group && t.group !== shown[i - 1]?.item.group && t.group !== items[shown[i - 1]?.top]?.group}
@@ -82,7 +71,6 @@
       <li class:sel={i === sel} class:child={row.child}>
         <!-- a move, not mouseenter: the list drawn under a pointer resting there has not been pointed at -->
         <button onmousedown={(e) => { e.preventDefault(); if (t.folder) toggle(i); else pick(t); }} onmousemove={() => { if (sel !== i || !pointed) { sel = i; pointed = true; } }}>
-          <!-- the twisty marks a page that has sections; → opens it, ← folds it away again -->
           {#if !row.child && t.sections?.length}
             <svg class="chev" class:down={open.has(row.top)} viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5"/></svg>
           {:else}<span class="chev"></span>{/if}
@@ -90,7 +78,6 @@
           {:else if t.swatch}<span class="s-swatch" style:background={t.swatch}></span>
           {:else if t.icon}<svg class="s-ico" viewBox="0 0 16 16">{@html t.icon}</svg>{/if}
           <span class="s-label">{t.label}</span>
-          <!-- a section under its own page needs no reminder of which page that is (a kind in a / menu folder does) -->
           {#if t.hint && (!row.child || items[row.top]?.folder)}<span class="hint">{t.hint}</span>{/if}
         </button>
       </li>
@@ -105,9 +92,9 @@
     list-style: none;
     margin: 0;
     padding: 4px;
-    width: max-content; /* its own width, not what is left of the window right of the caret: placed by it */
+    width: max-content;
     min-width: 200px;
-    max-width: min(340px, calc(100vw - 16px)); /* a 320-wide phone: the hints were cut at the right edge */
+    max-width: min(340px, calc(100vw - 16px));
     max-height: 300px;
     overflow-y: auto;
     background: var(--bg-pop);
@@ -118,13 +105,10 @@
   .suggest .group { padding: 8px 8px 3px; font-size: 11.5px; font-weight: 600; color: var(--fg-dim); }
   .suggest .group:first-child { padding-top: 3px; }
   .s-swatch { width: 14px; height: 14px; flex: none; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
-  /* the twisty column is held open on every row, so labels line up whether or not a row has one */
   .chev { width: 9px; height: 9px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0.4; transition: transform 120ms; }
   .chev.down { transform: rotate(90deg); }
   .suggest li.child button { padding-left: 25px; }
   .suggest li.sel button { background: var(--accent-soft); }
-  /* the title keeps its width and the hint gives way first: shrunk side by side, "Swimlanes" came out "Swimlan…" next to
-     a whole hint. Only a title longer than the row itself is cut (the twisty and the icon keep their 40px) */
   .s-label { flex: none; max-width: calc(100% - 40px); overflow: hidden; text-overflow: ellipsis; }
   .s-emoji { width: 15px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
   .s-ico { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; opacity: 0.7; }

@@ -1,4 +1,3 @@
-// The menu a note opens by itself: right-click (or ⌥↩) inside it; on a link, the link's own.
 import type { Editor } from '@tiptap/core';
 import type { NodeSelection } from '@tiptap/pm/state';
 import { cardable, cardToLink, linkToCard } from './bookmark';
@@ -10,45 +9,33 @@ import { imageMenu } from './image';
 import { highlightMenu } from './highlight';
 import { COLORS, colorAt, colorText } from './textColor';
 
-/**
- * Right-click inside a note. The webview's own menu is Look Up / Translate / Speech / AutoFill — a wall
- * of things a note cannot use — so the app draws this one instead: the clipboard, the marks that have
- * keyboard shortcuts nobody remembers (with words chosen), the note's own things (with none), and nothing else.
- */
 export function noteMenu(editor: Editor, event: MouseEvent | null) {
   if (event) {
-    // a right-click outside the selection moves the caret there first, the way every editor behaves
     const at = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
     const sel = editor.state.selection;
     if (at && (at.pos < sel.from || at.pos > sel.to)) editor.commands.setTextSelection(at.pos);
   }
   const empty = editor.state.selection.empty;
-  // on a link: the caret in it or at either end of it (a link no longer takes in the place at its ends: a right-click on
-  // its first letter put the caret before it)
   const $h = editor.state.selection.$head;
   const linkMark = [...$h.marks(), ...($h.nodeAfter?.marks ?? []), ...($h.nodeBefore?.marks ?? [])].find((m) => m.type.name === 'link');
   const linked = !!linkMark;
   const caret = editor.view.coordsAtPos(editor.state.selection.head);
   const at = event ?? { clientX: Math.round(caret.left), clientY: Math.round(caret.bottom) };
-  // a link card selected (⌥↩ on it, or a right-click): back to a plain link, or open / copy it
   const sel = editor.state.selection as NodeSelection;
   if (sel.node?.type.name === 'bookmark') {
     const href: string = sel.node.attrs.href;
     ui.openMenu(at, [{ label: 'Show as link', run: () => void cardToLink(editor) }, ...linkItems(href, null).map((i, n) => (n ? i : { ...i, sep: true }))]);
     return;
   }
-  // a picture selected (⌥↩ on it): the picture's own menu
   if (sel.node?.type.name === 'image') {
     const pos = sel.from;
     const shown = (editor.view.nodeDOM(pos) as HTMLElement | null)?.querySelector('img');
     imageMenu(editor, () => pos, at, shown?.src || sel.node.attrs.src);
     return;
   }
-  // the caret on a link (⌥↩ there, or a right-click on it): the link's own menu, its card first
   if (empty && linkMark) {
     const href = (linkMark.attrs.href as string | undefined) ?? '';
     const unlink = () => editor.chain().focus().extendMarkRange('link').unsetLink().run();
-    // an address that would not read back as a card is not offered as one (see cardable)
     const card = cardable(editor, href) ? [{ label: 'Show as card', run: () => void linkToCard(editor) }] : [];
     ui.openMenu(at, [...card, ...linkItems(href, unlink).map((i, n) => (n || !card.length ? i : { ...i, sep: true }))]);
     return;
@@ -56,7 +43,6 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
   /** execCommand is the one path that keeps ProseMirror's own clipboard serializer (markdown, nodes) */
   const clip = (cmd: 'cut' | 'copy') => () => { editor.commands.focus(); document.execCommand(cmd); };
   const keys = (id: string) => shortcuts.keysFor(id);
-  // nothing greyed out: an item that cannot run is not on the list at all
   const items: MenuItem[] = [
     { label: 'Cut', keys: 'Mod-x', hide: empty, run: clip('cut') },
     { label: 'Copy', keys: 'Mod-c', hide: empty, run: clip('copy') },
@@ -70,19 +56,15 @@ export function noteMenu(editor: Editor, event: MouseEvent | null) {
     linked
       ? { label: 'Remove link', run: () => editor.chain().focus().unsetLink().run() }
       : { label: 'Link…', keys: keys('link'), hide: empty, run: () => void linkSelection(editor) },
-    // words chosen: the menu is about them; the whole note's things wait for nothing to be chosen
     { label: 'Select all', sep: true, keys: 'Mod-a', hide: !empty, run: () => editor.chain().focus().selectAll().run() },
     { label: 'Find & replace…', keys: keys('find'), hide: !empty, run: () => ui.openFind() },
     { label: 'Present', keys: keys('present'), hide: !empty, run: () => ui.openPresent(editor.view.dom) },
-    // from the block the right click was on
     { label: 'Present from here', keys: keys('presentHere'), hide: !empty, run: () => { const d = editor.view.domAtPos(editor.state.selection.from).node; let b: Node | null = d; while (b && b.parentNode !== editor.view.dom) b = b.parentNode; ui.openPresent(editor.view.dom, b as Element | null); } },
     { label: 'Export…', sep: true, hide: !empty, run: () => exportMenu(at) },
   ];
-  // from the keyboard (⌥↩) there is no pointer: the menu opens under the caret instead
   ui.openMenu(at, items);
 }
 
-/** the chosen words in one of Notion's text colours, or back to the note's own */
 function textColorMenu(editor: Editor, at: { clientX: number; clientY: number }) {
   const { from, to } = editor.state.selection;
   const now = colorAt(editor);
@@ -92,26 +74,22 @@ function textColorMenu(editor: Editor, at: { clientX: number; clientY: number })
   ]);
 }
 
-/** What a link offers, wherever it is asked: open (or write to) it, take the link off, copy it. */
 function linkItems(href: string, unlink: (() => void) | null): MenuItem[] {
   const mail = href.startsWith('mailto:');
   return [
     { label: mail ? 'Send mail' : 'Open link', keys: shortcuts.keysFor('toggleCheck'), run: () => void openUrl(href) },
     { label: 'Remove link', hide: !unlink, run: () => unlink?.() },
-    // an address is copied bare: mailto: is of no use in a To: field
     { label: 'Copy link', run: () => void copyText(mail ? href.slice('mailto:'.length) : href) },
   ];
 }
 
 
-/** Ask for a URL and hang it on the selection (⌘K has no home in this editor). */
 async function linkSelection(editor: Editor) {
   const href = (await ui.prompt('링크 주소', ''))?.trim();
   if (!href) return editor.commands.focus();
   editor.chain().focus().setLink({ href: /^[a-z]+:/i.test(href) ? href : `https://${href}` }).run();
 }
 
-/** the open note saved as a file, one menu for every place that offers it (the note's ⋯, a right click) */
 export function exportMenu(at: { clientX: number; clientY: number }) {
   const keys = (id: string) => shortcuts.keysFor(id);
   ui.openMenu(at, [

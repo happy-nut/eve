@@ -1,7 +1,3 @@
-/**
- * Mermaid diagrams (a ```mermaid code block drawn as its picture). The library is the biggest thing the app could
- * load, so it comes only with the first diagram shown, as the code grammars do (code.ts).
- */
 import { chartHtml } from './charts';
 import { FONT } from './lanes';
 import { isMobile } from './platform';
@@ -16,14 +12,8 @@ const dark = () => {
   return t === 'dark' || (t !== 'light' && typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches);
 };
 
-/**
- * The diagrams' look, in the manner of Toss: white cards on a soft grey canvas, one strong blue, quiet grey lines,
- * no frames around what needs none. Plain hex for mermaid; app.css .diagram-canvas holds the same colours as CSS
- * for what Eve draws itself (charts.ts).
- */
 const PALETTE = {
   light: {
-    // dim: a label on an edge or a group (12px) reads at 4.5:1 on the canvas and a white box (#8b95a1 read at 3:1)
     fg: '#333d4b', strong: '#191f28', dim: '#66707e', canvas: '#f9fafb', node: '#ffffff', border: '#e5e8eb', line: '#a1aab5',
     accent: '#3182f6', head: '#f2f4f6', tint: '#e8f3ff', tintLine: '#b8d6ff', tintText: '#1b64da', note: '#fff8e6', noteLine: '#ffe2a6', shadow: 'rgba(0,23,51,0.06)',
     hues: ['#3182f6', '#15c39a', '#ff9f2e', '#8b5cf6', '#f04452', '#f5b800', '#4cc3ff', '#5fbf4a', '#ec5fa8', '#6366f1', '#c08457', '#14b8a6'],
@@ -35,7 +25,6 @@ const PALETTE = {
   },
 };
 
-/** `hex` laid over `over` at `t` (0..1): the soft tints of a hue */
 function mix(hex: string, over: string, t: number) {
   const p = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const [a, b] = [p(hex), p(over)];
@@ -44,7 +33,6 @@ function mix(hex: string, over: string, t: number) {
 
 function config(mode: 'light' | 'dark') {
   const c = PALETTE[mode];
-  // a mind map: its centre in solid blue, each branch a soft chip of its own hue with a line of it
   const scale: Record<string, string> = { cScale0: c.accent, cScaleLabel0: '#ffffff', cScaleInv0: c.line, cScalePeer0: c.accent };
   c.hues.slice(1).concat(c.hues[0]).forEach((h, i) => {
     scale[`cScale${i + 1}`] = mix(h, c.node, mode === 'dark' ? 0.24 : 0.14);
@@ -53,7 +41,6 @@ function config(mode: 'light' | 'dark') {
     scale[`cScalePeer${i + 1}`] = h;
   });
   c.hues.forEach((h, i) => (scale[`pie${i + 1}`] = h));
-  // a git graph's branches and an XY chart's series in the same colours, their labels white on them
   c.hues.slice(0, 8).forEach((h, i) => { scale[`git${i}`] = h; scale[`gitBranchLabel${i}`] = '#ffffff'; scale[`gitInv${i}`] = h; });
   const branches = c.hues.slice(1).concat(c.hues[0]).map((h, i) => `.section-edge-${i} { stroke: ${mix(h, c.canvas, 0.55)}; }`).join(' ')
     // a circle's or a hexagon's own fill, its branch's as a box's is (mermaid's section colours reach only rects and
@@ -164,9 +151,8 @@ function config(mode: 'light' | 'dark') {
 }
 
 function load(): Promise<Mermaid> {
-  lib ??= import('mermaid').then((m) => m.default, (e) => { lib = null; throw e; }); // failed: the next diagram tries again
+  lib ??= import('mermaid').then((m) => m.default, (e) => { lib = null; throw e; });
   return lib.then((m) => {
-    // in the note's colours, light or dark; strict: a diagram's labels are text, never script or a link that runs
     const want = themeKey();
     if (want !== theme) {
       theme = want;
@@ -187,21 +173,13 @@ export function renderMermaid(code: string): Promise<{ svg: string } | { error: 
   return next;
 }
 
-/** The diagram's SVG, or the reason it could not be drawn. */
 async function draw(code: string): Promise<{ svg: string } | { error: string }> {
   if (!code.trim()) return { error: 'An empty diagram' };
-  // lanes shrink little and scroll instead: at 64% eleven steps in three lanes had 7px words and 5px line labels, and
-  // still scrolled; five lanes at a phone's width left boxes too small for a finger
-  const chart = chartHtml(code, 0.9); // a pie, a timeline, a Gantt chart: drawn by Eve, without loading mermaid
+  const chart = chartHtml(code, 0.9);
   if (chart) return { svg: chart };
   try {
     const m = await load();
     const { svg } = await m.render(`eve-mermaid-${++seq}`, code);
-    // shrunk to the note's width, but never past 80% of its size (60% on a phone, a third narrower: a two-part sequence
-    // diagram was cut off at the card's edge), where its text stops being easy to read: wider
-    // than that, it scrolls sideways in its card (and opens full size from its expand button). Its own width too, not
-    // mermaid's 100%: the block around it is as wide as its content, and a 100% of that is nothing to go by, so a small
-    // diagram fell to its 80% with the page beside it empty
     const sized = svg.replace(/(<svg[^>]*?style="max-width: )([\d.]+)px;/, (_, head, w) => `${head}min(100%, ${w}px); width: ${w}px; min-width: ${Math.round(+w * MIN_SCALE)}px;`);
     return { svg: sized.includes('actor-man') ? smallActors(sized) : sized };
   } catch (e) {
@@ -224,23 +202,19 @@ export function smallActors(svg: string): string {
     if (!head) return all;
     const [cx, r0] = [+head[1], +head[3]];
     const ys = [...figure.matchAll(/y[12]="([\d.-]+)"/g)].map((m) => +m[1]);
-    // mermaid's head (r 15 over a 20-long body) is near half the figure: a smaller one, sat on the neck
     const neck = Math.min(...ys), r = r0 * HEAD_SCALE, cy = neck - r;
     figure = figure.replace(head[0], head[0].replace(/cy="[\d.-]+"/, `cy="${cy}"`).replace(/r="[\d.]+"/, `r="${r}"`));
     const top = cy - r, feet = Math.max(...ys);
-    const to = top + r * 0.6; // the head's top a little inside the box's top edge, not above it
-    const label = to + (feet - top) * ACTOR_SCALE + (+y - feet) + 4; // as far under its feet as before, and a little more
+    const to = top + r * 0.6;
+    const label = to + (feet - top) * ACTOR_SCALE + (+y - feet) + 4;
     return `${open}<g transform="translate(${cx} ${to}) scale(${ACTOR_SCALE}) translate(${-cx} ${-top})">${figure}</g>${textHead}${label.toFixed(1)}${rest}`;
   });
 }
 
-/** the theme to draw in changed (Settings, or the system's dark mode): diagrams drawn again */
 export const themeKey = () => (dark() ? 'dark' : 'light');
 
-/** the colour the chart draws a pie's `i`th slice in, `hue` from charts.ts's sliceHues (the builder's swatches) */
 export const sliceColor = (hue: number, i: number) => {
   const h = PALETTE[themeKey()].hues[hue % 12];
-  return i >= 12 ? `color-mix(in srgb, ${h} 62%, #000)` : h; // as the chart draws a 13th part on (app.css .deep)
+  return i >= 12 ? `color-mix(in srgb, ${h} 62%, #000)` : h;
 };
-/** the colour a mind map's `i`th first-level branch is drawn in (the builder's bullets) */
 export const branchColor = (i: number) => PALETTE[themeKey()].hues[(i + 1) % 12];

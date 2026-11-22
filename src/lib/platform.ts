@@ -1,6 +1,4 @@
-// Thin layer over Tauri; falls back to localStorage so `npm run dev` works in a plain browser.
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-/** The Android / iOS build: no hotkey, no login item, no Dock, no window to size or hide. */
 export const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad/.test(navigator.userAgent);
 const desktop = isTauri && !isMobile;
 
@@ -9,9 +7,6 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
   return invoke<T>(cmd, args);
 }
 
-/** What the page just did, for memory.log (mem.rs: a line a minute of what the page holds and what came before it).
- *  A Mac's only; nothing goes anywhere but that file. */
-/** A YouTube player's address for this app: on the Mac, the page the app serves on the loopback (net.rs, player_port) */
 export function youtubePlayer(embed: string, put: (src: string) => void) {
   if (!desktop) return put(embed);
   const u = new URL(embed);
@@ -36,7 +31,6 @@ export const storage = {
     if (isTauri) return invoke<void>('write_note', { id, text }).then(widget.changed);
     localStorage.setItem(LS + id, text);
   },
-  /** Where the notes live. Resolves the asset mapper too, so `assetUrl` is ready before anything renders. */
   async path(): Promise<string> {
     if (notesDir) return notesDir;
     if (!isTauri) return (notesDir = 'localStorage');
@@ -46,33 +40,22 @@ export const storage = {
   },
 };
 
-/** The Android home-screen widget, through `window.EveAndroid` (MainActivity.kt). A no-op anywhere else. */
 type Bridge = { takeIntent(): string; notesChanged(): void; showKeyboard(): void; account(repo: string, token: string, host: string): void; export(kind: string, title: string, body: string): void; pinWidget(noteId: string): boolean; widgetTop(): string; setReminder?(on: boolean, at: string, template: string): void; askNotify?(): void; widgetDaily?(on: boolean): void; installUpdate(url: string): void; immersive?(on: boolean): void };
-// looked up on every call: on a cold start the activity can inject it after this module has run
 const android = () => (globalThis as { EveAndroid?: Bridge }).EveAndroid;
 let widgetTimer: ReturnType<typeof setTimeout> | undefined;
 export const widget = {
-  /** a note file changed: the widget re-reads the folder (once per burst of writes) */
   changed() {
     if (!android()) return;
     clearTimeout(widgetTimer);
     widgetTimer = setTimeout(() => android()?.notesChanged(), 800);
   },
-  /** the GitHub sign-in, for the background pull that runs while the app is closed */
   account(repo: string, token: string, host = '') { android()?.account(repo, token, host); },
-  /** Download an update and open the installer (MainActivity → Updater). */
   installUpdate: (url: string) => android()?.installUpdate(url),
-  /** Put a widget showing this note on the home screen. False when the launcher can't be asked. */
   pin: (noteId: string): boolean => android()?.pinWidget(noteId) ?? false,
-  /** the daily note reminder's alarm (Reminder.kt); the permission to notify is asked when it goes on */
   reminder: (on: boolean, at: string, template: string) => android()?.setReminder?.(on, at, template),
-  /** the permission to notify, asked when a reminder is set in a note (Reminder.kt rings it) */
   askNotify: () => android()?.askNotify?.(),
-  /** daily notes in the widget's list, or not (Settings → Daily notes) */
   daily: (on: boolean) => android()?.widgetDaily?.(on),
-  /** notes pinned to the top of the widget's list */
   top: (): string[] => (android()?.widgetTop?.() ?? '').split(',').filter(Boolean),
-  /** Export the open note to the share sheet (pdf/png are printed from the page). True once handed over. */
   export(kind: 'md' | 'pdf' | 'png', title: string, body: string): Promise<boolean> {
     const bridge = android();
     if (!bridge) return Promise.resolve(false);
@@ -82,12 +65,7 @@ export const widget = {
       bridge.export(kind, title, kind === 'md' ? body : '');
     });
   },
-  /** the caret is in the note: raise the on-screen keyboard with it */
   keyboard() { android()?.showKeyboard(); },
-  /**
-   * What Android opened the app for: `note:<id>` / `new` from the widget, or the `eve://connect?…` link
-   * from the phone-setup page. Also drains the one that launched the app.
-   */
   onOpen(cb: (ask: string) => void) {
     if (!isMobile) return;
     const drain = () => { const ask = android()?.takeIntent(); if (ask) cb(ask); };
@@ -105,19 +83,15 @@ export const widget = {
 export function onDisk(src: string): string {
   try { return decodeURI(src); } catch { return src; }
 }
-/** the name of a file of ours in notes/assets (`assets/…`), as it is on disk; null for anything else */
 export const assetName = (src: string): string | null => (/^assets\//.test(src) ? onDisk(src.slice('assets/'.length)) : null);
 
-/** Map a markdown image src to something the webview can load. Relative paths live under notes/. */
 export function assetUrl(src: string | undefined): string | undefined {
   if (!src || !isTauri || /^(https?:|data:|asset:|file:)/.test(src)) return src;
   if (!notesDir) return src;
-  // lazy import keeps the browser bundle Tauri-free
   return convertFileSrcSync(`${notesDir}/${onDisk(src)}`);
 }
-let convertFileSrcSync: (p: string) => string = (p) => p; // set by storage.path()
+let convertFileSrcSync: (p: string) => string = (p) => p;
 
-/** Save a pasted / dropped file (image, PDF) next to the notes and return its relative path. Browser fallback: data URL. */
 export async function saveAsset(file: File | Blob): Promise<string> {
   if (!isTauri) {
     // a picture is stored inside the note, so it has to survive a reload; anything else only has to open
@@ -125,7 +99,6 @@ export async function saveAsset(file: File | Blob): Promise<string> {
     if (!file.type.startsWith('image/')) return URL.createObjectURL(file);
     return new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsDataURL(file); });
   }
-  // a file dragged in from Finder may arrive without a MIME type; its name still carries the extension
   const named = file instanceof File ? /\.([a-z0-9]+)$/i.exec(file.name)?.[1].toLowerCase() : undefined;
   const ext = named ?? (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg');
   const { invoke: inv } = await import('@tauri-apps/api/core');
@@ -133,7 +106,6 @@ export async function saveAsset(file: File | Blob): Promise<string> {
   return inv<string>('save_asset', new Uint8Array(await file.arrayBuffer()), { headers: { 'x-ext': ext } });
 }
 
-/** Open a native file picker, copy the image next to the notes, return its relative path. Null if cancelled. */
 export async function pickImage(): Promise<string | null> {
   if (!isTauri) {
     return new Promise((res) => {
@@ -142,7 +114,7 @@ export async function pickImage(): Promise<string | null> {
         const f = inp.files?.[0];
         if (!f) return res(null);
         const r = new FileReader();
-        r.onload = () => res(String(r.result)); // browser fallback: data URL
+        r.onload = () => res(String(r.result));
         r.readAsDataURL(f);
       };
       inp.click();
@@ -155,36 +127,29 @@ export async function pickImage(): Promise<string | null> {
   return invoke<string>('import_asset', { src: path });
 }
 
-/** First page of a stored PDF as a PNG object URL (Quick Look, cached on disk). Null when unavailable. */
 export async function pdfThumb(src: string): Promise<string | null> {
   const name = assetName(src);
-  if (!isTauri || !name) return null; // only a file of ours has a thumbnail to ask for
+  if (!isTauri || !name) return null;
   try {
     const png = await invoke<ArrayBuffer>('pdf_thumb', { name });
     return URL.createObjectURL(new Blob([png], { type: 'image/png' }));
   } catch {
-    return null; // an encrypted or broken PDF: the card keeps its glyph
+    return null;
   }
 }
 
-/**
- * Quick Look's own preview of a stored document, as a URL the viewer's iframe can load — the
- * spreadsheet laid out as a table, the same thing Finder draws on the space bar. Null when this Mac
- * has no Quick Look generator for the format (a .hwp without Hancom Office is the usual one).
- */
 export async function qlPreview(src: string): Promise<string | null> {
   const name = assetName(src);
   if (!isTauri || !name) return null;
   try {
     const path = await invoke<string>('ql_preview', { name });
-    await storage.path(); // resolves convertFileSrc, which the preview lives outside notes/ to need
+    await storage.path();
     return convertFileSrcSync(path);
   } catch {
     return null;
   }
 }
 
-/** Pick a video, copy it next to the notes, return its relative path. Null if cancelled. */
 export async function pickVideo(): Promise<string | null> {
   if (!isTauri) return null;
   const { open } = await import('@tauri-apps/plugin-dialog');
@@ -194,7 +159,6 @@ export async function pickVideo(): Promise<string | null> {
   return invoke<string>('import_asset', { src: path });
 }
 
-/** Images in notes/assets, for sync. Browser mode has none (images are data URLs there). */
 export const assets = {
   list: (): Promise<string[]> => (isTauri ? invoke<string[]>('list_assets') : Promise.resolve([])),
   read: async (name: string): Promise<Uint8Array> => new Uint8Array(await invoke<ArrayBuffer>('read_asset', { name })),
@@ -205,12 +169,10 @@ export const assets = {
   },
 };
 
-/** Phone setup over the local network (handoff.ts): the Mac serves the sealed sign-in once, the phone fetches it. */
 export const share = {
   start: (path: string, body: string) => invoke<string>('share_start', { path, body }),
   stop: () => invoke<void>('share_stop').catch(() => {}),
   fetch: (host: string, path: string) => invoke<string>('lan_get', { host, path }),
-  /** the phone took it */
   async onDone(cb: () => void) {
     const { listen } = await import('@tauri-apps/api/event');
     return listen('share-done', cb);
@@ -234,20 +196,14 @@ export const clipboardText = (): Promise<string> =>
 export const copyText = (text: string): Promise<void> =>
   (isTauri ? invoke<void>('plugin:clipboard-manager|write_text', { label: null, text }) : navigator.clipboard.writeText(text)).catch(() => {});
 
-/**
- * A picture onto the clipboard as a picture, to paste into any app. Handed over as PNG: the Mac's side takes it
- * (the webview's own clipboard asks for a gesture it does not always grant), a phone's or a browser's own
- * clipboard elsewhere. false when it could not be read or put there.
- */
 export async function copyImage(src: string): Promise<boolean> {
   try {
-    const blob = await (await fetch(src)).blob(); // the asset protocol lets the page read its pictures (CORS)
+    const blob = await (await fetch(src)).blob();
     return await copyPng(blob.type === 'image/png' ? blob : await asPng(blob));
   } catch {
     return false;
   }
 }
-/** A PNG onto the clipboard, as copyImage puts a picture there (a diagram drawn into one, say). */
 export async function copyPng(png: Blob): Promise<boolean> {
   try {
     if (isTauri && !isMobile) await invoke<void>('plugin:clipboard-manager|write_image', { image: [...new Uint8Array(await png.arrayBuffer())] });
@@ -257,7 +213,6 @@ export async function copyPng(png: Blob): Promise<boolean> {
     return false;
   }
 }
-/** any picture the webview can draw (JPEG, GIF, WebP, SVG) redrawn as a PNG */
 async function asPng(blob: Blob): Promise<Blob> {
   const url = URL.createObjectURL(blob);
   try {
@@ -274,20 +229,16 @@ async function asPng(blob: Blob): Promise<Blob> {
   }
 }
 
-/** Open a link in the default browser. */
 export const openUrl = (url: string) => (isTauri ? invoke<void>('open_url', { url }) : Promise.resolve(void window.open(url, '_blank')));
 
-/** Open a stored asset (a PDF, say) in the app that owns it; a web URL goes to the browser. */
 export async function openAsset(src: string): Promise<void> {
   const name = assetName(src);
   if (isTauri && name) return invoke('open_asset', { name });
   await openUrl(src);
 }
 
-/** Page HTML for link previews. Browser mode: plain fetch (works only for CORS-friendly sites). */
 export const fetchUrl = (url: string) => (isTauri ? invoke<string>('fetch_url', { url }) : fetch(url).then((r) => r.text()));
 
-/** Pick files to import (Finder, multi-select). Null when cancelled. */
 export async function pickFiles(): Promise<string[] | null> {
   if (!isTauri) return null;
   const { open } = await import('@tauri-apps/plugin-dialog');
@@ -298,7 +249,6 @@ export async function pickFiles(): Promise<string[] | null> {
   return picked === null ? null : (Array.isArray(picked) ? picked : [picked]);
 }
 
-/** Pick folders to import whole. Null when cancelled. */
 export async function pickFolders(): Promise<string[] | null> {
   if (!isTauri) return null;
   const { open } = await import('@tauri-apps/plugin-dialog');
@@ -306,33 +256,23 @@ export async function pickFolders(): Promise<string[] | null> {
   return picked === null ? null : (Array.isArray(picked) ? picked : [picked]);
 }
 
-/** Every file under a folder, as paths relative to it. */
 export const listFolder = (root: string) => invoke<string[]>('list_folder', { root });
 
-/** Ask where to save an export. Null when cancelled. */
 export async function pickSavePath(name: string, ext: string): Promise<string | null> {
   if (!isTauri) return null;
   const { save } = await import('@tauri-apps/plugin-dialog');
   return save({ defaultPath: `${name}.${ext}`, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
 }
 
-/** Copy a file into notes/assets (an import that keeps the original where it is). */
 export const importAsset = (src: string) => invoke<string>('import_asset', { src });
 
-/**
- * Print the window to a PDF file. A print job that saves needs no printer and shows no panel, and the
- * pages keep their text (a picture of the note is what "Export as image" is for). `margin` is in points.
- */
 export const savePdf = (out: string, margin = 24) => invoke<void>('save_pdf', { out, margin });
 
-/** The same printed page, rasterised — how a note leaves as a picture. */
 export const savePng = (out: string, margin = 24, width = 1600) => invoke<void>('save_image', { out, margin, width });
 
-/** External files opened through macOS (Open With / double-click). */
 export const files = {
   read: (path: string) => invoke<string>('read_file', { path }),
   write: (path: string, text: string) => invoke<void>('write_file', { path, text }),
-  /** Subscribe to open requests; also drains files opened before the UI was ready. */
   async onOpen(cb: (paths: string[]) => void) {
     if (!isTauri) return;
     const { listen } = await import('@tauri-apps/api/event');
@@ -342,9 +282,7 @@ export const files = {
   },
 };
 
-/** eve:// links macOS hands over (`eve open`, the MCP server's open_note): the raw URL, parsed by evelink.ts. */
 export const links = {
-  /** Subscribe to them; also takes the one that started Eve before the UI was listening. */
   async onOpen(cb: (url: string) => void) {
     if (!desktop) return;
     const { listen } = await import('@tauri-apps/api/event');
@@ -354,7 +292,6 @@ export const links = {
   },
 };
 
-/** Changes the MCP server left in the app's inbox (inbox.ts): taken now, once the notes are in, and at each eve://inbox. */
 export const inbox = {
   async onAsk(cb: (texts: string[], answer: (ask: string, reply: { ok: boolean; text: string }) => void) => void | Promise<void>) {
     if (!desktop) return;
@@ -366,34 +303,24 @@ export const inbox = {
   },
 };
 
-/** Which app macOS opens a .md with. macOS only; a browser reports false and refuses to change it. */
 export const defaultApp = {
   get: () => (desktop ? invoke<boolean>('is_default_for_markdown') : Promise.resolve(false)),
   set: (on: boolean) => (isTauri ? invoke<void>('set_default_for_markdown', { on }) : Promise.reject(new Error('desktop only'))),
 };
 
-/** A Claude app that can start `eve mcp` (src-tauri/src/mcp.rs), the notes server (it reads, shows a note, and writes through the app's inbox). */
 export interface McpClient { id: string; name: string; installed: boolean; connected: boolean; stale: boolean }
-/** Settings → Claude: find the Claude apps on this Mac and register Eve with all of them in one go. Desktop only. */
 export const mcp = {
   clients: () => (desktop ? invoke<McpClient[]>('mcp_clients') : Promise.resolve([] as McpClient[])),
   connect: (on: boolean) => (desktop ? invoke<McpClient[]>('mcp_connect', { on }) : Promise.reject(new Error('desktop only'))),
 };
 
-/** Launch at login, so the global hotkey works even after the app was quit. */
 export const autostart = {
   async get() { if (!desktop) return false; return (await import('@tauri-apps/plugin-autostart')).isEnabled(); },
-  // a build run from the code (`tauri dev`) leaves the login item alone: it wrote itself there, and at login a
-  // months-old build came up instead of Eve, a white page with no dev server to load, holding the summon key
   async set(on: boolean, dev = import.meta.env.DEV) {
     if (!desktop || dev) return;
     const m = await import('@tauri-apps/plugin-autostart');
     await (on ? m.enable() : m.disable());
   },
-  /**
-   * At launch: on at the first, and from then on, while it is on, pointed at this Eve (written again with where it
-   * runs from), so one moved, reinstalled, or written over by a build run from the code is put right
-   */
   async keep(dev = import.meta.env.DEV) {
     if (!desktop || dev) return;
     if (!localStorage.getItem('eve.autostart.init')) {
@@ -402,9 +329,6 @@ export const autostart = {
   },
 };
 
-/** Hide from the Dock and ⌘Tab (macOS accessory app, like Raycast). Default on; remembered locally. */
-// ponytail: applied by the frontend after launch, so a Dock icon can flash for a moment at login; a Rust-side
-// marker file would avoid that if it ever bothers anyone
 export const dock = {
   get hidden() { return localStorage.getItem('eve.dock') !== 'shown'; },
   async set(hidden: boolean) {
@@ -413,10 +337,6 @@ export const dock = {
   },
 };
 
-/**
- * Summon / dismiss. No fade: the window is seen whole once the page has drawn in it — the traffic lights and the
- * note appearing together instead of the chrome arriving a few frames early, or a white page under it.
- */
 async function show() {
   // shown but not yet seen: WebKit may have thrown away what the page drew while Eve was hidden, and the window
   // came up white until the page had drawn again. Rust asks for it (`eve-reveal`, onReveal below), as it does for
@@ -432,10 +352,9 @@ async function show() {
  * white page under the crumbs (a scroll or a click did not bring it) until another note was opened and this one again.
  */
 export const seenFade = (duration: number) => ({ duration: document.hidden || !document.hasFocus() ? 0 : duration });
-/** Back in sight: a page or a list's row still part way into its fade (begun while Eve was away) is shown whole. */
 export function endFades() {
   for (const el of document.querySelectorAll<HTMLElement>('main .page, aside li')) {
-    for (const a of el.getAnimations?.() ?? []) try { a.finish(); } catch { /* an endless one: not a fade */ }
+    for (const a of el.getAnimations?.() ?? []) try { a.finish(); } catch { }
   }
 }
 /**
@@ -457,21 +376,13 @@ export function redrawPanes() {
     requestAnimationFrame(() => { for (const el of panes) el.style.transform = ''; });
   });
 }
-/** Summon `n` is seen once two frames are drawn after it (Rust sees it anyway after a while, so a page that cannot
- *  draw never leaves it invisible), and its panes drawn again once it is. */
 export async function revealWhenDrawn(n: number) {
   await new Promise((drawn) => requestAnimationFrame(() => requestAnimationFrame(drawn)));
   await invoke<void>('reveal_window', { n });
-  // and once more now that it is seen: the white page stayed past this, until it was scrolled
   requestAnimationFrame(redrawPanes);
 }
 if (desktop) void import('@tauri-apps/api/event').then(({ listen }) => listen<number>('eve-reveal', (e) => void revealWhenDrawn(e.payload)));
 let ground = '';
-/**
- * The window's own ground painted the page's colour (html's background, as the theme has it), so whatever shows
- * before the page has drawn — summoned, back from behind another app, out of the Dock — is the note's colour, not
- * WebKit's white. Called whenever the theme may have changed.
- */
 export async function paintGround() {
   if (!desktop) return;
   const m = getComputedStyle(document.documentElement).backgroundColor.match(/\d+/g);
@@ -481,7 +392,7 @@ export async function paintGround() {
   await invoke<void>('set_ground', { r, g, b });
 }
 async function dismiss() {
-  document.dispatchEvent(new Event('visibilitychange')); // closes tooltips/popovers on the way out
+  document.dispatchEvent(new Event('visibilitychange'));
   // a half-typed 한글 syllable would otherwise still be composing when the window comes back, and a
   // composing view reads no keystroke at all (App ends it on the way in too, for the paths with no blur)
   for (const pm of document.querySelectorAll('.tiptap')) pm.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));
@@ -492,17 +403,13 @@ export const win = {
   hide: () => (desktop ? dismiss() : Promise.resolve()),
 };
 
-/** The size the window opens at (Settings → Appearance). A browser window is the user's own business. */
 export async function setWindowSize(width: number, height: number): Promise<void> {
   if (!desktop) return;
   const { getCurrentWindow, LogicalSize } = await import('@tauri-apps/api/window');
   await getCurrentWindow().setSize(new LogicalSize(width, height));
 }
 
-/** The Mac's window over the whole screen (a presentation), or back. True when it changed: one already on the whole
- *  screen is left there, and stays there after. */
 let immersed = false;
-/** the app's own whole screen (the Mac's window, a phone's bars hidden), where there is one */
 export const ownWholeScreen = () => desktop || !!android()?.immersive;
 export async function wholeScreen(on: boolean): Promise<boolean> {
   // a phone: its status and navigation bars hidden (its webview has no fullscreen of its own: the page's was refused)
@@ -533,15 +440,11 @@ export async function onBack(cb: () => void): Promise<() => void> {
   return () => void l.unregister();
 }
 
-/**
- * Register the global "summon" hotkey. Re-callable: unregisters everything first. A build run from the code takes
- * none: beside the app it took the same keys, and once its dev server was gone it was summoned as a white page.
- */
 export async function setGlobalHotkey(keys: string, dev = import.meta.env.DEV): Promise<string | null> {
   if (!desktop || dev) return null;
   const gs = await import('@tauri-apps/plugin-global-shortcut');
   await gs.unregisterAll();
-  if (!keys) return null; // summoning turned off (Settings): no key taken from the other apps
+  if (!keys) return null;
   try {
     await gs.register(toTauriAccelerator(keys), (e) => {
       if (e.state === 'Pressed') win.toggle();
@@ -552,7 +455,6 @@ export async function setGlobalHotkey(keys: string, dev = import.meta.env.DEV): 
   }
 }
 
-/** "Mod-Shift-Space" -> "CmdOrCtrl+Shift+Space" */
 export function toTauriAccelerator(keys: string): string {
   return keys
     .split('-')

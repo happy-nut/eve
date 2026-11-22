@@ -13,7 +13,6 @@ export const NOTION_COPY = /<!--\s*notionvc:/;
 
 const ICON = /^(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic}|\p{Emoji_Modifier})*)\s*/u;
 
-/** Notion's copied markdown, written as a note here writes it */
 export function fromNotion(markdown: string): string {
   const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
   const out: string[] = [];
@@ -23,7 +22,6 @@ export function fromNotion(markdown: string): string {
       out.push(lines[i].replace(/^([ \t]*[-*+] \[[ xX]\]) {2,}/, '$1 '));
       continue;
     }
-    // a callout: > [!icon] (an icon of its own, as Eve writes one), then its lines; one with no emoji is a note
     const indent = aside[1], body: string[] = [];
     for (i++; i < lines.length && lines[i].trim() !== '</aside>'; i++) body.push(lines[i].startsWith(indent) ? lines[i].slice(indent.length) : lines[i].trimStart());
     while (body.length && !body[0].trim()) body.shift();

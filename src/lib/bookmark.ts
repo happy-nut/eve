@@ -6,12 +6,6 @@ import { fetchUrl, isMobile, isTauri, openUrl, youtubePlayer } from './platform'
 import { VIDEO_FILE } from './drop';
 import { saved, save } from './stored';
 
-/**
- * Bookmark card: a URL on a line of its own renders as a compact preview (favicon, title, description,
- * thumbnail) and opens in the browser on click. Markdown form is just the bare URL, so files stay plain.
- * Made from a link with ⌥↩ (Show as card). A pasted or typed address stays a link, ↩ after it too: it turned into a card
- * there, which no one asked for.
- */
 export const URL_RE = /^https?:\/\/[^\s<>"']+$/;
 const LS = 'eve.links';
 export interface Meta { title: string; desc: string; image: string; icon: string }

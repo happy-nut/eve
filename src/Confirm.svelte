@@ -7,13 +7,10 @@
   import { claimKeys } from './lib/keys';
   import { copyText } from './lib/platform';
 
-  // the last one asked: closing, it fades out showing what it showed (ui.pending is already null by then)
   const p = $derived.by(held(() => ui.pending));
-  // (ui.done gives the focus back to where it was, synchronously, before the answer is heard)
   const done = (v: string | null) => ui.done(v);
   let value = $state('');
   $effect(() => { value = p.input ?? ''; });
-  // what the box offers for its words (⌘K: the notes found), the first chosen unless the words are an address
   const found = $derived(p.choices ? p.choices(value) : []);
   const address = (v: string) => /[./:#]/.test(v.trim());
   let picked = $state(0);
@@ -23,10 +20,7 @@
   const copy = async () => { await copyText(p.command ?? ''); copied = true; setTimeout(() => (copied = false), 1500); };
 
   let box: HTMLDivElement;
-  /** up from the bottom on a phone (a sheet); the Mac's dialog grows in place */
   const appear = (node: Element) => sheet(node, (n) => scale(n, panelIn));
-  // the keypress that opened the dialog (Enter on a / menu item, say) is still travelling to window:
-  // it must not count as the answer to a dialog that did not exist when the key went down
   let openedAt = performance.now();
   let input = $state<HTMLInputElement>();
   let yes = $state<HTMLButtonElement>();
@@ -35,37 +29,30 @@
     openedAt = performance.now();
     const el = input ?? yes;
     el?.focus();
-    // selected once its text is in (it is set just after the box is drawn): the "https://" a link opens with was left
-    // unselected, and an address pasted went in after it
     if (el instanceof HTMLInputElement) tick().then(() => el.select());
   });
   function onKey(e: KeyboardEvent) {
     e.stopPropagation();
     if (e.timeStamp < openedAt) return;
     if (e.key === 'Escape') { e.preventDefault(); done(null); }
-    // (the Enter that ends a Korean or Japanese word being put together is the word's, and never gets here: it
-    // answered the dialog with the name half typed)
     if (found.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
       e.preventDefault();
-      // -1 is the words themselves (an address): above the first one found
       picked = Math.max(-1, Math.min(found.length - 1, picked + (e.key === 'ArrowDown' ? 1 : -1)));
       return;
     }
     if (e.key === 'Enter') {
       e.preventDefault();
       if (picked >= 0 && found[picked] && document.activeElement?.tagName === 'INPUT') { done(found[picked].value); return; }
-      // Enter presses the button that has the keyboard: Tab to Cancel, then Enter, deleted all the same
       const on = document.activeElement;
       if (on instanceof HTMLButtonElement && box.contains(on)) on.click();
       else done(p.input !== undefined ? value : 'yes');
     }
-    if (e.key === 'Tab') { // focus stays inside the dialog
+    if (e.key === 'Tab') {
       e.preventDefault();
       const els = [...box.querySelectorAll<HTMLElement>('input, button')];
       els[(els.indexOf(document.activeElement as HTMLElement) + (e.shiftKey ? -1 : 1) + els.length) % els.length]?.focus();
     }
   }
-  // every key while it is the one on top (fading out under a menu, or already answered, it hears nothing)
   $effect(() => claimKeys('global', { '*': onKey }, { whileTop: 'confirm' }));
 </script>
 
@@ -90,7 +77,6 @@
   {#if p.input !== undefined}
     <input bind:this={input} bind:value spellcheck="false" placeholder={p.placeholder ?? ''} />
     {#if found.length}
-      <!-- the pointer picks one as well; the keyboard stays in the box (↑↓ choose, ↩ takes) -->
       <div class="found" role="listbox" aria-label="Found">
         {#each found as f, i (f.value)}
           <button class="choice" class:on={i === picked} role="option" aria-selected={i === picked} tabindex="-1"
@@ -120,7 +106,6 @@
     font-size: 13px;
   }
   .head { display: flex; gap: 11px; align-items: flex-start; }
-  /* a quiet round badge: the trash for a delete, a pencil when it is asking for text */
   .mark {
     flex: none; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
     background: var(--bg-input); color: var(--fg-dim);
@@ -128,7 +113,6 @@
   .mark.danger { background: light-dark(rgba(255, 69, 58, 0.12), rgba(255, 69, 58, 0.18)); color: #ff453a; }
   .mark svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   p { margin: 4px 0 0; line-height: 1.45; word-break: break-word; white-space: pre-line; }
-  /* a Terminal command: selectable as it is, or copied whole */
   .cmd { display: flex; align-items: center; gap: 6px; margin: 12px 0 0 39px; padding: 4px 4px 4px 9px; border-radius: 8px; background: var(--bg-input); }
   .cmd code { flex: 1; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; user-select: text; -webkit-user-select: text; overflow-wrap: anywhere; }
   .cmd button { padding: 4px 10px; background: var(--bg-pop); }
@@ -156,7 +140,6 @@
   .primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
   .primary.danger { background: #ff453a; }
   .primary.danger:hover { background: color-mix(in srgb, #ff453a 88%, #000); }
-  /* the key that does the same thing, dimmed inside the button */
   kbd {
     font: inherit; font-size: 10.5px; line-height: 1; padding: 2px 4px; border-radius: 4px;
     background: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.14)); color: inherit; opacity: 0.75;

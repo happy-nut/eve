@@ -9,18 +9,11 @@
     type DbSchema, type PropDef, type PropType, type ViewKind,
   } from './lib/database';
 
-  /**
-   * A database (Notion's), mounted in the `database` node view: the pages under this page are its rows, shown as a
-   * table, a board, a calendar or a gallery. What the table is goes out through `commit` and comes back through `set`;
-   * what a row says (its title, its properties) is the row's own page, written as it changes. ⌘Z / ⌘⇧Z on the table
-   * take back (and redo) its own steps, whichever of those they were.
-   */
   let { schema: initial, commit, page }: { schema: DbSchema; commit: (d: DbSchema) => void; page: () => string | null } = $props();
   // svelte-ignore state_referenced_locally
   let d = $state.raw(initial);
   export function set(next: DbSchema) { d = next; }
 
-  // ---- the table's own undo: each step knows how to undo and redo itself ----
   type Step = { undo: () => void; redo: () => void };
   const done: Step[] = [], undone: Step[] = [];
   let root: HTMLDivElement;
@@ -32,7 +25,6 @@
   }
   const apply = (next: DbSchema) => { d = next; commit(next); };
   const put = (next: DbSchema) => { const was = d; step(() => apply(next), () => apply(was)); };
-  /** ⌘Z / ⌘⇧Z on the table (a field's own words have the field's own undo) */
   export function undoKey(e: KeyboardEvent): boolean {
     if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' || e.altKey) return false;
     if ((e.target as HTMLElement).matches?.('input[type="text"], input[type="number"], input:not([type]), textarea')) return false;
@@ -50,10 +42,8 @@
   const dateProp = $derived(d.props.find((p) => p.name === d.dateBy && p.type === 'date') ?? d.props.find((p) => p.type === 'date'));
   const columns = $derived(columnsOf(shownRows, groupProp));
 
-  // ---- what a cell says: stored values as they read, a relation its pages, a rollup and a formula worked out ----
   const def = (name: string) => d.props.find((p) => p.name === name);
   const pageBy = (title: string) => notes.byTitle(title);
-  /** a property of a row as a formula sees it: a number, a checkbox true or false, anything else its words */
   function val(n: Note, name: string, depth = 0): Val {
     if (name === NAME) return titleOf(n);
     const p = def(name);
@@ -66,7 +56,6 @@
     if (p.type === 'checkbox') return v === 'true';
     return shown(v, p.type);
   }
-  /** a rollup: the pages its relation links to, their property `of` (or their titles), made into one value */
   function rolled(n: Note, p: PropDef): string {
     const linked = linksIn(n.props?.[p.relation ?? '']).map(pageBy).filter((x): x is Note => !!x);
     const of = p.of ?? NAME;
@@ -83,7 +72,6 @@
   }
   const formulaError = (p: PropDef, n: Note) => evaluate(p.expr ?? '', (x) => val(n, x)).error;
 
-  /** ↩ in a field: what was written is taken (its change), the keyboard stays in the field — blurred, it was on nothing */
   const enterKeeps = (e: KeyboardEvent) => {
     if (e.key !== 'Enter' || e.isComposing) return;
     const el = e.currentTarget as HTMLInputElement;
@@ -92,17 +80,14 @@
     el.select();
   };
   type Where = { clientX: number; clientY: number };
-  /** a menu as a question: what was picked, or null when it was closed */
   function choose<T>(where: Where, items: { label: string; value: T; checked?: boolean; sep?: boolean }[]): Promise<T | null> {
     return new Promise((res) => {
       let picked = false;
-      // the menu says it closed before it runs the item picked: what was picked is known a moment later
       ui.openMenu(where, items.map((i) => ({ label: i.label, checked: i.checked, sep: i.sep, run: () => { picked = true; res(i.value); } })), () => setTimeout(() => { if (!picked) res(null); }));
     });
   }
   const open = (n: Note) => { if (pageId) notes.flush(pageId); notes.currentId = n.id; };
 
-  // ---- a row's title and its properties: each change one step of the table's undo ----
   function setTitle(id: string, t: string) {
     const n = notes.all.find((x) => x.id === id);
     if (!n) return;
@@ -121,12 +106,9 @@
     if (JSON.stringify(was) === JSON.stringify(v)) return;
     step(() => notes.setProp(id, p.name, v), () => notes.setProp(id, p.name, was));
   }
-  /** a new row, with what the view shows already set (the board's column, the calendar's day, the filter) */
   let fresh = $state<string | null>(null);
   async function addRow(props: Record<string, PropValue> = {}) {
     if (!pageId) return;
-    // a board, a calendar, a gallery show no field to name it in: it is named first (it was an "Untitled" no one could
-    // name, and the keys typed next went into the note)
     const named = d.view === 'table' ? 'Untitled' : await ui.prompt('Name', '');
     if (named === null || !pageId) return;
     const f = d.filter;
@@ -135,20 +117,17 @@
     if (d.view === 'table') fresh = id;
     done.push({ undo: () => notes.setGone(id, true), redo: () => notes.setGone(id, false) });
     undone.length = 0;
-    if (d.view !== 'table' && root) root.focus({ preventScroll: true }); // ⌘Z next takes it back
+    if (d.view !== 'table' && root) root.focus({ preventScroll: true });
   }
   const dropRow = (n: Note) => { const id = n.id; step(() => notes.setGone(id, true), () => notes.setGone(id, false)); };
   const focusFresh = (el: HTMLInputElement, id: string) => { if (id === fresh) { fresh = null; el.focus(); el.select(); } };
 
-  // ---- the properties (columns) ----
-  /** the databases a relation can link into: pages holding a ```database, their titles */
   const databases = () => notes.pages.filter((n) => n.body.includes('```database')).map((n) => ({ id: n.id, title: titleOf(n) }));
   const schemaOf = (id: string) => {
     const body = notes.all.find((n) => n.id === id)?.body ?? '';
     const m = /```database\n([\s\S]*?)\n```/.exec(body);
     return m ? parseDb(m[1]) : null;
   };
-  /** what a property of a kind needs besides its name: choices, a relation's database, a rollup's way, a formula */
   async function configure(type: PropType, where: Where, base: Partial<PropDef> = {}): Promise<Partial<PropDef> | null> {
     if (type === 'select' || type === 'multi') return { options: base.options ?? [] };
     if (type === 'relation') {
@@ -193,7 +172,6 @@
     if (!nameOk(name, p.name)) return void ui.tell(`“${name}” is taken: a property needs a name of its own.`);
     const ids = rows.map((r) => r.id), was = d, from = p.name;
     const re = (s?: string) => (s === from ? name : s);
-    // a formula that reads it reads it by its new name (left as it was, it read nothing, and showed 0)
     const said = new RegExp(`prop\\(\\s*(["'])${from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\1\\s*\\)`, 'g');
     const follow = (x: PropDef) => { const e = x.expr?.replace(said, `prop("${name.replace(/"/g, '\\"')}")`); return e && e !== x.expr ? { expr: e } : {}; };
     const next: DbSchema = {
@@ -213,8 +191,6 @@
     step(() => { for (const [id] of had) notes.setProp(id, p.name, null); apply(next); }, () => { for (const [id, v] of had) notes.setProp(id, p.name, v); apply(was); });
   }
   async function changeKind(p: PropDef, type: PropType, where: Where) {
-    // made a choice, what its rows already say are its choices (they were chips no menu offered, and the board put
-    // those rows under "No …")
     const said = type === 'select' || type === 'multi'
       ? [...new Set(rows.flatMap((r) => { const v = r.props?.[p.name]; return v == null || v === '' ? [] : Array.isArray(v) ? v.map(String) : type === 'multi' ? String(v).split(',').map((x) => x.trim()).filter(Boolean) : [String(v)]; }))]
       : [];
@@ -246,7 +222,6 @@
     ui.openMenu(where, items);
   }
 
-  // ---- choices, and a relation's pages ----
   async function newChoice(p: PropDef): Promise<string | null> {
     const typed = (await ui.prompt(`New choice for “${p.name}”`, ''))?.trim();
     if (!typed) return null;
@@ -263,7 +238,6 @@
       { label: 'Clear', hide: !now.length, run: () => setCell(n, p, null) },
     ]);
   }
-  /** a relation's pages: the linked database's rows (or every page), each toggled; many: search first */
   async function relationMenu(e: MouseEvent, n: Note, p: PropDef) {
     const where = under(e.currentTarget as HTMLElement);
     const now = linksIn(n.props?.[p.name]);
@@ -279,7 +253,6 @@
       : [{ label: p.target ? 'That database has no rows yet' : 'No notes to link', disabled: true }]);
   }
 
-  // ---- views ----
   function setView(v: ViewKind) {
     put({ ...d, view: v, ...(v === 'board' ? { groupBy: d.groupBy ?? groupProp?.name } : {}), ...(v === 'calendar' ? { dateBy: d.dateBy ?? dateProp?.name } : {}) });
   }
@@ -295,7 +268,6 @@
   const days = $derived(byDay(shownRows, dateProp?.name));
 </script>
 
-<!-- the table's own ⌘Z, for what is done on it (a field's words keep the field's own undo) -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="db" role="group" aria-label="Database" tabindex="-1" bind:this={root} onkeydown={undoKey}>
   <div class="db-top">
@@ -372,7 +344,6 @@
     <button class="new" onclick={() => addRow()}>+ New</button>
   {:else if d.view === 'board'}
     <div class="board">
-      <!-- the rows with no value, only while there are some (Notion's "No Status" too) -->
       {#each columns.filter((c) => c.value || c.rows.length || !groupProp) as col (col.value)}
         <div class="col" role="group" aria-label={col.value || 'No value'} ondragover={(e) => e.preventDefault()} ondrop={(e) => { e.preventDefault(); dropOn(groupProp, col.value); }}>
           <div class="col-head">{#if col.value}<span class="chip head-chip" style:background="var(--tag-{tagColor(col.value)})">{col.value}</span>{:else}No {groupProp?.name ?? 'value'}{/if} <span class="count">{col.rows.length}</span></div>
@@ -430,7 +401,7 @@
   .db input[type='date'].blank:not(:focus)::-webkit-datetime-edit { color: transparent; }
   .db-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
   .db-title { flex: 1; min-width: 120px; font: inherit; font-size: 1.15em; font-weight: 600; border: 0; background: none; color: var(--fg); outline: none; padding: 2px 0; }
-  .views { display: flex; flex-wrap: wrap; gap: 2px; } /* a narrow column, a large text: onto a second line, not past the column */
+  .views { display: flex; flex-wrap: wrap; gap: 2px; }
   button { font: inherit; border: 0; background: none; color: inherit; border-radius: 6px; }
   .views button { padding: 3px 9px; color: var(--fg-dim); }
   .views button.on { background: var(--bg-input); color: var(--fg); }
@@ -448,8 +419,6 @@
   td input:not([type='checkbox']) { width: 100%; box-sizing: border-box; font: inherit; border: 0; background: none; color: var(--fg); padding: 5px 8px; outline: none; }
   td input:focus { box-shadow: inset 0 0 0 2px var(--accent-soft); }
   td input[type='checkbox'] { margin: 0 8px; }
-  /* the row of the title and its buttons inside the cell: flex on the cell itself took it out of the table's row
-     layout, and its borders stood a few px off the others' */
   .name-row { display: flex; align-items: center; }
   .name input { font-weight: 500; }
   .open, .more { flex: none; width: 24px; height: 24px; color: var(--fg-dim); opacity: 0; }
@@ -463,7 +432,6 @@
   .board { display: flex; gap: 10px; overflow-x: auto; align-items: flex-start; padding-bottom: 4px; }
   .col { flex: none; width: 220px; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 8px; background: var(--bg-input); }
   .col-head { font-weight: 500; padding: 2px 4px; display: flex; align-items: center; gap: 6px; min-width: 0; }
-  /* a long choice: one line, cut short, its count still beside it */
   .head-chip { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .col-head .count { flex: none; }
   .count { background: none; color: var(--fg-dim); }
@@ -474,7 +442,7 @@
   .add-choice { justify-content: center; color: var(--fg-dim); min-height: 36px; }
   .cal-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
   .cal-bar button { padding: 2px 8px; color: var(--fg-dim); }
-  :global(html.mobile) .cal-bar button { min-width: 40px; min-height: 40px; } /* a finger's size */
+  :global(html.mobile) .cal-bar button { min-width: 40px; min-height: 40px; }
   .cal-bar button:hover { background: var(--bg-hover); color: var(--fg); }
   .cal-month { font-weight: 600; min-width: 9em; text-align: center; }
   .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
@@ -485,7 +453,6 @@
   .day-head { display: flex; justify-content: space-between; align-items: center; font-size: 0.85em; }
   .day-add { width: 18px; height: 18px; line-height: 1; color: var(--fg-dim); opacity: 0; }
   .day:hover .day-add, .day-add:focus-visible { opacity: 1; }
-  /* a phone has no hover: there they are always there, a finger's size (a row could not be opened or deleted) */
   :global(html.mobile) .db .open, :global(html.mobile) .db .more, :global(html.mobile) .db .day-add { opacity: 1; width: 36px; height: 36px; }
   .day-row { text-align: left; padding: 2px 5px; border-radius: 4px; background: var(--bg-input); color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.88em; }
   .day-row:hover { background: var(--bg-active); }

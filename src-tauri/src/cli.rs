@@ -1,5 +1,3 @@
-//! `eve <command>` in a terminal: core's commands (the very ones Claude gets over MCP), their arguments
-//! read from the command line, the answer printed. `eve help` lists them, `eve help <command>` shows one.
 use crate::core::{self, command, notes_dir, Command, Kind};
 use serde_json::{json, Map, Value};
 use std::io::Write;
@@ -10,9 +8,6 @@ fn print(to_err: bool, text: &str) {
     let _ = if to_err { std::io::stderr().write_all(text.as_bytes()) } else { std::io::stdout().write_all(text.as_bytes()) };
 }
 
-/// The arguments after `eve <command>` as the JSON the command takes: `--name value` (or `--name=value`)
-/// for any parameter, and bare words for the one that may be given bare (joined by spaces for a text,
-/// one each for a list).
 pub fn parse_args(cmd: &Command, argv: &[String]) -> Result<Value, String> {
     let mut out = Map::new();
     let mut bare: Vec<String> = Vec::new();
@@ -31,7 +26,7 @@ pub fn parse_args(cmd: &Command, argv: &[String]) -> Result<Value, String> {
             Some((n, v)) => (n, Some(v.to_string())),
             None => (flag, None),
         };
-        let name = if name == "group" { "page" } else { name }; // as Eve called a page path when it had folders
+        let name = if name == "group" { "page" } else { name };
         let p = cmd
             .params
             .iter()
@@ -79,12 +74,10 @@ pub fn parse_args(cmd: &Command, argv: &[String]) -> Result<Value, String> {
     Ok(Value::Object(out))
 }
 
-/// Run what the command line asks for. None: it asks for no command, so the app itself starts.
 pub fn main(argv: Vec<String>) -> Option<i32> {
     let first = argv.first()?.as_str();
     let rest = &argv[1..];
     let answer = match first {
-        // a Claude app started us as its notes server
         "mcp" => {
             crate::mcp::serve();
             return Some(0);
@@ -123,14 +116,13 @@ mod tests {
     fn arguments_become_what_the_tool_takes() {
         let search = command("search").unwrap();
         assert_eq!(parse_args(search, &words("회의 결정 --page Work --limit 5")).unwrap(), json!({ "query": "회의 결정", "page": "Work", "limit": 5 }));
-        assert_eq!(parse_args(search, &words("x --group Work")).unwrap(), json!({ "query": "x", "page": "Work" })); // its older name
+        assert_eq!(parse_args(search, &words("x --group Work")).unwrap(), json!({ "query": "x", "page": "Work" }));
         assert_eq!(parse_args(search, &words("--query=plan --from 2026-09")).unwrap(), json!({ "query": "plan", "from": "2026-09" }));
         assert!(parse_args(search, &words("--group Work")).unwrap_err().contains("needs <query>"));
         assert!(parse_args(search, &words("x --limit five")).unwrap_err().contains("whole number"));
         assert!(parse_args(search, &words("x --nope 1")).unwrap_err().contains("has no --nope"));
         assert!(parse_args(search, &words("x --group")).unwrap_err().contains("needs a value"));
         assert!(parse_args(search, &words("x --query y")).unwrap_err().contains("twice"));
-        // after --, a word that looks like a flag is a word
         assert_eq!(parse_args(search, &words("-- --not-a-flag")).unwrap(), json!({ "query": "--not-a-flag" }));
 
         let many = command("read-many").unwrap();
@@ -152,7 +144,6 @@ mod tests {
         assert!(one.starts_with("eve search — Search notes\n"), "{one}");
         assert!(one.contains("Usage: eve search <query> [--page <page>] [--from <from>] [--to <to>] [--limit <n>]"), "{one}");
         assert!(one.contains("<query>, --query") && one.contains("— required") && one.contains("(default 20, 1–100)"), "{one}");
-        // Claude's tool names read as the commands a terminal types
         assert!(one.contains("`eve read`") && !one.contains("read_note "), "{one}");
         assert!(one.contains("MCP tool search_notes"));
         assert_eq!(core::help(Some("open_note")).unwrap(), core::help(Some("open")).unwrap());

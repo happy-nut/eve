@@ -5,31 +5,18 @@ import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { chipLabel } from './date';
 
-/**
- * Find (and replace) inside the open note. Matches are decorations, so nothing in the document is
- * touched until a replace actually runs.
- *
- * ponytail: plain case-insensitive text. Regex if it ever bites.
- */
 export const FIND = new PluginKey<FindState>('eve-find');
 
-/** `atom`: the match is in (or runs into) a [[link]] or a date, shown but not replaced, which would cut it up */
 export interface Hit { from: number; to: number; atom?: boolean }
 export interface FindState { query: string; index: number; hits: Hit[] }
 
-/** what an inline node that is not text reads as on screen, for the search: a [[link]] its words, a date its day */
 function shown(node: PMNode): string {
   if (node.type.name === 'wikiLink') return node.attrs.alias || node.attrs.title || '';
   if (node.type.name === 'dateMention') return chipLabel(node.attrs);
   if (node.type.name === 'hardBreak') return '\n';
-  return '\ufffc'; // a picture, a formula: nothing to find in it
+  return '\ufffc';
 }
 
-/**
- * Each line is searched as it reads, the words of it whatever their marks: matched one text node at a time, a phrase
- * running over bold ("The **quick** brown") or into a [[link]] was not found. A match is mapped back to where it
- * is in the note, all of an atom it touches included.
- */
 function search(doc: PMNode, query: string): Hit[] {
   const hits: Hit[] = [];
   if (!query) return hits;
@@ -41,9 +28,8 @@ function search(doc: PMNode, query: string): Hit[] {
     let text = '';
     block.forEach((n) => { text += n.isText ? n.text! : shown(n); });
     q.lastIndex = 0;
-    if (!q.test(text)) return false; // the usual line: nothing in it, and nothing more to work out
+    if (!q.test(text)) return false;
     q.lastIndex = 0; // (matchAll starts where the test left off)
-    // where each piece of the line starts in its text and in the note
     const at: { off: number; pos: number; size: number; atom: boolean }[] = [];
     let off = 0;
     block.forEach((n, offset) => {
@@ -105,12 +91,8 @@ export const Find = Extension.create({
 
 export const findState = (editor: Editor): FindState => FIND.getState(editor.state) ?? { query: '', index: 0, hits: [] };
 
-/** where the caret was as the search began (a query typed into an empty box) */
 const home = new WeakMap<Editor, { anchor: number; head: number }>();
 
-/** Type in the find box. The first match is selected, so Enter walks on from there. Nothing found (or the box
- *  emptied), the caret goes back to where it was: each letter's first match had taken it, and Esc then left it in
- *  some word on the way ("t" of "text"), far from where the user was typing. */
 export function setQuery(editor: Editor, query: string) {
   if (!findState(editor).query || !home.has(editor)) home.set(editor, { anchor: editor.state.selection.anchor, head: editor.state.selection.head });
   editor.view.dispatch(editor.state.tr.setMeta(FIND, { query, index: 0 }));
@@ -122,7 +104,6 @@ export function setQuery(editor: Editor, query: string) {
   editor.view.dispatch(editor.state.tr.setSelection(TextSelection.between(at(was.anchor), at(was.head))).setMeta('addToHistory', false));
 }
 
-/** Step to the next (1) or previous (-1) match, wrapping around. */
 export function step(editor: Editor, dir: 1 | -1) {
   const { hits, index } = findState(editor);
   if (!hits.length) return;
@@ -136,10 +117,9 @@ export function step(editor: Editor, dir: 1 | -1) {
  * It only scrolls when the match is not comfortably on screen: the bar covers the top of the note, and
  * a page that jumps at every keystroke is worse than one that stays put.
  */
-const BAR = 96; // the find bar's reach down the top of the note
+const BAR = 96;
 function reveal(editor: Editor, from: number) {
   const box = editor.view.coordsAtPos(from);
-  // where the bar really ends (a phone's, with its replace row, reaches further than the Mac's)
   const bar = document.querySelector('.find')?.getBoundingClientRect().bottom ?? BAR;
   if (box.top > Math.max(BAR, bar + 4) && box.bottom < window.innerHeight - 24) return;
   const dom = editor.view.domAtPos(from).node;
@@ -147,12 +127,10 @@ function reveal(editor: Editor, from: number) {
   el?.scrollIntoView({ block: 'center' });
 }
 
-/** Put the match on screen and select it, without taking the keyboard out of the find box. */
 function show(editor: Editor, index: number) {
   const { hits } = findState(editor);
   const hit = hits[index];
   const tr = editor.state.tr.setMeta(FIND, { index });
-  // a match inside a folded toggle is shown, not counted out of sight: its toggles open
   if (hit) {
     const $at = tr.doc.resolve(hit.from);
     for (let d = $at.depth; d > 0; d--) {
@@ -166,15 +144,9 @@ function show(editor: Editor, index: number) {
   if (hit) reveal(editor, hit.from);
 }
 
-/**
- * Replace the match in view, then sit on the one that follows it, so Enter walks the note in order. The one
- * after is the first that starts past what was just put in: the replacement may itself match ("eve" → "Eve",
- * the search ignoring case; "eve" → "steve"), and the same index then stayed on it, replacing it over and over.
- */
 export function replaceOne(editor: Editor, text: string) {
   const { hits, index } = findState(editor);
   let hit = hits[index];
-  // one in a [[link]] or a date is shown, not replaced: the next that can be is
   if (hit?.atom) {
     const next = hits.findIndex((h, i) => !h.atom && i > index);
     const any = next >= 0 ? next : hits.findIndex((h) => !h.atom);
@@ -183,13 +155,12 @@ export function replaceOne(editor: Editor, text: string) {
   }
   if (!hit) return;
   editor.view.dispatch(put(editor, editor.state.tr, hit, text));
-  const left = findState(editor).hits; // the plugin re-searched the changed doc
+  const left = findState(editor).hits;
   if (!left.length) return;
   const next = left.findIndex((h) => h.from >= hit.from + text.length);
-  show(editor, next >= 0 ? next : 0); // past the last one: round to the first again
+  show(editor, next >= 0 ? next : 0);
 }
 
-/** Replace every match, back to front so the earlier positions stay valid. */
 export function replaceAll(editor: Editor, text: string) {
   const { hits } = findState(editor);
   if (!hits.length) return;

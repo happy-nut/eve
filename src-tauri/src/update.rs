@@ -12,18 +12,15 @@ use tauri::{AppHandle, Emitter};
 const PREFIX: &str = "https://github.com/happy-nut/eve/releases/download/";
 const ASSET: &str = "/Eve-macos-arm64.zip";
 
-/// The only downloads an update may come from: this repository's Mac zip.
 pub(crate) fn allowed(url: &str) -> bool {
     url.starts_with(PREFIX) && url.ends_with(ASSET) && !url[PREFIX.len()..].contains("..")
 }
 
-/// A digest as the releases API lists it ("sha256:<64 hex>"), or bare hex, as lowercase hex.
 pub(crate) fn sha256_of(digest: &str) -> Option<String> {
     let hex = digest.strip_prefix("sha256:").unwrap_or(digest).to_ascii_lowercase();
     (hex.len() == 64 && hex.chars().all(|c| c.is_ascii_hexdigit())).then_some(hex)
 }
 
-/// The .app this executable runs from: …/Eve.app/Contents/MacOS/eve -> …/Eve.app.
 pub(crate) fn bundle_of(exe: &Path) -> Result<PathBuf, String> {
     let bundle = exe.parent().and_then(Path::parent).and_then(Path::parent).ok_or("Eve is not running from an app.")?;
     let ok = exe.parent().and_then(Path::file_name).is_some_and(|n| n == "MacOS")
@@ -45,10 +42,8 @@ fn run(cmd: &str, args: &[&std::ffi::OsStr]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-/// How a failed download starts its message: the one failure Homebrew is asked to take over (brew_update).
 const DOWNLOAD_FAILED: &str = "Download failed";
 
-/// Download `url` to `to`, reporting "downloading:<percent>" every 5%.
 fn download(app: &AppHandle, url: &str, to: &Path) -> Result<(), String> {
     use std::io::{Read, Write};
     let agent = ureq::Agent::config_builder()
@@ -78,7 +73,6 @@ fn download(app: &AppHandle, url: &str, to: &Path) -> Result<(), String> {
     file.sync_all().map_err(|e| e.to_string())
 }
 
-/// Download, check, swap in, restart. On any failure before the swap nothing of the old app is touched.
 fn install(app: &AppHandle, url: &str, sha256: &str, version: &str) -> Result<(), String> {
     if !allowed(url) {
         return Err("That download is not an Eve release.".into());
@@ -116,7 +110,6 @@ fn install(app: &AppHandle, url: &str, sha256: &str, version: &str) -> Result<()
             return Err(format!("The download is not Eve {version}; nothing was changed."));
         }
         let _ = run("/usr/bin/xattr", &["-dr".as_ref(), "com.apple.quarantine".as_ref(), new.as_os_str()]);
-        // the swap: the old app aside, the new one in its place, the old one back if that fails
         let old = work.join("Eve-old.app");
         // macOS's App Management protection may refuse this; then nothing has changed yet
         std::fs::rename(&bundle, &old).map_err(|e| {
@@ -132,9 +125,6 @@ fn install(app: &AppHandle, url: &str, sha256: &str, version: &str) -> Result<()
     let _ = std::fs::remove_dir_all(&work);
     result?;
     let _ = app.emit("eve-update", "restarting");
-    // start the new copy once this one has gone (a second Eve would find the hotkey taken). Started bare it
-    // would wait for the hotkey with no window, as at login, and the update looked like Eve had quit: handing
-    // it an eve:// link brings the window up (RunEvent::Opened shows it; the page acts only on eve://open).
     std::process::Command::new("/bin/sh")
         .args(["-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; /usr/bin/open -a \"$2\" eve://updated", "sh"])
         .arg(std::process::id().to_string())
@@ -190,15 +180,12 @@ fi
 exit "$code"
 "#;
 
-/// The last lines brew wrote, for the message (all of it stays in the log).
 fn tail(log: &Path, lines: usize) -> String {
     let text = std::fs::read_to_string(log).unwrap_or_default();
     let kept: Vec<&str> = text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("exit ")).collect();
     kept[kept.len().saturating_sub(lines)..].join("\n")
 }
 
-/// The download was refused (a company network that lets only Homebrew out): brew reinstalls Eve instead.
-/// Returns once brew has; on success this Eve is quit and the new one started by the script.
 fn brew(app: &AppHandle) -> Result<(), String> {
     let _ = app.emit("eve-update", "brew");
     let shell = std::env::var("SHELL").ok().filter(|s| s.starts_with('/') && Path::new(s).exists()).unwrap_or_else(|| "/bin/zsh".into());
@@ -212,10 +199,8 @@ fn brew(app: &AppHandle) -> Result<(), String> {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
     #[cfg(unix)]
-    std::os::unix::process::CommandExt::process_group(&mut cmd, 0); // lives on when brew quits this Eve
+    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut child = cmd.spawn().map_err(|e| format!("Could not start Homebrew: {e}"))?;
-    // brew downloads and installs in a minute or two; one still at it after twenty is stuck (a lock, a prompt
-    // nobody can answer): stopped, so the Update button works again
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20 * 60);
     let status = loop {
         match child.try_wait().map_err(|e| e.to_string())? {
@@ -238,11 +223,6 @@ fn brew(app: &AppHandle) -> Result<(), String> {
     }
 }
 
-/// Update this Mac's Eve to `version` from `url` (a release's Eve-macos-arm64.zip, with its `sha256`).
-/// Progress arrives as "eve-update" events: downloading[:percent], installing, brew, restarting.
-/// A download the network refuses is handed to Homebrew; any other failure is not (a zip that does not match
-/// its SHA-256 must not be installed unchecked, which the cask would do; a Mac that will not let Eve replace
-/// itself will not let a brew Eve started either).
 #[tauri::command]
 pub(crate) async fn install_update(app: AppHandle, url: String, sha256: String, version: String) -> Result<(), String> {
     if !cfg!(target_os = "macos") {

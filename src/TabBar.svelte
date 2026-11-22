@@ -6,9 +6,6 @@
   import Icon from './Icon.svelte';
   import { scrollHint } from './lib/scrollHint';
 
-  // the notes open in tabs, over the note (only with two or more): a click brings one to front, the middle button or
-  // its × closes it, the right button pins it or closes the others. A press keeps the keyboard where it was (in the
-  // note): a tab is no place for it, and it fell to <body> on a click of the front tab or a background one's ×
   const label = (id: string) => {
     if (id === CALENDAR) return { title: notes.calendar.name, icon: notes.calendar.icon };
     const n = notes.all.find((x) => x.id === id);
@@ -23,8 +20,6 @@
       { label: 'Close other tabs', hide: tabs.list.length < 2, run: () => tabs.closeOthers(i) },
     ]);
   }
-  // more tabs than fit: the open one is brought into sight (it was left off past the bar's end, with no bar to scroll
-  // by), and the bar's edges fade where more of it goes on
   let bar = $state<HTMLDivElement | null>(null);
   $effect(() => {
     void notes.currentId; void tabs.list.length;
@@ -50,7 +45,6 @@
 </div>
 
 <style>
-  /* under the window's top row (the crumbs and ⋯ live there), over the note */
   .tabbar {
     position: absolute; top: 40px; left: 0; right: 0; height: 30px; z-index: var(--z-toolbar);
     display: flex; gap: 2px; padding: 0 12px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--line);
@@ -63,7 +57,6 @@
   }
   .tab.pinned { flex: none; min-width: 0; }
   .tab:hover { background: var(--bg-hover); }
-  /* the open tab is the page itself (its colour, the bar's line broken under it), not a grey a hover shares */
   .tab.on { background: var(--bg); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line), 0 1px 0 var(--bg); }
   button { border: 0; background: none; color: inherit; font: inherit; }
   .pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 4px 0 10px; font-size: 12.5px; text-align: left; }

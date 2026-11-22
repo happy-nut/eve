@@ -1,12 +1,4 @@
-/**
- * Where a passage Claude copied from a note (read_note) is in it, for edit_note. Copied back, it is seldom the same to
- * the character: the escapes the note keeps go (2 \* 3, \[x\], a line ending in \), a table's | --- | comes back
- * |---|, spaces at a line's end go, `` b`c `` loses a backtick, Windows line ends come. Asked for exactly, each was
- * "not in the note", tried again and again. Here the note and the passage are both read the way those differences
- * vanish, the passage looked for in that, and the place it is found taken back to the note as written.
- */
 
-/** the text as compared: each character with the span of the original it stands for */
 function compared(s: string): { text: string; from: number[]; to: number[] } {
   let text = '';
   const from: number[] = [], to: number[] = [];
@@ -14,7 +6,6 @@ function compared(s: string): { text: string; from: number[]; to: number[] } {
   for (let i = 0; i < s.length;) {
     const c = s[i];
     if (c === '\r') { i++; continue; }
-    // an escape: the character it keeps (a line break written "\" + newline: the newline)
     if (c === '\\' && i + 1 < s.length && /[!-/:-@[-`{-~\n]/.test(s[i + 1])) { put(s[i + 1], i, i + 2); i += 2; continue; }
     const entity = /^&(#32|#9|#160|nbsp);/.exec(s.slice(i, i + 6));
     // a run of spaces (or the entities the note writes for kept spaces): one, none at a line's end or by a table's |

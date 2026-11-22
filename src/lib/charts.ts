@@ -3,25 +3,12 @@ import { esc, laneSvg } from './lanes';
 import { mindSvg } from './mindmap';
 import { huesOf } from './chartHues';
 
-/**
- * The charts Eve draws itself, from the same mermaid code: a pie as a donut with its parts listed beside it, a
- * timeline as a column of dates, a Gantt chart as a tidy schedule. Mermaid's own drawings of these three stretched
- * and crowded (a timeline's dashed drops and arrows, a Gantt's labels between its rows). The note still keeps
- * mermaid's code, so other apps draw it their way; code these cannot read, or a Gantt
- * with what this drawing has no look for (days excluded, settings kept as written), is left to mermaid. Each part
- * carries the `data-spot` key it is edited by (spots.ts). HTML for the diagram canvas, styled by app.css (.chart-*), colours by CSS
- * variables, so the light and dark themes need no drawing again.
- */
 export function chartHtml(code: string, laneMin = 0.64): string | null {
   const d = fromCode(code);
   if (!d) return null;
-  if (d.kind === 'flowchart' && d.lanes?.length) return laneSvg(d, laneMin); // swimlanes (lanes.ts)
-  // a plain flowchart too, by the same drawing: mermaid placed every step again for each line drawn in. Left to mermaid
-  // is one with what this drawing has no look for (a style, a class's colours, an arrow or a shape of its own, a
-  // chart drawn right to left or upwards)
+  if (d.kind === 'flowchart' && d.lanes?.length) return laneSvg(d, laneMin);
   if (d.kind === 'flowchart' && d.nodes.length && (d.dir === 'TD' || d.dir === 'LR') && !d.extra?.length && !d.pre?.length
     && !d.nodes.some((n) => n.raw || n.cls) && !d.edges.some((e) => e.arrow)) return laneSvg(d, laneMin);
-  // a sequence with no one in it: mermaid drew an empty card, with nothing to say what it was
   if (d.kind === 'sequence' && !d.people.length) return `<div class="chart chart-empty"><p>Nothing to show yet</p></div>`;
   if (d.kind === 'mindmap') return mindSvg(d, laneMin);
   if (d.kind === 'pie') return pie(d);
@@ -39,9 +26,7 @@ function pie(d: Pie) {
   const parts = d.slices.filter((s) => s.value > 0);
   const total = parts.reduce((a, s) => a + s.value, 0);
   if (!total) return `<div class="chart chart-empty">${title(d.title)}<p>Nothing to show yet</p></div>`;
-  // a ring of strokes on one circle: each part a dash of its share, a hair of gap between them
   const R = 70, C = 2 * Math.PI * R, gap = parts.length > 1 ? 2.2 : 0;
-  // each slice's colour by its name, not its place (chartHues.ts)
   const hue = sliceHues(d.slices.map((s) => s.label));
   const tone = (i: number) => `c${hue[i]}${i >= 12 ? ' deep' : ''}`;
   let at = 0;
@@ -53,7 +38,7 @@ function pie(d: Pie) {
   }).join('');
   const top = parts.reduce((a, s) => (s.value > a.value ? s : a), parts[0]);
   const rows = d.slices.map((s, i) => {
-    const pct = s.value > 0 ? ((s.value / total) * 100).toFixed(1) : '0.0'; // one decimal on every row (8% beside 5.7%)
+    const pct = s.value > 0 ? ((s.value / total) * 100).toFixed(1) : '0.0';
     return `<div class="row" data-spot="slice:${i}"><span class="dot ${tone(i)}"></span><span class="lbl">${esc(s.label)}</span>`
       + `${d.showData ? `<span class="val">${fmt(s.value)}</span>` : ''}<span class="pct">${pct}%</span></div>`;
   }).join('');
@@ -66,7 +51,6 @@ function pie(d: Pie) {
 function timeline(d: Timeline) {
   const rows = d.periods.map((p, i) => {
     const events = p.events.map((e, j) => [e, j] as const).filter(([e]) => e.trim());
-    // a section's name over its first period, across the column (they were not drawn at all)
     const head = p.section !== undefined ? `<div class="tl-sec" data-spot="section:${i}">${esc(p.section.trim() || 'Section')}</div>` : '';
     return `${head}<div class="tl-row c${i % 12}"><div class="tl-when" data-spot="period:${i}">${esc(p.label)}</div><div class="tl-dot"></div>`
       + `<div class="tl-what">${events.length ? events.map(([e, j]) => `<div data-spot="event:${i}:${j}">${esc(e)}</div>`).join('') : `<div class="tl-none" data-spot="event:${i}:0">—</div>`}</div></div>`;
@@ -79,19 +63,17 @@ const dayNum = (iso: string) => Math.round(Date.parse(`${iso}T00:00:00Z`) / DAY)
 const md = (n: number) => { const d = new Date(n * DAY); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
 
 function gantt(d: Gantt) {
-  const dates = ganttDates(d); // a task after another starts where that one ends
+  const dates = ganttDates(d);
   const tasks = [...dates.values()];
   if (!tasks.length) return `<div class="chart chart-empty">${title(d.title)}<p>Nothing to show yet</p></div>`;
   const from = Math.min(...tasks.map((t) => dayNum(t.start)));
   const to = Math.max(...tasks.map((t) => dayNum(t.start) + Math.max(1, t.days)));
   const span = Math.max(1, to - from);
   const pct = (n: number) => `${(((n - from) / span) * 100).toFixed(3)}%`;
-  // ticks: each day for a fortnight, each week for a season, else each month's first
   const ticks: number[] = [];
   if (span <= 16) for (let n = from; n <= to; n++) ticks.push(n);
   else if (span <= 120) for (let n = from; n <= to; n += 7) ticks.push(n);
   else {
-    // each month's first (each year's past a decade), stepped a month at a time, not a day: a span of centuries drew for seconds
     const d0 = new Date(from * DAY), years = span > 3660;
     for (let y = d0.getUTCFullYear(), m = years ? 0 : d0.getUTCMonth() + 1; ; years ? y++ : m++) {
       const n = Math.round(Date.UTC(y, m, 1) / DAY);
@@ -100,8 +82,6 @@ function gantt(d: Gantt) {
     }
   }
   const label = span > 3660 ? (n: number) => String(new Date(n * DAY).getUTCFullYear()) : md;
-  // the dates named at most six times along the axis (every line still drawn): a fortnight's daily dates ran into one
-  // another on a phone, "10/910/1010/11"
   const every = Math.ceil(ticks.length / 6);
   const named = ticks.filter((_, i) => i % every === 0);
   const end = (n: number) => ((n - from) / span < 0.04 ? ' class="first"' : (n - from) / span > 0.96 ? ' class="last"' : '');
@@ -110,9 +90,7 @@ function gantt(d: Gantt) {
   const rows = d.sections.map((s, si) => {
     const head = `<div class="g-sec" data-spot="phase:${si}">${esc(s.name) || '&#8203;'}</div><div class="g-track g-sec-track">${grid}</div>`;
     const bars = s.tasks.map((t, ti) => {
-      // (on the calendar: weekends skipped, three days from a Friday reach the Tuesday)
       const a = dayNum(dates.get(t)!.start), days = Math.max(1, dates.get(t)!.days), key = `task:${si}:${ti}`;
-      // done: quiet grey; under way: striped; critical: red; a milestone: a diamond on its day
       const tags = t.tags ?? [], mile = tags.includes('milestone');
       const cls = `g-bar c${tags.includes('crit') ? 4 : si % 12}${tags.includes('done') ? ' done' : ''}${tags.includes('active') ? ' active' : ''}${mile ? ' mile' : ''}`;
       const when = mile ? md(a) : `${md(a)} – ${md(a + days - 1)} · ${Math.max(1, t.days)}d`;

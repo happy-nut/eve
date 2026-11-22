@@ -1,20 +1,14 @@
-/**
- * The parts a formula is built from, put in by a click in its box (MathEdit.svelte): each is MathLive's template, `#@`
- * where what was selected goes, `#?` an empty slot the caret moves through with Tab. `show` is how its button reads.
- */
 export interface MathPart {
-  tex: string; show?: string; name: string; /** a MathLive command run in place of putting TeX in */ cmd?: string;
-  /** what typed in the box puts it in too (MathLive's shortcuts, and MathEdit's own): said on its button */
+  tex: string; show?: string; name: string; cmd?: string;
   keys?: string;
 }
-export interface MathShelf { id: string; label: string; /** its tab on a phone, where five words ran past the screen */ short: string; parts: MathPart[] }
+export interface MathShelf { id: string; label: string; short: string; parts: MathPart[] }
 
 const sym = (tex: string, name: string, keys?: string): MathPart => ({ tex, name, keys });
 
 export const SHELVES: MathShelf[] = [
   {
     id: 'basic', label: 'Basic', short: 'x²', parts: [
-      // \dfrac: as large inside another fraction as outside it (\frac shrank each level, two deep it was hard to read)
       { tex: '\\dfrac{#@}{#?}', show: '\\frac{a}{b}', name: 'Fraction', keys: '/' },
       { tex: '#@^{#?}', show: 'x^{2}', name: 'Power', keys: '^' },
       { tex: '#@_{#?}', show: 'x_{i}', name: 'Subscript', keys: '_' },
@@ -70,17 +64,12 @@ export const SHELVES: MathShelf[] = [
       { tex: '\\begin{vmatrix}#?&#?\\\\#?&#?\\end{vmatrix}', show: '\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}', name: 'Determinant' },
       { tex: '\\begin{pmatrix}#?\\\\#?\\end{pmatrix}', show: '\\begin{pmatrix}x\\\\y\\end{pmatrix}', name: 'Column vector' },
       { tex: '\\begin{cases}#?&#?\\\\#?&#?\\end{cases}', show: '\\begin{cases}a&x>0\\\\b&x\\le0\\end{cases}', name: 'Cases' },
-      // in a matrix or cases already: a row or a column more (⌘↵ and ⌘; did it, unseen; a phone had no way)
       { tex: 'row', cmd: 'addRowAfter', show: '\\begin{smallmatrix}\\square\\\\ +\\end{smallmatrix}', name: 'Add a row (in a matrix)' },
       { tex: 'column', cmd: 'addColumnAfter', show: '\\begin{smallmatrix}\\square & +\\end{smallmatrix}', name: 'Add a column (in a matrix)' },
     ],
   },
 ];
 
-/**
- * A formula as it is drawn and edited: every fraction as large as the text around it. \frac shrinks what is in it at
- * each level, and two deep a fraction was hard to read; notes written before keep their \frac, drawn this way.
- */
 export const fullSize = (tex: string): string => tex.replace(/\\frac(?![a-zA-Z])/g, '\\dfrac');
 
 /**

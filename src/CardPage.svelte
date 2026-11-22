@@ -18,11 +18,7 @@
   import TableTools from './TableTools.svelte';
   import { composing, handledBy } from './lib/keys';
 
-  // a kanban card as a floating page (Notion "peek"): one markdown editor whose first line is the title,
-  // like a note. One editing host, so a drag that starts in the title runs on into the body.
-  // the page this one shows: one of the pages open (ui.cards), not whichever is on top now
   let { req }: { req: CardReq & CardMore } = $props();
-  /** the column the card is in now (Move to…), from where it was as the page opened (each page is its own: keyed) */
   // svelte-ignore state_referenced_locally
   let column = $state(req.column);
   let el: HTMLDivElement;
@@ -31,11 +27,9 @@
   let dateMenu: ReturnType<typeof DateMenu>;
   let emojiRow: ReturnType<typeof EmojiRow>;
   let editor = $state<TipTap | undefined>();
-  const close = () => ui.closeCard(); // it puts the keyboard back
-  /** the card's fields: the title as its line reads, not as markdown writes it (`2*3*4 > 1` came back `234 &gt; 1`) */
+  const close = () => ui.closeCard();
   function cardOf(md: string) {
     const card = splitCard(md), first = editor?.state.doc.firstChild;
-    // (a title holding more than text, a date or a formula, is left to the markdown's plain reading)
     let text = first?.type.name === 'heading';
     first?.forEach((n) => { if (!n.isText) text = false; });
     if (card.title && text) card.title = first!.textContent;
@@ -63,26 +57,18 @@
     editor.view.focus();
     if (req.markdown !== undefined || (req.title.trim() && req.caret !== 'title')) editor.commands.focus('end');
     else editor.commands.focus(editor.state.doc.firstChild!.nodeSize - 1);
-    // the page grows in from a day opened with Enter: if the webview left the focus on that day behind
-    // it, the keys (Esc included) would go to the calendar, not to the page
     const again = requestAnimationFrame(() => { if (!el.contains(document.activeElement)) editor?.view.focus(); });
-    // the phone's formatting bar; closed, the page under it has it back (a card shut over a day took it with it, and
-    // the bar did nothing in the day after)
     const under = hooks.cardCommand, mine = (id: string) => { if (editor) runEditorCommand(editor, id); };
     hooks.cardCommand = mine;
     return () => { cancelAnimationFrame(again); if (hooks.cardCommand === mine) hooks.cardCommand = under; editor?.destroy(); };
   });
 
-  /** a sheet slides up on a phone; the Mac's floating page grows in place */
   const appear = (node: HTMLElement) => sheet(node, (n) => scale(n, panelIn), dy);
 
-  // a phone: pulled down by its handle, or from the top of the note, the sheet follows the finger and closes.
-  // From inside the note only a drag that sets off at once: a finger held first is selecting text.
   let dy = $state(0);
   let dragging = $state(false);
   const pull = (node: HTMLElement) => isMobile ? pullDown(node, { onpull: (d, on) => { dy = d; dragging = on; }, onclose: close, scroller: () => scrollEl, quick: true }) : undefined;
 
-  // a phone: no ⌫ on a focused card there, so the card's page carries the delete, asked first like a note's
   async function remove() {
     const title = editor?.state.doc.firstChild?.textContent.trim() || 'Untitled';
     const del = req.onDelete;
@@ -91,7 +77,6 @@
     del();
   }
 
-  /** Move to…: the board's columns, the card's own ticked */
   function moveMenu(e: MouseEvent) {
     ui.openMenu(under(e.currentTarget as HTMLElement), (req.columns ?? []).map((c) => ({
       label: c.title || 'Untitled', checked: c.id === column, run: () => { req.move?.(c.id); column = c.id; editor?.commands.focus(); },
@@ -99,12 +84,11 @@
   }
   const columnTitle = $derived((req.columns?.find((c) => c.id === column)?.title || 'Untitled'));
 
-  /** ↵ at the end of the title: on into the body, its first empty line if it starts with one (a new line there, else) */
   function titleEnter(e: KeyboardEvent) {
     if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || composing(e) || req.markdown !== undefined || !editor) return;
     const { state, view } = editor, { selection: sel, doc } = state, title = doc.firstChild;
     if (!sel.empty || title?.type.name !== 'heading' || sel.$from.parent !== title || sel.$from.parentOffset !== title.content.size) return;
-    if (ui.menu || document.querySelector('.suggest')) return; // a popup at the caret wants it
+    if (ui.menu || document.querySelector('.suggest')) return;
     e.preventDefault();
     e.stopPropagation();
     const after = title.nodeSize, next = doc.nodeAt(after), para = state.schema.nodes.paragraph;
@@ -114,21 +98,16 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    // a popup's Esc has already been taken by the editor (and closed the popup) by the time it gets here
     if (e.key === 'Escape' && handledBy(e) !== 'taken') { e.preventDefault(); e.stopPropagation(); close(); }
-    // Tab indents a list (the editor marks those handled); anywhere else it must not walk focus out of the page
     if (e.key === 'Tab' && !e.defaultPrevented) e.preventDefault();
   }
 </script>
 
-<!-- preventDefault: the press would otherwise move the focus to the page under it after close() put it back -->
 <div class="backdrop" transition:fade|global={scrimFade} style:opacity={dy ? Math.max(0.2, 1 - dy / 400) : null} onmousedown={(e) => { e.preventDefault(); close(); }} role="presentation"></div>
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="card-page" transition:appear|global use:pull class:dragging class:with-del={isMobile && (!!req.onDelete || !!req.move)} style:translate={dy ? `0 ${dy}px` : null}
   role="dialog" tabindex="-1" onkeydown={onKey} onkeydowncapture={titleEnter}>
   {#if isMobile}<div class="grip" aria-hidden="true"></div>{/if}
-  <!-- the card's own: Move to… (a phone can't drag it to another column), delete (the Mac's ⌫ on the board was the
-       only other way), and on the Mac a close (Esc or a click outside, neither of which shows) -->
   <div class="ctools">
     {#if req.move && (req.columns?.length ?? 0) > 1}
       <button class="cmove" aria-label="Move to another column" title="Move to another column" onmousedown={(e) => e.preventDefault()} onclick={moveMenu}>
@@ -164,21 +143,15 @@
     /* in the middle by its margins, not a transform: a transform makes the card the box a diagram's whole screen
        fills (app.css takes it off then), and with it off a translate's card sat with its corner in the middle */
     position: fixed; z-index: var(--z-sheet); inset: 0; margin: auto;
-    /* as large as the window lets it be: 760 wide in a small window, two-thirds of a wide one (held to 760 and 760
-       tall, a calendar's day or a board's card stayed a small box in the middle of a big screen) */
     width: min(92vw, max(760px, 66vw), 1240px); height: min(86vh, max(760px, 80vh), 1100px); display: flex; flex-direction: column; overflow: hidden;
     background: var(--bg-pop); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
   }
-  /* the scroller sits inside the card so the outline rail can stay put while the page scrolls */
   .card-scroll { flex: 1; padding: 40px 56px 0; overflow-y: auto; scrollbar-width: none; }
   .card-scroll::-webkit-scrollbar { display: none; }
-  /* a phone: the note's own 20px margins, no card margin on top of them; a handle says it is a sheet */
   :global(html.mobile) .card-scroll { padding: 8px 0 0; }
-  /* let go short of closing: it settles back */
   :global(html.mobile) .card-page { transition: translate 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
   :global(html.mobile) .card-page.dragging { transition: none; }
   .grip { flex: none; width: 36px; height: 4px; border-radius: 2px; margin: 8px auto 2px; background: var(--bg-active); }
-  /* the card's own buttons, at the page's top right (a sheet's: beside the handle); the title starts below them */
   .ctools { position: absolute; top: 8px; right: 10px; z-index: var(--z-raised); display: flex; align-items: center; gap: 2px; }
   .ctools button {
     height: 30px; min-width: 30px; border: 0; border-radius: 8px; background: none; padding: 0 6px; font: inherit; font-size: 12.5px;
@@ -194,11 +167,9 @@
   :global(html.mobile) .card-page.with-del .card-scroll { padding-top: 40px; }
   .card-body { flex: 1; }
   .card-page .card-body :global(.tiptap) { padding: 0 0 120px; max-width: none; min-height: 100%; }
-  /* an untitled card still shows where the title goes (the editor's own placeholder is for paragraphs) */
   .card-page .card-body :global(.tiptap > h1:first-child:has(> br:only-child))::before {
     content: 'Untitled'; color: var(--fg-dim); float: left; height: 0; pointer-events: none;
   }
-  /* a template, not a card: says so above it */
   .tpl-note {
     margin: 0; padding: 10px 52px 10px 18px; font-size: 12.5px; color: var(--fg-dim);
     background: color-mix(in srgb, var(--accent) 7%, transparent); border-bottom: 1px solid var(--line);

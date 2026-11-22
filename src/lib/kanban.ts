@@ -6,19 +6,12 @@ import Board from '../Kanban.svelte';
 import { focusBack } from './code';
 import { defaultBoard, parseBoard, parseTemplate, serializeBoard, type CardTemplate, type Column } from './board';
 
-/**
- * Kanban block: an atom node whose whole state is one attribute (the columns); the board UI is
- * Kanban.svelte mounted in the node view. File form is a ```kanban fence holding JSON (see board.ts);
- * a fence that does not parse stays a plain code block so nothing is lost.
- */
 let enterNext = false;
-/** Insert a fresh board at the cursor and put keyboard focus in it. */
 export const insertKanban = (editor: { chain: () => any }) => {
   enterNext = true;
   editor.chain().focus().insertContent([{ type: 'kanban', attrs: { columns: defaultBoard() } }, { type: 'paragraph' }]).run();
 };
 
-/** Delete the board at `pos` (asks first when it holds cards; ⌘Z brings it back either way). */
 export async function deleteBoard(editor: Editor, pos: number) {
   const node = editor.state.doc.nodeAt(pos);
   if (node?.type.name !== 'kanban') return;
@@ -27,25 +20,19 @@ export async function deleteBoard(editor: Editor, pos: number) {
   editor.chain().deleteRange({ from: pos, to: pos + node.nodeSize }).focus().run();
 }
 
-/**
- * The board at `pos` given `columns`, one step to undo. `group`: a step of its own unless one of the same group came
- * just before, which it joins (a card made and its title typed into it: two ⌘Z took it away, an empty "Untitled"
- * card between). The history's own grouping of a composition does it: steps alike in theirs are one.
- */
 export function commitBoard(editor: Editor, pos: number, columns: Column[], group?: string) {
   const tr = editor.state.tr.setNodeMarkup(pos, undefined, { ...editor.state.doc.nodeAt(pos)!.attrs, columns });
   if (group) tr.setMeta('composition', group);
   editor.view.dispatch(tr);
 }
 
-/** Keyboard focus into the board at `pos` (Kanban.svelte decides where). */
 const enterBoard = (editor: Editor, pos: number) => (editor.view.nodeDOM(pos) as any)?.__enter?.();
 
 export const Kanban = Node.create({
   name: 'kanban',
   group: 'block',
   atom: true,
-  selectable: false, // the board is entered, never selected as a block
+  selectable: false,
 
   addAttributes() {
     return {
@@ -70,11 +57,9 @@ export const Kanban = Node.create({
         target: dom,
         props: {
           columns: node.attrs.columns,
-          // every attribute is carried over: setNodeMarkup replaces them all
           commit: (columns: Column[], group?: string) => commitBoard(editor, pos(), columns, group),
           template: (): CardTemplate | null => editor.state.doc.nodeAt(pos())?.attrs.template ?? null,
           saveTemplate: (template: CardTemplate) => editor.view.dispatch(editor.state.tr.setNodeMarkup(pos(), undefined, { ...editor.state.doc.nodeAt(pos())!.attrs, template })),
-          // leave to the text before / after the board (a paragraph is added after it when there is none)
           exit: (where: 'before' | 'after') => {
             const p = pos(), tr = editor.state.tr;
             if (where === 'after' && !tr.doc.nodeAt(p + 1)) tr.insert(p + 1, editor.schema.nodes.paragraph.create());
@@ -91,21 +76,19 @@ export const Kanban = Node.create({
       if (enterNext) { enterNext = false; setTimeout(() => app.enter(true)); }
       return {
         dom,
-        stopEvent: () => true, // the board owns every event inside it (keys, drag, clicks)
+        stopEvent: () => true,
         ignoreMutation: () => true,
         update: (n) => {
           if (n.type.name !== 'kanban') return false;
           app.set(n.attrs.columns);
           return true;
         },
-        // the keyboard on the board as it goes (an undo took it out): back to the note, not left on nothing
         destroy: () => { const had = dom.contains(document.activeElement); void unmount(app); if (had) focusBack(editor); },
       };
     };
   },
 
   addKeyboardShortcuts() {
-    // ↓ from the text above / ↑ from the text below step into the board (⌫ / Delete beside it: selectMediaFirst)
     const top = (editor: Editor) => {
       const s = editor.state.selection;
       return s instanceof TextSelection && s.empty && s.$from.depth >= 1 ? s.$from : null;
@@ -134,7 +117,6 @@ export const Kanban = Node.create({
     return {
       markdown: {
         serialize(state: any, node: any) {
-          // JSON lines never start with a backtick, so a plain fence can't be closed early by a card body
           state.write('```kanban');
           state.ensureNewLine();
           state.text(serializeBoard(node.attrs.columns, node.attrs.template), false);
@@ -145,7 +127,7 @@ export const Kanban = Node.create({
         parse: {
           updateDOM(root: HTMLElement) {
             for (const code of [...root.querySelectorAll('pre > code.language-kanban')]) {
-              if (!parseBoard(code.textContent ?? '')) continue; // broken JSON stays a visible, editable code block
+              if (!parseBoard(code.textContent ?? '')) continue;
               const div = document.createElement('div');
               div.setAttribute('data-kanban', '');
               div.textContent = code.textContent ?? '';

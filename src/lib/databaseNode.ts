@@ -5,11 +5,6 @@ import { notes } from './notes.svelte';
 import { focusBack } from './code';
 import { defaultDb, parseDb, serializeDb, type DbSchema } from './database';
 
-/**
- * The database block: an atom whose whole state is one attribute (what the table is), the table itself
- * Database.svelte mounted in the node view, as a board is (kanban.ts). File form is a ```database fence of JSON; one
- * that does not parse stays a code block, nothing lost. Its rows are the pages under the note it is in.
- */
 export const insertDatabase = (editor: { chain: () => any }) =>
   editor.chain().focus().insertContent([{ type: 'database', attrs: { schema: defaultDb() } }, { type: 'paragraph' }]).run();
 
@@ -19,7 +14,6 @@ export const DatabaseBlock = Node.create({
   atom: true,
   selectable: false,
 
-  // the note the editor is (createEditor says): a day's page or a card floats over another note, the one open
   addOptions() {
     return { page: (): string | null => notes.currentId };
   },
@@ -45,14 +39,12 @@ export const DatabaseBlock = Node.create({
         props: {
           schema: node.attrs.schema,
           commit: (schema: DbSchema) => editor.view.dispatch(editor.state.tr.setNodeMarkup(pos(), undefined, { ...editor.state.doc.nodeAt(pos())!.attrs, schema })),
-          // the note it is in: a day's page's own, not the calendar's (every day's database showed the same rows, written
-          // under the calendar)
           page: () => this.options.page(),
         },
       });
       return {
         dom,
-        stopEvent: () => true, // the table owns its keys, clicks and drags
+        stopEvent: () => true,
         ignoreMutation: () => true,
         update: (n) => {
           if (n.type.name !== 'database') return false;

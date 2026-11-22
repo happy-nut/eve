@@ -4,19 +4,16 @@
 // along its lines, a box pointed at lights the way through it, and ▶ tells it a step at a time. Nothing is hidden at
 // rest: the finished picture is what is drawn, and the motion only plays over it (none with the system's Reduce motion).
 
-const UNIT = 0.6; // seconds a level (or a message) takes
-const MAX = 2.4; // a long diagram's levels are squeezed so the whole of it is drawn in about this long
+const UNIT = 0.6;
+const MAX = 2.4;
 const FADE = 400, POP = 520;
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** `stage`: which press of → in a presentation brings it up (a flowchart's level, a sequence's message) */
 type Step = { el: Element; at: number; stage: number; line?: SVGPathElement | SVGLineElement };
 
-/** what comes up when: an element, the second it starts at, and its line when it is one */
 export function timeline(svg: SVGSVGElement): Step[] {
   const kind = svg.getAttribute('aria-roledescription');
   if (kind === 'sequence') {
-    // a message to oneself is drawn as a loop, a path, not a line
     const msgs = [...svg.querySelectorAll<SVGLineElement | SVGPathElement>(':is(line, path)[class^="messageLine"]')];
     const u = Math.min(UNIT, MAX / Math.max(1, msgs.length));
     const steps: Step[] = [...svg.querySelectorAll('rect.actor, text.actor, g.actor-man')].map((el) => ({ el, at: 0, stage: 0 }));
@@ -24,7 +21,6 @@ export function timeline(svg: SVGSVGElement): Step[] {
     msgs.forEach((line, i) => {
       const at = 0.4 + i * u;
       steps.push({ el: line, at, stage: i + 1, line });
-      // its words are the text just before it
       const t = line.previousElementSibling;
       if (t?.classList.contains('messageText')) steps.push({ el: t, at, stage: i + 1 });
     });
@@ -38,9 +34,7 @@ export function timeline(svg: SVGSVGElement): Step[] {
   const steps: Step[] = [...nodes].map(([id, el]) => ({ el, at: level.get(id)! * u, stage: level.get(id)! }));
   for (const { p, ends } of lines) {
     const [s, d] = ends ?? ['', ''];
-    // from its source once that is up, landing about when its target comes up (a line back up the chart: when it is due)
     const at = Math.max((level.get(s) ?? 0) * u + 0.25 * (u / UNIT), (level.get(d) ?? 0) * u - 0.4 * (u / UNIT));
-    // a step at a time it comes with its target (a line back up the chart: with its source, the later of the two)
     const stage = Math.max(level.get(s) ?? 0, level.get(d) ?? 0);
     steps.push({ el: p, at, stage, line: p });
     const label = labels.get(p.dataset.id!);
@@ -49,7 +43,6 @@ export function timeline(svg: SVGSVGElement): Step[] {
   return steps;
 }
 
-/** a flowchart's boxes by name, its lines with the boxes at their ends, and their labels; null: not a flowchart */
 function flowParts(svg: SVGSVGElement) {
   if (svg.getAttribute('aria-roledescription') !== 'flowchart-v2') return null;
   const prefix = `${svg.id}-flowchart-`;
@@ -85,7 +78,6 @@ function flowParts(svg: SVGSVGElement) {
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** each box's level: breadth first from the ones nothing points to (or the first, in a circle) */
 export function levels(ids: string[], pairs: [string, string][]): Map<string, number> {
   const level = new Map<string, number>();
   const pointed = new Set(pairs.map(([, d]) => d));
@@ -96,14 +88,11 @@ export function levels(ids: string[], pairs: [string, string][]): Map<string, nu
     const next: string[] = [];
     for (const s of queue) for (const [a, d] of pairs) if (a === s && !level.has(d)) { level.set(d, level.get(s)! + 1); next.push(d); }
     queue = next;
-    // a part of the chart nothing above reaches (a circle of its own): from its first box, after the rest
     if (!queue.length) { const left = ids.find((i) => !level.has(i)); if (left) { level.set(left, Math.max(...level.values()) + 1); queue = [left]; } }
   }
   return level;
 }
 
-/** a box given its step (`class A step2`, its node drawn with the class) comes up at it, the others at their level;
- *  the levels no box is at are closed up, so numbering one box 5 does not leave four presses with nothing */
 export function numbered(level: Map<string, number>, nodes: Map<string, Element>): Map<string, number> {
   for (const [id, el] of nodes) {
     const k = /(?:^|\s)step([1-9]\d*)(?:\s|$)/.exec(el.getAttribute('class') ?? '');
@@ -120,31 +109,21 @@ const len = (l: SVGPathElement | SVGLineElement) => {
   return Math.hypot(x2.baseVal.value - x1.baseVal.value, y2.baseVal.value - y1.baseVal.value);
 };
 
-/** a line drawing in has its head hidden by a class, not by its own marker-end changed and remembered: a value kept to
- *  be put back was the wrong one after quick turns or in a copy taken mid-way, and the line stayed headless. A class
- *  holds nothing to get wrong; at rest no line has it, and a copy's is taken off when the copy is walked */
 export const DRAWING = 'eve-drawing';
 const heads = new WeakMap<Element, ReturnType<typeof setTimeout>>();
-/** every line of `svg` with its head again (a copy taken while lines drew in, or a walk begun anew) */
 const settle = (svg: SVGSVGElement) => { for (const l of svg.querySelectorAll(`.${DRAWING}`)) { clearTimeout(heads.get(l)); heads.delete(l); l.classList.remove(DRAWING); } };
 
-/** one element coming up: a line drawn from its start, anything else faded in */
 function enter({ el, line }: Step, delay: number): Animation {
-  // a box springs up into its place, a little past its size and back (app.css scales it from its own middle); anything
-  // else fades in
   if (!line && el.matches('g.node, rect.actor, g.actor-man')) {
     return el.animate([{ opacity: 0, scale: '0.92' }, { opacity: 1, scale: '1.015', offset: 0.6 }, { opacity: 1, scale: '1' }],
       { duration: POP, delay, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'backwards' });
   }
   if (!line) return el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' });
   const n = len(line);
-  // the dash is the keyframes' own, so a dotted line goes back to its dots when it is drawn
   const a = line.animate([
     { strokeDasharray: `${n}`, strokeDashoffset: `${n}` },
     { strokeDasharray: `${n}`, strokeDashoffset: '0' },
   ], { duration: FADE, delay, easing: 'ease-out', fill: 'backwards' });
-  // and its arrowhead only once it has got there (drawn at its end from the start, it was there before the line); put
-  // back by a timer, not by the animation's end: an animation stalled while Eve was away left the line headless
   clearTimeout(heads.get(line));
   line.classList.add(DRAWING);
   const back = () => { clearTimeout(heads.get(line)); heads.delete(line); line.classList.remove(DRAWING); };
@@ -153,10 +132,6 @@ function enter({ el, line }: Step, delay: number): Animation {
   return a;
 }
 
-/**
- * The diagram a step at a time, as a presentation's → and ← walk it: `count` steps (0 when it has none to take), and
- * `show(k)` puts up steps 0…k, the one just reached coming in as it does when the diagram draws itself.
- */
 export function stepper(svg: SVGSVGElement): { count: number; show(k: number): void } {
   settle(svg);
   const steps = timeline(svg);
@@ -167,7 +142,7 @@ export function stepper(svg: SVGSVGElement): { count: number; show(k: number): v
     show(k) {
       for (const s of steps) {
         (s.el as SVGElement).style.opacity = s.stage > k ? '0' : '';
-        const f = s.line?.nextElementSibling; // its flow (flow()) hidden and shown with it
+        const f = s.line?.nextElementSibling;
         if (f?.classList.contains(FLOW)) (f as SVGElement).style.opacity = s.stage > k ? '0' : '';
         if (s.stage === k && k > shown && 'animate' in s.el && !reduced()) enter(s, 0);
       }
@@ -176,9 +151,6 @@ export function stepper(svg: SVGSVGElement): { count: number; show(k: number): v
   };
 }
 
-/** the diagram drawn in, once it is well in sight; the returned function stops it (drawn again, put away) */
-/** `played`: told once the intro has run to its end (a drawing put away, or drawn again, before then has not had one:
- *  a block drawn again mid-way, as one Eve draws at once can be as the note settles, was left with no intro at all) */
 export function drawIn(svg: SVGSVGElement, played?: () => void): () => void {
   if (reduced() || typeof IntersectionObserver === 'undefined' || !svg.animate) return () => {};
   settle(svg);
@@ -187,7 +159,7 @@ export function drawIn(svg: SVGSVGElement, played?: () => void): () => void {
   const running: Animation[] = [];
   const play = () => {
     for (const s of steps) running.push(enter(s, s.at * 1000));
-    Promise.all(running.map((a) => a.finished)).then(() => played?.(), () => {}); // (cancelled: not played)
+    Promise.all(running.map((a) => a.finished)).then(() => played?.(), () => {});
   };
   const io = new IntersectionObserver(([e]) => { if (e?.isIntersecting) { io.disconnect(); play(); } }, { threshold: 0.3 });
   io.observe(svg);
@@ -195,18 +167,11 @@ export function drawIn(svg: SVGSVGElement, played?: () => void): () => void {
 }
 
 
-/**
- * A box pointed at lights the whole way through it: every box and line that leads to it from the start, and on from
- * it to the end, with the lines into and out of it (one back up the chart too) and their labels; the rest of the chart
- * steps back (app.css, `.eve-focus`), so "how does it get here, and where does it go" reads at a glance. The returned
- * function stops it.
- */
 export function focus(svg: SVGSVGElement): () => void {
   const parts = flowParts(svg);
   if (!parts) return () => {};
   const { nodes, lines, labels } = parts;
   const ids = new Map([...nodes].map(([id, el]) => [el, id]));
-  // the lines that go on through the chart: one back to a box already on its way (a loop) is a way round, not through
   const back = new Set<(typeof lines)[number]>(), seen = new Set<string>(), stack = new Set<string>();
   const walk = (at: string) => {
     seen.add(at); stack.add(at);
@@ -257,13 +222,7 @@ export function focus(svg: SVGSVGElement): () => void {
   return () => { clear(); svg.removeEventListener('pointerover', over); svg.removeEventListener('pointerleave', clear); };
 }
 
-/** how long a played diagram stays on each step */
 const BEAT = 900;
-/**
- * The diagram told a step at a time where it stands in the note (▶ on it): its first boxes, then each level (a
- * sequence: each message) coming in after the last, the one just reached marked (app.css, `.eve-now`), and the whole
- * back once it has been told. `done` is told when it ends; the returned function ends it at once.
- */
 export function play(svg: SVGSVGElement, done: () => void): () => void {
   const s = stepper(svg), steps = timeline(svg);
   if (!s.count) { done(); return () => {}; }
@@ -292,13 +251,7 @@ export function play(svg: SVGSVGElement, done: () => void): () => void {
   return end;
 }
 
-/** a line's flowing copy (flow()): a picture of the drawing leaves it out (snapshot.ts) */
 export const FLOW = 'eve-flow';
-/**
- * Each drawn line of a flowchart (and a sequence's messages) with light running along it the way it goes, over it as
- * a copy (app.css draws the copy as short moving dashes): only while the diagram is in sight, none with Reduce motion.
- * Dotted lines, and ones that already move, are left as they are. The returned function takes the copies away.
- */
 export function flow(svg: SVGSVGElement): () => void {
   if (reduced()) return () => {};
   const lines = svg.querySelectorAll<SVGPathElement | SVGLineElement>(

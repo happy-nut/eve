@@ -1,5 +1,4 @@
 <script lang="ts">
-  /** A shortcut as one rounded chip per key: ⌘ ⇧ N */
   import { keyParts } from './lib/shortcuts.svelte';
   let { keys, dark = false }: { keys: string; dark?: boolean } = $props();
 </script>

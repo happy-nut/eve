@@ -18,41 +18,23 @@
   import { tagSpots, adders, toggles } from './lib/spots';
   import { followPointer } from './lib/followPointer';
 
-  /**
-   * A ```mermaid block in the note: its drawing, and, clicked, the drawing made editable right there — a flowchart's
-   * boxes and lines on the picture itself (FlowEditor.svelte), any other chart's parts clicked and typed in where they
-   * are drawn too (ChartEditor.svelte); all of a chart's parts as rows under it on asking (DiagramForm.svelte). Every change is written back into the block's code (onCode), which is what the note keeps;
-   * an undo, a sync or the code typed by hand comes back as `code` and is read again. A diagram written with more
-   * than these can show (styles, subgraphs, notes) is drawn, and edited as its code.
-   */
   let { code, start, codeShown, onCode, onCodeEdit, onCodeLeave, onError, onHistory, onLeave, onDelete }: {
     code: string;
-    /** made just now from the / menu: open for editing at once */
     start: boolean;
-    /** the caret is in the block's code, which shows above the drawing */
     codeShown: boolean;
     onCode: (code: string) => void;
     onCodeEdit: () => void;
-    /** the caret out of the code, after the block: the drawing clicked while the code shows */
     onCodeLeave: () => void;
     onError: (failed: boolean) => void;
-    /** the note's undo (false) or redo (true): ⌘Z with the keyboard on the diagram */
     onHistory: (redo: boolean) => void;
-    /** done with it from the keyboard or Done: the note's keyboard back, the block selected (it was on nothing, and
-     *  the keys typed next, ⌘Z too, went nowhere) */
     onLeave: () => void;
-    /** the block deleted (one ⌘Z brings it back); `focus`: the note's keyboard back at its place */
     onDelete: (focus: boolean) => void;
   } = $props();
 
   let root: HTMLDivElement, canvas = $state<HTMLDivElement | null>(null);
-  // what it was given when the block was made; later changes come through the effects below
   const first = untrack(() => ({ code, start }));
   let d = $state<Diagram | null>(fromCode(first.code));
   let active = $state(first.start && !!fromCode(first.code));
-  // The note's code is left exactly as it was written until the chart is changed here: read into a chart and written
-  // back, `A --> B` would become the chart's own spelling of it, a change no one made. `base` is the chart as the
-  // note holds it; only a chart that differs from it is written. `sent` is the code last written, coming back.
   const mine = $derived(d ? toCode(d) : null);
   let base = untrack(() => mine);
   let sent: string | null = null;
@@ -65,23 +47,19 @@
     sent = c;
     edited = true;
     clearTimeout(writeTimer);
-    // written into the note a moment after the last change, unless the note changed it meanwhile (an undo, a sync)
     const at = untrack(() => code);
     writeTimer = setTimeout(() => { writeTimer = undefined; if (code === at) onCode(c); }, 250);
   });
-  /** a change still waiting, written now (before an undo, so the undo undoes it) */
   function flush() {
     if (writeTimer === undefined) return;
     clearTimeout(writeTimer);
     writeTimer = undefined;
     if (mine !== null && mine !== code) onCode(mine);
   }
-  // the code changed elsewhere (undo, sync, typed by hand): read again
   $effect(() => {
     const c = code;
     untrack(() => {
       if (c === sent) return;
-      // changed elsewhere (a sync, an undo): what this was about to write is older, and would write over it
       clearTimeout(writeTimer);
       writeTimer = undefined;
       sent = null;
@@ -91,15 +69,10 @@
       if (!d) active = false;
     });
   });
-  /** what is drawn: the note's own code, or the chart as changed here (written into the note a moment later) */
   const drawn = $derived(edited && mine !== null ? mine : code);
 
-  // ---- the drawing ----
   let svg = $state(''), error = $state(''), seq = 0, drawTimer: ReturnType<typeof setTimeout> | undefined;
   let theme = $state(themeKey());
-  // A sequence diagram's blocks folded while it is looked at (seqFold.ts): a copy of the code is drawn with their
-  // insides as one note, the note's own code untouched. Kept while the block is in the open note, on the whole screen
-  // too (the same block). `shown` and `drawnFolds` are the blocks and folds of the drawing as it is now.
   let folds = $state<ReadonlySet<string>>(new Set());
   let shown = $state<SeqBlock[]>([]), drawnFolds = $state<ReadonlySet<string>>(new Set());
   $effect(() => {
@@ -110,12 +83,11 @@
     drawTimer = setTimeout(async () => {
       let view = foldSeq(c, f);
       let out = await renderMermaid(view.code);
-      // folded, it could not be drawn (the hidden lines did more than the note across them keeps): drawn unfolded
       if ('error' in out && view.code !== c) { view = foldSeq(c, new Set()); out = await renderMermaid(c); if (n === seq && 'svg' in out) folds = new Set(); }
       if (n !== seq) return;
       if ('svg' in out) { svg = out.svg; error = ''; shown = view.shown; drawnFolds = f; } else error = out.error;
       onError(!!error);
-    }, untrack(() => svg) ? 120 : 0); // read without depending on it: each drawing is a new string, and would draw again
+    }, untrack(() => svg) ? 120 : 0);
   });
   let centred = false;
   function centreRoot() {
@@ -125,35 +97,26 @@
     const a = r.getBoundingClientRect(), c = canvas.getBoundingClientRect();
     canvas.scrollLeft += a.left + a.width / 2 - c.left - canvas.clientWidth / 2;
   }
-  /** the drawing's block labels matched to their blocks, to fold by a click on them; false: a row of them under it */
   let labelled = $state(true);
   $effect(() => {
     void svg;
     const list = shown, f = drawnFolds;
     tick().then(() => {
       const el = canvas?.querySelector(':scope > svg');
-      if (el instanceof SVGSVGElement) spreadLabels(el); // a line's label off another's (edgeLabels.ts)
-      // on a phone, mermaid's own drawing at four fifths of its size at least, the card scrolling across: shrunk to the
-      // card's width, a sequence's or a table's words were too small to read or to hit
+      if (el instanceof SVGSVGElement) spreadLabels(el);
       if (isMobile && el instanceof SVGSVGElement && d && /^(sequence|class|state|er)$/.test(d.kind) && el.viewBox.baseVal?.width) el.style.minWidth = `${Math.round(el.viewBox.baseVal.width * 0.8)}px`;
-      if (d && canvas) tagSpots(d, canvas); // its parts marked, to be clicked and typed in (spots.ts)
-      // a mind map wider than the card shown from its middle, its root, the first time (from its left edge, the root
-      // was cut off on a phone)
+      if (d && canvas) tagSpots(d, canvas);
       if (d?.kind === 'mindmap' && canvas && !centred && canvas.scrollWidth > canvas.clientWidth) centreRoot();
       labelled = !list.some(foldable) || (!!el && markFolds(el, list, f));
     });
   });
-  // done with it: a drawing wider than its card, scrolled across as it was edited, shown again from where it starts (it
-  // stayed on its far side, the card an empty stretch with the edges of two tables); a mind map from its root
   let wasActive = false;
   $effect(() => {
     const now = active;
     if (wasActive && !now && canvas && canvas.scrollWidth > canvas.clientWidth) { canvas.scrollLeft = 0; if (d?.kind === 'mindmap') centreRoot(); }
     wasActive = now;
   });
-  // drawn in once, the first time it is seen in the note: not again as it is edited, folded or drawn in the other theme
   let introduced = false;
-  /** told a step at a time (▶): what stops it, while it plays; `playable`, a drawing with steps to tell */
   let playing = $state<(() => void) | null>(null), playable = $state(false);
   function togglePlay() {
     const el = canvas?.querySelector(':scope > svg');
@@ -168,9 +131,6 @@
     tick().then(() => {
       const el = canvas?.querySelector(':scope > svg');
       if (!(el instanceof SVGSVGElement)) return;
-      // (introduced once it has played to its end: a drawing replaced mid-way, as Eve's own can be as the note settles,
-      // left the next one without its intro)
-      // its lines flow once it has drawn itself in (flowing at once, a line drawing in was already lit end to end)
       let flowing = introduced ? flowLines(el) : () => {};
       const intro = introduced ? () => {} : drawIn(el, () => { introduced = true; flowing = flowLines(el); });
       const lit = focus(el);
@@ -186,38 +146,27 @@
   }
   const chips = $derived(labelled || error ? [] : shown.filter(foldable));
   onMount(() => {
-    // drawn again in the other theme (Settings, or the system's dark mode)
     const again = () => (theme = themeKey());
     const scheme = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
     scheme?.addEventListener('change', again);
     const watch = new MutationObserver(again);
     watch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    // a click anywhere else in the app is done with it (not one on a choice's popup or sheet, or its backdrop). On the
-    // click, not the press: closed on the press, its tools folded away under the pointer and the click (a checkbox
-    // below, another diagram) landed on whatever moved up into their place
     const away = (e: MouseEvent) => {
       const t = e.target as Element | null;
       if (active && t && !root.contains(t) && !t.closest('[role="listbox"], [role="menu"], .backdrop, .scrim, .sheet, [role="dialog"]')) {
         active = false;
-        if (d && isEmpty(d)) { flush(); onDelete(false); } // its last box deleted: nothing is left to keep
+        if (d && isEmpty(d)) { flush(); onDelete(false); }
       }
     };
     document.addEventListener('click', away, true);
-    // keys meant for it while it is open: the keyboard on it, on nothing, or still in the note's text (a click on the
-    // drawing leaves it there). Esc lets go of it (it fell through and hid the window); ⌘Z undoes into it
     const keys = (e: KeyboardEvent) => {
-      // ⌘↵ in its code: its drawing, from the keyboard (it could be opened by a click only)
       if (!active && codeShown && d && (e.metaKey || e.ctrlKey) && e.key === 'Enter' && (e.target as Element).closest?.('.tiptap') === root.closest('.tiptap')) {
         e.preventDefault(); e.stopPropagation(); toDrawing(); return;
       }
       if (e.defaultPrevented) return;
       const t = e.target as Element;
-      // a list open in a row (Select): its keys are its own — heard here first, its Esc closed the whole diagram
       if (t.closest?.('[aria-expanded="true"]')) return;
-      // (a picked box's field, holding the keyboard unseen until a key is typed, is not typing: FlowEditor.svelte)
       const typing = t instanceof HTMLElement && t.matches('input:not(.armed), textarea, select');
-      // on the whole screen: + − 0 zoom, and Esc with nothing being edited puts it back in the note
-      // ⌘Z on the whole screen, open for editing or not: the note's undo (the note itself has no keyboard there)
       if (full && !typing && root.contains(t) || full && t === document.body) {
         if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y'))) {
           e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y'); return;
@@ -230,72 +179,57 @@
         if (e.key === '0') { e.preventDefault(); fit(); return; }
       }
       if (!active) return;
-      // ⌘Z in a row of the form: the note's undo, as everywhere else in it (the field's own undo and the note's took
-      // turns, and the diagram went with them)
       if (typing && root.contains(t) && !t.closest('.layer') && (e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y'))) {
         e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y'); return;
       }
       const ours = t === document.body || (root.contains(t) && !typing) || (!typing && t.closest?.('.tiptap') === root.closest('.tiptap'));
       if (!ours) return;
-      // Esc lets go of what is picked in the picture first (a box, a line, a lane, Connect), then of the diagram
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (!flowEd?.escape() && !chartEd?.escape()) leave(); }
-      // ⌘A on a row's button or with the keyboard let go: the page's own select-all took in the note's text, the note
-      // took that for its selection, and the next letter typed replaced the whole note
       else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && (t === document.body || root.contains(t))) { e.preventDefault(); e.stopPropagation(); }
       else if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'z' || (e.ctrlKey && e.key.toLowerCase() === 'y')) && t === document.body) {
         e.preventDefault(); e.stopPropagation(); flush(); onHistory(e.shiftKey || e.key.toLowerCase() === 'y');
       }
-      // a letter, ⌫ or ⌦ with no part of a chart picked: nothing (it went to the note, whose selection was the diagram
-      // itself, and the letter took its place)
       else if (chart && t === document.body && !e.metaKey && !e.ctrlKey && !e.altKey && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete')) {
         e.preventDefault(); e.stopPropagation();
       }
     };
-    // (ahead of the note's own keymaps: its Esc and ⌘Z are the diagram's while it is open)
     const unclaim = claimKeys('global', { '*': keys }, { capture: true });
     return () => {
-      if (full) ui.closeDiagramView(); // gone while on the whole screen (an undo took it out): the app's keys come back
+      if (full) ui.closeDiagramView();
       clearTimeout(drawTimer);
-      flush(); // a change still waiting is not lost (code.ts writes it only into this same block, if it is still there)
+      flush();
       scheme?.removeEventListener('change', again); watch.disconnect();
       document.removeEventListener('click', away, true);
       unclaim();
     };
   });
   $effect(() => { if (codeShown) active = false; });
-  // a phone's back while the diagram is being edited: one step out of it, as Esc on a Mac (it left the note, and its
-  // field, going with it, threw)
   $effect(() => {
     if (!active) return;
     const back = () => { if (!flowEd?.escape() && !chartEd?.escape()) leave(); };
     hooks.diagramBack = back;
     return () => { if (hooks.diagramBack === back) hooks.diagramBack = undefined; };
   });
-  // edited as its code (written by hand, or Code pressed): that is the note's own text, under the whole screen, so the
-  // diagram goes back into the note to be edited there
   $effect(() => { if (codeShown && full) untrack(leaveFull); });
 
-  /** the box the opening click landed on, picked as the editor comes up */
   let pick = $state<string | null>(null), pickField = $state<string | null>(null);
   function open(e: MouseEvent) {
-    // a sequence diagram's block label: folded or unfolded, not opened
     const fold = (e.target as Element).closest?.('[data-fold]');
     if (fold && !active && !error) { e.preventDefault(); toggleFold(fold.getAttribute('data-fold')!); return; }
     if (active || error) return;
-    if (!d) { onCodeEdit(); return; } // written by hand: its code is how it is edited
+    if (!d) { onCodeEdit(); return; }
     e.preventDefault();
-    if (codeShown) onCodeLeave(); // the drawing clicked under its code: the code goes, the drawing opens
+    if (codeShown) onCodeLeave();
     const g = (e.target as Element).closest?.('g.node');
     const spot = (e.target as Element).closest?.('[data-spot]');
     pick = d.kind !== 'flowchart' ? spot?.getAttribute('data-spot') ?? null : g ? /-flowchart-(.+)-\d+$/.exec(g.id)?.[1] ?? null : null;
     pickField = d.kind !== 'flowchart' ? spot?.getAttribute('data-field') ?? null : null;
-    letGo(); // the keys typed next are the diagram's, not the note's
+    letGo();
     active = true;
   }
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape' && active && !e.defaultPrevented) { e.preventDefault(); e.stopPropagation(); leave(); }
   }
-  /** opened from the keyboard (↵ on the block selected), as a click opens it: false when it is edited as its code */
   export function edit(): boolean {
     if (active || error) return false;
     if (!d) { onCodeEdit(); return true; }
@@ -304,14 +238,11 @@
     active = true;
     return true;
   }
-  /** Done, Esc: closed, the keyboard back in the note on the block; a chart with nothing left in it goes instead */
   function leave() {
     flush();
     active = false;
-    // (on the whole screen the keyboard stays on it: the note is under it, and typed there the keys would go into it)
     if (d && isEmpty(d)) onDelete(true); else if (!full) onLeave();
   }
-  /** right-click: what the block itself offers (the note's own menu is for its text) */
   function menu(e: MouseEvent) {
     if (full || isMobile) return;
     e.preventDefault();
@@ -327,30 +258,25 @@
     ]);
   }
 
-  /** the drawing onto the clipboard as a picture, on its card's own background */
   async function copyPicture() {
     const drawn = canvas?.firstElementChild;
     const ok = !!drawn && !!canvas && (await pictureOf(drawn, getComputedStyle(canvas).backgroundColor).then(copyPng, () => false));
     if (!ok) void ui.tell('The diagram could not be copied.');
   }
 
-  /** the code shown: to its drawing (the caret out of the code, the drawing open) */
   function toDrawing() {
     onCodeLeave();
     pick = null; pickField = null;
     letGo();
     active = true;
   }
-  /** why a hand-written diagram is edited as code (it opened as code and said nothing of why) */
   const why = $derived(codeShown && !d && !error ? whyCode(code) : null);
   const flow = $derived(active && d?.kind === 'flowchart' ? d : null);
-  /** the dock's + : what the chart adds (a box, a lane; a part, a title, a branch…), each typed in at once */
   function addItems(): MenuItem[] {
     if (flow) return [{ label: 'Box', run: () => flowEd?.addBox() }, { label: 'Lane', run: () => flowEd?.addLane() }];
     if (chart) return adders(chart).map((a) => ({ label: a.label.replace(/^\+ /, ''), run: () => chartEd?.open(a.run()) }));
     return [];
   }
-  /** the dock's ⋯ : its layout and settings, its rows, its code */
   function moreItems(): MenuItem[] {
     const f = flow, c = chart;
     return [
@@ -360,56 +286,38 @@
       { label: 'Edit code', sep: true, run: () => { active = false; onCodeEdit(); } },
     ];
   }
-  /** the note kept where it is while the dock's ↶ ↷ run: the note scrolled to where the change was, the dock went with
-   *  it off the screen, and the ↷ pressed next landed on nothing */
   function stayPut(run: () => void) {
     const sc = root.closest<HTMLElement>('.scroll') ?? (document.scrollingElement as HTMLElement | null);
     const top = sc?.scrollTop ?? 0;
     run();
     if (!sc) return;
-    // (the undo runs a moment later, and the drawing is drawn again after it)
     let n = 0;
     const hold = () => { sc.scrollTop = top; if (++n < 12) requestAnimationFrame(hold); };
     requestAnimationFrame(hold);
   }
   function menuFrom(e: MouseEvent, items: MenuItem[]) {
     e.stopPropagation();
-    // each run once the menu has gone and given the keyboard back to its button: run at once, the field it opened (a
-    // new lane's name, a new part's) lost the keyboard to that button and closed
     ui.openMenu(under(e.currentTarget as HTMLElement), items.map((it) => ({ ...it, run: it.run && (() => requestAnimationFrame(() => it.run!())) })));
   }
   let flowEd = $state<ReturnType<typeof FlowEditor> | null>(null);
   const chart = $derived(active && d && d.kind !== 'flowchart' ? d : null);
   let chartEd = $state<ReturnType<typeof ChartEditor> | null>(null);
-  /** all of the chart's parts as rows under it, asked for (they were all there was, and editing in them was slow) */
   let rows = $state(false);
 
-  // ---- the whole screen: this same block over everything, zoomed and panned, and edited there as in the note ----
-  // (a copy of its picture was shown before, which could only be looked at). Zooming sizes the drawing itself and
-  // panning scrolls it, so the flowchart editor's layer, which follows the picture's scroll, stays on its boxes.
   let full = $state(false), zoom = $state(1);
   const ZOOM_MIN = 0.1, ZOOM_MAX = 8;
   function enterFull() {
-    // its code shown: that goes first (the code is the note's text, under the whole screen, which it would close again)
     if (codeShown) onCodeLeave();
-    // where the keyboard was is kept before it is taken away: kept after, it was nowhere, and the keys typed after
-    // Esc went nowhere too
-    // (the ⤢ itself, focused by its click in some browsers, is gone on the whole screen: the note's text, then)
     const was = document.activeElement as HTMLElement | null;
-    // the note under it is put back where it was: the block, out of the note meanwhile, left a hole that the page
-    // closed up (and moved the text in it), and the note scrolled to its end as it took the keyboard back
     const kept: [Element, number][] = [];
     for (let s = root.parentElement; s; s = s.parentElement) if (s.scrollHeight > s.clientHeight) kept.push([s, s.scrollTop]);
     const back = () => { for (const [s, top] of kept) s.scrollTop = top; };
     ui.viewDiagram(() => { full = false; tick().then(() => { back(); requestAnimationFrame(back); }); }, was && was !== document.body && !root.contains(was) ? was : root.closest<HTMLElement>('.tiptap'));
-    letGo(); // keys are the diagram's now, not the note's text
+    letGo();
     full = true;
     tick().then(fit);
   }
-  /** back into the note (✕, Esc, the phone's back) */
-  // back in the note, the keyboard in it (left on <body>, ⌘Z there undid nothing)
   const leaveFull = () => { ui.closeDiagramView(); if (!active) onLeave(); };
-  /** the drawing's own size, before any zoom */
   function natural(): { el: HTMLElement | SVGSVGElement; w: number; h: number } | null {
     const el = canvas?.firstElementChild as HTMLElement | SVGSVGElement | null;
     if (!el) return null;
@@ -417,12 +325,9 @@
       const vb = el.viewBox.baseVal;
       return vb && vb.width ? { el, w: vb.width, h: vb.height } : null;
     }
-    // a chart Eve draws as HTML takes the width it is given: on the whole screen it is given one of its own, a page's
-    // (it stretched to the screen, and zooming laid it out again narrower instead of making it larger)
     if (full && el.dataset.nw === undefined) {
       if (el.dataset.style === undefined) el.dataset.style = el.getAttribute('style') ?? '';
       el.style.zoom = '1';
-      // it is the canvas that scrolls, not the chart that is held to its width (as a flex item it shrank to it)
       el.style.maxWidth = 'none'; el.style.flex = 'none';
       el.style.width = `${Math.min(720, window.innerWidth - 32)}px`;
       el.dataset.nw = String(el.offsetWidth || 1);
@@ -430,7 +335,6 @@
     }
     return { el, w: +(el.dataset.nw ?? el.offsetWidth) || 1, h: +(el.dataset.nh ?? el.offsetHeight) || 1 };
   }
-  /** the drawing at the zoom on the whole screen, or as the note draws it */
   function size() {
     const n = natural();
     if (!n) return;
@@ -444,19 +348,15 @@
     if (el instanceof SVGSVGElement) {
       el.style.maxWidth = 'none'; el.style.minWidth = '0';
       el.style.width = `${n.w * zoom}px`; el.style.height = `${n.h * zoom}px`;
-    } else el.style.zoom = String(zoom); // a chart Eve draws itself, as HTML
+    } else el.style.zoom = String(zoom);
   }
   $effect(() => { void svg; void zoom; void full; tick().then(size); });
-  /** fitted to the screen (0, or the percentage clicked) */
   function fit() {
     const n = natural();
     if (!canvas || !n) return;
-    // the zoom bar's room kept clear at the foot: fitted to the whole height, a phone on its side had the bar over the
-    // last row of boxes, and the picture scrolled
     const bar = canvas.parentElement?.querySelector<HTMLElement>('.zoombar'), foot = bar ? bar.offsetHeight + 24 : 0;
     zoom = Math.min(Math.max(Math.min((canvas.clientWidth - 48) / n.w, (canvas.clientHeight - 48 - foot) / n.h, 2), ZOOM_MIN), ZOOM_MAX);
   }
-  /** zoomed by `f` about a point of the canvas (its middle), which stays where it is */
   function zoomBy(f: number, px?: number, py?: number) {
     if (!canvas) return;
     px ??= canvas.clientWidth / 2; py ??= canvas.clientHeight / 2;
@@ -475,9 +375,8 @@
     const r = canvas.getBoundingClientRect();
     zoomBy(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
   }
-  /** dragging the empty canvas with the mouse pans it; a drag on a box or a line is the editor's */
   function onPanDown(e: PointerEvent) {
-    if (!full || !canvas || e.pointerType !== 'mouse' || e.button !== 0 || e.shiftKey) return; // Shift: boxes picked by dragging (FlowEditor.svelte)
+    if (!full || !canvas || e.pointerType !== 'mouse' || e.button !== 0 || e.shiftKey) return;
     if ((e.target as Element).closest('g.node, .edgeLabel, path, button, input, textarea, select, a')) return;
     const c = canvas, x0 = e.clientX, y0 = e.clientY, sl = c.scrollLeft, st = c.scrollTop;
     let moved = false;
@@ -490,12 +389,10 @@
     };
     const up = () => {
       c.classList.remove('panning');
-      // the click that ends a pan is not a click on the canvas (it opened the editor, or let go of the box picked)
       if (moved) window.addEventListener('click', (k) => { k.stopPropagation(); k.preventDefault(); }, { capture: true, once: true });
     };
     followPointer({ move, up });
   }
-  /** two fingers pinch on a phone (one finger scrolls, as the canvas scrolls) */
   function pinchZoom(el: HTMLElement) {
     let d0 = 0;
     const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
@@ -523,7 +420,6 @@
     {#if error}{error}{:else}{@html svg}{/if}
   </div>
   {#if chips.length}
-    <!-- the drawing's labels could not be matched to its blocks: they fold from here instead -->
     <div class="foldchips">
       {#each chips as b (b.key)}
         <button type="button" class:on={drawnFolds.has(b.key)} aria-pressed={drawnFolds.has(b.key)} onclick={() => toggleFold(b.key)}>
@@ -535,8 +431,6 @@
   {#if flow && canvas && svg && !error}<FlowEditor bind:this={flowEd} {flow} host={canvas} version={svg} {pick} />{/if}
   {#if chart && canvas && svg && !error}<ChartEditor bind:this={chartEd} d={chart} host={canvas} version={svg} {pick} {pickField} />{/if}
   {#if !error && svg}
-    <!-- its tools, over its top-right corner as the pointer comes over it (and while it is edited): no bar under it to
-         reach for — a click away or Esc is done, + adds, ⋯ holds its layout, its rows and its code -->
     <div class="dock" class:on={active || codeShown} role="toolbar" aria-label="Diagram tools">
       {#if active && d}
         {#if addItems().length}
@@ -555,7 +449,6 @@
         <i class="sep"></i>
       {/if}
       {#if playable && !active}
-        <!-- ▶ tells the diagram a step at a time (diagramMotion.ts's play); while it plays, the dock stays -->
         <button type="button" class="mermaid-play" class:on={!!playing} style="--i: 1" aria-label={playing ? 'Stop' : 'Play'} data-tip={playing ? 'Stop' : 'Play it a step at a time'}
           onclick={(e) => { e.stopPropagation(); togglePlay(); }}>
           {#if playing}<svg viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.5" /></svg>
@@ -569,14 +462,12 @@
         </button>
       {/if}
       <i class="sep edit"></i>
-      <!-- undo where there is no keyboard (a phone's bar with ↶ went with the keyboard as a box was picked) -->
       <button type="button" class="edit" style="--i: 3" aria-label="Undo" data-tip="Undo (⌘Z)" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); stayPut(() => onHistory(false)); }}>
         <svg viewBox="0 0 16 16"><path d="M5.5 4 2.5 7l3 3M2.5 7h7a4 4 0 0 1 0 8H8" /></svg>
       </button>
       <button type="button" class="edit" style="--i: 4" aria-label="Redo" data-tip="Redo (⇧⌘Z)" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); stayPut(() => onHistory(true)); }}>
         <svg viewBox="0 0 16 16"><path d="M10.5 4l3 3-3 3M13.5 7h-7a4 4 0 0 0 0 8H8" /></svg>
       </button>
-      <!-- the diagram itself deleted (⌘Z brings it back) -->
       <button type="button" class="danger edit" style="--i: 5" aria-label="Delete diagram" data-tip="Delete diagram" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); active = false; onDelete(true); }}>
         <svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg>
       </button>
@@ -595,14 +486,12 @@
   </div>
 
   {#if !active && why}
-    <!-- written by hand: why it is edited as its code (the way back to the drawing, for one that has one, is the dock's) -->
     <p class="why">
       {#if 'kind' in why}This kind of diagram ({why.kind}) is edited as its code.
       {:else if 'line' in why}Written by hand with <code>{why.line.length > 48 ? why.line.slice(0, 47) + '…' : why.line}</code>, which the drawing editor can't show, so it is edited as code. It still draws as written.
       {:else}Written by hand with more than the drawing editor shows, so it is edited as code. It still draws as written.{/if}
     </p>
   {/if}
-  <!-- no line of tips under it: the bars and the buttons' own titles say what they do (the tips looked cluttered) -->
   {#if active && d && !flow && rows}
     <DiagramForm {d} />
   {/if}
@@ -613,8 +502,6 @@
   .pic { position: relative; }
   .dblock.active { box-shadow: 0 0 0 2px var(--accent-soft); background: var(--bg); }
   .dblock.active :global(.mermaid-view) { cursor: default; }
-  /* a sequence diagram's block labels fold it (seqFold.ts): a ▾ beside each on a hover (always on a phone, which
-     has none), a ▸ beside a folded one always, so it is seen to be folded */
   .pic :global(.mermaid-view [data-fold]) { cursor: pointer; }
   .pic :global(.mermaid-view .eve-fold-mark) {
     font-size: 11px; fill: var(--fg-dim); opacity: 0; transition: opacity 0.12s; user-select: none; -webkit-user-select: none;
@@ -638,8 +525,6 @@
   .foldchips button.on { color: var(--fg); }
   :global(html.mobile) .foldchips button { min-height: 36px; }
   .dblock.full .foldchips { position: absolute; top: 10px; left: 12px; right: 60px; z-index: var(--z-block-ui-over); }
-  /* the dock: a small frosted pill over the top-right corner, coming in as the pointer comes over the diagram, its
-     buttons one after another */
   .dock {
     position: absolute; top: 10px; right: 10px; z-index: var(--z-block-ui-over); display: flex; align-items: center; gap: 1px; padding: 3px;
     border-radius: 12px; background: color-mix(in srgb, var(--bg-pop) 82%, transparent); box-shadow: var(--pop-shadow);
@@ -665,7 +550,6 @@
   }
   .dock button:active { transform: scale(0.92); }
   :global(html.mobile) .dock button { width: 40px; height: 38px; }
-  /* a phone has no pointer to come over it: there, always, and its undo and delete while it is edited only */
   :global(html.mobile) .dock { opacity: 1; transform: none; pointer-events: auto; }
   :global(html.mobile) .dock button { opacity: 1; transform: none; }
   :global(html.mobile) .dblock:not(.active) .dock:not(.on) .edit { display: none; }
@@ -675,14 +559,11 @@
   .why code { font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--bg-input); }
   .dblock :global(.form) { padding: 4px 12px 0; }
 
-  /* the whole screen: the picture fills it and scrolls; the tools along the top; a chart's rows beside it (under it on
-     a narrow screen) */
   .dblock.full {
     position: fixed; inset: 0; z-index: var(--z-fullscreen); border-radius: 0; box-shadow: none; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
     background: light-dark(#f9fafb, #17181d); display: grid; grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: auto auto minmax(0, 1fr) auto; outline: none;
   }
-  /* clear of a Mac window's traffic lights, which stay over the top-left corner of the whole screen */
   :global(html:not(.mobile)) .dblock.full .foldchips { left: 86px; }
   .dblock.full > .pic { grid-column: 1; grid-row: 3 / 5; min-height: 0; }
   .dblock.full > :global(.form) { grid-column: 2; grid-row: 3; width: min(380px, 40vw); overflow: auto; padding: 12px; background: var(--bg); border-left: 1px solid var(--border, var(--bg-hover)); }
@@ -694,9 +575,8 @@
   .dblock.full .pic { height: 100%; }
   .dblock.full :global(.diagram-canvas) {
     height: 100%; box-sizing: border-box; border-radius: 0; overflow: auto; overscroll-behavior: contain; align-items: flex-start; padding: 24px;
-    margin: 0; box-shadow: none; /* the note's spacing pushed its foot off the screen, and its hover ring framed the screen */
+    margin: 0; box-shadow: none;
   }
-  /* centred while it fits, from its top-left corner once it is larger (a centred one was cut off where it overflowed) */
   .dblock.full :global(.diagram-canvas > *) { margin: auto; }
   .dblock.full:not(.active) :global(.diagram-canvas) { cursor: grab; }
   .dblock.full :global(.diagram-canvas.panning) { cursor: grabbing; }

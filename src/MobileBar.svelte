@@ -1,16 +1,7 @@
 <script lang="ts" module>
-  // the page's full height for each width it has had (upright, turned on its side), taken when the app starts
-  // (keyboard down; the bar can mount with it up). The keyboard only ever shortens the page, never narrows it:
-  // one height for both, a phone turned on its side read as a keyboard up, and the bar stayed over the note.
   const tallest = new Map<number, number>();
   if (typeof window !== 'undefined') tallest.set(window.innerWidth, window.innerHeight);
 
-  /**
-   * The full height at a width not seen yet: the phone turned with the keyboard up. Its first height there already had
-   * the keyboard taken off, was kept as the full one, and the bar never showed on its side. The page runs edge to edge
-   * (MainActivity), so turned, it is as tall as it was wide: an earlier height that is this width says how tall it is
-   * now; failing that, the screen's other side. Nothing to go by (a window beside another app): 0, the page as it is.
-   */
   function guessFull(w: number): number {
     for (const [w0, h0] of tallest) if (Math.abs(h0 - w) <= 2) return w0;
     const s = window.screen;
@@ -25,12 +16,6 @@
   import { hooks } from './lib/ui.svelte';
   import { scrollHint } from './lib/scrollHint';
 
-  /**
-   * A phone has no shortcuts: while the note (or a sheet over it) holds the caret and the keyboard is up, a row of
-   * formatting buttons sits on top of the keyboard. MainActivity shrinks the page by the keyboard's
-   * height, so "on top of the keyboard" is simply the bottom of the page; the keyboard being up shows
-   * as the page being noticeably shorter than it has ever been.
-   */
   let editing = $state(false);
   let keyboard = $state(false);
 
@@ -40,20 +25,16 @@
       tallest.set(w, full);
       keyboard = window.innerHeight < full - 120;
     };
-    // the note's own text only: a box's name, a form's row or a formula being typed in a diagram or an equation inside
-    // the note is not it, and the bar's buttons wrote into the note (bold, a to-do) from there. Only the editor itself
-    // counts: a board's column being renamed or a picture's caption being written sit inside it too, and the bar's
-    // To-do turned the note's title into a to-do from there
     const check = () => {
       const a = document.activeElement;
       editing = !!a?.matches('.page .tiptap, .card-page .tiptap') && !a.closest('.dblock, .math-edit, .mermaid-host, .math-inline, .math-block');
       measure();
     };
-    const out = () => setTimeout(check, 0); // focus lands on the next element a tick later
+    const out = () => setTimeout(check, 0);
     document.addEventListener('focusin', check);
     document.addEventListener('focusout', out);
     window.addEventListener('resize', check);
-    check(); // the note may already hold the caret (a widget tap focuses it before this mounts)
+    check();
     return () => {
       document.removeEventListener('focusin', check);
       document.removeEventListener('focusout', out);
@@ -61,20 +42,17 @@
     };
   });
 
-  // the sheet's editor when the caret is in it (a card, a day, a template), else the note's
   const run = (id: string) => (document.activeElement?.closest('.card-page') ? hooks.cardCommand : hooks.command)?.(id);
-  const done = () => (document.activeElement as HTMLElement | null)?.blur(); // puts the keyboard away
+  const done = () => (document.activeElement as HTMLElement | null)?.blur();
 
   const buttons: { id: string; label: string; icon: string }[] = [
     { id: 'taskList', label: 'To-do', icon: '<rect x="3" y="3.5" width="9" height="9" rx="2"/><path d="M5.3 8l1.7 1.7L10 6.5"/>' },
     { id: 'bold', label: 'Bold', icon: '<path d="M4.5 3h4a2.5 2.5 0 010 5h-4zM4.5 8h4.8a2.5 2.5 0 010 5H4.5z"/>' },
-    // a marker pen, its tip on the stroke it leaves (the same ==mark== as ⌘⇧H and the note's menu)
     { id: 'highlight', label: 'Highlight', icon: '<path d="M9.5 2.5l4 4-5.5 5.5H4v-4z"/><path d="M2.5 14h11"/>' },
     { id: 'outdent', label: 'Outdent', icon: '<path d="M13.5 4h-6M13.5 8h-6M13.5 12h-6M5 6L2.5 8 5 10"/>' },
     { id: 'indent', label: 'Indent', icon: '<path d="M13.5 4h-6M13.5 8h-6M13.5 12h-6M2.5 6L5 8l-2.5 2"/>' },
     { id: 'slash', label: 'Insert block', icon: '<path d="M10.5 2.5l-5 11"/>' },
   ];
-  // ⌘Z / ⇧⌘Z on the Mac: kept at the bar's left edge, where a thumb finds them without scrolling the row
   const history: { id: string; label: string; icon: string }[] = [
     { id: 'undo', label: 'Undo', icon: '<path d="M5.5 3.5L2.5 6.5l3 3"/><path d="M2.5 6.5h7a4 4 0 010 8H7"/>' },
     { id: 'redo', label: 'Redo', icon: '<path d="M10.5 3.5l3 3-3 3"/><path d="M13.5 6.5h-7a4 4 0 000 8H9"/>' },
@@ -82,7 +60,6 @@
 </script>
 
 {#if editing && keyboard}
-  <!-- mousedown is swallowed so a tap never takes the caret out of the note -->
   <div class="mbar" role="toolbar" aria-label="Formatting" tabindex="-1"
     onmousedown={(e) => e.preventDefault()}>
     {#each history as b (b.id)}
@@ -91,9 +68,6 @@
       </button>
     {/each}
     <span class="sep"></span>
-    <!-- the formatting buttons scroll sideways when the phone is too narrow for them all. No bullets or
-         headings: "- " and "## " already make them while typing -->
-    <!-- more buttons past its end (Insert block, at 390 wide): that end fades, so the row is seen to go on -->
     <div class="tools" {@attach scrollHint}>
       {#each buttons as b (b.id)}
         <button tabindex="-1" aria-label={b.label} onclick={() => run(b.id)}>
@@ -109,7 +83,7 @@
 
 <style>
   .mbar {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-phone-bar); /* over a sheet (--z-sheet) too */ display: flex; align-items: center; gap: 2px;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-phone-bar); display: flex; align-items: center; gap: 2px;
     padding: 4px 6px; background: var(--bg-pop); border-top: 1px solid var(--line);
   }
   button {

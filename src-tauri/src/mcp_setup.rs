@@ -14,11 +14,8 @@ const NAME: &str = "eve";
 pub(crate) struct Client {
     id: &'static str,
     name: &'static str,
-    /// the app / CLI is on this Mac
     installed: bool,
-    /// registered, pointing at this copy of Eve
     connected: bool,
-    /// registered, but at another path (Eve moved, or a dev build registered it)
     stale: bool,
 }
 
@@ -30,7 +27,6 @@ fn desktop_config() -> PathBuf {
     home().join("Library/Application Support/Claude/claude_desktop_config.json")
 }
 
-/// The command a client should start: this very executable.
 fn exe() -> Result<String, String> {
     let path = std::env::current_exe().and_then(|p| p.canonicalize()).map_err(|e| e.to_string())?;
     let path = path.to_string_lossy().into_owned();
@@ -41,8 +37,6 @@ fn exe() -> Result<String, String> {
     Ok(path)
 }
 
-// ---- the JSON config: pure, tested ------------------------------------------------
-/// The command `mcpServers.eve` starts, if the config has one.
 pub(crate) fn registered(config: &str) -> Option<String> {
     let v: Value = serde_json::from_str(config).ok()?;
     v.get("mcpServers")?.get(NAME)?.get("command")?.as_str().map(str::to_string)
@@ -258,7 +252,6 @@ fn code_set(on: bool, me: &str) -> Result<(), String> {
         line += " true";
     }
     let out = shell(&line)?;
-    // believe the CLI, not the exit code: what `claude mcp get` says now is what the user will see
     let now = code(me);
     if now.connected == on && !(!on && now.stale) {
         return Ok(());
@@ -274,19 +267,16 @@ fn code_set(on: bool, me: &str) -> Result<(), String> {
     ))
 }
 
-// ---- commands -----------------------------------------------------------------------
 fn clients() -> Result<Vec<Client>, String> {
     let me = exe()?;
     Ok(vec![desktop(&me), code(&me)])
 }
 
-/// Which Claude apps are here, and whether each already runs `eve mcp`.
 #[tauri::command]
 pub(crate) async fn mcp_clients() -> Result<Vec<Client>, String> {
     clients()
 }
 
-/// Register (`on`) or unregister Eve with every Claude app found here. Returns the new state.
 #[tauri::command]
 pub(crate) async fn mcp_connect(on: bool) -> Result<Vec<Client>, String> {
     let me = exe()?;
@@ -310,7 +300,6 @@ mod tests {
     #[test]
     fn adds_and_removes_eve_keeping_the_rest_in_order() {
         let config = r#"{"zeta":1,"mcpServers":{"other":{"command":"x","env":{"Z":"1","A":"2"}}},"alpha":[1.5,true,null,{"y":0,"b":-3}],"k":"한글"}"#;
-        // read and written back unchanged, key order included
         assert_eq!(serde_json::to_string(&serde_json::from_str::<Json>(config).unwrap()).unwrap(), config);
         let on = with_eve(config, Some("/Applications/Eve.app/Contents/MacOS/eve")).unwrap().unwrap();
         assert_eq!(registered(&on).as_deref(), Some("/Applications/Eve.app/Contents/MacOS/eve"));
@@ -319,12 +308,10 @@ mod tests {
             compact,
             r#"{"zeta":1,"mcpServers":{"other":{"command":"x","env":{"Z":"1","A":"2"}},"eve":{"command":"/Applications/Eve.app/Contents/MacOS/eve","args":["mcp"]}},"alpha":[1.5,true,null,{"y":0,"b":-3}],"k":"한글"}"#
         );
-        // the same entry again changes nothing; another path replaces it where it is
         assert_eq!(with_eve(&on, Some("/Applications/Eve.app/Contents/MacOS/eve")).unwrap(), None);
         let moved = with_eve(&on, Some("/new/eve")).unwrap().unwrap();
         assert_eq!(registered(&moved).as_deref(), Some("/new/eve"));
         assert!(moved.find("\"other\"").unwrap() < moved.find("\"eve\"").unwrap());
-        // off: back to the original, byte for byte once compacted
         let off = with_eve(&on, None).unwrap().unwrap();
         assert_eq!(serde_json::to_string(&serde_json::from_str::<Json>(&off).unwrap()).unwrap(), config);
         assert_eq!(with_eve(config, None).unwrap(), None);

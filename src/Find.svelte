@@ -8,7 +8,6 @@
   import { composing } from './lib/keys';
   import { isMobile } from './lib/platform';
 
-  /** ⌘F: a small bar over the note. Enter walks the matches, ⇧Enter walks back, Esc puts it away. */
   let { editor }: { editor: Editor | undefined } = $props();
 
   let query = $state('');
@@ -28,11 +27,8 @@
   $effect(() => {
     const e = editor;
     if (!e) return;
-    // the note may be edited (or replaced into) while the bar is open
     const on = () => sync();
     e.on('transaction', on);
-    // the bar was just opened with a query still in it. Read untracked: tracked, every letter typed cleared the search
-    // and ran it again from where the last letter's match had put the caret, so a word not found left it there
     const q = untrack(() => query);
     if (q) setQuery(e, q);
     sync();
@@ -60,8 +56,6 @@
     sync();
   }
 
-  /** A phone's bar lies across the whole note: the note makes room under it, or the first lines' matches sat under
-   *  the bar with no way to scroll them out (the Mac's bar keeps to the corner, beside the text). */
   function makeRoom(bar: HTMLElement) {
     const scroll = isMobile ? bar.parentElement?.querySelector<HTMLElement>(':scope > .scroll') : null;
     if (!scroll) return;
@@ -73,21 +67,14 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    // and nothing more: it fell through to Enter's work, replacing the match (or stepping on) as the bar closed
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
-    // the Enter that ends a Korean or Japanese word being put together is the word's, not a step to the next match
     else if (e.key !== 'Enter' || composing(e)) return;
     e.preventDefault();
-    // in the replace field, Enter works through the matches one replacement at a time; ⇧Enter still just walks back,
-    // so a match can be stepped over. In the find field it steps on, the replace line open or not (it replaced there,
-    // with the replacement field empty: each ↩ deleted a match)
     if (replacing && !e.shiftKey && (e.target as HTMLElement).classList.contains('rep')) replaceNext();
     else walk(e.shiftKey ? -1 : 1);
   }
 </script>
 
-<!-- the keys come from the fields and buttons inside, which are focusable on their own; the bar only
-     catches them once on the way up, so it needs no role of its own beyond the landmark -->
 <!-- its buttons keep the keyboard in the field (WebKit gives a clicked button no focus: it went to nothing, and ↩ no
      longer stepped through the matches) -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -111,7 +98,6 @@
   </div>
   {#if replacing}
     <div class="line">
-      <!-- the same gap the magnifier takes above, so both fields start on one line -->
       <span class="glass" aria-hidden="true"></span>
       <input class="rep" placeholder="Replace with" spellcheck="false" bind:value={replacement} />
       <button class="icon" data-tip="Replace (↩)" aria-label="Replace" onclick={replaceNext}>
@@ -132,7 +118,7 @@
   }
   .line { display: flex; align-items: center; gap: 4px; }
   .glass { width: 14px; height: 14px; margin: 0 2px 0 4px; flex: none; fill: none; stroke: var(--fg-dim); stroke-width: 1.4; stroke-linecap: round; }
-  span.glass { stroke: none; } /* the spacer under the magnifier: footprint only */
+  span.glass { stroke: none; }
   input {
     flex: 1; min-width: 0; border: 0; outline: none; background: var(--bg-input); color: inherit;
     font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 6px;
@@ -141,7 +127,6 @@
   .count { font-size: 11.5px; color: var(--fg-dim); font-variant-numeric: tabular-nums; padding: 0 2px; }
   .find .icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
   .find svg { width: 14px; height: 14px; display: block; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
-  /* a phone: across the note under its bar, with buttons and text a thumb can use */
   :global(html.mobile) .find { left: 12px; right: 12px; top: 8px; width: auto; padding: 8px; gap: 6px; }
   :global(html.mobile) .find input { font-size: 16px; padding: 8px 10px; border-radius: 8px; }
   :global(html.mobile) .find .icon { width: 36px; height: 36px; }

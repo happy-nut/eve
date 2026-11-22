@@ -14,7 +14,7 @@ export const ClickTarget = Extension.create({
   name: 'clickTarget',
   addProseMirrorPlugins() {
     let down: { x: number; y: number; block: number } | null = null;
-    let typed = 0; // keys pressed since: a selection they made (⇧↑ right after the click) is not the click's to put right
+    let typed = 0;
     return [
       new Plugin({
         props: {
@@ -40,18 +40,12 @@ export const ClickTarget = Extension.create({
   },
 });
 
-/**
- * The note's top-level block a pointer event is over (by height, when it is on the note's own margin), or -1: also
- * for a click on something of its own that is not the text (a callout's icon, a code block's language, a checkbox,
- * a caption, a board, a link card), which does what it does and leaves the caret be.
- */
 function blockAt(view: EditorView, e: MouseEvent): number {
   const target = e.target as HTMLElement | null;
   if (!target || target.closest('input, button, select, label, a, [contenteditable="false"], .callout-emoji, .code-lang, .img-cap')) return -1;
   let el: HTMLElement | null = target;
   while (el && el.parentElement !== view.dom) el = el.parentElement;
   if (!el || el === view.dom) {
-    // beside a block narrower than the note (a picture), or on the note's padding: the block at that height
     el = ([...view.dom.children] as HTMLElement[]).find((c) => { const r = c.getBoundingClientRect(); return r.height > 0 && e.clientY >= r.top && e.clientY <= r.bottom; }) ?? null;
   }
   if (!el) return -1;
@@ -65,12 +59,11 @@ function settle(view: EditorView, index: number, x: number, y: number) {
   for (let i = 0; i < index; i++) start += doc.child(i).nodeSize;
   const node = doc.child(index), end = start + node.nodeSize;
   const sel = view.state.selection;
-  if (sel.from >= start && sel.to <= end) return; // where it was clicked: nothing to put right
+  if (sel.from >= start && sel.to <= end) return;
   if (!node.isTextblock && !hasText(node)) {
     view.dispatch(view.state.tr.setSelection(NodeSelection.create(doc, start)));
     return;
   }
-  // a line of the block: the click's height, kept inside the block's text (a code block's own lines, not its padding)
   const dom = view.nodeDOM(start) as HTMLElement | null;
   const box = (dom?.querySelector('pre code') ?? dom)?.getBoundingClientRect();
   let pos: number | null = null;

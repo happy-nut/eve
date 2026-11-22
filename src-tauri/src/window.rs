@@ -1,9 +1,7 @@
-//! The one window: summon, dismiss, Dock, always on top.
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
-/// Is the main window currently visible and frontmost? (the frontend decides whether to summon or dismiss)
 #[tauri::command]
 pub(crate) fn is_front(app: AppHandle) -> bool {
     app.get_webview_window("main")
@@ -11,7 +9,6 @@ pub(crate) fn is_front(app: AppHandle) -> bool {
         .unwrap_or(false)
 }
 
-/// Show + focus the main window.
 #[tauri::command]
 pub(crate) fn show_window(app: AppHandle) -> Result<(), String> {
     let win = app.get_webview_window("main").ok_or("no main window")?;
@@ -29,10 +26,6 @@ pub(crate) fn show_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Summoned (the hotkey, a link from another app): shown and focused but not yet seen, until the page has drawn in it
-/// again (`reveal_window`). While Eve was hidden WebKit may have let go of what the page drew, and a window seen at once
-/// was white until the page drew again. The page is told to (`eve-reveal`); if it never says so, the window is seen
-/// anyway, a while later: at 300 ms that was too soon on a busy Mac, just back from sleep, and it was seen white.
 #[tauri::command]
 pub(crate) fn summon_window(app: AppHandle) -> Result<(), String> {
     use tauri::Emitter;
@@ -44,8 +37,6 @@ pub(crate) fn summon_window(app: AppHandle) -> Result<(), String> {
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(FALLBACK_MS));
         reveal(&app, n, "not drawn: seen anyway");
-        // still no word from the page a good while on: it is not slow, it is gone or stuck, and the window stayed
-        // white for good until Eve was quit. Loaded again, it draws (the notes are on disk; the caret and ⌘Z are lost)
         std::thread::sleep(std::time::Duration::from_millis(STUCK_MS));
         let Some(w) = app.get_webview_window("main") else { return };
         if stuck(ANSWERED.load(Ordering::SeqCst), n, w.is_visible().unwrap_or(false)) {
@@ -57,8 +48,6 @@ pub(crate) fn summon_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Summon `n` came up and the page never said it drew for it (nor for a later one): it is gone or stuck. Not when the
-/// window was put away again meanwhile: a hidden page draws nothing, so it had nothing to say.
 fn stuck(answered: u64, n: u64, visible: bool) -> bool {
     visible && answered < n
 }
@@ -71,17 +60,13 @@ pub(crate) fn page_ended<R: tauri::Runtime>(webview: &tauri::Webview<R>) {
     let _ = webview.reload();
 }
 
-/// how long a summoned window waits for the page before it is seen anyway
 const FALLBACK_MS: u64 = 1500;
-/// and after that, how much longer before a page that has said nothing is taken for gone and loaded again
 const STUCK_MS: u64 = 5000;
 static SUMMONS: AtomicU64 = AtomicU64::new(0);
-/// the last summon the page itself said it had drawn for (not the fallback's)
 static ANSWERED: AtomicU64 = AtomicU64::new(0);
 static SEEN: AtomicU64 = AtomicU64::new(0);
 static SUMMONED_AT: Mutex<Option<std::time::Instant>> = Mutex::new(None);
 
-/// The page has drawn since summon `n`: the window is seen.
 #[tauri::command]
 pub(crate) fn reveal_window(app: AppHandle, n: Option<u64>) {
     let n = n.unwrap_or_else(|| SUMMONS.load(Ordering::SeqCst));
@@ -89,8 +74,6 @@ pub(crate) fn reveal_window(app: AppHandle, n: Option<u64>) {
     reveal(&app, n, "drawn");
 }
 
-/// seen once per summon, by whichever comes first; how long it took is written down (Logs/dev.happynut.eve/summon.log),
-/// so a white page on someone's Mac says why
 fn reveal(app: &AppHandle, n: u64, how: &'static str) {
     if SEEN.fetch_max(n, Ordering::SeqCst) >= n { return; }
     let ms = SUMMONED_AT.lock().unwrap().map(|t| t.elapsed().as_millis()).unwrap_or(0);

@@ -1,17 +1,9 @@
 import type { Mindmap, MindShape } from './diagram';
 import { esc, textW, wrap } from './lanes';
 
-/**
- * A mind map, drawn by Eve: the idea in the middle as a soft card, its branches out to both sides on soft curves,
- * each first branch a pastel card of its own whose tint the lines under it share, the ideas further out plain words. Mermaid's own drawing set every idea in a box of its own on straight spokes around
- * the middle, crowded and lopsided. Every idea is a g.mm-node with data-spot ("root", "branch:<i>", i its place in
- * d.items) for the editor to find it by (ChartEditor.svelte); colours are CSS variables (app.css), so the light and
- * dark themes need no drawing again.
- */
 
 type Node = { text: string; shape: MindShape; depth: number; spot: string; hue: number; kids: Node[]; lines: string[]; w: number; h: number; x: number; y: number; right: boolean };
 
-// size, weight, line height, padding across and down, widest line, per depth (the middle, a first branch, further out)
 const LOOK = [
   { size: 16, weight: 650, line: 21, px: 22, py: 13, max: 220 },
   { size: 14, weight: 600, line: 19, px: 15, py: 9, max: 190 },
@@ -19,11 +11,10 @@ const LOOK = [
 ];
 const look = (n: { depth: number; shape: MindShape }) => {
   const l = LOOK[Math.min(n.depth, 2)];
-  // an idea further out given a shape is drawn in it, so it is padded as a chip
   return n.depth >= 2 && n.shape !== 'plain' ? { ...l, px: 12, py: 7 } : l;
 };
-const GAP_X = [64, 44, 34]; // from an idea to the ones under it
-const GAP_Y = [22, 14, 6]; // between ideas under one (the first branches, under them, further out)
+const GAP_X = [64, 44, 34];
+const GAP_Y = [22, 14, 6];
 const PAD = 18;
 
 const span = (n: Node): number => n.kids.length ? Math.max(n.h, n.kids.reduce((a, k) => a + span(k), 0) + GAP_Y[Math.min(n.depth, 2)] * (n.kids.length - 1)) : n.h;
@@ -34,12 +25,11 @@ function sized(n: Node) {
   const tw = Math.max(...n.lines.map((s) => textW(s, l.size, l.weight)));
   n.w = Math.ceil(tw + l.px * 2);
   n.h = n.lines.length * l.line + l.py * 2;
-  if (n.shape === 'circle' && n.depth > 0) n.w = n.h = Math.max(n.w, n.h); // a circle as wide as it is tall
-  if (n.shape === 'hexagon') n.w += n.h * 0.4; // its points outside the words
+  if (n.shape === 'circle' && n.depth > 0) n.w = n.h = Math.max(n.w, n.h);
+  if (n.shape === 'hexagon') n.w += n.h * 0.4;
   n.kids.forEach(sized);
 }
 
-/** an idea and those under it laid out from `x` (its inner edge), its block of ideas starting `top` down */
 function place(n: Node, x: number, top: number, right: boolean) {
   const s = span(n);
   n.right = right;
@@ -51,12 +41,9 @@ function place(n: Node, x: number, top: number, right: boolean) {
   for (const k of n.kids) { place(k, nx, y, right); y += span(k) + GAP_Y[Math.min(n.depth, 2)]; }
 }
 
-/** an idea further out with no shape: plain words, the lines meeting them at their middle (once drawn on a coloured line
- *  under them, every word underlined in its branch's colour) */
 const plainWords = (n: Node) => n.depth >= 2 && n.shape === 'plain';
-/** where a line leaves an idea, outwards */
 function outPt(n: Node) {
-  if (n.depth === 0) return { x: n.x + n.w / 2, y: n.y }; // from the middle of the centre: the curves fan out of it
+  if (n.depth === 0) return { x: n.x + n.w / 2, y: n.y };
   return { x: n.right ? n.x + n.w : n.x, y: n.y };
 }
 function inPt(n: Node) {
@@ -83,26 +70,20 @@ function shapeOf(n: Node) {
 import { held, huesOf } from './chartHues';
 
 export function mindSvg(d: Mindmap, minScale = 0.8): string {
-  // the tree as the code writes it: a branch at most one step deeper than the one above it
   const root: Node = { text: d.root.trim() || 'Idea', shape: d.rootShape ?? 'circle', depth: 0, spot: 'root', hue: 0, kids: [], lines: [], w: 0, h: 0, x: 0, y: 0, right: true };
   const stack: Node[] = [root];
   d.items.forEach((b, i) => {
     if (!b.text.trim()) return;
     const depth = Math.max(1, Math.min(b.depth, stack.length));
     stack.length = depth;
-    // (a branch's colour, its own name's at the first step, the one it hangs from below that)
     const n: Node = { text: b.text.trim(), shape: b.shape ?? 'plain', depth, spot: `branch:${i}`, hue: depth === 1 ? 0 : stack[depth - 1].hue, kids: [], lines: [], w: 0, h: 0, x: 0, y: 0, right: true };
     stack[depth - 1].kids.push(n);
     stack.push(n);
   });
-  // the first step's colours by their names (chartHues.ts), one of the five pastels besides the centre's blue (of
-  // twelve, two of five branches came out the same pastel); those under them follow
   const hues = huesOf(root.kids.map((k) => k.text), root.kids.map((k) => k.spot), 5, 1);
   const tint = (n: Node, h: number) => { n.hue = h; n.kids.forEach((k) => tint(k, h)); };
   root.kids.forEach((k, i) => tint(k, hues[i]));
   sized(root);
-  // to both sides once there are three or more, the first ones on the right, the rest on the left going round
-  // clockwise (from the bottom up), split where the two sides are nearest the same height
   const kids = root.kids;
   let cut = kids.length;
   if (kids.length >= 3) {
@@ -113,7 +94,6 @@ export function mindSvg(d: Mindmap, minScale = 0.8): string {
     cut = Math.max(1, cut);
   }
   let right = kids.slice(0, cut), left = kids.slice(cut).reverse();
-  // being edited: each where it was, a new one on the lighter side (split again at each change, the others moved)
   if (held.sides.size && kids.length >= 3) {
     right = []; left = [];
     for (const k of kids) {
@@ -141,7 +121,6 @@ export function mindSvg(d: Mindmap, minScale = 0.8): string {
   const links: string[] = [];
   for (const p of all) for (const k of p.kids) {
     const a = outPt(p), b = inPt(k);
-    // a soft S from one to the other, flat where it leaves and where it arrives
     const mx = (a.x + b.x) / 2;
     const from = p.depth === 0 ? { x: k.right ? root.x + root.w - root.h / 2 : root.x + root.h / 2, y: 0 } : a;
     const c1 = p.depth === 0 ? { x: k.right ? root.x + root.w + 8 : root.x - 8, y: b.y } : { x: mx, y: a.y };
@@ -149,7 +128,6 @@ export function mindSvg(d: Mindmap, minScale = 0.8): string {
   }
   const nodes = all.map((n) => {
     const l = look(n), cls = n.depth === 0 ? 'mm-root' : n.depth === 1 ? 'mm-l1' : plainWords(n) ? 'mm-leaf' : 'mm-leaf shaped';
-    // the words in the middle of the shape, however tall it is (a circle is as tall as it is wide)
     const top = n.y - (n.lines.length * l.line) / 2 + l.line / 2;
     const cx = n.x + n.w / 2;
     const text = n.lines.map((s, i) => `<text x="${cx.toFixed(1)}" y="${(top + i * l.line).toFixed(1)}">${esc(s)}</text>`).join('');

@@ -14,23 +14,19 @@
    */
   let { onclose, children, role = 'dialog', label, layer = true }: {
     onclose: () => void; children: Snippet; role?: string; label?: string;
-    /** false: what it shows is a layer of its own already (a menu), which back closes as such */
     layer?: boolean;
   } = $props();
 
-  // Android's back closes it, the newest layer first (App's phoneBack)
   onMount(() => (layer ? ui.openedSheet(() => onclose()) : undefined));
 
   // on <body>: a transformed ancestor (the settings panel) would otherwise become what position:fixed is measured from
   const portal = (node: HTMLElement) => { document.body.appendChild(node); return { destroy: () => node.remove() }; };
 
-  let dy = $state(0); // how far the finger has pulled it down
+  let dy = $state(0);
   let dragging = $state(false);
 
-  /** cubic ease-out, as the other sheets (popup.ts); going away it starts from wherever the finger let go */
   const slide = (_: Element) => ({ duration: 240, css: (t: number, u: number) => `translate: 0 calc(${(dy * t).toFixed(1)}px + ${(u * u * u * 100).toFixed(2)}%)` });
 
-  /** pulled down from the top of its scroll, the sheet follows the finger; far or fast enough, it closes */
   const pull = (node: HTMLElement) => pullDown(node, { onpull: (d, on) => { dy = d; dragging = on; }, onclose });
 </script>
 
@@ -48,7 +44,7 @@
     position: fixed; z-index: var(--z-menu); left: 0; right: 0; bottom: 0; margin: 0; padding: 8px 10px calc(12px + var(--bottom, 0px));
     background: var(--bg-pop); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
     max-height: 80vh; overflow-y: auto; overscroll-behavior: contain;
-    transition: translate 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); /* let go short of closing: it settles back */
+    transition: translate 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .sheet.dragging { transition: none; }
   .sheet::before { content: ''; display: block; width: 36px; height: 4px; border-radius: 2px; margin: 4px auto 8px; background: var(--bg-active); }

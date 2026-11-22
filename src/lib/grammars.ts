@@ -1,5 +1,3 @@
-// the highlighter with lowlight's 37 common grammars and a few more people write notes in (a Dockerfile drew plain),
-// split from the app's start (code.ts loads it)
 import { common, createLowlight } from 'lowlight';
 import dockerfile from 'highlight.js/lib/languages/dockerfile';
 import powershell from 'highlight.js/lib/languages/powershell';

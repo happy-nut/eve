@@ -9,25 +9,8 @@ import { scrollHint } from './scrollHint';
 import { HTML_TAGS } from './html';
 import { inCell } from './blocks';
 
-/**
- * Formulas: `$E = mc^2$` in a line of text, and a block of its own,
- *
- *   $$
- *   \int_0^1 x^2 \, dx
- *   $$
- *
- * as Obsidian, GitHub and pandoc write them, so a note's formulas read the same anywhere. In the note a formula is
- * drawn (MathLive); clicked, it becomes the box it is typed in, the formula as it looks, with a row of the parts
- * a formula is made of (fractions, roots, sums, matrices, Greek letters) to put in by a click; its TeX is there too.
- *
- * Dollars that are money stay money. A `$` opens a formula only with no space after it, and closes one only with
- * no space before it and no digit after it (pandoc's rule): "$5 and $10" is text. Text that would read as a formula
- * all the same is written with its dollars escaped (`\$`), so a note reads back as it was.
- */
 
-// ---- markdown ----
 
-/** where the formula opened at `start` (a `$`) closes in `src`, or -1 */
 function closing(src: string, start: number): number {
   const first = src[start + 1];
   if (!first || first === '$' || /\s/.test(first)) return -1;
@@ -35,14 +18,13 @@ function closing(src: string, start: number): number {
     const j = src.indexOf('$', i);
     if (j < 0) return -1;
     i = j + 1;
-    if (src[j - 1] === '\\') continue; // \$, a dollar in the formula
+    if (src[j - 1] === '\\') continue;
     if (/\s/.test(src[j - 1])) continue;
     if (/\d/.test(src[j + 1] ?? '')) continue;
     return j;
   }
 }
 
-/** `line` with each `|` inside a `$…$` (not one written `\|`) as `hide`, a character of the same length */
 export function hidePipesInMath(line: string, hide: string): string {
   let out = line;
   for (let i = line.indexOf('$'); i >= 0; i = line.indexOf('$', i + 1)) {
@@ -55,7 +37,6 @@ export function hidePipesInMath(line: string, hide: string): string {
   return out;
 }
 
-/** a run of text that would be read back as a formula (some `$…$` in it) */
 export const readsAsMath = (text: string): boolean => {
   for (let i = text.indexOf('$'); i >= 0; i = text.indexOf('$', i + 1)) {
     if (text[i - 1] === '\\') continue;
@@ -90,9 +71,8 @@ function blockRule(md: MarkdownIt) {
     let body: string;
     let last = startLine;
     if (rest.trim().endsWith('$$') && rest.trim().length >= 2) {
-      body = rest.trim().slice(0, -2); // $$ x $$ on a line of its own
+      body = rest.trim().slice(0, -2);
     } else {
-      // the line that ends in $$, inside whatever holds this one (a list item, a quote)
       for (last = startLine + 1; last < endLine; last++) {
         if (state.sCount[last] < state.blkIndent && !state.isEmpty(last)) return false;
         const s = state.bMarks[last] + state.tShift[last];
@@ -113,12 +93,9 @@ function blockRule(md: MarkdownIt) {
   md.renderer.rules.math_block = (tokens, i) => `<div data-math-block="">${md.utils.escapeHtml(tokens[i].content)}</div>\n`;
 }
 
-// ---- editing ----
 
-/** a formula just put in (the / menu, `$$`, the shortcut): its box opens as it is first drawn */
 let openNext = false;
 
-/** the formula at `pos`, if that is where one still is */
 const formulaAt = (editor: Editor, pos: number | null | undefined) => {
   const n = pos == null ? null : editor.state.doc.nodeAt(pos);
   return n && (n.type.name === 'mathInline' || n.type.name === 'mathBlock') ? n : null;
@@ -131,7 +108,7 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
   const shown = document.createElement(display ? 'div' : 'span');
   shown.className = 'math-shown';
   dom.append(shown);
-  let current = node; // as this view last drew it
+  let current = node;
   let editing: MathEditing | null = null;
 
   const draw = () => {
@@ -140,12 +117,11 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     if (!latex.trim()) { shown.textContent = display ? 'New equation' : 'Equation'; return; }
     const m = mathNow();
     if (m) { shown.innerHTML = mathMarkup(m, fullSize(latex), display); return; }
-    shown.textContent = latex; // a moment, the first time: MathLive on its way
+    shown.textContent = latex;
     loadMath().then(() => { if (!editing) draw(); }, () => {});
   };
   draw();
 
-  /** the caret beside the formula: after it (1) or before it (-1), the keyboard back in the note */
   const leave = (side: 1 | -1) => {
     const p = getPos();
     if (p == null || !formulaAt(editor, p)) return;
@@ -195,7 +171,6 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     editing = null;
     e.destroy();
     dom.classList.remove('editing');
-    // nothing typed: a formula with nothing in it is not kept
     if (!current.attrs.latex.trim()) queueMicrotask(remove); else draw();
   };
 
@@ -203,10 +178,10 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     if (editing || (e as MouseEvent).button !== 0) return;
     e.preventDefault();
     const m = e as MouseEvent;
-    void open({ x: m.clientX, y: m.clientY }); // the caret where it was clicked
+    void open({ x: m.clientX, y: m.clientY });
   });
   if (openNext) { openNext = false; queueMicrotask(() => open()); }
-  const unhint = display ? scrollHint(dom) : null; // a long one: cut off, it said nothing of it
+  const unhint = display ? scrollHint(dom) : null;
 
   return {
     dom,
@@ -214,7 +189,7 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
       if (n.type !== current.type) return false;
       const was = current;
       current = n;
-      if (editing) { if (n.attrs.latex !== was.attrs.latex) editing.set(n.attrs.latex); } // an undo, a sync
+      if (editing) { if (n.attrs.latex !== was.attrs.latex) editing.set(n.attrs.latex); }
       else if (n.attrs.latex !== was.attrs.latex) draw();
       return true;
     },
@@ -223,12 +198,10 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     stopEvent: (e: Event) => !!editing && e.target instanceof globalThis.Node && dom.contains(e.target),
     ignoreMutation: () => true,
     destroy: () => { editing?.destroy(); editing = null; unhint?.(); },
-    /** Enter on a selected formula */
     open,
   };
 }
 
-/** Enter (or a double-click's worth: any key that edits) on a selected formula opens its box */
 const openSelected = (editor: Editor) => {
   const sel = editor.state.selection;
   if (!(sel instanceof NodeSelection) || !/^math(Inline|Block)$/.test(sel.node.type.name)) return false;
@@ -271,23 +244,20 @@ const mathNode = (display: boolean) => Node.create({
 
   addInputRules() {
     if (display) {
-      // "$$" and a space (or Enter) on an empty line: a block formula, open to type in
       return [new InputRule({
         find: /^\$\$\s$/,
         handler: ({ state, range }) => {
           const $from = state.doc.resolve(range.from);
           if ($from.parent.type.name !== 'paragraph' || $from.parent.textContent.trim() !== '$$') return null;
-          if (inCell($from)) return null; // a cell holds lines, not a block: put there, it cut the table in two
+          if (inCell($from)) return null;
           openNext = true;
           state.tr.replaceRangeWith($from.before(), $from.after(), this.type.create({ latex: '' }));
         },
       })];
     }
-    // "$x^2$" typed in a line: the formula, drawn, as it would be read back
     return [new InputRule({
       find: /(^|[^\\$\w])\$([^\s$](?:[^$]*[^\s$\\])?)\$$/,
       handler: ({ state, range, match }) => {
-        // in code being typed (`$x$`): the closing backtick makes it code, the dollars and all
         if (((match.input ?? '').slice(0, (match.index ?? 0) + match[1].length).match(/`/g)?.length ?? 0) % 2) return null;
         // nor where a formula has no place (a toggle's title holds words only): it took the closing $ and drew nothing
         if (!state.doc.resolve(range.from).parent.type.contentMatch.matchType(this.type)) return null;

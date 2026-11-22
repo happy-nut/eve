@@ -1,4 +1,3 @@
-/** 16x16 line icons for the menu, drawn in the sidebar's stroke style. */
 export const ICONS = {
   plus: '<path d="M8 3.5v9M3.5 8h9"/>',
   page: '<path d="M4 1.5h5L12.5 5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5"/><path d="M6.2 10h3.6M8 8.2v3.6"/>',

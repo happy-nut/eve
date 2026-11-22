@@ -1,110 +1,72 @@
-/**
- * The charts a note's diagrams are edited as (DiagramBlock.svelte) as data, and as the mermaid code a note keeps. The
- * note stores only the code: what is drawn is written out (toCode), and a diagram opened again is read back from its code
- * (fromCode). Read back is strict: a line the builder would not have written (a style, a subgraph, a comment) makes it
- * null, and the diagram is edited as code, so nothing written by hand is lost to a form that cannot show it.
- */
 
 export type Shape = 'round' | 'box' | 'pill' | 'diamond' | 'circle' | 'db';
 export type Line = 'solid' | 'dotted' | 'thick';
 export interface FlowNode {
-  id: string; label: string; shape: Shape; /** the swimlane it is in (a lane's id), if the chart has lanes */ lane?: string;
-  /** a shape as written that the forms have no button for ([/…/], {{…}}, [[…]], >…]): kept while its shape is left alone */
+  id: string; label: string; shape: Shape; lane?: string;
   raw?: { open: string; close: string; as: Shape };
-  /** mermaid's `:::class` on it, kept */
   cls?: string;
-  /** which press of → in a presentation brings it up (1 the first), written `class A,B step2`; none: in the arrows' order */
   step?: number;
 }
-/** a swimlane: who or what does the steps in it (mermaid's subgraph) */
 export interface Lane { id: string; label: string }
 export interface FlowEdge {
   from: string; to: string; label: string; line: Line;
-  /** the arrow as written when it is not one the forms make (---, --o, --x, <-->, --->): kept while its line is left alone */
   arrow?: string;
-  /** drawn moving, its dashes running the way it goes (mermaid's `e1@-->` and `e1@{ animate: true }`) */
   animate?: boolean;
 }
 export interface Flowchart {
   kind: 'flowchart'; dir: 'LR' | 'TD' | 'RL' | 'BT'; nodes: FlowNode[]; edges: FlowEdge[]; lanes?: Lane[];
-  /** what a chart pasted in says that the forms do not show (style, classDef, class, linkStyle, click, %% comments): kept
-   *  as written, after the chart; `pre`: what came before its first line (a %%{init}%% setting) */
   extra?: string[]; pre?: string[];
 }
-/** the chart goes across (left to right, or right to left), not down */
 export const across = (d: Pick<Flowchart, 'dir'>) => d.dir === 'LR' || d.dir === 'RL';
 
 export interface Person { id: string; name: string; actor: boolean }
 export interface Message {
   from: string; to: string; text: string; reply: boolean;
-  /** just added: whether it replies is a guess (the answer to the one before), made again as From and To are chosen;
-   *  not written in the code */
   guessed?: true;
-  /** the arrow as written when it is not one the forms make (->, -x, -), <<->>): kept while it sends or replies as it did */
   arrow?: string;
-  /** `+`: the receiver's activation bar starts; `-`: the sender's ends */
   act?: '+' | '-';
 }
 export type NoteAt = 'over' | 'left of' | 'right of';
 export interface SeqNote { note: NoteAt; who: string[]; text: string }
-/** a group of messages (a loop, alternatives…) opened, divided (else, and, option) or closed (end) */
 export type BlockKind = 'loop' | 'alt' | 'else' | 'opt' | 'par' | 'and' | 'critical' | 'option' | 'break' | 'rect' | 'end';
 export interface SeqBlock { block: BlockKind; text: string }
-/** a line the forms do not show (activate, a title, a link, a comment…), kept where it is, as written */
 export interface Raw { raw: string }
 export type Step = Message | SeqNote | SeqBlock | Raw;
 export const isMessage = (s: Step): s is Message => 'from' in s;
-/** `messages`: its steps in order, the messages and what stands between them */
 export interface Sequence { kind: 'sequence'; people: Person[]; messages: Step[]; numbered: boolean }
 
 export interface Slice { label: string; value: number }
 export interface Pie { kind: 'pie'; title: string; slices: Slice[]; showData: boolean }
 
-/** how mermaid draws an idea: plain words, a square, rounded, a circle, a bang, a cloud, a hexagon */
 export type MindShape = 'plain' | 'square' | 'rounded' | 'circle' | 'bang' | 'cloud' | 'hexagon';
-export interface Branch { text: string; depth: number; shape?: MindShape } // depth 1: under the centre
-/** `rootShape`: the centre's, a circle when not said */
+export interface Branch { text: string; depth: number; shape?: MindShape }
 export interface Mindmap { kind: 'mindmap'; root: string; items: Branch[]; rootShape?: MindShape }
 
-/** `section`: a period that starts a section (a stretch of periods under one name) carries the section's name */
 export interface Period { label: string; events: string[]; section?: string }
 export interface Timeline { kind: 'timeline'; title: string; periods: Period[] }
 
 export interface Task {
   name: string; start: string; days: number;
-  /** its id (other tasks start after it) and its tags (done, active, crit, milestone) */
   id?: string; tags?: string[];
-  /** it starts when the tasks with these ids end (spaces between), or, '', when the one before it ends: not on `start` */
   after?: string;
 }
 export interface Phase { name: string; tasks: Task[] }
-/** `extra`: settings the forms do not show (excludes, todayMarker, an axis format…), kept as written */
-/** `skipWeekends`, `noToday`: the two settings the rows show as boxes to tick (excludes weekends, todayMarker off) */
 export interface Gantt { kind: 'gantt'; title: string; sections: Phase[]; extra?: string[]; skipWeekends?: true; noToday?: true }
 
 export type Dir = 'TB' | 'BT' | 'LR' | 'RL';
-/** a class diagram: `members` as written ("+String name", "+run() bool", "<<interface>>") */
-export interface ClassBox { id: string; name: string; members: string[]; /** written on a line of its own */ decl?: true }
-/** `arrow`: <|--, *--, o--, -->, --, ..>, ..|>, .. (or as written); the cards: how many at each end ("1", "*") */
+export interface ClassBox { id: string; name: string; members: string[]; decl?: true }
 export interface ClassLink { from: string; to: string; arrow: string; label: string; fromCard: string; toCard: string }
-/** `extra`: what the forms do not show (notes, styles, namespaces, comments), kept as written, after the rest */
 export interface ClassDiagram { kind: 'class'; dir?: Dir; classes: ClassBox[]; links: ClassLink[]; extra?: string[] }
 
-/** a state diagram: `[*]` is where it starts (as a from) and ends (as a to) */
-/** `kind`: a choice (◇), a fork or a join (a bar) instead of a state; `parent`: the state of states it is drawn in;
- *  `note`: a note beside it */
 export interface StateBox {
   id: string; name: string; desc: string; decl?: true;
   kind?: 'choice' | 'fork' | 'join'; parent?: string; note?: { side: 'left' | 'right'; text: string };
 }
-/** `in`: the state of states a start or an end ([*]) is written in: that state's own start or end, not the chart's */
 export interface StateLink { from: string; to: string; label: string; in?: string }
 export interface StateDiagram { kind: 'state'; v2: boolean; dir?: Dir; states: StateBox[]; links: StateLink[]; extra?: string[] }
 
-/** database tables (erDiagram): a column's `keys` as written ("PK", "PK, FK") */
 export interface Column { type: string; name: string; keys: string; comment: string }
 export interface Table { id: string; name: string; columns: Column[]; decl?: true }
-/** `left`/`right`: how many on each side, as mermaid writes it (||, |o, }|, }o and their mirrors) */
 export interface Relation { from: string; to: string; left: string; right: string; dashed: boolean; label: string }
 export interface ErDiagram { kind: 'er'; dir?: Dir; tables: Table[]; links: Relation[]; extra?: string[] }
 
@@ -126,14 +88,11 @@ export const KINDS: { kind: Kind; label: string; hint: string }[] = [
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export const addDays = (day: string, n: number) => { const d = new Date(`${day}T00:00:00`); d.setDate(d.getDate() + n); return iso(d); };
 
-/** what a new chart of each kind starts as: a small example to change, not an empty form */
-/** the / menu's swimlanes: a flowchart whose steps sit in the lane of who does them */
 export function swimlaneStarter(): Flowchart {
   return {
-    kind: 'flowchart', dir: 'TD', // lanes side by side down the page: a note is narrower than it is long
+    kind: 'flowchart', dir: 'TD',
     lanes: [{ id: 'L1', label: 'Customer' }, { id: 'L2', label: 'Store' }, { id: 'L3', label: 'Delivery' }],
     nodes: [
-      // in the order the code lists them (by lane), so the chart reads back exactly as it is
       { id: 'n1', label: 'Order', shape: 'pill', lane: 'L1' },
       { id: 'n6', label: 'Receive', shape: 'pill', lane: 'L1' },
       { id: 'n2', label: 'Check payment', shape: 'round', lane: 'L2' },
@@ -202,8 +161,6 @@ export function starter(kind: Kind, today = iso(new Date())): Diagram {
   }
 }
 
-/** a starter's words in Korean, for a note written in it: its example is there to be renamed, and renaming every box of
- *  an English one in a Korean note was work. Only the words shown: a class's, a table's or a state's name is code. */
 const KO: Record<string, string> = {
   Start: '시작', 'Ready?': '준비됐나요?', Done: '완료', yes: '예', no: '아니오', Me: '나', App: '앱', Ask: '요청', Answer: '응답',
   Idea: '아이디어', One: '첫째', Detail: '세부', Two: '둘째', Three: '셋째', Spring: '봄', Summer: '여름', Fall: '가을',
@@ -229,27 +186,23 @@ const unent = (s: string) => s.replace(/#(\d+);/g, (_, n) => String.fromCharCode
  *  a name that begins with one has its first letter written as an entity code */
 const KEYWORD = /^(title|section|excludes|includes|dateformat|axisformat|tickinterval|todaymarker|weekday|weekend|acctitle|accdescr|displaymode|inclusiveenddates|topaxis)\b/i;
 const unkeyword = (s: string) => (KEYWORD.test(s) ? `#${s.charCodeAt(0)};${s.slice(1)}` : s);
-const one = (s: string) => s.replace(/\s*\n\s*/g, ' ').trim(); // a label is one line
+const one = (s: string) => s.replace(/\s*\n\s*/g, ' ').trim();
 const quoted = (s: string) => `"${ent(one(s), '"#|')}"`;
 const unquote = (s: string) => unent(s.trim().replace(/^"(.*)"$/, '$1'));
-// a flowchart's label may hold line breaks: written as mermaid's <br>, read back as the breaks they were
 const brQuoted = (s: string) => `"${ent(s.split('\n').map(one).join('\n').replace(/^\n+|\n+$/g, ''), '"#|').replace(/\n/g, '<br>')}"`;
 const unlines = (s: string) => unquote(s).replace(/<br\s*\/?>/gi, '\n');
 
-// ---- flowchart ----
 const SHAPES: Record<Shape, [string, string]> = {
   round: ['(', ')'], box: ['[', ']'], pill: ['([', '])'], diamond: ['{', '}'], circle: ['((', '))'], db: ['[(', ')]'],
 };
 const ARROWS: Record<Line, string> = { solid: '-->', dotted: '-.->', thick: '==>' };
 
-/** an arrow as written: its kind of line (= thick, . dotted, - solid) */
 const lineOf = (arrow: string): Line => (arrow.includes('=') ? 'thick' : arrow.includes('.') ? 'dotted' : 'solid');
 
 function flowCode(d: Flowchart) {
   const lines = [...(d.pre ?? []), `flowchart ${d.dir}`];
   const shapeOf = (n: FlowNode) => (n.raw && n.raw.as === n.shape ? [n.raw.open, n.raw.close] : SHAPES[n.shape]);
   const nodeLine = (n: FlowNode, pad: string) => { const [a, b] = shapeOf(n); return `${pad}${n.id}${a}${brQuoted(n.label)}${b}${n.cls ? `:::${n.cls}` : ''}`; };
-  // swimlanes are subgraphs: each lane's boxes inside its own (any other app draws them as groups); boxes in no lane after
   const lanes = d.lanes ?? [];
   for (const l of lanes) {
     lines.push(`  subgraph ${l.id}[${quoted(l.label)}]`, `    direction ${d.dir}`);
@@ -276,8 +229,6 @@ function flowCode(d: Flowchart) {
   return lines.join('\n');
 }
 
-// a node as written: an id, and its shape and label if given here (A, A[Text], A{"Text"}, A[/Text/], …), and a :::class
-// after it. Longer brackets first; the ones the forms have no button for are kept as written (raw), drawn as `as`.
 const OPENS: [string, string[], Shape, boolean][] = [
   ['(((', [')))'], 'circle', true], ['([', ['])'], 'pill', false], ['[[', [']]'], 'box', true], ['[(', [')]'], 'db', false],
   ['((', ['))'], 'circle', false], ['{{', ['}}'], 'diamond', true], ['[/', ['/]', '\\]'], 'box', true], ['[\\', ['\\]', '/]'], 'box', true],
@@ -296,7 +247,6 @@ function readNode(s: string): { id: string; label?: string; shape?: Shape; raw?:
   };
   for (const [open, closes, shape, kept] of OPENS) {
     if (!rest.startsWith(open)) continue;
-    // a quoted label ends at its closing quote: the bracket after it closes the shape
     const q = rest[open.length] === '"' ? rest.indexOf('"', open.length + 1) : open.length - 1;
     if (q < 0) return null;
     const found = closes.map((c) => [c, rest.indexOf(c, q + 1)] as const).filter(([, at]) => at >= 0).sort((x, y) => x[1] - y[1])[0];
@@ -308,7 +258,6 @@ function readNode(s: string): { id: string; label?: string; shape?: Shape; raw?:
   }
   return withClass({ id, rest });
 }
-/** boxes joined by & (A & B --> C): each, and what follows them */
 function readNodes(s: string): { nodes: NonNullable<ReturnType<typeof readNode>>[]; rest: string } | null {
   const nodes = [];
   let rest = s;
@@ -321,10 +270,7 @@ function readNodes(s: string): { nodes: NonNullable<ReturnType<typeof readNode>>
     rest = rest.slice(1);
   }
 }
-/** an arrow at the start of `s`, and its label: -->, ---, -.->, ==>, --o, --x, <-->, --->, with |a label| after it, or
- *  written inside it (-- a label -->, -. a label .->, == a label ==>) */
 function readArrow(s: string): { arrow: string; label: string; rest: string; id?: string } | null {
-  // a line's own id before it (A e1@--> B), for a setting said of it after
   const named = /^([\p{L}\p{N}_]+)@(?=[<ox]?[-=])/u.exec(s);
   if (named) { const a = readArrow(s.slice(named[0].length)); return a && { ...a, id: named[1] }; }
   const inside = /^([<ox]?)(--|-\.|==)\s+(.*?)\s+(-{2,}|\.+-|={2,})([>ox]?)(?![-=.])/u.exec(s);
@@ -337,7 +283,6 @@ function readArrow(s: string): { arrow: string; label: string; rest: string; id?
   if (!bare || bare[0].trim() === '') return null;
   return { arrow: bare[1] + bare[2] + bare[3], label: bare[4] ?? '', rest: s.slice(bare[0].length) };
 }
-/** a line's statements: mermaid takes `;` between them, outside a label's quotes or brackets */
 function statements(line: string): string[] {
   const out: string[] = [];
   let depth = 0, quote = false, from = 0;
@@ -351,8 +296,6 @@ function statements(line: string): string[] {
   out.push(line.slice(from));
   return out.map((x) => x.trim()).filter(Boolean);
 }
-/** a line the forms do not show, kept as written: styles, classes, a link's style, a click, a comment, accessibility */
-/** a box's Order in a presentation: `class A,C step2` */
 const STEP = /^class\s+([\p{L}\p{N}_]+(?:\s*,\s*[\p{L}\p{N}_]+)*)\s+step([1-9]\d*)\s*;?$/u;
 const KEPT = /^(%%|style\s|classDef\s|class\s|linkStyle\s|click\s|accTitle\b|accDescr\b)/;
 
@@ -362,7 +305,7 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
   const d: Flowchart = { kind: 'flowchart', dir: dir[1] === 'TB' ? 'TD' : (dir[1] as Flowchart['dir']), nodes: [], edges: [] };
   if (pre.length) d.pre = pre;
   const seen = new Map<string, FlowNode>();
-  let lane: Lane | null = null; // the subgraph being read
+  let lane: Lane | null = null;
   // a line to or from a lane itself (Lane1 -.-> Lane2): mermaid joins the two groups, the lanes cannot (it was drawn
   // as two boxes named Lane1 and Lane2); the chart is mermaid's to draw
   let toLane = false;
@@ -385,12 +328,9 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
     if (step) { steps.push([step[1].split(/\s*,\s*/), +step[2], whole]); continue; }
     if (KEPT.test(whole)) { keep(whole); continue; }
     for (const line of statements(whole)) {
-      // after a `;` too (`A --> B; class A step2`): kept as written, the editor showed no Order mermaid drew by
       const st = STEP.exec(line);
       if (st) { steps.push([st[1].split(/\s*,\s*/), +st[2], line]); continue; }
       if (KEPT.test(line)) { keep(line); continue; }
-      // a swimlane: `subgraph id["Label"]` (or id[Label], or a bare id, or a title of words) … `end`; one inside
-      // another is more than lanes
       const sub = /^subgraph\s+([\p{L}\p{N}_]+)\s*(?:\[(.*)\])?$/u.exec(line) ?? /^subgraph\s+(.+)$/.exec(line);
       if (sub) {
         if (lane) return null;
@@ -402,11 +342,9 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
         continue;
       }
       if (line === 'end') { if (!lane) return null; lane = null; continue; }
-      // a line told to move (e1@{ animate: true }); any other setting of one is more than the forms show
       const set = /^([\p{L}\p{N}_]+)@\{\s*animate:\s*(true|false)\s*\}$/u.exec(line);
       if (set) { told.push([set[1], set[2] === 'true']); continue; }
-      if (/^direction\s+(LR|RL|TB|TD|BT)$/.test(line)) { if (!lane) return null; continue; } // written anew with the chart's
-      // boxes, and the arrows between them: A --> B, A --> B --> C, A & B --> C & D
+      if (/^direction\s+(LR|RL|TB|TD|BT)$/.test(line)) { if (!lane) return null; continue; }
       let group = readNodes(line);
       if (!group) return null;
       let from = group.nodes.map(node);
@@ -428,10 +366,8 @@ function flowRead(lines: string[], head: string, pre: string[] = []): Flowchart 
       }
     }
   }
-  if (lane || toLane) return null; // a lane never closed
+  if (lane || toLane) return null;
   for (const [id, on] of told) { const e = edgeIds.get(id); if (!e) return null; if (on) e.animate = true; else delete e.animate; }
-  // a step given to a box there is not, or a second one to the same box, is kept as written; so is a class of that
-  // name the chart styles itself (`classDef step1 fill:#f96`): its colour, not an Order, and Auto took it away
   const styled = new Set((d.extra ?? []).flatMap((x) => /^classDef\s+(?:[\w-]+\s*,\s*)*step([1-9]\d*)\b/.exec(x)?.[1] ?? []).map(Number));
   for (const [ids, k, line] of steps) {
     const ns = ids.map((i) => seen.get(i));
@@ -450,7 +386,6 @@ const MESSAGE = new RegExp(String.raw`^(${SID})\s*(${SEQ_ARROW})\s*([+-]?)\s*(${
 const NOTE = new RegExp(String.raw`^note\s+(over|left of|right of)\s+(${SID})(?:\s*,\s*(${SID}))?\s*:\s?(.*)$`, 'i');
 const BLOCK = /^(loop|alt|else|opt|par|and|critical|option|break|rect)\b\s*(.*)$/;
 const OPENS_BLOCK = new Set(['loop', 'alt', 'opt', 'par', 'critical', 'break', 'rect']);
-/** an arrow replies when it is dashed (-->>, --x, --)) */
 export const replies = (arrow: string) => arrow.replace(/^<</, '').startsWith('--');
 // a name can hold what a participant line could not (`as`, spaces): it is written with an id and an alias
 function seqCode(d: Sequence) {
@@ -458,11 +393,10 @@ function seqCode(d: Sequence) {
   if (d.numbered) lines.push('  autonumber');
   for (const p of d.people) {
     const name = ent(one(p.name) || p.id, ';#');
-    // no alias where it would only say the id again (`participant Web as Web`)
     lines.push(`  ${p.actor ? 'actor' : 'participant'} ${p.id}${name === p.id ? '' : ` as ${name}`}`);
   }
   const ids = new Set(d.people.map((p) => p.id));
-  let depth = 1; // a group's lines indented under it
+  let depth = 1;
   const pad = (n: number) => '  '.repeat(Math.max(1, n));
   const says = (text: string) => (one(text) ? `: ${ent(one(text), ';#')}` : ':');
   for (const st of d.messages) {
@@ -491,7 +425,7 @@ function seqRead(lines: string[]): Sequence | null {
   for (const raw of lines) {
     const line = raw.trim();
     if (line === 'autonumber') { d.numbered = true; continue; }
-    if (/^box\b/.test(line)) return null; // participants in a box: their lines go together, which the form cannot keep
+    if (/^box\b/.test(line)) return null;
     const p = PARTICIPANT.exec(line);
     if (p) {
       if (d.people.some((x) => x.id === p[2])) return null;
@@ -549,7 +483,6 @@ function pieRead(lines: string[], head: string): Pie | null {
 // ---- mind map ----
 // brackets in a branch's text ((, [, {) would give it a shape: written as entity codes
 const branch = (s: string) => ent(s, '()[]{}#');
-/** each shape's brackets, the longest first: (( before ( */
 const MIND_BRACKETS: [MindShape, string, string][] = [
   ['circle', '((', '))'], ['bang', '))', '(('], ['hexagon', '{{', '}}'], ['square', '[', ']'], ['rounded', '(', ')'], ['cloud', ')', '('],
 ];
@@ -557,7 +490,6 @@ const shaped = (shape: MindShape | undefined, id: string, text: string) => {
   const b = MIND_BRACKETS.find(([s]) => s === shape);
   return b ? `${id}${b[1]}${branch(text)}${b[2]}` : branch(text);
 };
-/** an idea as written: its shape from its brackets (an id before them, as mermaid writes them, dropped) */
 function readIdea(text: string): { text: string; shape: MindShape } | null {
   for (const [shape, open, close] of MIND_BRACKETS) {
     const m = new RegExp(String.raw`^[\p{L}\p{N}_-]*${open.replace(/./g, '\\$&')}(.*)${close.replace(/./g, '\\$&')}$`, 'u').exec(text);
@@ -571,7 +503,7 @@ function mindCode(d: Mindmap) {
   d.items.forEach((b, i) => {
     const text = one(b.text);
     if (!text) return;
-    depth = Math.max(1, Math.min(b.depth, depth + 1)); // one step deeper than the branch above it, at most
+    depth = Math.max(1, Math.min(b.depth, depth + 1));
     lines.push(`${'  '.repeat(depth + 1)}${shaped(b.shape, `b${i}`, text)}`);
   });
   return lines.join('\n');
@@ -588,7 +520,7 @@ function mindRead(lines: string[]): Mindmap | null {
   for (const raw of rest) {
     const ind = raw.length - raw.trimStart().length;
     const idea = readIdea(raw.trim());
-    if (ind <= base || !idea || raw.trim().startsWith('::')) return null; // a second root, a class or an icon
+    if (ind <= base || !idea || raw.trim().startsWith('::')) return null;
     while (indents.length > 1 && ind <= indents[indents.length - 1]) indents.pop();
     indents.push(ind);
     d.items.push(idea.shape === 'plain' ? { text: idea.text, depth: indents.length - 1 } : { text: idea.text, depth: indents.length - 1, shape: idea.shape });
@@ -596,7 +528,6 @@ function mindRead(lines: string[]): Mindmap | null {
   return d;
 }
 
-// ---- timeline ----
 function timeCode(d: Timeline) {
   const lines = ['timeline'];
   if (one(d.title)) lines.push(`  title ${ent(one(d.title), ':#')}`);
@@ -609,14 +540,13 @@ function timeCode(d: Timeline) {
 }
 function timeRead(lines: string[]): Timeline | null {
   const d: Timeline = { kind: 'timeline', title: '', periods: [] };
-  let section: string | undefined; // the name of the section the next period starts
+  let section: string | undefined;
   for (const raw of lines) {
     const line = raw.trim();
     const t = /^title\s+(.*)$/i.exec(line);
     if (t) { d.title = unent(t[1].trim()); continue; }
     const sec = /^section\s+(.*)$/i.exec(line);
     if (sec) { section = unent(sec[1].trim()); continue; }
-    // events part at a colon with a space after it (or the line's end): "10:30" and a URL's "https:" stay whole
     const [label, ...events] = line.split(/\s*:(?:\s+|$)/).map((s) => unent(s.trim()));
     if (!label) { const last = d.periods[d.periods.length - 1]; if (!last) return null; last.events.push(...events); continue; }
     d.periods.push(section === undefined ? { label, events } : { label, events, section });
@@ -625,12 +555,8 @@ function timeRead(lines: string[]): Timeline | null {
   return d;
 }
 
-// ---- gantt ----
 const TAGS = new Set(['done', 'active', 'crit', 'milestone']);
-/** each task's start and length as drawn: a task after others starts when the last of them ends, one after the one
- *  before it when that ends (one after ids that name none, on the chart's first day) */
 const weekend = (day: string) => [0, 6].includes(new Date(`${day}T00:00:00Z`).getUTCDay());
-/** a start moved off a weekend, and how many calendar days `n` weekdays from it take */
 function onWeekdays(start: string, n: number): [string, number] {
   let at = start;
   while (weekend(at)) at = addDays(at, 1);
@@ -638,21 +564,18 @@ function onWeekdays(start: string, n: number): [string, number] {
   for (let left = Math.max(1, n); left > 0; days++) if (!weekend(addDays(at, days))) left--;
   return [at, days];
 }
-/** each task's first day and how many days it takes on the calendar (a task after another starts where that one ends) */
 export function ganttDates(d: Gantt): Map<Task, { start: string; days: number }> {
   const out = new Map<Task, { start: string; days: number }>();
   const all = d.sections.flatMap((s) => s.tasks);
   const first = all.filter((t) => t.after === undefined).map((t) => t.start).sort()[0] ?? iso(new Date());
   const byId = new Map(all.filter((t) => t.id).map((t) => [t.id!, t]));
   const end = (t: Task | undefined) => { const r = t && out.get(t); return r ? addDays(r.start, r.days) : null; };
-  // again until nothing moves: a task after one listed below it had only the chart's first day, read in one pass
   for (let pass = 0; pass <= all.length; pass++) {
     let moved = false, prev: Task | undefined;
     for (const t of all) {
       const start = t.after === undefined ? t.start
         : t.after === '' ? end(prev) ?? first
         : t.after.split(' ').map((id) => end(byId.get(id))).filter((x): x is string => !!x).sort().pop() ?? first;
-      // weekends skipped: it starts on a weekday, and its days are weekdays (the days it takes on the calendar, given)
       const [at, days] = d.skipWeekends ? onWeekdays(start, t.days) : [start, t.days];
       if (out.get(t)?.start !== at || out.get(t)?.days !== days) { out.set(t, { start: at, days }); moved = true; }
       prev = t;
@@ -669,7 +592,6 @@ function ganttCode(d: Gantt) {
   if (spans.length && !(d.extra ?? []).some((x) => /^(tickInterval|axisFormat)\b/i.test(x))) {
     const from = spans.map((t) => t.start).sort()[0], to = spans.map((t) => addDays(t.start, t.days)).sort().pop()!;
     const span = (Date.parse(to) - Date.parse(from)) / 864e5;
-    // (a day's ticks for a week at most: a fortnight's, its dates drawn small, ran into one another)
     lines.push(span <= 8 ? '  tickInterval 1day' : span <= 120 ? '  tickInterval 1week' : '  tickInterval 1month');
     if (span > 120) lines.push('  axisFormat %Y-%m');
   }
@@ -692,14 +614,13 @@ function ganttCode(d: Gantt) {
 }
 const realDay = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); const t = new Date(Date.UTC(y, m - 1, d)); return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d; };
 const isDay = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && realDay(s);
-/** a setting the forms do not show, kept as written */
 const GANTT_KEPT = /^(excludes|includes|todayMarker|weekday|weekend|axisFormat|tickInterval|displayMode|inclusiveEndDates|topAxis|accTitle|accDescr)\b/i;
 function ganttRead(lines: string[]): Gantt | null {
   const d: Gantt = { kind: 'gantt', title: '', sections: [] };
   for (const raw of lines) {
     const line = raw.trim();
-    if (line === 'dateFormat YYYY-MM-DD' || /^tickInterval 1(day|week|month)$/.test(line) || line === 'axisFormat %Y-%m') continue; // written anew
-    if (/^dateFormat\b/i.test(line)) return null; // its dates in another form: the date fields would misread them
+    if (line === 'dateFormat YYYY-MM-DD' || /^tickInterval 1(day|week|month)$/.test(line) || line === 'axisFormat %Y-%m') continue;
+    if (/^dateFormat\b/i.test(line)) return null;
     if (/^excludes\s+weekends$/i.test(line)) { d.skipWeekends = true; continue; }
     if (/^todayMarker\s+off$/i.test(line)) { d.noToday = true; continue; }
     if (GANTT_KEPT.test(line)) { (d.extra ??= []).push(line); continue; }
@@ -725,7 +646,6 @@ function ganttRead(lines: string[]): Gantt | null {
     if (n) task.days = +n[1] * (n[2] === 'w' ? 7 : 1);
     else if (isDay(len) && task.start) task.days = Math.round((Date.parse(len) - Date.parse(task.start)) / 864e5);
     else return null;
-    // a real length under a century (a milestone's may be none)
     if (task.days > 36500 || task.days < 0 || (!task.days && !tags.includes('milestone'))) return null;
     if (id) task.id = id;
     if (tags.length) task.tags = tags;
@@ -735,9 +655,7 @@ function ganttRead(lines: string[]): Gantt | null {
   return d;
 }
 
-// ---- class, state and table diagrams: what the forms show read and written, any other line kept as written ----
 const DIRECTION = /^direction\s+(TB|BT|LR|RL)$/;
-/** the last line of the `{ … }` block opening at `at`: kept whole, as one statement */
 function blockEnd(lines: string[], at: number): number {
   let depth = 0;
   for (let i = at; i < lines.length; i++) {
@@ -746,12 +664,10 @@ function blockEnd(lines: string[], at: number): number {
   }
   return lines.length - 1;
 }
-/** lines `from`…`to` as one kept statement, indented as they were under its first */
 function block(lines: string[], from: number, to: number) {
   const pad = lines[from].length - lines[from].trimStart().length;
   return lines.slice(from, to + 1).map((l) => l.slice(Math.min(pad, l.length - l.trimStart().length)).trimEnd()).join('\n');
 }
-/** a kept statement written back, each of its lines under the diagram's */
 const kept = (x: string) => x.split('\n').map((l) => `  ${l}`).join('\n');
 
 const CID = String.raw`[\p{L}\p{N}_]+(?:~[^~\s]+~)?`;
@@ -771,7 +687,6 @@ function classCode(d: ClassDiagram) {
       lines.push(`  class ${c.id}["${one(c.name).replace(/"/g, "'")}"]`);
       for (const m of members) lines.push(`  ${c.id} : ${m}`);
     } else if (members.length) lines.push(`  class ${c.id} {`, ...members.map((m) => `    ${m}`), '  }');
-    // a class with nothing else to say is written on a line of its own: unwritten, one just added was lost
     else if (c.decl || !d.links.some((l) => l.from === c.id || l.to === c.id)) lines.push(`  class ${c.id}`);
   }
   const ids = new Set(d.classes.map((c) => c.id));

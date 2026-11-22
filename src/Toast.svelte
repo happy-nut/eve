@@ -5,14 +5,11 @@
   import { isMobile } from './lib/platform';
 </script>
 
-<!-- a status, not a dialog: it takes no focus and blocks nothing, so writing goes on under it; its one button is
-     there for the mouse (or a tap) while it lasts. Keyed, so a newer one comes in as itself, not as an edit of the last -->
 {#if ui.toastMsg}
   {#key ui.toastMsg.id}
     <div class="toast" class:mobile={isMobile} class:clear-of-sheet={isMobile && !!ui.layers.top} role="status" aria-live="polite" transition:fly|global={{ y: 8, duration: 160, easing: cubicOut }}>
       <span class="msg">{ui.toastMsg.message}</span>
       {#if ui.toastMsg.action}
-        <!-- mousedown kept from the button: the caret stays in the note it was in -->
         <button onmousedown={(e) => e.preventDefault()} onclick={() => ui.toastAction()}>{ui.toastMsg.action.label}</button>
       {/if}
     </div>
@@ -21,14 +18,11 @@
 
 <style>
   .toast {
-    /* in the middle of the note's pane, not the window's: at a narrow window it lay over the list's Trash and Settings */
     position: fixed; left: calc(var(--pane-left, 0px) + (100vw - var(--pane-left, 0px)) / 2); bottom: 24px; translate: -50% 0; z-index: var(--z-toast);
     display: flex; align-items: center; gap: 12px; max-width: min(440px, calc(100vw - var(--pane-left, 0px) - 32px));
-    /* dark, as the hints that come up in the same place are (it was a white card there, a stranger to them) */
     padding: 6px 6px 6px 14px; font-size: 13px; color: #f2f3f5;
     background: light-dark(#1d1f24, #2a2d33); border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
   }
-  /* a phone's formatting bar (and the list's + button) sit along the bottom: clear of them */
   .toast.mobile { bottom: calc(84px + env(safe-area-inset-bottom)); }
   .toast.mobile.clear-of-sheet { bottom: auto; top: calc(12px + env(safe-area-inset-top)); }
   .msg { min-width: 0; overflow-wrap: anywhere; }

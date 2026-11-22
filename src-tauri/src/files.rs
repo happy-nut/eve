@@ -1,4 +1,3 @@
-//! The notes folder: notes, their assets, and files opened from outside.
 use std::{fs, path::PathBuf};
 use tauri::{AppHandle, Manager};
 
@@ -19,8 +18,6 @@ pub(crate) fn safe_id(id: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Changes the MCP server left for the app (`eve mcp`, core.rs ask_app), oldest first, each taken out of the
-/// inbox as it is read: it is done once, by this app's notes store.
 #[tauri::command]
 pub(crate) fn take_inbox(app: AppHandle) -> Result<Vec<String>, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("inbox");
@@ -28,11 +25,10 @@ pub(crate) fn take_inbox(app: AppHandle) -> Result<Vec<String>, String> {
         Ok(entries) => entries.flatten().map(|e| e.path()).filter(|p| p.extension().and_then(|e| e.to_str()) == Some("json")).collect(),
         Err(_) => return Ok(Vec::new()),
     };
-    asks.sort(); // named by the time they were asked
+    asks.sort();
     Ok(asks.iter().filter_map(|p| fs::read_to_string(p).ok().filter(|_| fs::remove_file(p).is_ok())).collect())
 }
 
-/// The app's answer to one change, for the server waiting on it.
 #[tauri::command]
 pub(crate) fn answer_inbox(app: AppHandle, ask: String, reply: String) -> Result<(), String> {
     if ask.is_empty() || !ask.chars().all(|c| c.is_ascii_digit() || c == '-') {
@@ -42,7 +38,6 @@ pub(crate) fn answer_inbox(app: AppHandle, ask: String, reply: String) -> Result
     write_atomic(&dir.join(format!("{ask}.reply")), reply.as_bytes())
 }
 
-/// Returns raw file contents of every note; parsing happens in the frontend.
 #[tauri::command]
 pub(crate) fn list_notes(app: AppHandle) -> Result<Vec<String>, String> {
     let dir = notes_dir(&app)?;
@@ -69,10 +64,8 @@ pub(crate) fn assets_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// What may live in notes/assets: pictures, videos, and PDFs dropped into a note.
 pub(crate) const ASSET_EXTS: [&str; 16] = [
     "png", "jpg", "jpeg", "gif", "webp", "svg", "heic", "pdf", "mp4", "mov", "m4v", "webm",
-    // documents the webview cannot draw itself: the viewer shows Quick Look's preview of them
     "xlsx", "xls", "hwp", "hwpx",
 ];
 
@@ -84,17 +77,12 @@ pub(crate) fn safe_name(name: &str) -> Result<(), String> {
     if ok { Ok(()) } else { Err("invalid asset name".into()) }
 }
 
-/// `<ms-hex>-<6 hex>.<ext>`. The millisecond alone is not enough: an import copies a note's
-/// pictures at once, and two of them in one millisecond would share a name and the second
-/// would overwrite the first. The suffix counts up from a random start, so names never repeat
-/// within one run and two devices (or two runs) rarely pick the same one.
 pub(crate) fn stamp_name(ext: &str) -> String {
     use std::hash::{BuildHasher, Hasher};
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::OnceLock;
     static START: OnceLock<u64> = OnceLock::new();
     static COUNT: AtomicU64 = AtomicU64::new(0);
-    // std's hasher keys are random per process: enough randomness without another crate
     let start = *START.get_or_init(|| std::collections::hash_map::RandomState::new().build_hasher().finish());
     let n = start.wrapping_add(COUNT.fetch_add(1, Ordering::Relaxed)) & 0xff_ffff;
     let stamp = std::time::SystemTime::now()
@@ -104,8 +92,6 @@ pub(crate) fn stamp_name(ext: &str) -> String {
     format!("{stamp:x}-{n:06x}.{ext}")
 }
 
-/// A new file in notes/assets under a fresh name, filled by `fill`. Never replaces an
-/// existing file: a name already taken (synced in from another device) just draws another.
 fn create_asset(app: &AppHandle, ext: &str, mut fill: impl FnMut(&mut fs::File) -> std::io::Result<()>) -> Result<String, String> {
     let dir = assets_dir(app)?;
     for _ in 0..8 {
@@ -116,7 +102,6 @@ fn create_asset(app: &AppHandle, ext: &str, mut fill: impl FnMut(&mut fs::File) 
             r => r.map_err(|e| e.to_string())?,
         };
         if let Err(e) = fill(&mut file) {
-            // no half-written picture left behind for sync to pick up
             let _ = fs::remove_file(&path);
             return Err(e.to_string());
         }
@@ -140,7 +125,6 @@ pub(crate) fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> Result<(), S
     fs::rename(tmp, path).map_err(|e| e.to_string())
 }
 
-/// Copy a file picked by the user into notes/assets and return its note-relative path.
 #[tauri::command]
 pub(crate) fn import_asset(app: AppHandle, src: String) -> Result<String, String> {
     let src = PathBuf::from(src);
@@ -154,7 +138,6 @@ pub(crate) fn import_asset(app: AppHandle, src: String) -> Result<String, String
     create_asset(&app, &ext, |to| std::io::copy(&mut from, to).map(|_| ()))
 }
 
-/// File bytes from the clipboard / a drop, saved into notes/assets. Body = raw bytes, header x-ext = extension.
 #[tauri::command]
 pub(crate) fn save_asset(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<String, String> {
     let ext = request
@@ -205,7 +188,6 @@ pub(crate) fn write_asset(app: AppHandle, request: tauri::ipc::Request<'_>) -> R
     write_atomic(&assets_dir(&app)?.join(&name), &raw_body(&request)?)
 }
 
-/// External files (opened via Finder / "Open With"). Edited in place, never synced.
 #[tauri::command]
 pub(crate) fn read_file(path: String) -> Result<String, String> {
     fs::read_to_string(path).map_err(|e| e.to_string())
@@ -216,7 +198,6 @@ pub(crate) fn write_file(path: String, text: String) -> Result<(), String> {
     fs::write(path, text).map_err(|e| e.to_string())
 }
 
-/// Every file under a picked folder, as paths relative to it (hidden files skipped).
 #[tauri::command]
 pub(crate) fn list_folder(root: String) -> Result<Vec<String>, String> {
     let root = PathBuf::from(&root);
@@ -248,7 +229,6 @@ pub(crate) fn notes_path(app: AppHandle) -> Result<String, String> {
 mod tests {
     use super::*;
 
-    /// An import copies a note's pictures together, many inside one millisecond.
     #[test]
     fn stamp_names_in_a_row_are_distinct_and_safe() {
         let names: Vec<String> = (0..5000).map(|_| stamp_name("png")).collect();

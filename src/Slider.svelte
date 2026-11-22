@@ -1,5 +1,4 @@
 <script lang="ts">
-  /** A range drawn in the app's own colours: the filled part in the accent, a round white knob. */
   let { value, min, max, step = 1, oninput, label = '' }: {
     value: number; min: number; max: number; step?: number; oninput: (v: number) => void; label?: string;
   } = $props();

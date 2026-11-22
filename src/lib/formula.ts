@@ -1,11 +1,4 @@
 import { dayKey } from './daily';
-/**
- * Notion's formulas, the part a note's table needs: `prop("Price") * 2`, `if(prop("Done"), "✓", "")`,
- * `dateBetween(prop("Due"), now(), "days")`, `concat(prop("Name"), " (", prop("Status"), ")")`. Read by a small parser
- * of its own and worked out over the row's values: nothing is run as code (a note's formula is no script).
- *
- * Values are numbers, words, true/false, or nothing (null). A date is words, `2026-11-01`.
- */
 export type Val = number | string | boolean | null;
 type Node =
   | { k: 'lit'; v: Val }
@@ -116,7 +109,6 @@ function run(n: Node, prop: (name: string) => Val): Val {
     case 'op': {
       const a = run(n.a, prop), b = run(n.b, prop);
       switch (n.op) {
-        // words joined when either side is words that are no number, as Notion's +
         case '+': return typeof a === 'string' && isNaN(Number(a)) || typeof b === 'string' && isNaN(Number(b)) ? str(a) + str(b) : num(a) + num(b);
         case '-': return num(a) - num(b);
         case '*': return num(a) * num(b);
@@ -137,7 +129,6 @@ function run(n: Node, prop: (name: string) => Val): Val {
 }
 const cmp = (a: Val, b: Val) => (typeof a === 'number' || typeof b === 'number' ? num(a) - num(b) : str(a).localeCompare(str(b)));
 
-/** The formula worked out over a row (`prop` gives its values), as the words a cell shows; an error says so. */
 export function evaluate(src: string, prop: (name: string) => Val): { value: string; error?: string } {
   if (!src.trim()) return { value: '' };
   try {

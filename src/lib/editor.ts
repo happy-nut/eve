@@ -59,7 +59,6 @@ import { ICONS } from './lineIcons';
 import { LIST_ITEM_CONTENT, NumberedList, ListSwitch, JoinNextItem, LineIndent, JoinLists, ListMarkdown, ToDoItem, looseLists } from './lists';
 import { appearance } from './appearance.svelte';
 
-/** markdown that would otherwise land as literal characters ("**bold**", "# heading", "- item", …) */
 const MD_SYNTAX = /(\$[^\s$]|\*\*|__|~~|^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|`|\[[^\]]*\]\(|^\|.*\|\s*$)/m;
 /** clipboard HTML that carries formatting of its own, so it is more than a plain-text flavour */
 const RICH_HTML = /<(strong|b|em|i|u|s|a|h[1-6]|ul|ol|li|code|pre|blockquote|img|table|hr)\b/i;
@@ -70,12 +69,6 @@ const RICH_HTML = /<(strong|b|em|i|u|s|a|h[1-6]|ul|ol|li|code|pre|blockquote|img
  */
 const LEADS = 'pre, h1, h2, h3, h4, h5, h6, blockquote, table, ul, ol, div[data-math-block], div[data-kanban], div[data-eve-raw], details';
 
-/**
- * A list item that starts with a block other than a line of text. The item's first line is text (blocks.ts, the
- * list commands and the keys all work from it), so such an item is read with an empty line first, and `lead` says
- * the block was on the item's own line: it is written back there, not after an empty line (which was the item's
- * text, the block coming out of the list after it). An item made in the editor never has it.
- */
 const ListItemLead = ListItem.extend({
   content: LIST_ITEM_CONTENT,
   addAttributes() {
@@ -89,9 +82,6 @@ const ListItemLead = ListItem.extend({
           node.forEach((child, _o, i) => { if (i) state.render(child, node, i); });
           return;
         }
-        // a numbered to-do (`1. [ ] task`), which the note has no checkbox for, is read as that text: its brackets
-        // are written as they were, not escaped, so another app still finds its to-do there
-        // (`parent` is no node when an item is written out on its own: a list line dragged by its ⋮⋮ threw here)
         if ((parent as PMNode | undefined)?.type?.name === 'orderedList' && first?.type.name === 'paragraph' && text?.isText && !text.marks.length && /^\[[ xX]\] \S/.test(text.text!)) {
           state.write(text.text!.slice(0, 4));
           state.render(first.cut(4), node, 0);
@@ -102,8 +92,6 @@ const ListItemLead = ListItem.extend({
       },
       parse: {
         setup(md: any) {
-          // `1. [ ] task`: a to-do in a numbered list, which a to-do list cannot be. Read as a to-do, it was taken out
-          // of the list, an empty item left in its place; its brackets are kept as text instead.
           md.core.ruler.before('inline', 'eve-numbered-todo', (state: any) => {
             const lists: string[] = [];
             for (const [i, t] of (state.tokens as any[]).entries()) {
@@ -188,7 +176,6 @@ const BlankLine = Paragraph.extend({
  * the page (a callout's title split off its first line), so it sees the lines as they will be.
  */
 function keepSpaces(root: HTMLElement) {
-  // the space after a to-do's "[ ]" is markdown's, not the text's (the checkbox it stood after is gone by now)
   for (const li of root.querySelectorAll('li[data-checked]')) {
     const first = document.createTreeWalker(li, NodeFilter.SHOW_TEXT).nextNode();
     if (first?.parentElement?.closest('li') === li && first.nodeValue?.startsWith(' ')) first.nodeValue = first.nodeValue.slice(1);
@@ -201,13 +188,11 @@ function keepSpaces(root: HTMLElement) {
     for (const m of text.matchAll(/[ \t]+/g)) {
       const a = m.index!, b = a + m[0].length;
       if (/\s/.test(text[a - 1] ?? '') || /\s/.test(text[b] ?? '')) continue;
-      // one space reads the same either way, but not at the ends of a line, nor after code ending in one ("`a ` b"
-      // lost it); one after a checkbox or a picture is markdown's own, and goes
       const prev = t.previousSibling;
       const lead = a === 0 && (!prev || prev.nodeName === 'BR' || /\s$/.test(prev.textContent ?? ''));
       if (m[0] === ' ' && !lead && (b < text.length || t.nextSibling)) continue;
       const to = b + (text.codePointAt(b)! > 0xffff ? 2 : b < text.length ? 1 : 0);
-      const span = document.createElement('eve-space'); // no tag of HTML's: the Html extension keeps those
+      const span = document.createElement('eve-space');
       span.style.whiteSpace = 'pre';
       span.textContent = text.slice(a, to);
       parts.push(text.slice(last, a), span);
@@ -216,15 +201,12 @@ function keepSpaces(root: HTMLElement) {
     if (parts.length) t.replaceWith(...parts, text.slice(last));
   }
 }
-/** A blank line (BlankLine) read back empty, as it was. Here, the last thing to see the page, and not as the line is read
- *  in: a callout or a quote is built after that, and the blank lines in it kept their space — invisible, one more ⌫ to
- *  clear, and a note read back after a sync no longer the one open (the caret moved). */
 function emptyBlankLines(el: HTMLElement) {
   for (const p of el.querySelectorAll('p')) if (p.textContent === BLANK) p.replaceChildren();
 }
 const KeepSpaces = Extension.create({
   name: 'keepSpaces',
-  priority: 1, // the last to see the page
+  priority: 1,
   addStorage: () => ({ markdown: { parse: { updateDOM: (el: HTMLElement) => { emptyBlankLines(el); keepSpaces(el); } } } }),
 });
 
@@ -232,23 +214,14 @@ const KEYMAP = new PluginKey('eve-keymap');
 const APP_GUARD = new PluginKey('eve-app-guard');
 
 export const getMarkdown = (editor: Editor): string => (editor.storage as any).markdown.getMarkdown();
-/** a note this long (in ProseMirror positions, about characters) waits for a pause before it becomes markdown */
 const LONG = 10_000;
 
-/**
- * What ⌥↑ / ⌥↓ just moved is lit faintly for a moment, so the eye can tell which lines went where: every
- * line in the selection, or for a caret in an item's first line the whole item with what hangs under it.
- * The two classes are taken in turn so a second move right away starts the fade over.
- */
 const FLASH = new PluginKey<DecorationSet>('moveFlash');
 let flashes = 0;
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
-/** per editor: ⌥↑ / ⌥↓ that move the note itself rather than a line (the note's own editor says when) */
 const noteMove = new WeakMap<Editor, (dir: -1 | 1, onTitle: boolean) => boolean>();
 
 function moveAndFlash(editor: Editor, dir: -1 | 1): boolean {
-  // the title line never moves inside its note: there (or right after the note was opened from the list)
-  // the keys move the note itself, the way they move a row in the list
   const { $from, empty } = editor.state.selection;
   const onTitle = empty && $from.depth === 1 && $from.index(0) === 0 && $from.parent.type.name === 'heading';
   if (noteMove.get(editor)?.(dir, onTitle)) return true;
@@ -276,16 +249,6 @@ function moveAndFlash(editor: Editor, dir: -1 | 1): boolean {
   return true;
 }
 
-/**
- * ⌘↩ on a to-do, Notion's way: its box ticked or cleared. Over several lines, every to-do among them: all
- * ticked if any was open, all cleared if every one was done. Elsewhere the key is not ours.
- */
-/**
- * Cells chosen in a table, copied as text. With the table's header row among them, a markdown table of just those
- * cells (Settings → General, on unless turned off): pasted into a note, a README or a chat, it is the table again.
- * Otherwise a tab between cells and a line a row, as a spreadsheet copies and takes them (they came a blank line
- * apart, one cell a paragraph).
- */
 function copiedCells(sel: CellSelection, slice: Slice, serializer: any): string {
   const table = sel.$anchorCell.node(-1);
   const top = Math.min(sel.$anchorCell.index(-1), sel.$headCell.index(-1));
@@ -297,7 +260,6 @@ function copiedCells(sel: CellSelection, slice: Slice, serializer: any): string 
   return rows.map((r) => { const cells: string[] = []; r.forEach((c) => cells.push(plain(c))); return cells.join('\t'); }).join('\n');
 }
 
-/** ⌘↵ in a toggle's title: it opens, or closes (Notion's ⌘↵ acts on the block it is in) */
 function toggleHere({ tr, state }: { tr: any; state: any }): boolean {
   const { $from } = state.selection;
   for (let d = $from.depth; d > 0; d--) {
@@ -324,10 +286,6 @@ function toggleCheck({ tr, state }: { tr: any; state: any }): boolean {
   return true;
 }
 
-/**
- * An arrow typed as text ("->" becomes →). Not inside `code` still being typed: its mark only comes with the
- * closing backtick, by when "=>" in it had already turned. (Code that is already code is left alone anyway.)
- */
 const arrow = (find: RegExp, replace: string) => new InputRule({
   find,
   handler: ({ state, range }) => {
@@ -617,7 +575,6 @@ export function editorCommands(editor: Editor): Record<string, () => boolean> {
         // an address pasted after an "https://" came out "https://https://…"; one typed bare (example.com) is the web's
         let url = typed.trim().replace(/^(?:https?:\/\/)+(https?:\/\/)/i, '$1');
         if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(url)) url = `https://${url}`;
-        // nothing but the scheme left is no address: OK there linked the words to "https://"
         if (!url || /^[a-z][\w+.-]*:\/*$/i.test(url)) c().extendMarkRange('link').unsetLink().run();
         // no words chosen and none linked: the address goes in as its own words (it linked nothing, and said nothing)
         else if (editor.state.selection.empty && !prev) c().insertContent({ type: 'text', text: url, marks: [{ type: 'link', attrs: { href: url } }] }).unsetMark('link').run();
@@ -687,10 +644,6 @@ function shiftPastBlocks(view: EditorView, e: KeyboardEvent): boolean {
   return true;
 }
 
-/**
- * A date chip clicked: a reminder's time changed or the reminder taken off, or a plain day made one (Notion's
- * "Remind" on a date). The time is asked as HH:MM; anything else leaves the chip as it was.
- */
 function chipMenu(editor: Editor, pos: number, dom: HTMLElement) {
   const node = editor.state.doc.nodeAt(pos);
   if (node?.type.name !== 'dateMention') return;
@@ -708,13 +661,11 @@ function chipMenu(editor: Editor, pos: number, dom: HTMLElement) {
     : [{ label: 'Remind me…', run: () => void askTime(remindTime(node.attrs.date)) }]);
 }
 
-/** Eve's own keys from before it took Notion's (0.7.55 and older) */
 const FORMER: Record<string, string> = {
   'Mod-Shift-7': 'orderedList', 'Mod-Shift-8': 'bulletList', 'Mod-Shift-9': 'taskList', 'Mod-Alt-c': 'codeBlock',
   'Mod-Shift-x': 'strike', 'Alt-ArrowUp': 'moveBlockUp', 'Alt-ArrowDown': 'moveBlockDown',
 };
 
-/** (Re)install the user keymap in front of every other plugin, so rebinding wins. */
 export function applyKeymap(editor: Editor) {
   const cmds = editorCommands(editor);
   const bindings: Record<string, Command> = {};
@@ -723,15 +674,11 @@ export function applyKeymap(editor: Editor) {
     // ProseMirror knows the minus key as "-" ("Minus" is the list's own name for it), and with Shift held the
     // key reads "_": that is found by the key's code (Mod-Shift--), or as "_" without its Shift (Mod-_)
     const keys = a.keys.replace(/Minus$/, '-');
-    // ⌘K with no words chosen and no link under the caret is search, as in Notion: the key goes on to the app
     bindings[keys] = a.id === 'link' ? () => (!editor.state.selection.empty || editor.isActive('link')) && cmds.link() : () => cmds[a.id]();
     if (keys !== a.keys && keys.includes('Shift-')) bindings[keys.replace('Shift-', '').replace(/-$/, '_')] = bindings[keys];
   }
   editor.unregisterPlugin(KEYMAP);
   editor.unregisterPlugin(APP_GUARD);
-  // App-scope combos (e.g. ⌘B rebound to "focus sidebar", Esc to hide the window) must not be eaten
-  // by the editor's built-in keymaps; stop editor handling and say the key is the app's (keys.ts), so the app's
-  // shortcuts still run it. A card page still closes on Esc instead: it stops the event before it reaches the window.
   const guard = new Plugin({
     key: APP_GUARD,
     props: {
@@ -745,21 +692,13 @@ export function applyKeymap(editor: Editor) {
     },
   });
   editor.registerPlugin(guard, (p, all) => [p, ...all]);
-  // ⌥↩ opens the note's own menu, the one the right button opens (the sidebar answers to it too)
   bindings['Alt-Enter'] = () => (noteMenu(editor, null), true);
-  // the keys these did before Eve took Notion's, still doing them unless something else has them now: the stock ones
-  // underneath (⌘⇧8, ⌘⌥C) would otherwise answer, without this editor's care for code, tables and toggles
   const taken = new Set(shortcuts.actions.map((a) => a.keys));
   for (const [keys, id] of Object.entries(FORMER)) if (!taken.has(keys) && !bindings[keys] && cmds[id]) bindings[keys] = () => cmds[id]();
   const plugin = new Plugin({ key: KEYMAP, props: { handleKeyDown: keydownHandler(bindings) } });
   editor.registerPlugin(plugin, (p, all) => [p, ...all]);
 }
 
-/**
- * Attachments pasted or dropped into a note: a picture or a PDF, stored next to the notes (a blob: URL
- * would die on restart). `at` is the drop point, so a file lands where it was let go, not at the caret.
- * A markdown/text file is not an attachment — App opens it as a note of its own.
- */
 function insertFiles(editor: Editor, files?: FileList | null, at?: number): boolean {
   const take = [...(files ?? [])].filter(isAsset);
   if (!take.length) return false;
@@ -771,7 +710,7 @@ function insertFiles(editor: Editor, files?: FileList | null, at?: number): bool
       const content = (editor.storage as any).markdown.parser.parse(md);
       const chain = editor.chain().focus();
       (pos === undefined ? chain.insertContent(content) : chain.insertContentAt(pos, content)).run();
-      if (pos !== undefined) pos = editor.state.selection.to; // the next file follows this one
+      if (pos !== undefined) pos = editor.state.selection.to;
     }
   })();
   return true;
@@ -792,15 +731,9 @@ const spellingHelp = Extension.create({
   },
 });
 
-/**
- * A click in the empty page under the note's last line puts the caret at the note's end, on its last line when that is
- * text, else on a new empty line under the picture, table or diagram that ends it. Left to WebKit, a click down there
- * found its own nearest line — in a long note sometimes one in the middle of the page. Only a plain click: a drag
- * that starts down there still selects upwards, and shift still extends.
- */
 export function clickBelow(view: EditorView, event: MouseEvent): boolean {
   if (event.button !== 0 || event.detail > 1 || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;
-  if (!view.state.selection.empty) return false; // a drag ended here: it selected something
+  if (!view.state.selection.empty) return false;
   const doc = view.state.doc, last = doc.lastChild;
   const dom = last && (view.nodeDOM(doc.content.size - last.nodeSize) as HTMLElement | null);
   if (!dom?.getBoundingClientRect || event.clientY <= dom.getBoundingClientRect().bottom) return false;
@@ -812,19 +745,12 @@ export function clickBelow(view: EditorView, event: MouseEvent): boolean {
   return true;
 }
 
-/**
- * Where a dropped file belongs: between blocks, on the side of the line the pointer is nearer to.
- * The raw coordinate would land mid-word and split the heading it was dropped on.
- *
- * It goes next to the innermost line that can have a picture beside it: a file let go on the second item of
- * a list, in a table's cell or on a line in a callout went above or below the whole list, table or callout.
- */
 export function dropBlock(view: EditorView, event: DragEvent): number | undefined {
   const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
   if (!at) return undefined;
   const $pos = view.state.doc.resolve(at.pos);
   if ($pos.depth < 1) return at.pos;
-  const block = view.state.schema.nodes.image; // every attachment is a block, as a picture is
+  const block = view.state.schema.nodes.image;
   for (let d = $pos.depth; d >= 1; d--) {
     const parent = $pos.node(d - 1), i = $pos.index(d - 1);
     const fitsAbove = parent.canReplaceWith(i, i, block), fitsBelow = parent.canReplaceWith(i + 1, i + 1, block);
@@ -832,16 +758,11 @@ export function dropBlock(view: EditorView, event: DragEvent): number | undefine
     const before = $pos.before(d);
     const box = (view.nodeDOM(before) as HTMLElement | null)?.getBoundingClientRect?.();
     const above = !!box && event.clientY < box.top + box.height / 2;
-    // a list item's first line has nothing above it inside the item, so the file goes under that line
     return (above && fitsAbove) || !fitsBelow ? before : $pos.after(d);
   }
   return at.pos;
 }
 
-/**
- * Open the page at one of its headings (a `[[Title#Section]]` link was followed): the caret lands on the
- * heading and it comes to the top of the view. A heading since renamed away simply opens the page.
- */
 export function goToSection(editor: Editor, section: string) {
   let at = -1;
   editor.state.doc.descendants((node, pos) => {
@@ -856,13 +777,6 @@ export function goToSection(editor: Editor, section: string) {
 
 let lastCut = { text: '', at: 0 };
 
-/**
- * Where a trigger that may open a menu was just written (typed, or put in by the phone's Insert block), followed
- * through later edits; null once the caret goes back before it, leaves its line, or it is deleted. One pasted, or
- * already in the text, is never it. `endsAtSpace`: the / menu is a single word, so a space ends it, and so does any
- * move of the caret; the [[ picker takes spaces, and only a click elsewhere (or leaving the line) ends it, so ← and
- * → can still fix a typo in the title being typed.
- */
 function typedTrigger(key: PluginKey<number | null>, char: string, endsAtSpace: boolean, closer?: string) {
   return new Plugin<number | null>({
     key,
@@ -874,7 +788,6 @@ function typedTrigger(key: PluginKey<number | null>, char: string, endsAtSpace: 
           at = r.deleted ? null : r.pos;
         }
         const { empty, $head } = state.selection;
-        // undo and redo put back a trigger that was already there: not one just typed
         if (tr.docChanged && empty && !tr.getMeta('paste') && tr.getMeta('uiEvent') !== 'paste' && tr.getMeta('uiEvent') !== 'drop' && !tr.getMeta('history$')
           && $head.parent.isTextblock && $head.parentOffset >= char.length
           && $head.parent.textBetween($head.parentOffset - char.length, $head.parentOffset) === char
@@ -882,11 +795,7 @@ function typedTrigger(key: PluginKey<number | null>, char: string, endsAtSpace: 
           return $head.pos - char.length;
         }
         if (at !== null && (state.selection.head <= at || state.doc.resolve(at).parent !== $head.parent)) return null;
-        // done with once the menu has closed: a space typed after it, or the caret moved away (by a click, an arrow),
-        // so coming back to it later (a click, a ⌫) does not open it again
         if (at !== null && endsAtSpace && /\s/.test(state.doc.textBetween(at + 1, Math.max(at + 1, $head.pos)))) return null;
-        // and once it is closed by hand ("[[Bob]]" typed out): the picker stayed on for the rest of the line, kept @ dates
-        // and :emoji from coming up, and Enter there turned what followed into a link
         if (at !== null && closer && state.doc.textBetween(at + char.length, Math.max(at + char.length, $head.pos)).includes(closer)) return null;
         if (at !== null && !tr.docChanged && tr.selectionSet && (endsAtSpace || tr.getMeta('pointer'))) return null;
         return at;
@@ -896,11 +805,8 @@ function typedTrigger(key: PluginKey<number | null>, char: string, endsAtSpace: 
 }
 const SLASH_AT = new PluginKey<number | null>('slashAt');
 const slashTyped = typedTrigger(SLASH_AT, '/', true);
-// an earlier "[[" left open in a paragraph ("np.array([[1, 2", "if [[ -n $x ]]") opened the picker whenever the caret
-// came back after it, and Enter there turned the rest of the line into a link
 const WIKI_AT = new PluginKey<number | null>('wikiAt');
 const wikiTyped = typedTrigger(WIKI_AT, '[[', false, ']]');
-// "+" as for "[[": a page's name takes spaces, so only the caret leaving it (or a space right after it) ends it
 const PAGE_AT = new PluginKey<number | null>('pageAt');
 const pageTyped = typedTrigger(PAGE_AT, '+', false);
 
@@ -954,11 +860,6 @@ const hangulKeys = Extension.create({
   } } })],
 });
 
-/**
- * → at the end of a line that ends in bold, code, a highlight… (← at the start of one that starts with it): what is
- * typed next is plain, as in Notion. Typing on without it keeps the formatting going, as a mark does; one press takes
- * it off, the next goes on to the next line as it always did.
- */
 const markExit = Extension.create({
   name: 'markExit',
   addKeyboardShortcuts() {
@@ -974,10 +875,6 @@ const markExit = Extension.create({
   },
 });
 
-/**
- * The caret at an edge of inline code (`ab|cd`): inside the code or outside it, which is what a letter typed there gets.
- * Null away from an edge. `inside` is the stored marks' (an arrow's step across) or else the letters' own.
- */
 function codeEdge(state: EditorState, $c = state.selection.$from, stored = state.storedMarks) {
   const code = state.schema.marks.code;
   if (!code || $c.parent.type.spec.code || !$c.parent.inlineContent) return null;
@@ -988,39 +885,27 @@ function codeEdge(state: EditorState, $c = state.selection.$from, stored = state
   return { after: inB, inside: !!code.isInSet(stored ?? $c.marks()), inMarks: (inB ? b : a)!.marks, outMarks: other?.isText ? other.marks : [] };
 }
 
-/**
- * ← → at an edge of inline code take the caret across the edge first, where it is: after `ab`, → once and what is
- * typed is plain, beside the code; → again goes on to the next letter. Come back with ←, the caret is outside first,
- * and ← again takes it in. The caret is drawn on its side (inside the code's box or outside it), since the webview's
- * own stood at the same place either way. Notion's web editor has no such step (typed there, a letter went into the
- * code from both sides), which left no way to write plain text just after code in the middle of a line.
- */
 const codeEdges = Extension.create({
   name: 'codeEdges',
-  priority: 110, // before markExit, which takes → at the end of a line for every mark
+  priority: 110,
   addKeyboardShortcuts() {
     const step = (dir: -1 | 1) => () => {
       const { state, view } = this.editor, sel = state.selection;
       if (!(sel instanceof TextSelection) || !sel.empty) return false;
       const e = codeEdge(state);
-      // across the edge, in place: → out of the code it ends, or into the code it starts; ← the other way
       if (e && (dir > 0) === (e.after === e.inside)) {
         view.dispatch(state.tr.setStoredMarks(e.inside ? e.outMarks : e.inMarks));
         return true;
       }
-      // a letter on to an edge: the caret is on the side of the letter it came past (inside, out of the code)
       const $c = sel.$from, node = dir > 0 ? $c.nodeAfter : $c.nodeBefore;
       if (!node?.isText) return false;
       const letters = Array.from(node.text!), letter = dir > 0 ? letters[0] : letters[letters.length - 1];
       const $to = state.doc.resolve($c.pos + dir * letter.length), there = codeEdge(state, $to, null);
       const inside = !!state.schema.marks.code.isInSet(node.marks);
-      if (!there || there.inside === inside) return false; // where the webview's own move puts it already
+      if (!there || there.inside === inside) return false;
       view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, $to.pos)).setStoredMarks(inside ? there.inMarks : there.outMarks).scrollIntoView());
       return true;
     };
-    // ⌫ or ⌦ between two codes touching (two, their marks differing: the first a link, as code copied from a web page
-    // comes in) puts them together, the second taking the first's marks, as deleting between two codes with a letter
-    // between them does. The webview deleted the letter before the seam instead, and they stayed two
     const join = () => {
       const { state, view } = this.editor, sel = state.selection;
       const code = state.schema.marks.code;
@@ -1038,7 +923,6 @@ const codeEdges = Extension.create({
     return [new Plugin({
       key: new PluginKey('codeEdges'),
       props: {
-        // the webview's caret hidden at an edge, and one drawn on the caret's side: in the code's box or beside it
         attributes: (state): Record<string, string> => (state.selection.empty && codeEdge(state) ? { class: 'at-code-edge' } : {}),
         // drawn by the code's own letter at the edge (a ::before or ::after), not a node of its own at the caret: a
         // widget there took an arrow's step and, at a line's start, left the input method nowhere to write (#325)
@@ -1057,9 +941,6 @@ const codeEdges = Extension.create({
   },
 });
 
-/** what is pasted in a table's cell, as it can hold it (`null`: it holds it already): one line, its lines a line break
- *  apart (the note's `<br>`), a list's items each with its bullet, number or box at the front; a heading's, a quote's,
- *  a toggle's lines their words; code a line a line; a picture between them its own */
 function cellLines(view: EditorView, content: Fragment, $at: ResolvedPos): Fragment | null {
   const schema = view.state.schema;
   // a block as the note writes it (the editor is on its view's element: tiptap puts it there)
@@ -1069,7 +950,6 @@ function cellLines(view: EditorView, content: Fragment, $at: ResolvedPos): Fragm
   content.forEach((n) => { if (!n.isInline && n.type !== paragraph && n.type !== image) fits = false; });
   if (fits) return null;
   const out: PMNode[] = [];
-  // on lines of their own, words in the cell before or after the caret kept apart from them
   let words: PMNode[] = [], lines = $at.parentOffset > 0 ? 1 : 0;
   const line = (front: string, inline: Fragment) => {
     if (lines++) words.push(hardBreak.create());
@@ -1081,8 +961,6 @@ function cellLines(view: EditorView, content: Fragment, $at: ResolvedPos): Fragm
     if (n.type === image) { close(); out.push(n); }
     else if (n.type.spec.code) n.textContent.split('\n').forEach((l, i) => line(i ? '' : front, l ? Fragment.from(schema.text(l)) : Fragment.empty));
     else if (n.isTextblock) line(front, n.content);
-    // a block that is one thing (a formula, a file, a link's card, a database): what a cell can hold of it, where it
-    // went before without a word: the formula as one in the line, a file or a card its link, the rest as written
     else if (n.isAtom) {
       const src = n.attrs.src || n.attrs.href;
       if (n.type.name === 'mathBlock' && schema.nodes.mathInline) line(front, Fragment.from(schema.nodes.mathInline.create({ latex: n.attrs.latex })));
@@ -1107,32 +985,25 @@ export function createEditor(opts: {
   content: string;
   onUpdate: (markdown: string) => void;
   onOpenNote: (title: string) => void;
-  /** the notes a `[[link]]` may point at: their titles, and the sections inside them */
   targets: () => readonly Note[];
   suggestionUI: SuggestionUI;
   calendarUI: CalendarUI;
   emojiUI: EmojiUI;
   cursor?: number;
-  /** ⌥↑ / ⌥↓ that should move the note itself, not a line: true when it did (`onTitle`: the caret is on the title) */
   onNoteMove?: (dir: -1 | 1, onTitle: boolean) => boolean;
-  /** the note this is (a database in it keeps its rows under it); left out, the note open */
   page?: () => string | null;
 }) {
-  // the menus at the caret, so one can stay shut while another is open: in "[[Meeting :sm" both the link picker and
-  // the emoji row came up, one over the other, and Enter picked from whichever answered first
   const WIKI_MENU = new PluginKey('wikiLinkSuggest'), DATE_MENU = new PluginKey('dateMention'), SLASH_MENU = new PluginKey('slashMenu'), PAGE_MENU = new PluginKey('pageMenu');
   // the state being made has a menu's say only once that menu's plugin has run on it, and tiptap runs them in no
   // order to count on; until then, the say it had before this keystroke
   const menuOpen = (ed: Editor, state: EditorState, ...menus: PluginKey[]) =>
     menus.some((k) => (k.getState(state) ?? k.getState(ed.state))?.active);
   const pageOf = (link: string) => notes.byTitle(splitLink(link, (t) => !!notes.byTitle(t))[0]);
-  const iconOf = (link: string) => pageOf(link)?.icon ?? ''; // a section link keeps the page's icon
-  // A long note's markdown is a few milliseconds per key (54 KB: 6.6 ms of a 7.9 ms keystroke), so it is made
-  // once the typing pauses; a short one, at once. Anything that reads the note first runs takeEditorKeys() (pending.ts).
+  const iconOf = (link: string) => pageOf(link)?.icon ?? '';
   let timer: ReturnType<typeof setTimeout> | undefined;
   const cancel = () => { clearTimeout(timer); timer = undefined; dropEdit(flush); };
   const flush = () => { if (timer === undefined) return; cancel(); opts.onUpdate(getMarkdown(editor)); };
-  let closing = false; // the editor is going: an edit made now (a caption saved on the way out) is handed over at once
+  let closing = false;
   function handOver(ed: Editor) {
     if (closing || ed.state.doc.content.size < LONG) { cancel(); opts.onUpdate(getMarkdown(ed)); return; }
     clearTimeout(timer);
@@ -1141,37 +1012,26 @@ export function createEditor(opts: {
   }
   const editor: Editor = new Editor({
     element: opts.element,
-    autofocus: false, // Editor.svelte decides (the sidebar may own focus, e.g. after deleting from the list)
+    autofocus: false,
     // text pasted is read as markdown already; bold's and italic's own rules read it again, looser than markdown
     // does, and "x * y * z" came out with "y" in italics
     enablePasteRules: ['link', 'code', 'strike', 'highlight'],
     content: opts.content,
     editorProps: {
-      attributes: { class: 'prose' }, // (and the spelling help's, from spellingHelp below)
-      // a phone's formatting bar (MobileBar, ~50px) sits over the bottom of the page: the caret is kept
-      // clear of it, and scrolled to a little early, instead of typing (or deleting) out of sight
-      // …and a Mac's caret kept clear of the toolbar's fade at the top and off the window's very foot (↑ took it under the
-      // drag strip for two lines; written at the note's end, it sat 5px from the bottom)
+      attributes: { class: 'prose' },
       ...(isMobile ? { scrollMargin: { top: 16, bottom: 90, left: 0, right: 0 }, scrollThreshold: { top: 16, bottom: 90, left: 0, right: 0 } } : { scrollMargin: { top: 80, bottom: 48, left: 0, right: 0 }, scrollThreshold: { top: 80, bottom: 48, left: 0, right: 0 } }),
-      // images pasted or dropped in are stored as files (blob: URLs would die on restart)
-      // a copy is markdown (tiptap-markdown's serializer, transformCopiedText below); words inside one line come
-      // as just those words, their bold or links kept, not wrapped in the line's list item or heading
       clipboardTextSerializer: (slice, view) => asCopy(() => {
         const { $from, $to } = view.state.selection;
         const serializer = (editor.storage as any).markdown.serializer;
         if (view.state.selection instanceof CellSelection) return copiedCells(view.state.selection, slice, serializer);
         const inLine = $from.sameParent($to) && $from.parent.isTextblock;
         if (inLine && $from.parent.type.spec.code) return slice.content.textBetween(0, slice.content.size, '\n');
-        // words inside inline code: just them, no backticks (pasted in a terminal, those ran a command)
         if (inLine && allCode(view.state, $from.pos, $to.pos)) return view.state.doc.textBetween($from.pos, $to.pos);
         let content = inLine ? Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))) : slice.content;
-        // part of a nested list, from below an item's own line: the items it sits in, whose lines were not copied,
-        // are left out (they wrote "- - two")
         for (let open = slice.openStart; !inLine && open >= 2 && content.childCount === 1 && LISTS.test(content.firstChild!.type.name)
           && content.firstChild!.childCount === 1 && LISTS.test(content.firstChild!.firstChild!.firstChild?.type.name ?? ''); open -= 2) {
           content = content.firstChild!.firstChild!.content;
         }
-        // a callout copied from below its title line: its first copied line is not its title
         if (!inLine) for (let d = $from.depth; d > 0; d--) {
           if ($from.node(d).type.name !== 'callout' || !$from.node(d).attrs.titled || $from.index(d) === 0) continue;
           const untitle = (frag: Fragment): Fragment => {
@@ -1183,12 +1043,7 @@ export function createEditor(opts: {
           content = untitle(content);
           break;
         }
-        // an empty line is just empty, and spaces opening a line (or ending one before a line break) just spaces:
-        // another app shows the `&#32;` they are saved as as written
         const spaces = (s: string) => s.replace(/&#32;/g, ' ').replace(/&#9;/g, '\t');
-        // a line of text right after another a line apart, as in the note: markdown's blank line between them came out
-        // in Slack, a chat or a mail as an empty line after every Enter (Eve reads them back as lines of their own).
-        // A heading, a list, code, a table… keep the blank line around them, so the copy still reads as markdown
         let text = '', prev: PMNode | null = null;
         content.forEach((block) => {
           if (prev) text += prev.type.name === 'paragraph' && block.type.name === 'paragraph' ? '\n' : '\n\n';
@@ -1199,12 +1054,8 @@ export function createEditor(opts: {
           .replace(/^([ \t>]*(?:[-*+] (?:\[[ xX]\] )?|\d+[.)] )?)((?:&#(?:32|9);)+)/gm, (_, pre, run) => pre + spaces(run))
           .replace(/(?:&#(?:32|9);)+(?=\\\n)/g, spaces);
       }),
-      // lines copied from inside a toggle's body come with the toggle around them (no title): pasted elsewhere, a
-      // new untitled toggle was made of them. They are just the lines; a whole toggle copied is still a toggle.
       transformPasted: (slice, view) => {
         let { content, openStart, openEnd } = slice;
-        // a toggle's title holds words only: what is pasted there is its words, a formula or a link as written. Fitted
-        // as it was, a line with a formula in it, two paragraphs, a list, went in as nothing
         const $here = view.state.selection.$from;
         if ($here.parent.type.name === 'detailsSummary') {
           const serializer = (editor.storage as any).markdown.serializer;
@@ -1218,13 +1069,8 @@ export function createEditor(opts: {
         if (content.firstChild?.type.name === 'tableRow' && !inCell(view.state.selection.$from)) {
           return new Slice(Fragment.from(view.state.schema.nodes.table.create(null, content)), 0, 0);
         }
-        // a cell holds lines and pictures only: a list pasted in one could not fit, and the table was cut in two there,
-        // the list between its halves and the rest of the row's cells lost. Its lines go in the cell, each with its
-        // bullet, number or box as written
         if (inCell($here) && inCell(view.state.selection.$to) && content.firstChild?.type.name !== 'tableRow') {
           const fitted = cellLines(view, content, $here);
-          // open at a line of words, so it joins the cell's own: closed (a list copied whole), it went in as a line of
-          // its own, an empty one above it, and the cell came back otherwise once the note was read again
           if (fitted) return new Slice(fitted, fitted.firstChild?.isTextblock ? 1 : 0, fitted.lastChild?.isTextblock ? 1 : 0);
         }
         while (openStart >= 2 && content.childCount === 1 && content.firstChild!.type.name === 'details' && content.firstChild!.firstChild?.type.name === 'detailsContent') {
@@ -1232,17 +1078,12 @@ export function createEditor(opts: {
           openStart -= 2;
           openEnd = Math.max(0, openEnd - 2);
         }
-        // words copied from inside one line come with its block around them (a to-do, a heading, a callout's title):
-        // pasted on an empty line, that block was made again. They are just the words, their marks kept.
         let inner = content, depth = 0;
         while (inner.childCount === 1 && !inner.firstChild!.isTextblock && depth < Math.min(openStart, openEnd)) inner = inner.firstChild!.content, depth++;
         const line = inner.childCount === 1 ? inner.firstChild! : null;
-        // (several lines of code stay code: a line of text holds no newline)
         if (line?.isTextblock && openStart === depth + 1 && openEnd === depth + 1 && !(line.type.spec.code && line.textContent.includes('\n'))) {
           return new Slice(line.content, 0, 0);
         }
-        // lines pasted in a list's line are lines of that list, beside it: paragraphs, or a list of another kind (bullets
-        // into to-dos), went inside the line's item instead (a second paragraph that loosened the list, a list under it)
         const $at = view.state.selection.$from, item = $at.depth >= 2 ? $at.node(-1) : null;
         if (item && /^(listItem|taskItem)$/.test(item.type.name) && $at.parent.type.name === 'paragraph') {
           const list = $at.node(-2), only = content.childCount === 1 ? content.firstChild! : null;
@@ -1258,8 +1099,6 @@ export function createEditor(opts: {
       handlePaste: (view, event, slice): boolean => {
         if (insertFiles(editor, event.clipboardData?.files)) return true;
         clearForPaste(view);
-        // text pasted in inline code (over it, or with the caret in it) is code too, as typed there: it came in
-        // plain, cut the code in two, and a file name in it became a link
         const { state } = view, { from, to, empty } = state.selection, code = state.schema.marks.code;
         const pasted = event.clipboardData?.getData('text/plain') ?? '';
         if (pasted && !editor.isActive('codeBlock') && (empty ? code.isInSet(state.storedMarks ?? state.selection.$from.marks()) : allCode(state, from, to))) {
@@ -1267,13 +1106,9 @@ export function createEditor(opts: {
           view.dispatch(state.tr.replaceWith(from, to, state.schema.text(pasted.replace(/\r?\n/g, ' '), marks)).scrollIntoView());
           return true;
         }
-        // a URL pasted over selected text links that text instead of replacing it (a bare URL on its own
-        // line still becomes a bookmark card — that is the empty-selection case, further down the chain)
         const text = pasted.trim();
         if (URL_RE.test(text) && !empty) return editor.chain().focus().setLink({ href: text }).run();
         const $from = state.selection.$from;
-        // code copied in VS Code says so (and in what language): on an empty line it is a code block of it, as it was;
-        // in a line of text it is its lines as written, none of its ** or ` read as markdown
         const vscode = event.clipboardData?.getData('vscode-editor-data');
         if (vscode && text && !editor.isActive('codeBlock') && !inCell($from)) {
           const code = pasted.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').trimEnd();
@@ -1290,8 +1125,6 @@ export function createEditor(opts: {
             return true;
           }
         }
-        // a line that holds no line break (a toggle's title) takes lines pasted in it as one, a space between them:
-        // they cut the toggle in two, the rest of it under a new one
         if (/\n/.test(text) && $from.parent.isTextblock && !$from.parent.type.spec.code && !$from.parent.type.contentMatch.matchType(state.schema.nodes.hardBreak)) {
           view.dispatch(state.tr.insertText(text.replace(/\s*\r?\n\s*/g, ' ')).scrollIntoView());
           return true;
@@ -1302,20 +1135,12 @@ export function createEditor(opts: {
           view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse(fromNotion(pasted))));
           return true;
         }
-        // markdown copied from a chat or a terminal comes as plain text that happens to carry HTML of the
-        // same characters; render it instead of pasting the ** and # in literally. Real formatting wins.
         if (text && MD_SYNTAX.test(text) && !RICH_HTML.test(html) && !editor.isActive('codeBlock')) {
           const parsed = (editor.storage as any).markdown.parser.parse(pasted);
-          // a line pasted into a line keeps the spaces at its ends (read as markdown, " $x$ ok" lost its first)
           const lead = pasted.includes('\n') ? '' : /^[ \t]+/.exec(pasted)?.[0] ?? '', trail = pasted.includes('\n') ? '' : /[ \t]+$/.exec(pasted)?.[0] ?? '';
           view.dispatch(pasteMarkdown(view, parsed, lead, trail));
           return true;
         }
-        // lines of plain text are lines, as if typed with Enter between them (in a list: items of it). Read as
-        // markdown they were one paragraph, a line break between each. A cell, a heading, a toggle's title and code
-        // keep them in the one line. Lines copied in the editor come with its own HTML, which says what they were.
-        // A line's indent is its text (written as the note keeps it, &#32; / &#9;): read as markdown, four spaces or a
-        // tab made it code. A blank line is one empty line, as many as there were.
         if (text && /\n/.test(text) && !RICH_HTML.test(html) && !html.includes('data-pm-slice') && $from.parent.type.name === 'paragraph' && !inCell($from)) {
           const lines = pasted.replace(/\r\n?/g, '\n').replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '').split('\n');
           const indent = (ws: string) => ws.replace(/ /g, '&#32;').replace(/\t/g, '&#9;');
@@ -1323,7 +1148,6 @@ export function createEditor(opts: {
           view.dispatch(pasteMarkdown(view, (editor.storage as any).markdown.parser.parse(md)));
           return true;
         }
-        // a table (a block) copied in the editor, on an empty item of a list: in that item's place
         const tr = state.tr;
         outOfEmptyItem(tr, slice.content.firstChild);
         if (tr.docChanged) {
@@ -1334,7 +1158,6 @@ export function createEditor(opts: {
       },
       // links open in the browser: the editor's own webview must not navigate away from the app
       handleDOMEvents: {
-        // cut, then paste the same text elsewhere: moving lines around, which ⌥↑↓ does in place
         cut: (view) => {
           const { from, to } = view.state.selection;
           lastCut = { text: view.state.doc.textBetween(from, to, '\n').trim(), at: Date.now() };
@@ -1347,16 +1170,14 @@ export function createEditor(opts: {
           }
           return false;
         },
-        // a phone's long press is the system's: select a word, drag the handles (the note bar's ⋯ has the rest)
         contextmenu: (_view, event) => {
           if (isMobile) return false;
           event.preventDefault(); noteMenu(editor, event as MouseEvent); return true;
         },
         click: (view, event) => {
-          // a click in the empty page under the note: the caret at its end (clickBelow)
           if (event.target === view.dom && clickBelow(view, event as MouseEvent)) return true;
           const a = (event.target as HTMLElement | null)?.closest?.('a[href]');
-          if (!a || a.closest('.bookmark')) return false; // the bookmark card opens itself
+          if (!a || a.closest('.bookmark')) return false;
           event.preventDefault();
           void openUrl(a.getAttribute('href') ?? '');
           return true;
@@ -1377,17 +1198,17 @@ export function createEditor(opts: {
     extensions: [
       spellingHelp,
       StarterKit.configure({
-        paragraph: false, // replaced below: an empty paragraph survives the markdown round trip
-        orderedList: false, // replaced below: a new "1. " right after a numbered list continues it
-        listItem: false, // replaced below: an image may be an item's first block
-        heading: false, // replaced below: a line break in a heading
-        link: false, // replaced below: typing at a link's end is not the link's
-        codeBlock: false, // replaced below: syntax highlighting + a language chip
-        horizontalRule: false, // replaced below: no divider inside a list, and the caret can reach it
-        blockquote: false, // replaced below: "> " makes a toggle, as in Notion, so a quote is "| "
-        text: false, // replaced below: text that would read back as a formula keeps its dollars escaped
-        code: false, // replaced below: code in a link
-        bulletList: false, // replaced below: "-" then Enter is a line of its own
+        paragraph: false,
+        orderedList: false,
+        listItem: false,
+        heading: false,
+        link: false,
+        codeBlock: false,
+        horizontalRule: false,
+        blockquote: false,
+        text: false,
+        code: false,
+        bulletList: false,
       }),
       Text,
       markExit,
@@ -1401,10 +1222,8 @@ export function createEditor(opts: {
         // space, and read back the link was gone and its [words](…) showed as text
         addStorage() {
           const plain = defaultMarkdownSerializer.marks.link;
-          // copied (asCopy), an address written as itself goes bare: another app showed its <> as written
           const open = (state: any, mark: any, parent: any, index: number) => {
             const w = (plain.open as any)(state, mark, parent, index);
-            // (a mail address too: kept as [me@x.com](mailto:me@x.com), copied it is me@x.com)
             const node = parent.child(index), next = index + 1 < parent.childCount ? parent.child(index + 1) : null;
             if (copying && !state.inAutolink && node.isText && mark.attrs.href === `mailto:${node.text}` && !mark.isInSet(next?.marks ?? [])) state.inAutolink = true;
             return copying && state.inAutolink ? '' : w;
@@ -1593,18 +1412,10 @@ export function createEditor(opts: {
       ListItemLead,
       NumberedList,
       ListSwitch,
-      // The selection is drawn by SelectionLayer (rectangles over the text, nothing inside it); what the layer
-      // cannot show is marked here with a class only: a picture, card, PDF or video the selection covers whole
-      // (the colour laid over it), a [[link]] or date in it, an empty line it runs through.
       SelectionLayer,
       ClickTarget,
-      // + and ⋮⋮ beside the block under the pointer: a Mac's, a phone has no pointer to bring them up
       ...(isMobile ? [] : [BlockHandle.configure({ run: (id) => runEditorCommand(editor, id) })]),
-      // a table's own: ⋮⋮ on a row, ⋯ on a column, + along its foot and side (a phone keeps TableTools' bar)
       ...(isMobile ? [] : [TableHandles]),
-      // a line of words holds no raw newline: code's lines brought into one (copied from code and pasted in a line, a
-      // selection from text into code typed over, a web page's <pre>) ran on in it, and read back they were one line.
-      // Each becomes a line break, as Shift-↩ makes; where a line takes none (a toggle's title), a space
       Extension.create({
         name: 'noRawNewlines',
         addProseMirrorPlugins: () => [new Plugin({
@@ -1648,19 +1459,14 @@ export function createEditor(opts: {
               state.doc.nodesBetween(from, to, (node, pos) => {
                 if (node.isText) return false;
                 const whole = pos >= from && pos + node.nodeSize <= to;
-                // a diagram is drawn, its code hidden: it takes the overlay as a picture does (nothing showed it chosen)
                 if (node.type.name === 'codeBlock' && node.attrs.language === 'mermaid') {
                   if (whole) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: 'in-sel' }));
                   return false;
                 }
                 if (node.isAtom) {
-                  // a [[link]] or a date in the line takes the text's colour; a block (picture, card…) the overlay
                   if (whole) marks.push(Decoration.node(pos, pos + node.nodeSize, { class: node.isBlock ? 'in-sel' : 'pm-sel' }));
                   return false;
                 }
-                // an empty line the selection runs through is left unmarked: a sliver drawn on it read as a space
-                // selected there, one on each empty line of a drag (the line holds nothing: its `&nbsp;` is only how
-                // the note's file keeps it)
                 return true;
               });
               return marks.length ? DecorationSet.create(state.doc, marks) : null;
@@ -1679,12 +1485,6 @@ export function createEditor(opts: {
           props: { decorations: (state) => FLASH.getState(state) },
         })],
       }),
-      // ⌫ at the start of the line under a picture (a PDF, a video, a link card, a formula block, a divider, a table),
-      // or Delete at the end of the line over it: the first press selects it, the second removes it. In one keystroke
-      // the picture was gone, easy to miss when all that was meant was to join two lines. One at the end of a list
-      // item (a callout, a quote) is under the line as much: the stock ⌫ pulled the line into the item and the
-      // picture went. A divider or a table in a quote never went: the line went in and out of the quote instead.
-      // A board, which is never selected, asks as its own × does (gone at once when it has no cards).
       Extension.create({
         name: 'selectMediaFirst',
         priority: 1000,
@@ -1698,7 +1498,6 @@ export function createEditor(opts: {
             const next = blockBeside($from, dir, (n) => MEDIA.test(n.type.name));
             if (!next || !MEDIA.test(next.node.type.name)) return false;
             const board = next.node.type.name === 'kanban';
-            // an empty line goes as it always did (under a board too it asked, as ⌫ there always has)
             if (!line.content.size && !(board && dir < 0)) return false;
             if (board) return void deleteBoard(this.editor, next.pos), true;
             view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, next.pos)).scrollIntoView());
@@ -1707,7 +1506,6 @@ export function createEditor(opts: {
           return { Backspace: select(-1), Delete: select(1) };
         },
       }),
-      // Enter and ↑ in a table (table.ts), while no menu at the caret wants them for its own list
       Extension.create({
         name: 'tableKeys',
         priority: 1000,
@@ -1723,7 +1521,6 @@ export function createEditor(opts: {
           return [new InputRule({ find: /[-+*][^\S\n]$/, handler: ({ state, range }) => (cellBulletRule(state.tr, range.from, range.to) ? undefined : null) })];
         },
       }),
-      // ⌘Z right after a markdown shortcut made something: what was typed comes back (see editorCommands' undo)
       Extension.create({
         name: 'undoShortcut',
         priority: 1000,
@@ -1737,8 +1534,6 @@ export function createEditor(opts: {
       TaskList,
       ListMarkdown,
       ToDoItem,
-      // a phone's bar does the formatting; the markdown hint is for a keyboard
-      // the first line is the page's title (drawn as one, app.css): empty, it says so; the line under it, what can be typed
       Placeholder.configure({ placeholder: ({ node, pos }) => (pos === 0 ? 'Untitled' : node.type.name === 'heading' ? `Heading ${node.attrs.level}` : isMobile ? 'Start writing…' : 'Start typing… # heading, - list, [[ link') }),
       // …and an empty block the caret is in says what it is, as Notion's do (an empty heading was a blank 29px line).
       // Its own small plugin: the stock one's includeChildren put its marks on every block, and a copy took them
@@ -1749,7 +1544,7 @@ export function createEditor(opts: {
             decorations: (state) => {
               const { $from, empty } = state.selection;
               const line = $from.parent;
-              if (!empty || !line.isTextblock || line.content.size || $from.depth < 2) return null; // (the note's own lines: above)
+              if (!empty || !line.isTextblock || line.content.size || $from.depth < 2) return null;
               const around = $from.node(-1).type.name;
               const says = line.type.name === 'heading' ? `Heading ${line.attrs.level}` : line.type.name === 'detailsSummary' ? 'Toggle'
                 : around === 'taskItem' ? 'To-do' : around === 'listItem' ? 'List' : around === 'blockquote' ? 'Empty quote' : '';
@@ -1760,7 +1555,6 @@ export function createEditor(opts: {
         })],
       }),
       Markdown.configure({ html: true, transformPastedText: true, transformCopiedText: true, linkify: true, breaks: false }),
-      // ahead of the picker's own plugin, which reads where the "[[" was typed in the same transaction
       Extension.create({ name: 'wikiTyped', priority: 1000, addProseMirrorPlugins: () => [wikiTyped] }),
       WikiLink.configure({
         onOpen: opts.onOpenNote,
@@ -1771,31 +1565,23 @@ export function createEditor(opts: {
           char: PICKERS.wiki.char,
           allowSpaces: true,
           startOfLine: false,
-          allowedPrefixes: null, // `[[` means a link wherever it is typed, not only after a space
+          allowedPrefixes: null,
           pluginKey: WIKI_MENU,
-          // only the "[[" just typed opens it (wikiTyped)
           allow: ({ state, range }) => WIKI_AT.getState(state) === range.from,
           items: ({ query }) => {
             const q = query.toLowerCase();
             const pages: SuggestItem[] = [];
             const sections: SuggestItem[] = [];
-            // the page being edited: no link to itself, but its own sections are fair game (a note that
-            // points at its own headings is how a contents list is written)
             const self = editor.state.doc.firstChild?.textContent.trim();
             for (const n of opts.targets()) {
               const title = titleOf(n);
-              // a link can aim at a section of another page too; it stores `Title#Section` and shows the
-              // heading with its page beside it, so two notes with a "TODO" heading stay apart
               const inside = headingsOf(n.body).map((h) => ({ label: h, value: `${title}#${h}`, hint: title, icon: ICONS.section }));
-              // the same sections twice over, reached two ways: typed after a `#`, or by opening the
-              // page in the list with → when the headings are not what you remember
               if (title !== self && typedIn(title.toLowerCase(), q)) {
                 pages.push({ label: title, sections: inside, ...(n.icon ? { noteIcon: n.icon } : { icon: ICONS.note }) });
               }
               for (const h of inside) if (typedIn(h.value.toLowerCase(), q)) sections.push(h);
             }
-            const items = [...pages, ...sections].slice(0, 8); // pages first: the sections fill what is left
-            // a title nothing answers to yet: picking it links a page that gets created on the first visit
+            const items = [...pages, ...sections].slice(0, 8);
             if (query && !query.includes('#') && !pages.some((p) => p.label.toLowerCase() === q)) {
               items.push({ label: query, hint: 'new note', icon: ICONS.page });
             }
@@ -1811,29 +1597,20 @@ export function createEditor(opts: {
           render: () => popup(opts.suggestionUI, PICKERS.wiki),
         },
       }),
-      // @ — a day, stored as the day and shown as it reads now. The trigger keeps the default
-      // prefixes (line start or after a space), which is what keeps an address out of it.
       DateMention.configure({
         onChip: chipMenu,
         suggestion: {
           char: PICKERS.date.char,
-          // "@next wednesday", "@in 3 days" (Notion's): spaces go on into the day being named. A name or a sentence
-          // after @ finds no day and the calendar goes; ↩ only picks a day named in full (PICKERS.date)
           allowSpaces: true,
           pluginKey: DATE_MENU,
-          // the caret come back to an @ already written ("ask @|Tom", by a click or the arrows): the word on it is what
-          // the @ names, and a word that is no day is a name, not a day being typed (the calendar opened on today)
           allow: ({ editor, state, range }) => {
             if (menuOpen(editor, state, WIKI_MENU, SLASH_MENU, PAGE_MENU)) return false;
             const { $head } = state.selection;
             const rest = /^\S+/.exec($head.parent.textBetween($head.parentOffset, $head.parent.content.size, undefined, '￼'))?.[0];
             if (!rest || $head.pos <= range.from) return true;
-            // (a day named in full: "tomorrow" is "Tom" so far, but "Tom" written out is no day)
             const word = state.doc.textBetween(range.from + 1, $head.pos) + rest;
             return !!remindChoices(word) || (dayChoices(word) as { exact?: boolean }[]).some((d) => d.exact);
           },
-          // the days a query could mean; the calendar opens on the first and closes when there is none. "@remind"
-          // offers them as reminders (Notion's), at 09:00 or the next hour today
           items: ({ query }) => remindChoices(query) ?? dayChoices(query),
           command: ({ editor, range, props }) => {
             const { value, remind } = props as { value: string; remind?: boolean };
@@ -1852,8 +1629,6 @@ export function createEditor(opts: {
       CalloutEdges,
       Highlight,
       ...Html,
-      // ~words~ struck through, as Notion types it (~~words~~ still is too, and is how it is saved). After a space or at
-      // the line's start only, and never across another ~: "10~20", "안녕~" and ~~words~~ being typed stay as they are
       Extension.create({
         name: 'singleTilde',
         addInputRules() {
@@ -1863,8 +1638,6 @@ export function createEditor(opts: {
       Extension.create({
         name: 'arrows',
         addInputRules: () => [
-          // both ways first: "<-" is already ← by the time ">" comes, so they are ← finished with > — and with
-          // the ← taken back (⌫), "<-" then ">" must not be read as "<" and "->"
           arrow(/(?:←|<-)>$/, '↔'),
           arrow(/(?:⇐|<=)>$/, '⇔'),
           arrow(/->$/, '→'),
@@ -1894,15 +1667,11 @@ export function createEditor(opts: {
               char: PICKERS.slash.char,
               pluginKey: SLASH_MENU,
               allowSpaces: false,
-              // default prefixes (line start / after a space): a '/' already inside text like KRW/USD must not open the menu
-              // only the "/" just typed opens it: the caret coming back after one already in the sentence ("x / y",
-              // by an arrow, a click, a ⌫) opened it, and so did a "/" right after bold text or a link, where it
-              // starts its own text node and looked to the plugin like the start of the line
               allow: ({ state, range }) => {
                 if (SLASH_AT.getState(state) !== range.from) return false;
                 const $at = state.doc.resolve(range.from);
-                if ($at.parent.type.spec.code) return false; // in code a / is code (Enter made a new page)
-                if ($at.parent.type.name === 'detailsSummary') return false; // a toggle's title: text only, no block fits
+                if ($at.parent.type.spec.code) return false;
+                if ($at.parent.type.name === 'detailsSummary') return false;
                 const before = $at.parent.textBetween(Math.max(0, $at.parentOffset - 1), $at.parentOffset, undefined, '\ufffc');
                 return !before || /\s/.test(before);
               },
@@ -1911,14 +1680,11 @@ export function createEditor(opts: {
                 editor.chain().focus().deleteRange(range).run();
                 (props as SuggestItem).run?.(editor);
               },
-              // (when ↩ picks: PICKERS.slash)
               render: () => popup(opts.suggestionUI, PICKERS.slash),
             }),
           ];
         },
       }),
-      // Notion's "+": a new page under this one, or a page to link. After a space or at a line's start (the trigger's
-      // default prefixes), so "C++" and "1+1" stay text; not in code, nor in a toggle's title (text only)
       Extension.create({
         name: 'pageMenu',
         addProseMirrorPlugins() {
@@ -1933,7 +1699,6 @@ export function createEditor(opts: {
                 if (PAGE_AT.getState(state) !== range.from) return false;
                 const $at = state.doc.resolve(range.from);
                 if ($at.parent.type.spec.code || $at.parent.type.name === 'detailsSummary') return false;
-                // "+ " is a sum or a list's mark, not a page asked for
                 if (/^\s/.test(state.doc.textBetween(range.from + 1, Math.max(range.from + 1, range.to)))) return false;
                 return !menuOpen(editor, state, WIKI_MENU, DATE_MENU, SLASH_MENU);
               },
@@ -1949,8 +1714,6 @@ export function createEditor(opts: {
           ];
         },
       }),
-      // Slack's `:smile`: a colon (at a line's start or after a space) and two letters bring up the best
-      // few emoji in a row; the pick replaces what was typed. Not in code, where `:x` is just text.
       Extension.create({
         name: 'emojiSuggest',
         addProseMirrorPlugins() {
@@ -1979,8 +1742,7 @@ export function createEditor(opts: {
   (editor as unknown as { css: HTMLStyleElement | null }).css = null;
   markStartsAfterPrefix(editor);
   looseLists(editor);
-  editor.on('blur', flush); // leaving the note: the list, a dialog, another app
-  // the note closed or switched (the document is still there to read)
+  editor.on('blur', flush);
   editor.on('destroy', () => { closing = true; flush(); });
   if (opts.onNoteMove) noteMove.set(editor, opts.onNoteMove);
   applyKeymap(editor);
@@ -1995,8 +1757,6 @@ export function createEditor(opts: {
       tall = window.innerHeight;
       if (!shrank) return;
       if (editor.view.hasFocus()) { requestAnimationFrame(() => editor.isDestroyed || editor.commands.scrollIntoView()); return; }
-      // a text box inside the note (a diagram's box name or row, a formula) with the keyboard: brought into view the
-      // same way, or it was typed into blind behind the keyboard
       const a = document.activeElement as HTMLElement | null;
       if (a && a !== editor.view.dom && editor.view.dom.contains(a)) requestAnimationFrame(() => a.scrollIntoView({ block: 'center', inline: 'nearest' }));
     };

@@ -1,11 +1,4 @@
 import { SEQ_ARROW } from './diagram';
-/**
- * Folding a sequence diagram's blocks (alt, opt, loop, par, critical, break, rect) while it is looked at: a folded
- * block keeps its box, its label and its condition, and its inside is drawn as one note saying what is hidden
- * ("⋯ 4 messages"). It is a way of looking, not an edit: the note's code is never changed; the code drawn is a copy
- * with the folded blocks' insides swapped for that note (foldSeq), and the drawing's labels are then matched back to
- * the blocks they belong to (markFolds), so a click on one folds it.
- */
 
 export interface SeqBlock {
   /** what the block is known by while the note is open: its kind, its condition and which of the same it is, so an
@@ -19,11 +12,9 @@ export interface SeqBlock {
   close: number;
   /** the block it is inside, as an index into the list, or -1 */
   parent: number;
-  /** how many parts it has: an alt with one else has 2 */
   sections: number;
   messages: number;
   notes: number;
-  /** the participants its inside uses, in the diagram's order */
   who: string[];
 }
 
@@ -39,7 +30,6 @@ const NUMBER = /^autonumber(?:\s+(off)|\s+(\d+)(?:\s+(\d+))?)?\s*;?$/i;
 /** a declared participant's id: what comes before `as`, without mermaid's `@{ … }` settings */
 const declId = (rest: string) => rest.replace(/@\{[\s\S]*\}/, '').replace(/\s+as\s+[\s\S]*$/i, '').trim();
 
-/** one line read for what it does: who it involves, and whether it is a message */
 type Line =
   | { t: 'decl'; id: string }
   | { t: 'msg'; from: string; to: string; act: '+' | '-' | '' }
@@ -68,7 +58,6 @@ function read(raw: string): Line {
 
 interface Parsed { lines: string[]; read: Line[]; head: number; blocks: SeqBlock[]; order: Map<string, number> }
 
-/** the code read as a sequence diagram: null when it is not one, or its blocks do not close as they open */
 function parse(code: string): Parsed | null {
   const lines = code.split('\n');
   let head = 0;
@@ -85,7 +74,6 @@ function parse(code: string): Parsed | null {
   const meet = (id: string) => { if (!order.has(id)) order.set(id, order.size); };
   const blocks: SeqBlock[] = [];
   const seen = new Map<string, number>();
-  // what is open around each line: the blocks (an index into `blocks`), or -2 for a `box` of participants
   const stack: number[] = [];
   const inside = (f: (b: SeqBlock) => void) => { for (const i of stack) if (i >= 0) f(blocks[i]); };
   const use = (ids: string[]) => { for (const id of ids) meet(id); inside((b) => { for (const id of ids) if (!b.who.includes(id)) b.who.push(id); }); };
@@ -116,16 +104,13 @@ function parse(code: string): Parsed | null {
   return { lines, read: rd, head, blocks, order };
 }
 
-/** the blocks of a sequence diagram, in the order they open; none when the code is not one */
 export function seqBlocks(code: string): SeqBlock[] {
   return parse(code)?.blocks ?? [];
 }
 
-/** a block with nothing in it to hide has nothing to fold */
 export const foldable = (b: SeqBlock) => b.who.length > 0;
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
-/** what the note across a folded block says */
 export function hiddenSays(b: SeqBlock): string {
   const what = b.messages ? plural(b.messages, 'message') : plural(b.notes, 'note');
   return `⋯ ${what}${b.sections > 1 ? ` in ${b.sections} parts` : ''}`;
@@ -176,7 +161,6 @@ export function foldSeq(code: string, folded: ReadonlySet<string>): { code: stri
     const activeWas = new Map(active);
     for (let j = b.open + 1; j < b.close; j++) {
       const l = p.read[j];
-      // a participant declared, or first met, inside: still in its place among the others
       if (l.t === 'decl' && !met.has(l.id)) { met.add(l.id); out.push(p.lines[j].replace(/^\s*(?:create\s+)?/i, pad)); }
       const ids = l.t === 'msg' ? [l.from, l.to] : l.t === 'note' ? l.who : l.t === 'act' ? [l.id] : [];
       for (const id of ids) if (!met.has(id)) { met.add(id); out.push(`${pad}participant ${id}`); }
@@ -184,7 +168,6 @@ export function foldSeq(code: string, folded: ReadonlySet<string>): { code: stri
     }
     const ends = b.who.length > 1 ? `${b.who[0]},${b.who[b.who.length - 1]}` : b.who[0];
     out.push(`${pad}Note over ${ends}: ${hiddenSays(b)}`);
-    // left active, or let go, by the hidden lines: so it still is
     for (const [id, n] of active) {
       const d = n - (activeWas.get(id) ?? 0);
       for (let k = 0; k < Math.abs(d); k++) out.push(`${pad}${d > 0 ? 'activate' : 'deactivate'} ${id}`);
@@ -229,10 +212,8 @@ export function markFolds(svg: Element, shown: SeqBlock[], folded: ReadonlySet<s
     return !fill || /[#<&]/.test(b.text) || plain(fill) === plain(b.text);
   });
   if (!ok) return false;
-  // marked once already (drawn again as it was): marked afresh
   svg.querySelectorAll('.eve-fold-mark').forEach((m) => m.remove());
   const ns = 'http://www.w3.org/2000/svg';
-  // a label box's corners (a polygon's "x,y x,y …")
   const corners = (box: Element | null) => (box?.getAttribute('points') ?? '').split(/[\s,]+/).map(Number);
   const xs = (box: Element | null) => corners(box).filter((v, k) => k % 2 === 0 && Number.isFinite(v));
   const ys = (box: Element | null) => corners(box).filter((v, k) => k % 2 === 1 && Number.isFinite(v));
@@ -256,9 +237,6 @@ export function markFolds(svg: Element, shown: SeqBlock[], folded: ReadonlySet<s
     label.setAttribute('data-fold', b.key);
     g.append(mark(b.key, Math.max(...xs(box)) + 5, +(label.getAttribute('y') ?? 0)));
   });
-  // the note a folded block's inside became: drawn quieter than a note of the diagram's own, and a click on it unfolds
-  // it too. It is the first note saying so under the block's top (one of the diagram's own saying the same above it
-  // is not it)
   const tops = new Map<string, number>();
   labelled.forEach((b, i) => tops.set(b.key, Math.min(...ys(groups[i].querySelector('.labelBox')))));
   rects.forEach((b, i) => tops.set(b.key, +(boxes[i].getAttribute('y') ?? 0)));

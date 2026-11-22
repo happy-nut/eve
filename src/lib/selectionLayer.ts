@@ -28,11 +28,7 @@ class Layer {
     view.dom.after(this.el);
     document.addEventListener('selectionchange', this.schedule);
     window.addEventListener('resize', this.schedule);
-    // any scroll (the note's own pane, a card page): the rectangles follow the text
     document.addEventListener('scroll', this.schedule, true);
-    // the text moved with nothing selected anew: a picture, a diagram or a link card above it loaded and grew, the list
-    // beside it opened, the font came in. The rectangles stayed where the text had been — in a long note, often
-    // half a line off it
     this.resized?.observe(view.dom);
     document.fonts?.addEventListener('loadingdone', this.schedule);
     this.schedule();
@@ -67,14 +63,12 @@ class Layer {
     cancelAnimationFrame(this.frame);
     this.frame = requestAnimationFrame(() => this.draw());
   };
-  /** the selected text's own boxes, line by line, as rectangles on the layer */
   private draw() {
     const { view, el } = this;
     const sel = view.state.selection;
     const boxes: DOMRect[] = [];
     let firstRange: Range | undefined;
     const clips = new Map<Element, DOMRect | null>();
-    // a table's cell selection colours whole cells itself (.selectedCell); a node selection outlines its node
     const cells = '$anchorCell' in sel;
     if (!sel.empty && !(sel instanceof NodeSelection) && !cells && view.dom.isConnected) {
       const { from, to } = sel;
@@ -92,12 +86,9 @@ class Layer {
         return false;
       });
     }
-    // the layer sits at the top-left of its positioned ancestor, which may itself scroll
     const op = el.offsetParent as HTMLElement | null;
     const host = op?.getBoundingClientRect() ?? new DOMRect();
     const dx = (op?.scrollLeft ?? 0) - host.left - (op?.clientLeft ?? 0), dy = (op?.scrollTop ?? 0) - host.top - (op?.clientTop ?? 0);
-    // what the first rectangle was drawn from, checked again while it shows (watch)
-    // (its own box, not the drawn one: a code block scrolled sideways cuts that one down, and it never matched)
     const at = firstRange && [...firstRange.getClientRects()].find((b) => b.width > 0.5);
     this.first = boxes.length && at ? { range: firstRange!, top: at.top, left: at.left } : null;
     if (this.first && !this.timer) this.timer = setInterval(this.watch, 300);
@@ -126,12 +117,6 @@ export function inText(at: { node: Node; offset: number }, side: 1 | -1): { node
   return { node, offset };
 }
 
-/**
- * What of the note a piece of text can be seen through: the boxes of the blocks around it that scroll or clip (a
- * code block's long line scrolled sideways, a wide table), cut down to one another. The text's own boxes run on
- * past them, out of sight, and a rectangle drawn for each lit the page beyond the block, to the window's edge.
- * Null when nothing around it clips. Per draw, each element's answer is kept (`seen`).
- */
 function clipOf(node: Node, root: HTMLElement, seen: Map<Element, DOMRect | null>): DOMRect | null {
   let clip: DOMRect | null = null;
   for (let el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement; el && el !== root; el = el.parentElement) {
@@ -139,7 +124,6 @@ function clipOf(node: Node, root: HTMLElement, seen: Map<Element, DOMRect | null
     if (box === undefined) {
       const cs = getComputedStyle(el);
       const clips = cs.overflowX !== 'visible' || cs.overflowY !== 'visible';
-      // the padding box: what scrolls inside the element shows within it
       box = clips ? (() => { const r = el.getBoundingClientRect(); return new DOMRect(r.left + el.clientLeft, r.top + el.clientTop, el.clientWidth, el.clientHeight); })() : null;
       seen.set(el, box);
     }

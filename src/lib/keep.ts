@@ -1,8 +1,3 @@
-/**
- * Google Keep, as Google Takeout exports it: one `<note>.json` per note (an `.html` beside it for people,
- * and the note's pictures), plus a `Labels.txt`. Pure, so it can be tested in Node (keep.test.mjs);
- * transfer.ts reads the files and copies the pictures.
- */
 
 export interface KeepNote {
   title?: string;
@@ -34,12 +29,6 @@ export function attachmentCandidates(filePath: string): string[] {
   return out;
 }
 
-/**
- * Keep is plain text: whatever markdown would read as something else stays text. The characters markdown
- * gives a meaning (emphasis, code, links, HTML, entities, headings, tables) are escaped wherever they are;
- * what only means something at the start of a line (a list's "- " or "1. ", a divider) is escaped there; and
- * an indent, which markdown takes for code or drops, is kept as no-break spaces.
- */
 export const plain = (line: string) =>
   line
     .replace(/[\\`*_~[\]<>&#|]/g, '\\$&')

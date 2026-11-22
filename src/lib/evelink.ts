@@ -1,8 +1,3 @@
-/**
- * `eve://open?id=…[&section=…]`: how `eve open` and the MCP server's open_note (src-tauri/src/mcp.rs,
- * link_to) ask the running Eve to show a note. A link only ever shows a note — any page could hand one
- * to macOS, so nothing it says may write, delete or create.
- */
 export interface EveLink { id: string; section: string }
 
 export function parseEveLink(url: string): EveLink | null {

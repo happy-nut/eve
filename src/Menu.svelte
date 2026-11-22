@@ -10,12 +10,8 @@
   import { floatAt, held } from './lib/popup';
   import { claimKeys, PRIORITY } from './lib/keys';
 
-  // every menu in the app (a right click, the list's "+", a code block's language): App renders it, anyone opens
-  // it through ui.openMenu. Keyboard-reachable — the mouse moves the highlight.
-  // the last menu opened: closing, it slides away showing what it showed (ui.menu is already null by then)
   const req = $derived.by(held(() => ui.menu));
   let el = $state<HTMLUListElement | null>(null);
-  // a menu with a search field: what is typed in it, and the items it leaves (names starting with it first)
   let q = $state('');
   $effect(() => { if (ui.menu) q = ''; });
   const shown = $derived.by(() => {
@@ -27,21 +23,16 @@
     return [...hits.filter(starts), ...hits.filter((it) => !starts(it))].map((it) => ({ ...it, sep: false }));
   });
   let x = $state(0), y = $state(0), maxH = $state<number | null>(null);
-  // Esc closes it, wherever the keyboard is: opened by ⌘⇧H the keyboard stays in the note, and the menu's Esc was
-  // left to the app's keys, the last to hear it — what heard it before (the note, a diagram in it) kept the menu up
   $effect(() => {
     if (!ui.menu) return;
     return claimKeys('global', { Escape: (e) => { e.stopPropagation(); ui.closeMenu(); return true; } }, { capture: true, whileTop: 'menu', priority: PRIORITY.top, composing: true });
   });
 
-  // placed at the pointer, then, once its size is known, pulled back inside the window across and over the pointer
-  // when there is no room under it (its own size: offsetWidth, not the rect, which is scaled while it pops in)
   $effect(() => {
     const m = ui.menu;
     if (!m) return;
     x = m.x; y = m.y; maxH = null;
     if (!el) return;
-    // opened from a button (ui.under): under it, or over its top, never over the button itself
     const at = m.from ? { left: m.x, right: m.x, top: m.from.top - 4, bottom: m.y } : { x: m.x, y: m.y };
     const f = floatAt(at, { w: el.offsetWidth, h: el.offsetHeight }, { gap: 0 });
     x = f.left; y = f.top; maxH = f.maxHeight;
@@ -54,7 +45,6 @@
   }
   const keyed = (e: KeyboardEvent) => {
     const k = eventToKeys(e).replace(/(^|-)Delete$/, '$1Backspace');
-    // ↩ and Space are the focused item's own
     return k && k !== 'Enter' && k !== 'Space' ? shown.find((it) => it.keys === k && !it.disabled) : undefined;
   };
   function onKey(e: KeyboardEvent) {
@@ -62,35 +52,28 @@
     const i = items.indexOf(document.activeElement as HTMLButtonElement);
     const field = el?.querySelector<HTMLInputElement>('.search input');
     if (field && document.activeElement === field) {
-      // the field: ↓ into the list, ↩ the first match; any other key is typed
       if (e.isComposing || e.keyCode === 229) return;
       if (e.key === 'ArrowDown') items[0]?.focus();
       else if (e.key === 'Enter') { if (shown[0] && !shown[0].disabled) pick(shown[0]); }
       else if (e.key === 'Escape') ui.closeMenu();
       else return;
-    } else if (field && e.key === 'ArrowUp' && i === 0) field.focus(); // back up into the field
-    else if (field && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) { field.focus(); return; } // the key goes on into it
+    } else if (field && e.key === 'ArrowUp' && i === 0) field.focus();
+    else if (field && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) { field.focus(); return; }
     else if (e.key === 'ArrowDown') items[(i + 1) % items.length]?.focus();
     else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length]?.focus();
     else if (e.key === 'Escape') ui.closeMenu();
-    // an item's shortcut, shown beside it, does it here too (⌦ as ⌫: a Mac keyboard's delete is either)
     else if (keyed(e)) { const it = keyed(e)!; ui.closeMenu(); it.run?.(); }
     else return;
     e.preventDefault();
     e.stopPropagation();
   }
-  // opened from the keyboard (⌥↩), the first item is ready for ↩; from the mouse, nothing is highlighted
   const autofocus = (node: HTMLElement) => {
-    // a long list (a code block's languages) opens at the current choice
     const on = node.querySelector<HTMLElement>('button.on');
     on?.scrollIntoView({ block: 'nearest' });
-    // a search field takes the keys at once: typed, the list narrows
     const field = node.querySelector<HTMLElement>('.search input');
     const first = field ?? (document.documentElement.dataset.input === 'keyboard' && (on ?? node.querySelector<HTMLElement>('button:not(:disabled)')));
     (first || node).focus();
   };
-  // each menu as it opens, not only the first: one opened from another's item (Text color…, Highlight…) is drawn by the
-  // same list, and the first one closing had given the keyboard back to the note under it
   $effect(() => {
     if (ui.menu && el) untrack(() => autofocus(el!));
   });
@@ -103,7 +86,6 @@
 {#snippet check()}<svg class="check" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>{/snippet}
 
 {#if isMobile}
-  <!-- a phone: the same items as a sheet from the bottom, rows a thumb can hit -->
   <BottomSheet onclose={() => ui.closeMenu()} layer={false}>
     <ul class="items" role="menu">
       {#each req.items as it, i (i)}
@@ -145,7 +127,6 @@
   .items button:disabled { color: var(--fg-dim); }
   .items button.danger { color: #ff453a; }
   .items button { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  /* the name next to its swatch, the check at the end (pushed apart, a pen's colour sat at one edge, its name at the other) */
   .items .lbl { flex: 1; text-align: left; }
   .items button.on { font-weight: 600; }
   .check { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--accent-text); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -165,7 +146,6 @@
   .menu kbd { flex: none; color: var(--fg-dim); font: inherit; font-size: 11.5px; }
   .menu button:focus { background: var(--accent-soft); outline: none; }
   .menu button:disabled { color: var(--fg-dim); }
-  /* the search field: held at the top while the items scroll under it */
   .menu .search { position: sticky; top: -4px; margin: -4px -4px 4px; padding: 4px; background: var(--bg-pop); border-bottom: 1px solid var(--line); }
   .menu .search input { width: 100%; border: 0; outline: none; background: none; color: inherit; font: inherit; font-size: 13px; padding: 5px 8px; }
   .menu .search input::placeholder { color: var(--fg-dim); }

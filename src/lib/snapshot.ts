@@ -1,16 +1,8 @@
 import { FLOW } from './diagramMotion';
 const SCALE = 2;
-/** the card's margin around it, as in the note (a chart's title was at the picture's very edge) */
 const PAD = 16;
 
-/**
- * A drawing on screen as a picture: a diagram's SVG (mermaid's, or the lanes Eve draws) or a chart Eve draws as HTML
- * (a pie, a timeline, a Gantt chart). A picture made of it is drawn on its own, without the app's stylesheet, so a
- * copy of it is given each part's styles as they are on screen: it comes out in the note's colours, light or dark.
- * At twice its size, to stay sharp where it is pasted.
- */
 export async function pictureOf(el: Element, background: string): Promise<Blob> {
-  // drawn at its own size, not the note's: a wide diagram is shrunk to the note, or cut off and scrolled in it
   let width = 0, height = 0;
   const box = el instanceof SVGSVGElement ? el.viewBox.baseVal : null;
   if (box && box.width && box.height) ({ width, height } = box);
@@ -41,12 +33,8 @@ export async function pictureOf(el: Element, background: string): Promise<Blob> 
   return await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('no picture'))), 'image/png'));
 }
 
-/** `el` copied with each part's style as it is on screen once it has drawn itself in: an animation still running is
- *  ended first (copied part way, the picture was a chart half drawn, its boxes faint and its lines short), and the dot
- *  that runs along the lines under the pointer is left out */
 export function drawnCopy(el: Element): Element {
   for (const a of el.getAnimations?.({ subtree: true }) ?? []) if (a.effect?.getTiming().iterations !== Infinity) a.finish();
-  // copied as it is at rest: not with one box pointed at and the rest stepped back, nor part way back from that
   const focused = el.classList.contains('eve-focus');
   el.classList.remove('eve-focus');
   el.classList.add('eve-still');
@@ -55,7 +43,7 @@ export function drawnCopy(el: Element): Element {
   el.classList.remove('eve-still');
   if (focused) el.classList.add('eve-focus');
   copy.classList.remove('eve-still');
-  for (const f of copy.querySelectorAll(`.${FLOW}`)) f.remove(); // the light along the lines (diagramMotion.ts)
+  for (const f of copy.querySelectorAll(`.${FLOW}`)) f.remove();
   // a line's label is HTML in a foreignObject, its chip a background and shadows round its words: in a picture
   // (the drawing inside the picture's own foreignObject) WebKit drew half of the chip. The chip drawn instead as the
   // drawing's own rectangles behind the words, the words left as they are
@@ -64,7 +52,6 @@ export function drawnCopy(el: Element): Element {
     const w = +(fo.getAttribute('width') ?? 0), h = +(fo.getAttribute('height') ?? 0);
     if (!chip || !w || !h) continue;
     const x = +(fo.getAttribute('x') ?? 0), y = +(fo.getAttribute('y') ?? 0), r = parseFloat(chip.style.borderRadius) || 0;
-    // `color 0px 0px 0px 4px, …`: each a ring of its colour, the widest under the others
     const rings = [...chip.style.boxShadow.matchAll(/(rgba?\([^)]*\))\s+0px\s+0px\s+0px\s+([\d.]+)px/g)].map((m) => ({ color: m[1], out: +m[2] }));
     const layers = [...rings.sort((a, b) => b.out - a.out), { color: chip.style.backgroundColor, out: 0 }].filter((l) => l.color && !/rgba\(0, 0, 0, 0\)|transparent/.test(l.color));
     for (const l of layers) {
@@ -80,7 +67,6 @@ export function drawnCopy(el: Element): Element {
   return copy;
 }
 
-// what an SVG part is painted with; the rest of its computed style is its geometry, which its attributes already say
 const PAINT = [
   'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-linecap',
   'stroke-linejoin', 'stroke-opacity', 'opacity', 'color', 'visibility', 'display', 'filter', 'clip-path', 'paint-order',
@@ -88,7 +74,6 @@ const PAINT = [
   'letter-spacing', 'text-anchor', 'dominant-baseline',
 ];
 
-/** each part of `copy` given the style its original has on screen (the two walked side by side) */
 function styled(from: Element, copy: Element) {
   const cs = getComputedStyle(from);
   const to = (copy as HTMLElement | SVGElement).style;

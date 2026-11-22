@@ -1,29 +1,16 @@
-/**
- * `:smile` in a note: the emoji that fit the word best, Slack-style. The data is the emoji picker's own
- * (emojibase, English), fetched the first time it is needed. Pure apart from `loadEmoji`; tested in Node.
- */
 export interface EmojiEntry {
   emoji: string; shortcodes?: string[]; annotation: string; tags?: string[]; order?: number; version?: number;
-  /** set by searchEmoji: the shortcode the search hit (`smile` for `:smi`), to show under the row */
   code?: string;
 }
 
-/** What may follow the colon: a letter first (or Slack's +1 / -1), then a shortcode's own characters, two of them
- *  at least, as Slack asks. Anything else (a space, `12:30`, `//`) is not a search. One letter is a face, not a
- *  search: "great :D" then Enter put an emoji in place of the :D and ate the new line. */
 export const EMOJI_QUERY = /^([a-z][a-z0-9_+-]|[+-]1)[a-z0-9_+-]*$/i;
 
-/**
- * The best `limit` emoji for `query`, best first: a shortcode that is the word, then a name or tag that is
- * the word, then a shortcode starting with it, a word of the name, a tag. Ties: the shorter shortcode,
- * then the order the emoji keyboard has them in. `newest`: the newest emoji version this system can draw.
- */
 export function searchEmoji(data: EmojiEntry[], query: string, limit = 5, newest = Infinity): EmojiEntry[] {
   const q = query.toLowerCase();
   if (!EMOJI_QUERY.test(q)) return [];
   const ranked: { e: EmojiEntry; tier: number; len: number }[] = [];
   for (const e of data) {
-    if ((e.version ?? 0) > newest) continue; // newer than this system draws: an empty box
+    if ((e.version ?? 0) > newest) continue;
     const codes = e.shortcodes ?? [], tags = e.tags ?? [], words = e.annotation.toLowerCase().split(/[\s:,-]+/);
     const name = e.annotation.toLowerCase();
     const tier =
@@ -42,7 +29,6 @@ export function searchEmoji(data: EmojiEntry[], query: string, limit = 5, newest
 }
 
 let loading: Promise<EmojiEntry[]> | null = null;
-/** The emoji list, fetched once (about 430 KB, so not with the app's start). */
 export function loadEmoji(): Promise<EmojiEntry[]> {
   loading ??= import('emoji-picker-element-data/en/emojibase/data.json?url')
     .then((m) => fetch(m.default))
@@ -71,12 +57,12 @@ export function newestEmoji(): number {
   ctx.textBaseline = 'top';
   const one = ctx.measureText('😀').width;
   const draws = (e: string) => {
-    if (ctx.measureText(e).width > one * 1.5) return false; // fell apart into pieces
+    if (ctx.measureText(e).width > one * 1.5) return false;
     ctx.clearRect(0, 0, 32, 32);
     ctx.fillText(e, 0, 0);
     const px = ctx.getImageData(0, 0, 32, 32).data;
     for (let i = 0; i < px.length; i += 4) if (px[i + 3] && (Math.abs(px[i] - px[i + 1]) > 20 || Math.abs(px[i + 1] - px[i + 2]) > 20)) return true;
-    return false; // no colour: the box drawn for a missing glyph
+    return false;
   };
   return (newest = PROBES.find(([, e]) => draws(e))?.[0] ?? 1);
 }

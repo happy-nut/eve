@@ -10,19 +10,8 @@ const renderIcon = (el: HTMLElement, icon: string) => {
   const c = customIcon(icon);
   if (c) el.innerHTML = c.svg; else el.textContent = calloutKind(icon)?.icon ?? icon;
 };
-/** the box's colour: an Obsidian type's own, else the plain grey */
 const colorOf = (icon: string) => calloutKind(icon)?.color ?? '';
 
-/**
- * Notion-style callout: emoji + colored box. Markdown form, Obsidian's:
- *   > [!💡]            an icon of its own
- *   > [!warning]- Title  or one of Obsidian's types (its icon and colour; the word stays in the file, and
- *   > text               the fold mark after it, - or +, is kept though Eve does not fold)
- * Text on the marker's own line is the callout's title: the box's first paragraph, in bold, written back
- * on that line.
- */
-/** Split a paragraph at its first line break: what came before it becomes a paragraph of its own, before
- *  it (marks and all). A paragraph of one line is all title. */
 function splitTitle(p: Element): void {
   const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
   for (let t = walker.nextNode() as Text | null; t; t = walker.nextNode() as Text | null) {
@@ -33,11 +22,10 @@ function splitTitle(p: Element): void {
     range.setEnd(t, at);
     const title = document.createElement('p');
     title.append(range.extractContents());
-    t.data = t.data.slice(1); // the break itself (extractContents left the text from it on)
+    t.data = t.data.slice(1);
     p.before(title);
     return;
   }
-  // one line: it is the title, and the body follows in the next paragraphs
 }
 
 export const Callout = Node.create({
@@ -48,15 +36,12 @@ export const Callout = Node.create({
 
   addAttributes() {
     return {
-      // written as the data- attributes they are read from (renderHTML below): a copied folded callout came back unfolded
       emoji: { default: '💡', parseHTML: (el) => el.getAttribute('data-callout') || '💡', renderHTML: () => ({}) },
       fold: { default: '', parseHTML: (el) => el.getAttribute('data-fold') ?? '', renderHTML: (a) => (a.fold ? { 'data-fold': a.fold } : {}) },
       titled: { default: false, parseHTML: (el) => el.hasAttribute('data-titled'), renderHTML: () => ({}) },
     };
   },
   parseHTML() {
-    // a callout copied in the editor comes back as it was drawn, its icon beside its body: read whole, the icon was read
-    // as a line of it ("✏️" became the title, the title its first line). Read from markdown, it is the body alone.
     return [{ tag: 'div[data-callout]', contentElement: (el) => (el as HTMLElement).querySelector<HTMLElement>(':scope > .callout-body') ?? (el as HTMLElement) }];
   },
   renderHTML({ node, HTMLAttributes }) {
@@ -86,7 +71,7 @@ export const Callout = Node.create({
           tr.setNodeMarkup(getPos()!, undefined, { ...tr.doc.nodeAt(getPos()!)?.attrs, emoji: v.trim() });
           return true;
         }).run();
-        else if (!isMobile) editor.commands.focus(); // dismissed: back into the note all the same
+        else if (!isMobile) editor.commands.focus();
       });
       const contentDOM = document.createElement('div');
       contentDOM.className = 'callout-body';
@@ -108,9 +93,6 @@ export const Callout = Node.create({
       };
     };
   },
-  // a title is a line of words: its first line made something else (a to-do from the phone's bar, a list, a heading),
-  // the callout has none, as its file then says. Left titled, the note open was not the note saved, and read back
-  // it changed under the caret
   addProseMirrorPlugins() {
     return [new Plugin({
       appendTransaction: (trs, _old, state) => {
@@ -127,15 +109,12 @@ export const Callout = Node.create({
     })];
   },
   addKeyboardShortcuts() {
-    // Enter on an empty trailing paragraph leaves the callout
     return {
       Enter: ({ editor }) => {
         const { $from, empty } = editor.state.selection;
         if (!empty || $from.parent.content.size !== 0) return false;
         const callout = $from.node(-1);
         if (callout?.type.name !== 'callout' || $from.index(-1) !== callout.childCount - 1 || callout.childCount < 2) return false;
-        // one step after the other on the same transaction: the place after the callout is mapped past the
-        // deleted line (worked out on the old note, it landed two inside whatever came next)
         return editor.chain().command(({ tr }) => {
           tr.delete($from.before(), $from.after());
           const at = tr.mapping.map($from.after(-1));
@@ -154,11 +133,8 @@ export const Callout = Node.create({
             state.write(`[!${node.attrs.emoji}]${node.attrs.fold}`);
             const first = node.firstChild;
             if (node.attrs.titled && first?.type.name === 'paragraph' && first.content.size) {
-              // the title back on the marker's line, the rest below it
               state.write(' ');
               state.renderInline(first);
-              // a paragraph after it goes on the very next line, as Obsidian writes it (read back, the
-              // title's line break splits them again); anything else keeps a blank line between
               if (node.childCount > 1 && node.child(1).type.name === 'paragraph') state.ensureNewLine();
               else state.closeBlock(first);
               node.forEach((child: any, _: number, i: number) => { if (i > 0) state.render(child, node, i); });
@@ -189,7 +165,6 @@ export const Callout = Node.create({
               if (!m) continue;
               const text = first.firstChild;
               if (text && text.nodeType === 3) text.textContent = (text.textContent ?? '').replace(/^\[!([^\]]+)\][+-]?[ \t]*/, '');
-              // anything left on the marker's line is the title: it becomes a paragraph of its own
               let titled = false;
               if (text && text.nodeType === 3 && text.textContent!.startsWith('\n')) text.textContent = text.textContent!.slice(1);
               else if (first.textContent?.trim()) { splitTitle(first); titled = true; }
@@ -210,14 +185,11 @@ export const Callout = Node.create({
   },
 });
 
-/** The callout's ⌫ and Delete at its edges, ahead of the list and line keys that otherwise take them first. */
 export const CalloutEdges = Extension.create({
   name: 'calloutEdges',
   priority: 1000,
   addKeyboardShortcuts() {
     return {
-      // ⌫ at the start of a titled callout's title: the title steps out, and the callout has no title now (the body
-      // line under it had become the title, in bold, untouched)
       Backspace: ({ editor }) => {
         const { state, view } = editor;
         const { $from, empty } = state.selection;
@@ -231,8 +203,6 @@ export const CalloutEdges = Extension.create({
         view.dispatch(tr.lift(range, target).scrollIntoView());
         return true;
       },
-      // Delete at the end of the line just before a callout: the caret goes into its first line (an empty line goes).
-      // The stock join pulled that first line out of the callout and left the caret where it was.
       Delete: ({ editor }) => {
         const { state, view } = editor;
         const { $from, empty } = state.selection;

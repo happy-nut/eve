@@ -1,15 +1,3 @@
-//! Eve's notes, read from disk: the one place that finds, reads and opens them. `eve mcp` (mcp.rs) offers
-//! these commands to Claude as tools and `eve <command>` (cli.rs) to a terminal, both from `COMMANDS`,
-//! so the two can never drift apart; `help` is written from the same table.
-//!
-//! It reads `notes/*.md` straight from disk: the app writes every edit there 300 ms after the keystroke
-//! and every synced change at once, so the folder is current whether or not Eve runs. Nothing here
-//! writes a note: `open` only asks the running app to show one (an eve:// link), and a change (create,
-//! append, edit) is handed to the app (`ask_app`), so its in-memory store stays the only writer — a file
-//! written beside it would be written over from memory at the note's next save.
-//!
-//! No Tauri in this file, so `cargo test` covers it without a window. The note format mirrors
-//! `parse` / `titleOf` / `plain` in src/lib (notes.svelte.ts, markdown.ts); the tests pin the cases.
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -19,10 +7,8 @@ const IDENTIFIER: &str = "dev.happynut.eve";
 /// tool output and moves anything past 25,000 out of the conversation into a file; this stays under the
 /// warning even if the estimate is off by 2.5x. A longer answer ends with a cursor to continue from.
 const BUDGET: usize = 9_000;
-/// A note file past this is read only this far (a pasted log, a runaway export): the rest is never loaded.
 const MAX_FILE: u64 = 8 << 20;
 
-/// Where the app keeps its notes (Tauri's app_data_dir + "notes"). `EVE_NOTES_DIR` overrides it.
 pub fn notes_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("EVE_NOTES_DIR") {
         return PathBuf::from(dir);
@@ -36,24 +22,19 @@ pub fn notes_dir() -> PathBuf {
     data.join(IDENTIFIER).join("notes")
 }
 
-// ---- notes ------------------------------------------------------------------
 #[derive(Debug, Clone, PartialEq)]
 pub struct Note {
     pub id: String,
     pub body: String,
     pub updated: i64,
     pub deleted: bool,
-    /// the folder an older version kept it in ("Work/Projects"), until the app makes that pages
     pub group: String,
     pub parent: Option<String>,
-    /// the file was bigger than MAX_FILE and only its start was read
     pub clipped: bool,
 }
 
-/// `parse` in notes.svelte.ts: `---\n<key: value lines>\n---\n<body>`, an id required.
 pub fn parse(text: &str) -> Option<Note> {
     let rest = text.strip_prefix("---\n")?;
-    // the frontmatter ends at the first "\n---" (it may be empty: "---\n---")
     let end = if rest.starts_with("---") { 0 } else { rest.find("\n---")? + 1 };
     let meta = &rest[..end.saturating_sub(1)];
     let after = &rest[end + 3..];
@@ -79,7 +60,6 @@ pub fn parse(text: &str) -> Option<Note> {
     Some(Note { id, body: body.to_string(), updated, deleted, group, parent, clipped: false })
 }
 
-/// `plain` in markdown.ts: a line of markdown as the text it shows.
 pub fn plain(line: &str) -> String {
     let lead = |c: char| matches!(c, '#' | '>' | '-' | '*' | '+') || c.is_whitespace();
     let mut s: &str = line;
@@ -93,7 +73,6 @@ pub fn plain(line: &str) -> String {
     } else if s.starts_with("[ ]") || s.starts_with("[x]") {
         s = s[3..].trim_start();
     }
-    // \x -> x, ==marked== -> marked, the emphasis marks dropped, then [[Title]] -> Title (or its alias)
     let mut unescaped = String::with_capacity(s.len());
     let mut chars = s.chars();
     while let Some(c) = chars.next() {
@@ -117,7 +96,6 @@ pub fn plain(line: &str) -> String {
     linked.trim().to_string()
 }
 
-/** `==text==` -> `text`, as markdown.ts's `/==(?=\S)(.+?)==/g`: the text starts with no space. */
 fn highlights_off(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut i = 0;
@@ -141,7 +119,6 @@ fn highlights_off(s: &str) -> String {
     out
 }
 
-/// markdown.ts's `splitAlias`: `Title|alias` (the bar maybe escaped, as in a table) -> (title, alias).
 pub fn split_alias(inner: &str) -> (&str, &str) {
     match inner.find('|') {
         None => (inner.trim(), ""),
@@ -152,15 +129,12 @@ pub fn split_alias(inner: &str) -> (&str, &str) {
     }
 }
 
-/// `titleOf`: the first non-blank line, as text.
 pub fn title_of(body: &str) -> String {
     let first = body.split('\n').find(|l| !l.trim().is_empty()).unwrap_or("");
     let t = plain(first);
     if t.is_empty() { "Untitled".into() } else { t }
 }
 
-/// One note file as text: at most MAX_FILE bytes, and bytes that are not UTF-8 shown as U+FFFD instead
-/// of the note going missing.
 fn read_text(path: &Path) -> Option<(String, bool)> {
     use std::io::Read;
     let file = std::fs::File::open(path).ok()?;
@@ -170,7 +144,6 @@ fn read_text(path: &Path) -> Option<(String, bool)> {
     Some((String::from_utf8_lossy(&bytes).into_owned(), clipped))
 }
 
-/// Every live note in the folder (tombstones left out), newest first.
 pub fn load(dir: &Path) -> Result<Vec<Note>, String> {
     let entries = std::fs::read_dir(dir).map_err(|e| {
         format!(
@@ -185,23 +158,17 @@ EVE_NOTES_DIR points the server at another folder.",
         .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("md"))
         .filter_map(|p| read_text(&p))
         .filter_map(|(t, clipped)| parse(&t).map(|n| Note { clipped, ..n }))
-        // the daily template and the calendar's name are the calendar's, not notes (daily.ts isCalendarOwn)
         .filter(|n| !n.deleted && n.id != "daily-template" && n.id != "daily-calendar")
         .collect();
     out.sort_by(|a, b| b.updated.cmp(&a.updated).then_with(|| a.id.cmp(&b.id)));
     Ok(out)
 }
 
-// ---- size: what fits in one answer ------------------------------------------------
-/// Tokens a model will likely spend on `s`, on the high side: ~3 ASCII chars a token, and 1.5 tokens
-/// for any other char (Hangul, CJK and emoji cost about one to two each).
 pub fn tokens(s: &str) -> usize {
     let (ascii, other) = s.chars().fold((0, 0), |(a, o), c| if c.is_ascii() { (a + 1, o) } else { (a, o + 1) });
     ascii / 3 + other * 3 / 2 + 1
 }
 
-/// How far past `from` the text can go within `budget` tokens: whole lines while they fit, and at least
-/// one character. A single line too long for the budget is cut between characters.
 pub fn fit(text: &str, from: usize, budget: usize) -> usize {
     let mut end = from;
     let mut used = 0;
@@ -215,7 +182,6 @@ pub fn fit(text: &str, from: usize, budget: usize) -> usize {
         if end > from {
             return end;
         }
-        // not even one line: as many characters as fit, counted in half-tokens (ASCII 1, others 3)
         let mut half = 0;
         for (i, c) in line.char_indices() {
             half += if c.is_ascii() { 1 } else { 3 };
@@ -228,8 +194,6 @@ pub fn fit(text: &str, from: usize, budget: usize) -> usize {
     end
 }
 
-/// The fence a piece of markdown leaves open (``` or ~~~), so a cut can close it: otherwise everything
-/// after the cut would read as code.
 fn open_fence(text: &str) -> Option<&'static str> {
     let mut open = None;
     for line in text.lines() {
@@ -282,8 +246,6 @@ fn outline(body: &str) -> Vec<String> {
     out
 }
 
-// ---- time: local days, without a date crate ------------------------------------
-/// This Mac's offset from UTC in seconds (`date +%z` once), so "September" means local September.
 #[cfg(not(test))]
 fn offset() -> i64 {
     static OFFSET: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
@@ -298,13 +260,11 @@ fn offset() -> i64 {
         }
     })
 }
-/// Tests run in Seoul, wherever the machine is: a non-zero offset keeps the day arithmetic honest.
 #[cfg(test)]
 fn offset() -> i64 {
     9 * 3600
 }
 
-/// Days since 1970-01-01 for a civil date (Howard Hinnant's days_from_civil).
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = y.div_euclid(400);
@@ -315,7 +275,6 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-/// (year, month, day) of a day count; the inverse of days_from_civil.
 pub(crate) fn civil(days: i64) -> (i64, i64, i64) {
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
@@ -328,12 +287,10 @@ pub(crate) fn civil(days: i64) -> (i64, i64, i64) {
     (yoe + era * 400 + if m <= 2 { 1 } else { 0 }, m, d)
 }
 
-/// Local midnight of a day, as ms epoch.
 fn day_start(y: i64, m: i64, d: i64) -> i64 {
     (days_from_civil(y, m, d) * 86_400 - offset()) * 1000
 }
 
-/// ms epoch -> local "2026-09-29 17:41".
 fn stamp(ms: i64) -> String {
     let secs = ms.div_euclid(1000) + offset();
     let (y, m, d) = civil(secs.div_euclid(86_400));
@@ -341,7 +298,6 @@ fn stamp(ms: i64) -> String {
     format!("{y:04}-{m:02}-{d:02} {:02}:{:02}", rem / 3600, rem % 3600 / 60)
 }
 
-/// "2026-09" or "2026-09-05" -> [start, end) in ms: the whole month, or that one day.
 fn span(s: &str) -> Option<(i64, i64)> {
     let parts: Vec<i64> = s.trim().split('-').map(|p| p.parse().ok()).collect::<Option<_>>()?;
     match parts[..] {
@@ -354,7 +310,6 @@ fn span(s: &str) -> Option<(i64, i64)> {
     }
 }
 
-/// `from` / `to` arguments -> [start, end): each end a month or a day, both inclusive; either may be left out.
 fn period(args: &Value) -> Result<Option<(i64, i64)>, String> {
     let (from, to) = (arg_str(args, "from"), arg_str(args, "to"));
     if from.is_empty() && to.is_empty() {
@@ -369,24 +324,19 @@ fn period(args: &Value) -> Result<Option<(i64, i64)>, String> {
     Ok(Some((start, end)))
 }
 
-/// When the note was made: a day's note is its day; a note made in the app carries its creation
-/// time in the id (`newId`: base-36 ms + 6 random chars). None for anything else.
 pub fn created(n: &Note) -> Option<i64> {
     if let Some(key) = n.id.strip_prefix("daily-") {
         return span(key).filter(|_| key.len() == 10).map(|(s, _)| s);
     }
     let head = n.id.get(..n.id.len().checked_sub(6)?)?;
     let ms = i64::from_str_radix(head, 36).ok()?;
-    // 2017 .. 2100: anything else is not a timestamp
     (1_500_000_000_000..4_102_444_800_000).contains(&ms).then_some(ms)
 }
 
-/// No period, or touched inside it.
 fn within(n: &Note, when: Option<(i64, i64)>) -> bool {
     when.map_or(true, |p| touched(n, p))
 }
 
-/// Made or last changed inside the period.
 fn touched(n: &Note, (start, end): (i64, i64)) -> bool {
     let inside = |t: i64| t >= start && t < end;
     inside(n.updated) || created(n).is_some_and(inside)
@@ -406,9 +356,6 @@ fn describe(n: &Note, notes: &[Note]) -> String {
     s + &format!(" · updated: {})", stamp(n.updated))
 }
 
-/// That page or under it: the titles of the pages a note is under, and its own, read as a path, so "Work/Projects"
-/// finds the page Projects under Work and what is under it. (A note in an older version's folder, not yet made a page
-/// by the app, is found by its folder.)
 fn under_page(n: &Note, notes: &[Note], page: &str) -> bool {
     let g = page.trim().trim_matches('/');
     let under = |p: &str| p == g || p.starts_with(&format!("{g}/"));
@@ -426,14 +373,10 @@ fn under_page(n: &Note, notes: &[Note], page: &str) -> bool {
     under(&path.join("/"))
 }
 
-// ---- commands: what Claude and the terminal can ask for ------------------------------------------
-/// What a parameter holds.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Kind {
     Text,
-    /// a whole number, between the two bounds
     Number(u64, u64),
-    /// a list of texts, between the two lengths
     Texts(usize, usize),
 }
 
@@ -443,7 +386,6 @@ pub struct Param {
     pub kind: Kind,
     pub help: &'static str,
     pub required: bool,
-    /// on the command line it may be given bare (`eve search words`), not only as `--query words`
     pub positional: bool,
 }
 
@@ -458,7 +400,6 @@ const fn needed(p: Param) -> Param {
 }
 
 pub struct Command {
-    /// the MCP tool's name
     pub tool: &'static str,
     /// the command-line name: `eve <cli>`
     pub cli: &'static str,
@@ -471,15 +412,11 @@ pub struct Command {
     pub run: fn(&Path, &[Note], &Value) -> Result<String, String>,
 }
 
-/// What a command does besides reading, for the MCP client's annotations.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Effect {
     Reads,
-    /// changes what is on the screen, not the notes
     Shows,
-    /// adds to the notes, taking nothing away
     Adds,
-    /// may take text out of a note
     Rewrites,
 }
 
@@ -623,7 +560,6 @@ pub const COMMANDS: &[Command] = &[
             if body.trim().is_empty() {
                 return Err("Give body: the note's whole new text. To delete the note, use delete_note.".into());
             }
-            // the title stays on top when only what is under it was written
             let body = if body.trim_start().starts_with("# ") { format!("{body}\n") } else { format!("# {}\n\n{body}\n", title_of(&note.body)) };
             ask_app(dir, serde_json::json!({ "op": "rewrite", "id": note.id, "body": body }))
         },
@@ -642,7 +578,6 @@ pub const COMMANDS: &[Command] = &[
     },
 ];
 
-/// A command by its tool name or its command-line name.
 pub fn command(name: &str) -> Option<&'static Command> {
     COMMANDS.iter().find(|c| c.tool == name || c.cli == name)
 }
@@ -745,7 +680,6 @@ fn arg_str<'a>(args: &'a Value, key: &str) -> &'a str {
     args.get(key).and_then(Value::as_str).unwrap_or("").trim()
 }
 
-/// The page path asked for: `page`, or `group` as an older client says it (Eve had folders, groups, before pages).
 fn arg_page(args: &Value) -> &str {
     Some(arg_str(args, "page")).filter(|p| !p.is_empty()).unwrap_or_else(|| arg_str(args, "group"))
 }
@@ -767,11 +701,8 @@ pub fn list_notes(notes: &[Note], args: &Value) -> Result<String, String> {
     Ok(budgeted(format!("{} note(s), newest first:\n", hits.len()), &lines, hits.len(), "list_notes"))
 }
 
-/// `head` and as many `lines` as the budget holds, then what was left out of `total` and how to get less.
 fn budgeted(head: String, lines: &[String], total: usize, tool: &str) -> String {
     let more = |n: usize| format!("[{n} more not shown. Call {tool} again with a page, from / to, or more words to narrow it down.]\n");
-    // counted as the whole will be (each line's own count rounds down, and a hundred of them added up came to less
-    // than the list they made), with room kept for the line saying what was left out
     let mut out = head;
     let mut shown = 0;
     for line in lines {
@@ -787,7 +718,6 @@ fn budgeted(head: String, lines: &[String], total: usize, tool: &str) -> String 
     out
 }
 
-/// `around` chars either side of byte offset `at`, on one line.
 fn snippet(body: &str, at: usize, around: usize) -> String {
     let start = body[..at].char_indices().rev().nth(around).map(|(i, _)| i).unwrap_or(0);
     let end = body[at..].char_indices().nth(around * 2).map(|(i, _)| at + i).unwrap_or(body.len());
@@ -804,7 +734,6 @@ pub fn search_notes(notes: &[Note], args: &Value) -> Result<String, String> {
     let page = arg_page(args);
     let limit = arg_limit(args, 20, 100);
     let when = period(args)?;
-    // (query words in the title, note, snippet)
     let mut hits: Vec<(usize, &Note, String)> = Vec::new();
     for n in notes.iter().filter(|n| under_page(n, notes, page) && within(n, when)) {
         let lower = n.body.to_lowercase();
@@ -813,7 +742,6 @@ pub fn search_notes(notes: &[Note], args: &Value) -> Result<String, String> {
         }
         let title = title_of(&n.body).to_lowercase();
         let in_title = words.iter().filter(|w| title.contains(w.as_str())).count();
-        // the first match past the title line, if any, says more than the title again
         let skip = n.body.find('\n').unwrap_or(n.body.len());
         let first = |from: usize| words.iter().filter_map(|w| lower.get(from..)?.find(w.as_str()).map(|i| i + from)).min();
         let at = first(skip).or_else(|| first(0)).unwrap_or(0);
@@ -829,7 +757,6 @@ pub fn search_notes(notes: &[Note], args: &Value) -> Result<String, String> {
     Ok(budgeted(format!("{} match(es), best first:\n", hits.len()), &lines, hits.len(), "search_notes"))
 }
 
-/// The heading line whose text is `name`, and everything up to the next heading of its level or above.
 fn section<'a>(body: &'a str, name: &str) -> Option<&'a str> {
     let want = name.trim().trim_start_matches('#').trim().to_lowercase();
     let mut fenced = false;
@@ -876,7 +803,6 @@ fn cursor_at(cursor: &str, note: &Note, text: &str) -> Result<usize, String> {
 fn pick<'a>(notes: &'a [Note], args: &'a Value) -> Result<(&'a Note, &'a str, Vec<String>), String> {
     let (id, title) = (arg_str(args, "id"), arg_str(args, "title"));
     let title = split_alias(title.trim_start_matches("[[").trim_end_matches("]]")).0;
-    // a [[Title#Section]] link given whole
     let (title, linked) = match title.split_once('#') {
         Some((t, s)) if !t.is_empty() => (t.trim(), s.trim()),
         _ => (title, ""),
@@ -888,7 +814,6 @@ fn pick<'a>(notes: &'a [Note], args: &'a Value) -> Result<(&'a Note, &'a str, Ve
         notes.iter().find(|n| n.id == id).ok_or_else(|| format!("No note with id \"{id}\"."))?
     } else if !title.is_empty() {
         let low = title.to_lowercase();
-        // newest first already, so the first exact title is the one a [[link]] would open
         let mut same = notes.iter().filter(|n| title_of(&n.body).to_lowercase() == low);
         match same.next() {
             Some(n) => {
@@ -932,7 +857,6 @@ pub fn read_note(notes: &[Note], args: &Value) -> Result<String, String> {
         out += &format!("[… continued from {}%]\n", from * 100 / body.len().max(1));
     }
     let heads = if wanted.is_empty() && from == 0 { outline(&note.body) } else { Vec::new() };
-    // room for the closing line: the cursor, and on the first part the note's sections
     let tail = 120 + heads.iter().map(|h| tokens(h) + 1).sum::<usize>();
     let end = fit(body, from, BUDGET.saturating_sub(tokens(&out) + tail));
     out += &piece(&body[from..end]);
@@ -952,7 +876,6 @@ pub fn read_note(notes: &[Note], args: &Value) -> Result<String, String> {
     Ok(out)
 }
 
-/// `eve://open?id=…[&section=…]`: what the app answers to by showing that note (lib.rs, src/lib/evelink.ts).
 pub fn link_to(id: &str, section: &str) -> String {
     fn enc(s: &str) -> String {
         s.bytes()
@@ -969,13 +892,11 @@ pub fn link_to(id: &str, section: &str) -> String {
     url
 }
 
-/// The note (and section) to show, as the link that shows it, and what to tell the model once it is shown.
 pub fn open_note(notes: &[Note], args: &Value) -> Result<(String, String), String> {
     let (note, wanted, twins) = pick(notes, args)?;
     let mut heading = String::new();
     if !wanted.is_empty() {
         let found = section(&note.body, wanted).ok_or_else(|| format!("\"{}\" has no section \"{wanted}\".", title_of(&note.body)))?;
-        // the heading as the editor shows it: the app looks it up by that exact text (editor.ts)
         heading = plain(found.lines().next().unwrap_or("")).trim().to_string();
     }
     let mut said = format!("Opened \"{}\" in Eve", title_of(&note.body));
@@ -989,8 +910,6 @@ pub fn open_note(notes: &[Note], args: &Value) -> Result<(String, String), Strin
     Ok((link_to(&note.id, &heading), said))
 }
 
-/// Hand the link to macOS, which gives it to the running Eve (or starts Eve with it); in the background,
-/// Eve is not brought to the front.
 fn launch(url: &str, background: bool) -> Result<(), String> {
     if !cfg!(target_os = "macos") {
         return Err("Reaching the Eve app works on the Mac only.".into());
@@ -1013,13 +932,10 @@ fn launch(url: &str, background: bool) -> Result<(), String> {
     Ok(())
 }
 
-// ---- writing: through the app -------------------------------------------------------
-/// Where a change waits for the app: beside the notes folder, not in it (the list and sync read that).
 pub fn inbox(dir: &Path) -> PathBuf {
     dir.parent().unwrap_or(dir).join("inbox")
 }
 
-/// How long a change waits for Eve to take it: long enough for Eve to start.
 const ANSWER_WITHIN: std::time::Duration = std::time::Duration::from_secs(20);
 
 /// Hand Eve one change and wait for its answer. The change is a file in the app's inbox, which only this
@@ -1031,7 +947,6 @@ pub fn ask_app(dir: &Path, ask: Value) -> Result<String, String> {
     Ok(v.get("text").and_then(Value::as_str).unwrap_or("").to_string())
 }
 
-/// `ask_app`, its whole answer: what Eve sends back besides words (a diagram's pictures)
 pub fn ask_app_for(dir: &Path, mut ask: Value) -> Result<Value, String> {
     use std::sync::atomic::{AtomicU32, Ordering};
     static NEXT: AtomicU32 = AtomicU32::new(0);
@@ -1041,9 +956,7 @@ pub fn ask_app_for(dir: &Path, mut ask: Value) -> Result<Value, String> {
     let id = format!("{millis}-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
     ask["ask"] = Value::from(id.as_str());
     let (part, ready, reply) = (inbox.join(format!("{id}.part")), inbox.join(format!("{id}.json")), inbox.join(format!("{id}.reply")));
-    // written whole before it is named .json: Eve never reads half a change
     std::fs::write(&part, ask.to_string()).and_then(|_| std::fs::rename(&part, &ready)).map_err(|e| format!("Could not hand the change to Eve ({e})."))?;
-    // the tests play Eve themselves
     if !cfg!(test) {
         if let Err(e) = launch("eve://inbox", true) {
             let _ = std::fs::remove_file(&ready);
@@ -1060,21 +973,17 @@ pub fn ask_app_for(dir: &Path, mut ask: Value) -> Result<Value, String> {
         }
         std::thread::sleep(std::time::Duration::from_millis(40));
     }
-    // not taken: take it back, so it is not done later behind a retry
     if std::fs::remove_file(&ready).is_ok() {
         return Err("Eve did not take the change: nothing was written. Is Eve 0.7.69 or later installed, and can it start?".into());
     }
     Err("Eve took the change but did not answer in time. Read the note before trying again: it may be done.".into())
 }
 
-/// `create_note`: the parent found here, from the notes on disk; the rest is the app's.
 fn create_note(dir: &Path, notes: &[Note], args: &Value) -> Result<String, String> {
     let title = arg_str(args, "title");
     if title.is_empty() || title.contains('\n') {
         return Err("Give the new note a title, one line.".into());
     }
-    // asked to make a note that is there, Claude means to change it: made again it would be a second note somewhere
-    // else, the first left behind (and a [[link]] by its title opens only one of them)
     if let Some(n) = notes.iter().find(|n| title_of(&n.body).to_lowercase() == title.to_lowercase()) {
         return Err(format!(
             "There is already a note \"{}\" (id {}). To change it, use edit_note for a passage or rewrite_note for the whole of it: it stays where it is. To make a second note, give it another title.",
@@ -1096,13 +1005,9 @@ fn create_note(dir: &Path, notes: &[Note], args: &Value) -> Result<String, Strin
     ask_app(dir, serde_json::json!({ "op": "create", "body": text, "page": page, "parent": parent }))
 }
 
-/// A line of a command's answer naming a picture it made: the MCP server sends the picture itself in its place.
 pub const PICTURE: &str = "Picture: ";
-/// At most this many pictures in one diagram_images answer (each is a few thousand tokens to Claude).
 const MAX_PICTURES: usize = 6;
 
-/// `diagram_images`: the note's diagrams drawn by Eve, which alone can draw them (mermaid, and Eve's own charts, run
-/// in its page), as `PICTURE` lines naming the PNG files kept beside the notes, each with its code.
 fn diagram_images(dir: &Path, notes: &[Note], args: &Value) -> Result<String, String> {
     use base64::Engine;
     let (note, _, _) = pick(notes, args)?;
@@ -1139,11 +1044,8 @@ fn diagram_images(dir: &Path, notes: &[Note], args: &Value) -> Result<String, St
     Ok(out.trim_end().to_string())
 }
 
-/// At most this many ids in one read_notes call.
 const MAX_IDS: usize = 100;
 
-/// Several notes, whole and as written, in the order asked for. What does not fit one answer continues
-/// in the next: a note may be split between answers, never shortened.
 pub fn read_notes(notes: &[Note], args: &Value) -> Result<String, String> {
     let mut ids: Vec<&str> = Vec::new();
     for v in args.get("ids").and_then(Value::as_array).ok_or("Give ids: a list of note ids, from list_notes or search_notes.")? {
@@ -1159,7 +1061,6 @@ pub fn read_notes(notes: &[Note], args: &Value) -> Result<String, String> {
         return Err(format!("At most {MAX_IDS} ids at a time."));
     }
     let find = |id: &str| notes.iter().find(|n| n.id == id);
-    // a cursor is `index:offset~updated`: the note it stopped in, where, and which version of it
     let cursor = arg_str(args, "cursor");
     let (start, mut offset) = if cursor.is_empty() {
         (0, 0)
@@ -1189,7 +1090,6 @@ pub fn read_notes(notes: &[Note], args: &Value) -> Result<String, String> {
             format!("\n=== {} · continued from {}% ===\n", describe(n, notes), from * 100 / n.body.len().max(1))
         };
         let room = BUDGET.saturating_sub(tokens(&out) + tokens(&head) + CLOSING);
-        // too little room left to be worth starting here: the next answer begins with it
         if room < 200 && out.contains("\n=== ") {
             next = Some((i, from, n));
             break;
@@ -1232,7 +1132,6 @@ mod tests {
         assert_eq!(n.body, "# Hello\n\nbody\n");
         assert!(parse("---\nid: x\ndeleted: true\n---\n").unwrap().deleted);
         assert_eq!(parse("---\nid: x\n---").unwrap().body, "");
-        // a divider in the body is not the end of the frontmatter
         assert_eq!(parse("---\nid: x\n---\na\n---\nb").unwrap().body, "a\n---\nb");
         assert!(parse("no frontmatter").is_none());
         assert!(parse("---\nupdated: 1\n---\nno id").is_none());
@@ -1248,7 +1147,6 @@ mod tests {
         assert_eq!(title_of("a\\*b"), "ab");
         assert_eq!(title_of("   \n"), "Untitled");
         assert_eq!(title_of("회의록 2026"), "회의록 2026");
-        // the same as markdown.test.mjs: aliases, an escaped bar, highlights
         assert_eq!(title_of("- see [[DB|데이터베이스]] and [[Plan]]"), "see 데이터베이스 and Plan");
         assert_eq!(title_of("| [[DB\\|db]] |"), "| db |");
         assert_eq!(title_of("# ==Important== plan"), "Important plan");
@@ -1258,11 +1156,9 @@ mod tests {
 
     #[test]
     fn stamps_and_days_are_local() {
-        // tests run at +09:00 (see offset)
         assert_eq!(stamp(0), "1970-01-01 09:00");
         assert_eq!(stamp(1_790_000_000_000), "2026-09-21 23:13");
         assert_eq!(civil(days_from_civil(2024, 2, 29)), (2024, 2, 29));
-        // September in Seoul starts at 15:00 UTC on Aug 31
         assert_eq!(span("2026-09"), Some((1_788_188_400_000, 1_790_780_400_000)));
         assert_eq!(span("2026-12").unwrap().1, day_start(2027, 1, 1));
         assert_eq!(span("2026-09-05").map(|(a, b)| b - a), Some(86_400_000));
@@ -1293,7 +1189,6 @@ mod tests {
 
     #[test]
     fn a_folder_is_found_as_the_pages_it_became() {
-        // "Work/Alpha" is the page Work, a page Alpha under it, and the notes under that (asked as a group by an older client too)
         let under = |mut n: Note, p: &str| { n.parent = Some(p.into()); n };
         let notes = vec![note("w", 5, "", "# Work"), under(note("al", 4, "", "# Alpha"), "w"), under(note("x", 3, "", "# Plan"), "al"), note("h", 2, "", "# Home"), under(note("y", 1, "", "# Milk"), "h")];
         let out = list_notes(&notes, &json!({ "page": "Work/Alpha" })).unwrap();
@@ -1340,7 +1235,7 @@ mod tests {
         let sep = |d: i64, h: i64| day_start(2026, 9, d) + h * 3_600_000;
         let notes = vec![
             note("daily-2026-09-02", sep(2, 22), "", "# 2026-09-02\n- [ ] call mom"),
-            note("mtktin40abc123", sep(20, 0), "Work", "# Launch plan\nship it"), // made 09-03, changed 09-20
+            note("mtktin40abc123", sep(20, 0), "Work", "# Launch plan\nship it"),
             note("old", sep(10, 0), "", "# Old page\nedited in September"),
             note("august", day_start(2026, 8, 31) + 23 * 3_600_000, "", "# August\nlate on the 31st"),
             note("october", day_start(2026, 10, 1), "", "# October"),
@@ -1349,7 +1244,6 @@ mod tests {
         let sept = list_notes(&notes, &json!({ "from": "2026-09", "to": "2026-09" })).unwrap();
         assert_eq!(ids(&sept), ["mtktin40abc123", "old", "daily-2026-09-02"], "{sept}");
         assert!(sept.contains("created: 2026-09-03 · updated: 2026-09-20"), "{sept}");
-        // made on the 3rd counts for the first days, though last changed on the 20th
         let early = list_notes(&notes, &json!({ "from": "2026-09-01", "to": "2026-09-05" })).unwrap();
         assert_eq!(ids(&early), ["mtktin40abc123", "daily-2026-09-02"], "{early}");
         assert_eq!(ids(&list_notes(&notes, &json!({ "from": "2026-09", "page": "Work" })).unwrap()), ["mtktin40abc123"]);
@@ -1360,7 +1254,6 @@ mod tests {
         assert!(found.contains("Launch plan") && !found.contains("Old page"), "{found}");
     }
 
-    /// The cursor an answer ends with, if it goes on.
     fn next_cursor(out: &str) -> Option<String> {
         let at = out.rfind("cursor \"")? + 8;
         Some(out[at..at + out[at..].find('"')?].to_string())
@@ -1395,7 +1288,6 @@ mod tests {
         }
         assert_eq!(again, body);
         assert!(parts > 10);
-        // a part that stops inside a code block is closed off
         assert_eq!(piece("a\n```js\nx\n"), "a\n```js\nx\n```");
         assert_eq!(piece("```\nx\n```\n"), "```\nx\n```");
         assert_eq!(piece("~~~\n```\n"), "~~~\n```\n~~~");
@@ -1423,10 +1315,8 @@ mod tests {
             assert_eq!(seen.matches(&format!("line {i}:")).count(), 1, "line {i}");
         }
         assert!(seen.contains("the end"));
-        // the first part names the sections to jump to
         let first = read_note(&notes, &json!({ "id": "big" })).unwrap();
         assert!(first.contains("or read one section: Part 0 | Part 5"), "{}", &first[first.len() - 300..]);
-        // a cursor from an older version, or made up, is refused
         let c = next_cursor(&first).unwrap();
         let newer = vec![note("big", 8, "", &body)];
         assert!(read_note(&newer, &json!({ "id": "big", "cursor": c })).unwrap_err().contains("changed"));
@@ -1440,7 +1330,6 @@ mod tests {
             .map(|d| note(&format!("daily-2026-09-{d:02}"), d, "", &format!("# day {d}\n{}", "오늘 한 일을 적는다. ".repeat(60))))
             .collect();
         notes.push(note("huge", 15, "", &big_body()));
-        // in the order asked for: the big note in the middle, a missing id, a repeat
         let mut ids: Vec<String> = (1..=30).rev().map(|d| format!("daily-2026-09-{d:02}")).collect();
         ids.insert(10, "huge".into());
         ids.insert(3, "gone".into());
@@ -1464,13 +1353,11 @@ mod tests {
         for d in 1..=30 {
             assert_eq!(seen.matches(&format!("# day {d}\n")).count(), 1, "day {d}");
         }
-        // the big note whole: every line, the very end included, nothing summarised
         for i in (1..3000).step_by(5) {
             assert_eq!(seen.matches(&format!("line {i}:")).count(), 1, "line {i}");
         }
         assert!(seen.contains("the end"));
         assert!(seen.contains("=== gone: no such note ==="));
-        // cursors: made up, pointing into a character, or from an older version
         assert!(read_notes(&notes, &json!({ "ids": ["daily-2026-09-01"], "cursor": "gone" })).is_err());
         assert!(read_notes(&notes, &json!({ "ids": ["daily-2026-09-01"], "cursor": "0:9~1" })).is_err());
         assert!(read_notes(&notes, &json!({ "ids": ["daily-2026-09-01"], "cursor": "0:3~2" })).unwrap_err().contains("changed"));
@@ -1497,7 +1384,6 @@ mod tests {
         let (url, said) = open_note(&notes, &json!({ "title": "plan" })).unwrap();
         assert_eq!(url, "eve://open?id=p1");
         assert!(said.starts_with("Opened \"Plan\" in Eve.") && said.contains("open one by id: old"), "{said}");
-        // the section by any spelling a read accepts, sent as the editor shows the heading
         let (url, said) = open_note(&notes, &json!({ "title": "[[Plan#goals & map]]" })).unwrap();
         assert_eq!(url, "eve://open?id=p1&section=Goals%20%26%20map");
         assert!(said.contains("at \"Goals & map\""), "{said}");

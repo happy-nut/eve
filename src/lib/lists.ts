@@ -7,22 +7,14 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { suggestionVisible } from './slash';
 import { indentLines, switchItem, joinNextItem, joinListBelow, itemAbove, liftCounting } from './blocks';
 
-/** list items hold text or an image first, then any block (stock TipTap insists on a paragraph) */
 export const LIST_ITEM_CONTENT = '(paragraph|image) block*';
-/** "1. ", "a. " or "i. " opening a line: a numbered list */
 export const NUMBERED = /^(\d+|a|i)\.[^\S\n]$/;
 
-/**
- * An item of two blocks: two paragraphs, or a line and the code, formula, picture, table or heading under it. A blank
- * line goes between them, so markdown reads the list back loose. A list inside the item is written without one; so is
- * the empty line a block on the item's own line is read with.
- */
 function twoBlocks(item: PMNode): boolean {
   let n = 0;
   item.forEach((c, _o, i) => { if (!/List$/.test(c.type.name) && !(i === 0 && item.attrs.lead && !c.content.size)) n++; });
   return n > 1;
 }
-/** a list markdown reads back loose: one of its items holds two blocks, or a list in it is loose */
 export function readsLoose(list: PMNode): boolean {
   let two = false;
   list.forEach((item) => { if (twoBlocks(item)) two = true; });
@@ -34,12 +26,6 @@ export function readsLoose(list: PMNode): boolean {
   return two;
 }
 
-/**
- * A tight list with an item holding a line and code under it (a formula, a picture, a table, a heading) was written
- * tight with a blank line inside the item, read back loose, and written with blank lines between all its items: the
- * note changed the second time it was saved. Such a list is written loose from the first (the editor marks it loose
- * too, once the note is edited: joinLists).
- */
 export function looseLists(editor: Editor) {
   const serializer = (editor.storage as any).markdown.serializer;
   const nodesOf = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(serializer), 'nodes')?.get;
@@ -59,8 +45,6 @@ export function looseLists(editor: Editor) {
   });
 }
 
-// Notion-style numbering: typing "1. " (any number) directly after a numbered list joins it and
-// continues the count. Stock TipTap only joins when the typed number is the next one.
 export const NumberedList = OrderedList.extend({
   // written as tiptap-markdown does (")" for every other of two numbered lists in a row, so they stay two), but a
   // list inside an item from 1: markdown reads one numbered from 5 right under the item's line as more of that
@@ -83,14 +67,10 @@ export const NumberedList = OrderedList.extend({
     },
   }),
   addInputRules() {
-    // "a. " and "i. " too, as Notion takes them: a numbered list all the same, its marks drawn by depth (1. a. i.),
-    // which is all markdown can keep
     return [wrappingInputRule({ find: NUMBERED, type: this.type, getAttributes: (m) => ({ start: +m[1] || 1 }), joinPredicate: (_m, node) => !node.attrs.type || node.attrs.type === '1' })];
   },
 });
 
-// "- ", "[] " or "1. " typed at the start of a list line of another kind turns that line into it (the stock
-// rules only wrap a plain line, so on a to-do "- " stayed text)
 export const ListSwitch = Extension.create({
   name: 'listSwitch',
   priority: 102,
@@ -100,15 +80,12 @@ export const ListSwitch = Extension.create({
       new InputRule({ find, handler: ({ state, range, match }) => (switchItem(state.tr, range.from, range.to, n[list], n[item], attrs?.(match), itemAttrs?.(match)) ? undefined : null) });
     return [
       rule(/^\s*[-+*][^\S\n]$/, 'bulletList', 'listItem'),
-      // "[x] " makes a to-do already done, as it does on a plain line
       rule(/^\s*\[( |x)?\][^\S\n]$/, 'taskList', 'taskItem', undefined, (m) => ({ checked: m[1] === 'x' })),
       rule(NUMBERED, 'orderedList', 'listItem', (m) => ({ start: +m[1] || 1 })),
     ];
   },
 });
 
-// Delete at the end of a list line over an item at another level or of another kind: that item's text joins the
-// line (joinNextItem). Ahead of the lists' own Delete (priority 101), which took over once that item had sub-items
 export const JoinNextItem = Extension.create({
   name: 'joinNextItem',
   priority: 102,
@@ -117,14 +94,11 @@ export const JoinNextItem = Extension.create({
   },
 });
 
-// ahead of the list items' own Tab, which moves an item's sub-items along with it
 export const LineIndent = Extension.create({
   name: 'lineIndent',
   priority: 101,
   addKeyboardShortcuts() {
     const run = (dir: 1 | -1) => () => !suggestionVisible(this.editor) && this.editor.commands.command(indentLines(dir));
-    // ⌫ / Enter step out as ⇧Tab does — but where the line cannot move, the key's own meaning still applies
-    // (⇧Tab keeps the key even then; these would otherwise do nothing at all)
     const stepOut = () => {
       const doc = this.editor.state.doc;
       return run(-1)() && this.editor.state.doc !== doc;
@@ -132,17 +106,11 @@ export const LineIndent = Extension.create({
     return {
       Tab: run(1),
       'Shift-Tab': run(-1),
-      // ⌫ at the very start of a nested item: it steps out a level as ⇧Tab does, still its own kind (a bullet
-      // under a number stays a bullet). The stock join made it an item of its parent's list, of that list's kind.
-      // A top-level item is left to the stock ⌫ (the line becomes plain text), the numbers after it counting on.
       Backspace: () => {
         if (this.editor.commands.command(liftCounting(false))) return true;
         const { $from, empty } = this.editor.state.selection;
         if (!empty || $from.parentOffset !== 0 || !$from.parent.isTextblock || $from.depth < 4 || $from.index(-1) !== 0) return false;
         if (!/Item$/.test($from.node(-1).type.name) || !/Item$/.test($from.node(-3).type.name)) return false;
-        // an empty item with nothing under it: ⌫ deletes the line, the caret to the end of the line above. Stepped
-        // out instead, it took the items after it along as its own sub-items, and the next ⌫ (on a top-level item,
-        // the line made plain) left them all at the top level: deleting one sub-item unindented the rest
         const item = $from.node(-1);
         if (!$from.parent.content.size && item.childCount === 1) {
           const { state, view } = this.editor;
@@ -155,13 +123,6 @@ export const LineIndent = Extension.create({
         }
         return stepOut();
       },
-      // Enter on an empty item under an item of another kind (a bullet under a to-do): it steps out as
-      // ⇧Tab does, still a bullet. The stock lift made it an unmarked line inside the to-do, where the
-      // caret could not be seen in WebKit. A number under a bullet is one too (both are list items, but the
-      // stock lift made it a bullet, where ⇧Tab and ⌫ keep it a number)
-      // In the middle of its list, one of the same kind steps out as ⇧Tab does too: the stock lift left it a bare
-      // line inside the item above, the items after it under it and the list loose. Enter at the start of
-      // a line puts an empty item above it (itemAbove); on an empty numbered one, the count carries on.
       Enter: () => {
         const c = this.editor.commands;
         if (c.command(itemAbove) || c.command(liftCounting(true))) return true;
@@ -177,9 +138,6 @@ export const LineIndent = Extension.create({
   },
 });
 
-// Two lists that end up touching (a blank line between them deleted, a paragraph between them
-// turned into an item, an item moved out with ⌥↓, …) become one list — markdown has no way to
-// keep them apart anyway, and a numbered count carries on instead of restarting at 1.
 export const JoinLists = Extension.create({
   name: 'joinLists',
   addProseMirrorPlugins() {
@@ -197,31 +155,22 @@ export const JoinLists = Extension.create({
           });
         };
         scan(state.doc, 0);
-        // A numbered list inside an item counts from 1. Markdown lets only a list starting at 1 begin right under a
-        // line of text, so one numbered from 5 under its item's line ("5. " typed there, a list split in two) was
-        // read back as more of that line: the list gone, "a 5. x" in its place.
         const restart: number[] = [], loose: number[] = [];
         state.doc.descendants((node, pos, parent) => {
           if (node.type.name === 'orderedList' && (node.attrs.start ?? 1) !== 1 && parent && /Item$/.test(parent.type.name)) restart.push(pos);
-          // a list with an item of two paragraphs is loose, as markdown reads it back: written tight, the note
-          // came back with blank lines between all its items, changed by being opened and saved
-          // and a list around a loose one is loose too, as markdown reads it: the note kept "inner loose, outer
-          // tight" only until it was opened again
           if (/List$/.test(node.type.name) && node.attrs.tight && readsLoose(node)) loose.push(pos);
         });
         if (!at.length && !restart.length && !loose.length) return null;
         const tr = state.tr;
-        for (const p of restart) tr.setNodeAttribute(p, 'start', 1); // attributes only: no position moves
+        for (const p of restart) tr.setNodeAttribute(p, 'start', 1);
         for (const p of loose) tr.setNodeAttribute(p, 'tight', false);
-        for (const p of at.reverse()) if (canJoin(tr.doc, p)) tr.join(p); // back to front: earlier positions stay valid
+        for (const p of at.reverse()) if (canJoin(tr.doc, p)) tr.join(p);
         return tr;
       },
     })];
   },
 });
 
-// markdown quirks around lists: tightness for task lists (tiptap-markdown only does bullet/ordered),
-// empty checkboxes, and an image that is a list item's whole content
 export const ListMarkdown = Extension.create({
   name: 'listMarkdown',
   addStorage: () => ({
@@ -243,7 +192,6 @@ export const ListMarkdown = Extension.create({
           // is tight again; the runs are split apart later (updateDOM).
           md.core.ruler.after('block', 'eve-tight-runs', (state: any) => {
             const t = state.tokens, lines: string[] = state.src.split('\n');
-            // blank inside a quote or a callout too, where the line is a bare ">"
             const blank = (n: number) => n >= 0 && n < lines.length && !lines[n].replace(/^\s*(>\s?)*/, '').trim();
             for (let i = 0; i < t.length; i++) {
               if (t[i].type !== 'bullet_list_open') continue;
@@ -255,18 +203,16 @@ export const ListMarkdown = Extension.create({
                 const first = t[end + 2];
                 items.push({ open: end, task: first?.type === 'inline' && /^\[[ xX]\](\s|$)/.test(first.content) });
               }
-              if (!items.some((x) => x.task) || items.every((x) => x.task)) continue; // one kind: markdown's own say
+              if (!items.some((x) => x.task) || items.every((x) => x.task)) continue;
               for (let a = 0; a < items.length; ) {
                 let b = a;
                 while (b + 1 < items.length && items[b + 1].task === items[a].task) b++;
-                // tight: no blank line between its items nor inside them (their trailing blank line aside)
                 let tight = true;
                 for (let k = a; k <= b && tight; k++) {
                   const [from, to] = t[items[k].open].map ?? [0, 0];
                   for (let n = from; n < (k < b ? t[items[k + 1].open].map[0] : to) - (k < b ? 0 : 1); n++) if (blank(n)) { tight = false; break; }
                 }
                 const stop = b + 1 < items.length ? items[b + 1].open : end;
-                // never an item of two paragraphs: made tight, they ran together into one line
                 for (let k = a; k <= b && tight; k++) {
                   const to = k < b ? items[k + 1].open : stop;
                   let paras = 0;
@@ -336,9 +282,6 @@ export const ToDoItem = TaskItem.extend({
   addInputRules() {
     return [wrappingInputRule({ find: /^\s*(\[([( |x])?\])[^\S\n]$/, type: this.type, getAttributes: (m) => ({ checked: m[m.length - 1] === 'x' }) })];
   },
-  // the item's own content wrapper only where the editor drew one (its label, then a div: copied HTML), else
-  // the item itself (read from markdown) — not the first div anywhere in it: a toggle's or a board's div in
-  // a to-do was taken for the whole item, and its text and the rest were gone the next time it was read
   parseHTML() {
     const content = (el: HTMLElement) => (el.querySelector(':scope > label') && el.querySelector<HTMLElement>(':scope > div')) || el;
     return [{ tag: `li[data-type="${this.name}"]`, priority: 51, contentElement: content }];

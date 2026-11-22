@@ -7,9 +7,7 @@ import { assetUrl, copyImage } from './platform';
 import { MIN_WIDTH, alignOf, escapeWidth, nameOf, sizeGrip, widthOf, withAlign, withWidth } from './resize';
 import type { Editor } from '@tiptap/core';
 
-/** `![caption](src "title")`, the picture as a block of its own or inside a table's cell */
 export function imageMarkdown(state: any, node: PMNode): string {
-  // the src is a URL, not text: escaping it would put backslashes into the file name
   const alt = withAlign(withWidth(escapeWidth(state.esc(node.attrs.alt ?? '')), node.attrs.width), node.attrs.align);
   const src: string = node.attrs.src ?? '';
   // ...but one with a space, a "<" or ">", or a ")" with no "(" before it ends the link early (the rest was
@@ -17,7 +15,7 @@ export function imageMarkdown(state: any, node: PMNode): string {
   let depth = 0;
   for (const c of src) if ((depth += c === '(' ? 1 : c === ')' ? -1 : 0) < 0) break;
   const dest = depth || /[\s<>]/.test(src) ? `<${src.replace(/[<>]/g, '\\$&')}>` : src;
-  const title = node.attrs.title ? ` "${state.esc(node.attrs.title).replace(/"/g, '\\"')}"` : ''; // a " in it closed it
+  const title = node.attrs.title ? ` "${state.esc(node.attrs.title).replace(/"/g, '\\"')}"` : '';
   return `![${alt}](${dest}${title})`;
 }
 
@@ -30,7 +28,6 @@ function captionOf(tokens: any[]): string {
   let out = '';
   for (const t of tokens) {
     if (t.type === 'text') out += t.content;
-    // `\|` stays escaped: only a bare `|540` at the end is the width (see widthOf)
     else if (t.type === 'text_special') out += t.content === '|' ? t.markup : t.content;
     else if (t.type === 'code_inline') out += t.markup + t.content + t.markup;
     else if (t.type === 'math_inline') out += `$${t.content}$`;
@@ -44,7 +41,6 @@ function captionOf(tokens: any[]): string {
 }
 
 const keptTags = new WeakSet<object>();
-/** the <img> tag the picture was read from, while it still says what the picture is (not resized, not renamed) */
 function asWritten(node: PMNode): string | null {
   const html: string | null = node.attrs.html;
   if (!html || node.attrs.width || node.attrs.align) return null;
@@ -54,32 +50,21 @@ function asWritten(node: PMNode): string | null {
   return img && img.getAttribute('src') === node.attrs.src && (nameOf(img.getAttribute('alt')) || null) === node.attrs.alt ? html : null;
 }
 
-/**
- * Images. Markdown keeps a portable relative path (`assets/x.png`, next to the notes);
- * only the rendered <img src> is mapped to something the webview can load.
- *
- * The caption is the image's alt text, so `![caption](assets/x.png)` is all the markdown needs.
- */
 export const LocalImage = Image.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
-      // how wide the writer dragged it, carried in the caption as "caption|540" so the markdown keeps it
-      // an <img width="20"> is no narrower than a drag can make it, as a "|20" is not: read as 20 it was written
-      // "|20", which came back 120 the next time
       width: {
         default: null,
         parseHTML: (el) => widthOf(el.getAttribute('alt')) ?? (Number(el.getAttribute('width')) ? Math.max(MIN_WIDTH, Number(el.getAttribute('width'))) : null),
         renderHTML: (attrs: any) => (attrs.width ? { style: `width:${attrs.width}px` } : {}),
       },
       alt: { default: null, parseHTML: (el: HTMLElement) => nameOf(el.getAttribute('alt')) || null },
-      // where it sits across the page (null: on the left, where a picture sits anyway), carried as "caption|center"
       align: {
         default: null,
         parseHTML: (el: HTMLElement) => alignOf(el.getAttribute('alt')) ?? (/^(center|right)$/.exec(el.getAttribute('data-align') ?? el.getAttribute('align') ?? '')?.[1] || null),
         renderHTML: (attrs: any) => (attrs.align ? { 'data-align': attrs.align } : {}),
       },
-      // an <img> whose width the note has no way to write (`width="50%"`): the tag as it was, written back so
       html: { default: null, parseHTML: (el: HTMLElement) => el.getAttribute('data-eve-img'), rendered: false },
     };
   },
@@ -99,7 +84,6 @@ export const LocalImage = Image.extend({
         },
         parse: {
           setup(md: any) {
-            // `<img width="50%">` came back as `![](…)`, its width gone: the tag is kept with the picture
             if (!keptTags.has(md)) {
               keptTags.add(md);
               md.core.ruler.after('inline', 'eve-img-width', (state: any) => {

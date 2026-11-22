@@ -1,6 +1,6 @@
 // What floats, and over what: two rules that ~20 fixes kept finding broken one place at a time (a menu under the full-size
 // picture, the / menu off the window's right edge, a box's bar over its +, the table's bar over the line above it).
-// - Every z-index is one of the --z-* layers set on :root in app.css, where their order is written down once. A number
+// - Every z-index is one of the --z-* layers set on :root in app.css, whose values are the order. A number
 //   anywhere else was how a menu ended up under a picture: each component guessed its own.
 // - Nothing in a component reads the window's size to place itself: placement goes through popup.ts (floatAt), which
 //   knows the Mac's title strip, a phone's bars and its keyboard. The few reads left are not placement, and say why.

@@ -1,24 +1,8 @@
-/**
- * Kanban board data + its file form (pure; tested in Node). Lives in the note as a fenced block of JSON:
- *
- *   ```kanban
- *   { "columns": [ { "title": "To do", "cards": [ { "title": "…", "body": "markdown" } ] } ] }
- *   ```
- *
- * JSON rather than a line format: a lost indent can't turn a body line into a card, and a block that does
- * not parse is left as a code block (nothing is silently reinterpreted or dropped).
- * ids are per-session only (keys for animation and focus), never written to the file.
- */
-/** `extra`: what else the file gave the card or column (a "due" written by hand or by another tool), kept as it was */
 export interface Card { id: string; title: string; body: string; extra?: Record<string, unknown> }
-/** what a new card on this board starts as (the board's own; {{date}} is filled in when a card is made) */
 export interface CardTemplate { title: string; body: string }
 export interface Column { id: string; title: string; cards: Card[]; extra?: Record<string, unknown> }
-/** what a board's card page is given besides the card (carried along with it to CardPage.svelte) */
 export interface CardMore {
-  /** the caret at the end of the title, being typed (a card just made by typing on the board) */
   caret?: 'title';
-  /** the board's columns and the card's own, for Move to… (a phone can't drag a card to another column) */
   columns?: { id: string; title: string }[]; column?: string; move?: (colId: string) => void;
 }
 
@@ -26,17 +10,12 @@ export const uid = () => Math.random().toString(36).slice(2, 9);
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
-/** the keys of `o` the board has no field for */
 function extraOf(o: unknown, known: string[]): Record<string, unknown> | undefined {
   if (!o || typeof o !== 'object') return undefined;
   const rest = Object.entries(o).filter(([k]) => !known.includes(k));
   return rest.length ? Object.fromEntries(rest) : undefined;
 }
 
-/**
- * null when the text is not a board (bad JSON or shape), or has more at its top than columns and a template, or more
- * in the template than its title and body (the board would write it back without). A card written as just its words ("Buy milk") is a card with that title.
- */
 export function parseBoard(text: string): Column[] | null {
   let data: any;
   try { data = JSON.parse(text); } catch { return null; }
@@ -52,7 +31,6 @@ export function parseBoard(text: string): Column[] | null {
 }
 const withExtra = (o: unknown, known: string[]) => { const extra = extraOf(o, known); return extra ? { extra } : {}; };
 
-/** The board's card template, when it has one. */
 export function parseTemplate(text: string): CardTemplate | null {
   let t: any;
   try { t = JSON.parse(text)?.template; } catch { return null; }
@@ -67,7 +45,6 @@ export function serializeBoard(cols: Column[], template: CardTemplate | null = n
 
 export const defaultBoard = (): Column[] => ['To do', 'In progress', 'Done'].map((title) => ({ id: uid(), title, cards: [] }));
 
-/** Card `id` placed at `index` of column `colId` (index clamps); same column reorders. */
 export function moveCard(cols: Column[], id: string, colId: string, index: number): Column[] {
   const card = cols.flatMap((c) => c.cards).find((k) => k.id === id);
   if (!card) return cols;

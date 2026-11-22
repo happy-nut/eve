@@ -1,6 +1,4 @@
 <script module lang="ts">
-  /** the day the keyboard was on, kept while the calendar is away (a note opened from it, then ⌘[ back): it came back
-   *  on today, the month that was being looked at lost */
   let kept = '';
 </script>
 
@@ -14,20 +12,11 @@
   import { monthName, shiftDays, shiftMonths } from './lib/date';
   import Icon from './Icon.svelte';
 
-  /**
-   * The daily notes as a month, in the editor's place and as wide as it, under a head like a note's (its
-   * icon and name, both editable; the name is the sidebar's too). Each day shows the first line written
-   * under its title; a day opens its note. Keys: arrows move a day / a week, ⌘← ⌘→ a month, Enter opens,
-   * ⌫ deletes the day's note (asked first); a right-click (a long press on a phone) offers the same.
-   */
   let { onpick, ontemplate }: { onpick: (key: string) => void; ontemplate: () => void } = $props();
 
-  // Eve stays open for days, hidden and summoned: today is read again when the day turns and whenever the
-  // window comes back, or a calendar left open overnight kept showing (and its Today going to) yesterday
   let today = $state(dayKey(new Date()));
-  let cursor = $state(kept || dayKey(new Date())); // the day under the keyboard
+  let cursor = $state(kept || dayKey(new Date()));
   $effect(() => { kept = cursor; });
-  // back to the calendar (⌘[, the list, ⌃⇧K) with the keyboard on nothing: on its day, so the arrows and ↩ work
   onMount(() => { if (!document.activeElement || document.activeElement === document.body) void moveTo(cursor); });
   $effect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -35,7 +24,7 @@
       clearTimeout(timer);
       const now = new Date();
       const key = dayKey(now);
-      if (key !== today) { if (cursor === today) cursor = key; today = key; } // a cursor left on today moves on with it
+      if (key !== today) { if (cursor === today) cursor = key; today = key; }
       const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
       timer = setTimeout(check, midnight.getTime() - now.getTime() + 500);
     };
@@ -51,8 +40,6 @@
   const title = $derived(monthName(cursor));
   const weekdays = Array.from({ length: 7 }, (_, i) => new Date(2026, 8, 27 + i).toLocaleDateString(undefined, { weekday: 'short' }));
 
-  /** what a day says, under its title, as it reads (previewOf, the phone list's): a table's words, a to-do's, a
-   *  callout's — raw lines showed "| Name | Kind |", "[ ] buy milk", "[!tip] A callout"; code and a board, nothing */
   const lines = $derived.by(() => {
     const m = new Map<string, string>();
     for (const n of notes.daily) m.set(keyOfDaily(n.id), previewOf(n.body, 120).replace(/\u00a0/g, ' ').trim());
@@ -66,9 +53,7 @@
     if (focus) grid?.querySelector<HTMLElement>('.day.cursor')?.focus();
   }
   const shift = (days: number) => shiftDays(cursor, days);
-  /** the same day in another month, or its last day when it has fewer */
   const shiftMonth = (by: number) => shiftMonths(cursor, by);
-  /** Delete a day's note, once asked; the keyboard goes back where it was. A day with no note has nothing to delete. */
   async function remove(key: string) {
     const n = notes.daily.find((x) => x.id === dailyId(key));
     if (!n) return;
@@ -76,8 +61,6 @@
     if (await ui.ask(`Delete the note for ${when}?`)) notes.remove(n.id);
     void moveTo(cursor);
   }
-  /** A day's own menu: only a day with a note has one. It leaves the cursor alone, so a day of the month
-   *  before or after does not turn the page under the menu. */
   function dayMenu(e: MouseEvent, key: string) {
     e.preventDefault();
     if (lines.has(key)) ui.openMenu(e, [{ label: 'Delete', danger: true, run: () => void remove(key) }]);
@@ -97,23 +80,21 @@
       e.key === 'ArrowDown' && !mod ? shift(7) : null;
     if (!to) return;
     e.preventDefault();
-    e.stopPropagation(); // ⌘← / ⌘→ are the app's back / forward everywhere else
+    e.stopPropagation();
     void moveTo(to);
   }
 
-  // the head: name and icon, like a note's
   let renaming = $state(notes.calendar.name);
   $effect(() => { renaming = notes.calendar.name; });
   function rename() {
     if (renaming.trim() !== notes.calendar.name) notes.setCalendar({ name: renaming });
-    // emptied, it is called what it was called (its name unchanged, nothing above put that back in the field)
     renaming = notes.calendar.name;
   }
   async function changeIcon(anchor: HTMLElement) {
     const v = await ui.pickEmoji(anchor, notes.calendar.icon);
     if (v !== null) notes.setCalendar({ icon: v || '🗓️' });
     await tick();
-    focusNote(); // back to the calendar's day
+    focusNote();
   }
 </script>
 
@@ -151,9 +132,7 @@
 </div>
 
 <style>
-  /* the same top as a note's page, below the toolbar's fade */
   .calendar { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; padding: 60px clamp(16px, 4vw, 48px) 24px; }
-  /* a head like a note's: the icon, then the name as the page's title */
   .head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 18px; }
   .big-icon {
     border: 0; background: none; line-height: 1; padding: 4px; margin-left: -4px; border-radius: 10px; transition: background 0.12s, transform 0.12s;
@@ -181,11 +160,9 @@
   .today-btn { padding: 0 12px; background: var(--bg-input); color: var(--fg); font-weight: 500; margin: 0 4px; }
   .nav:hover, .today-btn:hover { background: var(--bg-active); color: var(--fg); }
   svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-  /* no ruled lines: rounded days with air between them */
   .grid {
     flex: 1; min-height: 0; display: grid; gap: 6px;
     grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: auto repeat(6, minmax(64px, 1fr));
-    /* a short window: the weeks scroll, each its full height (held to the window, a day ran over the week under it) */
     overflow-y: auto;
   }
   .wd { padding: 0 10px 2px; font-size: 11.5px; font-weight: 500; color: var(--fg-dim); letter-spacing: 0.02em; }
@@ -196,11 +173,8 @@
   }
   .day:hover { background: var(--bg-hover); }
   .day:focus { outline: none; }
-  /* the day under the keyboard, whenever the keyboard is in the month (focus-visible is not dependable in
-     WebKit after a focus() from script, which is how the arrows move it) */
   .grid:focus-within .day.cursor { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
   .day:active { transform: scale(0.98); }
-  /* a day with its note: a small blue dot beside the number */
   .num { position: relative; }
   .day.has .num::after {
     content: ''; position: absolute; top: 50%; right: -8px; width: 5px; height: 5px; margin-top: -2.5px;
@@ -216,25 +190,19 @@
     font-size: 12px; line-height: 1.4; color: var(--fg-dim); overflow: hidden;
     display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; word-break: break-word;
   }
-  /* a day too short for three lines: one, cut with an ellipsis, not a line sliced through */
   @media (max-height: 760px) {
     .line { -webkit-line-clamp: 1; line-clamp: 1; }
   }
-  /* a phone: the month fits the screen, a day shows its number and a line */
   :global(html.mobile) .calendar { padding: 14px 12px 16px; }
   :global(html.mobile) .name { font-size: 1.65em; }
   :global(html.mobile) .month { font-size: 16px; }
-  :global(html.mobile) .nav { flex: none; width: 40px; height: 40px; border-radius: 12px; } /* a finger's size at 360 wide too */
+  :global(html.mobile) .nav { flex: none; width: 40px; height: 40px; border-radius: 12px; }
   :global(html.mobile) .today-btn { height: 36px; font-size: 14px; border-radius: 10px; }
-  /* a phone's day is its number and a dot: each week at least that tall, the month scrolling past it on its side (held to
-     the screen in landscape, the weeks were 20px and their numbers ran into each other) */
   :global(html.mobile) .grid { gap: 4px; grid-template-rows: auto repeat(6, minmax(48px, 1fr)); }
-  :global(html.mobile) .day:hover { background: none; } /* a tap leaves no hover behind */
+  :global(html.mobile) .day:hover { background: none; }
   :global(html.mobile) .day { min-height: 0; padding: 6px 3px 14px; gap: 2px; border-radius: 10px; align-items: center; }
   :global(html.mobile) .wd { padding: 0; font-size: 11px; text-align: center; }
   :global(html.mobile) .num { margin: 0; width: 26px; height: 26px; line-height: 26px; font-size: 13.5px; }
-  /* a phone's day is too narrow for its note's words (a word or two, broken mid-word): a dot under the number says
-     there is one, and the day opens it */
   :global(html.mobile) .day.has .num::after { top: auto; bottom: -8px; right: 50%; width: 5px; height: 5px; margin: 0 -2.5px 0 0; }
   :global(html.mobile) .line { display: none; }
 </style>

@@ -3,15 +3,6 @@ import { assetUrl, pdfThumb } from './platform';
 import { DOC_FILE } from './drop';
 import { ui } from './ui.svelte';
 
-/**
- * A document dropped into a note — a PDF, a spreadsheet, a .hwp. Its markdown form is an ordinary
- * link — `[report.pdf](assets/17…-ab.pdf)` — so a note read anywhere else is still a plain link;
- * only this editor draws the card.
- *
- * Nothing of the document is loaded up front: the first page arrives when the card scrolls into view,
- * and the readable document only when the card is clicked (PdfViewer, a floating panel). Both come
- * from Quick Look, so a format this app knows nothing about still shows up.
- */
 export const Pdf = Node.create({
   name: 'pdf',
   group: 'block',
@@ -44,7 +35,7 @@ export const Pdf = Node.create({
 
       const thumb = document.createElement('div');
       thumb.className = 'pdf-thumb';
-      thumb.innerHTML = pageGlyph(kind); // stays behind the preview, and is all a failed/blocked preview leaves
+      thumb.innerHTML = pageGlyph(kind);
 
       const body = document.createElement('div');
       body.className = 'pdf-body';
@@ -62,7 +53,7 @@ export const Pdf = Node.create({
       // lazy: the page is only rendered once the card is actually on screen. A picture, not a live PDF
       // view — the webview's built-in one draws its own floating zoom/share HUD over the note on hover.
       let url: string | null = null;
-      let gone = false; // put away before the picture came: it is let go as it comes
+      let gone = false;
       const io = new IntersectionObserver((entries) => {
         if (!entries.some((e) => e.isIntersecting)) return;
         io.disconnect();
@@ -91,19 +82,16 @@ export const Pdf = Node.create({
     return {
       markdown: {
         serialize(state: any, node: any) {
-          // the path is a URL, not text: escaping it would put backslashes into the file name
           state.write(`[${state.esc(node.attrs.name ?? '')}](${node.attrs.src ?? ''})`);
           state.closeBlock(node);
         },
         parse: {
-          // a line that is nothing but a link to a .pdf is a card
           updateDOM(root: HTMLElement) {
             for (const p of [...root.children]) {
               if (p.tagName !== 'P' || p.children.length !== 1) continue;
               const a = p.firstElementChild as HTMLAnchorElement;
               const href = a.getAttribute('href') ?? '';
               const text = a.textContent?.trim() ?? '';
-              // the name carries the extension as reliably as the path does (and a dev-mode blob: URL has no name at all)
               if (a.tagName !== 'A' || !(DOC_FILE.test(href) || DOC_FILE.test(text)) || p.textContent?.trim() !== text) continue;
               const card = document.createElement('div');
               card.setAttribute('data-pdf', href);
@@ -117,9 +105,7 @@ export const Pdf = Node.create({
   },
 });
 
-/** The webview URL for a stored PDF, as the floating viewer loads it. */
 export const pdfSrc = (src: string) => assetUrl(src) ?? src;
 
-/** The page behind a card, labelled with the file's own extension — all that is left when Quick Look has no preview. */
 const pageGlyph = (kind: string) =>
   `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h8l4 4v15H6z"/><path d="M14 2.5v4h4"/><text x="12" y="17" text-anchor="middle" textLength="11" lengthAdjust="spacingAndGlyphs">${kind}</text></svg>`;

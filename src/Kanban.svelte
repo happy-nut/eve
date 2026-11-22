@@ -9,33 +9,20 @@
   import { dayKey, fillTemplate } from './lib/daily';
   import { scrollHint } from './lib/scrollHint';
 
-  /**
-   * Notion-style board, mounted inside the `kanban` node view. Every change goes out through `commit`
-   * (a ProseMirror transaction) and comes back through `set`, so undo/redo and sync just work.
-   * Keys: ↑↓←→ move between headers / cards / "+ New"; ⌥↑↓←→ move the focused card, ⌥←→ the column;
-   * Enter opens a card (renames a header), ⌫ deletes; Esc, ↑ on a header or ↓ on "+ New" go back to the text.
-   * A letter typed on a header or "+ New" starts a card in that column with it, as "+ New" then typing would.
-   */
   let { columns: initial, commit, template, saveTemplate, exit, remove, undo, redo }: {
-    /** `group`: a card just made and its title typed are one step to undo (the same group is merged into it) */
     columns: Column[]; commit: (c: Column[], group?: string) => void;
-    /** what a new card starts as (this board's own template), and saving an edit to it */
     template: () => CardTemplate | null; saveTemplate: (t: CardTemplate) => void;
     exit: (where: 'before' | 'after') => void; remove: () => void; undo: () => void; redo: () => void;
   } = $props();
   // svelte-ignore state_referenced_locally
   let columns = $state.raw(initial);
-  /** Update from the editor (undo/redo, sync). Svelte moves DOM nodes to reorder, which blurs them; refocus by id. */
   export async function set(c: Column[]) {
     const a = document.activeElement as HTMLElement | null;
     columns = c;
-    // an update before the board is on the page (the note just opening) has no focus of its own to keep
     if (!a || !root?.contains(a)) return;
     await tick();
     const now = document.activeElement as HTMLElement | null;
     const id = a.dataset.id ?? '', colId = a.closest<HTMLElement>('.kb-col')?.dataset.id ?? '';
-    // still on the board, and not on a card on its way out (an undo took it: it lingers while it flies off, and the
-    // keyboard went with it to nothing)
     const leaving = (el: HTMLElement) => el.dataset.kb === 'card' && !columns.some((c) => c.cards.some((k) => k.id === el.dataset.id));
     if (!root || (now && now !== document.body && root.contains(now) && !leaving(now))) return;
     const col = a.dataset.kb === 'card' ? columns.find((x) => x.cards.some((k) => k.id === id)) : columns.find((x) => x.id === colId);
@@ -46,8 +33,6 @@
     else if (col) focusHead(col.id);
     else enter();
   }
-  /** `fresh`: a board just made, the keyboard on its first column's first card's place, where typing starts a card (on
-   *  its header, typed letters went nowhere and a space scrolled the page) */
   export function enter(fresh = false) {
     if (last?.isConnected) { last.focus({ preventScroll: true }); last.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
     else if (fresh && columns[0]) columns[0].cards.length ? focusCard(columns[0].id, columns[0].cards[0].id) : focusAdd(columns[0].id);
@@ -56,9 +41,8 @@
 
   let root: HTMLDivElement;
   let last: HTMLElement | null = null;
-  let focused = $state<string | null>(null); // data-kb of the focused control (drives the +/× highlight, see the CSS)
-  let editing = $state<string | null>(null); // column being renamed
-  // focus + keep it in view: the board scrolls sideways and the note scrolls vertically
+  let focused = $state<string | null>(null);
+  let editing = $state<string | null>(null);
   const q = (sel: string) => {
     const el = root.querySelector<HTMLElement>(sel);
     if (el) { el.focus({ preventScroll: true }); el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
@@ -67,10 +51,8 @@
   const focusCard = (colId: string, id: string) => q(`.kb-col[data-id="${colId}"] .kb-card[data-id="${id}"]`);
   const focusHead = (colId?: string) => q(`.kb-col[data-id="${colId}"] .kb-head`);
   const focusAdd = (colId: string) => q(`.kb-col[data-id="${colId}"] .kb-add`);
-  // first line that still says something once markdown is stripped (a divider or a bare list marker is skipped)
   const firstLine = (body: string) => body.split('\n').map(plain).find(Boolean) ?? '';
 
-  // ---- mouse drag: the board previews the move while dragging, commits on drop ----
   let dragging = $state<{ id: string; colId: string } | null>(null);
   let over = $state<{ colId: string; index: number } | null>(null);
   const view = $derived(dragging && over ? moveCard(columns, dragging.id, over.colId, over.index) : columns);
@@ -89,51 +71,39 @@
     if (over?.colId !== col.id || over.index !== index) over = { colId: col.id, index };
   }
   async function drop(e: DragEvent) {
-    if (!dragging) return; // a file dragged in from Finder belongs to the app's own drop handler
+    if (!dragging) return;
     e.preventDefault();
     const id = dragging.id;
     if (over) commit(view);
     dragEnd();
-    // the keyboard on the card moved, as a keyboard move leaves it: the drag took it off the board, to nowhere, and
-    // ⌘Z then went past the board (to the list's undo)
     await tick();
     root?.querySelector<HTMLElement>(`[data-kb="card"][data-id="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
   }
   function dragEnd() { dragging = null; over = null; }
-  // a card moving between columns flies there (keyboard moves); while the mouse drags, it just appears
   const [send, receive] = crossfade({
     duration: (d) => (dragging ? 0 : Math.min(360, 140 + d * 0.25)),
     easing: cubicOut,
     fallback: (node) => ({ duration: 160, css: (t) => `opacity:${t}; transform: scale(${0.92 + 0.08 * t})` }),
   });
 
-  // ---- edits ----
-  /** `group`: the card was just made, and what is typed into it joins that step to undo; `caret`: typed into its title */
   async function open(card: Card, group?: string, caret?: 'title') {
     const colOf = () => columns.find((c) => c.cards.some((k) => k.id === card.id));
     const from = colOf()?.id;
-    // Move to…: a phone can't drag a card to another column
     const more: Card & CardMore = {
       ...card, caret, column: from, columns: columns.map((c) => ({ id: c.id, title: c.title })),
       move: (to) => { if (colOf()?.id !== to) commit(moveCard(columns, card.id, to, Infinity)); },
     };
-    // a phone has no ⌫ on a focused card: the card's page carries a delete of its own
     await ui.openCard(more, (patch) => commit(patchCard(columns, card.id, patch), group), () => {
       const col = colOf();
       if (col) removeCard(col, col.cards.findIndex((k) => k.id === card.id));
     });
-    // moved meanwhile: the keyboard back on it where it is now (the card it was opened from is gone from there)
     const now = colOf();
     if (now && now.id !== from) { await tick(); focusCard(now.id, card.id); }
   }
-  /** a card being named as it was typed on the board: the letters typed while its page opens (a moment, in which they
-   *  fell on the card and were lost) are its title's too */
   let naming: { id: string; title: string; group: string } | null = null;
-  /** `typed`: the letter typed on the board that made it, its title's first */
   async function addCard(col: Column, typed = '') {
     const t = template(), today = dayKey(new Date());
     const card = { id: uid(), title: (t ? fillTemplate(t.title, today) : '') + typed, body: t ? fillTemplate(t.body, today) : '' };
-    // the card and the title typed into it are one step to undo: two ⌘Z took it away, an empty "Untitled" between
     const group = `card-${card.id}`;
     commit(columns.map((c) => (c.id === col.id ? { ...c, cards: [...c.cards, card] } : c)), group);
     if (typed) naming = { id: card.id, title: card.title, group };
@@ -142,12 +112,10 @@
     await open(card, group, typed ? 'title' : undefined);
     if (naming?.id === card.id) naming = null;
   }
-  /** The board's template, opened like a card: what every new card here starts as. */
   async function editTemplate() {
     let t = template() ?? { title: '', body: '' };
     await ui.openCard({ ...t, note: 'Card template — every new card on this board starts like this. {{date}} and {{weekday}} are filled in.' },
       (patch) => { t = { ...t, ...patch }; saveTemplate(t); });
-    // back on the board's keys: the template's button (shown only on hover) takes none, and the keyboard was stuck there
     if (document.activeElement?.classList.contains('kb-tpl')) q('.kb-addcol');
   }
   function addColumn() {
@@ -169,7 +137,6 @@
     await tick();
     next ? focusHead(next.id) : q('.kb-addcol');
   }
-  /** `back`: the keyboard returns to the header (↩, Esc); a click elsewhere (into the note) keeps it where it went */
   async function rename(col: Column, title: string | null, back = true) {
     editing = null;
     if (title !== null && title.trim() !== col.title) commit(columns.map((c) => (c.id === col.id ? { ...c, title: title.trim() } : c)));
@@ -184,7 +151,6 @@
   }
   const focusInput = (el: HTMLInputElement) => { el.focus(); el.select(); };
 
-  // ---- keyboard ----
   async function onKey(e: KeyboardEvent) {
     const t = e.target as HTMLElement;
     if (t.tagName === 'INPUT') return;
@@ -201,7 +167,7 @@
     if (naming && kind === 'card' && cardId === naming.id && k.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
       naming.title += k;
-      if (ui.card) ui.card.title = naming.title; // the page, about to open, opens with them
+      if (ui.card) ui.card.title = naming.title;
       commit(patchCard(columns, cardId, { title: naming.title }), naming.group);
       return;
     }
@@ -213,7 +179,6 @@
     if (k === 'Enter' && kind === 'x') { e.preventDefault(); remove(); return; }
     if ((k === 'Backspace' || k === 'Delete') && kind === 'card') { e.preventDefault(); removeCard(col, i); return; }
     if ((k === 'Backspace' || k === 'Delete') && kind === 'head') { e.preventDefault(); removeColumn(col); return; }
-    // a space presses what has the keyboard (it scrolled the page); a letter on a header or "+ New" starts a card there
     if (k === ' ' && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
       if (kind === 'card') open(col.cards[i]); else if (kind === 'head') editing = colId; else if (kind === 'add') addCard(col);
@@ -248,7 +213,7 @@
       else if (kind === 'head') focusHead(c.id);
       else focusAdd(c.id);
     };
-    if (kind === 'x' || kind === 'addcol') { // the + / × stack past the last column
+    if (kind === 'x' || kind === 'addcol') {
       if (k === 'ArrowDown' && kind === 'addcol') q('.kb-x');
       else if (k === 'ArrowUp' && kind === 'x') q('.kb-addcol');
       else if (k === 'ArrowLeft') focusHead(view[view.length - 1]?.id);
@@ -272,7 +237,6 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="kb-wrap" bind:this={root} onkeydown={onKey} onfocusin={(e) => { last = e.target as HTMLElement; focused = last.dataset.kb ?? null; }} onfocusout={() => (focused = null)}>
-<!-- more board past its edge (a narrow window): that edge fades, as a wide diagram's does -->
 <div class="kb" {@attach scrollHint}>
   {#each view as col (col.id)}
     <div class="kb-col" data-id={col.id} animate:flip={{ duration: 220 }} ondragover={(e) => dragOver(e, col)} ondrop={drop}>
@@ -298,13 +262,10 @@
       <button class="kb-add" data-kb="add" onclick={() => addCard(col)}>+ New</button>
     </div>
   {/each}
-  <!-- past the last column: + adds a column -->
   <div class="kb-end">
     <button class="icon kb-addcol" class:on={focused === 'addcol'} data-kb="addcol" aria-label="Add column" data-tip="Add column" onclick={addColumn}>+</button>
   </div>
 </div>
-  <!-- under the board, at its right edge (shown while hovering it): the card template and the × that deletes the board.
-       Past the last of many columns they sat off the side of the note, out of sight until the board was scrolled -->
   <div class="kb-foot">
     <button class="icon kb-tpl" tabindex="-1" aria-label="Card template" data-tip="Card template" onclick={editTemplate}>
       <svg viewBox="0 0 16 16"><path d="M4 1.5h5L12.5 5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/><path d="M9 1.5V5h3.5M5.5 8.5h5M5.5 11h3"/></svg>
@@ -318,7 +279,6 @@
   .kb-foot { display: flex; justify-content: flex-end; gap: 2px; margin: -0.5em 0 0.4em; }
   .kb-x { width: 28px; height: 28px; font-size: 16px; opacity: 0; transition: opacity 0.12s, background 0.12s; }
   .kb-wrap:hover .kb-x, .kb-x.on { opacity: 1; }
-  /* the card template: shown while hovering the board, like the ×; always there on a phone */
   .kb-tpl { width: 28px; height: 28px; opacity: 0; transition: opacity 0.12s, background 0.12s; }
   .kb-tpl svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   .kb-wrap:hover .kb-tpl, :global(html.mobile) .kb-tpl { opacity: 1; }
@@ -326,23 +286,15 @@
      focus, and WebKit left :focus styling on the × after the focus had moved on to a header */
   .kb-end .icon:focus-visible { background: none; color: var(--fg-dim); }
   :global(html[data-input='keyboard']) :is(.kb-addcol, .kb-x).on { background: var(--accent-soft); color: var(--fg); }
-  /* 4px side padding inside the scroller so a focus ring is not clipped at its edge */
-  /* columns as tall as the board: a card dragged under a short column's last card drops in it */
-  /* sizes in em: a board follows the note's text size and Small text (in px it stayed 13px beside 28px text) */
   .kb { display: flex; align-items: stretch; gap: 14px; overflow-x: auto; padding: 6px 4px 14px; margin: 0.6em -4px; user-select: none; -webkit-user-select: none; scrollbar-width: thin; }
-  /* narrower columns before a sideways scroll: at 236px each a new board's three ran past the note's width, "Done"
-     cut and its + out of sight */
   .kb-col { flex: 0 1 236px; min-width: 170px; display: flex; flex-direction: column; gap: 7px; min-height: 60px; }
   .kb-head, .kb-rename {
     display: flex; align-items: center; gap: 7px; min-height: 1.87em; padding: 0 8px; border-radius: 6px; font-size: 0.87em; font-weight: 500;
     outline: none; border: 0; background: none; color: var(--fg); font-family: inherit; width: 100%;
   }
   .kb-head:hover { background: var(--bg-hover); }
-  /* hover: a delete × at the right edge of the header */
   .kb-del { margin-left: auto; width: 20px; height: 20px; font-size: 14px; flex: none; opacity: 0; transition: opacity 0.12s, background 0.12s; }
   .kb-head:hover .kb-del { opacity: 1; }
-  /* a phone has no hover: an unseen × still took a tap at the header's right end, where a thumb lands to rename the
-     column, and deleted it. There it is shown, with a finger-sized target; the board's own × likewise */
   :global(html.mobile) .kb-del { opacity: 1; width: 40px; height: 40px; margin: -6px -8px -6px auto; font-size: 17px; color: var(--fg-dim); }
   :global(html.mobile) .kb-x { opacity: 1; }
   /* keyboard focus ring: decided by the app's own input tracking (App.svelte sets data-input), not by the browser's
@@ -368,7 +320,6 @@
   }
   .kb-add:hover { background: var(--bg-hover); color: var(--fg); }
   .kb-addcol { flex: none; width: 28px; height: 28px; font-size: 17px; }
-  /* a finger's size on a phone, and apart: 28px side by side, the template's tap deleted the board */
   :global(html.mobile) :is(.kb-addcol, .kb-tpl, .kb-x) { width: 40px; height: 40px; }
   :global(html.mobile) .kb-foot { gap: 12px; }
 </style>

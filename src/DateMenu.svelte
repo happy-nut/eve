@@ -5,13 +5,11 @@
   import type { CalendarUI } from './lib/slash';
   import { chipLabel, dateLabel, isoDay, remindTime, monthGrid, monthName, sameMonth, shiftDays, shiftMonths, weekdayNames } from './lib/date';
 
-  // the calendar behind `@`: one month, a cursor on a day. The editor drives it through `ui`
-  // (bind:this to reach it), the same way the [[ and / popup is driven.
-  let day = $state(''); // the day under the cursor — '' is how this popup is closed
+  let day = $state('');
   let today = $state('');
-  let place = $state(''); // its left/top-or-bottom/max-height (lib/popup.ts)
+  let place = $state('');
   let pick: (iso: string) => void = () => {};
-  let remind = $state(false); // `@remind`: the foot says when the reminder will ring
+  let remind = $state(false);
 
   const names = weekdayNames();
   const weeks = $derived(day ? monthGrid(day) : []);
@@ -20,7 +18,7 @@
     show(iso, rect, cb, at) {
       day = iso ?? '';
       remind = !!at;
-      today = isoDay(new Date()); // read on every open, so an app left running overnight still knows
+      today = isoDay(new Date());
       pick = cb;
       if (rect) place = placeAt(rect, 290, 250);
     },
@@ -32,7 +30,6 @@
     place: (rect) => { place = placeAt(rect, 290, 250); },
   };
 
-  // mousedown, not click: a click would take focus out of the editor before the day is picked
   const grab = (run: () => void) => (e: MouseEvent) => { e.preventDefault(); run(); };
 </script>
 
@@ -60,7 +57,6 @@
         {/each}
       {/each}
     </div>
-    <!-- what picking would write, in the same words the chip will use -->
     <div class="cal-foot">{remind ? chipLabel({ date: day, time: remindTime(day), remind: true }) : dateLabel(day)}</div>
   </div>
 {/if}
@@ -69,7 +65,7 @@
   .cal {
     position: fixed;
     z-index: var(--z-caret-popup);
-    overflow-y: auto; /* cut to the room over or under the caret (lib/popup.ts) */
+    overflow-y: auto;
     padding: 6px;
     background: var(--bg-pop);
     border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
@@ -93,7 +89,6 @@
     font-variant-numeric: tabular-nums;
   }
   .cal-day.out { color: var(--fg-dim); opacity: 0.5; }
-  /* today is marked even when the cursor is elsewhere: it is the one day you navigate from */
   .cal-day.now { font-weight: 600; }
   .cal-day:hover { background: var(--accent-soft); }
   .cal-day.on { background: var(--accent); color: var(--on-accent); }

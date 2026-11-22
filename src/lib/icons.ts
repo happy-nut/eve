@@ -1,8 +1,3 @@
-/**
- * Custom (non-emoji) icons offered in the picker's "Eve" tab. Stored as ":name:" tokens.
- * Claude mark: Simple Icons (CC0). OpenAI blossom: Wikimedia Commons (simple geometry). Inline SVG uses
- * currentColor where the brand mark is monochrome (theme-aware); the picker gets a data-URI copy in grey.
- */
 export interface CustomIcon { name: string; label: string; svg: string }
 
 export const CUSTOM_ICONS: CustomIcon[] = [
@@ -15,23 +10,15 @@ export const customIcon = (icon?: string) => (isCustom(icon) ? CUSTOM_ICONS.find
 export const customUrl = (c: CustomIcon) =>
   'data:image/svg+xml;utf8,' + encodeURIComponent(c.svg.replace(/currentColor/g, '#8e8e93').replace(/eve-oa/g, 'oa'));
 
-/** a pleasant pool for "add icon" (Notion picks one at random too) */
 export const RANDOM_ICONS = ['📝', '📌', '📎', '📚', '📖', '📒', '📓', '🗂️', '🗒️', '💡', '🔥', '⭐', '✨', '🌟', '🎯', '🚀', '🛰️', '🧭', '🗺️', '🧩', '🧠', '🎨', '🎬', '🎧', '🎮', '🏗️', '🔧', '🛠️', '⚙️', '🔬', '🧪', '🧬', '💎', '🌱', '🌿', '🍀', '🌸', '🌊', '🌈', '☀️', '🌙', '⚡', '❄️', '🍎', '🍋', '🍉', '🥑', '🍕', '☕', '🍵', '🐢', '🐙', '🦊', '🐼', '🦉', '🐳', '🦋', '🏠', '🏔️', '🗽', '🎈', '🎁', '🏆', '🔑', '🔒', '💬', '📣', '🧲'];
 
-/**
- * An emoji drawn into a PNG. Printing draws a colour emoji glyph only in part — the same slice of it
- * wherever it sits — while a picture of one comes out whole, so the page header prints this instead.
- * Cached: the same icon is asked for on every render.
- */
-/** A glyph drawn to the edge of its canvas comes out shaved, so the picture is this much bigger than
- *  the glyph inside it; the negative margin in Icon.svelte takes the difference back out of the layout. */
 export const EMOJI_PAD = 1.4;
 const painted = new Map<string, string>();
 export function emojiImage(ch: string, size = 56): string {
   const key = `${ch}@${size}`;
   const had = painted.get(key);
   if (had !== undefined) return had;
-  const scale = 3; // drawn large, shown small: it has to survive a print at 300dpi
+  const scale = 3;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = Math.round(size * EMOJI_PAD) * scale;
   const g = canvas.getContext('2d');
@@ -47,7 +34,6 @@ export function emojiImage(ch: string, size = 56): string {
   return url;
 }
 
-/** One at random, never the one already in place (a second roll should look like it did something). */
 export const randomIcon = (except = '') => {
   const pool = RANDOM_ICONS.filter((e) => e !== except);
   return pool[Math.floor(Math.random() * pool.length)];

@@ -9,20 +9,13 @@
   import { floatAt, held, screenInsets, viewSize } from './lib/popup';
   import { claimKeys, composing } from './lib/keys';
 
-  // the last one asked: closing, it fades out showing what it showed (ui.emoji is already null by then)
   const req = $derived.by(held(() => ui.emoji));
   let el: HTMLElement & { i18n?: unknown };
-  // under what it was opened from, over it when there is no room under it; inside the window and clear of the
-  // traffic lights / toolbar strip (screenInsets). A phone's picker fills the screen instead (app.css).
   const W = 352, H = 400;
   const below = $derived(floatAt(req.at, { w: W, h: H }, { gap: 6 }));
-  // room on neither side of it (a short window): beside it, where there is the room, not over the icon it came from
   const at = $derived(below.maxHeight >= H ? below : (() => { const s = floatAt(req.at, { w: W, h: H }, { gap: 6, prefer: 'side' }); return s.side === 'left' || s.side === 'right' ? { ...s, maxHeight: H } : below; })());
-  // room for all of it on neither side (a short window): as low as it fits, over what it came from, rather than cut
-  // off at the window's foot — it is modal, and its search box is what is wanted
   const x = $derived(at.left), y = $derived(at.maxHeight >= H ? at.top : Math.max(screenInsets().top, viewSize().h - screenInsets().bottom - H));
 
-  // in English, as the rest of Eve is (and the emoji's names the search finds them by): the picker was in Korean
   const en = {
     categoriesLabel: 'Categories', emojiUnsupportedMessage: 'Your browser does not support color emoji.',
     favoritesLabel: 'Recently used', loadingMessage: 'Loading…', networkErrorMessage: 'Could not load emoji.',
@@ -42,7 +35,6 @@
     // the element always lists custom icons first; move that tab to the far right and mark the
     // selected tab by background instead of the sliding indicator (which assumes source order)
     const root = el.shadowRoot;
-    // focus the search box as soon as it exists, so you can type straight away
     let tries = 0;
     const focusSearch = () => {
       const inp = root?.querySelector<HTMLInputElement>('input.search, input[type="search"], input');
@@ -53,11 +45,8 @@
     // shown instead, so ↓ walks the categories from the start
     let waits = 0;
     const firstTab = () => {
-      // once the emoji are drawn: before that no tab is selected yet, and the custom one gets picked after
       const tab = root?.querySelector<HTMLButtonElement>('.nav-button:not([data-group-id="-1"])');
       if (!tab || !root?.querySelector('.tabpanel button.emoji')) { if (waits++ < 80) setTimeout(firstTab, 25); return; }
-      // ↓ may have taken the keyboard into the icons already (a slow first load): it goes on to the first of the tab
-      // shown next, not to <body> with the icon it was on
       const inGrid = !!root?.activeElement?.matches('button.emoji');
       if (root?.querySelector('.nav-button[data-group-id="-1"][aria-selected="true"]')) tab.click();
       if (inGrid && root) void firstCellOnceDrawn(root, () => !root.activeElement?.matches('button.emoji') || !(root.activeElement as HTMLElement).offsetParent);
@@ -79,16 +68,6 @@
     const d = (e as CustomEvent).detail;
     ui.emojiDone(d.unicode ?? `:${d.emoji.shortcodes[0]}:`);
   }
-  /**
-   * The emoji as a grid under the keyboard: the search results, or the open category when nothing is typed.
-   * The element's own ↑↓ walk the results one by one (a row is nine presses) and do nothing in a category;
-   * here ↓ from the search box goes into the grid, ←→ move by cell, ↑↓ to the nearest cell on the line above
-   * or below. Past a category's last line ↓ opens the next category (↑ past its first, the one before), so
-   * every section is a few presses away; ↑ from the very top goes back to the box. ↩ / space pick. Typing
-   * (a letter, ⌫) goes back to the box too, and the key lands there.
-   */
-  /** ↓ pressed before the emoji are drawn (their list still loading, a first open): the keyboard goes to the first
-   *  once there is one, unless it has moved on meanwhile */
   async function firstCellOnceDrawn(root: ShadowRoot, waiting: () => boolean) {
     for (let waited = 0; waited < 5000; waited += 50) {
       await new Promise((r) => setTimeout(r, 50));
@@ -110,20 +89,18 @@
         if (cells.length) go(cells[0]);
         else { e.preventDefault(); e.stopPropagation(); void firstCellOnceDrawn(root, () => root.activeElement === input); }
       }
-      // ↩ after a search picks its first match, the one a glance at the results lands on (it did nothing)
       else if (e.key === 'Enter' && !composing(e) && input?.value.trim() && root.querySelector('#search-results') && cells.length) {
         e.preventDefault(); e.stopPropagation(); cells[0].click();
       }
       return;
     }
     if (i < 0 || !input) return;
-    /** the cell on the next line up or down, nearest to this one sideways */
     const line = (dir: 1 | -1) => {
       const r = cells[i].getBoundingClientRect();
       let best: HTMLButtonElement | null = null, bestTop = 0, bestDx = Infinity;
       for (const c of cells) {
         const b = c.getBoundingClientRect();
-        if (dir * (b.top - r.top) < r.height / 2) continue; // this line, or the wrong way
+        if (dir * (b.top - r.top) < r.height / 2) continue;
         const dx = Math.abs(b.left - r.left);
         if (!best || dir * (b.top - bestTop) < -1 || (Math.abs(b.top - bestTop) <= 1 && dx < bestDx)) { best = c; bestTop = b.top; bestDx = dx; }
       }
@@ -139,14 +116,11 @@
     }
     else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); cells[i].click(); }
     else if (e.key === 'Backspace' || e.key.length === 1 || e.key === 'Process' || composing(e)) {
-      // not prevented: the key itself goes on to the box, caret at the end of what was typed
       input.focus();
       input.setSelectionRange(input.value.length, input.value.length);
     }
   }
 
-  /** Opens the next (or previous) category tab, in the order they are shown (the custom icons last), and puts the
-   *  keyboard on its first line (or its last), nearest to where it was. Not searching only: results have no tabs. */
   async function category(root: ShadowRoot, dir: 1 | -1, from: HTMLElement): Promise<boolean> {
     if (root.querySelector('#search-results')) return false;
     const tabs = [...root.querySelectorAll<HTMLButtonElement>('.nav-button')]
@@ -155,7 +129,7 @@
     if (!next) return false;
     const x = from.getBoundingClientRect().left;
     next.click();
-    for (let n = 0; n < 20; n++) { // the element draws the new category a frame or two later
+    for (let n = 0; n < 20; n++) {
       await new Promise((r) => setTimeout(r, 16));
       const cells = [...root.querySelectorAll<HTMLButtonElement>('.tabpanel button.emoji')];
       if (!cells.length || cells.includes(from as HTMLButtonElement)) continue;
@@ -171,22 +145,20 @@
     return false;
   }
 
-  /** the emoji under the mouse or the keyboard, with the :code: that types it in a note (the same data) */
   let preview = $state<{ face: string; url?: string; code: string } | null>(null);
   function show(e: Event) {
     const b = e.composedPath().find((n): n is HTMLButtonElement => n instanceof HTMLElement && n.matches('.tabpanel button.emoji'));
     if (b) void showCell(b);
   }
   async function showCell(b: HTMLElement) {
-    if (!b.matches('button.emoji')) { preview = null; return; } // the search box
+    if (!b.matches('button.emoji')) { preview = null; return; }
     const id = b.id.slice(b.id.indexOf('-') + 1); // emo-😀, fav-😀, or a custom icon's name
-    const own = CUSTOM_ICONS.find((c) => c.label === id); // the app's own icons are not in the element's data
+    const own = CUSTOM_ICONS.find((c) => c.label === id);
     if (own) { preview = { face: '', url: customUrl(own), code: own.name }; return; }
     const found = await (el as any)?.database?.getEmojiByUnicodeOrName(id);
     const code = found?.shortcodes?.[0];
     if (code) preview = { face: found.unicode ?? '', code };
   }
-  // Esc puts it away, wherever the keyboard is, while it is the one on top
   $effect(() => claimKeys('global', { Escape: (e) => { e.stopPropagation(); ui.emojiDone(null); return true; } }, { whileTop: 'emoji' }));
 </script>
 
@@ -195,14 +167,12 @@
 <div class="panel" style="left: {x}px; top: {y}px; width: {W}px" transition:scale|global={popIn} role="dialog" aria-label="Choose an icon" onkeydowncapture={onGridKey}>
   <header>
     {#if isMobile}
-      <!-- a phone's picker fills the screen: the way back is where the note's own back button is -->
       <button class="act back" aria-label="Close" onclick={() => ui.emojiDone(null)}>
         <svg viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg>
       </button>
     {/if}
     <span class="tab">Icon</span>
     <span class="acts">
-      <!-- the same pool the "Add icon" button rolls from, so a page can be given a face without choosing one -->
       <button class="act" aria-label="Random icon" title="Random icon" onclick={() => ui.emojiDone(randomIcon(req.current))}>
         <svg viewBox="0 0 16 16"><path d="M2 4.5h2.2c1.3 0 2.4.7 3 1.8l1.6 3.4c.6 1.1 1.7 1.8 3 1.8H14M2 11.5h2.2c.9 0 1.8-.4 2.4-1.1M9.4 5.6c.6-.7 1.5-1.1 2.4-1.1H14M12.3 2.8 14 4.5l-1.7 1.7M12.3 9.8 14 11.5l-1.7 1.7"/></svg>
       </button>
@@ -213,7 +183,6 @@
       {/if}
     </span>
   </header>
-  <!-- the preview follows the mouse and the keyboard (focusin) alike; the picker itself is the interactive part -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <emoji-picker bind:this={el} data-source={dataSource} skin-tone-emoji="✌️" onemoji-click={onPick}
     onmouseover={show} onfocusin={show}></emoji-picker>
@@ -242,18 +211,15 @@
   .act:hover { color: var(--fg); background: var(--bg-hover); }
   .act:active { background: var(--bg-active); }
   .act svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
-  /* a thumb, not a pointer */
   :global(html.mobile) .act { width: 44px; height: 44px; border-radius: 12px; }
   :global(html.mobile) .act svg { width: 22px; height: 22px; }
   :global(html.mobile) .act.back { margin: 0 2px 0 -10px; }
   :global(html.mobile) .tab { flex: 1; }
-  /* a phone's picker fills the screen (app.css): the grid takes all the height under the header, so with the
-     keyboard down the recent row sits at the bottom, not halfway down with nothing under it */
   :global(html.mobile) .panel { display: flex; flex-direction: column; }
   :global(html.mobile) emoji-picker { flex: 1; min-height: 0; height: auto; }
-  :global(html.mobile) .preview { display: none; } /* no pointer to hover with: a tap picks */
+  :global(html.mobile) .preview { display: none; }
   emoji-picker {
-    width: 100%; height: 312px; /* + the preview line: the same 400 the panel is placed by */
+    width: 100%; height: 312px;
     --background: var(--bg-pop); --border-color: var(--line); --border-size: 0;
     --indicator-color: var(--accent); --input-border-color: transparent; --input-font-color: var(--fg);
     --input-placeholder-color: var(--fg-dim); --input-border-radius: 8px; --input-padding: 7px 10px; --input-font-size: 13px;
@@ -261,7 +227,6 @@
     --button-hover-background: var(--bg-hover); --button-active-background: var(--bg-active);
     --emoji-size: 1.35rem; --emoji-padding: 0.4rem; --num-columns: 9; --skintone-border-radius: 8px; --custom-emoji-size: 1.35rem;
   }
-  /* what is under the mouse or the keyboard, as it is typed in a note */
   .preview {
     display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border-top: 1px solid var(--line);
     font-size: 12px; color: var(--fg-dim);

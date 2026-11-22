@@ -6,31 +6,24 @@
   import { floatAt } from './lib/popup';
   import { claimKeys, PRIORITY } from './lib/keys';
 
-  /**
-   * A choice among a few, drawn by the app instead of the platform: a popover under the button on the
-   * desktop, a sheet from the bottom on a phone. Enter / Space opens it, ↑↓ move, Enter picks, Esc closes.
-   */
   let { value, options, onchange, onpicked, label = '' }: {
     value: string;
     options: readonly (readonly [string, string])[];
     onchange: (v: string) => void;
-    /** after any pick, the one it had included (where the keyboard goes next is the caller's) */
     onpicked?: () => void;
     label?: string;
   } = $props();
 
   let open = $state(false);
-  // closed however it was (a pick, Esc, a click away): the caller's next keyboard place, as after a pick
   let wasOpen = false;
   $effect(() => { if (wasOpen && !open) onpicked?.(); wasOpen = open; });
-  let at = $state(0); // the highlighted row while open
-  // open, Esc closes the list first, wherever the keyboard is (gone from its button, the Esc closed what it sits in)
+  let at = $state(0);
   $effect(() => {
     if (!open || isMobile) return;
     return claimKeys('global', { Escape: (e) => { e.stopPropagation(); close(); return true; } }, { capture: true, priority: PRIORITY.top, composing: true });
   });
   let btn = $state<HTMLButtonElement | null>(null);
-  let pos = $state({ left: 0, top: 0, maxHeight: 0, width: 0, up: false }); // up: over the button, no room under it
+  let pos = $state({ left: 0, top: 0, maxHeight: 0, width: 0, up: false });
 
   // the list lives on <body>: a transformed ancestor (the settings panel) would otherwise become the
   // box its position:fixed is measured from
@@ -45,13 +38,9 @@
   }
   let list = $state<HTMLDivElement | null>(null);
   const option = (i: number) => list?.querySelectorAll<HTMLButtonElement>('[role="option"]')[i];
-  // the keyboard goes into the list as it opens, on the current choice, as every menu's does (Menu.svelte)
   $effect(() => { if (open && list) option(at)?.focus(); });
   function moveTo(i: number) { at = i; option(i)?.focus(); }
   function close() { open = false; btn?.focus(); }
-  /** Under the button, its right edge on the button's; over it when there is no room under it — its bottom edge just
-   *  above the button (placed by its top at the button's top, the list covered the button and ran off the bottom of
-   *  the window). Cut to the room it has either way, and scrolls. Guessed at first, then by its own size once drawn. */
   function place(w: number, h: number) {
     if (!btn) return;
     const f = floatAt(btn.getBoundingClientRect(), { w, h }, { align: 'end' });
@@ -68,7 +57,7 @@
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); show(); }
   }
   function listKey(e: KeyboardEvent) {
-    e.stopPropagation(); // Esc closes this, not the settings around it
+    e.stopPropagation();
     if (e.key === 'Escape') close();
     else if (e.key === 'Tab') { close(); return; }
     else if (e.key === 'ArrowDown') moveTo((at + 1) % options.length);
@@ -87,7 +76,6 @@
   <svg viewBox="0 0 16 16"><path d="M4.5 6.5L8 10l3.5-3.5"/></svg>
 </button>
 
-<!-- its own block: one in the list's would stay, catching clicks, while the list fades out -->
 {#if open && !isMobile}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="scrim" use:portal role="presentation" onmousedown={(e) => { e.preventDefault(); close(); }}></div>
@@ -135,7 +123,7 @@
 
   .pop {
     position: fixed; z-index: var(--z-popover); transform-origin: top right; padding: 4px; overflow-y: auto;
-    box-sizing: border-box; /* its max-height is all the room it has, padding and border in it (+10 on its min-width) */
+    box-sizing: border-box;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);
   }
   .pop.up { transform-origin: bottom right; }

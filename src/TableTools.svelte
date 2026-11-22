@@ -4,57 +4,33 @@
   import { isMobile } from './lib/platform';
   import { scrollHint } from './lib/scrollHint';
 
-  /**
-   * Row/column controls for the table the caret is in, on a phone (a Mac has the table's own handles, Notion's:
-   * tableHandles.ts). A small bar over the table's top-left corner,
-   * the way the outline rail sits beside the page — no grips to hunt for, and nothing on screen while
-   * you are writing anywhere else. It stays while the caret is in the table.
-   */
-  /** `sheet`: the editor is a card's or a day's page (--z-sheet), which drew over the bar and left a table there with
-   *  no way to add a row; the bar goes over that page then, still under the phone's formatting bar (--z-phone-bar) */
   let { editor, sheet = false }: { editor: Editor | undefined; sheet?: boolean } = $props();
 
   let at = $state<{ x: number; y: number } | null>(null);
 
   function place() {
-    // a Mac has the table's own handles instead, under the pointer (tableHandles.ts)
     if (!isMobile) { at = null; return; }
     const e = editor;
-    if (!e || e.isDestroyed) { at = null; return; } // gone already (the note was switched)
-    // the caret's own element, not view.hasFocus(): a window that is not the frontmost one still has
-    // a caret sitting in the table, and the bar should be there when it comes back
+    if (!e || e.isDestroyed) { at = null; return; }
     const caretIn = document.activeElement && e.view.dom.contains(document.activeElement);
     if (!caretIn || !e.isActive('table')) { at = null; return; }
     const dom = e.view.domAtPos(e.state.selection.from).node;
     const el = (dom instanceof HTMLElement ? dom : dom.parentElement)?.closest('table');
     if (!el) { at = null; return; }
     const r = el.getBoundingClientRect();
-    // (not drawn yet, its size is not known: placed again once it is)
     if (!bar) requestAnimationFrame(() => { if (bar) place(); });
     const h = bar?.offsetHeight ?? 32, w = bar?.offsetWidth ?? 0;
-    // Over the table, or under it when there is no room over it; 8px off the table, kept on screen across (a table
-    // scrolled sideways, or a phone's bar wider than a narrow table, left the bar's end off it) and under the note's
-    // scroll area's top. (It never pushes the note apart: moving text under the caret.)
     const above = gap(el, -1, r), ins = screenInsets(), top = scrollTop(el);
-    // in a table taller than the window the top had scrolled away and the bar with it, out of sight above the note
-    // while the caret was in a row on screen. It stays at the top of the note's scroll area then, as long as some
-    // of the table is still under it: what of the table is on screen is what it goes over.
     const shown = above >= h + 3 ? Math.min(Math.max(r.top, top + 4 + h + 8), r.bottom) : r.top;
     const f = floatAt({ left: r.left, right: r.right, top: shown, bottom: r.bottom }, { w, h },
-      // (a phone: over or under the table, never in its corner: as wide as the table there, it lay over the header row
-      // being typed in; over the line beside the table is the lesser cover)
       { prefer: 'above', gap: 8, avoid: { ...ins, top: Math.max(ins.top, top + 4) } });
-    // (y is the bar's foot: it is drawn up from there)
     at = { x: f.left, y: f.top + h };
   }
 
-  /** How far off the table the nearest thing written is on that side (-1 above, 1 under): the nearest block with
-   *  something in it, past empty lines; none, no end */
   function gap(table: HTMLElement, dir: -1 | 1, r: DOMRect): number {
     const root = editor?.view.dom;
     let block: Element = table.closest('.tableWrapper') ?? table;
     let next = dir < 0 ? block.previousElementSibling : block.nextElementSibling;
-    // the table first (last) in what holds it (a callout, a list item): what is beside that
     while (!next && block.parentElement && block.parentElement !== root) {
       block = block.parentElement;
       next = dir < 0 ? block.previousElementSibling : block.nextElementSibling;
@@ -66,7 +42,6 @@
     return dir < 0 ? r.top - n.bottom : n.top - r.bottom;
   }
 
-  /** where the area the table scrolls in begins on screen (the window's top when nothing in between scrolls) */
   function scrollTop(el: HTMLElement): number {
     for (let p = el.parentElement; p; p = p.parentElement) {
       if (/(auto|scroll)/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight) return Math.max(0, p.getBoundingClientRect().top);
@@ -85,7 +60,7 @@
     e.on('transaction', update);
     e.on('focus', update);
     e.on('blur', update);
-    window.addEventListener('scroll', update, true); // the note scrolls under it
+    window.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
     update();
     return () => {
@@ -98,7 +73,6 @@
     };
   });
 
-  /** the press must not take the caret out of the cell it is about to act on */
   const hold = (ev: MouseEvent) => ev.preventDefault();
   const run = (name: string) => () => (editor as any)?.chain().focus()[name]().run();
 
@@ -144,13 +118,9 @@
   .tbl-tools .icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; }
   .tbl-tools svg { width: 15px; height: 15px; display: block; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   .tbl-sep { width: 1px; height: 15px; background: var(--line); margin: 0 3px; }
-  /* a phone: buttons a finger can hit, and Delete table set apart from Merge or split beside it. Too wide for a
-     narrow screen, the row scrolls sideways */
   :global(html.mobile) .tbl-tools { max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; }
   :global(html.mobile) .tbl-tools .icon { flex: none; width: 38px; height: 38px; }
   :global(html.mobile) .tbl-tools svg { width: 19px; height: 19px; }
-  /* set well apart from Merge or split (a tap a little off must not delete the table); on a narrow phone the bar scrolls,
-     its end fading, to reach it */
   :global(html.mobile) .tbl-tools .gap { margin-left: 14px; color: #ff453a; }
   :global(html.mobile) .tbl-sep { flex: none; height: 20px; }
 </style>

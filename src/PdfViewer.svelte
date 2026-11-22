@@ -9,27 +9,16 @@
   import { HWP_FILE, PDF_FILE } from './lib/drop';
   import { viewSize } from './lib/popup';
 
-  // A floating panel, not a dialog: no backdrop, nothing behind it blocked — a PDF can sit open beside
-  // the text being written. Drag it by its bar, resize it by any edge or the corner.
-  // The document follows ui.pdf: another card clicked while the panel is up opens in it. Read once, the
-  // panel kept showing the first document whatever was clicked next. (The last one stays while it closes.)
   let last = ui.pdf!;
   const req = $derived.by(() => (last = ui.pdf ?? last));
 
-  // Three ways a document reaches the panel, in order of how little this app has to know about it:
-  // the webview draws a PDF itself; a spreadsheet arrives as Quick Look's own preview (plain HTML,
-  // exported once and cached); a .hwp is laid out here, because macOS ships nothing that can read one.
   const match = (re: RegExp) => re.test(req.src) || re.test(req.name);
   const kind = $derived(match(PDF_FILE) ? 'pdf' : match(HWP_FILE) ? 'hwp' : 'quicklook');
 
-  let src = $state(''); // a URL the iframe loads
-  let page = $state(''); // a whole document the iframe is handed instead
+  let src = $state('');
+  let page = $state('');
   let failed = $state('');
 
-  /**
-   * The rendered pages as one document for the iframe. It goes in sandboxed and script-less: the SVG
-   * is built from a file that arrived from outside, and nothing in it needs to run.
-   */
   const sheet = (pages: string[]) =>
     `<!doctype html><meta charset="utf-8"><style>` +
     `html{background:#f4f4f5}body{margin:0;padding:12px;display:flex;flex-direction:column;align-items:center;gap:12px}` +
@@ -41,7 +30,7 @@
     src = k === 'pdf' ? pdfSrc(doc) : '';
     page = '';
     failed = '';
-    let live = true; // a document still loading when the next one is opened does not land over it
+    let live = true;
     if (k === 'quicklook') {
       void qlPreview(doc).then((u) => {
         if (!live) return;
@@ -50,8 +39,6 @@
       });
     }
     if (k === 'hwp') {
-      // ponytail: every page is laid out at once. A long document makes that felt; render on scroll
-      // (as the cards in a note already do) if it ever does.
       void hwpPages(doc)
         .then((d) => {
           if (live) page = sheet(Array.from({ length: d.count }, (_, i) => d.page(i)));
@@ -66,7 +53,7 @@
     return () => { live = false; };
   });
 
-  const BAR = 33; // title bar height
+  const BAR = 33;
   const EDGE = 7; // frame around the document: the grab handles live here, clear of the PDF view,
                   // which the webview draws itself and which swallows a press meant for the panel
 
@@ -74,12 +61,8 @@
   let h = $state(Math.min(780, Math.round(viewSize().h * 0.74)));
   let x = $state(Math.max(12, viewSize().w - Math.min(520, viewSize().w - 24) - 12));
   let y = $state(64);
-  let busy = $state(false); // being moved or resized
+  let busy = $state(false);
 
-  /**
-   * One pointer gesture. The pointer is captured by the handle, so the drag survives the pointer
-   * crossing the document — an iframe would otherwise take the rest of the gesture for itself.
-   */
   function gesture(e: PointerEvent, step: (dx: number, dy: number) => void) {
     e.preventDefault();
     const handle = e.currentTarget as HTMLElement;
@@ -103,20 +86,18 @@
     if ((e.target as HTMLElement).closest('button')) return;
     const left = x, top = y;
     gesture(e, (dx, dy) => {
-      x = Math.min(viewSize().w - 120, Math.max(120 - w, left + dx)); // a sliver stays grabbable
+      x = Math.min(viewSize().w - 120, Math.max(120 - w, left + dx));
       y = Math.min(viewSize().h - 40, Math.max(0, top + dy));
     });
   }
 
   const MIN_W = 280, MIN_H = 200;
-  /** Every edge and corner, by the sides it moves — 'nw' takes the top and the left one together. */
   const HANDLES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
   function resize(e: PointerEvent, sides: string) {
     const w0 = w, h0 = h, x0 = x, y0 = y;
     gesture(e, (dx, dy) => {
       if (sides.includes('e')) w = Math.max(MIN_W, Math.min(viewSize().w - x - 8, w0 + dx));
       if (sides.includes('s')) h = Math.max(MIN_H, Math.min(viewSize().h - y - 8, h0 + dy));
-      // the far side stays put: the panel grows out of the edge being dragged
       if (sides.includes('w')) {
         const left = Math.min(x0 + w0 - MIN_W, Math.max(8, x0 + dx));
         w = w0 + (x0 - left);
@@ -192,22 +173,18 @@
     border-bottom: 1px solid var(--line); background: var(--bg-side); flex: none; height: 33px; box-sizing: border-box;
   }
   .pdf-title { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  /* the shared .icon rule only sizes the button; the toolbar centers its own, so this one centers ours */
   .pdf-bar .icon { display: inline-flex; align-items: center; justify-content: center; flex: none; }
   .pdf-bar svg { width: 15px; height: 15px; display: block; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
   .pdf-doc { flex: 1; overflow: hidden; padding: 0 7px 7px; background: var(--bg-pop); }
   iframe { border: 0; display: block; transform: scale(0.5); transform-origin: 0 0; background: var(--bg); }
   .pdf-doc.plain iframe { transform: none; }
   .pdf-none { margin: 0; height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 24px; color: var(--fg-dim); font-size: 12.5px; }
-  /* a moved or resized panel must not hand the rest of the gesture to the document */
   .busy iframe { pointer-events: none; }
-  /* grab frame: 7px edges, 18px corners — all of it panel chrome, never over the PDF view */
   .pdf-edge { position: absolute; }
   .pdf-edge.n { top: 0; left: 18px; right: 18px; height: 6px; cursor: ns-resize; }
   .pdf-edge.s { bottom: 0; left: 18px; right: 18px; height: 7px; cursor: ns-resize; }
   .pdf-edge.w { left: 0; top: 6px; bottom: 18px; width: 7px; cursor: ew-resize; }
   .pdf-edge.e { right: 0; top: 6px; bottom: 18px; width: 7px; cursor: ew-resize; }
-  /* the top corners stay a thin band: below them the title bar's own buttons must keep their clicks */
   .pdf-edge.nw, .pdf-edge.ne { top: 0; width: 18px; height: 6px; }
   .pdf-edge.nw { left: 0; cursor: nwse-resize; }
   .pdf-edge.ne { right: 0; cursor: nesw-resize; }

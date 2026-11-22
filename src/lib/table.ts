@@ -6,19 +6,7 @@ import { imageMarkdown } from './image';
 import { hidePipesInMath } from './math';
 import { CellSelection, cellAround, columnResizingPluginKey, deleteColumn, deleteRow, fixTables, inSameTable, nextCell, tableEditingKey, TableMap } from '@tiptap/pm/tables';
 
-/**
- * Tables. The markdown form is the GFM pipe table everyone else writes:
- *
- *   | Name | Qty |
- *   | --- | --- |
- *   | Pen | 2 |
- *
- * markdown-it reads those on its own (that is how an imported file keeps its tables); this adds the
- * way back out, because tiptap-markdown has no serializer for table nodes and would otherwise write
- * raw HTML into the note.
- */
 
-/** One cell as a single line of markdown, marks and all (`**bold**` survives a round trip). */
 function cellText(state: any, cell: PMNode): string {
   // the cell borrows the output buffer, and with it what is kept about the buffer: the quote's "> " (written at
   // what looked like the start of a line: a table in a quote got one more "> " in each cell every save) and where
@@ -30,13 +18,9 @@ function cellText(state: any, cell: PMNode): string {
   // a line break as `<br>` (tiptap-markdown's own way in a table): its usual backslash and newline came back as
   // "\ ", and one more backslash every save
   state.inTable = state.inCell = true;
-  // every line in it, however deep: a list, quote or toggle typed into a cell is not a cell's markdown, but its
-  // text left out was gone from the note at the next save while still on screen
   cell.descendants((child) => {
     if (!child.isTextblock && child.type.name !== 'image') return true;
-    // a cell holding two paragraphs is still one line (the text after a picture may bring its own space)
     if (state.out && !/\s$/.test(state.out) && !/^\s/.test(child.textContent)) state.out += ' ';
-    // a picture read from a cell is a block of its own in it; it goes back in the line, not left out
     if (child.isTextblock) state.renderInline(child);
     else state.out += imageMarkdown(state, child);
     return false;
@@ -66,7 +50,7 @@ function cellsOf(line: string): string[] {
   return cells;
 }
 
-const HIDDEN = ''; // a `|` inside a formula, while markdown-it splits the row
+const HIDDEN = '';
 const widened = new WeakSet<object>();
 
 /**
@@ -130,8 +114,6 @@ function wideTables(md: any) {
 }
 
 const WIDTHS = 'eve:widths';
-/** markdown written for the clipboard's plain text, not for the note: what only the note needs (a table's widths, an
- *  address's <>) is left out. Pasted in another app it showed as written; Eve pastes the copy's HTML. */
 export let copying = false;
 export function asCopy<T>(write: () => T): T {
   copying = true;
@@ -139,7 +121,6 @@ export function asCopy<T>(write: () => T): T {
 }
 const WIDTHS_RE = new RegExp(`^<!--\\s*${WIDTHS}((?:\\s+(?:\\d+|-))+)\\s*-->\\s*$`);
 
-/** a table's column widths, from the comment under it (written by the table's serializer), onto its cells */
 function tableWidths(md: any) {
   if (sized.has(md)) return;
   sized.add(md);
@@ -178,8 +159,6 @@ const tableMarkdown = {
       });
       if (!rows.length) return;
       const width = rows.reduce((max, r) => Math.max(max, r.length), 0);
-      // a column's alignment, as the first cell of it that has one says (":---", ":---:", "---:"); it was always
-      // written "---", and an aligned column came back plain
       const aligns: (string | null)[] = Array(width).fill(null);
       node.forEach((row) => row.forEach((cell, _o, i) => { aligns[i] ??= cell.attrs.align ?? null; }));
       const rule = (a: string | null) => (a === 'left' ? ':---' : a === 'center' ? ':---:' : a === 'right' ? '---:' : '---');
@@ -212,42 +191,24 @@ const align = {
   renderHTML: (a: { align?: string | null }) => (a.align ? { style: `text-align: ${a.align}` } : {}),
 };
 
-/** the rows and cells are written by the table itself; these keep the serializer from visiting them */
 const inner = { markdown: { serialize() {} } };
 
-/** a text selection with one end in a table cell and the other out of the table */
 const halfInTable = (sel: Selection) => sel instanceof TextSelection && !cellAround(sel.$from) !== !cellAround(sel.$to);
 
-/**
- * tableEditing, with a text selection that runs out of a table left alone. It folds one that ends at the very
- * start of a line in another cell or out of the table back into its first cell (it takes that for a triple-click
- * in a cell), so a drag to the start of the line below stayed in the cell. ⇧↑ / ⇧↓ into a table from above or
- * below made the selection whole cells, dropping where it started; now it runs on through the table as text.
- * And ⇧↓ in the last row (⇧↑ in the first) did nothing, WebKit only stepping to the next cell: it now takes the
- * selection out to the next line, from the start of the cell it began in (its end, going up).
- */
-/** ⇧↓ / ⇧↑ from the table's last / first row: the selection out to the line after / before the table */
 function outOfTable(view: EditorView, dir: 1 | -1): boolean {
   const { selection: sel, doc } = view.state;
   const cells = sel instanceof CellSelection;
   const $cell = cells ? sel.$headCell : cellAround(sel.$head);
   if (!$cell || nextCell($cell, 'vert', dir)) return false;
   const edge = ($c: ResolvedPos, d: number) => Selection.near(doc.resolve(d > 0 ? $c.pos + $c.nodeAfter!.nodeSize : $c.pos), -d).head;
-  // a text selection only once it is on the cell's last (first) line
   if (!cells && (doc.resolve(edge($cell, dir)).parent !== sel.$head.parent || !view.endOfTextblock(dir > 0 ? 'down' : 'up'))) return false;
   const head = Selection.near(doc.resolve(dir > 0 ? $cell.after(-1) : $cell.before(-1)), dir).head;
-  if (head > $cell.before(-1) && head < $cell.after(-1)) return false; // nothing past the table
+  if (head > $cell.before(-1) && head < $cell.after(-1)) return false;
   const anchor = cells ? edge(sel.$anchorCell, -dir) : sel.anchor;
   view.dispatch(view.state.tr.setSelection(TextSelection.create(doc, anchor, head)).scrollIntoView());
   return true;
 }
 
-/**
- * A selection from text above a table into a cell (or from a cell to text below) cleared: the text out of the table
- * goes, the cells it covers are emptied, every row and column stays. Deleted as one range, the cells taken out left
- * their rows short, and fixTables filled them from the rows below: rows were lost, cells moved up into the header.
- * The caret ends where the selection began, `text` typed there; or, `out`, on the side out of the table.
- */
 function clearHalf(view: EditorView, text = '', out = false) {
   view.dispatch(cleared(view.state, text, out).scrollIntoView());
   return true;
@@ -257,7 +218,6 @@ function cleared(state: EditorState, text: string, out: boolean): Transaction {
   const { from, to } = state.selection;
   const $cell = cellAround(state.selection.$to) ?? cellAround(state.selection.$from)!;
   const start = $cell.before(-1), end = $cell.after(-1);
-  // the part out of the table, then the part of each cell in the selection; the last first, so the rest stay put
   const parts: [number, number][] = [start > from ? [from, start] : [end, to]];
   const lo = Math.max(from, start), hi = Math.min(to, end);
   state.doc.nodesBetween(lo, hi, (node, pos) => {
@@ -269,7 +229,6 @@ function cleared(state: EditorState, text: string, out: boolean): Transaction {
   const tr = state.tr;
   for (const [a, b] of parts.sort((x, y) => y[0] - x[0])) {
     const $a = tr.doc.resolve(a);
-    // a whole cell keeps an empty line: a cell cannot be left with none
     if (/^table(Cell|Header)$/.test($a.parent.type.name) && b === $a.end()) tr.replaceWith(a, b, state.schema.nodes.paragraph.create());
     else tr.delete(a, b);
   }
@@ -279,21 +238,14 @@ function cleared(state: EditorState, text: string, out: boolean): Transaction {
   return tr;
 }
 
-/**
- * A paste over a selection half in a table: cleared as ⌫ clears it, then what is pasted goes in out of the table
- * (in a cell, lines and blocks have no place). Pasted over as one range, the table lost rows as with a delete.
- */
 export function clearForPaste(view: EditorView) {
   if (!halfInTable(view.state.selection)) return;
   const tr = cleared(view.state, '', true);
   view.dispatch(tr);
-  // one undo takes back both: the paste is history's next step after the clearing (unmarked, a paste below the table
-  // was a step of its own, not touching what was cleared). It is put in at once, in this same event.
   pasting = tr;
   queueMicrotask(() => { pasting = null; });
 }
 let pasting: Transaction | null = null;
-/** marks the paste after clearForPaste's clearing as part of it, for the history */
 const pasteAfterClear = new Plugin({
   filterTransaction: (tr) => {
     if (pasting && tr !== pasting && tr.docChanged && !tr.getMeta('appendedTransaction')) tr.setMeta('appendedTransaction', pasting);
@@ -301,25 +253,18 @@ const pasteAfterClear = new Plugin({
   },
 });
 
-/** a line put above a table that opens the note, the caret on it: with nothing above the table, no key could make one */
 function lineAbove(view: EditorView) {
   const tr = view.state.tr.insert(0, view.state.schema.nodes.paragraph.create());
   view.dispatch(tr.setSelection(TextSelection.create(tr.doc, 1)).scrollIntoView());
   return true;
 }
 
-/** the caret's cell, in the first row of a table opening the note */
 function topRow(view: EditorView) {
   const sel = view.state.selection;
   const $cell = sel instanceof TextSelection && sel.empty ? cellAround(sel.$head) : null;
   return !!$cell && $cell.before(1) === 0 && $cell.index(1) === 0;
 }
 
-/**
- * Enter in a table cell: a line break in it (`<br>` in the note, as ⇧Enter). The stock Enter split the cell into two
- * lines, which a cell's one line of markdown cannot hold: the second ran into the first on save ("a1 next"). At the
- * very start of a table opening the note, the line above it instead (no line break leads a cell).
- */
 export function cellEnter(view: EditorView, hardBreak: () => boolean): boolean {
   const sel = view.state.selection;
   if (sel instanceof CellSelection || !cellAround(sel.$head)) return false;
@@ -331,10 +276,6 @@ export function cellEnter(view: EditorView, hardBreak: () => boolean): boolean {
   return true;
 }
 
-/**
- * A list in a table cell. A cell is one line of markdown, which holds no list, so its items are lines of the cell
- * (`<br>` between them) that start with "• ": the note keeps them, and any markdown reader shows them as bullets.
- */
 export const BULLET = '• ';
 
 function cellLine($pos: ResolvedPos) {
@@ -382,7 +323,6 @@ export function toggleCellBullet(view: EditorView): boolean {
   return true;
 }
 
-/** ⌫ at the very start of a table with nothing in it: the table goes, the caret at the end of the line above */
 export function dropEmptyTable(view: EditorView): boolean {
   const sel = view.state.selection;
   const $cell = sel.empty && sel instanceof TextSelection ? cellAround(sel.$head) : null;
@@ -397,7 +337,6 @@ export function dropEmptyTable(view: EditorView): boolean {
   return true;
 }
 
-/** the whole table chosen: its wrapper marked, to be outlined as a chosen picture is */
 const chosenTable = new Plugin({
   props: {
     decorations(state) {
@@ -409,7 +348,6 @@ const chosenTable = new Plugin({
   },
 });
 
-/** ↑ in the first row of a table opening the note: a line above it, as ↑ makes one over code opening the note */
 export const upAboveTable = (view: EditorView) => topRow(view) && view.endOfTextblock('up') && lineAbove(view);
 
 function lessTableEditing(plugin: Plugin): Plugin {
@@ -419,7 +357,6 @@ function lessTableEditing(plugin: Plugin): Plugin {
     appendTransaction: (trs, old, state) => (halfInTable(state.selection) ? fixTables(state, old) : appendTransaction!(trs, old, state)),
     props: {
       ...props,
-      // a cut of such a selection: copied as any, then cleared as ⌫ clears it (the stock cut deleted it as one range)
       handleDOMEvents: {
         ...props?.handleDOMEvents,
         cut: (view, e) => {
@@ -446,12 +383,6 @@ function lessTableEditing(plugin: Plugin): Plugin {
   });
 }
 
-/**
- * ⌫ (or Delete) on whole rows or columns chosen with nothing in them: they go, as with the table's own Delete row /
- * Delete column. Chosen with words in them, ⌫ empties them as it always did (a second ⌫ then takes them out). The
- * header row emptied and taken out, the row under it is the header (a markdown table always has one). The whole
- * table is prosemirror-tables' own: it goes.
- */
 function dropEmptyLines(view: EditorView): boolean {
   const sel = view.state.selection;
   if (!(sel instanceof CellSelection) || (sel.isRowSelection() && sel.isColSelection())) return false;
@@ -460,13 +391,12 @@ function dropEmptyLines(view: EditorView): boolean {
   if (!empty) return false;
   if (sel.isRowSelection()) {
     const header = Math.min(sel.$anchorCell.index(-1), sel.$headCell.index(-1)) === 0;
-    // one step for ⌘Z: the row taken out and the new header made in the same transaction
     return deleteRow(view.state, (tr) => {
       const $cell = header ? cellAround(tr.selection.$from) : null;
       const table = $cell?.node(-1);
       if ($cell && table?.firstChild && table.firstChild.firstChild?.type.name !== 'tableHeader') {
         const th = tr.doc.type.schema.nodes.tableHeader;
-        let pos = $cell.before(-1) + 2; // the first row's first cell
+        let pos = $cell.before(-1) + 2;
         table.firstChild.forEach((c) => { tr.setNodeMarkup(pos, th, c.attrs); pos += c.nodeSize; });
       }
       view.dispatch(tr);
@@ -488,7 +418,7 @@ const dragOutOfTable = new Plugin({
     handleDOMEvents: {
       mousedown(view, down) {
         if (down.button !== 0 || down.shiftKey || down.ctrlKey || down.metaKey) return false;
-        if ((columnResizingPluginKey.getState(view.state)?.activeHandle ?? -1) > -1) return false; // a column being resized
+        if ((columnResizingPluginKey.getState(view.state)?.activeHandle ?? -1) > -1) return false;
         const start = view.posAtCoords({ left: down.clientX, top: down.clientY });
         const $cell = start && cellAround(view.state.doc.resolve(start.pos));
         if (!start || !$cell) return false;
@@ -499,7 +429,6 @@ const dragOutOfTable = new Plugin({
           const { doc } = view.state;
           const $in = cellAround(doc.resolve(at.inside >= 0 ? at.inside : at.pos)) ?? cellAround(doc.resolve(at.pos));
           if ($in && inSameTable($in, doc.resolve(cell))) return;
-          // beside a line, between blocks: the line the pointer is on
           const head = Selection.near(doc.resolve(at.pos), at.pos > anchor ? 1 : -1).head;
           const sel = TextSelection.create(doc, anchor, head);
           if (!sel.eq(view.state.selection) || tableEditingKey.getState(view.state) == null) {
@@ -520,13 +449,6 @@ const dragOutOfTable = new Plugin({
   },
 });
 
-/**
- * A table's columns stay as wide as they are while its cells are written in, as Notion's do. Opened, a table is laid
- * out by what its cells hold (a column of long words wide, one of numbers narrow); then those widths are held, so a
- * cell's words wrap in it, where they used to push its column wider and squeeze the others under the caret. Held on
- * screen only, never in the note (a GFM table has no widths to keep): a window or pane of another width, a column
- * added or taken away, and the table is laid out afresh. One sized by hand (colwidth) keeps the widths it was given.
- */
 interface Pin { pos: number; widths: number[]; total: number }
 const pinKey = new PluginKey<Pin[]>('tableWidths');
 const sizedByHand = (table: PMNode) => { let by = false; table.descendants((n) => { if (n.attrs.colwidth) by = true; return !by; }); return by; };
@@ -547,7 +469,7 @@ const holdWidths = new Plugin<Pin[]>({
         const table = state.doc.nodeAt(pin.pos);
         if (!table || !fits(table, pin)) continue;
         decos.push(Decoration.node(pin.pos, pin.pos + table.nodeSize, { class: 'held', style: `--held-w: ${pin.total}px` }));
-        let at = pin.pos + 2; // into the table, into its first row
+        let at = pin.pos + 2;
         table.firstChild!.forEach((cell, _o, i) => { decos.push(Decoration.node(at, at + cell.nodeSize, { style: `width: ${pin.widths[i]}px` })); at += cell.nodeSize; });
       }
       return DecorationSet.create(state.doc, decos);
@@ -555,7 +477,6 @@ const holdWidths = new Plugin<Pin[]>({
   },
   view(view) {
     let frame = 0, width = view.dom.clientWidth;
-    // the tables not held yet, measured as the page laid them out, and held from then on
     const measure = () => {
       frame = 0;
       const pins = pinKey.getState(view.state) ?? [];
@@ -566,7 +487,7 @@ const holdWidths = new Plugin<Pin[]>({
         if (next.some((p) => p.pos === pos) || sizedByHand(node)) return false;
         const wrap = view.nodeDOM(pos) as HTMLElement | null, row = wrap?.querySelector('tr');
         const total = wrap?.querySelector('table')?.getBoundingClientRect().width ?? 0;
-        if (!row || !total) return false; // not laid out (a closed toggle, a test's page)
+        if (!row || !total) return false;
         next.push({ pos, widths: [...row.children].map((c) => Math.round(c.getBoundingClientRect().width)), total: Math.round(total) });
         added = true;
         return false;
@@ -574,7 +495,6 @@ const holdWidths = new Plugin<Pin[]>({
       if (added || next.length !== pins.length) view.dispatch(view.state.tr.setMeta(pinKey, next).setMeta('addToHistory', false));
     };
     const soon = () => { if (!frame) frame = requestAnimationFrame(measure); };
-    // another width for the note: every table laid out afresh for the room there is now
     const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
       if (view.dom.clientWidth === width) return;
       width = view.dom.clientWidth;
@@ -590,11 +510,6 @@ const holdWidths = new Plugin<Pin[]>({
   },
 });
 
-/**
- * A column's edge taken by the pointer: every column of the table given the width it has on screen first, so the drag
- * moves that edge alone. Only the dragged column was given a width, and on release the page laid the others out
- * afresh, so a line not dragged moved too. Before the resizing plugin, which reads the widths as it starts.
- */
 const holdColumnsForDrag = new Plugin({
   props: {
     handleDOMEvents: {
@@ -605,7 +520,6 @@ const holdColumnsForDrag = new Plugin({
         if (table?.type.name !== 'table') return false;
         const map = TableMap.get(table), row = (view.nodeDOM(start - 1) as HTMLElement | null)?.querySelector('tr');
         if (!row) return false;
-        // each column's width, from the first row (a cell over two columns split between them)
         const widths: number[] = [];
         for (const c of row.children as HTMLCollectionOf<HTMLTableCellElement>) {
           const w = c.getBoundingClientRect().width / c.colSpan;
@@ -619,7 +533,6 @@ const holdColumnsForDrag = new Plugin({
           const col = map.colCount(pos);
           tr.setNodeMarkup(start + pos, null, { ...cell.attrs, colwidth: widths.slice(col, col + cell.attrs.colspan) });
         }
-        // not a step of its own for ⌘Z: the drag's own step takes the column back, and the rest look as they did
         if (tr.docChanged) view.dispatch(tr.setMeta('addToHistory', false));
         return false;
       },
@@ -635,9 +548,6 @@ export const TableNodes = [
     },
   }).configure({ resizable: true }),
   TableRow.extend({ addStorage: () => inner }),
-  // A cell holds what a markdown table's cell can: lines and pictures. A list, quote, callout, toggle, code or formula
-  // block typed or put into one (a shortcut, the / menu, the phone's bar, a paste) showed in it and was gone from the
-  // note at the next save; held to these, nothing else can be made there at all
   TableHeader.extend({ content: '(paragraph | image)+', addStorage: () => inner, addAttributes() { return { ...this.parent?.(), align }; } }),
   TableCell.extend({ content: '(paragraph | image)+', addStorage: () => inner, addAttributes() { return { ...this.parent?.(), align }; } }),
 ];

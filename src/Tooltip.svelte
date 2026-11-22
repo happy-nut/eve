@@ -1,9 +1,4 @@
 <script lang="ts">
-  /**
-   * One tooltip for the whole app. Any element with data-tip="text" (and optionally data-keys="Mod-k")
-   * gets it on hover, rendered at body level so panes can't clip it. Classes on the element:
-   * tip-up (above), tip-right (right-aligned), tip-side (beside it: a row's button, whose tip covered the next row).
-   */
   import Keys from './Keys.svelte';
   import { claimKeys, PRIORITY } from './lib/keys';
 
@@ -11,12 +6,9 @@
 
   let tip = $state<{ text: string; keys: string; at: DOMRect; up: boolean; right: boolean; side?: boolean } | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let current: HTMLElement | null = null; // element the tooltip belongs to
+  let current: HTMLElement | null = null;
   let box = $state<HTMLDivElement | null>(null);
   let pos = $state<{ left: number; top: number } | null>(null);
-  // placed once its size is known, kept inside the window: a tip centred under a control at its right edge (the
-  // calendar's ›) ran off it, and one under a control at the window's foot went under it — it goes over it then.
-  // Only the window's edge is kept clear: a tip in the title strip is the toolbar's own.
   $effect(() => {
     if (!box || !tip) { pos = null; return; }
     const f = floatAt(tip.at, { w: box.offsetWidth, h: box.offsetHeight },
@@ -26,7 +18,7 @@
 
   function over(e: MouseEvent) {
     const el = (e.target as HTMLElement).closest<HTMLElement>('[data-tip]');
-    if (el === current) return; // moving between children of the same control: keep it still
+    if (el === current) return;
     clearTimeout(timer);
     current = el;
     if (!el) { tip = null; return; }
@@ -37,11 +29,9 @@
     }, 400);
   }
   function out(e?: MouseEvent) {
-    // only when the pointer really leaves the control (not when it crosses into a child)
     if (e && current && e.relatedTarget instanceof Node && current.contains(e.relatedTarget)) return;
     clearTimeout(timer); tip = null; current = null;
   }
-  // any key puts it away, whoever takes the key
   $effect(() => claimKeys('global', { '*': () => out() }, { capture: true, priority: PRIORITY.watch, composing: true }));
 </script>
 

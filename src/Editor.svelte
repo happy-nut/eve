@@ -26,11 +26,10 @@
 
   let scrollEl = $state<HTMLDivElement | null>(null);
 
-  let suggest: ReturnType<typeof Suggest>; // [[ and / popup
-  let dateMenu: ReturnType<typeof DateMenu>; // the @ calendar
-  let emojiRow: ReturnType<typeof EmojiRow>; // the :smile row
+  let suggest: ReturnType<typeof Suggest>;
+  let dateMenu: ReturnType<typeof DateMenu>;
+  let emojiRow: ReturnType<typeof EmojiRow>;
 
-  // the markdown the editor last handed over (or was given): a body that differs from it came from elsewhere
   let lastEmitted = '';
 
   onMount(() => {
@@ -39,14 +38,11 @@
     editor = createEditor({
       element: el,
       content: note.body,
-      // the note it was opened on: handed over late (a long note's last keys, as Back opens the next), `note` is already
-      // the next one, and the words went there while the new note was taken for empty and deleted
       onUpdate: (md) => { lastEmitted = md; notes.update(id, md); },
       onNoteMove: (dir, onTitle) => (onTitle || openedFromList.id === note.id) && nudgeNote(note.id, dir),
       onOpenNote: (title) => {
         notes.flush(note.id);
         notes.openByTitle(title);
-        // a link into this very page: no navigation happens, so make the jump here
         if (notes.section && notes.currentId === note.id) {
           const s = notes.section;
           notes.section = '';
@@ -58,12 +54,9 @@
       suggestionUI: suggest.ui,
       calendarUI: dateMenu.ui,
       emojiUI: emojiRow.ui,
-      // a [[Title#Section]] link says where to land, over wherever the caret was left last time
       cursor: notes.section ? undefined : notes.cursor.get(note.id),
     });
     if (import.meta.env.DEV) (window as any).__editor = editor;
-    // a file dropped outside the note (the sidebar, the margins) still attaches to the open one
-    // an attachment joins the note as its own block, never glued onto the last sentence
     hooks.attach = (md) => {
       const e = editor!;
       const content = (e.storage as any).markdown.parser.parse(md);
@@ -77,9 +70,6 @@
     };
     hooks.section = (heading) => editor && goToSection(editor, heading);
     hooks.page = () => el.querySelector<HTMLElement>('.tiptap');
-    // summoned back: the page stays as it was left, the caret where the eyes left it. Only a caret out of sight (or
-    // under the toolbar's fade) is brought to the middle of the page. Centred every time, the line being written at
-    // the bottom of the window jumped up to the middle on each ⌘⇧E.
     hooks.caretIntoView = () => {
       if (!editor || !scrollEl) return;
       const caret = editor.view.coordsAtPos(editor.state.selection.head);
@@ -92,20 +82,18 @@
     // code block's last line, scrolling the code sideways to it. Put it there first, so the end is the empty line.
     // Opening a note is not writing in it: the editor's own spelling of it is not saved back, dated now.
     editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false).setMeta('preventUpdate', true));
-    const section = notes.section; // a [[Title#Section]] link brought us here
+    const section = notes.section;
     notes.section = '';
     if (section) {
       goToSection(editor, section);
     } else if (notes.selectTitle) {
-      // a brand-new page: its placeholder title is selected, so typing renames it right away
       notes.selectTitle = false;
       editor.commands.setTextSelection({ from: 1, to: 1 + (editor.state.doc.firstChild?.content.size ?? 0) });
       editor.commands.focus();
     } else if (notes.caretEnd) {
-      notes.caretEnd = false; // opened to write in: under whatever the template put there
+      notes.caretEnd = false;
       editor.commands.focus('end');
     } else if (ui.focusOwner !== 'sidebar' && !isMobile) editor.commands.focus(notes.cursor.has(note.id) ? undefined : 'end');
-    // (a phone opens a note to read it: the keyboard comes up when the text is tapped, not before)
     return () => {
       hooks.attach = undefined;
       hooks.caretIntoView = undefined;
@@ -123,17 +111,14 @@
   async function changeIcon(anchor: HTMLElement) {
     const v = await ui.pickEmoji(anchor, note.icon ?? '');
     if (v !== null) notes.setIcon(note.id, v);
-    if (!isMobile) editor?.view.focus(); // back into the note, the caret where it was (a phone's keyboard stays down)
+    if (!isMobile) editor?.view.focus();
   }
 
-  /** A random icon (picked again with a click on it). The button goes as the icon takes its place, and the keyboard
-   *  went with it, to nothing: back into the note, the caret where it was (a phone's keyboard stays down). */
   function addIcon() {
     notes.setIcon(note.id, randomIcon());
     if (!isMobile) editor?.view.focus();
   }
 
-  /** A cover's choices (Notion's): one of the gradients, a picture of one's own, or none */
   function coverMenu(at: HTMLElement) {
     ui.openMenu(under(at), [
       ...Object.entries(GRADIENTS).map(([k, g]) => ({
@@ -144,41 +129,25 @@
     ]);
   }
 
-  // Under a cover the toolbar's fade (main::before) would wash its top out to the page's colour: it waits until the
-  // cover has scrolled up past the toolbar, when text starts to run under the icons again
   let coverTop = $state(true);
   const COVER_H = isMobile ? 160 : 220;
   const onScroll = () => { coverTop = !!note.cover && (scrollEl?.scrollTop ?? 0) < COVER_H - 72; };
   $effect(() => { void note.cover; onScroll(); });
 
-  // asked to write at the end of this very note (the reminder's today, already open): no remount brings it there
   $effect(() => {
     if (editor && notes.caretEnd && notes.currentId === note.id) { notes.caretEnd = false; editor.commands.focus('end'); }
   });
 
-  // the spelling help switched in Settings: the note's attributes are read again (editor.ts), without a remount
   $effect(() => { void appearance.s.autoCorrect; if (editor) editor.view.setProps({}); });
 
-  // rebind editor shortcuts live when the user changes them
   $effect(() => { shortcuts.actions; if (editor) applyKeymap(editor); });
 
-  // remote sync may replace the body under us — even while the caret is in it (a window in the background keeps
-  // its focus), or the next keystroke would save the old text over the other device's edit. Only a body the editor
-  // did not hand over itself counts: the editor writes `- a` for `* a`, and putting the note back as it was saved
-  // would just re-set it. Re-setting it is not an edit here, so it is not saved back, nor dated now. Trailing
-  // newlines do not count as a difference: a note that ends in one (created from a template, imported from a file)
-  // would otherwise be re-set on every mount, throwing away where the caret was just put — the jump a
-  // [[Title#Section]] link makes, say.
   $effect(() => {
     const body = note.body;
     if (!editor || body.trimEnd() === lastEmitted.trimEnd()) return;
     lastEmitted = body;
     takeBody(editor, body);
   });
-  /**
-   * Where the note sits, over its title: the pages it is under, outermost first, each opened on a click. Nothing for a
-   * note at the top level.
-   */
   const crumbs = $derived.by(() => {
     const pages: { label: string; icon: string; id: string }[] = [];
     const seen = new Set<string>([note.id]);
@@ -192,7 +161,6 @@
     return pages;
   });
 
-  // the notes that link here (Notion's backlinks): a count over the title, a menu of them on a click
   const backlinks = $derived(notes.linksTo(note.id));
   function showBacklinks(at: HTMLElement) {
     const short = (t: string) => (t.length > 60 ? t.slice(0, 59) + '…' : t);
@@ -202,7 +170,6 @@
     })));
   }
 
-  /** the pane's width on it as --pane, for the blocks that reach past the text to its edges (app.css) */
   function paneWidth(node: HTMLElement) {
     const put = () => node.style.setProperty('--pane', `${node.clientWidth}px`);
     put();
@@ -213,7 +180,6 @@
   }
 </script>
 
-<!-- a wide note takes the whole pane: nothing holds its text to the reading width; a small one is a step smaller -->
 <div class="scroll" bind:this={scrollEl} onscroll={onScroll} class:cover-top={coverTop && !!note.cover}
   style:--editor-width={note.wide ? 'none' : null} style:--font-size={note.small ? `${appearance.smallPx}px` : null}>
   {#if note.cover}
@@ -225,8 +191,6 @@
     {#if note.icon}
       <button class="big-icon" aria-label="Change icon" title="Change icon" onclick={(e) => changeIcon(e.currentTarget)}><Icon icon={note.icon} size={isMobile ? 44 : 56} /></button>
     {/if}
-    <!-- Notion's row: under the icon, right over the title, shown as the page is hovered. (A press keeps the caret where
-         it was: the button goes as it is used, and the keyboard fell to <body>) -->
     <div class="page-controls" class:none={!!note.icon && !!note.cover && !backlinks.length}>
     {#if !note.icon}
       <button class="add-icon" onmousedown={(e) => e.preventDefault()} onclick={addIcon}>
@@ -248,7 +212,6 @@
     {/if}
     </div>
   </div>
-  <!-- Tab indents a list (the editor marks those handled); anywhere else it must not walk focus out of the editor -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="editor has-head" bind:this={el} {@attach paneWidth}
     onkeydown={(e) => {
@@ -262,7 +225,6 @@
     onclick={(e) => { if (e.target === el && editor) clickBelow(editor.view, e); }}></div>
 </div>
 {#if crumbs.length}
-  <!-- in the window's top row, as a title bar would have it: it stays put while the note scrolls under it -->
   <nav class="crumbs" aria-label="Where this note is">
     {#each crumbs as c, i (i)}
       <span class="sep">/</span>
@@ -284,16 +246,9 @@
   .scroll { height: 100%; overflow-y: auto; scrollbar-width: none; }
   .scroll::-webkit-scrollbar { display: none; }
   .editor { min-height: 100%; }
-  /* the head, as Notion's: the icon, then a row of what can be added (shown as the page is hovered, its room always
-     kept so the title doesn't jump), then the title. "Add cover" stood beside a 56px icon, off at its top corner */
-  /* how far down the head starts and how far in, by window: set here as values and nowhere else, read once by the
-     head. Each window used to set the head's padding itself (the phone's and tabs' with !important), and a cover's
-     rule won or lost by window: with tabs open the icon sat 18px under the cover's edge */
   .scroll { --head-top: 44px; --head-side: clamp(24px, 8vw, 96px); }
   @media screen {
-    /* a Mac: the breadcrumbs sit in the window's top row, the note starts clear of them */
     :global(html:not(.mobile)) .scroll { --head-top: 64px; }
-    /* tabs open: the note starts under their row, which already clears the window's top row */
     :global(main.tabbed) .scroll { --head-top: 24px; }
     :global(html.mobile) .scroll { --head-top: 18px; --head-side: 20px; }
   }
@@ -302,28 +257,19 @@
     display: flex; flex-direction: column; align-items: flex-start;
   }
   .page-controls { display: flex; align-items: center; gap: 2px; width: 100%; height: 28px; margin: 4px 0; }
-  .page-controls.none { height: 0; margin: 0 0 12px; } /* an icon and a cover both: nothing to offer, no empty row */
+  .page-controls.none { height: 0; margin: 0 0 12px; }
   .backlinks {
     margin-left: auto; display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--fg-dim);
     font: inherit; font-size: 12.5px; padding: 3px 6px; margin-right: -6px; border-radius: 6px; white-space: nowrap;
   }
   .backlinks svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; }
   .backlinks:hover { background: var(--bg-hover); color: var(--fg); }
-  /* level with the window's toolbar, past it when the sidebar is closed and it sits over the note; only the crumbs
-     take clicks, the rest of the row still drags the window */
   .crumbs {
     position: absolute; top: 10px; right: 52px;
-    /* 14px into the note, but never left of 214px from the window's edge (the toolbar's four buttons end at 210px): the
-       note's way from that edge is the window less the note (100vw - 100%), followed as the sidebar slides, so the crumbs
-       go with the note until the toolbar and stay clear of it. Waiting for the sidebar to be gone (:has(aside)), they
-       slid under its buttons as it went and jumped clear at the end, and opened again they jumped back under them. */
     left: max(14px, calc(214px - (100vw - 100%))); height: 24px; z-index: var(--z-toolbar); pointer-events: none;
     display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; font-size: 13px; color: var(--fg-dim); white-space: nowrap;
   }
-  /* tabs open: the note starts under their row, and the crumbs, kept in the window's top row, are 71px above it — left
-     at 10px they ran through the page's icon and "Add cover" */
   :global(main.tabbed) .crumbs { top: -61px; }
-  /* Find open (top right of the window): the crumbs end before it, not under it */
   :global(main:has(.find)) .crumbs { right: 400px; }
   .sep { opacity: 0.45; flex: none; padding: 0 1px; }
   .sep:first-child { display: none; }
@@ -331,30 +277,23 @@
     display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 220px; height: 24px; padding: 0 6px;
     border-radius: 6px; border: 0; background: none; color: inherit; font: inherit; pointer-events: auto;
   }
-  /* a block, so a name too long is cut with an ellipsis (inline, it was cut mid-letter with none) */
   .crumb span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* each place a few letters at least: squeezed, a note three pages deep read "/ / / A really quite lo" */
   .crumb:not(.here) { min-width: 3.2em; flex-shrink: 1; }
   .crumb.here { color: var(--fg); flex-shrink: 0.2; }
   button.crumb:hover { background: var(--bg-hover); color: var(--fg); }
-  /* a phone: in its own bar, between the back button and the note's icons */
   :global(html.mobile) .crumbs { top: -52px; left: 50px; right: 146px; height: 52px; font-size: 14px; }
-  /* a phone has room for where the note is and what holds it: the rest of the way is the list's */
   :global(html.mobile) .crumbs > :not(:nth-last-child(-n + 3)) { display: none; }
-  /* …and only while that bar is there: back in the list it is gone, and the crumbs were left over the list's title */
   :global(html.mobile .shell:not(:has(> .mhead))) .crumbs { display: none; }
   .add-icon {
     display: inline-flex; align-items: center; gap: 6px; height: 28px; border: 0; background: none; color: var(--fg-dim);
     font: inherit; font-size: 13.5px; padding: 0 8px 0 6px; border-radius: 6px; opacity: 0;
     transition: opacity 0.15s, background 0.12s;
   }
-  .page-controls > :first-child { margin-left: -6px; } /* the first one's words in line with the title's */
+  .page-controls > :first-child { margin-left: -6px; }
   .add-icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; }
   :global(main:hover) .add-icon, .add-icon:focus-visible { opacity: 1; }
-  /* a phone has no hover: an unseen button above the title took a tap there and gave the note a random icon */
   :global(html.mobile) .add-icon { opacity: 1; }
   .add-icon:hover { background: var(--bg-hover); color: var(--fg); }
-  /* the keyboard on them: the app's own soft ring, as the list's rows have (WebKit's blue ring cut through the emoji) */
   .add-icon:focus-visible, .big-icon:focus-visible { outline: none; background: var(--bg-hover); box-shadow: 0 0 0 2px var(--accent-soft); }
   .big-icon {
     border: 0; background: none; font-size: 56px; line-height: 1; padding: 4px; margin-left: -4px; border-radius: 10px;
@@ -363,9 +302,6 @@
   .big-icon:hover { background: var(--bg-hover); }
   .big-icon:active { transform: scale(0.95); }
   .editor.has-head :global(.tiptap) { padding-top: 0; min-height: calc(100% - 72px); }
-  /* the cover: across the whole pane, the page's icon half over its lower edge, as Notion has it */
-  /* the cover under the window's top row, as Notion's is under its bar: the crumbs and the toolbar's icons are on the
-     page's own colour, not on the picture (on a dark one they could not be read) */
   .cover { position: relative; width: 100%; }
   :global(html:not(.mobile) main:not(.tabbed)) .cover { margin-top: 44px; }
   .cover-change {
@@ -377,9 +313,7 @@
   :global(html.mobile) .cover-change { opacity: 1; }
   .cover-change:hover { color: var(--fg); }
   .page-head.with-cover { padding-top: 12px; }
-  /* the icon pulled up half over the cover, the row under it */
   .page-head.with-cover.with-icon { padding-top: 0; }
-  /* positioned, as the cover is, so the icon is drawn over the cover's edge, not under it */
   .page-head.with-cover { position: relative; }
   .page-head.with-cover .big-icon { margin-top: -38px; }
 

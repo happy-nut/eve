@@ -2,40 +2,26 @@ import { findUpdate, type Update } from './update';
 import { isMobile, isTauri, onWindowFocus, widget } from './platform';
 import { ui, errorText } from './ui.svelte';
 
-/**
- * Eve's own updates, on the phone and the Mac: looked for at launch and when the app comes back (at most
- * every few hours), offered in the list, installed with one tap. The phone hands the APK to Android's
- * installer (plus the system's own "Update"); the Mac downloads its zip, checks it and swaps itself for
- * the new app, then starts again (src-tauri/src/update.rs).
- */
 const EVERY = 3 * 60 * 60 * 1000;
-/** how old an answer may be when the window comes back, or Settings opens: a release made an hour ago shows */
 export const FRESH = 10 * 60 * 1000;
 const target = isMobile ? 'android' : 'mac';
-/** what installs Eve by hand when it cannot replace itself (the same the README gives) */
 export const BY_HAND = 'brew reinstall --cask happy-nut/tap/eve';
 
 class Updates {
   available = $state<Update | null>(null);
   state = $state<'' | 'permission' | 'downloading' | 'installing' | 'brew' | 'restarting' | 'error'>('');
-  /** how much of the download is done while downloading (-1 until the first report) */
   progress = $state(-1);
-  /** what went wrong, when the Mac says (the phone only reports that it failed) */
   message = $state('');
   current = $state('');
-  /** Settings' Check button: busy while asking, then what came of it */
   checking = $state(false);
   failed = $state(false);
-  /** why the last check failed, when GitHub said */
   reason = $state('');
-  /** when it last asked (0: not yet, so Settings does not claim "up to date" before it knows) */
   checked = $state(0);
 
   async check(force = false, maxAge = EVERY) {
     if (!isTauri || this.checking || (!force && Date.now() - this.checked < maxAge)) return;
     this.checked = Date.now();
     this.checking = true;
-    // long enough to be seen: an answer in 80 ms would look like the button did nothing
     const shown = new Promise((r) => setTimeout(r, 600));
     try {
       if (!this.current) this.current = await (await import('@tauri-apps/api/app')).getVersion();
@@ -45,7 +31,7 @@ class Updates {
       this.available = await findUpdate(this.current, undefined, target, token);
       this.failed = false;
       this.reason = '';
-    } catch (err) { this.failed = true; this.reason = err instanceof Error ? err.message : ''; /* offline: next time */ }
+    } catch (err) { this.failed = true; this.reason = err instanceof Error ? err.message : ''; }
     await shown;
     this.checking = false;
   }
@@ -58,21 +44,17 @@ class Updates {
     if (isMobile) return widget.installUpdate(u.url);
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      // on success the app quits and the new one starts: nothing comes back
       await invoke('install_update', { url: u.url, sha256: u.sha256 ?? '', version: u.version });
     } catch (err) {
       this.state = 'error';
       this.message = errorText(err);
-      // a line in a tooltip was all it said, and the command to run was in it to retype: a dialog, the command copied with a click
       void ui.tell(`Eve ${u.version} could not be installed.\n${this.message}\n\nIn Terminal, this installs it instead:`, BY_HAND);
     }
   }
-  /** what an update under way is doing, for the list and Settings ('' when none is) */
   get doing(): string {
     switch (this.state) {
       case 'downloading': return `Downloading${this.available ? ` ${this.available.version}` : ''}…${this.progress >= 0 ? ` ${this.progress}%` : ''}`;
       case 'installing': return isMobile ? 'Tap Update on the next screen' : 'Installing…';
-      // the download was refused (a company network): Homebrew, which the network lets out, takes over
       case 'brew': return 'Installing with Homebrew…';
       case 'restarting': return 'Restarting…';
       case 'permission': return 'Allow Eve to install apps, then tap Update again';
@@ -80,8 +62,6 @@ class Updates {
       default: return '';
     }
   }
-  /** the Update button waits while the update is under way (on the phone only while downloading: a
-   *  cancelled installer screen needs the button again) */
   get busy() { return this.state === 'downloading' || (!isMobile && (this.state === 'installing' || this.state === 'brew' || this.state === 'restarting')); }
   private report(detail: string) {
     const [state, pct] = detail.split(':');

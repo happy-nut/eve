@@ -6,7 +6,6 @@
   import { ui } from './lib/ui.svelte';
 </script>
 
-<!-- a tip about the note, not over what is opened on it (a picker, Settings: it covered their last row) -->
 {#if hints.current && !ui.layers.modal}
   {@const h = hints.current}
   <div class="hint" role="status" transition:fly|global={{ y: 16, duration: 220, easing: cubicOut }}>
@@ -24,7 +23,6 @@
     background: light-dark(#1d1f24, #2a2d33); color: #f2f3f5; font-size: 13px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
   }
-  /* a toast up as well: the hint over it, not behind it in the same place */
   :global(body:has(.toast)) .hint { bottom: 72px; }
   .bulb { font-size: 14px; }
   .text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -10,7 +10,6 @@
   import { typedIn } from './lib/hangul';
   import Icon from './Icon.svelte';
 
-  // the trash (Notion's): what was deleted, newest first; a row brings its note back, or deletes it for good
   let q = $state('');
   const list = $derived(notes.trash.filter((n) => !q.trim() || typedIn(titleOf(n).toLowerCase(), q.trim().toLowerCase())));
   const appear = (node: Element) => sheet(node, (n) => scale(n, panelIn));
@@ -24,8 +23,6 @@
   async function erase(ids: string[], what: string) {
     if (!ids.length || !(await ui.ask(`Delete ${what} for good? It can't be brought back.`))) return;
     notes.erase(ids);
-    // the button pressed went with its note: the keyboard stays in the Trash (it fell through to the note behind it,
-    // and what was typed next went into that note)
     await tick();
     searchEl?.focus();
   }
@@ -68,12 +65,10 @@
 <style>
   .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-sheet-scrim); }
   .rpanel {
-    /* held by its top, below the window's top row: centred at 80vh tall, a short window put it on the title bar */
     position: fixed; z-index: var(--z-sheet); top: max(44px, 12vh); left: 50%; transform: translateX(-50%);
     width: min(440px, 92vw); max-height: min(520px, calc(100vh - 88px)); display: flex; flex-direction: column;
     border-radius: var(--panel-radius); background: var(--bg-pop); box-shadow: var(--panel-shadow); font-size: 13px; overflow: hidden;
   }
-  /* a phone: a sheet from the bottom, as the menus are */
   :global(html.mobile) .rpanel { top: auto; bottom: 0; left: 0; right: 0; width: auto; transform: none; border-radius: var(--panel-radius) var(--panel-radius) 0 0; max-height: 75vh; padding-bottom: env(safe-area-inset-bottom); }
   .top { display: flex; gap: 6px; padding: 10px 10px 6px; }
   .search { flex: 1; font: inherit; padding: 7px 9px; border-radius: 8px; border: 0; background: var(--bg-input); color: var(--fg); outline: none; }
@@ -86,14 +81,13 @@
   .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .when { flex: none; color: var(--fg-dim); font-size: 12px; }
   .restore, .erase, .close { flex: none; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; color: var(--fg-dim); }
-  /* a phone: a finger's size, and Restore well apart from Delete for good (2px apart, a tap a little off erased the note) */
   :global(html.mobile) .restore, :global(html.mobile) .erase, :global(html.mobile) .close { width: 44px; height: 44px; }
   :global(html.mobile) .erase { margin-left: 12px; }
   .restore:hover, .erase:hover, .close:hover { background: var(--bg-input); color: var(--fg); }
   svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
   .empty { margin: 0; padding: 18px 16px 22px; color: var(--fg-dim); line-height: 1.45; }
   .foot { display: flex; justify-content: flex-end; padding: 8px 10px 10px; border-top: 1px solid var(--line); }
-  .danger { padding: 6px 12px; font-weight: 500; background: #ff453a; color: #fff; } /* as the dialog's Delete */
+  .danger { padding: 6px 12px; font-weight: 500; background: #ff453a; color: #fff; }
   .danger:hover { background: color-mix(in srgb, #ff453a 88%, #000); }
   .erase:hover { color: #ff453a; }
 </style>

@@ -1,23 +1,9 @@
 import { Mark, Node } from '@tiptap/core';
 import { inkGoesOnWhileTyping } from './textColor';
 
-/**
- * HTML written in a note's markdown that the editor has no node of its own for, kept as it was: a <span> with a
- * colour, <kbd>, <sub>, <sup>, <abbr> and the like around text; a <div> around blocks (a README's
- * <div align="center">); a <!-- comment -->. Read, they used to be dropped — the text kept, the tags gone the next
- * time the note was saved, the comment gone whole.
- *
- * Only HTML that came from markdown is kept (updateDOM marks it data-eve-html): HTML pasted from a web page is full of
- * spans and divs that mean nothing in a note, and is still taken for its text alone. Handlers (on…) and
- * javascript: addresses are never kept: a note's HTML is drawn in the app.
- */
 const INLINE = ['span', 'kbd', 'sub', 'sup', 'abbr', 'small', 'var', 'samp', 'cite', 'q', 'dfn', 'ins', 'time', 'font'];
 const MARK = 'data-eve-html';
 
-/**
- * Every element HTML has (and SVG's and MathML's root). Anything else in angle brackets is text: `Array<string>`,
- * "press <Enter>". Read as a tag, it was dropped, the words with it.
- */
 export const HTML_TAGS = new Set(('a abbr acronym address applet area article aside audio b base basefont bdi bdo bgsound big blink '
   + 'blockquote body br button canvas caption center cite code col colgroup data datalist dd del details dfn dialog dir div dl dt em '
   + 'embed fieldset figcaption figure font footer form frame frameset h1 h2 h3 h4 h5 h6 head header hgroup hr html i iframe image img '
@@ -25,7 +11,6 @@ export const HTML_TAGS = new Set(('a abbr acronym address applet area article as
   + 'noframes noscript object ol optgroup option output p param picture plaintext portal pre progress q rb rp rt rtc ruby s samp '
   + 'script search section select slot small source spacer span strike strong style sub summary sup svg table tbody td template '
   + 'textarea tfoot th thead time title tr track tt u ul var video wbr xmp').split(' '));
-/** the HTML the note makes something of: formatting, a picture, a list, a table, a toggle, a box of blocks */
 const OWN = new Set([...INLINE, 'a', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'mark', 'code', 'br', 'img', 'div', 'p',
   'details', 'summary', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'pre', 'table', 'thead', 'tbody', 'tfoot',
   'tr', 'th', 'td', 'hr']);

@@ -1,4 +1,3 @@
-//! macOS only: Quick Look previews, printing a note to PDF / PNG, and being the .md handler.
 use std::fs;
 use tauri::{AppHandle, Manager};
 
@@ -19,7 +18,6 @@ pub(crate) fn menu_without_close(app: &AppHandle) -> tauri::Result<()> {
                 if let MenuItemKind::Predefined(p) = it {
                     if p.text()? == "Close Window" {
                         sub.remove_at(j)?;
-                        // and the separator it leaves at the end of Window
                         if j > 0 && j == items.len() - 1 {
                             if let MenuItemKind::Predefined(sep) = &items[j - 1] {
                                 if sep.text()?.is_empty() { sub.remove_at(j - 1)?; }
@@ -28,7 +26,6 @@ pub(crate) fn menu_without_close(app: &AppHandle) -> tauri::Result<()> {
                     }
                 }
             }
-            // File held Close Window alone: no empty menu left in the bar
             if sub.items()?.is_empty() && sub.text()? == "File" { menu.remove_at(i)?; }
         }
         app.set_menu(menu)?;
@@ -103,8 +100,6 @@ pub(crate) fn set_seen(app: &AppHandle, seen: bool, then: Option<Box<dyn FnOnce(
     { let _ = (app, seen); if let Some(then) = then { then(None) } }
 }
 
-/// The window's ground in the page's colour (the theme's), under a webview that draws none of its own: what shows
-/// before the page has drawn — summoned, back from behind another app, out of the Dock — was WebKit's white.
 #[tauri::command]
 pub(crate) fn set_ground(app: AppHandle, r: u8, g: u8, b: u8) {
     #[cfg(target_os = "macos")]
@@ -125,7 +120,7 @@ pub(crate) fn set_ground(app: AppHandle, r: u8, g: u8, b: u8) {
                 // WebKit's own white, drawn where the page has not drawn yet (the key wry's transparent webview turns off)
                 webview.setValue_forKey(Some(&NSNumber::numberWithBool(false)), ns_string!("drawsBackground"));
                 if webview.respondsToSelector(objc2::sel!(setUnderPageBackgroundColor:)) {
-                    webview.setUnderPageBackgroundColor(Some(&color)); // macOS 12 and later
+                    webview.setUnderPageBackgroundColor(Some(&color));
                 }
             });
         });
@@ -134,7 +129,6 @@ pub(crate) fn set_ground(app: AppHandle, r: u8, g: u8, b: u8) {
     let _ = (app, r, g, b);
 }
 
-/// An asset of the notes, by its file name: one that names no other folder, and is there.
 fn stored_asset(app: &AppHandle, name: &str) -> Result<std::path::PathBuf, String> {
     safe_name(name)?;
     let p = assets_dir(app)?.join(name);
@@ -144,10 +138,6 @@ fn stored_asset(app: &AppHandle, name: &str) -> Result<std::path::PathBuf, Strin
     Ok(p)
 }
 
-/// First page of a stored PDF as a PNG, for the card in a note. Rendered by Quick Look (the same
-/// picture Finder shows) and cached, so a note full of PDFs costs one render each, once.
-/// ponytail: runs qlmanage on the async runtime; if a huge PDF ever makes that felt, move it to
-/// spawn_blocking.
 #[tauri::command]
 pub(crate) async fn pdf_thumb(app: AppHandle, name: String) -> Result<tauri::ipc::Response, String> {
     let src = stored_asset(&app, &name)?;
@@ -200,10 +190,6 @@ pub(crate) fn run_with_deadline(
     }
 }
 
-/// A stored document as HTML, for the floating viewer: Quick Look's own preview bundle — the one
-/// Finder draws on the space bar — exported once into the cache, which is why a spreadsheet arrives
-/// laid out as a table without this app knowing anything about the format. Returns the path of its
-/// Preview.html. A PDF never comes through here: the webview draws that itself.
 #[tauri::command]
 pub(crate) async fn ql_preview(app: AppHandle, name: String) -> Result<String, String> {
     let src = stored_asset(&app, &name)?;
@@ -234,8 +220,6 @@ pub(crate) async fn ql_preview(app: AppHandle, name: String) -> Result<String, S
     .map_err(|e| e.to_string())?
 }
 
-/// Hand a stored asset to whatever app owns it (Preview, for a PDF). The asset protocol URL the
-/// webview renders means nothing to the rest of the system, so the file itself is opened by path.
 #[tauri::command]
 pub(crate) async fn open_asset(app: AppHandle, name: String) -> Result<(), String> {
     let path = stored_asset(&app, &name)?;
@@ -262,21 +246,12 @@ pub(crate) fn wait_for_pdf(path: &std::path::Path, secs: u64) -> Result<(), Stri
     Err("the print job did not finish".into())
 }
 
-/// Export what the window shows as a PDF file, with margins and no panel in the way.
-///
-/// The note is printed, not screenshotted: a print job whose disposition is "save" writes the pages
-/// straight to `out`, so it needs no printer connected and the text stays text. `@media print` in the
-/// app's stylesheet is what strips the window chrome first. The job is started on the run loop and the
-/// call returns — a print operation that blocks the main thread never finishes, WebKit needs it.
 #[tauri::command(async)]
 pub(crate) fn save_pdf(window: tauri::WebviewWindow, out: String, margin: f64) -> Result<(), String> {
     print_pdf(&window, &out, margin)?;
     wait_for_pdf(std::path::Path::new(&out), 60)
 }
 
-/// The note as a picture: the printed page, rasterised. Same margins, same pagination, same everything
-/// — a long note simply becomes its first page. (`qlmanage` used to draw a standalone HTML page here,
-/// on a square canvas that left half the picture empty.)
 #[tauri::command(async)]
 pub(crate) fn save_image(app: AppHandle, window: tauri::WebviewWindow, out: String, margin: f64, width: u32) -> Result<(), String> {
     let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("export");
@@ -346,21 +321,15 @@ pub(crate) fn print_pdf(window: &tauri::WebviewWindow, out: &str, margin: f64) -
             let _ = tx.send(());
         })
         .map_err(|e| e.to_string())?;
-    // only that the job was handed over — the pages are written as the run loop gets to them
     rx.recv_timeout(std::time::Duration::from_secs(10)).map_err(|e| e.to_string())
     }
 }
 
-/// Whether macOS opens .md files with this app, and the switch that claims them.
-///
-/// LaunchServices keeps one handler per content type; `duti` and friends are just wrappers around
-/// these two calls, so the app makes them itself.
 #[cfg(target_os = "macos")]
 pub(crate) mod default_app {
     use core_foundation::base::{CFRelease, TCFType};
     use core_foundation::string::{CFString, CFStringRef};
 
-    // .md / .markdown, and the plain-text family a .txt falls into
     pub const TYPES: [&str; 2] = ["net.daringfireball.markdown", "public.plain-text"];
     const ALL_ROLES: u32 = 0xFFFF_FFFF;
 
@@ -393,14 +362,12 @@ pub(crate) mod default_app {
     }
 }
 
-/// Whether Launch Services opens this kind of file with Eve.
 #[cfg(target_os = "macos")]
 fn opens_with_eve(app: &AppHandle, t: &str) -> bool {
     let me = app.config().identifier.to_lowercase();
     default_app::handler(t).map(|h| h.to_lowercase() == me).unwrap_or(false)
 }
 
-/// Is this app what macOS opens a .md with?
 #[tauri::command]
 pub(crate) fn is_default_for_markdown(app: AppHandle) -> bool {
     #[cfg(target_os = "macos")]
@@ -414,10 +381,6 @@ pub(crate) fn is_default_for_markdown(app: AppHandle) -> bool {
     }
 }
 
-/// .md handed back to TextEdit, once, when Eve has it without having been asked: Eve used to declare itself the
-/// .md files' Owner (Info.plist), and Launch Services gave it every .md on the Mac — the icon too — with "Open .md
-/// files" off. That setting claims .md and .txt together, so .md alone being Eve's was the rank's doing, not a choice.
-/// Once (a marker in the app's data folder): a Finder "Open With → Change All" made later is the user's to keep.
 pub(crate) fn release_unclaimed_markdown(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     {
@@ -437,7 +400,6 @@ pub(crate) fn release_unclaimed_markdown(app: &AppHandle) {
     let _ = app;
 }
 
-/// Claim (or hand back) .md and .txt. Handing back picks TextEdit, the system's own editor.
 #[tauri::command]
 pub(crate) fn set_default_for_markdown(app: AppHandle, on: bool) -> Result<(), String> {
     #[cfg(target_os = "macos")]

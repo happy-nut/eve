@@ -1,19 +1,11 @@
-/** Markdown line helpers shared by notes, the board and the card page (pure; tested in Node). */
 
-/** Strip markdown syntax from one line for display. */
 export function plain(line: string): string {
   return line
-    // HTML a note keeps (html.ts) is not part of what it says: <span …>Plan</span> reads "Plan" (an escaped \<b\>,
-    // Keep's text, is text and stays)
     .replace(/<!--[\s\S]*?(-->|$)/g, '')
     .replace(/(?<!\\)<\/?[a-z][a-z0-9-]*(\s[^>]*?)?(?<!\\)>/gi, '')
     .replace(/^[#>\-*+\s]+|^\d+\.\s+|^\[[ x]\]\s*/g, '')
-    // a formula reads as what is written in it: "Energy $E=mc^2$" is the title "Energy E=mc^2" (a dollar that is
-    // only a dollar is saved escaped, \$, and stays)
     .replace(/(?<!\\)\$\$(.+?)(?<!\\)\$\$/g, '$1')
     .replace(/(?<![\\$])\$(?![\s$])((?:[^$\\]|\\.)*?[^\s\\])\$(?!\$)/g, '$1')
-    // a link reads as its words, a picture as what it shows (its alt text, else nothing): "Meeting with [Bob](https://…)"
-    // is "Meeting with Bob", the title a [[link]] to it is written with — not a page of its own made from the raw line
     .replace(/(?<!\\)(!?)\[([^\]]*)\]\(([^)\s]*)(?:\s+"[^"]*")?\)/g, (_, img: string, text: string, url: string) => (img ? text : text || url))
     .replace(/==(?=\S)(.+?)==/g, '$1')
     // marks come off; a character written escaped is text and stays, and so does a "_" inside a word (no mark

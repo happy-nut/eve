@@ -3,11 +3,6 @@ import { assetUrl } from './platform';
 import { VIDEO_FILE } from './drop';
 import { nameOf, sizeGrip, widthOf, withWidth } from './resize';
 
-/**
- * A video dropped into a note. Markdown form is an ordinary link — `[clip.mp4](assets/17…-ab.mp4)` —
- * like the PDF card, so the note stays readable anywhere else; here it plays in place. The width the
- * writer dragged rides along in the name (`clip.mp4|540`).
- */
 export const Video = Node.create({
   name: 'video',
   group: 'block',
@@ -38,10 +33,10 @@ export const Video = Node.create({
       dom.contentEditable = 'false';
 
       const video = document.createElement('video');
-      let shown: string = node.attrs.src; // the file the player has
+      let shown: string = node.attrs.src;
       video.src = assetUrl(shown) ?? shown;
       video.controls = true;
-      video.preload = 'metadata'; // the first frame only, until it is played
+      video.preload = 'metadata';
       video.playsInline = true;
       if (node.attrs.width) video.style.width = `${node.attrs.width}px`;
 
@@ -60,15 +55,10 @@ export const Video = Node.create({
         ignoreMutation: () => true,
         update: (updated) => {
           if (updated.type !== node.type) return false;
-          // only a new file is loaded anew: a <video> given its src again starts over, so a resize (only the
-          // width changed) blanked the player and stopped what was playing
           if (updated.attrs.src !== shown) video.src = assetUrl((shown = updated.attrs.src)) ?? shown;
           video.style.width = updated.attrs.width ? `${updated.attrs.width}px` : '';
           return true;
         },
-        // the player's own buttons belong to the player, not to the editor's selection handling.
-        // globalThis.Node, because the Node imported up top is TipTap's — against that one the test
-        // is false for every event there is, and the editor swallows the click meant for Play.
         stopEvent: (e) => e.target === grip || (e.target instanceof globalThis.Node && video.contains(e.target)),
       };
     };
@@ -82,7 +72,6 @@ export const Video = Node.create({
           state.closeBlock(node);
         },
         parse: {
-          // a line that is nothing but a link to a video file is a player
           updateDOM(root: HTMLElement) {
             for (const p of [...root.children]) {
               if (p.tagName !== 'P' || p.children.length !== 1) continue;

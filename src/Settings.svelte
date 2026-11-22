@@ -26,25 +26,21 @@
   let notesPath = $state('');
   let launchAtLogin = $state(false);
   let dockHidden = $state(dock.hidden);
-  /** no hotkey, so Eve must be reachable as any app is: back in the Dock and ⌘Tab (on again, it stays there until
-   *  hidden again here) */
   function setSummon(on: boolean) {
     appearance.set({ summon: on });
     if (!on && dock.hidden) { dockHidden = false; void dock.set(false); }
   }
   let opensMarkdown = $state(false);
   let defaultAppError = $state<string | null>(null);
-  /** the newest phone release, shown beside the QR (a phone on 0.7.2 or later offers it itself once opened) */
   let phoneApp = $state<{ version: string } | null>(null);
   onMount(() => {
-    void updates.check(false, 60_000); // the Version row says what is true now, not what was true hours ago
+    void updates.check(false, 60_000);
     if (!isMobile) findUpdate('0').then((r) => (phoneApp = r), () => {});
     storage.path().then((p) => (notesPath = p));
     autostart.get().then((v) => (launchAtLogin = v));
     defaultApp.get().then((v) => (opensMarkdown = v));
     if (isTauri && !isMobile) mcp.clients().then((c) => (claude = c), (e) => (claudeError = errorText(e)));
   });
-  /** Claude apps found on this Mac (null while looking), and the one-click register / unregister */
   let claude = $state<McpClient[] | null>(isTauri && !isMobile ? null : []);
   let claudeBusy = $state(false);
   let claudeError = $state<string | null>(null);
@@ -53,7 +49,6 @@
   const claudeText = $derived(
     claude === null ? 'Looking for Claude…'
     : !claudeFound.length ? 'Install Claude Desktop or Claude Code first'
-    // every app, found or not: one missing must not pass for connected
     : claude.map((c) => `${c.name}: ${!c.installed ? 'not found' : c.connected ? '✓ connected' : c.stale ? 'points at another copy of Eve' : 'not connected'}`).join(' · '));
   async function connectClaude(on: boolean) {
     claudeBusy = true;
@@ -77,14 +72,10 @@
     { scope: 'app', label: 'App' },
     { scope: 'editor', label: 'Editor' },
   ];
-  /** the device code a click away from the clipboard, with a moment of "Copied" to say it worked */
-  /** sign-in elsewhere: a GitHub Enterprise server, an organization as the notes' owner, a token instead of the browser */
   let elsewhere = $state(false);
-  let signingUp = $state(false); // the GitHub sign-up page was opened from here
+  let signingUp = $state(false);
   let signIn = $state({ host: sync.settings.host, owner: '', token: '', clientId: '' });
-  /** the server as typed, if it reads as one ('' = github.com, or not yet a host) */
   const signHost = $derived.by(() => { try { return normHost(signIn.host); } catch { return ''; } });
-  /** a token page on that server: a classic token with the repo scope, named for Eve */
   const tokenPage = $derived(`${webBase(signHost)}/settings/tokens/new?scopes=repo&description=Eve%20notes`);
   let copied = $state(false);
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -95,7 +86,6 @@
     copiedTimer = setTimeout(() => (copied = false), 1400);
   }
 
-  // what is changed most comes first; a phone has no shortcuts to set
   const tabs = ([['general', 'General'], ['appearance', 'Appearance'], ['sync', 'Sync'], ['shortcuts', 'Shortcuts']] as const).filter(([id]) => !isMobile || id !== 'shortcuts');
 
   const syncText = $derived(
@@ -108,31 +98,25 @@
     if (recording) {
       e.preventDefault(); e.stopPropagation();
       if (e.key === 'Escape') { recording = null; conflict = null; return; }
-      // ⌫ puts back its own key, the one Eve came with: Hide window could not be set back to Esc (Esc ends recording),
-      // and only Reset all undid one changed shortcut
       if (e.key === 'Backspace' && !e.metaKey && !e.ctrlKey && !e.altKey) { shortcuts.reset(recording); recording = null; conflict = null; return; }
       const keys = eventToKeys(e);
-      if (!keys) return; // modifier only, keep waiting
-      // a key with no ⌘ / ⌃ / ⌥ is one the note types (a letter, ⇧ and a letter, Space, ↩): bound, it could not be typed
+      if (!keys) return;
       if (!/(^|-)(Mod|Ctrl|Alt)-/.test(keys) && !/(^|-)F\d{1,2}$/.test(keys)) { conflict = { id: recording, keys, with: '', bare: true }; return; }
       const clash = shortcuts.set(recording, keys);
-      if (clash) { conflict = { id: recording, keys, with: clash.label }; return; } // keep recording
+      if (clash) { conflict = { id: recording, keys, with: clash.label }; return; }
       conflict = null;
       recording = null;
       return;
     }
     if (e.key === 'Escape') { e.stopPropagation(); onClose(); return true; }
-    if (e.key === 'Tab' && !ui.menu) ui.layers.trapTab(e); // round Settings' own controls, never out behind it
+    if (e.key === 'Tab' && !ui.menu) ui.layers.trapTab(e);
   }
   const takeFocus = (el: HTMLElement) => { if (!isMobile) el.focus({ preventScroll: true }); };
-  /** Esc with the keyboard still behind Settings (the list's row, the note) closes Settings first: left to them,
-   *  the list's own Esc took the keyboard to the note. Inside Settings, its popups keep their own Esc. */
   function escBehind(e: KeyboardEvent) {
     if (e.key !== 'Escape' || recording || ui.menu) return;
     if ((e.target as HTMLElement | null)?.closest?.('.panel')) return;
     e.stopPropagation(); onClose(); return true;
   }
-  // (while Settings is the one on top: a dialog over it has the keys, and a menu over it its own Esc)
   $effect(() => {
     const off = [
       claimKeys('global', { '*': onKey }, { whileTop: 'settings' }),
@@ -140,15 +124,11 @@
     ];
     return () => off.forEach((f) => f());
   });
-  // a shortcut being recorded is taken first, every key of it (an IME's too), before the note or anything else:
-  // the app's own keys ran what the keys were already bound to (⌘N made a note, ⌘⇧⌫ asked to delete the open one,
-  // ⌘, closed Settings) while they were being recorded
   $effect(() => {
     if (!recording) return;
     return claimKeys('global', { '*': (e) => { onKey(e); e.stopPropagation(); return true; } }, { capture: true, whileTop: 'settings', priority: PRIORITY.record, composing: true });
   });
 
-  // several settings at once from one small link, right under the sample: an Undo puts them all back
   function resetLook() {
     const was = appearance.reset();
     ui.toast('Appearance reset to defaults', { label: 'Undo', run: () => appearance.set(was) });
@@ -156,9 +136,7 @@
 </script>
 
 
-<!-- preventDefault: the press would otherwise take the keyboard away again after closing gave it back -->
 <div class="backdrop" transition:fade|global={scrimFade} onmousedown={(e) => { e.preventDefault(); onClose(); }} role="presentation"></div>
-<!-- the keyboard comes into Settings and stays there: typing went on into the note behind it -->
 <div class="panel" use:takeFocus transition:scale|global={panelIn} role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1">
   <header>
     <div class="seg" role="tablist">
@@ -228,7 +206,6 @@
           <input type="checkbox" class="switch" checked={appearance.s.dailyNotes}
             onchange={(e) => appearance.set({ dailyNotes: e.currentTarget.checked })} />
         </label>
-        <!-- what only applies while daily notes are on hangs under them, indented, inside the same group -->
         {#if appearance.s.dailyNotes}
           {#if isMobile}
             <label class="row child">
@@ -348,7 +325,6 @@
           <Select label="Code background" value={appearance.s.codeShade} options={CODE_SHADES} onchange={(v) => appearance.set({ codeShade: v as CodeShade })} />
         </div>
       </div>
-      <!-- the colours as they are: a few lines of code, coloured as a code block colours them -->
       <div class="tiptap code-sample"><pre><code><span class="hljs-comment">// greet everyone on the list</span>
 <span class="hljs-keyword">function</span> <span class="hljs-title function_">greet</span>(<span class="hljs-params">names</span>) {'{'}
   <span class="hljs-keyword">const</span> <span class="hljs-variable">count</span> = names.<span class="hljs-property">length</span> + <span class="hljs-number">1</span>;
@@ -431,7 +407,6 @@
             <button class="btn primary" onclick={() => sync.login(elsewhere ? signIn : {})} disabled={!isTauri}>{elsewhere && signIn.token.trim() ? 'Sign in with token' : 'Sign in with GitHub'}</button>
           </div>
           {#if !elsewhere && isTauri}
-            <!-- someone with no GitHub yet: the account first, with no sign-in code ticking meanwhile -->
             <div class="row">
               <span class="label">{signingUp ? 'Made your account?' : 'New to GitHub?'}
                 <span class="sub">{signingUp
@@ -441,7 +416,6 @@
             </div>
           {/if}
           {#if elsewhere}
-            <!-- GitHub Enterprise (NAME.ghe.com, or a company's own server), an organization, or a token -->
             <label class="row">
               <span class="label">Server <span class="sub">blank for github.com</span></span>
               <input bind:value={signIn.host} placeholder="github.acme.com · acme.ghe.com" spellcheck="false" autocapitalize="off" />
@@ -530,9 +504,7 @@
 <style>
   .pens { display: inline-flex; align-items: center; gap: 6px; flex: none; }
   .pens input[type='color'] { width: 26px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 7px; background: none; cursor: pointer; }
-  /* a phone: pens and their Reset a finger's size */
   :global(html.mobile) .pens { gap: 10px; }
-  /* a phone: the pens on a line of their own under what they are (beside them, the words were one to a line) */
   :global(html.mobile) .row:has(> .pens) { flex-wrap: wrap; row-gap: 10px; }
   :global(html.mobile) .row:has(> .pens) > .label { flex-basis: 100%; }
   :global(html.mobile) .pens input[type='color'] { width: 40px; height: 40px; }
@@ -540,11 +512,9 @@
   .pens input[type='color']::-webkit-color-swatch-wrapper { padding: 2px; }
   .pens input[type='color']::-webkit-color-swatch { border: 0; border-radius: 5px; }
   .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-panel-scrim); }
-  /* a phone: settings is a page, and the strip above the status bar is part of it */
   :global(html.mobile) .backdrop { background: var(--bg); }
   .panel:focus { outline: none; }
   .panel {
-    /* held by its top, not centred: each tab is its own height, and centred the tabs moved under the pointer */
     position: fixed; z-index: var(--z-panel); top: max(40px, 9vh); left: 50%; transform: translateX(-50%);
     width: min(560px, 92vw); max-height: 82vh; display: flex; flex-direction: column; overflow: hidden;
     background: var(--bg-pop); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow);
@@ -560,10 +530,8 @@
 
   .body { padding: 0 14px 16px; overflow-y: auto; font-size: 13px; }
   .lead { color: var(--fg-dim); font-size: 12.5px; margin: 6px 4px 2px; }
-  /* group captions as macOS writes them: sentence case, a touch heavier than the rows, no shouting caps */
   h3 { font-size: 12px; font-weight: 600; color: var(--fg-dim); margin: 18px 6px 6px; }
 
-  /* grouped rows, macOS-settings style: hairlines between rows, label left, control right */
   .card { background: var(--bg-input); border-radius: 10px; padding: 0 12px; }
   .row { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 42px; padding: 7px 0; margin: 0; color: inherit; }
   .row + .row, .row + .alert, .alert + .row { border-top: 1px solid var(--line); }
@@ -576,7 +544,6 @@
   .foot { margin: 10px 8px 0; }
   .link { border: 0; background: none; color: var(--accent-text); font: inherit; font-size: 12.5px; padding: 0; }
 
-  /* key chips */
   .chip {
     font: inherit; font-size: 12px; padding: 4px 6px; border-radius: 7px; min-width: 64px;
     border: 0; background: var(--bg-pop); color: var(--fg-dim); box-shadow: 0 0 0 0.5px var(--line);
@@ -588,13 +555,12 @@
   @keyframes shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
   @keyframes blink { 50% { box-shadow: 0 0 0 2px transparent; } }
 
-  /* controls */
   .btn {
     font: inherit; font-size: 12.5px; font-weight: 500; padding: 5px 12px; border-radius: 7px; border: 0; white-space: nowrap;
     background: var(--bg-pop); color: var(--fg); box-shadow: 0 0 0 0.5px var(--line), 0 1px 2px rgba(0, 0, 0, 0.06);
     transition: filter 0.12s, transform 0.12s;
   }
-  .btn:hover { background: color-mix(in srgb, var(--bg-pop), var(--fg) 5%); } /* darker in light, lighter in dark */
+  .btn:hover { background: color-mix(in srgb, var(--bg-pop), var(--fg) 5%); }
   .btn:active { transform: scale(0.97); }
   .btn.primary { background: var(--accent); color: var(--on-accent); box-shadow: var(--glow); }
   .btn.primary:hover { filter: brightness(1.08); }
@@ -613,7 +579,6 @@
   }
   input:not([type]):focus, input[type='password']:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   .link.small { font-size: inherit; }
-  /* a thumb's target on a phone, not a 16px line of text */
   :global(html.mobile) .link.reset { padding: 12px 8px; margin: -6px -8px; }
   .switch {
     appearance: none; width: 34px; height: 20px; border-radius: 10px; margin: 0; position: relative;
@@ -627,7 +592,6 @@
   .switch:checked::after { transform: translateX(14px); }
   .switch:disabled { opacity: 0.4; }
 
-  /* sync status dot, same language as the sidebar footer */
   .status::before {
     content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin: 0 7px 1px 0;
     background: var(--fg-dim); transition: background 0.3s;
@@ -663,8 +627,6 @@
   .took { margin: 0; font-size: 14px; color: var(--fg); }
   p.sub.pad { margin: 0; padding: 0 16px 10px; font-size: 12px; }
 
-  /* a setting that only applies while the one above is on: indented in the same group, macOS-style, and
-     the hairline above it starts at the indent, so it reads as part of its parent rather than a peer */
   .row.child { margin-left: 22px; border-top: 1px solid var(--line); }
   .controls { display: flex; align-items: center; gap: 10px; flex: none; }
   .time {

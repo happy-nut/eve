@@ -3,40 +3,29 @@
   import type { Editor as TipTap } from '@tiptap/core';
   import { Selection } from '@tiptap/pm/state';
 
-  /**
-   * Section outline in place of a scrollbar: a tick per heading, dark while that stretch is on screen;
-   * hovering a tick shows its first lines. A note written without headings still gets a usable rail —
-   * any stretch taller than about a screenful is cut into ticks of its own, so the marks always track
-   * the scroll. Only when the page does not fit its scroller. Positioned against the nearest positioned
-   * ancestor, so put it next to the scroller, not inside it.
-   */
   let { scrollEl, editor }: { scrollEl: HTMLElement | null | undefined; editor?: TipTap } = $props();
 
   let marks = $state<{ top: number; text: string; preview: string; on: boolean; el: HTMLElement }[]>([]);
   let overflow = $state(false);
-  let hover = $state<number | null>(null); // the tick under the pointer: stretches at once
-  let peek = $state<number | null>(null); // the one showing its lines: only after a pause
+  let hover = $state<number | null>(null);
+  let peek = $state<number | null>(null);
   let peekTimer: ReturnType<typeof setTimeout> | undefined;
   const PEEK_WAIT = 500;
-  // tick length: all equal at rest; the hovered one stretches and its neighbours follow in a wave
   const tickWidth = (i: number) => (hover === null ? 5 : ([28, 21, 15][Math.abs(i - hover)] ?? 5));
   let raf = 0;
 
-  /** Pointing at a tick stretches it now; the balloon waits — unless one is already open, then it follows. */
   function enter(i: number) {
     hover = i;
     clearTimeout(peekTimer);
     if (peek !== null) { peek = i; return; }
     peekTimer = setTimeout(() => (peek = i), PEEK_WAIT);
   }
-  /** off the rail: everything goes at once (the balloon takes no pointer, so crossing it counts as off) */
   function leave() {
     clearTimeout(peekTimer);
     hover = null;
     peek = null;
   }
 
-  /** what a block reads as: the checkbox's screen-reader label is not part of the line */
   function textOf(el: Element): string {
     const copy = el.cloneNode(true) as HTMLElement;
     for (const hidden of copy.querySelectorAll('label, [aria-hidden="true"]')) hidden.remove();
@@ -53,13 +42,8 @@
       const base = sc.getBoundingClientRect().top - top;
       const end = root.lastElementChild;
       overflow = !!end && end.getBoundingClientRect().bottom - base > sc.clientHeight;
-      // a tick starts at every heading, and again wherever a stretch has run longer than a screenful
-      // …and never more ticks than the rail can hold: a very long note stretches its stride instead
       const span = Math.max(320, sc.clientHeight * 0.8, sc.scrollHeight / 24);
       const blocks = [...root.children] as HTMLElement[];
-      // a tick marks a section, and a section is the note's own top level: the shallowest heading under
-      // the title line. The headings inside one do not each earn a tick — three sub-headings in a row are
-      // one place to scroll to, not three, and turning them into ticks makes a picket fence of the rail.
       const level = Math.min(...blocks.slice(1).filter((el) => /^H[1-6]$/.test(el.tagName)).map((el) => +el.tagName[1]));
       const cuts: { el: HTMLElement; top: number }[] = [];
       let prev = -Infinity;
@@ -70,8 +54,6 @@
         prev = at;
       }
       marks = cuts.map((cut, i) => {
-        // (a tick with nothing to show — the empty line at the very bottom — is dropped below)
-        // the title line, then whatever follows it until the next tick
         let preview = '', e = cut.el.nextElementSibling;
         while (e && e !== cuts[i + 1]?.el && preview.length < 240) { preview += textOf(e) + ' '; e = e.nextElementSibling; }
         return {
@@ -81,14 +63,9 @@
           on: cut.top < bottom && (cuts[i + 1]?.top ?? sc.scrollHeight) > top,
           el: cut.el,
         };
-      }).filter((m) => m.text || m.preview); // the trailing empty line is not a place to scroll to
+      }).filter((m) => m.text || m.preview);
     });
   }
-  /**
-   * To the section, and the caret with it, at the end of its heading: only the page moved, and the next key typed went
-   * where the caret had been and scrolled the note back there. Put there without a scroll of its own: the page's
-   * glide is the one movement.
-   */
   function go(top: number, el: HTMLElement) {
     if (editor && !editor.isDestroyed && el.isConnected) {
       try {
@@ -97,7 +74,7 @@
           editor.view.dispatch(editor.state.tr.setSelection(Selection.near(doc.resolve(inside.end(1)), -1)));
           editor.view.focus();
         }
-      } catch { /* a block drawn by a view of its own may have no place to read: the page still goes there */ }
+      } catch { }
     }
     scrollEl?.scrollTo({ top: Math.max(0, top - 44), behavior: 'smooth' });
   }
@@ -124,8 +101,6 @@
 {#if overflow && marks.length > 1}
   <nav class="outline" class:peeking={hover !== null} aria-label="Sections" onmouseleave={leave}>
     {#each marks as h, i (i)}
-      <!-- tabindex -1: a mouse-only jump strip, Tab from the editor should not land in it; nor a click (the keys went
-           to the tick, not the note) -->
       <button class="tick" tabindex="-1" class:on={h.on} class:hov={hover === i} style="--w: {tickWidth(i)}px" onmouseenter={() => enter(i)}
         onmousedown={(e) => e.preventDefault()} onclick={() => go(h.top, h.el)}>
         <i></i>
@@ -145,12 +120,9 @@
     display: flex; flex-direction: column; gap: 2px; max-height: 72%;
   }
   .tick { position: relative; display: flex; align-items: center; height: 8px; width: 44px; padding: 0; border: 0; background: none; }
-  /* equal faint dashes; sections on screen are dark. Hovering one stretches it (and its neighbours, in a wave). */
   .tick i { display: block; width: var(--w); height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--fg) 12%, transparent); transition: background 0.2s, width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.2s; }
-  /* while a tick is hovered only that one is dark; the on-screen marks fade back */
   .outline:not(.peeking) .tick.on i, .tick.hov i { background: var(--fg); }
   .tick.hov i { height: 3px; }
-  /* takes no pointer: moving onto it counts as leaving the rail, so it closes right away */
   .peek { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); z-index: var(--z-raised); pointer-events: none; }
   .peek-in {
     display: flex; flex-direction: column; gap: 5px; width: min(230px, 34vw); padding: 10px 13px; border-radius: 10px;

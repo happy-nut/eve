@@ -8,17 +8,9 @@
   import { SHELVES, tidyTex, fullSize, type MathPart } from './lib/mathParts';
   import type { MathDone } from './lib/mathEdit.svelte';
 
-  /**
-   * A formula being edited, right where it is in the note: MathLive's box, showing the formula as it will look and
-   * typed into as such (x^2 puts the 2 up, / makes a fraction, ⇥ moves through the empty slots), and under it a row of
-   * the parts a formula is made of, put in by a click, no TeX to know. Its TeX is a click away for whoever knows it.
-   * Every change is written into the note as it is made (onInput); an undo or a sync comes back as `latex`.
-   */
   let { latex, display, at = null, onInput, onDone, onHistory }: {
     latex: string;
     display: boolean;
-    /** where the formula was clicked: the caret goes there (it always went to the end, and a typo in the middle took
-     *  another click) */
     at?: { x: number; y: number } | null;
     onInput: (latex: string) => void;
     onDone: (how: MathDone) => void;
@@ -30,24 +22,18 @@
   let shelf = $state(SHELVES[0].id);
   let tex = $state(false);
   let texValue = $state(untrack(() => latex));
-  let faces = $state<Record<string, string>>({}); // each part's button, drawn
+  let faces = $state<Record<string, string>>({});
   let finished = false;
-  /** an inline formula's row, where it floats: fixed to the window, under the formula and on the screen (inside a table
-   *  its row was cut off by the table's own scroll box, and could not be used) */
   let popAt = $state<{ left: number; top?: number; bottom?: number } | null>(null);
 
-  /** the arrow that last reached the formula's edge (MathLive's move-out direction), and the key that sends it */
   let edge = '', lastKey = '';
   const EDGE_KEY: Record<string, string> = { forward: 'ArrowRight', backward: 'ArrowLeft', upward: 'ArrowUp', downward: 'ArrowDown' };
   let bumped = $state(false), bumpTimer: ReturnType<typeof setTimeout> | undefined;
   function bump() { bumped = false; requestAnimationFrame(() => { bumped = true; clearTimeout(bumpTimer); bumpTimer = setTimeout(() => (bumped = false), 400); }); }
   const done = (how: MathDone) => { if (finished) return; finished = true; onDone(how); off(); };
-  // a layer while it is edited (a phone's back, Esc, a note brought up from outside finish it as Esc does); off once
-  // the caret is back in the note, so the keyboard is not put back over where onDone put it
   const off = ui.editingMath(() => done('after'));
   const clean = tidyTex;
 
-  // what the note changed (an undo, a sync): shown, unless it is what was just typed
   $effect(() => {
     const l = latex;
     untrack(() => {
@@ -59,7 +45,7 @@
   onMount(() => {
     let gone = false;
     loadMath().then((m) => {
-      if (gone || !slot.isConnected) return; // the formula left the page while MathLive loaded
+      if (gone || !slot.isConnected) return;
       const f = new m.MathfieldElement() as unknown as NonNullable<typeof mf>;
       const el = f as unknown as InstanceType<typeof m.MathfieldElement>;
       el.defaultMode = display ? 'math' : 'inline-math';
@@ -74,14 +60,11 @@
         el.popoverPolicy = 'off';
         el.menuItems = [];
         el.placeholder = '\\text{Formula}';
-        // / makes a fraction that stays the size of the text inside another (\frac shrank each level); * is × as on
-        // a calculator (it was ·, and × took a click on its button), ** the dot
         el.keybindings = [
           ...el.keybindings.filter((k) => k.key !== '/' && k.key !== '[NumpadDivide]'),
           ...['/', '[NumpadDivide]'].map((key) => ({ key, ifMode: 'math' as const, command: ['insert', '\\dfrac{#@}{#?}'] as ['insert', string] })),
         ];
         el.inlineShortcuts = { ...el.inlineShortcuts, '*': '\\times', '**': '\\cdot' };
-        // drawn as the note draws it: a \frac written before is edited at full size, and kept as \dfrac once edited
         f.value = fullSize(latex);
       } catch { return; }
       mf = f;
@@ -91,12 +74,7 @@
       f.addEventListener('move-out', (e: Event) => {
         e.preventDefault();
         const dir = (e as CustomEvent<{ direction: string }>).detail.direction;
-        // an arrow at the edge leaves only when pressed there again: one → too many, in the middle of writing, used to
-        // drop the formula. The first one flashes the box, to say the next goes out
-        // (an arrow's only: ⇥ past the last slot still goes straight out)
         if (lastKey === EDGE_KEY[dir] && edge !== dir) { edge = dir; bump(); return; }
-        // after the key has been dealt with: done at once, the note took the same ↓ and moved the caret a line further,
-        // and MathLive, its box gone under it, threw
         setTimeout(() => done(dir === 'backward' || dir === 'upward' ? 'before' : 'after'));
       });
       // ⌫ on an empty formula from MathLive's own keyboard (a phone's) removes it, as the key does
@@ -108,8 +86,8 @@
       });
       f.addEventListener('keydown', (e: KeyboardEvent) => {
         lastKey = e.key;
-        if (edge && e.key !== EDGE_KEY[edge]) edge = ''; // anything else between: the edge is to be reached again
-        if (f.mode === 'latex') return; // typing a \command: Esc and Enter are MathLive's
+        if (edge && e.key !== EDGE_KEY[edge]) edge = '';
+        if (f.mode === 'latex') return;
         if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey)) {
           e.preventDefault(); e.stopPropagation(); done('after');
         } else if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -127,32 +105,27 @@
       requestAnimationFrame(() => {
         if (gone) return;
         f.focus();
-        if (at) { try { const o = el.getOffsetFromPoint(at.x, at.y); if (o >= 0) el.position = o; } catch { /* the end, as before */ } }
+        if (at) { try { const o = el.getOffsetFromPoint(at.x, at.y); if (o >= 0) el.position = o; } catch { } }
         place();
-        // a phone: MathLive's keyboard comes up over the lower part of the screen; the formula and its row above it
         if (isMobile) setTimeout(clearKeyboard, 350);
       });
       const out: Record<string, string> = {};
       for (const s of SHELVES) for (const p of s.parts) out[p.tex] = mathMarkup(m, p.show ?? p.tex, false);
       faces = out;
     }, () => {});
-    // a click anywhere else in the app is done with it (not one on its own row or box)
     const away = (e: MouseEvent) => {
       const t = e.target as Node | null;
       if (t && !root.contains(t) && !(t instanceof Element && t.closest('.ML__keyboard'))) done('away');
     };
     document.addEventListener('mousedown', away, true);
-    // ⌘Z with the keyboard elsewhere than the box (the TeX line, a part's button): the note's own undo
     const keys = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' || !root.contains(e.target as Node) || e.target === mf) return;
       if ((e.target as Element).matches?.('input, textarea')) return;
       e.preventDefault(); onHistory(e.shiftKey);
     };
-    // (ahead of MathLive's and the note's: inside the formula's row, ⌘Z is the note's undo)
     const unclaim = claimKeys(root, { '*': keys }, { capture: true });
     window.addEventListener('scroll', place, true);
     window.addEventListener('resize', place);
-    // MathLive's keyboard coming up (or going) changes the room the row has under the formula
     const vk = (window as any).mathVirtualKeyboard as EventTarget | undefined;
     vk?.addEventListener?.('geometrychange', clearKeyboard);
     return () => {
@@ -168,7 +141,6 @@
     };
   });
 
-  /** the inline row under its formula, on the screen */
   function place() {
     if (display || !root || !tools) return;
     const r = root.getBoundingClientRect(), ins = { ...screenInsets() };
@@ -176,27 +148,16 @@
     const kb = (window as any).mathVirtualKeyboard?.boundingRect as DOMRect | undefined;
     // (by its height: it docks at the window's foot, and its top is still sliding up while it comes)
     if (kb?.height) ins.bottom = Math.max(ins.bottom, kb.height);
-    // its edge 8px left of the formula's, the way the box's own padding reads; 12px off the window's sides. Under
-    // the formula, or over it when there is no room under it (at the window's foot it was cut off after its tabs) —
-    // held by its bottom then, so another shelf's taller row grows away from the formula, not over it
     const f = floatAt({ left: r.left - 8, right: r.right, top: r.top, bottom: r.bottom }, { w: tools.offsetWidth || 440, h: tools.offsetHeight || 90 },
       { gap: 8, avoid: { ...ins, left: Math.max(ins.left, 12), right: Math.max(ins.right, 12) } });
     popAt = f.side === 'above' ? { left: f.left, bottom: viewSize().h - r.top + 8 } : { left: f.left, top: f.top };
   }
-  /** what MathLive's keyboard covers brought up above it */
   function clearKeyboard() {
-    // the row placed again with the keyboard's top as the room's foot (over the formula when it would be under the
-    // keyboard); then the formula and its row, whichever side of it the row is on
     place();
     const kb = (window as any).mathVirtualKeyboard?.boundingRect as DOMRect | undefined;
     if (!kb || !kb.height || !root) return;
-    // (where place() just put it: the page is not drawn again yet; the keyboard where it docks, not where it is
-    // sliding up from)
     const bottom = Math.max(root.getBoundingClientRect().bottom, !display && tools && popAt?.top !== undefined ? popAt.top + tools.offsetHeight : 0);
-    // lifted no further than keeps its own top (the formula) under the note's bar: on a phone on its side the box is
-    // taller than the room left, and lifted by its foot the formula went up under the bar
     const over = Math.min(bottom - (viewSize().h - kb.height - 12), root.getBoundingClientRect().top - (screenInsets().top + 60));
-    // the note's own scroll, or a card's or a day's page's (it found none there, and the box stayed under the keyboard)
     if (over > 0) (root.closest('.scroll, .card-scroll') as HTMLElement | null)?.scrollBy({ top: over, behavior: 'smooth' });
   }
 
@@ -216,8 +177,7 @@
     if (mf) mf.value = fullSize(v);
     onInput(v);
   }
-  const keep = (e: Event) => e.preventDefault(); // a press on the row leaves the keyboard in the box
-  /** out of the TeX line, the keyboard back in the box (it went nowhere: keys typed were lost, Esc did nothing) */
+  const keep = (e: Event) => e.preventDefault();
   function backToBox() {
     tex = false;
     requestAnimationFrame(() => mf?.focus());
@@ -258,23 +218,19 @@
   .slot { display: inline-block; min-width: 2em; }
   .display .slot { display: block; }
   .slot.hidden { visibility: hidden; height: 0; overflow: hidden; }
-  /* the box draws the formula as the note does (the same size, a display formula centred), on a soft wash */
   .slot :global(math-field) {
     display: inline-block; min-width: 2em; padding: 0 4px; margin: 0 -4px; border-radius: 6px; font-size: 1em;
     background: var(--bg-input); outline: none; border: 0; color: var(--fg);
     --caret-color: var(--accent); --selection-background-color: var(--accent-soft); --contains-highlight-background-color: transparent;
     --placeholder-color: var(--fg-dim); --smart-fence-color: var(--fg-dim);
   }
-  /* an arrow reached the edge: the next one goes out */
   .bumped .slot :global(math-field) { animation: edge-bump 0.4s ease-out; }
   @keyframes edge-bump { 0% { box-shadow: 0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent); } 100% { box-shadow: 0 0 0 2px transparent; } }
   .display .slot :global(math-field) { display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 10px 12px; font-size: 1.15em; border-radius: 12px; }
   .display .slot :global(math-field::part(content)) { justify-content: center; }
-  /* in a line, no taller than the formula drawn there: the line does not jump as it opens */
   .math-edit:not(.display) .slot :global(math-field::part(container)) { padding: 0; }
   .slot :global(math-field::part(menu-toggle)) { display: none; }
   :global(html:not(.mobile)) .slot :global(math-field::part(virtual-keyboard-toggle)) { display: none; }
-  /* in a line its keyboard comes up by itself: the toggle only made the box taller than its line */
   .math-edit:not(.display) .slot :global(math-field::part(virtual-keyboard-toggle)) { display: none; }
 
   .tools { display: block; margin-top: 8px; user-select: none; -webkit-user-select: none; font-size: 13px; line-height: 1.2; }
@@ -305,9 +261,7 @@
     display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 8px 10px; border: 0; border-radius: 8px; resize: vertical;
     background: var(--bg-input); color: var(--fg); font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; outline: none;
   }
-  /* a phone: MathLive's own keyboard is up under it, so the row takes one line each, swiped sideways */
   :global(html.mobile) .parts { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   :global(html.mobile) .part { flex: none; min-width: 44px; min-height: 44px; }
-  /* the shelf's tabs, TeX and Done too (25px tall, the symbols under them 44) */
   :global(html.mobile) .tabs button, :global(html.mobile) .texb, :global(html.mobile) .done { min-height: 40px; min-width: 40px; }
 </style>

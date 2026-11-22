@@ -12,7 +12,6 @@ mod net;
 mod update;
 mod window;
 
-/// Files macOS asked us to open before the frontend was listening.
 #[derive(Default)]
 struct Pending(Mutex<Vec<String>>);
 
@@ -21,7 +20,6 @@ fn take_pending_files(pending: tauri::State<Pending>) -> Vec<String> {
     std::mem::take(&mut *pending.0.lock().unwrap())
 }
 
-/// The last eve:// link macOS handed over before the frontend was listening (Eve started by it).
 #[derive(Default)]
 struct PendingLink(Mutex<Option<String>>);
 
@@ -33,7 +31,6 @@ fn take_pending_link(pending: tauri::State<PendingLink>) -> Option<String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
-    // a phone has no global hotkeys and no login items
     #[cfg(desktop)]
     let builder = builder
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -99,7 +96,6 @@ pub fn run() {
             mem::mem_mark
         ])
         .on_window_event(|window, event| {
-            // Closing the window keeps the app alive so the global hotkey still works.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window::hide_app(window.app_handle().clone());
@@ -108,8 +104,6 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building eve")
         .run(|app, event| {
-            // Finder "Open With", double-click on a .md, `open -a Eve file.md`; and eve://open?id=… from
-            // `eve open` or the MCP server's open_note (only ever shown, never acted on beyond that)
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = event {
                 let paths: Vec<String> = urls
@@ -122,8 +116,6 @@ pub fn run() {
                     app.state::<Pending>().0.lock().unwrap().extend(paths.clone());
                     let _ = app.emit("open-files", paths);
                 }
-                // eve://inbox: the MCP server left a change in the inbox. Taken without coming to the front (a
-                // started Eve takes the inbox once its notes are in, so nothing is kept for it here)
                 let inbox = urls.iter().any(|u| u.scheme() == "eve" && u.host_str() == Some("inbox"));
                 if inbox {
                     let _ = app.emit("inbox", ());
@@ -132,7 +124,6 @@ pub fn run() {
                     *app.state::<PendingLink>().0.lock().unwrap() = Some(link.to_string());
                     let _ = app.emit("open-link", link.to_string());
                 }
-                // brought up as the hotkey brings it: unseen until the page has drawn
                 if !(inbox && urls.len() == 1) {
                     let _ = window::summon_window(app.clone());
                 }
@@ -142,8 +133,6 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    /// The deadline is the whole point of the helper: a child that never exits has to be killed,
-    /// not waited on. `yes` writes forever and never finishes on its own.
     #[test]
     fn run_with_deadline_kills_a_hung_child() {
         let start = std::time::Instant::now();
@@ -156,8 +145,6 @@ mod tests {
         assert!(start.elapsed() < std::time::Duration::from_secs(5));
     }
 
-    /// The phone-setup server hands the sealed body to one right request, 404s anything else, and is
-    /// gone after that one hand-over.
     #[test]
     fn serve_once_answers_the_right_path_once() {
         use std::io::{Read, Write};
@@ -177,7 +164,6 @@ mod tests {
         let ok = get(path).unwrap();
         assert!(ok.starts_with("HTTP/1.1 200") && ok.ends_with("SEALED"), "{ok}");
         assert!(server.join().unwrap());
-        // one phone per QR: nothing listens any more
         assert!(get(path).is_err());
     }
 

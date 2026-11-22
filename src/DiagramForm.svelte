@@ -14,15 +14,9 @@
     depthAt, DIVIDERS, OPENERS, SPLITS, dropStep, openerOf, SPLIT_OF, wellFormed, arrowOf, seqArrows, setArrow, BARS, pieValue, dropBranch, deeper, indent, movePeriod, MIND_SHAPES, ROOT_SHAPES, plausible, endOf, startOf, startOptions, setStart, andAfterOptions, addAfter, setTags, tagOptions, rename, NAME_ID, TABLE_ID, drop, options, arrowOptions, stateDepth, STATE_KINDS, insideOptions, renameState, dropState, LEFT, RIGHT,
   } from './lib/diagramOps';
 
-  /**
-   * The parts of a sequence, pie, mind map, timeline, Gantt, class, state or table diagram, as rows to fill in, under its
-   * drawing in the note (DiagramBlock.svelte). A flowchart has none: it is drawn on its picture (FlowEditor.svelte).
-   * What a pasted diagram says that the rows cannot show is kept as a line of code, where it was, to edit as written.
-   */
   let { d }: { d: Diagram } = $props();
   let box: HTMLDivElement;
 
-  /** a row just added: its first text box takes the keyboard */
   async function focusLast(sel: string) {
     await tick();
     const all = box.querySelectorAll<HTMLInputElement>(sel);
@@ -34,8 +28,6 @@
     box.querySelectorAll<HTMLInputElement>(sel)[i]?.focus();
   }
 
-  /** a row gone with its ×: the keyboard goes to the × that took its place (or the last one left, or the rows' first
-   *  button). It fell to the page with the row, and the next ⌘A and letter were the note's — the whole note went */
   async function removed(x: HTMLElement, run: () => unknown) {
     const at = [...box.querySelectorAll('button.x')].indexOf(x);
     await run();
@@ -45,13 +37,10 @@
     (xs[Math.min(at, xs.length - 1)] ?? box.querySelector<HTMLElement>('button'))?.focus();
   }
 
-  // ---- sequence ----
   function addPerson(s: Sequence) {
     s.people.push({ id: freshId('p', s.people), name: `Person ${s.people.length + 1}`, actor: false });
     void focusLast('.s-person input');
   }
-  /** a participant gone, and the messages to and from it and the notes on it: asked first when there are any (they
-   *  went without a word) */
   async function dropPerson(s: Sequence, i: number) {
     const id = s.people[i].id;
     const theirs = (st: Sequence['messages'][number]) => (isMessage(st) ? st.from === id || st.to === id : 'note' in st && st.who.includes(id));
@@ -66,7 +55,6 @@
     s.messages.push({ note: 'right of', who: [who], text: '' });
     void focusLast('.s-step input.grow');
   }
-  /** a loop around a message of its own, to be changed into whatever group it is */
   function addGroup(s: Sequence) {
     const [a, b] = [s.people[0]?.id, s.people[1]?.id ?? s.people[0]?.id];
     if (!a || !b) return;
@@ -77,10 +65,9 @@
     const last = s.messages.filter(isMessage).pop();
     const [a, b] = last ? [last.to, last.from] : [s.people[0]?.id, s.people[1]?.id ?? s.people[0]?.id];
     if (!a || !b) return;
-    s.messages.push({ from: a, to: b, text: '', reply: !!last && !last.reply }); // the answer to the one above
+    s.messages.push({ from: a, to: b, text: '', reply: !!last && !last.reply });
     void focusLast('.s-step input.grow');
   }
-  /** a row put in a group, just above its end (added at the bottom, it was outside every group, and there was no way in) */
   async function addInside(s: Sequence, end: number, step: 'message' | 'group' | BlockKind) {
     const [a, b] = [s.people[0]?.id, s.people[1]?.id ?? s.people[0]?.id];
     if (!a || !b) return;
@@ -89,8 +76,6 @@
     await tick();
     box.querySelectorAll('.s-step')[end]?.querySelector<HTMLElement>('input.grow')?.focus();
   }
-  /** a row one up or down, past the row beside it: into a group past its end, out of it past its start. A group's own
-   *  start or end moved takes a row in or leaves it out. Not where the groups would no longer close */
   async function moveStep(s: Sequence, i: number, by: -1 | 1, from?: HTMLElement) {
     const j = i + by;
     if (j < 0 || j >= s.messages.length) return;
@@ -99,23 +84,19 @@
     if (wellFormed(s.messages) && !wellFormed(next)) return;
     s.messages = next;
     await tick();
-    // the keyboard goes with the row
     const row = box.querySelectorAll('.s-step')[j];
     const label = from?.getAttribute('aria-label');
     (row?.querySelector<HTMLElement>(label ? `[aria-label="${label}"]` : 'input.grow') ?? row?.querySelector<HTMLElement>('button'))?.focus();
   }
-  /** ⌥↑ / ⌥↓ (or ⌘⇧↑ / ⌘⇧↓, as Notion moves a block) in a row moves it */
   function stepKey(e: KeyboardEvent, s: Sequence, i: number) {
     if (composing(e) || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
     if (!(e.altKey && !e.metaKey && !e.ctrlKey) && !((e.metaKey || e.ctrlKey) && e.shiftKey)) return;
-    if ((e.target as Element).closest('[aria-expanded="true"]')) return; // an open list's own arrows
+    if ((e.target as Element).closest('[aria-expanded="true"]')) return;
     e.preventDefault();
     void moveStep(s, i, e.key === 'ArrowUp' ? -1 : 1, (e.target as Element).closest('button') ?? undefined);
   }
-  // a participant with no name yet: said so, not its inner id ("p3")
   const peopleOptions = (s: Sequence) => s.people.map((p) => [p.id, p.name.trim() || '(no name)'] as const);
 
-  /** Enter in a row: on to the same field of the next row, or, in the last, a row more (it did nothing but in a mind map) */
   async function rowEnter(e: KeyboardEvent, sel: string, add: () => void) {
     if (composing(e) || e.key !== 'Enter' || e.metaKey || e.ctrlKey || e.shiftKey) return;
     e.preventDefault();
@@ -124,11 +105,8 @@
     if (i >= 0 && i < all.length - 1) { all[i + 1].focus(); all[i + 1].select(); }
     else add();
   }
-  // ---- pie ----
   function addSlice(p: Pie) { p.slices.push({ label: `Part ${p.slices.length + 1}`, value: 10 }); void focusLast('.p-slice input.label'); }
 
-  // ---- mind map ----
-  /** a branch next to the one at `at`: after its own branches (right after it, it took them over as its own) */
   function addBranch(m: Mindmap, at = m.items.length - 1) {
     const depth = m.items[at]?.depth ?? 1;
     let end = at + 1;
@@ -143,12 +121,9 @@
     else if (e.key === 'Backspace' && !m.items[i].text && m.items.length > 1) { e.preventDefault(); dropBranch(m, i); void focusAt('.m-item input', Math.max(0, i - 1)); }
   }
 
-  // ---- timeline ----
   function addPeriod(t: Timeline) { t.periods.push({ label: '', events: [''] }); void focusLast('.t-period input.label'); }
-  /** a section: a stretch of periods under one name, from a new period on (they could not be grouped at all) */
   function addSection(t: Timeline) {
     const name = `Section ${t.periods.filter((p) => p.section !== undefined).length + 1}`;
-    // the first: around the periods there are (it came only with a new period, after them all); then from a new one
     if (t.periods.length && t.periods[0].section === undefined) t.periods[0].section = name;
     else t.periods.push({ label: '', events: [''], section: name });
     void focusAt('.t-section input', t.periods[0].section === name ? 0 : t.periods.filter((p) => p.section !== undefined).length - 1);
@@ -172,11 +147,9 @@
     const from = last && last.to !== '[*]' ? last.to : s.states[0]?.id ?? '[*]';
     s.links.push({ from, to: s.states.find((x) => x.id !== from)?.id ?? '[*]', label: '' });
   }
-  /** the chart's start and end, and each state of states' own (`[*] in`): a choice inside one had no line into it */
   const holders = (s: StateDiagram) => s.states.filter((x) => !x.kind && s.states.some((y) => stateParent(s, y) === x.id));
   const starts = (s: StateDiagram) => [['[*]', '● Start'] as [string, string], ...holders(s).map((x) => [`[*] ${x.id}`, `● Start in “${x.name.trim() || x.id}”`] as [string, string]), ...options(s.states)];
   const ends = (s: StateDiagram) => [['[*]', '◉ End'] as [string, string], ...holders(s).map((x) => [`[*] ${x.id}`, `◉ End in “${x.name.trim() || x.id}”`] as [string, string]), ...options(s.states)];
-  /** a line's end as its choice shows it: a start or end inside a state of states with that state's id */
   const endValue = (l: StateLink, at: string) => (at === '[*]' && l.in ? `[*] ${l.in}` : at);
   function setEnd(l: StateLink, side: 'from' | 'to', v: string) {
     const inside = /^\[\*\] (.+)$/.exec(v);
@@ -194,7 +167,6 @@
     const [a, b] = [e.tables[0]?.id, e.tables[1]?.id ?? e.tables[0]?.id];
     if (a && b) e.links.push({ from: a, to: b, left: '||', right: 'o{', dashed: false, label: '' });
   }
-  /** a kept line's box as tall as what it holds */
   const rows = (s: string) => Math.min(12, s.split('\n').length);
   function addTask(g: Gantt, s: Gantt['sections'][number]) {
     s.tasks.push({ name: '', start: endOf(g), days: 2 });
@@ -202,7 +174,6 @@
   }
   function addPhase(g: Gantt) { g.sections.push({ name: `Phase ${g.sections.length + 1}`, tasks: [{ name: '', start: endOf(g), days: 2 }] }); void focusLast('.g-phase input.label'); }
 
-  // narrowed views of the chart for the form (each kind's part of it)
   const seqD = $derived(d.kind === 'sequence' ? d : null);
   const pie = $derived(d.kind === 'pie' ? d : null);
   const pieHues = $derived(pie ? sliceHues(pie.slices.map((s) => s.label)) : []);
@@ -212,7 +183,6 @@
   const cls = $derived(d.kind === 'class' ? d : null);
   const state = $derived(d.kind === 'state' ? d : null);
   const er = $derived(d.kind === 'er' ? d : null);
-  /** what the chart keeps as written that its rows do not show (a class, state, table or Gantt chart's) */
   const extra = $derived(d.kind === 'class' || d.kind === 'state' || d.kind === 'er' || d.kind === 'gantt' ? d : null);
 </script>
 
@@ -223,7 +193,6 @@
 {/snippet}
 
 {#snippet trash(run: () => void, label: string)}
-  <!-- a row and all it holds: not a second × beside its first line's own (they looked the same, and did not do the same) -->
   <button class="x" type="button" aria-label={label} title={label} onclick={(e) => removed(e.currentTarget, run)}>
     <svg viewBox="0 0 16 16"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 9h4.8l.6-9" /></svg>
   </button>
@@ -281,7 +250,6 @@
         <label class="check"><input type="checkbox" bind:checked={seqD.numbered} />Numbered</label>
       </div>
       {#each seqD.messages as st, i (i)}
-        <!-- a group's steps indented under it, as the drawing boxes them -->
         <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <div class="row s-step" class:s-msg={isMessage(st)} role="group" style:padding-left={`${depthAt(seqD, i) * 18}px`} onkeydown={(e) => stepKey(e, seqD, i)}>
           {#if 'raw' in st}
@@ -290,7 +258,6 @@
           {:else if 'block' in st}
             {#if st.block === 'end'}
               <span class="end">end</span>
-              <!-- a row put in the group, above its end -->
               {@render addSmall(() => addInside(seqD, i, 'message'), 'Message')}
               {#if SPLIT_OF[openerOf(seqD, i) ?? 'end']}
                 {@const split = SPLIT_OF[openerOf(seqD, i) ?? 'end']!}
@@ -361,7 +328,6 @@
     <div class="section">
       <div class="head">Branches <span class="tip">{isMobile ? '' : '↩ new · ⇥ deeper · ⇧⇥ back'}</span></div>
       {#each mind.items as b, i (i)}
-        <!-- each first-level branch in its colour in the drawing (the centre takes the first) -->
         <div class="row m-item" style:padding-left={`${(b.depth - 1) * 22}px`}>
           <span class="bullet" style:background={b.depth === 1 ? branchColor(mind.items.slice(0, i + 1).filter((x) => x.depth === 1).length - 1) : 'var(--fg-dim)'}></span>
           <input class="grow" bind:value={b.text} placeholder="Idea" aria-label="Branch" onkeydown={(e) => branchKey(e, mind, i)} />
@@ -486,7 +452,6 @@
     <div class="section">
       <div class="head">States</div>
       {#each state.states as st, i (i)}
-        <!-- a state inside another indented under it, as the drawing boxes it -->
         <div class="row st-state" style:padding-left={`${stateDepth(state, st) * 18}px`}>
           <input class="name" value={st.name} oninput={(e) => renameState(state, st, e.currentTarget.value)} placeholder="State" aria-label="State name" />
           {#if !st.kind && !state.states.some((x) => stateParent(state, x) === st.id)}<input class="grow" bind:value={st.desc} placeholder="Description" aria-label="Description" />{/if}
@@ -559,8 +524,6 @@
   .head { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--fg-dim); }
   .head .check { margin-left: auto; }
   .tip { margin-left: auto; font-weight: 400; opacity: 0.8; }
-  /* a row too full goes on to a second line: its choices cut to a few letters (Composit…, After the one be…) could
-     not be read */
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
   .row.top { align-items: flex-start; }
   .row :global(.select) { flex: none; max-width: 100%; }
@@ -581,11 +544,9 @@
   .phase { font-weight: 600; }
   .g-phase .g-task { padding-left: 14px; }
   .t-period.in-section { padding-left: 14px; }
-  /* a row's buttons kept together at its end: wrapped one by one, a ▼ or a × sat alone on a line of its own, an
-     event's × between two events */
   .tools { display: inline-flex; flex: none; align-items: center; gap: 2px; margin-left: auto; }
-  .events .row, .t-period { flex-wrap: nowrap; } /* a period's buttons by its date, not under its events, over the next section */
-  .row > .x:last-child { margin-left: auto; } /* a row's × wrapped alone: at its end, not under its first field */
+  .events .row, .t-period { flex-wrap: nowrap; }
+  .row > .x:last-child { margin-left: auto; }
   .settings { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
   .g-phase > :global(.add) { margin-left: 14px; }
   .swatch, .bullet { flex: none; width: 10px; height: 10px; border-radius: 50%; }
@@ -599,7 +560,6 @@
   textarea:focus { box-shadow: 0 0 0 2px var(--accent-soft); }
   input.code, textarea.code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; }
   .adds { display: flex; flex-wrap: wrap; gap: 2px; }
-  /* a row's ↑↓ while it is the one being worked on: on every row, they crowded out its words */
   .s-step .mv { display: none; }
   .s-step:focus-within .mv, :global(html.mobile) .s-step .mv { display: inline-flex; }
   @media (hover: hover) { .s-step:hover .mv { display: inline-flex; } }
@@ -613,7 +573,6 @@
   .e-table .e-col { padding-left: 14px; }
   .e-table > :global(.add) { margin-left: 14px; }
   .type { width: 90px; }
-  /* not .keys: a phone hides every .keys, the shortcuts shown beside a menu's items (app.css) */
   .pkfk { width: 70px; }
 
 
@@ -635,20 +594,16 @@
   }
   :global(html.mobile) .s-step .grow, :global(html.mobile) .c-link .grow, :global(html.mobile) .e-link .grow, :global(html.mobile) .st-link .grow { flex: 1 1 70%; }
   :global(html.mobile) .st-state .name { width: 40%; }
-  /* a period on a phone: its date and its buttons on a line, its events the whole width under them (beside them, an
-     event's box was two letters wide) */
   :global(html.mobile) .t-period { flex-wrap: wrap; }
   :global(html.mobile) .t-period .when { flex: 1 1 auto; }
   :global(html.mobile) .t-period .events { flex: 1 1 100%; order: 3; }
 
-  /* a task: its name a line of its own, its start and length under it (four in a row left the name a few letters) */
   :global(html.mobile) .g-task { flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
   :global(html.mobile) .g-task .label { flex: 1 1 100%; }
   :global(html.mobile) .g-task .date { flex: 1 1 auto; width: auto; }
-  /* a finger's size: 26px ×s side by side were easy to miss into the wrong one */
   :global(html.mobile) .x { width: 40px; height: 40px; }
   :global(html.mobile) .add { min-height: 40px; }
   :global(html.mobile) .check input { width: 20px; height: 20px; }
   :global(html.mobile) .row { gap: 4px; }
-  :global(html.mobile) input:not([type='checkbox']) { font-size: 16px; padding: 9px 10px; } /* 16px: a phone does not zoom in */
+  :global(html.mobile) input:not([type='checkbox']) { font-size: 16px; padding: 9px 10px; }
 </style>

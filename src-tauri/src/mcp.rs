@@ -1,9 +1,3 @@
-//! `eve mcp`: core's commands as an MCP server over stdio, so Claude (Code / Desktop) can look through the
-//! notes, show one in the app, and write: make a note, add to one, change a passage of one.
-//!
-//! Started by the MCP client as a child process of the same binary (main.rs hands over before Tauri
-//! starts). The tools are `core::COMMANDS`, as they are for `eve <command>` (cli.rs): this file is only
-//! JSON-RPC.
 use crate::core::{self, notes_dir, Effect, Kind, Param, COMMANDS};
 use serde_json::{json, Value};
 use std::io::{BufRead, Write};
@@ -15,7 +9,6 @@ fn call(dir: &Path, params: &Value) -> Value {
     let name = params.get("name").and_then(Value::as_str).unwrap_or("");
     let empty = json!({});
     let args = params.get("arguments").unwrap_or(&empty);
-    // tools go by their tool names only (the command-line names are for the terminal)
     let result = match COMMANDS.iter().find(|c| c.tool == name) {
         Some(c) => core::run(dir, c.tool, args),
         None => Err(format!("Unknown tool \"{name}\".")),
@@ -26,8 +19,6 @@ fn call(dir: &Path, params: &Value) -> Value {
     }
 }
 
-/// An answer as MCP content: its words, and each picture it names (a `PICTURE` line) sent as the picture itself,
-/// in its place among them, for Claude to see.
 fn content(text: &str) -> Vec<Value> {
     use base64::Engine;
     let mut out = Vec::new();
@@ -51,7 +42,6 @@ fn content(text: &str) -> Vec<Value> {
     out
 }
 
-/// A parameter as JSON Schema.
 fn schema(p: &Param) -> Value {
     let mut s = match p.kind {
         Kind::Text => json!({ "type": "string" }),
@@ -62,7 +52,6 @@ fn schema(p: &Param) -> Value {
     s
 }
 
-/// core's commands, as MCP tools.
 fn tools() -> Value {
     COMMANDS
         .iter()
@@ -110,7 +99,6 @@ pub fn handle(dir: &Path, msg: &Value) -> Option<Value> {
     Some(json!({ "jsonrpc": "2.0", "id": id, "result": result }))
 }
 
-/// Serve MCP on stdin/stdout until the client closes stdin.
 pub fn serve() {
     let dir = notes_dir();
     let stdin = std::io::stdin();
@@ -161,7 +149,6 @@ mod tests {
         let list = handle(&dir, &json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" })).unwrap();
         let tools = list["result"]["tools"].as_array().unwrap();
         assert_eq!(tools.len(), 11);
-        // reading tools say so; open_note changes no note; create and append take nothing away; edit may
         for t in tools {
             let name = t["name"].as_str().unwrap();
             let reads = ["list_notes", "search_notes", "read_note", "read_notes", "diagram_images"].contains(&name);
@@ -188,13 +175,11 @@ mod tests {
         assert_eq!(many["inputSchema"]["properties"]["ids"]["maxItems"], 100);
         let list = tools.as_array().unwrap().iter().find(|t| t["name"] == "list_notes").unwrap();
         assert!(list["inputSchema"].get("required").is_none());
-        // a command-line name is not a tool
         let dir = std::env::temp_dir();
         let out = handle(&dir, &json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "list", "arguments": {} } })).unwrap();
         assert_eq!(out["result"]["isError"], true);
     }
 
-    /// A note's diagrams come back as pictures Claude sees (drawn by Eve: here a thread plays it), each with its code.
     #[test]
     fn diagrams_come_as_pictures() {
         let root = std::env::temp_dir().join(format!("eve-mcp-pictures-{}", std::process::id()));
@@ -243,7 +228,6 @@ mod tests {
         assert!(!rest.contains(core::PICTURE), "no path left for Claude to read instead");
         let asked = eve.join().unwrap();
         assert_eq!((&asked["op"], &asked["id"]), (&json!("picture"), &json!("f")));
-        // refused before Eve is asked: a note with none, a number past the last
         assert_eq!(call(json!({ "title": "Plain" }))["result"]["isError"], true);
         let past = call(json!({ "title": "Flow", "number": 3 }));
         assert_eq!(past["result"]["isError"], true);
@@ -251,7 +235,6 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
     }
 
-    /// A change goes to the app's inbox and the app's answer comes back as the tool's: here a thread plays Eve.
     #[test]
     fn writes_go_through_the_app() {
         let root = std::env::temp_dir().join(format!("eve-mcp-write-{}", std::process::id()));
@@ -288,19 +271,15 @@ mod tests {
         let out = call("edit_note", json!({ "title": "Projects", "old": "nope", "new": "x" }));
         assert_eq!(out["result"]["isError"], true);
         assert_eq!(text(&out), "\"old\" is not in the note.");
-        // a whole note written anew stays the same note, where it is; the title kept on top when it is left out
         assert_eq!(text(&call("rewrite_note", json!({ "title": "Projects", "body": "- one\n- two\n" }))), "Made it.");
-        // what was asked: the note found here by its title, the title written as the note's first line
         let asked = eve.join().unwrap();
         assert_eq!(asked[0]["body"], "# Plan\n\n- [ ] ship\n");
         assert_eq!(asked[0]["page"], "Work");
         assert_eq!(asked[0]["parent"], "p");
         assert_eq!((&asked[1]["op"], &asked[1]["id"], &asked[1]["old"]), (&json!("edit"), &json!("p"), &json!("nope")));
         assert_eq!((&asked[2]["op"], &asked[2]["id"], &asked[2]["body"]), (&json!("rewrite"), &json!("p"), &json!("# Projects\n\n- one\n- two\n")));
-        // refused before Eve is asked: no such note, no title, no passage
         assert_eq!(call("append_note", json!({ "title": "Nowhere", "text": "x" }))["result"]["isError"], true);
         assert_eq!(call("create_note", json!({ "title": " " }))["result"]["isError"], true);
-        // a note of that title is there: changed, not made again somewhere else
         let twin = call("create_note", json!({ "title": "projects", "body": "list, rewritten" }));
         assert_eq!(twin["result"]["isError"], true);
         assert!(text(&twin).contains("rewrite_note") && text(&twin).contains("id p"), "{twin}");

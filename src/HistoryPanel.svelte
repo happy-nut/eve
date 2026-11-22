@@ -10,8 +10,6 @@
   import { editedLabel } from './lib/date';
   import { createEditor } from './lib/editor';
 
-  // a note's versions (Notion's page history): the saves sync made, newest first, each shown as the note was then.
-  // They come from the repo's commits, so they are there only with sync on.
   const id = ui.historyOf!;
   const note = $derived(notes.all.find((n) => n.id === id));
   let versions = $state<{ sha: string; at: number }[] | null>(null);
@@ -23,7 +21,6 @@
     if (!sync.enabled) { versions = []; return; }
     sync.versions(id).then((v) => (versions = v), (e: Error) => (failed = syncError(e.message)));
   });
-  // the one chosen, read when it is chosen (a note saved a hundred times is not read a hundred times)
   $effect(() => {
     const v = versions?.[chosen];
     body = null;
@@ -35,7 +32,6 @@
 
   const when = (at: number) => new Date(at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-  // shown as the note is drawn, by the note's own editor, which only shows: nothing typed or picked there
   let view = $state<HTMLDivElement>();
   let shown: TipTap | undefined;
   const off = { show() {}, move() {}, month() {}, select: () => false, hide() {}, visible: () => false, place() {}, expand: () => false, collapse: () => false, chosen: () => false };
@@ -103,12 +99,11 @@
   .title { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   button { border: 0; background: none; color: var(--fg); font: inherit; border-radius: 6px; }
   .close { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; color: var(--fg-dim); }
-  :global(html.mobile) .close { width: 44px; height: 44px; } /* a finger's size */
+  :global(html.mobile) .close { width: 44px; height: 44px; }
   .close:hover { background: var(--bg-input); color: var(--fg); }
   svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; }
   .note { margin: 0; padding: 18px 16px; color: var(--fg-dim); line-height: 1.45; }
   .body { flex: 1; min-height: 0; display: flex; }
-  /* a phone: the versions in a row over the note */
   :global(html.mobile) .body { flex-direction: column; }
   ul { list-style: none; margin: 0; padding: 6px; width: 210px; flex: none; overflow-y: auto; border-right: 1px solid var(--line); }
   :global(html.mobile) ul { width: auto; display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }

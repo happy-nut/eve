@@ -13,11 +13,6 @@ import { closeHistory } from '@tiptap/pm/history';
 import { blockBeside, inCell } from './blocks';
 import { fenceFor } from './markdown';
 
-/**
- * Syntax highlighting, loaded with the first code block shown: lowlight, highlight.js and the grammars
- * are a sixth of the app's script and most notes have no code. Until they arrive a block draws plain;
- * then every waiting editor repaints once.
- */
 type Hast = { type: string; value?: string; properties?: { className?: string[] }; children?: Hast[] };
 type Lowlight = { highlight(lang: string, code: string): Hast & { data?: { relevance?: number } }; registered(lang: string): boolean };
 let lowlight: Lowlight | null = null;
@@ -35,20 +30,15 @@ function grammars() {
     lowlight = m.lowlight;
     for (const e of waiting) if (!e.isDestroyed) e.view.dispatch(e.state.tr.setMeta(HIGHLIGHT, true));
     waiting.clear();
-  }, () => { loading = null; }); // offline or failed: the next code block tries again
+  }, () => { loading = null; });
 }
 
-/** Each block's highlighting (spans from its start, with their hljs-* classes), kept while the block is unchanged:
- * a key typed in one block highlighted every block in the note again */
 const spans = new WeakMap<PMNode, [from: number, to: number, cls: string][]>();
 
-/** lowlight's tree for one code block */
 function spansOf(node: PMNode) {
   let got = spans.get(node);
   if (got) return got;
   const ll = lowlight!, text = node.textContent, lang: string | null = node.attrs.language;
-  // only in the language the block says: one guessed for plain text (or a language with no grammar here) came out in
-  // some other language's colours, often the wrong one, under a chip that said Plain text
   const tree = lang && ll.registered(lang) ? ll.highlight(lang, text) : null;
   got = [];
   let at = 0;
@@ -58,8 +48,6 @@ function spansOf(node: PMNode) {
         const to = at + (n.value?.length ?? 0);
         if (classes.length) got!.push([at, to, classes.join(' ')]);
         at = to;
-      // a part inside another in its own colour, not both parts' classes: in app.css the outer one's came later and
-      // won (a parameter's type in the parameters' colour, `${id}` in a string the grey of a comment)
       } else walk(n.children, n.properties?.className?.length ? n.properties.className : classes);
     }
   };
@@ -68,7 +56,6 @@ function spansOf(node: PMNode) {
   return got;
 }
 
-/** every code block in the note highlighted, as inline decorations; `round` tells one drawing from the next */
 function highlight(doc: PMNode, round = 0): DecorationSet {
   if (!lowlight) return DecorationSet.empty;
   const out: Decoration[] = [];
@@ -80,10 +67,6 @@ function highlight(doc: PMNode, round = 0): DecorationSet {
   });
   return DecorationSet.create(doc, out);
 }
-/** A word typed through an input method (Korean, Japanese…) is left alone on screen while it is being put together,
- *  and the highlighting it changed was never drawn after: "// 주석" stayed uncoloured, and in WebKit the block's
- *  colours stayed wrong even after the comment was deleted again. Once it is in, the highlighting is drawn again,
- *  told apart from the last drawing (`round`) so that the editor does draw it. */
 let round = 0;
 const highlighter = new Plugin<DecorationSet>({
   key: HIGHLIGHT,
@@ -91,8 +74,6 @@ const highlighter = new Plugin<DecorationSet>({
     init: (_, { doc }) => highlight(doc),
     apply: (tr, set, _old, now) =>
       tr.getMeta(HIGHLIGHT) === 'redraw' ? highlight(now.doc, ++round)
-        // drawn again on every change, not carried over: a block put back with the same code (synced in, moved, an
-        // undo) lost the colours carried with the old one, and stayed plain. Each block's spans are kept (`spans`).
         : tr.getMeta(HIGHLIGHT) || tr.docChanged ? highlight(now.doc, round) : set,
   },
   props: {
@@ -103,8 +84,8 @@ const highlighter = new Plugin<DecorationSet>({
         // only once the editor has read the word in: it does so 20ms after this event (prosemirror-view's
         // endComposition); drawn before that, the screen would be drawn from a note without the word in it
         setTimeout(() => {
-          if (view.isDestroyed || view.composing) return; // the next word's own end draws it
-          (view as any).domObserver?.forceFlush?.(); // anything typed still unread, read first
+          if (view.isDestroyed || view.composing) return;
+          (view as any).domObserver?.forceFlush?.();
           view.dispatch(view.state.tr.setMeta(HIGHLIGHT, 'redraw'));
         }, 60);
         return false;
@@ -113,21 +94,13 @@ const highlighter = new Plugin<DecorationSet>({
   },
 });
 
-/** commands a line of a shell session starts with (after `$ ` or `sudo `) */
 const COMMAND = /^(?:\.{0,2}\/[\w./-]+|git|gh|npm|npx|yarn|pnpm|bun|deno|node|cd|ls|curl|wget|docker|docker-compose|kubectl|helm|brew|apt|apt-get|yum|pip|pip3|python|python3|java|javac|gradle|mvn|make|cargo|rustup|go|export|echo|mkdir|rm|cp|mv|cat|touch|chmod|chown|ln|ssh|scp|grep|tail|head|tar|unzip|source|which|open|aws|gcloud|terraform|psql|mysql|redis-cli|xcodebuild|xcrun|sed|awk|find|kill|ps|env|sh|bash|zsh)$/;
-/** a picture drawn in text: box lines, arrows, shapes */
 const DRAWING = /[←-⇿─-╿■-◿]/;
-/** languages read alike, the one not taken no rival to the one that is */
 const KIN = [['javascript', 'typescript'], ['c', 'cpp'], ['css', 'scss']];
-/**
- * The language of code pasted with none named, where it is plain which: JSON and HTML as they are, a shell session by
- * its commands, else the grammar that alone fits it well (highlight.js's own guess was often wrong: shell read as
- * Ruby, Java as C#, a drawing in text as SCSS). null: none, the block is left Plain text.
- */
 export function guessLanguage(code: string, ll: Lowlight | null): string | null {
   const text = code.trim();
   if (!text || DRAWING.test(text)) return null;
-  if (/^[[{]/.test(text)) { try { JSON.parse(text); return 'json'; } catch { /* not JSON */ } }
+  if (/^[[{]/.test(text)) { try { JSON.parse(text); return 'json'; } catch { } }
   if (/^<[a-z!?]/i.test(text) && /<\/?[a-z][^>]*>$/i.test(text)) return 'xml';
   const lines = text.split('\n'), commands: string[] = [];
   lines.forEach((line, i) => {
@@ -144,9 +117,6 @@ export function guessLanguage(code: string, ll: Lowlight | null): string | null 
   return best[0] === 'c' && text.includes('::') ? 'cpp' : best[0];
 }
 
-/** code pasted into a block with no language (or as a fence with none) is given the one it plainly is, on the chip and
- *  in the note; a note read in is left as it was written. The grammars come with the first code block; code pasted
- *  before they are in is looked at again once they are. */
 let pasting = false;
 const guessing = new Plugin({
   props: {
@@ -184,7 +154,7 @@ const guessing = new Plugin({
       if (n.attrs.language || before.has(n) || !n.textContent.trim()) return false;
       const lang = guessLanguage(n.textContent, lowlight);
       if (lang) tr.setNodeMarkup(pos, undefined, { ...n.attrs, language: lang });
-      else if (!lowlight) unsure.add(n); // looked at again once the grammars are in
+      else if (!lowlight) unsure.add(n);
       return false;
     });
     return tr.docChanged ? tr : null;
@@ -192,7 +162,6 @@ const guessing = new Plugin({
 });
 const unsure = new Set<PMNode>();
 
-/** Languages offered by the chip, in menu order. Anything lowlight knows still highlights. */
 const LANGUAGES: [value: string, label: string][] = [
   ['', 'Plain text'],
   ['bash', 'Bash'],
@@ -234,7 +203,6 @@ const LANGUAGES: [value: string, label: string][] = [
   ['yaml', 'YAML'],
 ];
 
-/** what people type for a language, as the menu names it */
 const ALIASES: Record<string, string> = {
   js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript', py: 'python', sh: 'bash', shell: 'bash', zsh: 'bash',
   html: 'xml', yml: 'yaml', md: 'markdown', 'c++': 'cpp', 'c#': 'csharp', cs: 'csharp', toml: 'ini', kt: 'kotlin', rb: 'ruby',
@@ -242,10 +210,6 @@ const ALIASES: Record<string, string> = {
   docker: 'dockerfile', ps1: 'powershell', pwsh: 'powershell', proto: 'protobuf', hs: 'haskell', ex: 'elixir', exs: 'elixir',
   gradle: 'groovy', make: 'makefile', mk: 'makefile',
 };
-/**
- * The language a name typed in the field means: an alias (js), a name or label (python, C++), else the first whose
- * name or label starts with it (ty → TypeScript), else one whose label has it in it. null: none of the menu's.
- */
 export function matchLanguage(typed: string): [value: string, label: string] | null {
   const q = typed.trim().toLowerCase();
   if (!q) return null;
@@ -256,15 +220,10 @@ export function matchLanguage(typed: string): [value: string, label: string] | n
     ?? LANGUAGES.find(([, l]) => l.toLowerCase().includes(q))
     ?? null;
 }
-/** set by ``` as it makes a block: the block's view opens its language field (it is made in the same update) */
 let askLanguage = false;
 
 const labelOf = (language: string | null) => LANGUAGES.find(([v]) => v === (language ?? ''))?.[1] ?? language ?? 'Plain text';
 
-/**
- * A ```mermaid block is drawn as its diagram; its code shows (above the diagram, which follows it as it is typed)
- * while the caret is in it. The node decoration marks that block "editing".
- */
 const EDITING = new PluginKey('mermaid-editing');
 const editingDiagram = new Plugin({
   key: EDITING,
@@ -279,35 +238,24 @@ const editingDiagram = new Plugin({
       }
       return null;
     },
-    // a click beside a drawn diagram whose code is hidden (the margin by it, where a wide chart's boxes run past its
-    // edge): the diagram is selected. The caret went to the nearest place, inside its code (from the gap just after
-    // the block, the end of its code), and the code took the drawing's place while a box was being clicked on
     handleClick(view, pos) {
       const $p = view.state.doc.resolve(pos);
       let at = -1;
       for (let d = $p.depth; d > 0 && at < 0; d--) if ($p.node(d).type.name === 'codeBlock') at = $p.before(d);
       if (at < 0 && !$p.parent.isTextblock) at = $p.nodeBefore?.type.name === 'codeBlock' ? pos - $p.nodeBefore.nodeSize : $p.nodeAfter?.type.name === 'codeBlock' ? pos : -1;
       const n = at < 0 ? null : view.state.doc.nodeAt(at), { $head } = view.state.selection;
-      if (!n || !isDrawn(view, n, at) || ($head.pos > at && $head.pos < at + n.nodeSize)) return false; // its code showing
+      if (!n || !isDrawn(view, n, at) || ($head.pos > at && $head.pos < at + n.nodeSize)) return false;
       view.dispatch(selectBlock(view.state, at));
       return true;
     },
   },
 });
 
-/** Syntax highlighting, plus a language chip (and its menu) that appears on hover. */
-/**
- * How far a code block scrolled sideways must go to show the caret: 0 when it already shows. `box` is the block's
- * visible stretch (its padding inside), `caret` where the caret is drawn.
- */
 export function scrollToShow(box: { left: number; right: number }, caret: { left: number; right: number }): number {
   if (caret.left < box.left) return caret.left - box.left;
   if (caret.right > box.right) return caret.right - box.right;
   return 0;
 }
-/** A code line wider than its block scrolls in it, and the caret is followed there: ⌘← (or Home) back to the start of a
- *  line scrolled to its end left the block where it was, the caret out of sight. The webview moves the caret itself
- *  for those keys, and scrolls only the page, not the block. */
 const caretInSight = new Plugin({
   view: () => ({
     update(view, prev) {
@@ -317,26 +265,17 @@ const caretInSight = new Plugin({
       const at = view.domAtPos(selection.head).node;
       const pre = (at instanceof Element ? at : at.parentElement)?.closest('pre');
       if (!pre || pre.scrollWidth <= pre.clientWidth) return;
-      // at a line's start: the block's very left, whatever the pixels round to (a block placed at a fraction of a pixel
-      // was left 1px scrolled, its first letter's edge cut)
       const { $head } = selection;
       if (!$head.parentOffset || $head.parent.textBetween($head.parentOffset - 1, $head.parentOffset) === '\n') { pre.scrollLeft = 0; return; }
       let c: { left: number; right: number };
       try { c = view.coordsAtPos(selection.head); } catch { return; }
       const r = pre.getBoundingClientRect(), pad = parseFloat(getComputedStyle(pre).paddingLeft) || 0;
       const by = scrollToShow({ left: r.left + pad, right: r.right - pad }, { left: c.left, right: c.right + 1 });
-      // whole pixels, rounded away from the caret: by a fraction, the webview rounded a line's start to 1px off the
-      // block's left edge, its first letter's edge cut
       if (by) pre.scrollLeft = Math.max(0, by < 0 ? Math.floor(pre.scrollLeft + by) : Math.ceil(pre.scrollLeft + by));
     },
   }),
 });
 
-/**
- * A block's own controls going with the block (an undo took out a diagram being edited, or a board's card that had the
- * keyboard): the keyboard back in the note, not left on nothing, where ⌘⇧Z and the keys typed next went unheard. A
- * moment later, once the note has drawn the change; the note's view keeps its scroll (ProseMirror focuses without one).
- */
 export function focusBack(editor: Editor) {
   queueMicrotask(() => {
     const a = document.activeElement;
@@ -345,7 +284,6 @@ export function focusBack(editor: Editor) {
   });
 }
 
-/** the caret from the start of the code at `at` to the end of the line over it, or that line gone when empty */
 function toLineBefore(state: EditorState, view: EditorView, at: number) {
   const before = state.doc.resolve(at).nodeBefore;
   if (!before?.isTextblock) return false;
@@ -354,31 +292,17 @@ function toLineBefore(state: EditorState, view: EditorView, at: number) {
   return true;
 }
 
-/**
- * A diagram shown as its drawing (not as its code, as a hand-written one the editor can't draw, or one that failed, is
- * shown): a block the keys step onto and select, as they do a picture, not text the caret goes into. In its hidden
- * code the caret was out of sight, and the next ⌫ took a ")" out of it: "Parse error".
- */
 export function isDrawn(view: EditorView, node: PMNode | null | undefined, pos: number) {
   if (node?.type.name !== 'codeBlock' || node.attrs.language !== 'mermaid') return false;
   const dom = view.nodeDOM(pos);
   return !(dom instanceof HTMLElement && dom.classList.contains('mermaid-error'));
 }
-/** the diagram at `pos` selected as a whole: outlined, ⌫ deletes it, ↵ opens it */
 const selectBlock = (state: EditorState, pos: number) => state.tr.setSelection(NodeSelection.create(state.doc, pos)).scrollIntoView();
-/** the diagram selected as a whole (⌫ under it, ↑ onto it, Done) */
 export const selectedDiagram = (state: EditorState) => {
   const sel = state.selection;
   return sel instanceof NodeSelection && sel.node.type.name === 'codeBlock' && sel.node.attrs.language === 'mermaid' ? sel : null;
 };
 
-/**
- * ⌫ at the start of a line under code (a diagram's too, or code ending the list item above): the caret to the end of
- * the code, an empty line gone, as ⌦ from above goes into it. The stock join ran the line into the code
- * ("A --> Bbelow"), where it was code from then on. The caret goes in rather than the code being selected first, as
- * a picture is: code is text the caret can be in, and nothing is lost by a press. A drawn diagram is a picture, and is
- * selected first (an empty line going, as under a picture); the second ⌫ deletes it.
- */
 function toCodeBefore(state: EditorState, view: EditorView, $at: ResolvedPos) {
   if (!$at.parent.isTextblock || $at.parentOffset !== 0) return false;
   const code = blockBeside($at, -1);
@@ -390,10 +314,6 @@ function toCodeBefore(state: EditorState, view: EditorView, $at: ResolvedPos) {
   return true;
 }
 
-/**
- * Typing with a diagram selected (after Done, or ↑ onto it): the text goes on the line under it, made when there is
- * none. The stock input put the letter in the diagram's place, and the diagram was gone.
- */
 const typeBelow = new Plugin({
   props: {
     handleTextInput(view, _from, _to, text) {
@@ -412,11 +332,8 @@ const typeBelow = new Plugin({
 });
 
 export const CodeBlock = CodeBlockBase.extend({
-  // ahead of a list's own keys: Tab in code inside a list indents the code, not the whole list item
   priority: 1000,
   addProseMirrorPlugins() { return [...(this.parent?.() ?? []), highlighter, guessing, editingDiagram, caretInSight, typeBelow]; },
-  // ↓ from the line above a diagram (↑ from the line under it) goes onto it, selected, and ↵ opens it; one shown as
-  // code goes into its code. Its code hidden, the caret went past the diagram, and the keyboard could not reach it
   addKeyboardShortcuts() {
     const into = (dir: 'up' | 'down') => () => {
       const { view, state } = this.editor;
@@ -436,35 +353,26 @@ export const CodeBlock = CodeBlockBase.extend({
     const stock = this.parent?.() ?? {};
     return {
       ...stock,
-      // ↑ at the start of a code block heading the note still makes a line above it (the stock exit)
       ArrowDown: (p) => into('down')() || (stock.ArrowDown?.(p) ?? false),
       ArrowUp: (p) => into('up')() || (stock.ArrowUp?.(p) ?? false),
-      // ↵ on a diagram selected: opened for editing, as a click opens it (the stock ↵ put a line in its place)
       Enter: (p) => {
         const sel = selectedDiagram(this.editor.state);
         if (sel) return !!(this.editor.view.nodeDOM(sel.from) as any)?.__openDiagram?.();
         return stock.Enter?.(p) ?? false;
       },
-      // ⌫ in an emptied block, or at the start of the note's first: the line is plain again where it is. The stock
-      // one lifted it out of every list or callout around it too (cutting that in two), and its lines ran into one
-      // on save (no line breaks put in for the code's newlines)
       Backspace: () => {
         const { state, view } = this.editor, { empty, $anchor } = state.selection;
         if (empty && $anchor.parent.type.name !== this.name) return toCodeBefore(state, view, $anchor);
         if (!empty) return false;
         if ($anchor.pos === 1 || !$anchor.parent.textContent.length) return this.editor.commands.setNode('paragraph');
-        // ⌫ at the start of code under a line: to that line's end (an empty line goes). Joined, the code ran into
-        // the line as text, its # and - lines read back as headings and lists
         return $anchor.parentOffset === 0 && toLineBefore(state, view, $anchor.before());
       },
-      // Tab with no selection: four spaces typed (the stock one put them in as HTML, which dropped them)
       Tab: (p) => {
         const { state, view } = this.editor;
         if (!state.selection.empty || state.selection.$from.parent.type.name !== this.name) return stock.Tab?.(p) ?? false;
         view.dispatch(state.tr.insertText(' '.repeat(this.options.tabSize ?? 4)).scrollIntoView());
         return true;
       },
-      // ⌦ at the end of a line over code: into the code (an empty line goes), as ⌫ from the code's side
       Delete: () => {
         const { state, view } = this.editor, { empty, $head } = state.selection;
         if (!empty || !$head.parent.isTextblock || $head.parent.type.name === this.name || $head.parentOffset !== $head.parent.content.size) return false;
@@ -477,9 +385,6 @@ export const CodeBlock = CodeBlockBase.extend({
       },
     };
   },
-  // ``` alone at the start of a line: a code block at once, the keyboard in its language field (↓, Tab, ↩ or a space
-  // go on into the code). ```lang then a space or Enter (and ~~~ likewise): a language with capitals or signs too
-  // (```TypeScript, ```c++, ```C#). Not in a table cell, whose code a table can't keep (it came back as plain text)
   addInputRules() {
     const now = textblockTypeInputRule({ find: /^```$/, type: this.type, getAttributes: () => ({ language: null }) });
     const make = now.handler;
@@ -527,7 +432,7 @@ export const CodeBlock = CodeBlockBase.extend({
             const fence = md.renderer.rules.fence;
             md.renderer.rules.fence = (tokens: any[], idx: number, ...rest: unknown[]) => {
               const html: string = fence(tokens, idx, ...rest);
-              const info = tokens[idx].info.trim().replace(/^\S+\s*/, ''); // as written, escapes and all
+              const info = tokens[idx].info.trim().replace(/^\S+\s*/, '');
               return info ? html.replace(/^<pre/, `<pre data-info="${md.utils.escapeHtml(info)}"`) : html;
             };
           },
@@ -554,9 +459,8 @@ export const CodeBlock = CodeBlockBase.extend({
       chip.type = 'button';
       chip.className = 'code-lang';
       chip.contentEditable = 'false';
-      chip.tabIndex = -1; // a mouse affordance, not a tab stop
+      chip.tabIndex = -1;
       chip.textContent = labelOf(node.attrs.language);
-      // a mermaid block: its drawing, edited right there (DiagramBlock.svelte); the code shows only with the caret in it
       const host = document.createElement('div');
       host.className = 'mermaid-host';
       host.contentEditable = 'false';
@@ -564,8 +468,8 @@ export const CodeBlock = CodeBlockBase.extend({
       const posNow = () => getPos();
       let block: ReturnType<typeof mountDiagram> | null = null;
       let lastLine: number | null = null;
-      let shown = false; // the caret in the code
-      let shownNode: PMNode = node; // the block as this view last drew it
+      let shown = false;
+      let shownNode: PMNode = node;
       const setDiagram = (n: PMNode) => {
         const on = n.attrs.language === 'mermaid';
         dom.classList.toggle('mermaid', on);
@@ -575,9 +479,6 @@ export const CodeBlock = CodeBlockBase.extend({
         if (start) startNext = null;
         block = mountDiagram(host, {
           code: n.textContent, start, codeShown: shown,
-          // what was drawn, written into the block: one step to undo, the caret left where it was
-          // only into this very block, where it still is: the node there must be the one this view last showed (a last
-          // change written as the block was deleted found the paragraph after it at its old place, and wrote over it)
           onCode: (code) => {
             if (editor.isDestroyed) return;
             const p = posNow();
@@ -639,24 +540,18 @@ export const CodeBlock = CodeBlockBase.extend({
         editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, language: value || null }));
         editor.commands.focus();
       };
-      // pressing it leaves the caret where it was: WebKit put it in the block above the code (the chip straddles
-      // the block's top edge), and the click looked as if it had landed somewhere else
       chip.addEventListener('mousedown', (e) => e.preventDefault());
-      // the app's one menu (Menu.svelte): a popup under the chip on the Mac, a sheet on a phone
       chip.addEventListener('click', () => {
         if (ui.menu) { ui.closeMenu(); return; }
         const current = language();
-        // a language typed in markdown that the menu does not list (```vbnet) keeps its own entry
         const items = LANGUAGES.some(([v]) => v === current) ? LANGUAGES : [...LANGUAGES, [current, current] as [string, string]];
         const r = chip.getBoundingClientRect();
-        chip.classList.add('open'); // the chip is hover-only, but must stay while its menu is up
+        chip.classList.add('open');
         ui.openMenu(under(r),
           items.map(([value, label]) => ({ label, keywords: [value, ...Object.keys(ALIASES).filter((k) => ALIASES[k] === value)].join(' '), checked: value === current, run: () => setLanguage(value) })),
           () => chip.classList.remove('open'), 'Search languages');
       });
 
-      // the language field, where ``` puts the keyboard: a name (or the start of one, an alias) and ↓, Tab, ↩ or a
-      // space go on into the code in that language; Esc goes on with none; ⌫ with nothing typed takes the ``` back
       const ask = document.createElement('span');
       ask.className = 'code-lang-ask';
       ask.contentEditable = 'false';
@@ -668,7 +563,7 @@ export const CodeBlock = CodeBlockBase.extend({
       const hint = document.createElement('span');
       hint.className = 'code-lang-hint';
       ask.append(field, hint);
-      dom.append(ask); // always there, shown by .asking: put in and taken out, ProseMirror read it as an edit
+      dom.append(ask);
       const showHint = () => {
         const m = matchLanguage(field.value);
         hint.textContent = field.value.trim() ? (m ? m[1] : field.value.trim().toLowerCase()) : '↓ to code';
@@ -683,7 +578,6 @@ export const CodeBlock = CodeBlockBase.extend({
         field.focus({ preventScroll: true });
       };
       const closeField = () => { asking = false; dom.classList.remove('asking'); };
-      /** into the code, at its start, in the language typed (`keep`: none chosen, as Esc leaves it) */
       const intoCode = (keep: boolean) => {
         const typed = field.value.trim();
         closeField();
@@ -697,26 +591,22 @@ export const CodeBlock = CodeBlockBase.extend({
         editor.view.focus();
       };
       field.addEventListener('keydown', (e) => {
-        e.stopPropagation(); // the app's own keys (Esc hides the window) and the note's are not this field's
+        e.stopPropagation();
         if (composing(e)) return;
         if (e.key === 'ArrowDown' || e.key === 'Tab' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); intoCode(true); }
         else if (e.key === 'Escape') { e.preventDefault(); intoCode(false); }
         else if (e.key === 'Backspace' && !field.value) {
-          // the ``` back as it was typed, less the last `, as ⌫ after it would have left it
           e.preventDefault();
           closeField();
           editor.view.focus();
           const p = posNow();
           const cur = p == null ? null : editor.state.doc.nodeAt(p);
           if (p == null || !cur) return;
-          // the block as the ``` line was (what it was made of stays after it), not the stock undo: the keyboard going to
-          // the field had already put a step between
           const para = editor.schema.nodes.paragraph.create(null, [editor.schema.text('``'), ...(cur.content.size ? [editor.schema.text(cur.textContent)] : [])]);
           const tr = editor.state.tr.replaceWith(p, p + cur.nodeSize, para);
           editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, p + 3)).scrollIntoView());
         }
       });
-      // a click away: the language as typed so far, the keyboard where the click took it
       field.addEventListener('blur', () => {
         if (!asking) return;
         const typed = field.value.trim();
@@ -741,16 +631,12 @@ export const CodeBlock = CodeBlockBase.extend({
           setDiagram(updated);
           return true;
         },
-        // the block's own classes (mermaid, mermaid-error) are set here: read as an edit, ProseMirror made the block
-        // anew, which drew again, failed again and set them again, without end
         ignoreMutation: (m) => owns(m.target) || (m.type === 'attributes' && m.target === dom),
         stopEvent: (e) => owns(e.target),
-        // selected as a whole (a diagram, ⌫ under it): outlined as a picture is, and not made draggable as the stock does
         selectNode: () => dom.classList.add('ProseMirror-selectednode'),
         deselectNode: () => dom.classList.remove('ProseMirror-selectednode'),
         destroy: () => {
           asking = false;
-          // the keyboard on the diagram (or in the language field) as it goes, an undo taking it out: back to the note
           const a = document.activeElement;
           const had = owns(a) || ((!a || a === document.body) && !!host.querySelector('.dblock.active, .dblock.full'));
           block?.destroy();
@@ -761,11 +647,8 @@ export const CodeBlock = CodeBlockBase.extend({
   },
 }).configure({ languageClassPrefix: 'language-', enableTabIndentation: true, tabSize: 4 });
 
-/** the code of a diagram just made from the / menu: its block opens for editing as it is first drawn */
 let startNext: string | null = null;
 
-/** the / menu's diagrams: a small example of the kind, put in at the caret and opened for editing there */
-/** a new diagram's code: its example in the note's own words (a note with Korean in it gets a Korean one) */
 export function starterCode(kind: Kind | Diagram, noteText: string): string {
   const d = typeof kind === 'string' ? starter(kind) : kind;
   return toCode(/[\uac00-\ud7a3]/.test(noteText) ? inKorean(d) : d);
@@ -776,7 +659,6 @@ export function insertDiagram(editor: Editor, kind: Kind | Diagram) {
   const { from } = editor.state.selection;
   const c = isMobile ? editor.chain() : editor.chain().focus();
   c.insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: code }] }).run();
-  // out of the block it went into, onto the line under it: drawn, not shown as code
   const $at = editor.state.doc.resolve(Math.min(editor.state.selection.from, editor.state.doc.content.size));
   for (let d = $at.depth; d > 0; d--) {
     if ($at.node(d).type.name !== 'codeBlock' || $at.before(d) < from - 2) continue;

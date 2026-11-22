@@ -1,12 +1,6 @@
-//! What the page's memory comes to, written down once a minute with what was done since: Eve was seen holding
-//! gigabytes now and then, and a test that switches and types never got past a few hundred megabytes. The log says
-//! which actions came before a climb. It is `memory.log` beside the notes folder (macOS only; a phone's WebView is
-//! not a process of its own to look at).
 use std::sync::Mutex;
 use tauri::{AppHandle, State};
 
-/// What the page did since the last line: a note opened (its size), a panel, a sync. Kept short; a minute of
-/// switching through notes is counted, not listed.
 #[derive(Default)]
 pub(crate) struct Marks(Mutex<Vec<String>>);
 
@@ -16,7 +10,6 @@ pub(crate) fn mem_mark(marks: State<Marks>, what: String) {
     if m.len() < 200 { m.push(what) }
 }
 
-/// "note ×12, pdf, sync ×2": each kind of action once, with how many times, in the order first done.
 fn summary(marks: Vec<String>) -> String {
     let mut kinds: Vec<(String, usize)> = Vec::new();
     for m in marks {
@@ -28,7 +21,6 @@ fn summary(marks: Vec<String>) -> String {
     kinds.iter().map(|(k, n)| if *n > 1 { format!("{k} ×{n}") } else { k.clone() }).collect::<Vec<_>>().join(", ")
 }
 
-/// Seconds since 1970 as UTC `2026-11-13 09:41`.
 fn utc(secs: u64) -> String {
     let (y, m, d) = crate::core::civil((secs / 86400) as i64);
     let rem = secs % 86400;
@@ -57,8 +49,6 @@ fn web_pid(app: &AppHandle) -> Option<i32> {
     rx.recv_timeout(std::time::Duration::from_secs(5)).ok().filter(|p| *p > 0)
 }
 
-/// One line a minute: `2026-11-13 09:41  page 342 MB (most 512)  app 38 MB  note ×12, pdf`. The file keeps its last
-/// half megabyte or so.
 pub(crate) fn watch(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     {

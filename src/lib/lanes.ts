@@ -1,20 +1,8 @@
 import type { Flowchart, FlowNode } from './diagram';
 
-/**
- * Swimlanes, drawn by Eve: a flowchart whose boxes sit in lanes (mermaid's subgraphs). Mermaid draws subgraphs as
- * boxes it places where it likes, overlapping and out of line; lanes are bands side by side, every step in the band
- * of who does it, the steps in the order they happen across them. Across (LR) the lanes are rows, their names at the
- * left; down (TD) they are columns, their names on top.
- *
- * The drawing is made as mermaid makes a flowchart (a g.node per box, ids ending in -flowchart-<id>-0, a
- * path.flowchart-link per line in the chart's order, g.edgeLabel > g.label for their labels), so FlowEditor.svelte
- * edits it the same way; each lane's name is a g.lane-head to be clicked. Colours are CSS variables (app.css), so the
- * light and dark themes need no drawing again.
- */
 
 export const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif";
 let ctx: CanvasRenderingContext2D | null | undefined;
-/** a text's width at that size: the page's own measure, or a fair guess where there is no page (tests) */
 export function textW(s: string, size: number, weight = 400): number {
   if (ctx === undefined) {
     try { ctx = typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null; } catch { ctx = null; }
@@ -24,7 +12,6 @@ export function textW(s: string, size: number, weight = 400): number {
   for (const ch of s) w += /[ᄀ-ᇿ⺀-鿿가-힯＀-￯]/.test(ch) ? size : size * 0.56;
   return w;
 }
-/** a label in lines no wider than `max` (at spaces; a word longer than a line keeps its line) */
 export function wrap(s: string, max: number, size: number, weight = 400): string[] {
   const words = s.trim().split(/\s+/).filter(Boolean);
   if (!words.length) return [''];
@@ -313,16 +300,13 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   // named and marked as mermaid's flowchart is, its boxes `<id>-flowchart-<box>-0` and its lines `L_<from>_<to>_<n>`:
   // drawn in, and a step at a time in a presentation (boxes given an Order too), as a chart without lanes is
   let svg = `<svg class="lanes" id="${id}" aria-roledescription="flowchart-v2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width: ${W}px; min-width: ${Math.round(W * minScale)}px;" role="img" aria-label="${plain ? 'Flowchart' : 'Swimlanes'}">`;
-  // the start and the end (a pill, a circle) in a soft blue, lit from above (app.css colours its stops)
   svg += `<defs><marker id="${id}-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="sl-head" d="M0,1.5 L9,5 L0,8.5 z"/></marker>`
     + `<linearGradient id="${id}-lit" x1="0" y1="0" x2="0" y2="1"><stop class="sl-lit0" offset="0"/><stop class="sl-lit1" offset="1"/></linearGradient></defs>`;
-  // each step in a pastel of its own, read at a glance: a lane's steps in their lane's, a chart without lanes a colour
-  // a level down the page (app.css)
   const hue = (b: Box) => `c${(plain ? b.rank : b.lane) % 12}`;
   lanes.forEach((l, i) => {
     const [x, y] = xy(0, laneAt[i]);
     const last = i === lanes.length - 1;
-    const span = last ? C - laneAt[i] : laneC[i]; // the last lane runs to the drawing's edge
+    const span = last ? C - laneAt[i] : laneC[i];
     const [w, h] = LR ? [W, span] : [span, H];
     const [hw, hh] = LR ? [HEAD_M, span] : [span, HEAD_M];
     const name = names[i];
@@ -336,30 +320,23 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
       + `</g>`;
   });
 
-  // ---- where a line's label stands: on its own line, clear of the boxes, the lane names and the labels already placed.
-  // Each stood at its line's bend, and a busy chart put several on one spot, or on a box; now the bend is tried first,
-  // then points further along the line, and with none clear, the one that covers least ----
   type R = { m0: number; m1: number; c0: number; c1: number };
   const taken: R[] = [...boxes.values()].map((b) => ({ m0: b.m - main(b) / 2 - 4, m1: b.m + main(b) / 2 + 4, c0: b.c - cross(b) / 2 - 4, c1: b.c + cross(b) / 2 + 4 }));
-  taken.push({ m0: -Infinity, m1: HEAD_M + 4, c0: -Infinity, c1: Infinity }); // the lane names
-  const fixed = taken.length; // the steps and the names; the labels placed come after
+  taken.push({ m0: -Infinity, m1: HEAD_M + 4, c0: -Infinity, c1: Infinity });
+  const fixed = taken.length;
   const over = (a: R, b: R) => Math.max(0, Math.min(a.m1, b.m1) - Math.max(a.m0, b.m0)) * Math.max(0, Math.min(a.c1, b.c1) - Math.max(a.c0, b.c0));
   const ALONG = [0.5, 0.35, 0.65, 0.2, 0.8, 0.08, 0.92];
-  // the other lines, as thin strips: of two spots on its own line clear of the boxes and labels, a label takes the one
-  // over fewer of them (it stood over another line's run, the words crossed out)
   const strips = ways.map((w) => w.pts.slice(1).map((q, k) => {
     const p = w.pts[k];
     return { m0: Math.min(p[0], q[0]) - 1, m1: Math.max(p[0], q[0]) + 1, c0: Math.min(p[1], q[1]) - 1, c1: Math.max(p[1], q[1]) + 1 };
   }));
   function placeLabel(pts: [number, number][], at: [number, number], chip: { m: number; c: number }, own: number): [number, number] {
     const rect = ([m, c]: [number, number]): R => ({ m0: m - chip.m / 2 - 3, m1: m + chip.m / 2 + 3, c0: c - chip.c / 2 - 3, c1: c + chip.c / 2 + 3 });
-    // the segment holding the bend first, then the rest of the line
     const segs = pts.slice(1).map((q, k) => [pts[k], q] as const);
     const home = segs.findIndex(([p, q]) => Math.min(p[0], q[0]) - 0.5 <= at[0] && at[0] <= Math.max(p[0], q[0]) + 0.5 && Math.min(p[1], q[1]) - 0.5 <= at[1] && at[1] <= Math.max(p[1], q[1]) + 0.5);
     const order = home < 0 ? segs : [segs[home], ...segs.filter((_, k) => k !== home)];
     const spots: [number, number][] = [at];
     for (const [p, q] of order) for (const f of ALONG) spots.push([p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f]);
-    // each spot held inside the drawing: a long label at a line near its edge stood past it
     const hold = (v: number, half: number, max: number) => Math.min(Math.max(v, half + 3), max - half - 3);
     for (const sp of spots) { sp[0] = hold(sp[0], chip.m / 2, M); sp[1] = hold(sp[1], chip.c / 2, C); }
     let best = spots[0], least = Infinity, crossed = Infinity;
@@ -370,10 +347,6 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
       if (cover < least || (cover === least && lines < crossed)) { least = cover; crossed = lines; best = s; }
       if (!cover && !lines) break;
     }
-    // nowhere on the line clear (a loop or a line between two steps stacked close, a long label): the nearest clear
-    // place beside it, a step at a time outward from where it would stand
-    // (clear of everything, or else at least of the steps and the lane names: a label on another is read, one on a
-    // step hides it)
     const from = best, solid = taken.length > fixed ? [taken.slice(0, fixed)] : [];
     for (const among of [taken, ...solid]) {
       for (let k = 1; least > 0 && k <= 40; k++) {
@@ -387,7 +360,6 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
     return best;
   }
 
-  // ---- the lines ----
   const labels: string[] = [];
   edges.forEach((e, i) => {
     const { pts, at } = ways[i];
@@ -404,7 +376,6 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
   });
   svg += labels.join('');
 
-  // ---- the steps ----
   for (const b of boxes.values()) {
     const [x, y] = xy(b.m, b.c);
     const l = x - b.w / 2, t = y - b.h / 2;
@@ -412,7 +383,7 @@ export function laneSvg(d: Flowchart, minScale = 0.8): string {
     switch (b.n.shape) {
       case 'diamond': shape = `<path class="sl-shape" d="M${x},${t} L${l + b.w},${y} L${x},${t + b.h} L${l},${y} Z"/>`; break;
       case 'circle': shape = `<circle class="sl-shape" cx="${x}" cy="${y}" r="${b.w / 2}" fill="url(#${id}-lit)"/>`; break;
-      case 'pill': shape = `<rect class="sl-shape pill" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="${Math.min(b.h / 2, 22)}" fill="url(#${id}-lit)"/>`; break; // a tall one: rounded ends, not a blob
+      case 'pill': shape = `<rect class="sl-shape pill" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="${Math.min(b.h / 2, 22)}" fill="url(#${id}-lit)"/>`; break;
       case 'box': shape = `<rect class="sl-shape" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="7"/>`; break;
       case 'db': shape = `<path class="sl-shape" d="M${l},${t + 6} a${b.w / 2},6 0 0,0 ${b.w},0 a${b.w / 2},6 0 0,0 ${-b.w},0 v${b.h - 12} a${b.w / 2},6 0 0,0 ${b.w},0 v${-(b.h - 12)}"/>`; break;
       default: shape = `<rect class="sl-shape" x="${l}" y="${t}" width="${b.w}" height="${b.h}" rx="12"/>`;

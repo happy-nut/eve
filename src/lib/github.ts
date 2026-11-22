@@ -1,36 +1,18 @@
-/**
- * File sync against a GitHub repository (branch `main`) through the REST API. No git binary.
- * Pure: no Svelte, no Tauri — `fetch` is injected so it runs in Node for tests.
- *
- * State per repo: last seen commit (`head`), its tree, and `known` = { path -> blob sha } as of that commit.
- * A local file is "changed" when its git blob sha differs from `known`, so nothing is ever re-pushed
- * and restarts are free. Pushes are one commit on top of `head`; if someone else pushed first the
- * ref update is refused (422) and the caller pulls again (see syncRound).
- */
-/** `host`: the GitHub server ('' = github.com; see apiBase) */
 export interface RepoState { repo: string; token: string; head: string; tree: string; known: Record<string, string>; host?: string }
-/** `sha`, when given, is the blob sha of `data` (see FileHashes), so push need not hash it again. */
 export interface LocalFile { path: string; data: Uint8Array; sha?: string }
-/** `prev` = the blob sha we had for this path before the pull (undefined = new file). */
 export interface RemoteFile { path: string; data: Uint8Array; prev?: string }
 
 const BRANCH = 'main';
 const PREFIX = 'notes/';
 
-// ---- which GitHub: github.com, GitHub Enterprise Cloud with data residency (NAME.ghe.com), or a
-// GitHub Enterprise Server of one's own (github.example.com). GitHub Enterprise Cloud on github.com
-// itself is github.com: an organization there is only a different owner (see ensureRepo).
 
-/** What the user typed as their GitHub (a URL or a bare host, maybe with a port) as a host; '' = github.com. */
 export function normHost(input: string): string {
   const h = input.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   if (!h || h === 'github.com' || h === 'www.github.com' || h === 'api.github.com') return '';
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d{1,5})?$/.test(h)) throw new Error(`"${input.trim()}" is not a server address`);
   return h;
 }
-/** The server's web pages (sign-in, settings): https://github.com or https://HOST */
 export const webBase = (host = '') => `https://${host || 'github.com'}`;
-/** Its REST API: api.github.com, api.NAME.ghe.com, or HOST/api/v3 on a server of one's own */
 export function apiBase(host = ''): string {
   if (!host) return 'https://api.github.com';
   return host.endsWith('.ghe.com') ? `https://api.${host}` : `https://${host}/api/v3`;
@@ -60,7 +42,7 @@ async function explain(res: Response): Promise<string> {
     // GitHub says what was wrong in `errors` ("name already exists on this account"); "Validation Failed" alone tells nothing
     const why = (j.errors ?? []).map((e: { message?: string; code?: string }) => e?.message || e?.code).filter(Boolean);
     if (why.length) msg += ` (${why.join('; ')})`;
-  } catch { /* not json */ }
+  } catch { }
   if (res.status === 401) msg = 'bad token';
   if (res.status === 404) msg = 'repository not found (check owner/name and the token\'s access)';
   return `${res.status} ${msg}`.trim();
@@ -73,10 +55,6 @@ async function chunked<T, R>(xs: T[], fn: (x: T) => Promise<R>, n = 20): Promise
   return out;
 }
 
-/**
- * Every sync round offers every note; most have not changed since the last one. Remember each path's
- * last text and its blob sha, and hash again only when the text differs.
- */
 export class FileHashes {
   private last = new Map<string, { text: string; sha: string }>();
   private enc = new TextEncoder();
@@ -111,7 +89,6 @@ export class Repo {
     return res.json();
   }
 
-  /** Files under notes/ that changed on the remote since the last pull. Updates head/tree/known. */
   async pull(): Promise<RemoteFile[]> {
     const br = await this.api('GET', `/branches/${BRANCH}`);
     if (br.status === 404 || br.status === 409) { // no branch yet (empty repo) — or no such repo, which init() reports
@@ -141,21 +118,15 @@ export class Repo {
     return out;
   }
 
-  /** A file as it was when its blob was `sha`: what two devices last agreed on, for putting their changes together. */
   async blob(sha: string): Promise<Uint8Array> {
     return unb64((await this.json('GET', `/git/blobs/${sha}`)).content);
   }
 
-  /**
-   * The versions of one file, newest first: each commit that changed it on the branch, and when (Notion's page
-   * history; sync makes one about every minute something is written).
-   */
   async history(path: string, max = 50): Promise<{ sha: string; at: number }[]> {
     const list = await this.json('GET', `/commits?sha=${BRANCH}&path=${encodeURIComponent(path)}&per_page=${max}`);
     return (list as { sha: string; commit: { committer: { date: string } } }[]).map((c) => ({ sha: c.sha, at: Date.parse(c.commit.committer.date) }));
   }
 
-  /** A file as it was at commit `sha` (one of `history`'s). Null if it was not there. */
   async fileAt(path: string, sha: string): Promise<Uint8Array | null> {
     const res = await this.api('GET', `/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${sha}`);
     if (res.status === 404) return null;
@@ -171,7 +142,6 @@ export class Repo {
     if (!res.ok) throw new Error(await explain(res));
   }
 
-  /** One commit with every file whose content differs from the remote. False = branch moved; pull and retry. */
   async push(files: LocalFile[]): Promise<boolean> {
     const changed: (LocalFile & { sha: string })[] = [];
     for (const f of files) {
@@ -200,19 +170,12 @@ export class Repo {
   }
 }
 
-/**
- * pull -> merge (onPull) -> push, retried while the branch keeps moving underneath us.
- * `local` is called after the merge so it reflects what won.
- */
 export async function syncRound(
   repo: Repo,
   local: () => LocalFile[] | Promise<LocalFile[]>,
   onPull: (files: RemoteFile[]) => void | Promise<void>,
 ): Promise<void> {
   for (let i = 0; i < 3; i++) {
-    // what was pulled counts as taken in only once it is: a merge that stops halfway (a file it could not
-    // write) leaves head and known where they were, or the files after it would never come again and the
-    // older copies here would be pushed over them
     const before = { head: repo.s.head, tree: repo.s.tree, known: repo.s.known };
     const pulled = await repo.pull();
     try {
@@ -226,51 +189,36 @@ export async function syncRound(
   throw new Error('branch keeps moving; try again');
 }
 
-// ---- sign-in: OAuth device flow + the notes repo ------------------------------
 /** GitHub OAuth App "Eve" (device flow enabled), on github.com. Public by design; device flow needs no
  *  secret. Another server needs an OAuth App of its own (its admin registers one), or a token instead. */
 export const CLIENT_ID = 'Ov23liUjviaVeQmqYvUk';
 export const REPO_NAME = 'eve-notes';
-/** which OAuth App on which server a device-flow sign-in goes through */
 export interface Login { host?: string; clientId?: string }
 const loginUrl = (l: Login, path: string) => `${webBase(l.host)}/login/${path}`;
 export type Post = (url: string, form: Record<string, string>) => Promise<string>;
 
 export interface DeviceCode { device_code: string; user_code: string; verification_uri: string; interval: number; expires_in: number }
 
-/** Device flow, first half: a code for the user to enter on GitHub, and the secret half to poll with. */
 export async function requestCode(post: Post, l: Login = {}): Promise<DeviceCode> {
   const a = JSON.parse(await post(loginUrl(l, 'device/code'), { client_id: l.clientId || CLIENT_ID, scope: 'repo' }));
   if (!a.device_code) throw new Error(a.error_description ?? a.error ?? 'device code failed');
   return { device_code: a.device_code, user_code: a.user_code, verification_uri: a.verification_uri, interval: Number(a.interval) || 5, expires_in: Number(a.expires_in) || 900 };
 }
 
-// messages this app writes itself, already in words a person can act on
 const OWN_WORDS = / exists but is | is not a server address| is not a user or organization name|already exists, but this sign-in/;
 
-/**
- * A failed sign-in, said so that someone new to GitHub knows what to do next. Null: nothing to say
- * (they cancelled it themselves). Anything not recognised is shown as GitHub gave it.
- */
 export function signInError(msg: string): string | null {
   if (/cancelled/i.test(msg)) return null;
-  // Eve's own messages name an account, a repository or a server the user chose ("dnsmith/eve-notes exists
-  // but is public"): said as they are, never mistaken for a network failure by a word in a name
   if (OWN_WORDS.test(msg)) return msg;
   if (/denied/i.test(msg)) return 'Eve was not authorized on GitHub. Press Sign in with GitHub to try again.';
   if (/expired/i.test(msg)) return 'The sign-in code ran out. Press Sign in with GitHub for a new one.';
   if (/verif\w*.*email|email.*verif/i.test(msg)) return 'GitHub wants the account\'s email address confirmed first: open the link in the email GitHub sent, then sign in again.';
-  // GitHub answered (a status code first: "403 …the acme-network organization…"), so the network is fine
   const answered = /^\d{3}\b/.test(msg);
   if (!answered && /could not reach|lookup address|network|\bdns\b|timed? ?out|connection|offline|error sending request/i.test(msg)) return 'Could not reach GitHub. Check the internet connection (or a VPN) and try again.';
   if (/^401\b/.test(msg)) return 'GitHub did not accept this sign-in. Sign in again; a pasted token needs the repo scope.';
   return msg;
 }
 
-/**
- * A sync that failed, said as what happened and what comes next — not "TypeError: Load failed" or GitHub's
- * own paragraph. Sync tries again every minute by itself, so most of these need nothing from the user.
- */
 export function syncError(msg: string): string {
   if (OWN_WORDS.test(msg)) return msg;
   const answered = /^\d{3}\b/.test(msg);
@@ -283,17 +231,11 @@ export function syncError(msg: string): string {
   return msg.replace(/^\w*Error:\s*/, '');
 }
 
-/** The sign-in code ran out before it was entered (GitHub's own `expired_token`, or its time up). */
 export class CodeExpired extends Error {
   constructor(msg = 'the sign-in code expired; start again') { super(msg); }
 }
 
-/** Device flow, second half: poll until the code is authorized; resolves to the token. A failed request
- *  is not the end: the user is in the browser meanwhile, and a phone may cut a background app off the
- *  network for a while (DNS then fails). Only GitHub's own answer — denied, expired — or `expiresIn`
- *  running out ends it. */
 export async function pollToken(post: Post, deviceCode: string, interval = 5, signal?: AbortSignal, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)), expiresIn = 900, l: Login = {}): Promise<string> {
-  // Cancel ends the wait between asks at once, not after it (5 seconds, 10 and more after a slow_down)
   const cancelled = new Promise<void>((r) => signal?.addEventListener('abort', () => r(), { once: true }));
   for (let waited = 0; ; waited += interval) {
     if (waited > expiresIn) throw new CodeExpired();
@@ -304,7 +246,7 @@ export async function pollToken(post: Post, deviceCode: string, interval = 5, si
     try {
       reply = await post(loginUrl(l, 'oauth/access_token'), { client_id: l.clientId || CLIENT_ID, device_code: deviceCode, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' });
     } catch {
-      continue; // offline for a moment: ask again next round
+      continue;
     }
     const t = JSON.parse(reply);
     if (t.access_token) return t.access_token;
@@ -314,12 +256,6 @@ export async function pollToken(post: Post, deviceCode: string, interval = 5, si
   }
 }
 
-/**
- * Device flow: ask for a code, hand it to the user (onCode), poll until they authorize in the browser.
- * `post` does the two github.com POSTs (no CORS there, so the desktop side runs them). Resolves to the token.
- * A code lasts 15 minutes; someone making their GitHub account first (an email to confirm, a puzzle) can
- * take longer, so a code that runs out is replaced by a new one (`renewed`), for about an hour.
- */
 export async function deviceLogin(post: Post, onCode: (code: string, url: string, renewed: boolean) => void, signal?: AbortSignal, sleep?: (ms: number) => Promise<unknown>, l: Login = {}, renewals = 4): Promise<string> {
   for (let n = 0; ; n++) {
     const a = await requestCode(post, l);
@@ -327,17 +263,12 @@ export async function deviceLogin(post: Post, onCode: (code: string, url: string
     try {
       return await pollToken(post, a.device_code, a.interval, signal, sleep, a.expires_in, l);
     } catch (e) {
-      if (signal?.aborted) throw new Error('sign-in cancelled'); // cancelled while the last ask was out: not "the code ran out"
+      if (signal?.aborted) throw new Error('sign-in cancelled');
       if (!(e instanceof CodeExpired) || n >= renewals) throw e;
     }
   }
 }
 
-/**
- * Who the token belongs to, and the private notes repo (created if missing): `owner/eve-notes`, where
- * owner is the signed-in user or, given, an organization they belong to (a company's rules may want the
- * notes kept inside it). On `host` when not github.com.
- */
 export async function ensureRepo(token: string, f: typeof fetch = (...a) => fetch(...a), opts: { host?: string; owner?: string } = {}): Promise<{ user: string; repo: string }> {
   const api = apiBase(opts.host);
   const headers = { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' };

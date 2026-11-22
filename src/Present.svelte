@@ -9,66 +9,39 @@
   import { appearance } from './lib/appearance.svelte';
   import { followPointer } from './lib/followPointer';
 
-  /**
-   * The open note a slide at a time, over everything (⋯ → Present), cut by itself (slides.ts): a slide at each of its
-   * biggest headings. → (Space, ↓, a click on the right) goes on, ← (↑, a click on the left) back, Esc or a phone's
-   * back leaves. A section longer than the screen is one slide, scrolled through a screen a press, not cut onto the
-   * next (a long code block went on to a slide of its own, its first lines left behind). A diagram is a slide of its
-   * own, as big as the screen holds it, and one that draws itself in is walked a step at a time first, before → turns
-   * the page. Past the last slide, a screen says it is the end. F (or its button) puts it on the whole screen and back.
-   * A click on a diagram's drawing looks at it close up there: dragged to look around it, a click (or Esc) back.
-   */
-  // read once: the slides are the page as it was when the presentation began
   const page = ui.present!, from = ui.presentFrom;
-  // copies of the note's blocks as they are drawn now: diagrams, formulas and pictures the same, nothing to edit
   const sections = slides([...page.children]).map((blocks) => blocks.map((b) => {
     const c = b.cloneNode(true) as HTMLElement;
-    if (b === from) c.dataset.from = ''; // the block presented from: its slide comes up first
+    if (b === from) c.dataset.from = '';
     for (const e of [c, ...c.querySelectorAll('[contenteditable]')]) e.removeAttribute('contenteditable');
-    // a diagram as big as its slide holds it (the note sets it a width, and a least one, to keep it legible there)
     for (const svg of c.querySelectorAll<SVGSVGElement>('.mermaid-view svg')) Object.assign(svg.style, { width: '', minWidth: '', maxWidth: '' });
-    // a table laid out afresh for the slide's width: the column widths the note held it to (a narrower page's) left
-    // it squeezed into the slide's left side
     for (const t of [c, ...c.querySelectorAll('.tableWrapper')]) t.classList.remove('held');
     for (const cell of c.querySelectorAll<HTMLElement>('table, col, th, td')) Object.assign(cell.style, { width: '', minWidth: '' });
     return c;
   }));
   let at = $state(0);
-  /** a long slide scrolled past its headings: the section's two outermost, said in a bar over its top */
   let pinned = $state<{ heads: string[]; at: string }>({ heads: [], at: '' });
   function pin() {
     const r = body.getBoundingClientRect(), rb = box.getBoundingClientRect();
     const cs = getComputedStyle(body), pad = parseFloat(cs.paddingTop);
-    const top = r.top + pad; // where the words start, under the crumbs' room
+    const top = r.top + pad;
     const gone = body.scrollTop > 4 ? [...body.children].filter((b) => b.getBoundingClientRect().bottom <= top + 4) : [];
     const heads = path(gone).slice(0, 2).map((h) => h.textContent?.trim() ?? '');
-    // its words where a slide's own crumbs are (raised into its room over the words, by the styles below), its ground
-    // from the slide's top, so no line scrolled up into that room shows over it
     pinned = { heads, at: `top: ${r.top - rb.top}px; padding-top: ${Math.max(0, pad - 0.6 * parseFloat(cs.fontSize))}px; left: ${r.left - rb.left}px; width: ${r.width}px` };
   }
-  /** gone past the last slide: the end says so */
   let ended = $state(false);
   let box: HTMLDivElement, body: HTMLDivElement;
-  /** the diagrams on the slide shown, each with the step it is at */
-  /** the slide up is taller than the screen, scrolled through before the page turns */
   let tall = false;
   let walks: { svg: SVGSVGElement; walk: ReturnType<typeof stepper>; k: number }[] = [];
 
-  /** a block with a diagram in it */
   const chart = (b: Element) => !!b.querySelector('.mermaid-view');
   const again = (h: Element) => { const c = h.cloneNode(true) as Element; c.classList.add('again'); return c; };
-  // a divider at a slide's edge has nothing to divide there
   const hr = (b?: Element) => b?.tagName === 'HR' || (b?.childElementCount === 1 && b.firstElementChild!.tagName === 'HR' && !b.textContent?.trim());
   const trim = (s: Element[]) => { s = [...s]; while (hr(s[0])) s.shift(); while (hr(s.at(-1))) s.pop(); return s; };
   const deck = alone(sections, chart, again).map(trim).filter((s) => s.length);
   at = Math.max(0, deck.findIndex((s) => s.some((b) => b.hasAttribute('data-from') && !b.classList.contains('again'))));
 
   const EASE = 'cubic-bezier(.2, .7, .2, 1)';
-  /**
-   * The page turned (Settings → Appearance → Presenting): the slide leaving drawn over as a copy that goes, the new one
-   * coming in from the side it is turned to; then its lines one after another. A slide going on under the heading the
-   * last one had turns no page: its heading stays where it is and only the words under it change.
-   */
   function turn(old: { el: HTMLElement; at: DOMRect; top: number } | null, back: boolean) {
     if (matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     const head = (e: Element | null | undefined) => (e && /^H[1-6]$/.test(e.tagName) ? e.textContent : null);
@@ -82,7 +55,6 @@
     };
     const f = frames[kind];
     if (old && f) {
-      // the copy where the slide was, gone as the new one comes
       const rb = box.getBoundingClientRect(), { el } = old;
       Object.assign(el.style, { position: 'absolute', left: `${old.at.left - rb.left}px`, top: `${old.at.top - rb.top}px`, width: `${old.at.width}px`, height: `${old.at.height}px`, margin: '0' });
       el.classList.remove('first');
@@ -93,17 +65,13 @@
       body.animate(f[1], { duration: 420, easing: EASE });
     }
     if (!appearance.s.slideBuild) return;
-    // the lines, one after another (the heading it goes on under already there)
     [...body.children].filter((b) => !b.classList.contains('again')).slice(0, 14).forEach((b, n) =>
       b.animate([{ opacity: 0, transform: 'translateY(.6em)' }, {}], { duration: 380, delay: (f && !same ? 120 : 0) + n * 55, easing: EASE, fill: 'backwards' }));
   }
 
-  // ---- a diagram close up: zoomed about the point clicked, dragged to look around it ----
   let zoomed: { svg: SVGSVGElement; s: number; x: number; y: number } | null = null;
-  /** the click that ends a drag around a diagram is not a click on it */
   let dragged = false;
   function zoomTo(svg: SVGSVGElement, s: number, cx: number, cy: number, ease = true) {
-    // the point of the drawing under the pointer stays there (its box as laid out: where it is drawn, less the move)
     const r = svg.getBoundingClientRect(), z = zoomed ?? { s: 1, x: 0, y: 0 };
     const px = cx - (r.left - z.x), py = cy - (r.top - z.y);
     s = Math.min(8, Math.max(1, s));
@@ -116,7 +84,6 @@
     Object.assign(z.svg.style, { transformOrigin: '0 0', transition: ease ? `transform 0.25s ${EASE}` : 'none', transform: `translate(${z.x}px, ${z.y}px) scale(${z.s})` });
     z.svg.parentElement!.classList.add('zoomed');
   }
-  /** back to the whole diagram; false when it was not zoomed */
   function unzoom() {
     if (!zoomed) return false;
     const { svg } = zoomed;
@@ -138,7 +105,6 @@
     };
     followPointer({ move, up: () => {} });
   }
-  /** close up, a trackpad's two fingers move around it and a pinch (or ⌘ / ctrl and the wheel) zooms */
   function onWheel(e: WheelEvent) {
     const z = zoomed;
     if (!z) return;
@@ -148,20 +114,16 @@
     draw(false);
   }
 
-  /** slide `i` put up, its diagrams at their first step (come to going forward) or whole (going back) */
   async function go(i: number, back = false, animate = true) {
     unzoom();
-    // what was up, kept to be drawn leaving
     const old = animate && body?.childElementCount ? { el: body.cloneNode(true) as HTMLElement, at: body.getBoundingClientRect(), top: body.scrollTop } : null;
     at = i;
     ended = false;
     await tick();
     body.replaceChildren(...deck[i]);
     body.classList.toggle('chart', deck[i].some(chart));
-    // a diagram's slide is a column (the diagram takes what is left of it): its headings one row of crumbs at its top
     const crumbs = [...body.children].filter((b) => b.classList.contains('again'));
     if (crumbs.length && body.classList.contains('chart')) { const row = document.createElement('div'); row.className = 'crumbs'; body.prepend(row); row.append(...crumbs); }
-    // taller than the screen, measured before its lines come in: while they rise they reach below it for a moment
     tall = body.scrollHeight > body.clientHeight + 2;
     if (animate) turn(old, back);
     body.scrollTop = back ? body.scrollHeight : 0;
@@ -179,7 +141,7 @@
     if (w) { w.walk.show(++w.k); w.svg.scrollIntoView?.({ block: 'nearest' }); return; }
     if (tall && body.scrollTop + body.clientHeight < body.scrollHeight - 2) return body.scrollBy({ top: body.clientHeight * 0.85, behavior: 'smooth' });
     if (at < deck.length - 1) void go(at + 1);
-    else ended = true; // past the last: the end, which stays until ← or Esc
+    else ended = true;
   }
   function prev() {
     if (ended) { ended = false; return; }
@@ -191,7 +153,7 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    e.stopPropagation(); // nothing behind it acts on a key while it is up
+    e.stopPropagation();
     const k = e.key;
     if (k === 'Escape') { if (!unzoom()) ui.closePresent(); }
     else if (['ArrowRight', 'ArrowDown', ' ', 'PageDown', 'Enter'].includes(k)) next();
@@ -206,24 +168,21 @@
     const t = e.target as Element;
     if (t.closest('a, button')) return;
     if (dragged) { dragged = false; return; }
-    if (unzoom()) return; // close up, a click anywhere is back to the whole
-    // on the drawing itself (a box, a line, a word of it), not the room around it, which turns the page as before
+    if (unzoom()) return;
     const svg = t.closest('svg') !== t ? t.closest<SVGSVGElement>('.slide.chart .mermaid-view > svg') : null;
     if (svg) return zoomTo(svg, 2.5, e.clientX, e.clientY);
     (e.clientX < box.clientWidth / 3 ? prev : next)();
   }
 
-  // ---- the whole screen: the Mac's window over it all, a phone's bars hidden, or the page's (a browser) ----
   const own = ownWholeScreen();
   const canWhole = own || !!document.fullscreenEnabled;
   let full = $state(false);
-  /** put on the whole screen or taken off it; false when nothing changed */
   async function whole(on: boolean): Promise<boolean> {
     try {
       if (own) { const changed = await wholeScreen(on); full = on; return changed; }
       if (on && !document.fullscreenElement) { await box.requestFullscreen(); return true; }
       if (!on && document.fullscreenElement) { await document.exitFullscreen(); return true; }
-    } catch { /* refused (a page not allowed it): stays as it was */ }
+    } catch { }
     return false;
   }
   const onFull = () => { if (!own) full = !!document.fullscreenElement; };
@@ -231,10 +190,8 @@
   onMount(() => {
     box.focus();
     void go(at, false, false);
-    // taller than the screen or not, again as the window changes size (going to the whole screen, as it starts, too)
     const watch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => { tall = body.scrollHeight > body.clientHeight + 2; });
     watch?.observe(box);
-    // the whole screen while it is up, as a slideshow is (and back as it was after)
     const screen = own ? whole(true) : Promise.resolve(false);
     document.addEventListener('fullscreenchange', onFull);
     return () => {
@@ -249,13 +206,11 @@
   transition:fade|global={scrimFade} onkeydown={onKey} onclick={onClick} onpointerdown={onDown} onwheel={onWheel}>
   <div class="tiptap slide" class:first={at === 0} class:hidden={ended} bind:this={body} onscroll={pin}></div>
   {#if pinned.heads.length && !ended}
-    <!-- the section a long slide is in, its headings scrolled away: said over the top of its words, as a page's header -->
     <div class="pinned" style={pinned.at} transition:fade={{ duration: 120 }}>
       {#each pinned.heads as h, i (i)}{#if i}<span class="sep">›</span>{/if}<span>{h}</span>{/each}
     </div>
   {/if}
   {#if ended}
-    <!-- past the last slide: it says so, rather than a press that does nothing -->
     <div class="end" in:fade={{ duration: 200 }}>
       <p class="end-title">End of presentation</p>
       <p class="end-hint">{endHint(isMobile)}</p>
@@ -281,57 +236,41 @@
     padding: calc(max(40px, 9vh) + var(--top, 0px)) 0 calc(40px + var(--bottom, 0px)); box-sizing: border-box;
     background: var(--bg); outline: none; cursor: default;
   }
-  /* the note's own styles (.tiptap), a size up for a room to read it from */
   .slide {
-    /* the whole screen's width, as a slide is, and words sized to the screen both ways, so a slide looks the same on
-       any screen of its shape and a big one is not a narrow column of small type */
     --font-size: clamp(17px, min(2vw, 3.4vh), 48px); font-size: var(--font-size);
     width: calc(100% - 2 * max(24px, 5vw)); max-height: 100%; overflow-y: auto; scrollbar-width: none;
     margin: 0; align-self: flex-start; pointer-events: none; user-select: none;
   }
-  /* the first slide, the title's, in the middle of the screen; the others from the top, each heading where the last was.
-     Its title a cover's: well over the headings of the slides after it (2.9× the words was a shout, 2.2× lost on the
-     screen) */
   .slide.first { align-self: center; }
   .slide.first > :global(h1:first-child) { font-size: 2.6em; font-weight: 700; line-height: 1.12; letter-spacing: -0.025em; margin-bottom: 0.35em; }
   .slide.hidden { visibility: hidden; }
-  /* room over the words for the crumbs, taken out of the screen's top margin: they sit higher, the words where they were */
   .slide:not(.first) { padding-top: 1em; margin-top: -1em; }
   .slide > :global(:is(.again, .crumbs)) { position: relative; top: calc(var(--font-size) * -0.6); }
-  /* a diagram's drawing looked at close up (a click on it) */
   .slide:global(.chart) :global(.mermaid-view > svg) { pointer-events: auto; cursor: zoom-in; }
   .slide:global(.chart) :global(.mermaid-view.zoomed) { overflow: hidden; touch-action: none; }
   .slide:global(.chart) :global(.mermaid-view.zoomed > svg) { cursor: grab; }
-  /* a diagram's slide: the diagram as big as the screen holds it, under its headings */
   .slide:global(.chart) { display: flex; flex-direction: column; height: 100%; }
   .slide:global(.chart) > :global(.code-block) { flex: 1; min-height: 0; margin: 0; }
   .slide:global(.chart) :global(:is(.mermaid-host, .dblock, .pic, .mermaid-view)) { height: 100%; min-height: 0; margin: 0; box-shadow: none; }
   .slide:global(.chart) :global(.mermaid-view) { display: flex; align-items: center; justify-content: center; overflow: hidden; }
   .slide:global(.chart) :global(.mermaid-view > svg) { width: 100% !important; height: 100% !important; max-width: none !important; max-height: none; }
-  /* the slide that was up, going as the next comes */
   .present > :global(.leaving) { pointer-events: none; overflow: hidden; }
   .slide :global(:is(.mermaid-expand, .mermaid-play, .dock)) { display: none; }
   .slide::-webkit-scrollbar { display: none; }
   .slide > :global(:first-child) { margin-top: 0; }
-  /* a heading shown again, the slide going on under it: small, up in the corner, as a breadcrumb, the room for words */
   .slide :global(.again) {
     display: inline-block; margin: 0 0 1em; font-size: 0.55em; line-height: 1.3; font-weight: 600; color: var(--fg-dim);
   }
   .slide :global(.again + .again)::before { content: '›'; margin: 0 0.5em; font-weight: 400; }
-  /* lines further apart than in the note, as a slide is read from across a room: an inline code's chip (its tint
-     spreads past its text) reached into the line under it */
   .slide { line-height: 1.75; }
   .slide :global(:not(pre) > code) { box-shadow: 0 0 0 0.1em var(--code-bg); padding-block: 0.05em; }
-  /* a table the slide's width (its widths from the note are taken off its copy, above) */
   .slide :global(.tableWrapper) { overflow: visible; }
   .slide :global(table) { width: 100%; }
-  /* paragraphs apart, as a page of prose reads */
   .slide > :global(p + p) { margin-top: 0.6em; }
-  /* a copy to look at: a block's own tools have no place on a slide */
   .slide :global(:is(.tools, .codebar, .foldchips, .drag-handle, .block-handle)) { display: none !important; }
   .pinned {
     position: absolute; z-index: var(--z-raised); display: flex; gap: 0.5em; padding: 0 0 0.7em;
-    font-size: calc(clamp(17px, min(2vw, 3.4vh), 48px) * 0.55); line-height: 1.3; font-weight: 600; color: var(--fg-dim); /* the slide's crumbs' size */
+    font-size: calc(clamp(17px, min(2vw, 3.4vh), 48px) * 0.55); line-height: 1.3; font-weight: 600; color: var(--fg-dim);
     background: linear-gradient(var(--bg) 75%, transparent); pointer-events: none;
   }
   .pinned .sep { font-weight: 400; }

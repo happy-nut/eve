@@ -411,7 +411,6 @@ class NotesStore {
     if (was === undefined || was === now) { this.titles.set(n.id, now); return; }
     if (!this.isSettledTitle(n, now)) return;
     this.titles.set(n.id, now);
-    // ponytail: scans every body on a rename; fine for local notes, index the links if it ever bites
     const link = linkPattern(was);
     const isTitle = (t: string) => t.toLowerCase() === was.toLowerCase() || this.isTitleOfAnother(n, t);
     const ours = (section: string | undefined) => !section || splitLink(was + section, isTitle)[0].toLowerCase() === was.toLowerCase();
@@ -474,7 +473,6 @@ class NotesStore {
   shownParent(n: Note): string {
     return n.parent && this.visible.some((p) => p.id === n.parent) ? n.parent : '';
   }
-  // ponytail: ranks can get arbitrarily close after thousands of moves; renormalize then.
   place(id: string, parent: string, before: string | null) {
     history.record();
     if (id === CALENDAR_NOTE_ID && parent) return;
@@ -599,7 +597,7 @@ class NotesStore {
   }
   onTitles(run: () => void): () => void {
     run();
-    let seen = this.titleKey; // the effect's first run comes a moment later: only a change since then counts
+    let seen = this.titleKey;
     return $effect.root(() => {
       $effect(() => {
         const key = this.titleKey;

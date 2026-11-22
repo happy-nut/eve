@@ -1,8 +1,3 @@
-/**
- * A note's blocks as slides, cut by itself: a new one at each heading of the biggest size the note uses under its title
- * (the title, and whatever comes before the first of those, is the first slide). One longer than the screen is
- * scrolled through, not cut (Present.svelte).
- */
 export function slides(blocks: Element[]): Element[][] {
   const top = Math.min(9, ...blocks.slice(1).map(level));
   const out: Element[][] = [[]];
@@ -14,8 +9,6 @@ export function slides(blocks: Element[]): Element[][] {
 }
 
 const level = (b: Element) => Number(/^H([1-6])$/.exec(b.tagName)?.[1] ?? 9);
-/** the headings a block sits under, outermost first: the last of each level before it, a shallower one starting the
- *  path again (h2 h3 h3 h3 is h2 › the last h3, not every h3 in turn) */
 export function path(before: Element[]): Element[] {
   const out: Element[] = [];
   for (const b of before) {
@@ -26,11 +19,6 @@ export function path(before: Element[]): Element[] {
   return out;
 }
 
-/**
- * Each diagram (`chart`) a slide of its own, under the headings it sits under (`again` copies of them, small, unless
- * nothing but those came before it on its slide): a diagram beside words was shrunk to a corner of the screen. What
- * comes after it goes on to a slide of its own under the same headings.
- */
 export function alone(deck: Element[][], chart: (b: Element) => boolean, again: (h: Element) => Element): Element[][] {
   const small = (h: Element) => (h.classList.contains('again') ? h : again(h));
   const out: Element[][] = [];
@@ -47,6 +35,5 @@ export function alone(deck: Element[][], chart: (b: Element) => boolean, again: 
   return out;
 }
 
-/** what the end screen says to do next: a phone has no Esc or ←, only the ✕ and a tap on the left */
 export const endHint = (phone: boolean): string =>
   phone ? 'Tap ✕ to leave · tap the left side for the last slide' : 'Esc to leave · ← back to the last slide';

@@ -1,43 +1,21 @@
-/**
- * The drag handle that sets how wide a picture or a video is drawn. The width lives on the node (and
- * travels in the markdown as `|540` after the name), so it is the note's, not the window's.
- */
 export const MIN_WIDTH = 120;
 
-/**
- * Width written into a name: `caption|540` → 540. A caption that itself ends in `|2024` is written `\|2024`
- * (see escapeWidth), which is not a width. Never narrower than a drag can make it: a `|50` once read
- * as a width drew the picture 50px wide.
- */
 export function widthOf(text: string | null | undefined): number | null {
   const m = /(?<!\\)\|(\d{2,4})$/.exec(unAligned(text));
   return m ? Math.max(MIN_WIDTH, Number(m[1])) : null;
 }
 
-/**
- * Where a picture sits across the page, written after its width as `caption|540|center` (`|right`); the left
- * is where a picture sits anyway, so it is not written. A caption that itself ends in `|center` is escaped.
- */
 export type Align = 'center' | 'right';
 const ALIGN = /(?<!\\)\|(center|right)$/;
 export const alignOf = (text: string | null | undefined): Align | null => (ALIGN.exec(text ?? '')?.[1] as Align | undefined) ?? null;
 const unAligned = (text: string | null | undefined) => (text ?? '').replace(ALIGN, '');
-/** Put the alignment back on a name (with its width) for the markdown. */
 export const withAlign = (name: string, align: string | null | undefined) => (align === 'center' || align === 'right' ? `${name}|${align}` : name);
 
-/** The name without the width or alignment (and a `\|2024` or `\|center` that is part of it back as it was). */
 export const nameOf = (text: string | null | undefined) =>
   unAligned(text).replace(/(?<!\\)\|\d{2,4}$/, '').replace(/\\(\|\d{2,4})$/, '$1').replace(/\\(\|(?:center|right))$/, '$1');
-/** A name ending in `|2024` or `|center` of its own, kept from being read back as a width or an alignment. */
 export const escapeWidth = (name: string) => name.replace(/\|(\d{2,4})$/, '\\|$1').replace(/\|(center|right)$/, '\\|$1');
-/** Put the width back on a name for the markdown. */
 export const withWidth = (name: string, width: number | null | undefined) => (width ? `${name}|${width}` : name);
 
-/**
- * How wide a picture may be drawn: a picture of the note's own goes past the text to the pane's edge, 24px short
- * (app.css, .tiptap > .img-fig) — rightwards from the left, leftwards from the right, both ways centred; anything else
- * keeps to the column it is in.
- */
 function roomFor(media: HTMLElement): number {
   const tip = media.closest<HTMLElement>('.tiptap'), frame = media.closest<HTMLElement>('.img-fig');
   if (!tip) return Infinity;
@@ -49,10 +27,6 @@ function roomFor(media: HTMLElement): number {
   return Math.max(column, frame.dataset.align === 'center' ? column + 2 * side : column + side);
 }
 
-/**
- * A grip on the media's right edge. Dragging resizes it live; letting go reports the final width, and
- * a double-click hands it back to its natural size (`null`).
- */
 export function sizeGrip(media: HTMLElement, commit: (width: number | null) => void): HTMLElement {
   const grip = document.createElement('span');
   grip.className = 'size-grip';
@@ -61,7 +35,7 @@ export function sizeGrip(media: HTMLElement, commit: (width: number | null) => v
   grip.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    grip.setPointerCapture(e.pointerId); // the drag survives the pointer crossing the media
+    grip.setPointerCapture(e.pointerId);
     const x0 = e.clientX;
     const w0 = media.getBoundingClientRect().width;
     const column = roomFor(media);
@@ -76,8 +50,6 @@ export function sizeGrip(media: HTMLElement, commit: (width: number | null) => v
       grip.removeEventListener('pointermove', move);
       grip.removeEventListener('pointerup', up);
       grip.removeEventListener('pointercancel', up);
-      // a plain click on the grip is no resize: committed all the same, it fixed a picture that followed the
-      // column's width at whatever width it happened to be drawn
       if (moved) commit(Math.round(media.getBoundingClientRect().width));
     };
     grip.addEventListener('pointermove', move);

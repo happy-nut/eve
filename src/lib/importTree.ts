@@ -4,36 +4,25 @@ import { TEXT_FILE, DOC_FILE, VIDEO_FILE } from './drop';
 import { dirOf, nameOf, stem, resolveLink } from './paths';
 import { attachmentCandidates, isKeepNote, keepOrder, keepToNote, type FromKeep } from './keep';
 
-/**
- * One file of an import, wherever it came from (a folder picked in Finder, one dropped on the window): its place
- * in the import, `Folder/Sub/Note.md`, and how to read it.
- */
 export interface Source {
   path: string;
   text(): Promise<string>;
-  /** copied next to the notes; its address in a note (assets/…) */
   asset(): Promise<string>;
 }
 
 export interface Made {
   note: Note;
   source: Source;
-  /** an attachment's own line (`![](assets/…)`), for a file dropped on its own into the open note */
   embed?: string;
 }
 
-/** Files this app takes in, by extension. */
 export const IMPORTABLE = /\.(md|markdown|mdx|txt|pdf|xlsx?|hwpx?|png|jpe?g|gif|webp|svg|heic|mp4|mov|m4v|webm)$/i;
 const embedOf = (name: string, src: string) => (DOC_FILE.test(name) || VIDEO_FILE.test(name) ? `[${name.replace(/[[\]]/g, '')}](${src})` : `![](${src})`);
 const byName = (a: Source, b: Source) => a.path.localeCompare(b.path, undefined, { numeric: true });
 /** a file's or a folder's name as a title: Notion's export puts the page's id after it (`Trip 1a2b…`), left off */
 const titled = (name: string) => name.replace(/ [0-9a-f]{32}$/, '').trim();
-/** a title as a `# ` line that reads back as it is: what markdown takes for markup in it (`_old_`, `2*3*4`, a leading
- *  `- ` or `1. `) escaped, and the name came out otherwise */
 const heading = (t: string) => `# ${escapeTitle(t).replace(/^([-+>])/, '\\$1').replace(/^(\d+)([.)])/, '$1\\$2')}`;
 
-/** a file's front matter (Obsidian's, a static site's): `key: value` lines, a list as `- item` lines under its key or
- *  `[a, b]`. Eve's own keys are not taken from it */
 function frontMatter(yaml: string): Record<string, PropValue> {
   const out: Record<string, PropValue> = {};
   let list: string | null = null;
@@ -68,11 +57,10 @@ function frontMatter(yaml: string): Record<string, PropValue> {
 export async function importTree(sources: Source[], into = '', looseInto = into): Promise<Made[]> {
   const all = [...sources].sort(byName);
   const at = new Map(all.map((s) => [s.path, s]));
-  const named = new Map<string, Source>(); // by file name, for an Obsidian embed that names no folder
+  const named = new Map<string, Source>();
   for (const s of all) if (!named.has(nameOf(s.path).toLowerCase())) named.set(nameOf(s.path).toLowerCase(), s);
   const made: Made[] = [];
 
-  // a folder's page, made the first time something goes in it (an empty folder makes none)
   const folders = new Map<string, string>();
   const pageFor = (dirs: string[], loose = true): string | undefined => {
     let up = (loose && !dirs.length ? looseInto : into) || undefined;
@@ -85,7 +73,6 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
     return up;
   };
 
-  // ---- Google Keep ----
   const taken = new Set<string>();
   const keep: (FromKeep & { dirs: string[]; source: Source })[] = [];
   for (const s of all.filter((x) => /\.json$/i.test(x.path))) {
@@ -101,22 +88,17 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
         const file = at.get(inDir(c));
         if (!file) continue;
         taken.add(file.path);
-        // trashed in Keep: left behind, its pictures too
         if (json.isTrashed || copied[a.filePath]) continue;
-        try { copied[a.filePath] = await file.asset(); } catch { /* a kind Eve cannot hold */ }
+        try { copied[a.filePath] = await file.asset(); } catch { }
       }
     }
     const note = keepToNote(json, copied);
-    // its label a page in its folder's
     if (note) keep.push({ ...note, source: s, dirs: [...(dir ? dir.split('/') : []), ...(note.sub ? note.sub.split('/') : [])] });
   }
   for (const k of keep.sort(keepOrder)) made.push({ note: notes.addImported(k.body, k.updatedAt || Date.now(), pageFor(k.dirs)), source: k.source });
 
-  // ---- the rest: text files read first, so links between them know their titles ----
   const texts = all.filter((s) => !taken.has(s.path) && TEXT_FILE.test(s.path));
   const bodies = new Map<string, string>(), props = new Map<string, Record<string, PropValue>>();
-  // a title another page has (README in two folders, a Meeting there already) is given a number, as Finder names a
-  // copy: the [[links]] to the two went to one of them
   const used = new Set<string>();
   const free = (t: string) => {
     let out = t;
@@ -126,26 +108,21 @@ export async function importTree(sources: Source[], into = '', looseInto = into)
   };
   for (const s of texts) {
     let text = (await s.text()).replace(/^﻿/, '').replace(/\r\n?/g, '\n');
-    // front matter is the page's properties: under the title, its `---` read as a divider and its last line a heading
     const fm = /^---\n([\s\S]*?)\n---[ \t]*(?:\n|$)/.exec(text);
     if (fm) { props.set(s.path, frontMatter(fm[1])); text = text.slice(fm[0].length).replace(/^\n+/, ''); }
-    // the file's name is the title, as it is in Finder; a heading that says something else stays, under it
     const name = free(titled(stem(nameOf(s.path))));
     bodies.set(s.path, titleOf({ body: text }) === name ? text : `${heading(name)}\n\n${text}`);
   }
   const title = (path: string) => titleOf({ body: bodies.get(path)! });
 
-  // a folder that is a page's: `Trip/` beside `Trip.md`
   const pageOf = new Map<string, string>();
   for (const s of texts) pageOf.set(s.path.replace(/\.[^./]+$/, ''), s.path);
 
-  // a picture or a file a note reaches is copied once and goes into that note
   const copies = new Map<string, Promise<string>>();
   const copy = (s: Source) => { let c = copies.get(s.path); if (!c) copies.set(s.path, (c = s.asset())); return c; };
   const inside = new Set<string>();
   async function relink(body: string, dir: string): Promise<string> {
     const jobs: Promise<[string, string]>[] = [];
-    // [label](path) and ![alt](path), the path maybe in <…> and followed by a "title"
     for (const m of body.matchAll(/(!?)\[([^\]\n]*)\]\(\s*<?([^)\s>]+)>?(\s+"[^"]*")?\s*\)/g)) {
       const [whole, bang, label, target] = m;
       const path = resolveLink(dir, target);

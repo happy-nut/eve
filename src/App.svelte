@@ -40,15 +40,11 @@
   import { claimKeys, handledBy, PRIORITY } from './lib/keys';
 
   let sidebarOpen = $state(true);
-  // where the note's pane starts across the window, for what sits in its middle (a toast, a hint)
   $effect(() => { document.documentElement.style.setProperty('--pane-left', !isMobile && sidebarOpen ? '260px' : '0px'); });
   let settingsOpen = $state(false);
-  // a layer like any other while it is open (ui.layers): back and Esc reach it in its turn, and it puts the keyboard back
   $effect(() => { if (settingsOpen) return ui.openedSettings(() => (settingsOpen = false)); });
   let searchEl = $state<HTMLInputElement | null>(null);
   let hotkeyError = $state<string | null>(null);
-  // hold ⌘: sidebar notes show 1…9, ⌘<digit> opens that note. Not while anything is up over the note (a floating
-  // page, Settings, a dialog): the numbers lit up in the list behind it
   let cmdHeld = $state(false);
   let cmdTimer: ReturnType<typeof setTimeout> | undefined;
   function cmdDown() { clearTimeout(cmdTimer); cmdTimer = setTimeout(() => (cmdHeld = true), 550); }
@@ -57,20 +53,18 @@
     const note = tree.visibleOrdered()[n - 1];
     if (!note) return;
     ui.focusOwner = 'editor';
-    ui.search = ''; // the numbers are the whole list's (they are not shown on matches): the search is left behind
+    ui.search = '';
     notes.currentId = note.id;
     queueMicrotask(focusNote);
   }
 
-  // global hotkey follows the shortcut store live
   $effect(() => {
     const keys = appearance.s.summon ? shortcuts.keysFor('toggleWindow') : '';
     setGlobalHotkey(keys).then((err) => (hotkeyError = err));
   });
 
-  // Android back: a popup or a dialog closes, a note goes back to the list, and only the list leaves the app
   $effect(() => {
-    if (!isMobile || !isTauri || (sidebarOpen && !ui.layers.count && !ui.search)) return; // a filtered list: back clears it
+    if (!isMobile || !isTauri || (sidebarOpen && !ui.layers.count && !ui.search)) return;
     let off: (() => void) | undefined, gone = false;
     onBack(phoneBack)
       .then((u) => (gone ? u() : (off = u)));
@@ -79,24 +73,18 @@
 
   if (import.meta.env.DEV) Object.assign(window as any, { __notes: notes, __sync: sync, __appearance: appearance });
   onMount(() => {
-    // launched at login so the summon hotkey is always there (toggle in Settings), as this Eve
     void autostart.keep().catch(() => {});
     if (dock.hidden) dock.set(true);
-    // a file opened from Finder joins the notes like any import — it is a note from then on, movable
-    // in the sidebar and synced (the file on disk is left as it was)
     notes.load().then(() => {
-      // a phone opens where it was left: the note, not the list over it (the list is a swipe or Back away)
       if (isMobile && notes.resumed) sidebarOpen = false;
       void files.onOpen(async (paths) => {
         const first = await importPaths(paths);
         if (first) { ui.focusOwner = 'editor'; notes.currentId = first.id; }
       });
-      // eve://open?id=… (`eve open`, Claude's open_note): that note, at its heading when one is named.
-      // Showing is all a link may do: an unknown id is ignored, nothing is made
       void links.onOpen((url) => {
         const link = parseEveLink(url);
         if (!link || !notes.all.some((n) => n.id === link.id && !n.deleted)) return;
-        putAway(); // whatever was open over the app (a full-screen diagram, a card) would sit over the note
+        putAway();
         ui.focusOwner = 'editor';
         if (notes.currentId === link.id) {
           if (link.section) hooks.section?.(link.section);
@@ -105,16 +93,11 @@
         notes.section = link.section;
         notes.currentId = link.id;
       });
-      // what Claude writes through the MCP server: done through the store, as typed (inbox.ts)
       void inbox.onAsk(applyAll);
       widget.onOpen((ask) => {
-        // the phone-setup page: take the sign-in the Mac's QR points at
         const ticket = parseTicket(ask);
         if (ticket) { settingsOpen = true; void sync.claim(ticket).then(offerUpdate); return; }
-        // the reminder's notification: today's note
         if (ask === 'daily') { writeToday(); return; }
-        // a Markdown file opened with Eve or shared to it: MainActivity copied it (Opened.kt), and it joins the
-        // notes as a file from Finder does on the Mac
         if (ask.startsWith('open:')) {
           void importPaths(ask.slice(5).split('\n')).then((first) => {
             if (!first) return;
@@ -125,12 +108,9 @@
           });
           return;
         }
-        // the home-screen widget: straight into that note (or a new one), keyboard up
         const id = ask.startsWith('note:') ? ask.slice(5) : null;
         if (ask !== 'new' && !id) return;
         putAway();
-        // a widget may still show a note deleted since (on the Mac, then synced): opened, it took what was
-        // typed into a note no list shows. The list instead.
         if (id && !notes.all.some((n) => n.id === id && !n.deleted)) { sidebarOpen = true; return; }
         ui.focusOwner = 'editor';
         if (id) notes.currentId = id; else newNote();
@@ -141,7 +121,6 @@
     window.addEventListener('eve-summon', onSummon);
     // coming back by click, ⌘Tab or the Dock fires no DOM 'focus' when the webview never let go of it
     let unfocus: (() => void) | undefined;
-    // (not over a click that brought it back: that click puts the caret, cameBack)
     onWindowFocus(() => { redrawPanes(); cameBack(restoreFocus); }).then((u) => (unfocus = u));
     const stopSync = sync.start();
     const stopReminder = startReminder();
@@ -173,7 +152,7 @@
   function redrawCaretLine(view: View) {
     const at = view.state.selection.$from;
     if (!at.parent.isTextblock || at.depth < 1) return;
-    view.docView.markDirty(at.before(), at.after()); // the whole line, so it is built anew
+    view.docView.markDirty(at.before(), at.after());
     view.updateState(view.state);
   }
 
@@ -186,7 +165,7 @@
   function restoreFocus() {
     const back = away;
     away = null;
-    if (ui.layers.modal) return; // a dialog owns focus
+    if (ui.layers.modal) return;
     const a = document.activeElement as HTMLElement | null;
     if (a && a.isConnected && a !== document.body) return;
     const el = back?.isConnected ? back : document.querySelector<HTMLElement>(ui.card ? '.card-page .tiptap' : '.tiptap');
@@ -196,7 +175,6 @@
     if (view) view.focus(); else el?.focus();
   }
 
-  /** The window called up by the hotkey: the caret back, and in sight, ready to write. */
   function onSummon() {
     redrawPanes();
     restoreFocus();
@@ -207,19 +185,10 @@
     if (next) notes.currentId = next.id;
   }
 
-  /**
-   * A phone: a swipe to the right on a note brings the list back in. Not when the finger is choosing
-   * text: a long press that starts a selection, a drag of its handles, or any gesture that leaves text
-   * selected is the system's, and the list stays away.
-   */
   let swipe: { x: number; y: number; at: number } | null = null;
   function swipeStart(e: TouchEvent) {
     swipe = null;
-    // a diagram on the whole screen pans with the finger, and Find's bar would stay over the list
-    // nor while something is up over the note (a formula being typed: swiped, it stayed open, hidden, taking keys)
     if (!isMobile || sidebarOpen || settingsOpen || ui.card || ui.diagramView !== null || ui.find || ui.layers.count || hooks.diagramBack || e.touches.length !== 1) return;
-    // things that scroll sideways themselves keep the gesture: a wide diagram or equation scrolled back to its start
-    // brought the list in instead
     const t = e.target as HTMLElement;
     if (t.closest('pre, table, .kanban, .mbar, .mhead, input, textarea, .menu, .suggest, .cal, .dblock, .diagram-canvas, .math-block')) return;
     for (let el: HTMLElement | null = t; el && el !== document.body; el = el.parentElement) {
@@ -233,23 +202,17 @@
     const dx = t.clientX - swipe.x, dy = t.clientY - swipe.y;
     const held = Date.now() - swipe.at;
     swipe = null;
-    // a swipe is quick: a finger held first is a long press choosing text, and text selected when it
-    // lifts means the drag was choosing it (or pulling a handle). Text, not a block chosen whole: a diagram left chosen
-    // after its full screen closed is a selection with no text, and kept every swipe from bringing the list in
     if (held > 600 || getSelection()?.toString()) return;
     if (dx > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) toList();
   }
-  /** A phone's way back to the list (a swipe, back): the keyboard goes with the note, and a new note left unwritten
-   *  goes too (+, then a swipe left an "Untitled" row behind; back did not) */
   function toList() {
     // the native back key leaves the focus where it was: the note kept its caret behind the list, and with it the
     // "/" menu and a table's tools, drawn over the list. They go when the note lets go of the keyboard
     (document.activeElement as HTMLElement | null)?.blur();
-    notes.letGo(); // a new note left unwritten is no row in the list to come back to
+    notes.letGo();
     sidebarOpen = true;
   }
 
-  /** A phone's note bar: ⋯ (find & replace, select all, export to the share sheet), a widget of this note on the home screen, delete. */
   function moreMenu(from: HTMLElement) {
     const r = from.getBoundingClientRect();
     ui.openMenu({ clientX: r.right, clientY: r.bottom }, [
@@ -259,14 +222,11 @@
       { label: 'Find & replace…', hide: !isMobile, run: () => ui.openFind() },
       { label: 'Select all', hide: !isMobile, run: () => hooks.command?.('selectAll') },
       { label: 'Export…', sep: true, run: () => exportMenu({ clientX: r.right, clientY: r.bottom }) },
-      // the .md file itself, for a terminal, an agent or another app (a phone's is inside the app, of no use outside it)
       { label: 'Copy file path', sep: true, hide: !isTauri || isMobile || !notes.current, run: () => void copyPath() },
       { label: 'Version history…', sep: !isTauri || isMobile, hide: !notes.current, run: () => { const n = notes.current; if (n) { notes.flush(n.id); ui.openHistory(n.id); } } },
       { label: 'Trash…', hide: !isMobile, run: () => ui.openTrash() },
     ]);
   }
-  /** the open note a slide at a time (Present.svelte), from the page as it is drawn; `here`: from the slide with the
-   *  block the caret is in */
   function present(here = false) {
     const page = hooks.page?.();
     if (!page) return;
@@ -277,18 +237,16 @@
   async function copyPath() {
     const n = notes.current;
     if (!n) return;
-    notes.flush(n.id); // on disk as it reads now
+    notes.flush(n.id);
     await copyText(`${await storage.path()}/${n.id}.md`);
     ui.toast(`Path to “${titleOf(n)}” copied`);
   }
-  /** Opened from the Mac's QR: a newer Eve is asked about there and then, not left to a banner. */
   async function offerUpdate() {
     await updates.check(true);
     const v = updates.available?.version;
     if (v && (await ui.ask(`Eve ${v} is ready. Update now?`, false, 'Update'))) updates.install();
   }
 
-  /** notes pinned to the top of the home-screen widget (the pin in the note's bar shows it) */
   let widgetTop = $state(widget.top());
   function pinToHome() {
     const n = notes.current;
@@ -299,15 +257,13 @@
     const n = notes.current;
     if (!n || !(await ui.ask(`Delete “${titleOf(n)}”?`))) return;
     notes.remove(n.id);
-    sidebarOpen = true; // back to the list, not into whichever note came next
+    sidebarOpen = true;
   }
 
-  /** A new note: a search still narrowing the list would leave its row out of it, so the search goes. */
   function newNote() {
     ui.search = '';
     notes.create();
   }
-  /** A phone's +: a new note, open, keyboard up — or, with daily notes on, the choice of that or today's. */
   function newOnPhone() {
     const write = (open: () => void) => () => { ui.focusOwner = 'editor'; open(); sidebarOpen = false; widget.keyboard(); };
     ui.openMenu({ clientX: 0, clientY: 0 }, [
@@ -315,12 +271,9 @@
       { label: "Today's daily note", run: writeToday, hide: !appearance.s.dailyNotes },
     ]);
   }
-  /** Whatever was left open over the app (a picture, a picker, a menu, a dialog, a card, a PDF, Find, Settings),
-   *  put away before a note is brought to the front from outside (the reminder, the widget), or it sat over it. */
   function putAway() {
-    ui.layers.closeAll('putAway'); // a formula being typed too, and a phone's math keyboard with it
+    ui.layers.closeAll('putAway');
   }
-  /** Today's note, to write in: caret under the template, keyboard up on a phone. */
   function writeToday() {
     putAway();
     ui.focusOwner = 'editor';
@@ -329,23 +282,15 @@
     sidebarOpen = false;
     widget.keyboard();
   }
-  /** The daily template, from the calendar: a floating page over it, like a board's card template. */
   function openTemplate() {
     const n = notes.templateNote();
     void ui.openPage(n.body, (md) => notes.update(n.id, md),
       'Template — every new day starts like this. {{date}} and {{weekday}} are filled in.', () => n.id).then(() => notes.flush(n.id));
   }
-  /** A day picked in the calendar: its note, floating over the calendar like a board's card. */
   function openDay(key: string) {
-    const day = notes.dayDraft(key); // made only once something is written in it
+    const day = notes.dayDraft(key);
     void ui.openPage(day.body, (md) => day.write(md), undefined, () => day.note?.id ?? null).then(() => { if (day.note) notes.flush(day.note.id); });
   }
-  /**
-   * Where is the keyboard? The pane it just moved to (the list ↔ the note) flashes blue once. Only on a
-   * move between panes made from the keyboard: typing in a note, or its caret coming back to the same
-   * pane, tells the user nothing they don't know. Never on a phone (its on-screen keys count as keys).
-   * Nor into a text box (⌘K's search, a row being renamed): its own focus ring already says where the keys go.
-   */
   let lastPane: Element | null = null;
   function flashPane(e: FocusEvent) {
     const pane = (e.target as HTMLElement | null)?.closest?.('aside, main');
@@ -360,26 +305,15 @@
     setTimeout(() => pane.classList.remove('focus-flash'), 300);
   }
 
-  /** A phone's back (the bar's chevron, or Android's): a day goes back to its calendar, anything else to the list. */
   function phoneBack() {
-    // what is on top closes first, one at a time: whatever opened last (a picture over a card, a setting's choices over
-    // Settings, a dialog over a sheet). A formula being typed is one too: back finishes it, and its keyboard goes with it
     if (ui.layers.closeTop('back')) return;
-    else if (hooks.diagramBack) hooks.diagramBack(); // a diagram being edited: a step out of it, not out of the note
-    else if (sidebarOpen && ui.search) ui.search = ''; // the list cut down to a search: back shows all of it, before leaving
+    else if (hooks.diagramBack) hooks.diagramBack();
+    else if (sidebarOpen && ui.search) ui.search = '';
     else if (notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID) && appearance.s.dailyNotes) notes.currentId = CALENDAR;
     else toList();
   }
-  // another note brought up (a link, the widget, a reminder, ⌘1–9, ⌘N, back/forward): a diagram shown full
-  // screen was the last one's, and so was a board's card or a day floating over it. A card left up wrote into
-  // a board no longer on screen: what was typed in it was lost, with an error at every key. Its last keys
-  // were handed over before the switch (notes.currentId flushes them), so closing it loses nothing.
   $effect(() => { void notes.currentId; untrack(() => { ui.closeDiagramView(); ui.closeCard(); }); });
-  // no folders, as in Notion: pages in pages. An older version's groups become pages (this device's from before, or
-  // another's come in by sync)
   $effect(() => { if (notes.loaded && tree.groups.length) untrack(() => tree.toPages()); });
-  // the front tab shows whatever note is opened, however it was; a tab whose note went (deleted, or a blank one left)
-  // closes (tabs.svelte.ts). The list read too, so a deletion is seen when the open note stays the same.
   let lastOpen: string | null = null;
   $effect(() => {
     const cur = notes.currentId;
@@ -388,15 +322,11 @@
     untrack(() => tabs.follow(lastOpen));
     lastOpen = cur;
   });
-  // daily notes on: the calendar's row exists (opening it shows the calendar: notes.currentId)
   $effect(() => { if (appearance.s.dailyNotes && notes.loaded) notes.ensureCalendar(); });
-  // the phone's reminder alarm follows the settings
   $effect(() => { if (isMobile) syncPhoneReminder(); });
   $effect(() => { if (isMobile) widget.daily(appearance.s.dailyNotes && appearance.s.dailyInWidget); });
-  // daily notes switched off while the calendar was up: back to a note
   $effect(() => { if (!appearance.s.dailyNotes && notes.currentId === CALENDAR) notes.currentId = notes.firstPage()?.id ?? null; });
 
-  /** ⌘\\: closed -> open + focus list; focus already in list -> close + back to editor; else focus list. */
   function focusSidebar() {
     if (sidebarOpen && document.activeElement?.closest('aside')) {
       sidebarOpen = false;
@@ -406,7 +336,6 @@
     sidebarOpen = true;
     queueMicrotask(() => (document.querySelector<HTMLElement>('aside [data-row].active') ?? foldedOver() ?? document.querySelector<HTMLElement>('aside [data-row]'))?.focus());
   }
-  /** the open note's row is folded away: the row of the page it is folded under */
   function foldedOver() {
     const row = (sel: string) => document.querySelector<HTMLElement>(`aside ${sel}`);
     for (let n = notes.current; n?.parent; n = notes.all.find((m) => m.id === n!.parent) ?? null) {
@@ -421,27 +350,13 @@
     if (!(await ui.ask(`Delete “${titleOf(n)}”?`))) return;
     notes.remove(n.id);
   }
-  // Arrows are not on this list: moving the caret is reading, not writing, and folding the list away
-  // under an arrow key takes the highlighted row off the screen just when it is being used to navigate.
   const EDIT_KEYS = /^(Backspace|Delete|Enter|Tab)/;
-  /** a keystroke that writes in the editor (not a shortcut, not the sidebar's own keys) */
   function isWriting(e: KeyboardEvent) {
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
     if (!(document.activeElement as HTMLElement | null)?.closest('.tiptap')) return false;
     return e.key.length === 1 || EDIT_KEYS.test(e.key);
   }
 
-  /**
-   * A file dragged in from Finder. Every file becomes a note of its own, beside the open one, and
-   * leaves a mark in the note that was open: a text file links to the note it made, an attachment
-   * (picture, PDF) shows up as itself. A whole folder can be dropped too — it comes in with its shape
-   * (importTree.ts: a folder as a page of its name, a page's folder as its sub-pages, its pictures in its notes, a
-   * Keep export as Keep notes) and keeps to itself instead of writing into the open note. Dropped on the list, it
-   * goes where it was let go: on a note, beside it; elsewhere on the list, at the top.
-   * Either way the webview never gets the drop: its own pastes DOM into the editor, which then takes no
-   * keystroke at all.
-   */
-  /** the note's text size, said for a moment after ⌘+ / ⌘- / ⌘0 */
   let sizeShown = $state<number | null>(null);
   let sizeTimer: ReturnType<typeof setTimeout> | undefined;
   function showSize(px: number) {
@@ -451,14 +366,13 @@
   }
   let dropHint = $state<string | null>(null);
   let hintTimer: ReturnType<typeof setTimeout> | undefined;
-  let dropRow: HTMLElement | null = null; // the list's row a drop would go into, marked while it is over it
+  let dropRow: HTMLElement | null = null;
   function markRow(el: HTMLElement | null) {
     if (el === dropRow) return;
     dropRow?.classList.remove('file-over');
     el?.classList.add('file-over');
     dropRow = el;
   }
-  /** where on the list a drop is: the page it goes under ('' = the top), or null when it is not over the list */
   function listTarget(target: EventTarget | null): { into: string; row: HTMLElement | null } | null {
     const el = target as HTMLElement | null;
     if (!el?.closest?.('aside')) return null;
@@ -489,11 +403,9 @@
     dropHint = null;
     markRow(null);
     if (!e.dataTransfer?.types.includes('Files')) return;
-    const taken = e.defaultPrevented; // dropped into a note: the editor has that attachment already
+    const taken = e.defaultPrevented;
     e.preventDefault();
     const on = listTarget(e.target);
-    // a picture or a PDF the editor took is in the note already; made a note of its own as well, every
-    // file came back as an extra note in the list and was saved twice. A text file still becomes a note.
     const dropped = (await droppedFiles(e.dataTransfer)).filter(({ file, dir }) => !taken || dir || !isAsset(file));
     const made = await importTree(dropped.map(({ file, dir }) => ({
       path: dir ? `${dir}/${file.name}` : file.name,
@@ -501,37 +413,24 @@
       asset: () => saveAsset(file),
     })), on?.into ?? '', on?.into ?? notes.current?.parent ?? '');
     if (made.length) ui.focusOwner = 'editor';
-    if (on) return; // put on the list: nothing written into the open note
+    if (on) return;
     for (const { note, source, embed } of made) {
-      if (source.path.includes('/')) continue; // a folder brings its own tree; it does not write into the open note
+      if (source.path.includes('/')) continue;
       if (!embed) hooks.attach?.(`[[${titleOf(note)}]]`);
       else if (!taken) hooks.attach?.(embed);
     }
   }
 
   function onKeydown(e: KeyboardEvent) {
-    // ⌘ alone peeks at the numbers; ⌘ with anything else is a shortcut, so the icons come straight back
-    // (including a modifier already held when ⌘ goes down — ⇧⌘ waiting for its third key is not a peek)
     if (e.key === 'Meta' && !e.shiftKey && !e.altKey && !e.ctrlKey) cmdDown();
     else cmdUp();
-    // writing takes the window: the list folds away the moment you type inside the editor. Not in a floating page
-    // (a card, a day): it is over the note, and the list behind it stays as it was
     if (sidebarOpen && appearance.s.closeSidebarOnWrite && !ui.card && isWriting(e)) sidebarOpen = false;
-    // the right-click menu takes the keyboard while it is up, wherever the focus actually sits; so do a dialog, the
-    // emoji picker and a diagram on the whole screen (they take their own Esc)
     if (ui.layers.grabbing) {
       if (e.key === 'Escape' && ui.layers.escape()) e.preventDefault();
-      else if (ui.layers.trapTab(e)) { /* round its own controls */ }
-      // Settings' own key closes it again, the one shortcut that reaches past it
+      else if (ui.layers.trapTab(e)) { }
       else if (settingsOpen && ui.layers.top?.id === 'settings' && shortcuts.match(e, ['app'])?.id === 'settings') { e.preventDefault(); settingsOpen = false; }
       return;
     }
-    // Escape puts away what is open over the note, the newest first — the find bar, the PDF panel, a floating page (a
-    // board's card, a day from the calendar) — and only a bare note lets it through to hide the window. Tied to the
-    // key, not to the rebindable action: closing the thing on top is what Escape means everywhere in the app. A page
-    // closes on its own Esc; one that gets here had the focus outside it (on the day behind it, say), and must still
-    // close the page rather than hide the window. Not an Esc the note took (closing its / menu), nor one a popup
-    // inside the page took: that keeps the page open.
     if (e.key === 'Escape' && handledBy(e) !== 'taken' && ui.layers.escape()) {
       e.preventDefault();
       return;
@@ -542,52 +441,42 @@
       return;
     }
     if (handledBy(e) === 'taken') return;
-    // ⌘Z outside the note's text (the list): the last thing done to the notes taken back
     if (ui.undoKey(e)) { e.preventDefault(); return; }
-    // ⌘+ is ⌘⇧= on most keyboards (and the keypad's +): the same as ⌘= unless it is bound to something itself
-    // and ⌘K that linked nothing (no words chosen, or the list has the keys) is search, as in Notion
     const a = shortcuts.match(e, ['app']) ?? (e.key === '+' && (e.metaKey || e.ctrlKey) && !e.altKey ? shortcuts.actions.find((x) => x.id === 'textBigger') : undefined)
       ?? (shortcuts.keysFor('link') && eventToKeys(e) === shortcuts.keysFor('link') ? shortcuts.actions.find((x) => x.id === 'search') : undefined);
     if (!a) return;
-    // Escape belongs to whatever is open on top of the note (the PDF panel closes on it, and lets the
-    // window hide once it is gone)
-    if (a.id === 'hide' && (settingsOpen || document.activeElement === searchEl)) return; // handled locally
+    if (a.id === 'hide' && (settingsOpen || document.activeElement === searchEl)) return;
     e.preventDefault();
-    // the list behind a floating page: the page is put away first (as ⌘⇧↓ puts it away, opening another note), so
-    // the list is not opened, folded or focused unseen behind it. Its last keys are handed over before it goes.
     if (ui.card && (a.id === 'search' || a.id === 'focusSidebar')) { takeEditorKeys(); ui.closeCard(); }
-    // Settings over floating pages: they are put away, all of them, so Settings is the one thing up
     if (a.id === 'settings' && !settingsOpen && ui.card) { takeEditorKeys(); while (ui.card) ui.closeCard(); }
     switch (a.id) {
       case 'newNote':
-        // from the sidebar, ask what to create via the + menu
         if (document.activeElement?.closest('aside')) hooks.openPlus?.();
         else { ui.focusOwner = 'editor'; newNote(); }
         break;
       case 'search': sidebarOpen = true; queueMicrotask(() => searchEl?.focus()); break;
-      case 'find': // pressing it again puts the bar away and hands the note back the caret
+      case 'find':
         if (ui.find) ui.closeFind(); else ui.openFind();
         break;
       case 'focusSidebar': focusSidebar(); break;
       case 'back': notes.back(); break;
       case 'forward': notes.forward(); break;
-      case 'parentPage': { // the page this one is under, as Notion's ⌘⇧U goes up one level
+      case 'parentPage': {
         const up = notes.current?.parent;
         if (up && notes.all.some((n) => n.id === up && !n.deleted)) notes.currentId = up;
         break;
       }
-      case 'copyLink': { // a link that shows this note in Eve, from any app (eve open's, and the MCP server's)
+      case 'copyLink': {
         const n = notes.current;
         if (n) void navigator.clipboard?.writeText(`eve://open?id=${encodeURIComponent(n.id)}`).then(() => ui.toast(`Link to “${titleOf(n)}” copied`));
         break;
       }
-      case 'theme': { // the other of what is shown now: a system theme becomes the one it is not
+      case 'theme': {
         const dark = appearance.s.theme === 'dark' || (appearance.s.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
         appearance.set({ theme: dark ? 'light' : 'dark' });
         break;
       }
       case 'newTab': if (!isMobile) { ui.search = ''; const n = notes.create('', notes.current?.parent); tabs.open(n.id); ui.focusOwner = 'editor'; } break;
-      // the last tab: put Eve away, as Esc does (not a pinned one among others: it stays, and so does the window)
       case 'closeTab': if (!isMobile && !tabs.close() && tabs.list.length <= 1) win.hide(); break;
       case 'reopenTab': if (!isMobile) tabs.reopen(); break;
       case 'nextTab': if (!isMobile) tabs.step(1); break;
@@ -613,9 +502,7 @@
       // too: a Korean word's last syllable is still being put together when ⌘N or ⌘1 comes straight after it
       claimKeys('global', { '*': onKeydown }, { priority: PRIORITY.app, composing: true }),
       claimKeys('global', { Meta: () => cmdUp() }, { keyup: true, priority: PRIORITY.app, composing: true }),
-      // ⌘Z in the note that came up after the open one was deleted: the delete back, before the note's own undo
       claimKeys('global', { 'Mod-z': (e) => ui.toastUndoKey(e) }, { capture: true }),
-      // the last thing used was the keyboard (any key, before anything takes it): hover-only buttons wait for the mouse
       claimKeys('global', { '*': () => { document.documentElement.dataset.input = 'keyboard'; delete document.documentElement.dataset.hover; } },
         { capture: true, priority: PRIORITY.watch, composing: true }),
     ];
@@ -643,7 +530,6 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="shell" ontouchstart={swipeStart} ontouchend={swipeEnd} onfocusin={(e) => (ui.focusOwner = (e.target as HTMLElement).closest('aside') ? 'sidebar' : 'editor')}>
   <div class="dragbar" data-tauri-drag-region></div>
-  <!-- window toolbar, right of the traffic lights -->
   <div class="toolbar">
     <button class="icon" aria-label="Sidebar" data-tip="Sidebar" data-keys={shortcuts.keysFor('focusSidebar')} onclick={() => (sidebarOpen = !sidebarOpen)}>
       <svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6.5 3v10"/></svg>
@@ -659,7 +545,6 @@
     </button>
   </div>
   {#if isMobile && !sidebarOpen}
-    <!-- a phone: the note's own bar, back to the list on the left, a new note on the right -->
     <header class="mhead">
       <button class="micon mback" aria-label="Back" onclick={phoneBack}>
         <svg viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg>
@@ -688,7 +573,6 @@
         </div>
       {/key}
       {#if !isMobile}
-        <!-- the note's own menu, at the right end of the window's top row (a phone has it in its bar) -->
         <button class="icon note-more" aria-label="More" data-tip="More" onclick={(e) => moreMenu(e.currentTarget)}>
           <svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".9"/><circle cx="8" cy="8" r=".9"/><circle cx="12.5" cy="8" r=".9"/></svg>
         </button>
@@ -703,7 +587,6 @@
   <MobileBar />
 {/if}
 <Hint />
-<!-- rarely opened: each arrives as its own chunk the first time, not with the app's start -->
 {#if settingsOpen}
   {#await import('./Settings.svelte') then { default: Settings }}<Settings onClose={() => (settingsOpen = false)} {hotkeyError} />{/await}
 {/if}
@@ -739,8 +622,6 @@
 {#if ui.emoji}
   {#await import('./EmojiPicker.svelte') then { default: EmojiPicker }}<EmojiPicker />{/await}
 {/if}
-<!-- its own block: one in the menu's would stay, catching clicks, while the menu fades out (a head clicked at once
-     after a pick from another head's menu did nothing) -->
 {#if ui.menu && !isMobile}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="menu-scrim" onmousedown={() => ui.closeMenu()} oncontextmenu={(e) => { e.preventDefault(); ui.closeMenu(); }}></div>

@@ -1,9 +1,3 @@
-/**
- * A table's own handles, Notion's, on a Mac under the pointer: ⋮⋮ on the left edge of the row the pointer is in and
- * ⋯ on the top edge of its column — a click chooses that row (column) and opens its menu, a drag moves it — and a +
- * bar along the table's foot (a row) and its right side (a column). They stand on the table's own edges, never over
- * its cells. A phone, with no pointer to bring them up, keeps TableTools' bar.
- */
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
@@ -13,15 +7,12 @@ import type { Editor } from '@tiptap/core';
 import { ui, under, type MenuItem } from './ui.svelte';
 import { ICONS } from './lineIcons';
 
-/** the table at `pos` (its node, its map) */
 function tableAt(doc: PMNode, pos: number) {
   const node = doc.nodeAt(pos);
   return node?.type.name === 'table' ? { node, map: TableMap.get(node) } : null;
 }
-/** where row `r` column `c`'s cell starts */
 const cellPos = (pos: number, map: TableMap, r: number, c: number) => pos + 1 + map.map[r * map.width + c];
 
-/** Row `r` (or column `c`) of the table at `pos` chosen whole, as its handle's click chooses it */
 export function chooseLine(editor: Editor, pos: number, line: { row?: number; col?: number }) {
   const t = tableAt(editor.state.doc, pos);
   if (!t) return;
@@ -32,7 +23,6 @@ export function chooseLine(editor: Editor, pos: number, line: { row?: number; co
   editor.view.dispatch(editor.state.tr.setSelection(sel));
 }
 
-/** Row `r` again under it, words and all (a copy of the header row is a row of the body) */
 export function duplicateRow(editor: Editor, pos: number, r: number) {
   const t = tableAt(editor.state.doc, pos);
   if (!t) return;
@@ -44,12 +34,10 @@ export function duplicateRow(editor: Editor, pos: number, r: number) {
   editor.view.dispatch(editor.state.tr.insert(at, copy));
 }
 
-/** Column `c` again to its right, words and all */
 export function duplicateColumn(editor: Editor, pos: number, c: number) {
   const t = tableAt(editor.state.doc, pos);
   if (!t) return;
   const tr = editor.state.tr;
-  // from the last row up, so the places still to come are not moved by what goes in before them
   for (let r = t.map.height - 1; r >= 0; r--) {
     const at = cellPos(pos, t.map, r, c), cell = tr.doc.nodeAt(at)!;
     tr.insert(at + cell.nodeSize, cell.type.create(cell.attrs, cell.content));
@@ -57,14 +45,12 @@ export function duplicateColumn(editor: Editor, pos: number, c: number) {
   editor.view.dispatch(tr);
 }
 
-/** A row (column) at the table's end, the + bar's */
 export function addAtEnd(editor: Editor, pos: number, what: 'row' | 'col') {
   const t = tableAt(editor.state.doc, pos);
   if (!t) return;
   if (what === 'col') addColumnAt(editor, pos, t.map.width); else addRowAt(editor, pos, t.map.height);
 }
 
-/** A row at `edge` (1, under the header row; the table's height, at its foot), the caret into its first cell */
 export function addRowAt(editor: Editor, pos: number, edge: number) {
   const t = tableAt(editor.state.doc, pos);
   if (!t) return;
@@ -74,7 +60,6 @@ export function addRowAt(editor: Editor, pos: number, edge: number) {
   editor.chain().focus().setTextSelection(cellPos(pos, n.map, edge, 0) + 2).run();
 }
 
-/** A column at `edge` (0, the left edge; the table's width, the right one), the caret into its first cell */
 export function addColumnAt(editor: Editor, pos: number, edge: number) {
   const t = tableAt(editor.state.doc, pos);
   if (!t) return;
@@ -90,7 +75,6 @@ const DOTS_H = '<svg viewBox="0 0 16 8"><circle cx="4" cy="2.5" r="1.2"/><circle
 const PLUS = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">${ICONS.plus}</svg>`;
 
 interface Over { pos: number; table: HTMLTableElement; wrap: HTMLElement; row: number; col: number; cellEl?: HTMLTableCellElement; x: number; y: number }
-/** how near a column's edge on the table's top border the pointer is for that edge's + */
 const EDGE_REACH = 14;
 
 class Handles {
@@ -101,7 +85,7 @@ class Handles {
   private addCol = this.button('tbl-add col', PLUS, 'Add a column');
   private addHere = this.button('tbl-add here', PLUS, 'Add here');
   private here: { what: 'row' | 'col'; edge: number } = { what: 'col', edge: 0 };
-  private line = document.createElement('div'); // where a dragged row (column) would go
+  private line = document.createElement('div');
   private cur: Over | null = null;
   private dragging: { what: 'row' | 'col'; from: number; to: number } | null = null;
   private frame = 0;
@@ -135,7 +119,6 @@ class Handles {
     return b;
   }
 
-  /** the table under the pointer, or by it (its handles stand just off its edges) */
   private find(x: number, y: number): Over | null {
     for (const wrap of this.view.dom.querySelectorAll<HTMLElement>('.tableWrapper')) {
       const table = wrap.querySelector('table');
@@ -144,13 +127,10 @@ class Handles {
       const right = Math.min(t.right, r.right);
       if (x < t.left - 28 || x > right + 28 || y < t.top - 20 || y > t.bottom + 24) continue;
       const rows = [...table.rows], cells = [...(rows[0]?.cells ?? [])];
-      // the table's place: its rows' box (the node's content) starts just inside it
       const pos = this.view.posAtDOM(table.tBodies[0] ?? table, 0) - 1;
       if (this.view.state.doc.nodeAt(pos)?.type.name !== 'table' || !rows.length) continue;
       const row = rows.findIndex((tr) => y < tr.getBoundingClientRect().bottom);
       const cellEl = cells.find((c) => x < c.getBoundingClientRect().right) ?? cells[cells.length - 1];
-      // the column by the table's map, not by the first row's cells: two header cells merged shifted every column
-      // after them, and Delete column took the wrong one
       const map = TableMap.get(this.view.state.doc.nodeAt(pos)!);
       const col = cellEl ? map.colCount(this.view.posAtDOM(cellEl, 0) - 1 - (pos + 1)) : 0;
       return { pos, table, wrap, row: row < 0 ? rows.length - 1 : row, col, cellEl, x, y };
@@ -178,16 +158,11 @@ class Handles {
       if (box.height !== undefined) el.style.height = `${Math.round(box.height)}px`;
       el.classList.add('on');
     };
-    // on the edges: the row's ⋮⋮ across the table's left border, the column's ⋯ across its top one
-    // (12 wide across the border: 6px into the cell, clear of its words at 9px; at 16 it touched them)
     put(this.rowGrip, { left: left - 6, top: row.top + row.height / 2 - 12 });
     if (cell.left >= left - 1 && cell.right <= right + 1) put(this.colGrip, { left: cell.left + cell.width / 2 - 12, top: t.top - 8 });
     else this.colGrip.classList.remove('on');
     put(this.addRow, { left, top: t.bottom + 3, width: right - left, height: 16 });
     put(this.addCol, { left: right + 3, top: t.top, width: 16, height: t.height });
-    // by the top border, near an edge between two columns or at the left one: a + there puts a column in at that edge;
-    // by the left border, near an edge between two rows (under the header row, not over it), a row. The right and
-    // bottom edges are the + bars'
     const cols = [...o.table.rows[0].cells].map((c, i, all) => (i ? all[i - 1].getBoundingClientRect().right : c.getBoundingClientRect().left));
     const rows = [...o.table.rows].map((r) => r.getBoundingClientRect().top).slice(1);
     const nearest = (edges: number[], at: number) => edges.reduce((b, e, i) => (Math.abs(e - at) < Math.abs(edges[b] - at) ? i : b), 0);
@@ -196,7 +171,7 @@ class Handles {
       this.here = { what: 'col', edge: c };
       put(this.addHere, { left: cols[c] - 8, top: t.top - 8 });
       this.colGrip.classList.remove('on');
-      if (c === 0) this.rowGrip.classList.remove('on'); // the header row's ⋮⋮ is just under the left edge's +
+      if (c === 0) this.rowGrip.classList.remove('on');
     } else if (r >= 0 && Math.abs(o.x - left) <= EDGE_REACH && Math.abs(rows[r] - o.y) <= EDGE_REACH) {
       this.here = { what: 'row', edge: r + 1 };
       put(this.addHere, { left: left - 8, top: rows[r] - 8 });
@@ -208,11 +183,10 @@ class Handles {
     for (const el of [this.rowGrip, this.colGrip, this.addRow, this.addCol, this.addHere, this.line]) el.classList.remove('on');
   }
 
-  /** a press on a handle: let go where it was pressed, the menu; moved, the row (column) is carried */
   private press(e: MouseEvent, what: 'row' | 'col') {
     const o = this.cur;
     if (!o || e.button !== 0) return;
-    e.preventDefault(); // the caret stays in the note, and no text selection starts
+    e.preventDefault();
     const start = { x: e.clientX, y: e.clientY };
     const from = what === 'row' ? o.row : o.col;
     let moved = false;
@@ -240,12 +214,11 @@ class Handles {
     window.addEventListener('mouseup', up);
   }
 
-  /** the row (column) a dragged one would take the place of, by the pointer */
   private target(o: Over, what: 'row' | 'col', ev: MouseEvent): number {
     const items = what === 'row' ? [...o.table.rows] : [...o.table.rows[0].cells];
     const at = items.findIndex((el) => { const r = el.getBoundingClientRect(); return what === 'row' ? ev.clientY < r.top + r.height / 2 : ev.clientX < r.left + r.width / 2; });
     const from = what === 'row' ? o.row : o.col;
-    const slot = at < 0 ? items.length : at; // the gap it goes into
+    const slot = at < 0 ? items.length : at;
     return slot > from ? slot - 1 : slot;
   }
   private drawLine(o: Over, what: 'row' | 'col', to: number) {
@@ -260,7 +233,6 @@ class Handles {
     this.line.classList.add('on');
   }
 
-  /** the line where a column (row) put in at the + under the pointer will stand */
   private drawEdge(o: Over) {
     const host = this.host.getBoundingClientRect(), t = o.table.getBoundingClientRect(), { what, edge } = this.here;
     if (what === 'col') {
@@ -304,7 +276,7 @@ class Handles {
   }
 
   update(view: EditorView, prev: { doc: PMNode }) {
-    if (!view.state.doc.eq(prev.doc) && !this.dragging) this.hide(); // typing: they go until the pointer moves
+    if (!view.state.doc.eq(prev.doc) && !this.dragging) this.hide();
   }
   destroy() {
     cancelAnimationFrame(this.frame);

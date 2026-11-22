@@ -108,8 +108,6 @@ class Sync {
 
   get enabled() { return /^[\w.-]+\/[\w.-]+$/.test(this.settings.repo) && !!this.settings.token; }
 
-  /** device-flow code the user has to enter on GitHub, while a sign-in is in progress; `renewed`: the one
-   *  before it ran out (an account still being made), and this one is not on the clipboard yet */
   pending = $state<{ code: string; url: string; renewed?: boolean } | null>(null);
   private signingIn: AbortController | undefined;
 
@@ -120,11 +118,6 @@ class Sync {
     if (!isMobile) void openUrl(url);
   }
 
-  /**
-   * Sign in with GitHub, then create/find the private notes repo and sync. By default the browser's
-   * device flow on github.com; `a` points it at a GitHub Enterprise server (whose own OAuth App,
-   * `clientId`, the device flow then needs) or an organization, or hands a token so no browser is needed.
-   */
   async login(a: SignIn = {}) {
     if (!isTauri || this.signingIn) return;
     this.signingIn = new AbortController();
@@ -154,7 +147,6 @@ class Sync {
   phone = $state<{ link: string; until: number; done: boolean } | null>(null);
   private phoneTimer: ReturnType<typeof setTimeout> | undefined;
   private phoneOff: (() => void) | undefined;
-  /** `version`: the newest phone release, which the QR's page then downloads directly */
   async phoneSetup(version?: string) {
     this.error = '';
     try {
@@ -197,7 +189,6 @@ class Sync {
     }
   }
 
-  /** Forget the token (it stays valid on GitHub until revoked at github.com/settings/applications). */
   logout() {
     this.save({ token: '', user: '', repo: '' });
     this.status = 'idle';
@@ -210,12 +201,10 @@ class Sync {
     this.timer = setTimeout(() => this.now(), ms);
   }
 
-  /** A note's saved versions, newest first, from the repo's commits (version history); [] with sync off */
   async versions(id: string): Promise<{ sha: string; at: number }[]> {
     if (!this.enabled) return [];
     return new Repo({ ...this.settings }).history(`notes/${id}.md`);
   }
-  /** The note's words in one of `versions` ('' if the note was not there yet) */
   async versionAt(id: string, sha: string): Promise<string> {
     const data = await new Repo({ ...this.settings }).fileAt(`notes/${id}.md`, sha);
     return data ? parse(new TextDecoder().decode(data))?.body ?? '' : '';

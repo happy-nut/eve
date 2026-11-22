@@ -1,8 +1,5 @@
-//! The network: GitHub sign-in, links, and a phone set up from the Mac over the LAN.
 use tauri::{AppHandle, Emitter};
 
-// ---- GitHub sign-in (device flow) -------------------------------------------
-/// The two device-flow endpoints, on github.com or a GitHub Enterprise server: nothing else may be POSTed.
 pub(crate) fn login_url_ok(url: &str) -> bool {
     let Some((host, path)) = url.strip_prefix("https://").and_then(|r| r.split_once('/')) else { return false };
     let host_ok = !host.is_empty()
@@ -31,8 +28,6 @@ pub(crate) async fn github_post(url: String, form: Vec<(String, String)>) -> Res
     .map_err(|e| e.to_string())?
 }
 
-// ---- a phone set up from the Mac, over the local network (src/lib/handoff.ts) --------------
-/// Which hand-off is live; starting another (or finishing) retires the one before it.
 pub(crate) static SHARE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// This Mac's address on the local network: the interface a packet to the internet would leave from.
@@ -43,8 +38,6 @@ pub(crate) fn lan_ip() -> Result<std::net::IpAddr, String> {
     Ok(sock.local_addr().map_err(|e| e.to_string())?.ip())
 }
 
-/// Serve `body` (already sealed by the page) at `/<path>` on the LAN, to the first fetch only, for at
-/// most ten minutes. Returns "ip:port" for the QR. Emits "share-done" once the phone has it.
 #[tauri::command]
 pub(crate) fn share_start(app: AppHandle, path: String, body: String) -> Result<String, String> {
     use std::sync::atomic::Ordering;
@@ -63,9 +56,6 @@ pub(crate) fn share_start(app: AppHandle, path: String, body: String) -> Result<
     Ok(host)
 }
 
-/// The hand-off's server loop: answer `GET /<path>` with `body` once and stop; anything else gets a
-/// 404 and the wait goes on, until `deadline` or until another hand-off (`SHARE` moved past `me`).
-/// True when the body was handed over.
 pub(crate) fn serve_once(listener: std::net::TcpListener, path: &str, body: &str, me: u64, deadline: std::time::Duration) -> bool {
     use std::io::{Read, Write};
     use std::sync::atomic::Ordering;
@@ -89,19 +79,15 @@ pub(crate) fn serve_once(listener: std::net::TcpListener, path: &str, body: &str
         };
         let _ = conn.write_all(reply.as_bytes());
     }
-    // retire this hand-off, unless a newer one already took over
     let _ = SHARE.compare_exchange(me, me + 1, Ordering::SeqCst, Ordering::SeqCst);
     done
 }
 
-/// Retire the live hand-off (Done, or a new QR).
 #[tauri::command]
 pub(crate) fn share_stop() {
     SHARE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 }
 
-/// Phone: fetch the sealed sign-in from the Mac. Plain HTTP to a private address only — the bytes are
-/// sealed, and the key never travels (it came in the QR).
 #[tauri::command]
 pub(crate) async fn lan_get(host: String, path: String) -> Result<String, String> {
     let ip: std::net::SocketAddr = host.parse().map_err(|_| "bad host".to_string())?;
@@ -134,7 +120,6 @@ pub(crate) fn is_web_url(url: &str) -> bool {
     url.starts_with("https://") || url.starts_with("http://")
 }
 
-/// Open a link in the default browser (device-flow page, bookmark cards).
 #[tauri::command]
 pub(crate) async fn open_url(app: AppHandle, url: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
@@ -144,8 +129,6 @@ pub(crate) async fn open_url(app: AppHandle, url: String) -> Result<(), String> 
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
-/// Page HTML for link previews (og:* tags). curl keeps the webview's cookies and CORS out of it; the
-/// body is cut at 300k chars, plenty for <head>.
 #[tauri::command]
 pub(crate) async fn fetch_url(url: String) -> Result<String, String> {
     if !is_web_url(&url) {
@@ -188,7 +171,6 @@ mod login_tests {
 /// Mac app's page is tauri://. A page on the loopback holds the player instead; its address is the referrer.
 static PLAYER: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
 
-/// The player page for `GET /yt/<11-letter id>[?start=<seconds>]`; None for anything else.
 pub(crate) fn player_page(target: &str) -> Option<String> {
     let rest = target.strip_prefix("/yt/")?;
     let (id, query) = rest.split_once('?').unwrap_or((rest, ""));
@@ -220,7 +202,6 @@ fn serve_players(listener: std::net::TcpListener) {
     }
 }
 
-/// The loopback port the player pages are served on, the server started the first time it is asked for.
 pub(crate) fn player_port() -> Result<u16, String> {
     if let Some(p) = PLAYER.get() {
         return Ok(*p);

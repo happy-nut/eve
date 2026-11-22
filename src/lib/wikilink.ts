@@ -5,21 +5,12 @@ import { customIcon } from './icons';
 import type MarkdownIt from 'markdown-it';
 import { splitAlias } from './markdown';
 
-/**
- * [[Note title]] — an inline atom that links to another note by title.
- * Markdown: serialized/parsed as `[[Title]]`, or `[[Title|shown as]]` (Obsidian's alias: the link opens
- * Title and reads as the alias; inside a table the bar is escaped, `[[Title\|shown as]]`). Typing `[[`
- * opens a suggestion popup.
- */
 
 
 export interface WikiLinkOptions {
   onOpen: (title: string) => void;
-  /** the linked note's icon, so a link reads like its row in the sidebar ('' = none) */
   iconOf: (title: string) => string;
-  /** is there a page by this title (a link typed out whole becomes a link only then) */
   exists: (title: string) => boolean;
-  /** run `check` whenever the pages' titles change, until the returned function is called (notes.onTitles) */
   watchTitles: (check: () => void) => () => void;
   suggestion: Omit<SuggestionOptions, 'editor'>;
 }
@@ -76,23 +67,18 @@ export const WikiLink = Node.create<WikiLinkOptions>({
         e.preventDefault();
         this.options.onOpen(title);
       });
-      // a link to no page yet reads as one (a click still makes the page): it looked like every other link. It follows
-      // the pages as they come and go, a rename or a delete included, re-checked only when some title changes
       const stop = this.options.watchTitles(() => dom.classList.toggle('missing', !this.options.exists(title)));
       return { dom, destroy: stop };
     };
   },
 
   addKeyboardShortcuts() {
-    // a selected link opens on Enter (and ⌘↓, the "go into it" gesture), like clicking it
     const open = () => {
       const sel = this.editor.state.selection;
       if (!(sel instanceof NodeSelection) || sel.node.type.name !== this.name) return false;
       this.options.onOpen(sel.node.attrs.title);
       return true;
     };
-    // arrowing onto a link selects it instead of skipping over it, so there is a keyboard way in:
-    // ← / → lands on the link, Enter (or ⌘↓) opens it, another ← / → steps past it as usual
     const step = (dir: 1 | -1) => () => {
       const { state } = this.editor;
       const sel = state.selection;
@@ -106,9 +92,6 @@ export const WikiLink = Node.create<WikiLinkOptions>({
     return { Enter: open, 'Mod-ArrowDown': open, ArrowRight: step(1), ArrowLeft: step(-1) };
   },
 
-  // `[[Title]]` (`[[Title|shown as]]`) typed out whole, past the picker, is a link when a page answers to Title: it
-  // stayed text, saved `\[\[Title\]\]`, which no app reads as a link. Brackets that name no page (`[[1, 2]]`, a shell's
-  // `[[ -n $x ]]`) stay as typed.
   addInputRules() {
     return [
       new InputRule({
@@ -139,8 +122,6 @@ export const WikiLink = Node.create<WikiLinkOptions>({
               if (src.charCodeAt(state.pos) !== 0x5b || src.charCodeAt(state.pos + 1) !== 0x5b) return false;
               let end = src.indexOf(']]', state.pos + 2);
               if (end < 0) return false;
-              // a title ending in "]" ("Re: [draft]") closes on the last of the brackets: on the first, the link went to
-              // "Re: [draft" and a "]" was left after it
               while (src[end + 2] === ']') end++;
               const inner = src.slice(state.pos + 2, end);
               const [title, alias] = splitAlias(inner);
