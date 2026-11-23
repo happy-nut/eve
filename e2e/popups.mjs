@@ -166,7 +166,11 @@ async function newNote(page, mobile) {
   await dropdown('code language menu', async () => { await hoverOn('.code-block'); await page.locator('.code-lang').click(); });
   await dropdown('note menu (…)', () => page.locator('button.note-more').click());
   await dropdown('sidebar row menu', () => page.locator('aside [data-note]').last().click({ button: 'right' }));
-  await dropdown('emoji picker', () => page.locator('aside .note-row').last().locator('.ico-slot').click());
+  // the first open loads the emoji and then shows their first tab; what ↓ does while that happens is the next check's
+  await dropdown('emoji picker', async () => {
+    await page.locator('aside .note-row').last().locator('.ico-slot').click();
+    await page.waitForFunction(() => document.querySelector('emoji-picker')?.shadowRoot?.querySelector('.nav-button[aria-selected="true"]:not([data-group-id="-1"])'), null, { timeout: 10_000 });
+  });
   {
     // ↓ pressed the moment it opens, before its emoji are drawn (a first open on a slow machine): it lands on the first
     // one once they are, rather than being lost

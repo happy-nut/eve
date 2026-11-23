@@ -11,7 +11,7 @@
 
   const req = $derived.by(lastShown(() => ui.emoji));
   let el: HTMLElement & { i18n?: unknown };
-  let choosingFirstTab = true;
+  let switchingToFirstTab = false;
   const W = 352, H = 400;
   function placePicker(from: typeof req.at) {
     const below = floatAt(from, { w: W, h: H }, { gap: 6 });
@@ -51,20 +51,20 @@
     // shown instead, so ↓ walks the categories from the start
     let waits = 0;
     const onCustomTab = () => !!root?.querySelector('.nav-button[data-group-id="-1"][aria-selected="true"]');
+    let shownWaits = 0;
     const firstTabShown = () => {
-      if (onCustomTab() && waits++ < 80) { setTimeout(firstTabShown, 25); return; }
-      choosingFirstTab = false;
+      if (onCustomTab() && shownWaits++ < 80) { setTimeout(firstTabShown, 25); return; }
+      switchingToFirstTab = false;
     };
     const firstTab = () => {
       const tab = root?.querySelector<HTMLButtonElement>('.nav-button:not([data-group-id="-1"])');
-      if (!tab || !root?.querySelector('.tabpanel button.emoji')) { if (waits++ < 80) setTimeout(firstTab, 25); else choosingFirstTab = false; return; }
+      if (!tab || !root?.querySelector('.tabpanel button.emoji')) { if (waits++ < 80) setTimeout(firstTab, 25); return; }
       const inGrid = !!root?.activeElement?.matches('button.emoji');
-      if (onCustomTab()) tab.click();
+      if (onCustomTab()) { switchingToFirstTab = true; tab.click(); firstTabShown(); }
       if (inGrid && root) keepKeyboardInGrid(root);
       else focusSearch();
-      firstTabShown();
     };
-    choosingFirstTab = true;
+    switchingToFirstTab = false;
     firstTab();
     if (root && !root.querySelector('#eve-nav')) {
       const st = document.createElement('style');
@@ -86,8 +86,9 @@
   async function firstCellOnceDrawn(root: ShadowRoot, waiting: () => boolean) {
     for (let waited = 0; waited < 5000; waited += 50) {
       await new Promise((r) => setTimeout(r, 50));
-      if (!root.host.isConnected || !waiting()) return;
-      if (choosingFirstTab) continue;
+      if (!root.host.isConnected) return;
+      if (switchingToFirstTab) continue;
+      if (!waiting()) return;
       const first = [...root.querySelectorAll<HTMLButtonElement>('.tabpanel button.emoji')].find((c) => c.offsetParent);
       if (first) { first.focus(); first.scrollIntoView({ block: 'nearest' }); void showCell(first); return; }
     }
