@@ -28,6 +28,8 @@ jobs:
       - run: npm run e2e:forms
       - run: npm run e2e:present
       - run: npm run e2e:mem
+      - run: npx playwright-core install chromium
+      - run: npm run e2e:diagrams
       - run: npm run verify:map
         env:
           EVE_DRIVES_OUT: ${{ runner.temp }}/eve-drives
@@ -38,3 +40,18 @@ jobs:
           path: |
             e2e/out
             ${{ runner.temp }}/eve-drives
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: NDK_HOME="$ANDROID_NDK_LATEST_HOME" scripts/android-unit-test.sh

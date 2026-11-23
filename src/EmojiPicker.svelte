@@ -11,6 +11,7 @@
 
   const req = $derived.by(lastShown(() => ui.emoji));
   let el: HTMLElement & { i18n?: unknown };
+  let choosingFirstTab = true;
   const W = 352, H = 400;
   function placePicker(from: typeof req.at) {
     const below = floatAt(from, { w: W, h: H }, { gap: 6 });
@@ -49,14 +50,21 @@
     // the element opens on the custom icons, whose tab is moved to the far right: open on the first tab
     // shown instead, so ↓ walks the categories from the start
     let waits = 0;
+    const onCustomTab = () => !!root?.querySelector('.nav-button[data-group-id="-1"][aria-selected="true"]');
+    const firstTabShown = () => {
+      if (onCustomTab() && waits++ < 80) { setTimeout(firstTabShown, 25); return; }
+      choosingFirstTab = false;
+    };
     const firstTab = () => {
       const tab = root?.querySelector<HTMLButtonElement>('.nav-button:not([data-group-id="-1"])');
-      if (!tab || !root?.querySelector('.tabpanel button.emoji')) { if (waits++ < 80) setTimeout(firstTab, 25); return; }
+      if (!tab || !root?.querySelector('.tabpanel button.emoji')) { if (waits++ < 80) setTimeout(firstTab, 25); else choosingFirstTab = false; return; }
       const inGrid = !!root?.activeElement?.matches('button.emoji');
-      if (root?.querySelector('.nav-button[data-group-id="-1"][aria-selected="true"]')) tab.click();
+      if (onCustomTab()) tab.click();
       if (inGrid && root) keepKeyboardInGrid(root);
       else focusSearch();
+      firstTabShown();
     };
+    choosingFirstTab = true;
     firstTab();
     if (root && !root.querySelector('#eve-nav')) {
       const st = document.createElement('style');
@@ -79,6 +87,7 @@
     for (let waited = 0; waited < 5000; waited += 50) {
       await new Promise((r) => setTimeout(r, 50));
       if (!root.host.isConnected || !waiting()) return;
+      if (choosingFirstTab) continue;
       const first = [...root.querySelectorAll<HTMLButtonElement>('.tabpanel button.emoji')].find((c) => c.offsetParent);
       if (first) { first.focus(); first.scrollIntoView({ block: 'nearest' }); void showCell(first); return; }
     }

@@ -24,7 +24,7 @@
     el.addEventListener('input', fit);
     return () => el.removeEventListener('input', fit);
   };
-  let boxes = $state<Box[]>([]);
+  let boxes = $state<Box[]>([]), measured = $state(false);
   let sel = $state<{ node: string } | { nodes: string[] } | { edge: number; x: number; y: number } | { lane: string } | null>(untrack(() => (pickOnOpen ? { node: pickOnOpen } : null)));
   let laneHeads = $state<Box[]>([]);
   let laneAreas = $state<Box[]>([]);
@@ -87,6 +87,7 @@
       const id = g.dataset.lane, r = g.querySelector('rect.lane-bg')?.getBoundingClientRect();
       return id && r ? [{ id, x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height }] : [];
     });
+    measured = true;
     boxes = [...host.querySelectorAll('g.node')].flatMap((g) => {
       const id = mermaidBoxOf(g), r = g.getBoundingClientRect();
       return id ? [{ id, x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height }] : [];
@@ -600,6 +601,7 @@
   const selNode = $derived(selId ? flow.nodes.find((n) => n.id === selId) ?? null : null);
   $effect(() => {
     const drawnIds = new Set(boxes.map((b) => b.id)), edges = flow.edges.length;
+    if (!measured) return;
     untrack(() => {
       if (hover && !drawnIds.has(hover)) hover = null;
       if (!sel) return;

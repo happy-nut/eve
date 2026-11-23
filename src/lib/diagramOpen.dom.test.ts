@@ -30,3 +30,21 @@ test('a drawing is one Tab stop, and Enter on it opens it', async () => {
   expect(target.querySelector('.dblock')!.classList.contains('active')).toBe(true);
   expect(canvas.tabIndex).toBe(-1);
 });
+
+test('a click on a box of a closed drawing opens it with that box picked, its bar up', async () => {
+  const { default: DiagramBlock } = await import('../DiagramBlock.svelte');
+  const target = document.createElement('div');
+  document.body.append(target);
+  const none = () => {};
+  app = mount(DiagramBlock, { target, props: { code: 'flowchart LR\n  A[Start] --> B[Write]', start: false, codeShown: false, onCode: none, onCodeEdit: none, onCodeLeave: none, onError: none, onHistory: none, onLeave: none, onDelete: none } });
+  const seen = (sel: string) => new Promise<Element>((done) => {
+    const found = () => { const el = target.querySelector(sel); if (el) done(el); return !!el; };
+    if (!found()) new MutationObserver((_, mo) => { if (found()) mo.disconnect(); }).observe(target, { childList: true, subtree: true, attributes: true });
+  });
+  const box = [...target.querySelectorAll('g.node')].find((g) => g.textContent?.includes('Write')) ?? await seen('g.node[id*="-flowchart-B-"]');
+  box.querySelector('text, tspan')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  flushSync();
+  for (let i = 0; i < 5; i++) { await new Promise((r) => setTimeout(r, 0)); flushSync(); }
+  expect(target.querySelector('.dblock')!.classList.contains('active')).toBe(true);
+  expect(target.querySelector('.bar button[aria-label="Edit the text"]')).not.toBeNull();
+});

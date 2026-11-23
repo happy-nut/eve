@@ -10,7 +10,8 @@ npm test                                       # node tests + guards + vitest (j
 npx svelte-check --tsconfig ./tsconfig.app.json
 npm run verify:map                             # every sub-feature of the feature map, driven in WebKit (~3 min)
 npm run e2e:selection && npm run e2e:popups && npm run e2e:code && npm run e2e:summon && npm run e2e:table && npm run e2e:handle && npm run e2e:ui && npm run e2e:head && npm run e2e:overlap && npm run e2e:forms && npm run e2e:mem   # WebKit, as CI runs them
-CHROMIUM_PATH=/path/to/chrome node e2e/diagrams.mjs               # diagrams, math, phone take CHROMIUM_PATH
+npm run e2e:diagrams                           # Chromium (Playwright's own, or CHROMIUM_PATH=/path/to/chrome), as CI runs it; e2e:math and e2e:phone take Chromium the same way
+scripts/android-unit-test.sh                   # the phone's Kotlin unit tests, as CI runs them (ANDROID_HOME with an NDK, JDK 17)
 ```
 
 Do not commit `e2e/out/` screenshots that a run changed (`git checkout -- e2e/out`).

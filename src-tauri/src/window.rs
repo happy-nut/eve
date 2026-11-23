@@ -57,6 +57,7 @@ fn stuck(answered: u64, n: u64, visible: bool) -> bool {
 /// WebKit's process that draws the page ended (macOS took its memory while Eve was hidden, or it crashed): the page
 /// loaded again. Tauri's own does this too, but gives up without a word when it cannot reach the window at that moment,
 /// and the window was then white for good.
+#[cfg(target_os = "macos")]
 pub(crate) fn page_ended<R: tauri::Runtime>(webview: &tauri::Webview<R>) {
     note(webview.app_handle(), "the page's process ended: loaded again".into());
     let _ = webview.reload();

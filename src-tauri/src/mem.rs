@@ -10,6 +10,7 @@ pub(crate) fn mem_mark(marks: State<Marks>, what: String) {
     if m.len() < 200 { m.push(what) }
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn summary(marks: Vec<String>) -> String {
     let mut kinds: Vec<(String, usize)> = Vec::new();
     for m in marks {
@@ -21,6 +22,7 @@ fn summary(marks: Vec<String>) -> String {
     kinds.iter().map(|(k, n)| if *n > 1 { format!("{k} ×{n}") } else { k.clone() }).collect::<Vec<_>>().join(", ")
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn utc(secs: u64) -> String {
     let (y, m, d) = crate::core::civil((secs / 86400) as i64);
     let rem = secs % 86400;

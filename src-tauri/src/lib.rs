@@ -1,5 +1,7 @@
 use std::sync::Mutex;
-use tauri::{Emitter, Manager, WindowEvent};
+#[cfg(target_os = "macos")]
+use tauri::Emitter;
+use tauri::{Manager, WindowEvent};
 
 pub mod cli;
 pub mod core;
@@ -34,6 +36,32 @@ fn hide_instead_of_close(window: &tauri::Window, event: &WindowEvent) {
         let _ = window::hide_app(window.app_handle().clone());
     }
 }
+
+#[cfg(target_os = "macos")]
+fn on_run(app: &tauri::AppHandle, event: tauri::RunEvent) {
+    if let tauri::RunEvent::Opened { urls } = event {
+        let paths: Vec<String> = urls
+            .iter()
+            .filter(|u| u.scheme() == "file")
+            .filter_map(|u| u.to_file_path().ok())
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        if !paths.is_empty() {
+            app.state::<Pending>().0.lock().unwrap().extend(paths.clone());
+            let _ = app.emit("open-files", paths);
+        }
+        let inbox = open_inbox_if_asked(app, &urls);
+        if let Some(link) = urls.iter().rev().find(|u| u.scheme() == "eve" && u.host_str() != Some("inbox")) {
+            *app.state::<PendingLink>().0.lock().unwrap() = Some(link.to_string());
+            let _ = app.emit("open-link", link.to_string());
+        }
+        if !(inbox && urls.len() == 1) {
+            let _ = window::summon_window(app.clone());
+        }
+    }
+}
+#[cfg(not(target_os = "macos"))]
+fn on_run(_: &tauri::AppHandle, _: tauri::RunEvent) {}
 
 #[cfg(target_os = "macos")]
 fn open_inbox_if_asked(app: &tauri::AppHandle, urls: &[tauri::Url]) -> bool {
@@ -115,29 +143,7 @@ pub fn run() {
         .on_window_event(hide_instead_of_close)
         .build(tauri::generate_context!())
         .expect("error while building eve")
-        .run(|app, event| {
-            #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Opened { urls } = event {
-                let paths: Vec<String> = urls
-                    .iter()
-                    .filter(|u| u.scheme() == "file")
-                    .filter_map(|u| u.to_file_path().ok())
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .collect();
-                if !paths.is_empty() {
-                    app.state::<Pending>().0.lock().unwrap().extend(paths.clone());
-                    let _ = app.emit("open-files", paths);
-                }
-                let inbox = open_inbox_if_asked(app, &urls);
-                if let Some(link) = urls.iter().rev().find(|u| u.scheme() == "eve" && u.host_str() != Some("inbox")) {
-                    *app.state::<PendingLink>().0.lock().unwrap() = Some(link.to_string());
-                    let _ = app.emit("open-link", link.to_string());
-                }
-                if !(inbox && urls.len() == 1) {
-                    let _ = window::summon_window(app.clone());
-                }
-            }
-        });
+        .run(on_run);
 }
 
 #[cfg(test)]
