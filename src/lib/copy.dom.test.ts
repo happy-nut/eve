@@ -301,3 +301,11 @@ describe('cells chosen in a table and copied, as text', () => {
     expect(cells('Name', '3')).toBe('Name\tQty\napple\t2\npear\t3');
   });
 });
+
+test('> < & in the text are copied as they are written, not as &gt; &lt; &amp;', () => {
+  expect(copied('a -> b & c < d', 'a', 'd')).toBe('a -> b & c < d');
+  expect(copied('x > y\n\n- 1 < 2 & 3', '', '', { all: true }).trimEnd()).toBe('x > y\n\n- 1 < 2 & 3');
+  expect(copied('**if a > b** then', '', '', { all: true }).trimEnd()).toBe('**if a > b** then');
+  expect(copied('# a > b\n\n> c < d\n\n[x > y](https://e.com) & z', '', '', { all: true }).trimEnd()).toBe('# a > b\n\n> c < d\n\n[x > y](https://e.com) & z');
+  expect(copied('| a > b | c |\n| --- | --- |\n| 1 < 2 | 3 |', '', '', { all: true })).toContain('1 < 2');
+});

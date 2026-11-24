@@ -359,7 +359,7 @@ function piecesOf(text: string, rest: string): [text: string, written: string | 
   return pieces.filter(([s]) => s);
 }
 
-const plain = (text: string) => text
+const escapedForTheNote = (text: string) => text
   // "&lt;" typed as text came back as "<"; only a name markdown reads as a character is escaped, so "Q&A;" or
   // "AT&T;" stay as typed (written "&amp;A;" they showed so in the title, and a [[link]] to it found nothing)
   .replace(/&(#?[a-z0-9]+;)/gi, (m, rest) => (isEntity(m) ? `&amp;${rest}` : m))
@@ -410,6 +410,7 @@ const mathSafeText = {
     if (parent && index !== undefined) {
       for (let i = index + 1; i < parent.childCount; i++) rest += parent.child(i).isText ? parent.child(i).text : '￼';
     }
+    const plain = (t: string) => (state.options.copying ? t : escapedForTheNote(t));
     const pieces = piecesOf(body, rest);
     const dollars = readsAsMath(pieces.map(([s, out]) => out ?? plain(s)).join(''));
     for (const [s, out] of pieces) {
