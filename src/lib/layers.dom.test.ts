@@ -1,6 +1,6 @@
 import { test, expect, beforeEach, afterEach } from 'vitest';
-import { ui, type LayerId } from './ui.svelte';
-import { watchFocus, allowFocusLoss } from './focusWatch';
+import { ui, takingKeysOnBody, type LayerId } from './ui.svelte';
+import { watchFocus, allowFocusLoss, letGo } from './focusWatch';
 import { notes } from './notes.svelte';
 
 // Every layer (ui.layers) in one place: whatever opens over the app must close on a phone's back, one at a time and
@@ -158,6 +158,37 @@ test('a layer is off the stack before its close runs: what the close opens goes 
   ui.layers.closeTop('back');
   expect(seen).toBeNull();
   expect(ui.layers.top?.id).toBe('card');
+});
+
+// a drawing being edited takes its keys with the keyboard on <body>: a pick from its dock's ⋯ put the keyboard in the
+// note instead, so ⌘Z there was the note's own and scrolled the note away
+test.each(IDS.filter((id) => id !== 'find'))('%s: opened while a drawing takes its keys on <body>, it leaves the keyboard there as it closes', async (id) => {
+  const done = takingKeysOnBody();
+  letGo();
+  const box = open(id);
+  ui.layers.closeTop('putAway');
+  box.remove();
+  await settled();
+  done();
+  expect(document.activeElement).toBe(document.body);
+});
+
+test('find, opened while a drawing takes its keys on <body>, gives the keyboard to the note it searches', () => {
+  const done = takingKeysOnBody();
+  letGo();
+  const box = open('find');
+  ui.closeFind();
+  box.remove();
+  done();
+  expect(document.activeElement).toBe(note);
+});
+
+test('opened with the keyboard dropped on <body> by a click (WebKit focuses no button), the keyboard goes to the note', () => {
+  allowFocusLoss();
+  note.blur();
+  ui.openMenu({ clientX: 0, clientY: 0 }, [{ label: 'One' }]);
+  ui.closeMenu();
+  expect(document.activeElement).toBe(note);
 });
 
 test('opened from something since gone, the keyboard goes to the note', () => {

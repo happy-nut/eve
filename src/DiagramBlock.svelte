@@ -3,7 +3,7 @@
   import { isMobile, copyPng, copyText } from './lib/platform';
   import { pictureOf } from './lib/snapshot';
   import { fenced } from './lib/markdown';
-  import { ui, hooks, under, type MenuItem } from './lib/ui.svelte';
+  import { ui, hooks, under, takingKeysOnBody, type MenuItem } from './lib/ui.svelte';
   import { letGo } from './lib/focusWatch';
   import { claimKeys, composing } from './lib/keys';
   import { renderMermaid, themeKey } from './lib/mermaid';
@@ -206,6 +206,7 @@
     hooks.diagramBack = back;
     return () => { if (hooks.diagramBack === back) hooks.diagramBack = undefined; };
   });
+  $effect(() => { if (active) return takingKeysOnBody(); });
   $effect(() => { if (codeShown && full) untrack(leaveFull); });
 
   let pick = $state<string | null>(null), pickField = $state<string | null>(null);

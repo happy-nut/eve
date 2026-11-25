@@ -1,7 +1,7 @@
 import { history } from './history.svelte';
 import type { Box } from './popup';
 import { isMobile, memMark } from './platform';
-import { shifting, shiftingUntil } from './focusWatch';
+import { letGo, shifting, shiftingUntil } from './focusWatch';
 export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean; checked?: boolean;
   swatch?: string;
   icon?: string;
@@ -73,11 +73,21 @@ function keyboardNowhere(t: Element | null): boolean {
   return !t || t === document.body || t === document.documentElement;
 }
 
+let keysOnBody = 0;
+/** something takes its keys with the keyboard on <body> (a drawing being edited) until the returned function is
+ *  called: the keyboard a layer gives back meanwhile stays there, where it takes them */
+export function takingKeysOnBody(): () => void {
+  keysOnBody++;
+  return () => { keysOnBody--; };
+}
+
 export function focusBack(from: Element | null, ownSelector?: string) {
   const ok = (e: HTMLElement | null) => !!e?.isConnected && e !== document.body && !(ownSelector && e.closest(ownSelector)) && typeof e.focus === 'function';
+  const was = ok(from as HTMLElement | null) ? (from as HTMLElement) : null;
+  if (!was && keysOnBody) { letGo(); return; }
   // nowhere to go back to (a button WebKit gave no focus, so <body>): the note, kept where it was read too — the ⋯
   // menu closed on Esc took a note scrolled far down back up to its caret
-  const el = ok(from as HTMLElement | null) ? (from as HTMLElement) : isMobile ? null : document.querySelector<HTMLElement>('main .tiptap, main .calendar .day.cursor');
+  const el = was ?? (isMobile ? null : document.querySelector<HTMLElement>('main .tiptap, main .calendar .day.cursor'));
   if (el) keepingScroll(el, () => el.focus({ preventScroll: true }));
 }
 

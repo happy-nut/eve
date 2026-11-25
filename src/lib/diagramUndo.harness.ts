@@ -213,6 +213,7 @@ function wrong(w: Walk, name: string, act: Act, before: Before): string[] {
     else if (w.drawn.code !== want) out.push(`${name} left the drawing\n${w.drawn.code}\nnot\n${want}`);
   }
   if (act.kind === 'esc' && seen(w) === before.seen) out.push('Esc changed nothing that can be seen');
+  if (open(w) && document.activeElement === w.dom) out.push(`${name} left the keyboard in the note's text with the drawing open: ⌘Z there is the note's own, which scrolls the note`);
   return out;
 }
 
@@ -292,6 +293,8 @@ async function walk(kind: keyof typeof KINDS, start: string, drawn: Drawn, seed:
   const { acts, rules } = KINDS[kind];
   const r = rng(seed);
   const ed = editorWith(`above\n\n\`\`\`mermaid\n${start}\n\`\`\`\n\nbelow`);
+  const main = document.body.appendChild(document.createElement('main'));
+  main.append(ed.view.dom.parentElement!);
   const w: Walk = { ed, dom: ed.view.dom as HTMLElement, r, drawn, charts: [], at: 0, pointer: null, typedIn: null };
   try {
     await settle(300);
@@ -321,6 +324,7 @@ async function walk(kind: keyof typeof KINDS, start: string, drawn: Drawn, seed:
     return null;
   } finally {
     ed.destroy();
+    main.remove();
     ui.closeMenu();
     if (ui.pending) ui.done(null);
   }

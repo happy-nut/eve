@@ -13,6 +13,7 @@ Screens: `DiagramBlock.svelte` (the block, its dock, the whole screen), `FlowEdi
   the blue + beside a picked box adds a step after it, joined by a line.
 - `diagram-kept`: the note saves a ```mermaid block with every edit in it.
 - `diagram-undo`: the dock's ↶, or ⌘Z with a box picked, takes back one change at a time (the typed words, then the added step).
+  Straight after a pick from ⋯ or + the keyboard is still the drawing's: ⌘Z takes back that change, the note stays put.
 - `diagram-full`: ⤢ shows it on the whole screen (a `dialog`, zoom bar `− 200% +`, ✕); Esc or ✕ puts it back in the note.
 - `diagram-chart`: a chart's part clicked where drawn (`ChartEditor`): typing renames it, its Value field changes its
   size, the drawing follows.

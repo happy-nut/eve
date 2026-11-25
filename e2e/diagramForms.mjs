@@ -634,7 +634,11 @@ try {
   // that put the note back for a few frames after it still moved it, and kept a person from scrolling it meanwhile)
   page = await open('pie title Pets\n  "Dogs" : 40\n  "Cats" : 30', false);
   {
-    await page.evaluate(() => { const ed = window.__editor; ed.commands.insertContentAt(ed.state.doc.content.size, Array.from({ length: 40 }, (_, i) => ({ type: 'paragraph', content: [{ type: 'text', text: `Line ${i}` }] }))); });
+    await page.evaluate(() => {
+      const ed = window.__editor, lines = (from) => Array.from({ length: 40 }, (_, i) => ({ type: 'paragraph', content: [{ type: 'text', text: `Line ${from + i}` }] }));
+      ed.commands.insertContentAt(ed.state.doc.content.size, lines(40));
+      ed.commands.insertContentAt(ed.state.doc.firstChild.nodeSize, lines(0)); // the drawing mid-note, the caret far above it
+    });
     await page.waitForTimeout(300);
     await page.locator('.tiptap .mermaid-view').first().evaluate((v) => v.scrollIntoView({ block: 'center' }));
     await page.locator('.tiptap .mermaid-view').first().click({ position: { x: 6, y: 6 } });
@@ -667,9 +671,15 @@ try {
     await page.waitForFunction(() => document.querySelector('.tiptap .dblock.active') && document.activeElement === document.body);
     assert.deepEqual(await moves(() => page.keyboard.press('Meta+z')), [], '⌘Z with the keyboard on the drawing does not move the note');
     assert.doesNotMatch(await md(page), /pie showData/, '⌘Z took Values back');
+    // (a pick from ⋯ put the keyboard in the note's text, so ⌘Z straight after it was the note's own and scrolled it)
+    await dockMenu(page, 'More', 'Values');
+    await page.waitForFunction(() => /Dogs\s+40/.test(document.querySelector('.tiptap .mermaid-view').innerText));
+    assert.ok(await page.evaluate(() => document.querySelector('.tiptap .dblock.active') && document.activeElement === document.body), 'after a pick from ⋯ the keyboard is back on the drawing, not in the note');
+    assert.deepEqual(await moves(() => page.keyboard.press('Meta+z')), [], '⌘Z straight after a pick from ⋯ does not move the note');
+    assert.doesNotMatch(await md(page), /pie showData/, 'that ⌘Z took Values back');
   }
   await page.close();
-  console.log('ok   the dock’s ↶ and ↷ and ⌘Z on the drawing keep the note where it is');
+  console.log('ok   the dock’s ↶ and ↷ and ⌘Z on the drawing, also straight after a pick from ⋯, keep the note where it is');
   assert.deepEqual(errors, [], 'no errors in the page');
 } finally {
   await browser.close();
