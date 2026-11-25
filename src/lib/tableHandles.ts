@@ -6,6 +6,7 @@ import { CellSelection, TableMap, deleteCellSelection, moveTableColumn, moveTabl
 import type { Editor } from '@tiptap/core';
 import { ui, under, type MenuItem } from './ui.svelte';
 import { ICONS } from './lineIcons';
+import { followPointer } from './followPointer';
 
 function tableAt(doc: PMNode, pos: number) {
   const node = doc.nodeAt(pos);
@@ -102,9 +103,9 @@ class Handles {
     this.host.append(this.rowGrip, this.colGrip, this.addRow, this.addCol, this.addHere, this.line);
     this.host.addEventListener('mousemove', this.onMove);
     this.host.addEventListener('mouseleave', this.onLeave);
-    this.rowGrip.addEventListener('mousedown', (e) => this.press(e, 'row'));
-    this.colGrip.addEventListener('mousedown', (e) => this.press(e, 'col'));
-    for (const b of [this.addRow, this.addCol, this.addHere]) b.addEventListener('mousedown', (e) => e.preventDefault());
+    this.rowGrip.addEventListener('pointerdown', (e) => this.press(e, 'row'));
+    this.colGrip.addEventListener('pointerdown', (e) => this.press(e, 'col'));
+    for (const b of [this.rowGrip, this.colGrip, this.addRow, this.addCol, this.addHere]) b.addEventListener('mousedown', (e) => e.preventDefault());
     this.addRow.addEventListener('click', () => { const c = this.cur; if (c) { this.hide(); addAtEnd(this.editor, c.pos, 'row'); } });
     this.addCol.addEventListener('click', () => { const c = this.cur; if (c) { this.hide(); addAtEnd(this.editor, c.pos, 'col'); } });
     this.addHere.addEventListener('click', () => {
@@ -189,10 +190,9 @@ class Handles {
     for (const el of [this.rowGrip, this.colGrip, this.addRow, this.addCol, this.addHere, this.line]) el.classList.remove('on');
   }
 
-  private press(e: MouseEvent, what: 'row' | 'col') {
+  private press(e: PointerEvent, what: 'row' | 'col') {
     const o = this.cur;
     if (!o || e.button !== 0) return;
-    e.preventDefault();
     const start = { x: e.clientX, y: e.clientY };
     const from = what === 'row' ? o.row : o.col;
     let moved = false;
@@ -202,12 +202,14 @@ class Handles {
       this.dragging = { what, from, to: this.target(o, what, ev) };
       this.drawLine(o, what, this.dragging.to);
     };
-    const up = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
+    const end = () => {
       this.line.classList.remove('on');
       const d = this.dragging;
       this.dragging = null;
+      return d;
+    };
+    const up = () => {
+      const d = end();
       if (!moved) return this.menu(o, what);
       if (!d || d.to === d.from) return;
       // its table chosen first: the moves read the selection's table, and with the caret elsewhere nothing moved
@@ -216,8 +218,7 @@ class Handles {
       cmd(this.view.state, this.view.dispatch);
       this.view.focus();
     };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
+    followPointer({ move, up, cancel: end });
   }
 
   private target(o: Over, what: 'row' | 'col', ev: MouseEvent): number {

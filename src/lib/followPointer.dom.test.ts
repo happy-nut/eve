@@ -32,3 +32,17 @@ test('a finger dragging holds the page still until it is let go', () => {
   fire('pointerup');
   expect(touch()).toBe(false);
 });
+
+test('given the press, its element keeps the pointer, and letting go ends the drag even after that element is gone', () => {
+  const grip = document.createElement('span');
+  document.body.append(grip);
+  const kept: number[] = [];
+  grip.setPointerCapture = (id) => { kept.push(id); }; // jsdom has no pointer capture
+  const up = vi.fn();
+  grip.addEventListener('pointerdown', (e) => { followPointer({ press: e, move: () => {}, up }); });
+  grip.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 7, bubbles: true }));
+  expect(kept).toEqual([7]);
+  grip.remove();
+  fire('pointerup');
+  expect(up).toHaveBeenCalledTimes(1);
+});

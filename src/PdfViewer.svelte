@@ -8,6 +8,7 @@
   import { hwpPages } from './lib/hwp';
   import { HWP_FILE, PDF_FILE } from './lib/drop';
   import { viewSize, lastShown } from './lib/popup';
+  import { followPointer } from './lib/followPointer';
 
   const req = $derived.by(lastShown(() => ui.pdf));
 
@@ -64,21 +65,9 @@
 
   function gesture(e: PointerEvent, step: (dx: number, dy: number) => void) {
     e.preventDefault();
-    const handle = e.currentTarget as HTMLElement;
-    handle.setPointerCapture(e.pointerId);
     dragging = true;
     const x0 = e.clientX, y0 = e.clientY;
-    const move = (m: PointerEvent) => step(m.clientX - x0, m.clientY - y0);
-    const up = () => {
-      dragging = false;
-      handle.releasePointerCapture(e.pointerId);
-      handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', up);
-      handle.removeEventListener('pointercancel', up);
-    };
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', up);
-    handle.addEventListener('pointercancel', up);
+    followPointer({ press: e, move: (m) => step(m.clientX - x0, m.clientY - y0), up: () => (dragging = false) });
   }
 
   function drag(e: PointerEvent) {

@@ -295,6 +295,7 @@ test('a plain click on the resize grip sets no width; a drag does', () => {
   const media = document.createElement('img');
   const widths: (number | null)[] = [];
   const grip = sizeGrip(media, (w) => widths.push(w));
+  document.body.append(grip);
   grip.setPointerCapture = grip.releasePointerCapture = () => {}; // jsdom has no pointer capture
   const at = (type: string, clientX: number) => grip.dispatchEvent(new MouseEvent(type, { clientX, bubbles: true, cancelable: true }));
   at('pointerdown', 100);
@@ -304,6 +305,7 @@ test('a plain click on the resize grip sets no width; a drag does', () => {
   at('pointermove', 140);
   at('pointerup', 140);
   expect(widths).toHaveLength(1);
+  grip.remove();
 });
 
 test.each([
@@ -363,6 +365,7 @@ test('a picture of the note\'s own is dragged wide as far as the pane\'s edge le
   tip.style.setProperty('--pane-edge-gap', '30px');
   media.getBoundingClientRect = () => new DOMRect(0, 0, 300, 100);
   const grip = sizeGrip(media, () => {});
+  media.after(grip);
   grip.setPointerCapture = grip.releasePointerCapture = () => {}; // jsdom has no pointer capture
   const at = (type: string, clientX: number) => grip.dispatchEvent(new MouseEvent(type, { clientX, bubbles: true, cancelable: true }));
   at('pointerdown', 0);

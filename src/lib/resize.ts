@@ -1,3 +1,5 @@
+import { followPointer } from './followPointer';
+
 export const MIN_WIDTH = 120;
 
 export function widthOf(text: string | null | undefined): number | null {
@@ -35,26 +37,19 @@ export function sizeGrip(media: HTMLElement, commit: (width: number | null) => v
   grip.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    grip.setPointerCapture(e.pointerId);
     const x0 = e.clientX;
     const w0 = media.getBoundingClientRect().width;
     const column = roomFor(media);
     let moved = false;
-    const move = (m: PointerEvent) => {
-      if (m.clientX === x0) return;
-      moved = true;
-      media.style.width = `${Math.round(Math.min(column, Math.max(MIN_WIDTH, w0 + (m.clientX - x0))))}px`;
-    };
-    const up = () => {
-      grip.releasePointerCapture(e.pointerId);
-      grip.removeEventListener('pointermove', move);
-      grip.removeEventListener('pointerup', up);
-      grip.removeEventListener('pointercancel', up);
-      if (moved) commit(Math.round(media.getBoundingClientRect().width));
-    };
-    grip.addEventListener('pointermove', move);
-    grip.addEventListener('pointerup', up);
-    grip.addEventListener('pointercancel', up);
+    followPointer({
+      press: e,
+      move: (m) => {
+        if (m.clientX === x0) return;
+        moved = true;
+        media.style.width = `${Math.round(Math.min(column, Math.max(MIN_WIDTH, w0 + (m.clientX - x0))))}px`;
+      },
+      up: () => { if (moved) commit(Math.round(media.getBoundingClientRect().width)); },
+    });
   });
 
   grip.addEventListener('dblclick', (e) => {
