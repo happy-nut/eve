@@ -190,7 +190,8 @@ export const Toggle = [
           if (node.firstChild?.type.name !== 'detailsSummary') { state.renderContent(node.lastChild ?? node); return; }
           state.write(node.attrs.open ? '<details open>' : '<details>');
           state.ensureNewLine();
-          state.write(`<summary>${esc(node.firstChild.textContent)}</summary>`);
+          const title: string = node.firstChild.textContent;
+          state.write(`<summary>${state.options.copying ? title : esc(title)}</summary>`);
           state.closeBlock(node.firstChild);
           state.renderContent(node.lastChild);
           state.write('</details>');

@@ -146,6 +146,7 @@ const BlankLine = Paragraph.extend({
           // (a copy renders a bare Fragment: no parent node there, and nothing to leave out)
           const atEnd = (p: PMNode, i: number) => { for (let k = i; k < p.childCount; k++) if (p.child(k).type.name !== 'paragraph' || p.child(k).content.size) return false; return true; };
           if (parent?.type?.name === 'doc' && index !== undefined && index > 0 && !node.content.size && atEnd(parent, index)) return;
+          if (state.options.copying && index && parent?.child(index - 1).type.name === 'paragraph') state.flushClose(1); // a newline, not a blank line
           if (node.content.size) {
             // a line starting "1) " is a numbered list to markdown as much as "1. " is, which prosemirror-markdown
             // escapes and this did not: "1) Buy milk" came back a list
@@ -156,6 +157,11 @@ const BlankLine = Paragraph.extend({
               return start ? s.replace(/^(\s*\d+)\)(\s|$)/, '$1\\)$2').replace(/^(\s*)(=+\s*)$/, '$1\\$2') : s;
             };
             try { state.renderInline(node); } finally { state.esc = esc; }
+          } else if (state.options.copying) {
+            // the container's mark alone (`>`, not `> `), and the newline written out: prosemirror-markdown takes a
+            // line holding nothing for no line at all
+            state.write();
+            state.out = `${state.out.replace(/[ \t]+$/, '')}\n`;
           } else state.write(BLANK);
           state.closeBlock(node);
         },
@@ -970,19 +976,6 @@ function untitleCallout(frag: Fragment): Fragment {
   return frag.replaceChild(0, node);
 }
 
-function joinParagraphLines(content: Fragment, serializer: any): string {
-  const spaces = (s: string) => s.replace(/&#32;/g, ' ').replace(/&#9;/g, '\t');
-  let text = '', prev: PMNode | null = null;
-  content.forEach((block) => {
-    if (prev) text += prev.type.name === 'paragraph' && block.type.name === 'paragraph' ? '\n' : '\n\n';
-    text += (serializer.serialize(Fragment.from(block)) as string).replace(/\n+$/, '');
-    prev = block;
-  });
-  return text.replace(new RegExp(`^${BLANK}$`, 'gm'), '')
-    .replace(/^([ \t>]*(?:[-*+] (?:\[[ xX]\] )?|\d+[.)] )?)((?:&#(?:32|9);)+)/gm, (_, pre, run) => pre + spaces(run))
-    .replace(/(?:&#(?:32|9);)+(?=\\\n)/g, spaces);
-}
-
 function copySerializer(serializer: any) {
   const copying = (write: (state: any, ...rest: unknown[]) => void) => (state: any, ...rest: unknown[]) => { state.options.copying = true; write(state, ...rest); };
   return Object.create(serializer, {
@@ -996,14 +989,14 @@ function copyText(slice: Slice, view: EditorView, serializer: any): string {
   const inLine = $from.sameParent($to) && $from.parent.isTextblock;
   if (inLine && $from.parent.type.spec.code) return slice.content.textBetween(0, slice.content.size, '\n');
   if (inLine && allCode(view.state.doc, $from.pos, $to.pos)) return view.state.doc.textBetween($from.pos, $to.pos);
-  if (inLine) return joinParagraphLines(Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))), serializer);
+  if (inLine) return serializer.serialize(Fragment.from(view.state.schema.nodes.paragraph.create(null, $from.parent.content.cut($from.parentOffset, $to.parentOffset))));
   let content = dropOuterLists(slice.content, slice.openStart);
   for (let d = $from.depth; d > 0; d--) {
     if ($from.node(d).type.name !== 'callout' || !$from.node(d).attrs.titled || $from.index(d) === 0) continue;
     content = untitleCallout(content);
     break;
   }
-  return joinParagraphLines(content, serializer);
+  return serializer.serialize(content);
 }
 
 function pasteInToggleTitle(view: EditorView, content: Fragment, serializer: any): Slice {
@@ -1112,7 +1105,7 @@ function pasteNotion(editor: Editor, view: EditorView, tr: Transaction, { pasted
 }
 
 function pasteMarkdownText(editor: Editor, view: EditorView, tr: Transaction, { pasted, text, html }: Clip): boolean {
-  if (!text || !LITERAL_MARKDOWN.test(text) || RICH_HTML.test(html) || inCodeBlock(tr.selection)) return false;
+  if (!text || !LITERAL_MARKDOWN.test(text) || RICH_HTML.test(html) || html.includes('data-pm-slice') || inCodeBlock(tr.selection)) return false;
   const lead = pasted.includes('\n') ? '' : /^[ \t]+/.exec(pasted)?.[0] ?? '', trail = pasted.includes('\n') ? '' : /[ \t]+$/.exec(pasted)?.[0] ?? '';
   return pasteMarkdown(view, tr, parseMarkdown(editor, pasted), lead, trail);
 }

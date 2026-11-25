@@ -2,6 +2,8 @@
 // A node or mark added to the editor without a sample here fails the first test, so a new block can't ship without
 // its file and clipboard round trip being checked (a callout's copy once lost its title to its icon this way).
 import { test, expect, afterEach } from 'vitest';
+import type { Editor } from '@tiptap/core';
+import type { Node as PMNode } from '@tiptap/pm/model';
 import { editorWith as make, md } from './testEditor';
 import { SAMPLES, INSIDE, BLOCKS } from './schemaSamples';
 
@@ -50,6 +52,77 @@ test.each(Object.entries(SAMPLES))('%s: copied and pasted into another note, unc
   expect(copyPaste(note)).toBe(note);
 });
 
+// Copied out to another app (a chat, a mail, a terminal, another markdown editor), a note is its markdown with only
+// what the file alone needs taken out, so that it shows what the note shows:
+//  - nothing the note does not show: no <> around an address, no <!-- eve:… --> (a table's widths), no non-breaking
+//    space holding an empty line;
+//  - lines of text one after the other a line apart, as in the note, in a callout, a quote, a toggle or a list as
+//    anywhere (Slack and a chat drew markdown's blank line between them as an empty line after every Enter); a
+//    heading, a list, code, a table keep the blank line around them;
+//  - every word as the note shows it (`wordsAsShown`).
+function plainText(ed: Editor): string {
+  ed.commands.selectAll();
+  return ed.view.serializeForClipboard(ed.state.selection.content()).text;
+}
+const forOtherApps = (saved: string) => saved
+  .replace(/\n[> ]*\n[> ]*<!-- eve:[^>]*-->(?=\n|$)/g, '')
+  .replace(/<((?:https?:\/\/|mailto:)[^\s<>]+)>/g, '$1')
+  .replace(/^([> ]*)\u00a0$/gm, (_, prefix: string) => prefix.trimEnd());
+const isBlank = (line: string) => /^[> \t]*$/.test(line);
+const linesOf = (s: string) => s.replace(/\n+$/, '').split('\n');
+/** two paragraphs one after the other, a blank line apart in the file (a callout's title and its first line are not) */
+function linesJoined(doc: PMNode): number {
+  let n = 0;
+  const count = (box: PMNode) => {
+    box.forEach((p, _o, i) => { if (i && p.type.name === 'paragraph' && box.child(i - 1).type.name === 'paragraph' && !(box.type.name === 'callout' && box.attrs.titled && i === 1)) n++; });
+  };
+  count(doc);
+  doc.descendants(count);
+  return n;
+}
+function copiedAsTheNoteShows(ed: Editor) {
+  const text = plainText(ed), want = forOtherApps(md(ed));
+  expect(linesOf(text).filter((l) => !isBlank(l))).toEqual(linesOf(want).filter((l) => !isBlank(l)));
+  expect(linesOf(text).filter(isBlank).length, text).toBe(linesOf(want).filter(isBlank).length - linesJoined(ed.state.doc));
+}
+
+// Every word as the note shows it, whatever it holds: the note again with spaces opening each line and PROBE after each
+// run of its text, saved and read back (what the file cannot hold is gone), then copied. Each run of text is in the
+// copy as it is, in order: < > & and spaces, never the &lt; &gt; &amp; &#32; the file keeps them as (another app
+// showed those as written). Only a backslash markdown puts before a character it would read as formatting (\* \[ \_)
+// may stand among its letters, so that a markdown editor still reads the copy as the note; code is as it is.
+const PROBE = ' 1 < 2 & 3 > 0 &lt; AT&T';
+function probed(note: string): Editor {
+  const ed = editorWith(note), tr = ed.state.tr, at: [number, string][] = [];
+  ed.state.doc.descendants((n, pos) => {
+    if (n.isTextblock && n.firstChild?.isText) at.push([pos + 1, '  ']);
+    if (n.isText) at.push([pos + n.nodeSize, PROBE]);
+  });
+  for (const [pos, s] of at.sort((a, b) => b[0] - a[0])) tr.insertText(s, pos);
+  ed.view.dispatch(tr);
+  return editorWith(md(ed));
+}
+const PUNCTUATION = /[!-/:-@[-`{-~]/;
+function wordsAsShown(ed: Editor) {
+  const text = plainText(ed), lost: string[] = [];
+  let from = 0;
+  ed.state.doc.descendants((n, _p, parent) => {
+    if (!n.isText) return;
+    const code = !!parent?.type.spec.code || n.marks.some((m) => m.type.name === 'code');
+    const letter = (c: string) => (c === '\n' ? '\\n[> \\t]*' : (!code && PUNCTUATION.test(c) ? '\\\\?' : '') + c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const run = new RegExp([...n.text!].map(letter).join(''), 'g');
+    run.lastIndex = from;
+    const found = run.exec(text);
+    if (found) from = found.index + found[0].length;
+    else lost.push(n.text!);
+  });
+  expect(lost, text).toEqual([]);
+}
+
+test.each(Object.entries(SAMPLES))('%s: copied as plain text, it shows what the note shows', (_k, note) => {
+  copiedAsTheNoteShows(editorWith(note));
+  wordsAsShown(probed(note));
+});
 
 for (const [where, wrap] of Object.entries(INSIDE)) {
   test.each(BLOCKS)(`%s inside ${where}: saved as it was read, and copied unchanged`, (k) => {
@@ -58,24 +131,10 @@ for (const [where, wrap] of Object.entries(INSIDE)) {
     expect(md(editorWith(once))).toBe(once); // stable, whatever spelling it settles on
     expect(kinds(once)).toEqual(kinds(note)); // and nothing turned into something else
     expect(copyPaste(once)).toBe(once);
+    copiedAsTheNoteShows(editorWith(once));
+    wordsAsShown(probed(once));
   });
 }
-
-// what another app gets as plain text is the note's own markdown (a chat, a terminal, another editor), but for two
-// lines of text one after the other, which come a line apart as in the note (Slack and a chat drew markdown's blank
-// line between them as an empty line after every Enter): the same lines, only those blank lines left out. What only
-// the note needs is left out too, as another app showed it as written: a table's widths, the <> around an address
-test.each(Object.entries(SAMPLES))('%s: copied as plain text, it is its markdown', (_k, saved) => {
-  const note = saved.replace(/\n*<!-- eve:widths[^>]*-->/g, '').replace(/<((?:https?:\/\/|mailto:)[^\s<>]+)>/g, '$1');
-  const ed = editorWith(saved);
-  ed.commands.selectAll();
-  const { text } = ed.view.serializeForClipboard(ed.state.selection.content());
-  const lines = (s: string) => s.replace(/\n+$/, '').split(/\n+/);
-  expect(lines(text)).toEqual(lines(note));
-  // …and everywhere else the blank lines markdown needs: what is not two lines of text is as the note writes it
-  const kept = (s: string) => s.replace(/\n+$/, '').split(/\n\n/).length;
-  expect(kept(text)).toBe(kept(note) - (ed.state.doc.content.content.filter((b, i, all) => i && b.type.name === 'paragraph' && all[i - 1].type.name === 'paragraph').length));
-});
 
 // any two blocks one after the other: neither runs into the other (a list swallowing the line after it, a table its
 // next paragraph), and the pair saves the same twice
@@ -86,6 +145,7 @@ test.each(PAIRS.flatMap((a) => PAIRS.map((b) => [a, b])))('%s then %s: both kept
   expect(md(again)).toBe(once);
   expect(again.state.doc.childCount).toBe(first.state.doc.childCount);
   expect(kinds(once)).toEqual(kinds(note));
+  copiedAsTheNoteShows(again);
 });
 
 // one block picked out of the middle of a note (a drag over it, from the line above's end to the line below's start)

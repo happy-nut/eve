@@ -2,6 +2,8 @@
 // nested in. The guards hold every one of them to their rule: schemaGuard (saved, read back, copied), caretSync (the
 // caret kept by its text when the note comes in changed).
 export const SAMPLES: Record<string, string> = {
+  // lines of text one after the other, and an empty line between them (which the file holds as a non-breaking space)
+  'lines of text': 'a line\n\nthe next, at $5\n\n\u00a0\n\nafter an empty line',
   'marks and inline nodes': '# T\n\nplain **bold** *it* ~~s~~ <u>u</u> `code` ==hi== [l](https://x.y) [[Page]] [[Page|alias]] @2026-10-18 $x^2$ a\\\nb',
   'reminder': 'call @2026-10-26 09:00 ⏰ back, and a day @2026-10-27 alone',
   'database of every kind': "```database\n{\n  \"title\": \"People\",\n  \"props\": [\n    {\n      \"name\": \"Team\",\n      \"type\": \"relation\",\n      \"target\": \"abc\"\n    },\n    {\n      \"name\": \"Hours\",\n      \"type\": \"rollup\",\n      \"relation\": \"Team\",\n      \"of\": \"Hours\",\n      \"fn\": \"sum\"\n    },\n    {\n      \"name\": \"Pay\",\n      \"type\": \"formula\",\n      \"expr\": \"prop(\\\"Hours\\\") * 2\"\n    },\n    {\n      \"name\": \"Done\",\n      \"type\": \"checkbox\"\n    },\n    {\n      \"name\": \"When\",\n      \"type\": \"date\"\n    }\n  ],\n  \"view\": \"calendar\",\n  \"dateBy\": \"When\"\n}\n```",
@@ -38,4 +40,4 @@ export const INSIDE: Record<string, (body: string) => string> = {
   'a toggle': (b) => `<details open>\n<summary>T</summary>\n\n${b}\n\n</details>`,
   'a list item': (b) => '- item\n\n' + b.split('\n').map((l) => (l ? `  ${l}` : '')).join('\n'),
 };
-export const BLOCKS = ['code', 'lists', 'quote', 'toggle', 'callout', 'formula', 'table', 'sized table', 'divider', 'picture', 'board'];
+export const BLOCKS = ['lines of text', 'code', 'lists', 'quote', 'toggle', 'callout', 'formula', 'table', 'sized table', 'divider', 'picture', 'board'];

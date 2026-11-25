@@ -399,7 +399,7 @@ const mathSafeText = {
     // editor.ts). Not at a paragraph's end: ProseMirror trims a line's last spaces however they are written.
     // (a table's cell is one line of its own, with spaces between its parts)
     const edge = (i: number) => !state.inCell && !node.marks.some((m) => m.type.name === 'code') && (!parent || i < 0 || (i < parent.childCount && parent.child(i).type.name === 'hardBreak'));
-    const ent = (s: string) => s.replace(/ /g, '&#32;').replace(/\t/g, '&#9;');
+    const ent = (s: string) => (state.options.copying ? s : s.replace(/ /g, '&#32;').replace(/\t/g, '&#9;'));
     let body = node.text ?? '';
     const lead = index !== undefined && edge(index - 1) ? /^[ \t]*/.exec(body)![0] : '';
     body = body.slice(lead.length);

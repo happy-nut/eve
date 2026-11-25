@@ -27,6 +27,8 @@ test('lines of text copied come a line apart, as in the note, not a blank line a
   expect(copied('one\n\n\u00a0\n\ntwo', '', '', { all: true }).trimEnd()).toBe('one\n\ntwo');
   // a heading, a list, code keep the blank line around them: the copy still reads as markdown
   expect(copied('# Plan\n\nfirst\n\nsecond\n\n- a\n- b\n\nlast', '', '', { all: true }).trimEnd()).toBe('# Plan\n\nfirst\nsecond\n\n- a\n- b\n\nlast');
+  expect(copied('> [!note] T\n> one\n>\n> two\n>\n> \u00a0\n>\n> three', '', '', { all: true }).trimEnd()).toBe('> [!note] T\n> one\n> two\n>\n> three');
+  expect(copied('<details open>\n<summary>T</summary>\n\none\n\ntwo\n\n</details>', '', '', { all: true }).trimEnd()).toBe('<details open>\n<summary>T</summary>\n\none\ntwo\n\n</details>');
 });
 
 test('a whole code block keeps its fence and language; a few words inside it are just the code', () => {
@@ -111,7 +113,7 @@ test("a table is copied without its columns' widths; the note keeps them", () =>
 test('part of a toggle body copies as that body, not as a toggle titled with its first line', () => {
   const text = copied('<details open>\n<summary>T</summary>\n\nbody one\n\nbody two\n\n</details>', 'one', 'two');
   expect(text).not.toContain('<summary>');
-  expect(text).toContain('one\n\nbody two');
+  expect(text).toContain('one\nbody two');
   expect(text.match(/one/g)?.length).toBe(1);
 });
 
