@@ -192,6 +192,61 @@ async function newNote(page, mobile) {
   await page.close();
 }
 
+// ---- the document panel: a document that takes the keyboard as it loads gives it back to the note; one clicked into
+// keeps it ----
+// (the give-back watched the first 2.5 s and took the keyboard from a person who had clicked into the document to type
+// or search in it, a press inside the frame never reaching the panel.) Playwright's WebKit draws no PDF in a frame, so
+// a page stands in for WebKit's PDF view: the same iframe, the same keyboard.
+{
+  const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+  page.on('pageerror', (e) => errors.push(`document panel: ${e.message}`));
+  const doc = (takes) => `<!doctype html><body style="margin:0"><textarea style="width:100%;height:300px"></textarea>${takes ? '<script>addEventListener("load", () => { document.querySelector("textarea").focus(); window.took = true; })</script>' : ''}`;
+  await page.route('**/*.pdf', (r) => r.fulfill({ body: doc(r.request().url().includes('takes')), contentType: 'text/html' }));
+  await page.addInitScript((body) => { localStorage.clear(); localStorage.setItem('eve.notes.a', `---\nid: a\nupdated: 1\ndeleted: false\norder: 0\n---\n${body}`); },
+    '# Doc\n\n[takes.pdf](takes.pdf)\n\n[clicked.pdf](clicked.pdf)\n\nAfter.\n');
+  await page.goto(URL_);
+  const note = () => page.evaluate(() => window.__editor.getText());
+  const inDoc = () => page.frameLocator('.pdf-panel iframe').locator('textarea');
+  await page.click('.tiptap p:has-text("After.")');
+  await page.keyboard.press('End');
+
+  let name = 'document panel, taken on load';
+  try {
+    await page.click('.tiptap .pdf-card:has-text("takes.pdf")');
+    await inDoc().waitFor();
+    await page.frames().find((f) => f.url().includes('takes.pdf')).waitForFunction(() => window.took);
+    const back = await page.waitForFunction(() => !!document.activeElement?.closest('.tiptap'), null, { timeout: 5000 }).then(() => true, () => false);
+    await page.keyboard.type(' typed');
+    const typed = (await note()).includes('typed') && (await inDoc().inputValue()) === '';
+    await page.keyboard.press('Escape');
+    const closed = await page.locator('.pdf-panel').waitFor({ state: 'detached', timeout: 5000 }).then(() => true, () => false);
+    const r = { name, opened: true, in: back, out: typed, closed, focus: await focused(page) };
+    results.push(r);
+    console.log(`${ok(r) ? 'pass' : 'FAIL'} ${name.padEnd(28)} keyboard ${back ? 'back in the note' : 'LEFT in the document'}, typing ${typed ? 'into the note' : 'NOT into the note'}, Esc ${closed ? 'closed it' : 'did NOT close it'}`);
+  } catch (e) {
+    results.push({ name, opened: false });
+    console.log(`FAIL ${name.padEnd(28)} ${e.message.split('\n')[0]}`);
+  }
+
+  name = 'document panel, clicked into';
+  try {
+    await page.click('.tiptap .pdf-card:has-text("clicked.pdf")');
+    await inDoc().click();
+    const before = await note();
+    await page.keyboard.type('hello', { delay: 60 }); // a person's pace: the old give-back looked every 100 ms
+    const kept = (await inDoc().inputValue()) === 'hello', untouched = (await note()) === before;
+    await page.click('.pdf-panel button[aria-label="Close"]');
+    const closed = await page.locator('.pdf-panel').waitFor({ state: 'detached', timeout: 5000 }).then(() => true, () => false);
+    const r = { name, opened: true, in: kept, out: untouched, closed, focus: await focused(page) };
+    results.push(r);
+    console.log(`${ok(r) ? 'pass' : 'FAIL'} ${name.padEnd(28)} typing ${kept ? 'into the document' : 'NOT all into the document'}, the note ${untouched ? 'untouched' : 'TYPED INTO'}`);
+  } catch (e) {
+    results.push({ name, opened: false });
+    console.log(`FAIL ${name.padEnd(28)} ${e.message.split('\n')[0]}`);
+  }
+  await page.close();
+}
+
 // ---- a phone ----
 keyboard = false;
 {

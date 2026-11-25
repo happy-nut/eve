@@ -20,7 +20,6 @@ const src = join(root, 'src');
 const ALLOWED = [
   // timers on a clock or a gesture, not waits for something to be drawn
   { file: 'FlowEditor.svelte', at: 'interval', why: 'a line dragged to the edge scrolls the drawing every 30 ms while it is held there' },
-  { file: 'PdfViewer.svelte', at: 'interval', why: "WebKit's PDF view in the iframe takes the keyboard by itself while it loads, with no event the page hears", until: '2026-12-31' },
   { file: 'lib/reminder.ts', at: 'interval', why: 'reminders are due by the clock' },
   { file: 'lib/diagramMotion.ts', at: 'interval', why: 'a diagram played step by step, one step every STEP_MS' },
   { file: 'lib/selectionLayer.ts', at: 'interval', why: 'a reflow moves the selected text without an event (ResizeObserver does not see a line moving inside a box that keeps its size)' },

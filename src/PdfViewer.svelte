@@ -126,22 +126,26 @@
     resizeFrom({ w, h, x, y }, sides, sides === 'e' ? by : 0, sides === 's' ? by : 0);
   }
 
-  // The document (WebKit's PDF view, an iframe) can take the keyboard by itself as it loads; the panel sits
-  // beside the note to be written next to, and Esc has to reach the app to close it. For its first moments,
-  // until the panel is clicked, the keyboard is given back.
+  // WebKit's PDF view (in the iframe) can take the keyboard by itself as it loads. The page hears only its window's
+  // blur, the iframe by then its active element. A press inside the iframe never reaches the panel, but WebKit marks
+  // the iframe :hover as the pointer comes onto it or presses on it, so a click into the document is told apart. The
+  // panel sits beside the note to be written next to, and Esc has to reach the app to close it: the keyboard is given
+  // back unless the pointer is on the document or the panel was already in use.
+  // The blur comes while WebKit is still moving the keyboard into the frame: taken back then (or in a microtask), the
+  // note is the active element but the keys still go to the PDF. In the next task the move is over.
   let panel: HTMLDivElement;
-  let touched = false;
+  let used = false;
   onMount(() => {
-    const until = Date.now() + 2500;
-    const watch = setInterval(() => {
-      if (touched || Date.now() > until) { clearInterval(watch); return; }
-      if (document.activeElement?.tagName === 'IFRAME' && panel.contains(document.activeElement)) ui.pdfGiveBack();
-    }, 100);
-    return () => clearInterval(watch);
+    const tookKeyboard = () => {
+      const doc = document.activeElement;
+      if (!used && doc instanceof HTMLIFrameElement && panel.contains(doc) && !doc.matches(':hover')) setTimeout(() => ui.pdfGiveBack());
+    };
+    window.addEventListener('blur', tookKeyboard);
+    return () => window.removeEventListener('blur', tookKeyboard);
   });
 </script>
 
-<div class="pdf-panel" bind:this={panel} onpointerdowncapture={() => (touched = true)} class:dragging style:left="{x}px" style:top="{y}px" style:width="{w}px" style:height="{h}px"
+<div class="pdf-panel" bind:this={panel} onpointerdowncapture={() => (used = true)} onfocusin={(e) => { if (!(e.target instanceof HTMLIFrameElement)) used = true; }} class:dragging style:left="{x}px" style:top="{y}px" style:width="{w}px" style:height="{h}px"
   transition:scale|global={panelIn}>
   <div class="pdf-bar" role="toolbar" tabindex="-1" aria-label={req.name} onpointerdown={drag}>
     <span class="pdf-title">{req.name}</span>
