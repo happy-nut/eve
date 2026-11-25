@@ -2,6 +2,8 @@ import { test, expect, beforeEach, afterEach } from 'vitest';
 import { ui, takingKeysOnBody, type LayerId } from './ui.svelte';
 import { watchFocus, allowFocusLoss, letGo } from './focusWatch';
 import { notes } from './notes.svelte';
+import type { Editor } from '@tiptap/core';
+import { editorWith, posOf } from './testEditor';
 
 // Every layer (ui.layers) in one place: whatever opens over the app must close on a phone's back, one at a time and
 // the newest first, on Esc if it says so, all at once when a note is brought up from outside, and leave the keyboard
@@ -189,6 +191,60 @@ test('opened with the keyboard dropped on <body> by a click (WebKit focuses no b
   ui.openMenu({ clientX: 0, clientY: 0 }, [{ label: 'One' }]);
   ui.closeMenu();
   expect(document.activeElement).toBe(note);
+});
+
+// a browser puts the caret at the start of an editable box focused with no selection in it, and ProseMirror puts its
+// own back only 20 ms later, and not at all within 300 ms of a click: the keyboard a PDF gave back as it loaded, its
+// card just clicked, typed at the note's start
+/** a note in <main>, the keyboard in it, its caret after "After" */
+function noteWithCaret() {
+  const ed = editorWith('# Doc\n\nBefore.\n\nAfter.');
+  document.querySelector('main')!.replaceChildren(ed.view.dom.parentElement!);
+  ed.view.focus();
+  ed.commands.setTextSelection(posOf(ed, 'After', true));
+  return ed;
+}
+/** where the note's caret is as the keyboard arrives in it (what took the keyboard took the page's selection with it) */
+function caretOnArrival(ed: Editor) {
+  document.getSelection()!.removeAllRanges();
+  let at: number | null = null;
+  ed.view.dom.addEventListener('focusin', () => queueMicrotask(() => {
+    const s = document.getSelection()!;
+    at = s.anchorNode ? ed.view.posAtDOM(s.anchorNode, s.anchorOffset) : null;
+  }), { once: true });
+  return () => at;
+}
+
+test.each(IDS)('%s: the keyboard given back to the note comes with the note\'s caret, not at its start', async (id) => {
+  const ed = noteWithCaret();
+  try {
+    const box = open(id);
+    const arrived = caretOnArrival(ed);
+    ui.layers.closeTop('putAway');
+    box.remove();
+    await settled();
+    expect(document.activeElement).toBe(ed.view.dom);
+    expect(arrived()).toBe(posOf(ed, 'After', true));
+  } finally {
+    letGo();
+    ed.destroy();
+  }
+});
+
+test('a PDF that took the keyboard as it loaded gives it back with the note\'s caret, not at its start', async () => {
+  const ed = noteWithCaret();
+  try {
+    const box = open('pdf');
+    const arrived = caretOnArrival(ed);
+    ui.pdfGiveBack();
+    box.remove();
+    await Promise.resolve();
+    expect(document.activeElement).toBe(ed.view.dom);
+    expect(arrived()).toBe(posOf(ed, 'After', true));
+  } finally {
+    letGo();
+    ed.destroy();
+  }
 });
 
 test('opened from something since gone, the keyboard goes to the note', () => {

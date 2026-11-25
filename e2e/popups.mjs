@@ -244,8 +244,8 @@ async function newNote(page, mobile) {
   await page.close();
 }
 
-// ---- the document panel: a document that takes the keyboard as it loads gives it back to the note; one clicked into
-// keeps it ----
+// ---- the document panel: a document that takes the keyboard as it loads gives it back to the note, with its caret;
+// one clicked into keeps it ----
 // (the give-back watched the first 2.5 s and took the keyboard from a person who had clicked into the document to type
 // or search in it, a press inside the frame never reaching the panel.) Playwright's WebKit draws no PDF in a frame, so
 // a page stands in for WebKit's PDF view: the same iframe, the same keyboard.
@@ -268,13 +268,31 @@ async function newNote(page, mobile) {
     await inDoc().waitFor();
     await page.frames().find((f) => f.url().includes('takes.pdf')).waitForFunction(() => window.took);
     const back = await page.waitForFunction(() => !!document.activeElement?.closest('.tiptap'), null, { timeout: 5000 }).then(() => true, () => false);
+    // (typed at once, the words went to the note's start; or, the click having chosen the card, took its place)
     await page.keyboard.type(' typed');
-    const typed = (await note()).includes('typed') && (await inDoc().inputValue()) === '';
+    const typed = (await note()).endsWith('After. typed') && (await page.locator('.tiptap .pdf-card').count()) === 2 && (await inDoc().inputValue()) === '';
     await page.keyboard.press('Escape');
     const closed = await page.locator('.pdf-panel').waitFor({ state: 'detached', timeout: 5000 }).then(() => true, () => false);
     const r = { name, opened: true, in: back, out: typed, closed, focus: await focused(page) };
     results.push(r);
-    console.log(`${ok(r) ? 'pass' : 'FAIL'} ${name.padEnd(28)} keyboard ${back ? 'back in the note' : 'LEFT in the document'}, typing ${typed ? 'into the note' : 'NOT into the note'}, Esc ${closed ? 'closed it' : 'did NOT close it'}`);
+    console.log(`${ok(r) ? 'pass' : 'FAIL'} ${name.padEnd(28)} keyboard ${back ? 'back in the note' : 'LEFT in the document'}, typing ${typed ? 'at the caret, the cards kept' : `NOT at the caret: ${JSON.stringify(await note())}`}, Esc ${closed ? 'closed it' : 'did NOT close it'}`);
+  } catch (e) {
+    results.push({ name, opened: false });
+    console.log(`FAIL ${name.padEnd(28)} ${e.message.split('\n')[0]}`);
+  }
+
+  name = 'document panel, keyboard left';
+  try {
+    await page.click('.tiptap .pdf-card:has-text("clicked.pdf")');
+    await inDoc().waitFor();
+    const left = await page.evaluate(() => !!document.activeElement?.closest('.tiptap'));
+    await page.keyboard.type(' more');
+    const typed = (await note()).endsWith('After. typed more') && (await page.locator('.tiptap .pdf-card').count()) === 2;
+    await page.keyboard.press('Escape');
+    const closed = await page.locator('.pdf-panel').waitFor({ state: 'detached', timeout: 5000 }).then(() => true, () => false);
+    const r = { name, opened: true, in: left, out: typed, closed, focus: await focused(page) };
+    results.push(r);
+    console.log(`${ok(r) ? 'pass' : 'FAIL'} ${name.padEnd(28)} keyboard ${left ? 'in the note' : 'NOT in the note'}, typing ${typed ? 'at the caret, the cards kept' : `NOT at the caret: ${JSON.stringify(await note())}`}`);
   } catch (e) {
     results.push({ name, opened: false });
     console.log(`FAIL ${name.padEnd(28)} ${e.message.split('\n')[0]}`);

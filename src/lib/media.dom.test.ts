@@ -1,6 +1,6 @@
 // Pictures, PDFs, videos, link cards and math in a note: where they land, what they keep, how the keys treat them.
 import { test, expect, afterEach, describe, vi } from 'vitest';
-import { editorWith, md, posOf, press } from './testEditor';
+import { editorWith, md, posOf, press, type } from './testEditor';
 import { NodeSelection } from '@tiptap/pm/state';
 import { CellSelection } from '@tiptap/pm/tables';
 import { ui } from './ui.svelte';
@@ -374,4 +374,20 @@ test('a picture of the note\'s own is dragged wide as far as the pane\'s edge le
   // the column (600) and, to its right, half of what the pane has beside it (200) less the gap (30)
   expect(media.style.width).toBe('770px');
   document.body.innerHTML = '';
+});
+
+// the PDF opens beside the note to be written next to: a click on its card chose the card, so the words typed next took
+// its place (or, a PDF having taken the keyboard as it loaded, went to the note's start)
+test('a PDF card clicked opens its document and leaves the note\'s caret where it was: what is typed next goes there, the card kept', () => {
+  const ed = editorWith('# T\n\nBefore.\n\n[d.pdf](assets/d.pdf)\n\nAfter.');
+  ed.commands.setTextSelection(posOf(ed, 'After', true));
+  let card = -1;
+  ed.state.doc.descendants((n, p) => { if (n.type.name === 'pdf') card = p; });
+  ed.view.posAtCoords = () => ({ pos: card, inside: card });
+  const dom = ed.view.dom.querySelector('.pdf-card')!;
+  for (const kind of ['mousedown', 'mouseup', 'click']) dom.dispatchEvent(new MouseEvent(kind, { bubbles: true, cancelable: true, button: 0 }));
+  expect(ui.pdf?.src).toBe('assets/d.pdf');
+  type(ed, 'X');
+  expect(md(ed)).toBe('# T\n\nBefore.\n\n[d.pdf](assets/d.pdf)\n\nAfterX.');
+  ui.closePdf();
 });

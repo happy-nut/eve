@@ -1,4 +1,5 @@
 import { Node } from '@tiptap/core';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { assetUrl, pdfThumb } from './platform';
 import { DOC_FILE } from './drop';
 import { ui } from './ui.svelte';
@@ -76,6 +77,17 @@ export const Pdf = Node.create({
         destroy: () => { destroyed = true; io.disconnect(); if (url) URL.revokeObjectURL(url); },
       };
     };
+  },
+
+  addProseMirrorPlugins() {
+    // a click on a card opens its document: taken as handled, ProseMirror does not choose the card, and the note keeps
+    // the caret it is written at, put back over the browser's own (the press left that in the card's words, where keys
+    // go nowhere)
+    return [new Plugin({ key: new PluginKey('pdfClick'), props: { handleClickOn: (view, _pos, node, _nodePos, _event, direct) => {
+      if (!direct || node.type !== this.type) return false;
+      view.focus();
+      return true;
+    } } })];
   },
 
   addStorage() {

@@ -88,7 +88,14 @@ export function focusBack(from: Element | null, ownSelector?: string) {
   // nowhere to go back to (a button WebKit gave no focus, so <body>): the note, kept where it was read too — the ⋯
   // menu closed on Esc took a note scrolled far down back up to its caret
   const el = was ?? (isMobile ? null : document.querySelector<HTMLElement>('main .tiptap, main .calendar .day.cursor'));
-  if (el) keepingScroll(el, () => el.focus({ preventScroll: true }));
+  if (el) keepingScroll(el, () => focusWithCaret(el));
+}
+/** a note takes the keyboard through its editor's own focus, which puts the note's caret back in the same step: on a
+ *  bare focus() the browser puts a caret at the note's start, ProseMirror its own back only 20 ms later, and not at
+ *  all within 300 ms of a click */
+function focusWithCaret(el: HTMLElement) {
+  const view = (el as { editor?: { view: { focus(): void } } }).editor?.view;
+  if (view) view.focus(); else el.focus({ preventScroll: true });
 }
 
 class Layers {

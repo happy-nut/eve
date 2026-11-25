@@ -13,7 +13,8 @@ into a card, and drops a PDF in to read it beside the note.
 - `media-card`: an address on its own line, the caret in it, ⌥↩ → Show as card makes it a card (title, site);
   the note keeps the bare address, which reads back as a card after a reload.
 - `media-pdf`: a PDF dropped on the note is a card (`report.pdf`, `PDF · click to open`), saved as
-  `[report.pdf](…)`; a click opens a floating panel titled with its name, with Open outside and Close.
+  `[report.pdf](…)`; a click opens a floating panel titled with its name, with Open outside and Close. The click does
+  not choose the card: the note keeps its caret, and words typed next go there.
 - `media-pdf-page`: **Unchecked:** no drive, no test. The panel's page and the card's first-page picture come from Quick Look in the
   Tauri shell; in WebKit the panel is blank and the card shows a page glyph.
 - `media-image-drop`: a picture file dropped on the note goes in where it was dropped, as a PDF does (`handleDrop` →
