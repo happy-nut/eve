@@ -1,6 +1,7 @@
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
+import { heldWhileComposing } from './ime';
 import { Plugin, PluginKey, Selection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { imageMarkdown } from './image';
 import { hidePipesInMath } from './math';
@@ -320,12 +321,12 @@ export function dropEmptyTable(view: EditorView): boolean {
 
 const chosenTable = new Plugin({
   props: {
-    decorations(state) {
+    decorations: heldWhileComposing((state) => {
       const sel = state.selection;
       if (!(sel instanceof CellSelection) || !sel.isRowSelection() || !sel.isColSelection()) return null;
       const at = sel.$anchorCell.before(-1);
       return DecorationSet.create(state.doc, [Decoration.node(at, at + sel.$anchorCell.node(-1).nodeSize, { class: 'table-chosen' })]);
-    },
+    }),
   },
 });
 
@@ -444,7 +445,7 @@ const holdWidths = new Plugin<Pin[]>({
       : pins),
   },
   props: {
-    decorations(state) {
+    decorations: heldWhileComposing((state) => {
       const decos: Decoration[] = [];
       for (const pin of pinKey.getState(state) ?? []) {
         const table = state.doc.nodeAt(pin.pos);
@@ -454,7 +455,7 @@ const holdWidths = new Plugin<Pin[]>({
         table.firstChild!.forEach((cell, _o, i) => { decos.push(Decoration.node(at, at + cell.nodeSize, { style: `width: ${pin.widths[i]}px` })); at += cell.nodeSize; });
       }
       return DecorationSet.create(state.doc, decos);
-    },
+    }),
   },
   view(view) {
     let frame = 0, width = view.dom.clientWidth;

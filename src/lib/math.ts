@@ -8,6 +8,7 @@ import { mountMath, type MathEditing } from './mathEdit.svelte';
 import { scrollHint } from './scrollHint';
 import { HTML_TAGS } from './html';
 import { inCell } from './blocks';
+import { whenComposed } from './ime';
 
 function pandocClosingDollar(src: string, start: number): number {
   const first = src[start + 1];
@@ -110,6 +111,7 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
   shown.className = 'math-shown';
   dom.append(shown);
   let drawnNode = node;
+  let shownLatex: string = node.attrs.latex;
   let editing: MathEditing | null = null;
 
   const draw = () => {
@@ -122,6 +124,12 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     loadMath().then(() => { if (!editing) draw(); }, () => {});
   };
   draw();
+
+  const redraw = () => {
+    if (drawnNode.attrs.latex === shownLatex) return;
+    shownLatex = drawnNode.attrs.latex;
+    if (editing) editing.set(shownLatex); else draw();
+  };
 
   const leave = (side: 1 | -1) => {
     const p = getPos();
@@ -188,10 +196,8 @@ function view(editor: Editor, node: PMNode, getPos: () => number | undefined, di
     dom,
     update: (n: PMNode) => {
       if (n.type !== drawnNode.type) return false;
-      const was = drawnNode;
       drawnNode = n;
-      if (editing) { if (n.attrs.latex !== was.attrs.latex) editing.set(n.attrs.latex); }
-      else if (n.attrs.latex !== was.attrs.latex) draw();
+      whenComposed(editor.view, redraw);
       return true;
     },
     selectNode: () => dom.classList.add('selected'),

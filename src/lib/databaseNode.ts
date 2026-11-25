@@ -4,6 +4,7 @@ import Database from '../Database.svelte';
 import { notes } from './notes.svelte';
 import { focusBack } from './code';
 import { defaultDb, parseDb, serializeDb, type DbSchema } from './database';
+import { whenComposed } from './ime';
 
 export const insertDatabase = (editor: { chain: () => any }) =>
   editor.chain().focus().insertContent([{ type: 'database', attrs: { schema: defaultDb() } }, { type: 'paragraph' }]).run();
@@ -42,13 +43,16 @@ export const DatabaseBlock = Node.create({
           page: () => this.options.hostNoteId(),
         },
       });
+      let drawn = node;
+      const draw = () => app.set(drawn.attrs.schema);
       return {
         dom,
         stopEvent: () => true,
         ignoreMutation: () => true,
         update: (n) => {
           if (n.type.name !== 'database') return false;
-          app.set(n.attrs.schema);
+          drawn = n;
+          whenComposed(editor.view, draw);
           return true;
         },
         destroy: () => { const had = dom.contains(document.activeElement); void unmount(app); if (had) focusBack(editor); },

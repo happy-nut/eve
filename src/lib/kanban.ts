@@ -5,6 +5,7 @@ import { mount, unmount } from 'svelte';
 import Board from '../Kanban.svelte';
 import { focusBack } from './code';
 import { defaultBoard, parseBoard, parseTemplate, serializeBoard, type CardTemplate, type Column } from './board';
+import { whenComposed } from './ime';
 
 let enterNext = false;
 export const insertKanban = (editor: { chain: () => any }) => {
@@ -76,13 +77,16 @@ export const Kanban = Node.create({
       });
       (dom as any).__enter = app.enter;
       if (enterNext) { enterNext = false; setTimeout(() => app.enter(true)); }
+      let drawn = node;
+      const draw = () => app.set(drawn.attrs.columns);
       return {
         dom,
         stopEvent: () => true,
         ignoreMutation: () => true,
         update: (n) => {
           if (n.type.name !== 'kanban') return false;
-          app.set(n.attrs.columns);
+          drawn = n;
+          whenComposed(editor.view, draw);
           return true;
         },
         destroy: () => { const had = dom.contains(document.activeElement); void unmount(app); if (had) focusBack(editor); },

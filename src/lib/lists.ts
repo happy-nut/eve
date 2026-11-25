@@ -4,6 +4,8 @@ import TaskItem from '@tiptap/extension-task-item';
 import { Plugin, TextSelection } from '@tiptap/pm/state';
 import { canJoin } from '@tiptap/pm/transform';
 import type { Fragment, Node as PMNode } from '@tiptap/pm/model';
+import type { Decoration, DecorationSource, NodeView } from '@tiptap/pm/view';
+import { whenComposed } from './ime';
 import { suggestionVisible } from './slash';
 import { indentLines, switchItem, joinNextItem, joinListBelow, itemAbove, liftCounting } from './blocks';
 
@@ -292,8 +294,19 @@ export const ToDoItem = TaskItem.extend({
     const stock = this.parent?.();
     if (!stock) return null;
     return (props) => {
-      const view = stock(props) as any;
-      return { ...view, ignoreMutation: (m: { type: string; target: Node }) => m.type !== 'selection' && !view.contentDOM?.contains(m.target) };
+      const view = stock(props) as NodeView;
+      let drawn = { node: props.node, outer: props.decorations, inner: props.innerDecorations };
+      const draw = () => { view.update?.(drawn.node, drawn.outer, drawn.inner); };
+      return {
+        ...view,
+        update: (node: PMNode, outer: readonly Decoration[], inner: DecorationSource) => {
+          if (node.type !== props.node.type) return false;
+          drawn = { node, outer, inner };
+          whenComposed(props.editor.view, draw);
+          return true;
+        },
+        ignoreMutation: (m: { type: string; target: Node }) => m.type !== 'selection' && !view.contentDOM?.contains(m.target),
+      };
     };
   },
   // the box's hidden label says "To-do", not the item's words: tiptap wrote the words into it, on the page just

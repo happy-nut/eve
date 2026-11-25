@@ -1,6 +1,7 @@
 import { Node, getMarkRange, type Editor } from '@tiptap/core';
 import { Plugin, TextSelection, type NodeSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { heldWhileComposing } from './ime';
 
 import { fetchUrl, isMobile, isTauri, openUrl, youtubePlayer } from './platform';
 import { VIDEO_FILE } from './drop';
@@ -193,7 +194,7 @@ export const Bookmark = Node.create({
       // Not in code: code is read (and copied by eye) character by character
       new Plugin({
         props: {
-          decorations: (state) => {
+          decorations: heldWhileComposing((state) => {
             const type = state.schema.marks.link, { from, to } = state.selection;
             const cut: Decoration[] = [];
             state.doc.descendants((node, pos) => {
@@ -204,7 +205,7 @@ export const Bookmark = Node.create({
               return false;
             });
             return cut.length ? DecorationSet.create(state.doc, cut) : null;
-          },
+          }),
         },
       }),
     ];

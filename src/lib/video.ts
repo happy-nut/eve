@@ -2,6 +2,7 @@ import { Node as TipTapNode } from '@tiptap/core';
 import { assetUrl } from './platform';
 import { VIDEO_FILE } from './drop';
 import { nameOf, sizeGrip, widthOf, withWidth } from './resize';
+import { whenComposed } from './ime';
 
 export const Video = TipTapNode.create({
   name: 'video',
@@ -50,13 +51,18 @@ export const Video = TipTapNode.create({
 
       const grip = sizeGrip(video, setWidth);
       dom.append(video, grip);
+      let drawn = node;
+      const draw = () => {
+        if (drawn.attrs.src !== loadedSrc) video.src = assetUrl((loadedSrc = drawn.attrs.src)) ?? loadedSrc;
+        video.style.width = drawn.attrs.width ? `${drawn.attrs.width}px` : '';
+      };
       return {
         dom,
         ignoreMutation: () => true,
         update: (updated) => {
           if (updated.type !== node.type) return false;
-          if (updated.attrs.src !== loadedSrc) video.src = assetUrl((loadedSrc = updated.attrs.src)) ?? loadedSrc;
-          video.style.width = updated.attrs.width ? `${updated.attrs.width}px` : '';
+          drawn = updated;
+          whenComposed(editor.view, draw);
           return true;
         },
         stopEvent: (e) => e.target === grip || (e.target instanceof Node && video.contains(e.target)),

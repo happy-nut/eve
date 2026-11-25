@@ -6,6 +6,7 @@ import { Plugin, PluginKey, NodeSelection, TextSelection } from '@tiptap/pm/stat
 import { assetUrl, copyImage } from './platform';
 import { MIN_WIDTH, alignOf, escapeWidth, nameOf, sizeGrip, widthOf, withAlign, withWidth } from './resize';
 import type { Editor } from '@tiptap/core';
+import { whenComposed } from './ime';
 
 function linkDestination(src: string): string {
   // ...but one with a space, a "<" or ">", or a ")" with no "(" before it ends the link early (the rest was
@@ -264,15 +265,20 @@ export const LocalImage = Image.extend({
 
       const grip = sizeGrip(img, setWidth);
       figure.append(img, grip, cap);
+      let drawn = node;
+      const draw = () => {
+        img.src = assetUrl(drawn.attrs.src) ?? drawn.attrs.src;
+        img.alt = drawn.attrs.alt ?? '';
+        img.style.width = drawn.attrs.width ? `${drawn.attrs.width}px` : '';
+        if (drawn.attrs.align) figure.dataset.align = drawn.attrs.align; else delete figure.dataset.align;
+        if (document.activeElement !== cap) cap.textContent = drawn.attrs.alt ?? '';
+      };
       return {
         dom: figure,
         update: (updated) => {
           if (updated.type !== node.type) return false;
-          img.src = assetUrl(updated.attrs.src) ?? updated.attrs.src;
-          img.alt = updated.attrs.alt ?? '';
-          img.style.width = updated.attrs.width ? `${updated.attrs.width}px` : '';
-          if (updated.attrs.align) figure.dataset.align = updated.attrs.align; else delete figure.dataset.align;
-          if (document.activeElement !== cap) cap.textContent = updated.attrs.alt ?? '';
+          drawn = updated;
+          whenComposed(editor.view, draw);
           return true;
         },
         // a drag writes the width straight onto the <img> style. Left to ProseMirror, that change is

@@ -6,6 +6,7 @@ import { ui } from './ui.svelte';
 import { isMobile } from './platform';
 import { customIcon } from './icons';
 import { calloutKind } from './calloutKind';
+import { whenComposed } from './ime';
 
 const renderIcon = (el: HTMLElement, icon: string) => {
   const c = customIcon(icon);
@@ -96,14 +97,18 @@ export const Callout = Node.create({
     return ({ node, getPos, editor }) => {
       const dom = document.createElement('div');
       dom.className = 'callout';
-      dom.dataset.callout = node.attrs.emoji;
-      dom.dataset.color = colorOf(node.attrs.emoji);
-      dom.toggleAttribute('data-titled', !!node.attrs.titled);
       const emoji = document.createElement('span');
       emoji.className = 'callout-emoji';
       emoji.contentEditable = 'false';
-      renderIcon(emoji, node.attrs.emoji);
       emoji.title = 'Change icon';
+      let drawn = node;
+      const draw = () => {
+        renderIcon(emoji, drawn.attrs.emoji);
+        dom.dataset.callout = drawn.attrs.emoji;
+        dom.dataset.color = colorOf(drawn.attrs.emoji);
+        dom.toggleAttribute('data-titled', !!drawn.attrs.titled);
+      };
+      draw();
       emoji.addEventListener('mousedown', async (e) => {
         e.preventDefault();
         const v = await ui.pickEmoji(emoji, node.attrs.emoji);
@@ -124,10 +129,8 @@ export const Callout = Node.create({
         ignoreMutation: (m) => m.type !== 'selection' && !contentDOM.contains(m.target),
         update: (n) => {
           if (n.type.name !== 'callout') return false;
-          renderIcon(emoji, n.attrs.emoji);
-          dom.dataset.callout = n.attrs.emoji;
-          dom.dataset.color = colorOf(n.attrs.emoji);
-          dom.toggleAttribute('data-titled', !!n.attrs.titled);
+          drawn = n;
+          whenComposed(editor.view, draw);
           return true;
         },
       };

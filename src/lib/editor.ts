@@ -55,6 +55,7 @@ import { loadEmoji, newestEmoji, searchEmoji, type EmojiEntry } from './emoji';
 import { noteMenu } from './noteMenu';
 import { blockBeside, inCell, moveBlock, indentLines, switchLines, wrapLines, leaveTrailer } from './blocks';
 import { holdEdit, dropEdit } from './pending';
+import { ImeGate, heldWhileComposing, lineAttributes } from './ime';
 import { ICONS } from './lineIcons';
 import { LIST_ITEM_CONTENT, NumberedList, ListSwitch, JoinNextItem, LineIndent, JoinLists, ListMarkdown, ToDoItem, bulletsMarkdown } from './lists';
 import { appearance } from './appearance.svelte';
@@ -943,10 +944,9 @@ const codeEdges = Extension.create({
     return [new Plugin({
       key: new PluginKey('codeEdges'),
       props: {
-        attributes: (state): Record<string, string> => (state.selection.empty && codeEdge(state) ? { class: 'at-code-edge' } : {}),
         // drawn by the code's own letter at the edge (a ::before or ::after), not a node of its own at the caret: a
         // widget there took an arrow's step and, at a line's start, left the input method nowhere to write (#325)
-        decorations: (state) => {
+        decorations: heldWhileComposing((state) => {
           const e = state.selection.empty ? codeEdge(state) : null;
           if (!e) return null;
           const at = state.selection.from, $c = state.selection.$from;
@@ -955,7 +955,7 @@ const codeEdges = Extension.create({
           const [from, to] = e.after ? [at - letter.length, at] : [at, at + letter.length];
           const cls = `code-caret code-caret-${e.after ? 'after' : 'before'}${e.inside ? '' : ' out'}`;
           return DecorationSet.create(state.doc, [Decoration.inline(from, to, { class: cls })]);
-        },
+        }),
       },
     })];
   },
@@ -1160,7 +1160,7 @@ const PaintSelection = Extension.create({
   name: 'paintSelection',
   addProseMirrorPlugins: () => [new Plugin({
     props: {
-      decorations: (state) => {
+      decorations: heldWhileComposing((state) => {
         const sel = state.selection;
         if (sel.empty || sel instanceof NodeSelection) return null;
         const { from, to } = sel;
@@ -1173,7 +1173,7 @@ const PaintSelection = Extension.create({
           return false;
         });
         return marks.length ? DecorationSet.create(state.doc, marks) : null;
-      },
+      }),
     },
   })],
 });
@@ -1578,6 +1578,7 @@ export function createEditor(opts: {
       DollarSafeText,
       markExit,
       codeEdges,
+      ImeGate,
       hangulKeys,
       LinkEndsAtItsWords,
       CodeInsideLinks,
@@ -1614,7 +1615,7 @@ export function createEditor(opts: {
             init: () => DecorationSet.empty,
             apply: (tr, set) => tr.getMeta(FLASH) ?? set.map(tr.mapping, tr.doc),
           },
-          props: { decorations: (state) => FLASH.getState(state) },
+          props: { decorations: heldWhileComposing((state) => FLASH.getState(state)) },
         })],
       }),
       SelectMediaBeforeDelete,
@@ -1653,7 +1654,7 @@ export function createEditor(opts: {
         name: 'blockHint',
         addProseMirrorPlugins: () => [new Plugin({
           props: {
-            decorations: (state) => {
+            decorations: lineAttributes((state) => {
               const { $from, empty } = state.selection;
               const line = $from.parent;
               if (!empty || !line.isTextblock || line.content.size || $from.depth < 2) return null;
@@ -1661,8 +1662,8 @@ export function createEditor(opts: {
               const says = line.type.name === 'heading' ? `Heading ${line.attrs.level}` : line.type.name === 'detailsSummary' ? 'Toggle'
                 : around === 'taskItem' ? 'To-do' : around === 'listItem' ? 'List' : around === 'blockquote' ? 'Empty quote' : '';
               if (!says) return null;
-              return DecorationSet.create(state.doc, [Decoration.node($from.before(), $from.after(), { class: 'is-empty', 'data-placeholder': says })]);
-            },
+              return { from: $from.before(), to: $from.after(), attrs: { class: 'is-empty', 'data-placeholder': says } };
+            }),
           },
         })],
       }),

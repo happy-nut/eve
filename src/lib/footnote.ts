@@ -1,6 +1,7 @@
 import { Extension, Node, mergeAttributes, type Editor } from '@tiptap/core';
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { heldWhileComposing } from './ime';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type MarkdownIt from 'markdown-it';
 
@@ -111,14 +112,14 @@ export const FootnoteRef = Node.create({
     return [new Plugin({
       key: new PluginKey('footnoteLines'),
       props: {
-        decorations: (state) => {
+        decorations: heldWhileComposing((state) => {
           const decos: Decoration[] = [];
           state.doc.descendants((n, pos) => {
             if (n.type.name === 'paragraph' && DEF.test(n.textContent)) decos.push(Decoration.node(pos, pos + n.nodeSize, { class: 'fndef' }));
             return !n.isTextblock;
           });
           return DecorationSet.create(state.doc, decos);
-        },
+        }),
       },
     })];
   },

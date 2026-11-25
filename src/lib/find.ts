@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey, TextSelection, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { heldWhileComposing } from './ime';
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { chipAttrs, chipLabel } from './date';
@@ -75,14 +76,14 @@ export const Find = Extension.create({
           },
         },
         props: {
-          decorations(state) {
+          decorations: heldWhileComposing((state) => {
             const s = FIND.getState(state);
             if (!s?.query || !s.hits.length) return null;
             return DecorationSet.create(
               state.doc,
               s.hits.map((h, i) => Decoration.inline(h.from, h.to, { class: i === s.index ? 'find-hit current' : 'find-hit' })),
             );
-          },
+          }),
         },
       }),
     ];

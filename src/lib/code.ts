@@ -11,6 +11,7 @@ import { mountDiagram } from './diagramBlock.svelte';
 import { closeHistory, redoNoScroll, undoNoScroll } from '@tiptap/pm/history';
 import { blockBeside, inCell } from './blocks';
 import { fenceFor } from './markdown';
+import { heldWhileComposing, whenComposed } from './ime';
 
 type Hast = { type: string; value?: string; properties?: { className?: string[] }; children?: Hast[] };
 type Lowlight = { highlight(lang: string, code: string): Hast & { data?: { relevance?: number } }; registered(lang: string): boolean };
@@ -55,48 +56,24 @@ function spansOf(node: PMNode) {
   return got;
 }
 
-function highlight(doc: PMNode, redraw = 0): DecorationSet {
+function highlight(doc: PMNode): DecorationSet {
   if (!lowlight) return DecorationSet.empty;
   const out: Decoration[] = [];
-  const attrs = (cls: string) => (redraw ? { class: cls, 'data-redraw': String(redraw) } : { class: cls });
   doc.descendants((node, pos) => {
     if (node.type.name !== 'codeBlock') return true;
-    for (const [from, to, cls] of spansOf(node)) out.push(Decoration.inline(pos + 1 + from, pos + 1 + to, attrs(cls)));
+    for (const [from, to, cls] of spansOf(node)) out.push(Decoration.inline(pos + 1 + from, pos + 1 + to, { class: cls }));
     return false;
   });
   return DecorationSet.create(doc, out);
-}
-const REDRAW = 'redraw';
-let redraws = 0;
-export type DomObserver = { flush?(): void; forceFlush?(): void };
-export const domObserverOf = (view: EditorView) => (view as unknown as { domObserver?: DomObserver }).domObserver;
-
-function redrawAfterComposition(view: EditorView) {
-  if (view.isDestroyed || view.composing) return;
-  domObserverOf(view)?.forceFlush?.();
-  view.dispatch(view.state.tr.setMeta(HIGHLIGHT, REDRAW));
 }
 
 const highlighter = new Plugin<DecorationSet>({
   key: HIGHLIGHT,
   state: {
     init: (_, { doc }) => highlight(doc),
-    apply: (tr, set, _old, now) =>
-      tr.getMeta(HIGHLIGHT) === REDRAW ? highlight(now.doc, ++redraws)
-        : tr.getMeta(HIGHLIGHT) || tr.docChanged ? highlight(now.doc, redraws) : set,
+    apply: (tr, set, _old, now) => (tr.getMeta(HIGHLIGHT) || tr.docChanged ? highlight(now.doc) : set),
   },
-  props: {
-    decorations: (state) => HIGHLIGHT.getState(state),
-    handleDOMEvents: {
-      compositionend: (view) => {
-        if (!lowlight || !view.state.selection.$from.parent.type.spec.code) return false;
-        // only once the editor has read the word in: it does so 20ms after this event (prosemirror-view's
-        // endComposition); drawn before that, the screen would be drawn from a note without the word in it
-        setTimeout(() => redrawAfterComposition(view), 60);
-        return false;
-      },
-    },
-  },
+  props: { decorations: heldWhileComposing((state) => HIGHLIGHT.getState(state)) },
 });
 
 const SHELL_COMMAND = /^(?:\.{0,2}\/[\w./-]+|git|gh|npm|npx|yarn|pnpm|bun|deno|node|cd|ls|curl|wget|docker|docker-compose|kubectl|helm|brew|apt|apt-get|yum|pip|pip3|python|python3|java|javac|gradle|mvn|make|cargo|rustup|go|export|echo|mkdir|rm|cp|mv|cat|touch|chmod|chown|ln|ssh|scp|grep|tail|head|tar|unzip|source|which|open|aws|gcloud|terraform|psql|mysql|redis-cli|xcodebuild|xcrun|sed|awk|find|kill|ps|env|sh|bash|zsh)$/;
@@ -236,7 +213,7 @@ const EDITING = new PluginKey('mermaid-editing');
 const editingDiagram = new Plugin({
   key: EDITING,
   props: {
-    decorations(state) {
+    decorations: heldWhileComposing((state) => {
       const { $head } = state.selection;
       for (let d = $head.depth; d > 0; d--) {
         const n = $head.node(d);
@@ -245,7 +222,7 @@ const editingDiagram = new Plugin({
         }
       }
       return null;
-    },
+    }),
     handleClick(view, pos) {
       const $p = view.state.doc.resolve(pos);
       let at = -1;
@@ -625,6 +602,10 @@ export const CodeBlock = CodeBlockBase.extend({
       });
       if (ASK_LANGUAGE.read(editor.state)) queueMicrotask(() => { if (dom.isConnected) openField(); });
 
+      const draw = () => {
+        chip.textContent = labelOf(drawnNode.attrs.language);
+        setDiagram(drawnNode);
+      };
       const owns = (target: EventTarget | Node | null) => target instanceof Node && (chip.contains(target) || host.contains(target) || ask.contains(target));
       const ownMutation = (m: ViewMutationRecord) => owns(m.target) || (m.type === 'attributes' && m.target === dom);
       return {
@@ -632,10 +613,9 @@ export const CodeBlock = CodeBlockBase.extend({
         contentDOM: code,
         update: (updated, decorations) => {
           if (updated.type !== node.type) return false;
-          chip.textContent = labelOf(updated.attrs.language);
           codeShown = decorations.some((d) => d.spec.editing);
           drawnNode = updated;
-          setDiagram(updated);
+          whenComposed(editor.view, draw);
           return true;
         },
         ignoreMutation: ownMutation,

@@ -3,6 +3,7 @@ import { Plugin, PluginKey, Selection, TextSelection, type EditorState, type Tra
 import type { EditorView } from '@tiptap/pm/view';
 import { Fragment, type Node as PMNode, type NodeType, type Schema } from '@tiptap/pm/model';
 import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details';
+import { whenComposed } from './ime';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -160,11 +161,12 @@ export const Toggle = [
         button.contentEditable = 'false';
         const contentDOM = document.createElement('div');
         dom.append(button, contentDOM);
-        const show = (open: boolean) => {
+        let open: boolean = node.attrs.open;
+        const show = () => {
           dom.classList.toggle('is-open', open);
           button.ariaLabel = open ? 'Collapse' : 'Expand';
         };
-        show(node.attrs.open);
+        show();
         button.addEventListener('mousedown', (e) => {
           e.preventDefault();
           const pos = getPos();
@@ -178,7 +180,8 @@ export const Toggle = [
           ignoreMutation: (m) => m.type !== 'selection' && (button.contains(m.target) || m.target === dom),
           update: (n) => {
             if (n.type !== node.type) return false;
-            show(n.attrs.open);
+            open = n.attrs.open;
+            whenComposed(editor.view, show);
             return true;
           },
         };
