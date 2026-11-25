@@ -1,7 +1,8 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { fade, scale } from 'svelte/transition';
-  import { panelIn, scrimFade } from './lib/motion';
+  import { scale } from 'svelte/transition';
+  import { panelIn } from './lib/motion';
+  import Scrim from './Scrim.svelte';
   import { sheet } from './lib/popup';
   import { ui } from './lib/ui.svelte';
   import { notes, titleOf } from './lib/notes.svelte';
@@ -28,7 +29,7 @@
   }
 </script>
 
-<div class="backdrop" transition:fade|global={scrimFade} onmousedown={() => ui.closeTrash()} role="presentation"></div>
+<Scrim layer="sheet" tint="var(--scrim)" onclose={() => ui.closeTrash()} />
 <div class="rpanel" data-panel="trash" transition:appear|global role="dialog" aria-modal="true" aria-label="Trash">
   <div class="top">
     <input class="search" placeholder="Search the trash" bind:value={q} bind:this={searchEl} use:focus spellcheck="false" />
@@ -63,7 +64,6 @@
 </div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-sheet-scrim); }
   .rpanel {
     position: fixed; z-index: var(--z-sheet); top: max(44px, 12vh); left: 50%; transform: translateX(-50%);
     width: min(440px, 92vw); max-height: min(520px, calc(100vh - 88px)); display: flex; flex-direction: column;

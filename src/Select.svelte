@@ -3,6 +3,7 @@
   import { popIn } from './lib/motion';
   import { isMobile } from './lib/platform';
   import BottomSheet from './BottomSheet.svelte';
+  import Scrim from './Scrim.svelte';
   import { floatAt } from './lib/popup';
   import { claimKeys, PRIORITY } from './lib/keys';
 
@@ -76,9 +77,6 @@
   <svg viewBox="0 0 16 16"><path d="M4.5 6.5L8 10l3.5-3.5"/></svg>
 </button>
 
-{#if open && !isMobile}
-  <div class="scrim" use:portal role="presentation" onmousedown={(e) => { e.preventDefault(); close(); }}></div>
-{/if}
 {#if open}
   {#if isMobile}
     <BottomSheet onclose={() => (open = false)} role="listbox" label={label || undefined}>
@@ -91,6 +89,7 @@
       {/each}
     </BottomSheet>
   {:else}
+    <Scrim layer="popover" portal onclose={close} />
     <div class="pop" tabindex="-1" bind:this={list} class:up={pos.up} use:portal use:measured onkeydown={listKey} role="listbox" style="left: {pos.left}px; top: {pos.top}px; max-height: {pos.maxHeight}px; min-width: {Math.max(pos.width, 160) + 10}px"
       transition:scale|global={popIn}>
       {#each options as [id, text], i (id)}
@@ -116,8 +115,6 @@
   svg { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
   .select svg { color: var(--fg-dim); transition: transform 0.18s; }
   .select.open svg { transform: rotate(180deg); }
-
-  .scrim { position: fixed; inset: 0; z-index: var(--z-popover-scrim); }
 
   .pop {
     position: fixed; z-index: var(--z-popover); transform-origin: top right; padding: 4px; overflow-y: auto;

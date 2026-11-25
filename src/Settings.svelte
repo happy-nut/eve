@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fade, scale } from 'svelte/transition';
-  import { panelIn, scrimFade } from './lib/motion';
+  import { scale } from 'svelte/transition';
+  import { panelIn } from './lib/motion';
+  import Scrim from './Scrim.svelte';
   import { shortcuts, eventToKeys, prettyKeys, type Scope } from './lib/shortcuts.svelte';
   import { sync } from './lib/sync.svelte';
   import { storage, autostart, dock, defaultApp, mcp, isTauri, isMobile, copyText, openUrl, type McpClient } from './lib/platform';
@@ -17,7 +18,6 @@
   import { findUpdate } from './lib/update';
   import { askNotify } from './lib/reminder';
   import { claimKeys, PRIORITY } from './lib/keys';
-  import { closeKeepingFocus } from './lib/backdrop';
 
   let { onClose, hotkeyError }: { onClose: () => void; hotkeyError: string | null } = $props();
 
@@ -146,7 +146,7 @@
 </script>
 
 
-<div class="backdrop" transition:fade|global={scrimFade} onmousedown={closeKeepingFocus(onClose)} role="presentation"></div>
+<Scrim layer="panel" tint={isMobile ? 'var(--bg)' : 'var(--scrim)'} onclose={onClose} />
 <div class="panel" use:takeFocus transition:scale|global={panelIn} role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1">
   <header>
     <div class="seg" role="tablist">
@@ -521,8 +521,6 @@
   :global(html.mobile) .pens .link { min-height: 40px; padding: 0 10px; }
   .pens input[type='color']::-webkit-color-swatch-wrapper { padding: 2px; }
   .pens input[type='color']::-webkit-color-swatch { border: 0; border-radius: 5px; }
-  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-panel-scrim); }
-  :global(html.mobile) .backdrop { background: var(--bg); }
   .panel:focus { outline: none; }
   .panel {
     position: fixed; z-index: var(--z-panel); top: max(40px, 9vh); left: 50%; transform: translateX(-50%);

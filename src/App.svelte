@@ -637,10 +637,6 @@
 {#if ui.emoji}
   {#await import('./EmojiPicker.svelte') then { default: EmojiPicker }}<EmojiPicker />{/await}
 {/if}
-{#if ui.menu && !isMobile}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="menu-scrim" onmousedown={() => ui.closeMenu()} oncontextmenu={(e) => { e.preventDefault(); ui.closeMenu(); }}></div>
-{/if}
 {#if ui.menu}
   <Menu />
 {/if}

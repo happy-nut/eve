@@ -777,7 +777,7 @@ aside .file-over { border-radius: 6px; background: var(--accent-soft); box-shado
   /* the caret is the app's, not the note's: it printed as a stray bar at the end of the last line */
   .tiptap { caret-color: transparent; }
   .shell { display: block; animation: none; }
-  aside, .toolbar, .dragbar, .drop-hint, .pdf-panel, .tip, .backdrop,
+  aside, .toolbar, .dragbar, .drop-hint, .pdf-panel, .tip,
   .menu, .find, .outline, .suggest, .tbl-tools, .panel,
   .mhead, .mbar, .sheet, .scrim,
   .hint, .cal, .box, .emoji-row { display: none !important; }
@@ -957,5 +957,3 @@ svg .eve-drawing { marker-end: none !important; }
 }
 .diagram-canvas .eve-flowing .eve-flow { opacity: 0.85; animation-play-state: running; }
 @keyframes eve-flow { from { stroke-dashoffset: 48; } to { stroke-dashoffset: 0; } }
-
-.menu-scrim { position: fixed; inset: 0; z-index: var(--z-menu-scrim); }

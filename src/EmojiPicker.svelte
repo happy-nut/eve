@@ -1,7 +1,8 @@
 <script lang="ts">
   import { flushSync, onMount } from 'svelte';
-  import { fade, scale } from 'svelte/transition';
-  import { popIn, scrimFade } from './lib/motion';
+  import { scale } from 'svelte/transition';
+  import { popIn } from './lib/motion';
+  import Scrim from './Scrim.svelte';
   import { ui } from './lib/ui.svelte';
   import { isMobile } from './lib/platform';
   import { randomIcon } from './lib/icons';
@@ -119,7 +120,7 @@
   {#if c.url}<img src={c.url} alt="" />{:else}{c.face}{/if}
 {/snippet}
 
-<div class="backdrop" transition:fade|global={scrimFade} onmousedown={() => ui.emojiDone(null)} role="presentation"></div>
+<Scrim layer="popover" onclose={() => ui.emojiDone(null)} />
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_interactive_supports_focus -->
 <div class="panel" style="left: {x}px; top: {y}px; width: {W}px; --picker-h: {H}px" transition:scale|global={popIn} role="dialog" aria-label="Choose an icon" onkeydown={onKey}>
   <header>
@@ -173,7 +174,6 @@
 </div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; z-index: var(--z-popover-scrim); }
   .panel {
     position: fixed; z-index: var(--z-popover); overflow: hidden; display: flex; flex-direction: column;
     background: var(--bg-pop); border: var(--pop-border); border-radius: var(--pop-radius); box-shadow: var(--pop-shadow);

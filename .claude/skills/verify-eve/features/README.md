@@ -103,6 +103,7 @@ missing here). A new screen gets a feature file, or a sub-feature in one, proved
 - `Present.svelte`: [present](./present.md)
 - `MobileBar.svelte`: [phone](./phone.md)
 - `BottomSheet.svelte`: [phone](./phone.md)
+- `Scrim.svelte`: [database](./database.md)
 
 ## Not reachable here
 

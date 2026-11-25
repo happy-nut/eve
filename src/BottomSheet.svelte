@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { fade } from 'svelte/transition';
   import { onMount } from 'svelte';
   import { pullDown } from './lib/popup';
   import { ui } from './lib/ui.svelte';
+  import Scrim from './Scrim.svelte';
 
   /**
    * A phone's sheet from the bottom (the menus, a Select's choices): it slides up, and goes away by a tap on the
@@ -30,16 +30,13 @@
   const pull = (node: HTMLElement) => pullDown(node, { onpull: (d, on) => { dy = d; dragging = on; }, onclose });
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="scrim" use:portal transition:fade|global={{ duration: 150 }} style:opacity={dy ? Math.max(0.2, 1 - dy / 400) : null}
-  onclick={onclose} role="presentation"></div>
+<Scrim layer="menu" tint="rgba(0, 0, 0, 0.3)" pulled={dy} portal {onclose} />
 <div class="sheet" use:portal use:pull transition:slide|global {role} aria-label={label}
   class:dragging style:translate={dy ? `0 ${dy}px` : null}>
   {@render children()}
 </div>
 
 <style>
-  .scrim { position: fixed; inset: 0; z-index: var(--z-menu-scrim); background: rgba(0, 0, 0, 0.3); }
   .sheet {
     position: fixed; z-index: var(--z-menu); left: 0; right: 0; bottom: 0; margin: 0; padding: 8px 10px calc(12px + var(--bottom, 0px));
     background: var(--bg-pop); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);

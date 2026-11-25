@@ -8,6 +8,8 @@
 // at some moment, so a slow machine (CI) that is late to look still sees them.
 // On the Mac the keyboard must be somewhere after each closes, never left on <body> (where the keys typed next go
 // nowhere); a phone leaves it there on purpose, its keyboard down.
+// A popup put away by a click outside it lets go of the pointer at once: a second click there, while it still fades
+// out (its fades are drawn out here so that it is), reaches what was under it before it opened.
 // Needs WebKit for Playwright: npx playwright-core install webkit. It starts its own dev server, or uses EVE_URL.
 // Run: npm run e2e:popups
 import { webkit } from 'playwright-core';
@@ -25,6 +27,7 @@ const RECORD = () => {
   Element.prototype.animate = function (keyframes, options) {
     const ms = typeof options === 'number' ? options : options?.duration;
     if (ms > 0) seen.push(this);
+    if (ms > 0 && window.__slow) options = { ...(typeof options === 'number' ? {} : options), duration: ms * window.__slow };
     return animate.call(this, keyframes, options);
   };
 };
@@ -54,6 +57,35 @@ async function check(page, name, sel, open, close) {
 }
 
 const ok = (r) => r.opened && r.in && r.out && r.closed && r.focus;
+
+/** puts it away by a click at `at`, outside it, and clicks there again while it still fades out: the second press
+ *  must reach what was there before it opened, not what is going */
+async function clickThrough(page, name, sel, open, at) {
+  const [x, y] = at;
+  const under = await page.evaluate(([x, y]) => {
+    const el = document.elementFromPoint(x, y);
+    el.dataset.under = 'yes';
+    addEventListener('mousedown', (e) => { window.__pressed = e.target; }, { capture: true });
+    return `<${el.tagName.toLowerCase()} class="${el.className}">`;
+  }, [x, y]);
+  await open();
+  await page.locator(sel).last().waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
+  await page.evaluate(() => { window.__slow = 10; });
+  await page.mouse.click(x, y);
+  const going = await present(page, sel);
+  await page.mouse.click(x, y);
+  const got = await page.evaluate(() => {
+    const p = window.__pressed;
+    window.__slow = 0;
+    const hit = !!p?.closest('[data-under]');
+    document.querySelector('[data-under]')?.removeAttribute('data-under');
+    return { hit, what: p ? `<${p.tagName.toLowerCase()} class="${p.className}">` : 'nothing' };
+  });
+  await page.waitForFunction((sel) => !document.querySelector(sel) && !document.querySelector('.scrim'), sel, { timeout: 10_000 }).catch(() => {});
+  const r = { name: `${name}, click through`, opened: true, in: going, out: got.hit, closed: true, focus: true };
+  results.push(r);
+  console.log(`${ok(r) ? 'pass' : 'FAIL'} ${r.name.padEnd(28)} ${going ? 'still going' : 'NOT still going'} when clicked again; the press reached ${got.what}${got.hit ? '' : `, not ${under}`}`);
+}
 
 async function newNote(page, mobile) {
   await page.locator(mobile ? 'button[aria-label="New note"]:visible' : 'button[data-tip="New note"]:visible').first().click().catch(() => {});
@@ -113,6 +145,26 @@ async function newNote(page, mobile) {
   await page.waitForTimeout(400);
   await page.getByText('Appearance', { exact: true }).click();
   await check(page, "a setting's choices", '.pop', () => page.locator('button.select').first().click(), esc);
+  await page.close();
+}
+
+// ---- a click right after a popup is put away by a click outside it reaches what is under it ----
+{
+  const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+  await page.addInitScript(RECORD);
+  page.on('pageerror', (e) => errors.push(`click through: ${e.message}`));
+  await page.goto(URL_);
+  await page.waitForSelector('.tiptap');
+  await newNote(page, false);
+  const row = () => page.locator('aside [data-note]').last();
+  const away = [1070, 770];
+  await clickThrough(page, 'menu (right click)', '.menu', () => row().click({ button: 'right' }), away);
+  await clickThrough(page, 'emoji picker', '[aria-label="Choose an icon"]', () => page.locator('aside .note-row').last().locator('.ico-slot').click(), away);
+  await clickThrough(page, 'confirm', '.box', async () => { await row().focus(); await page.keyboard.press('Backspace'); }, away);
+  await clickThrough(page, 'settings', '.panel', () => page.locator('button[data-tip="Settings"]').first().click(), away);
+  await page.locator('button[data-tip="Settings"]').first().click();
+  await page.getByText('Appearance', { exact: true }).click();
+  await clickThrough(page, "a setting's choices", '.pop', () => page.locator('button.select').first().click(), away);
   await page.close();
 }
 
@@ -260,6 +312,7 @@ keyboard = false;
   await newNote(page, true);
   const tapOut = () => page.mouse.click(200, 60);
   await check(page, 'phone: note menu sheet', '.sheet', () => page.locator('button[aria-label="More"]:visible').first().click(), tapOut);
+  await clickThrough(page, 'phone: note menu sheet', '.sheet', () => page.locator('button[aria-label="More"]:visible').first().click(), [200, 60]);
   await check(page, 'phone: confirm sheet', '.box', () => page.locator('button[aria-label="Delete note"]:visible').first().click(),
     () => page.locator('.box button', { hasText: 'Cancel' }).click());
   await page.locator('button[aria-label="Back"]:visible').first().click();

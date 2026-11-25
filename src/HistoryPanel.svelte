@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { fade, scale } from 'svelte/transition';
+  import { scale } from 'svelte/transition';
   import type { Editor as TipTap } from '@tiptap/core';
-  import { panelIn, scrimFade } from './lib/motion';
+  import { panelIn } from './lib/motion';
+  import Scrim from './Scrim.svelte';
   import { sheet } from './lib/popup';
   import { ui } from './lib/ui.svelte';
   import { syncError } from './lib/github';
@@ -53,7 +54,7 @@
   const focus = (el: HTMLElement) => el.focus();
 </script>
 
-<div class="backdrop" transition:fade|global={scrimFade} onmousedown={() => ui.closeHistory()} role="presentation"></div>
+<Scrim layer="sheet" tint="var(--scrim)" onclose={() => ui.closeHistory()} />
 <div class="rpanel" data-panel="history" transition:appear|global role="dialog" aria-modal="true" aria-label="Version history">
   <header>
     <span class="title">Version history{note ? ` · ${titleOf(note)}` : ''}</span>
@@ -88,7 +89,6 @@
 </div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-sheet-scrim); }
   .rpanel {
     position: fixed; z-index: var(--z-sheet); top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: min(900px, 94vw); height: min(640px, 86vh); display: flex; flex-direction: column;

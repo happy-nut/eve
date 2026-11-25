@@ -151,7 +151,7 @@
     watch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     const away = (e: MouseEvent) => {
       const t = e.target as Element | null;
-      if (active && t && !root.contains(t) && !t.closest('[role="listbox"], [role="menu"], .backdrop, .scrim, .sheet, [role="dialog"]')) {
+      if (active && t && !root.contains(t) && !t.closest('[role="listbox"], [role="menu"], .scrim, .sheet, [role="dialog"]')) {
         active = false;
         if (d && isEmpty(d)) { flush(); onDelete(false); }
       }

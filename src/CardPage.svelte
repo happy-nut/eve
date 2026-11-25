@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { fade, scale } from 'svelte/transition';
-  import { panelIn, scrimFade } from './lib/motion';
+  import { scale } from 'svelte/transition';
+  import { panelIn } from './lib/motion';
+  import Scrim from './Scrim.svelte';
   import { isMobile } from './lib/platform';
   import { pullDown, sheet } from './lib/popup';
   import type { Editor as TipTap } from '@tiptap/core';
@@ -17,7 +18,6 @@
   import Outline from './Outline.svelte';
   import TableTools from './TableTools.svelte';
   import { composing, handledBy } from './lib/keys';
-  import { closeKeepingFocus } from './lib/backdrop';
 
   let { req }: { req: CardReq & CardMore } = $props();
   let column = $state(untrack(() => req.column));
@@ -106,7 +106,7 @@
   }
 </script>
 
-<div class="backdrop" transition:fade|global={scrimFade} style:opacity={dy ? Math.max(0.2, 1 - dy / 400) : null} onmousedown={closeKeepingFocus(close)} role="presentation"></div>
+<Scrim layer="sheet" tint="var(--scrim)" pulled={dy} onclose={close} />
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="card-page" transition:appear|global use:pull class:dragging class:with-del={isMobile && (!!req.onDelete || !!req.move)} style:translate={dy ? `0 ${dy}px` : null}
   role="dialog" tabindex="-1" onkeydown={onKey} onkeydowncapture={titleEnter}>
@@ -141,7 +141,6 @@
 <EmojiRow bind:this={emojiRow} />
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-sheet-scrim); }
   .card-page {
     /* in the middle by its margins, not a transform: a transform makes the card the box a diagram's whole screen
        fills (app.css takes it off then), and with it off a translate's card sat with its corner in the middle */

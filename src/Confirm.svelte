@@ -1,7 +1,8 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { fade, scale } from 'svelte/transition';
-  import { panelIn, scrimFade } from './lib/motion';
+  import { scale } from 'svelte/transition';
+  import { panelIn } from './lib/motion';
+  import Scrim from './Scrim.svelte';
   import { ui } from './lib/ui.svelte';
   import { sheet, lastShown } from './lib/popup';
   import { claimKeys } from './lib/keys';
@@ -57,7 +58,7 @@
 </script>
 
 
-<div class="backdrop" transition:fade|global={scrimFade} onmousedown={() => done(null)} role="presentation"></div>
+<Scrim layer="sheet" tint="var(--scrim)" onclose={() => done(null)} />
 <div class="box" bind:this={box} transition:appear|global role="dialog" aria-modal="true">
   <div class="head">
     <span class="mark" class:danger={p.danger && p.input === undefined}>
@@ -98,7 +99,6 @@
 </div>
 
 <style>
-  .backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-sheet-scrim); }
   .box {
     position: fixed; z-index: var(--z-sheet); top: 38%; left: 50%; transform: translate(-50%, -50%);
     width: min(380px, 90vw); padding: 18px 18px 14px; border-radius: var(--panel-radius);

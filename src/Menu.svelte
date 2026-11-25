@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
   import { scale } from 'svelte/transition';
   import BottomSheet from './BottomSheet.svelte';
+  import Scrim from './Scrim.svelte';
   import { isMobile } from './lib/platform';
   import { ui, type MenuItem } from './lib/ui.svelte';
   import { eventToKeys, prettyKeys } from './lib/shortcuts.svelte';
@@ -95,6 +96,7 @@
     </ul>
   </BottomSheet>
 {:else}
+<Scrim layer="menu" onclose={() => ui.closeMenu()} />
 <ul bind:this={el} class="menu" role="menu" tabindex="-1" inert={!ui.menu} style="left: {x}px; top: {y}px" style:max-height={maxH === null ? null : `min(${maxH}px, 360px, 70vh)`}
   transition:scale|global={popIn} onkeydown={onKey}>
   {#if req.search}
