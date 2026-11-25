@@ -118,8 +118,17 @@ export function pullDown(node: HTMLElement, o: { onpull: (dy: number, dragging: 
   } };
 }
 
+/** a note takes the keyboard through its editor's own focus, which puts the note's caret back in the same step: on a
+ *  bare focus() the browser puts a caret at the note's start, ProseMirror its own back only 20 ms later, and not at
+ *  all within 300 ms of a click */
+export function focusWithCaret(el: HTMLElement) {
+  const view = (el as { editor?: { view: { focus(): void } } }).editor?.view;
+  if (view) view.focus(); else el.focus({ preventScroll: true });
+}
+
 export function focusNote() {
-  document.querySelector<HTMLElement>('main .tiptap, main .calendar .day.cursor')?.focus();
+  const el = document.querySelector<HTMLElement>('main .tiptap, main .calendar .day.cursor');
+  if (el) focusWithCaret(el);
 }
 
 export function lastShown<T>(get: () => T | null | undefined): () => T {

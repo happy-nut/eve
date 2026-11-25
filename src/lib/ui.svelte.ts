@@ -1,5 +1,5 @@
 import { history } from './history.svelte';
-import type { Box } from './popup';
+import { focusWithCaret, type Box } from './popup';
 import { isMobile, memMark } from './platform';
 import { letGo, shifting, shiftingUntil } from './focusWatch';
 export interface MenuItem { label: string; run?: () => void; keys?: string; sep?: boolean; disabled?: boolean; danger?: boolean; hide?: boolean; checked?: boolean;
@@ -90,14 +90,6 @@ export function focusBack(from: Element | null, ownSelector?: string) {
   const el = was ?? (isMobile ? null : document.querySelector<HTMLElement>('main .tiptap, main .calendar .day.cursor'));
   if (el) keepingScroll(el, () => focusWithCaret(el));
 }
-/** a note takes the keyboard through its editor's own focus, which puts the note's caret back in the same step: on a
- *  bare focus() the browser puts a caret at the note's start, ProseMirror its own back only 20 ms later, and not at
- *  all within 300 ms of a click */
-function focusWithCaret(el: HTMLElement) {
-  const view = (el as { editor?: { view: { focus(): void } } }).editor?.view;
-  if (view) view.focus(); else el.focus({ preventScroll: true });
-}
-
 class Layers {
   // the stack itself, and what the page reads of it (state): an effect that opens one (Settings) must not read what
   // it writes, or it runs again for ever

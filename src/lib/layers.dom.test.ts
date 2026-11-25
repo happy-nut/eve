@@ -4,6 +4,7 @@ import { watchFocus, allowFocusLoss, letGo } from './focusWatch';
 import { notes } from './notes.svelte';
 import type { Editor } from '@tiptap/core';
 import { editorWith, posOf } from './testEditor';
+import { focusNote } from './popup';
 
 // Every layer (ui.layers) in one place: whatever opens over the app must close on a phone's back, one at a time and
 // the newest first, on Esc if it says so, all at once when a note is brought up from outside, and leave the keyboard
@@ -242,6 +243,23 @@ test('a PDF that took the keyboard as it loaded gives it back with the note\'s c
     expect(document.activeElement).toBe(ed.view.dom);
     expect(arrived()).toBe(posOf(ed, 'After', true));
   } finally {
+    letGo();
+    ed.destroy();
+  }
+});
+
+test('the note brought back from the list (Esc there, a note opened from it) comes with its caret, not at its start', async () => {
+  const ed = noteWithCaret();
+  const inList = document.body.appendChild(document.createElement('button'));
+  try {
+    inList.focus();
+    const arrived = caretOnArrival(ed);
+    focusNote();
+    await Promise.resolve();
+    expect(document.activeElement).toBe(ed.view.dom);
+    expect(arrived()).toBe(posOf(ed, 'After', true));
+  } finally {
+    inList.remove();
     letGo();
     ed.destroy();
   }
