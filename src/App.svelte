@@ -11,7 +11,7 @@
   import { tree } from './lib/tree.svelte';
   import { appearance } from './lib/appearance.svelte';
   appearance.apply();
-  import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onBack, seenFade, redrawPanes, widget, links, inbox, saveAsset, storage, copyText } from './lib/platform';
+  import { setGlobalHotkey, win, files, autostart, dock, isTauri, isMobile, onWindowFocus, onWindowHide, onBack, seenFade, redrawPanes, widget, links, inbox, saveAsset, storage, copyText } from './lib/platform';
   import Sidebar from './Sidebar.svelte';
   import Editor from './Editor.svelte';
   import Confirm from './Confirm.svelte';
@@ -122,14 +122,15 @@
     // coming back by click, ⌘Tab or the Dock fires no DOM 'focus' when the webview never let go of it
     let unfocus: (() => void) | undefined;
     onWindowFocus(() => { redrawPanes(); cameBack(restoreFocus); }).then((u) => (unfocus = u));
+    const unhide = onWindowHide(leaveWindow);
     const stopSync = sync.start();
     const stopReminder = startReminder();
     updates.start();
-    return () => { window.removeEventListener('eve-summon', onSummon); unfocus?.(); clearTimeout(hintTimer); stopSync(); stopReminder?.(); };
+    return () => { window.removeEventListener('eve-summon', onSummon); unfocus?.(); unhide(); clearTimeout(hintTimer); stopSync(); stopReminder?.(); };
   });
 
   /**
-   * Leaving the window mid-syllable (⌘Tab, a click in another app): take the focus out of the note, so
+   * Leaving the window mid-syllable (⌘Tab, a click in another app, Eve's own hotkey): take the focus out of the note, so
    * WebKit itself confirms the Hangul syllable and ProseMirror hears a real compositionend. A faked
    * compositionend (what this used to do) told ProseMirror the syllable was done while the input method
    * still had it open; ProseMirror then redrew the text under it, and the first syllable typed after

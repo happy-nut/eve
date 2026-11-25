@@ -409,9 +409,6 @@ export function onWindowHide(cb: () => void): () => void {
 }
 async function dismiss() {
   for (const cb of onHide) cb();
-  // a half-typed 한글 syllable would otherwise still be composing when the window comes back, and a
-  // composing view reads no keystroke at all (App ends it on the way in too, for the paths with no blur)
-  for (const pm of document.querySelectorAll('.tiptap')) pm.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));
   await invoke<void>('hide_app');
 }
 export const win = {
