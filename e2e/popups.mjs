@@ -132,11 +132,8 @@ async function newNote(page, mobile) {
   });
   await page.waitForTimeout(400);
   const where = () => page.evaluate(() => {
-    let a = document.activeElement;
-    while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement;
-    const up = (n) => n.parentElement ?? n.getRootNode().host ?? null;
-    let pop = null;
-    for (let n = a; n && !pop; n = up(n)) if (n.matches?.('.menu, [role="listbox"], emoji-picker')) pop = n;
+    const a = document.activeElement;
+    const pop = a?.closest('.menu, [role="listbox"], [aria-label="Choose an icon"]');
     if (pop) { a.dataset.probe ??= String(Math.random()); }
     return { inside: !!pop, id: a?.dataset?.probe ?? null, what: a ? `<${a.tagName.toLowerCase()}> ${(a.textContent || a.getAttribute('aria-label') || '').trim().slice(0, 24)}` : 'nothing' };
   });
@@ -166,24 +163,25 @@ async function newNote(page, mobile) {
   await dropdown('code language menu', async () => { await hoverOn('.code-block'); await page.locator('.code-lang').click(); });
   await dropdown('note menu (…)', () => page.locator('button.note-more').click());
   await dropdown('sidebar row menu', () => page.locator('aside [data-note]').last().click({ button: 'right' }));
-  // the first open loads the emoji and then shows their first tab; what ↓ does while that happens is the next check's
   await dropdown('emoji picker', async () => {
     await page.locator('aside .note-row').last().locator('.ico-slot').click();
-    await page.waitForFunction(() => document.querySelector('emoji-picker')?.shadowRoot?.querySelector('.nav-button[aria-selected="true"]:not([data-group-id="-1"])'), null, { timeout: 10_000 });
+    await page.waitForSelector('[aria-label="Choose an icon"] .grid .cell', { timeout: 10_000 });
   });
   {
-    // ↓ pressed the moment it opens, before its emoji are drawn (a first open on a slow machine): it lands on the first
+    // ↓ pressed the moment it opens, before its emoji are loaded (a first open on a slow machine): it lands on the first
     // one once they are, rather than being lost
-    await page.evaluate(() => indexedDB.databases?.().then((dbs) => dbs.forEach((d) => indexedDB.deleteDatabase(d.name))));
+    await page.route('**/emojibase/data.json*', async (r) => { await new Promise((w) => setTimeout(w, 1500)); await r.continue(); });
     await page.reload();
     await page.waitForSelector('.tiptap');
     await page.locator('aside .note-row').last().locator('.ico-slot').click();
-    await page.waitForFunction(() => document.querySelector('emoji-picker')?.shadowRoot?.activeElement?.matches('input'), null, { timeout: 10_000 }).catch(() => {});
+    await page.waitForFunction(() => document.activeElement?.matches('[aria-label="Choose an icon"] input.search'), null, { timeout: 10_000 }).catch(() => {});
+    const early = await page.locator('[aria-label="Choose an icon"] .grid .cell').count() === 0;
     await page.keyboard.press('ArrowDown');
-    const onCell = await page.waitForFunction(() => document.querySelector('emoji-picker')?.shadowRoot?.activeElement?.matches('button.emoji'), null, { timeout: 10_000 }).then(() => true, () => false);
-    const r = { name: 'emoji picker, ↓ at once', opened: true, in: onCell, out: true, closed: true, focus: true };
+    const onCell = await page.waitForFunction(() => document.activeElement?.matches('[aria-label="Choose an icon"] .grid .cell'), null, { timeout: 10_000 }).then(() => true, () => false);
+    await page.unroute('**/emojibase/data.json*');
+    const r = { name: 'emoji picker, ↓ at once', opened: true, in: early && onCell, out: true, closed: true, focus: true };
     results.push(r);
-    console.log(`${ok(r) ? 'pass' : 'FAIL'} ${r.name.padEnd(28)} ↓ before the emoji were drawn ${onCell ? 'went to the first one' : 'was LOST'}`);
+    console.log(`${ok(r) ? 'pass' : 'FAIL'} ${r.name.padEnd(28)} ↓ ${early ? 'before' : 'NOT before'} the emoji were loaded ${onCell ? 'went to the first one' : 'was LOST'}`);
     await page.keyboard.press('Escape'); await page.waitForTimeout(350);
   }
   await page.locator('button[data-tip="Settings"]').first().click();

@@ -5,6 +5,7 @@ import { hints } from './hints.svelte';
 import { sync } from './sync.svelte';
 import { tree } from './tree.svelte';
 import { saved } from './stored';
+import { remember, saveTone } from './iconPicker';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -17,6 +18,8 @@ test.each([
   ['tips turned off', () => hints.setOn(false)],
   ['a sync setting', () => sync.save({ lastSynced: 1 })],
   ['a page folded', () => tree.fold('a')],
+  ['an icon picked', () => remember('🔥')],
+  ['a skin tone chosen', () => saveTone(3)],
 ])('storage full: %s still happens, with no error', (_what, change) => {
   storageFull();
   expect(change).not.toThrow();

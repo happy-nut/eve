@@ -28,12 +28,10 @@ export default async (t) => {
   await t.shot('drag-nest-kept', 'aside');
 
   await t.click('aside .note-row:has([data-note="c"]) .ico-slot');
-  await t.page.waitForSelector('[aria-label="Choose an icon"] emoji-picker button.emoji');
-  // the grid is drawn once the picker's emoji data is read; its favourites row before it (a slower CI clicked then)
-  await t.page.waitForFunction(() => { const tab = document.querySelector('emoji-picker')?.shadowRoot?.querySelector('.tabpanel'); return !!tab && !tab.classList.contains('gone') && !!tab.querySelector('button.emoji'); });
+  await t.page.waitForSelector('[aria-label="Choose an icon"] .grid .cell');
   await t.ok('sidebar-icon', () => t.page.locator('[aria-label="Choose an icon"]').isVisible(), 'a click on the row icon opens the Choose an icon picker');
   const emoji = '😀';
-  await t.click(`emoji-picker .tabpanel [id="emo-${emoji}"]`);
+  await t.click(`[aria-label="Choose an icon"] .grid .cell:text-is("${emoji}")`);
   await t.ok('sidebar-icon', async () => (await list(t))[0] === `0|${emoji} Reading list`, `the picked emoji (${emoji}) shows before Reading list on its row`);
   await t.click('aside [data-note="c"]');
   await t.ok('sidebar-icon', () => t.page.evaluate((e) => [...document.querySelectorAll('.page-head *')].some((el) => el.children.length === 0 && el.textContent.trim() === e && el.getBoundingClientRect().height >= 40), emoji),

@@ -43,9 +43,8 @@ Preconditions: the default three notes plus `d.md` with front matter (a real `up
 - `sidebar-drag-nest` **Nest by drag.** `await t.page.dragAndDrop('aside [data-note="d"]', 'aside [data-note="a"]', { targetPosition: { x: 40, y: 25 } });`
   Garden is `1|` under Plan, above Groceries. After `t.page.reload()` it is still there, and
   `localStorage.getItem('eve.notes.d')` has `parent: a`.
-- `sidebar-icon` **Icon.** `await t.click('aside .note-row:has([data-note="c"]) .ico-slot'); await t.page.waitForSelector('[aria-label="Choose an icon"] emoji-picker button.emoji'); await t.click('emoji-picker button.emoji >> nth=3');`
-  (the locator reaches into the picker's shadow root). The row reads `😄  Reading list`; open it and the page's head
-  shows the big 😄 over `Add cover`.
+- `sidebar-icon` **Icon.** `await t.click('aside .note-row:has([data-note="c"]) .ico-slot'); await t.page.waitForSelector('[aria-label="Choose an icon"] .grid .cell'); await t.click('[aria-label="Choose an icon"] .grid .cell >> nth=3');`
+  The row reads `😁  Reading list`; open it and the page's head shows the big 😁 over `Add cover`.
 - `sidebar-jump` **Jump.** `await t.click('.tiptap'); await t.page.keyboard.down('Meta'); await t.wait(800);` shot the sidebar: 1 2 3 4
   badges in list order, Groceries' included. `await t.page.keyboard.press('Digit3'); await t.page.keyboard.up('Meta');`
   Reading list is open and `document.activeElement` is the `.tiptap`.
@@ -84,4 +83,5 @@ after-reload), `shots3/` (drag-kept), `shots4/` (phone-list, phone-lifted, phone
   rather than the picker (from `iconTap` in `Sidebar.svelte`, not driven).
 - The open note's pages are unfolded on start: a page folded while one of its own sub-pages is open comes back unfolded after a reload. Open another note before folding to prove the fold is kept.
 - ⌥↑ / ⌥↓ step through slots, an open page above being one: ⌥↑ under a page's sub-page first goes into it (as its last sub-page), the next ⌥↑ passes it.
-- The picker's 4th emoji is not the same in every run (recently used ones come first): read the picked emoji back from the row.
+- The picker opens on Smileys and keeps the recently used in a row of their own under the grid, so the grid's 4th
+  emoji is 😁 in every run; the recently used row's first one is the last picked.

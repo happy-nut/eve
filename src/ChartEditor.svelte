@@ -31,7 +31,7 @@
     const o = layer.getBoundingClientRect();
     return { x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height };
   }
-  let retry: ReturnType<typeof setTimeout> | undefined, tries = 0, unseen = false;
+  let unseen = false;
   let fresh: string | null = null, addedIn: string | null = null;
   let field = $state<HTMLInputElement | null>(null);
   let was: Record<string, unknown> | null = null;
@@ -40,13 +40,10 @@
   let tallest = 0, wide = 0, measured: string | null = null;
   function measureSelection() {
     if (!layer) return;
-    clearTimeout(retry);
     const el = sel ? find(sel) : null;
     rect = el ? box(el) : renamed || (rect && sel === measured) ? rect : null;
     measured = sel;
     if (el) renamed = false;
-    if (sel && !el && tries++ < 40) retry = setTimeout(measureSelection, 50);
-    else tries = 0;
     if (el && (unseen || (addedIn !== null && addedIn !== version))) { unseen = false; addedIn = null; el.scrollIntoView?.({ block: 'center', inline: 'center' }); }
     tick().then(placeBar);
   }
@@ -314,7 +311,6 @@
     return () => {
       held.hues.clear();
       held.sides.clear();
-      clearTimeout(retry);
       host.removeEventListener('click', onHostClick);
       host.removeEventListener('pointermove', onHostMove);
       host.removeEventListener('pointerleave', out);

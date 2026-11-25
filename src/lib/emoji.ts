@@ -1,11 +1,12 @@
 export interface EmojiEntry {
   emoji: string; shortcodes?: string[]; annotation: string; tags?: string[]; order?: number; version?: number;
+  group?: number; skins?: { emoji: string; tone: number | number[]; version?: number }[];
   code?: string;
 }
 
 export const EMOJI_QUERY = /^([a-z][a-z0-9_+-]|[+-]1)[a-z0-9_+-]*$/i;
 
-export function searchEmoji(data: EmojiEntry[], query: string, limit = 5, newest = Infinity): EmojiEntry[] {
+export function searchEmoji(data: readonly EmojiEntry[], query: string, limit = 5, newest = Infinity): EmojiEntry[] {
   const q = query.toLowerCase();
   if (!EMOJI_QUERY.test(q)) return [];
   const ranked: { e: EmojiEntry; tier: number; len: number }[] = [];
@@ -29,13 +30,16 @@ export function searchEmoji(data: EmojiEntry[], query: string, limit = 5, newest
 }
 
 let loading: Promise<EmojiEntry[]> | null = null;
+let loaded: EmojiEntry[] | null = null;
 export function loadEmoji(): Promise<EmojiEntry[]> {
   loading ??= import('emoji-picker-element-data/en/emojibase/data.json?url')
     .then((m) => fetch(m.default))
     .then((r) => r.json() as Promise<EmojiEntry[]>)
+    .then((d) => (loaded = d))
     .catch((e) => { loading = null; throw e; });
   return loading;
 }
+export const loadedEmoji = (): EmojiEntry[] | null => loaded;
 
 /**
  * The newest emoji version this system draws, found by drawing one emoji of each version: a version counts
