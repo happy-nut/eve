@@ -3,7 +3,7 @@ import DiagramBlock from '../DiagramBlock.svelte';
 
 type Props = {
   code: string; start: boolean; codeShown: boolean;
-  onCode: (code: string) => void; onCodeEdit: () => void; onCodeLeave: () => void; onError: (failed: boolean) => void; onHistory: (redo: boolean) => void;
+  onCode: (code: string, startsChange: boolean) => void; onCodeEdit: () => void; onCodeLeave: () => void; onError: (failed: boolean) => void; onHistory: (redo: boolean) => void;
   onLeave: () => void; onDelete: (focus: boolean) => void;
 };
 

@@ -497,12 +497,3 @@ assert.match(laneSvg({ kind: 'flowchart', dir: 'LR', lanes: [{ id: 'A', label: '
   assert.equal(styled.nodes[0].presentStep, undefined);
   assert.match(toCode(styled), /class A step1/);
 }
-
-// a diagram write on one line names it, so more letters there are one undo; lines added or two lines changed name none (#324)
-{
-  const { editedLine } = await import('./diagramUndo.ts');
-  const two = 'flowchart LR\n  n1("A")\n  n2("B")';
-  assert.equal(editedLine(two, 'flowchart LR\n  n1("A")\n  n2("Bc")'), 2);
-  assert.equal(editedLine(two, two + '\n  n1 --> n2'), null);
-  assert.equal(editedLine(two, 'flowchart LR\n  n1("X")\n  n2("Y")'), null);
-}

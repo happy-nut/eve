@@ -55,6 +55,12 @@ export default async (t) => {
     'the second undo takes back the added step and its line');
   await t.shot('undone');
   await t.ok('diagram-undo', async () => (await t.page.locator('.layer button.plus').count()) === 0, 'with the added step taken back no + is left beside a box');
+  await t.click('.tiptap .mermaid-view g.node:has-text("Ready?")');
+  await t.key(`${t.mod}+z`);
+  await t.ok('diagram-undo', () => has(t, 'n1(["Start"])'), 'with a box picked, ⌘Z takes back the change before: Begin reads Start again');
+  await t.key(`${t.mod}+Shift+z`);
+  await t.ok('diagram-undo', () => has(t, 'n1(["Begin"])'), 'and ⇧⌘Z brings Begin back');
+  await t.key('Escape');
 
   const back = () => t.page.evaluate(() => !document.querySelector('.dblock.full') && !!document.activeElement?.closest('.tiptap'));
   await dock(t, 'Full screen');

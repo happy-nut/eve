@@ -60,6 +60,17 @@
   $effect(() => { void version; tick().then(pinMindmapBranchSides); });
   $effect(() => { if (!sel) held.hues.clear(); });
   let said = '';
+  let readFrom = untrack(() => d);
+  $effect.pre(() => {
+    const now = d;
+    if (now === readFrom) return;
+    readFrom = now;
+    untrack(() => {
+      if (sel) letField();
+      sel = was = fresh = null;
+      text = before = said = '';
+    });
+  });
 
   function select(key: string | null) {
     if (key === sel) return;

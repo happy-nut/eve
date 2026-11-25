@@ -12,7 +12,7 @@ Screens: `DiagramBlock.svelte` (the block, its dock, the whole screen), `FlowEdi
 - `diagram-edit`: a box clicked is picked (a bar: Text, shapes, Order, Connect, Delete) and typing replaces its words;
   the blue + beside a picked box adds a step after it, joined by a line.
 - `diagram-kept`: the note saves a ```mermaid block with every edit in it.
-- `diagram-undo`: the dock's ↶ takes back one change at a time (the typed words, then the added step).
+- `diagram-undo`: the dock's ↶, or ⌘Z with a box picked, takes back one change at a time (the typed words, then the added step).
 - `diagram-full`: ⤢ shows it on the whole screen (a `dialog`, zoom bar `− 200% +`, ✕); Esc or ✕ puts it back in the note.
 - `diagram-chart`: a chart's part clicked where drawn (`ChartEditor`): typing renames it, its Value field changes its
   size, the drawing follows.
@@ -42,7 +42,8 @@ Preconditions: the default notes. Each diagram goes in on a new line after the l
 - `diagram-edit` `diagram-kept` **+ a step.** `await t.click('.tiptap .mermaid-view g.node:has-text("Done")'); await t.click('.layer button.plus'); await t.type('Ship'); await t.key('Escape');`
   A box Ship after Done; the markdown adds `n4("Ship")` and `n3 --> n4`. (The dock's + → Box adds a box with no line.)
 - `diagram-undo` **Undo.** `await t.click('.tiptap .dblock .dock button[aria-label="Undo"]')` twice: first `n4("New step")`, then no
-  n4 and no `n3 --> n4`.
+  n4 and no `n3 --> n4`. With a box picked (`await t.click('.tiptap .mermaid-view g.node:has-text("Ready?")')`),
+  `await t.key(`${t.mod}+z`)` takes back the next one (`n1(["Start"])` again) and `${t.mod}+Shift+z` brings it back.
 - `diagram-full` **Full screen.** `await t.click('.tiptap .dblock .dock button[aria-label="Full screen"]')`: `.dblock.full[role="dialog"]`,
   the drawing at 200%, ✕ at the top right. Esc twice (the first lets go of editing, the second of the screen) or
   `await t.click('button[aria-label="Back to the note"]')`: back in the note, the keyboard in `.tiptap`.

@@ -24,7 +24,7 @@
     el.addEventListener('input', fit);
     return () => el.removeEventListener('input', fit);
   };
-  let boxes = $state<Box[]>([]), measured = $state(false);
+  let boxes = $state<Box[]>([]);
   let sel = $state<{ node: string } | { nodes: string[] } | { edge: number; x: number; y: number } | { lane: string } | null>(untrack(() => (pickOnOpen ? { node: pickOnOpen } : null)));
   let laneHeads = $state<Box[]>([]);
   let laneAreas = $state<Box[]>([]);
@@ -52,7 +52,7 @@
   const armedKey = (a: Armed | null) => (!a ? '' : 'node' in a ? `n:${a.node}` : `l:${a.lane}`);
   function fillArmedField(a: Armed) {
     if ('node' in a) editText = before = flow.nodes.find((n) => n.id === a.node)?.label ?? '';
-    else laneText = flow.lanes?.find((l) => l.id === a.lane)?.label ?? '';
+    else laneText = laneBefore = flow.lanes?.find((l) => l.id === a.lane)?.label ?? '';
   }
   function holdArmedField(fresh: boolean) {
     const el = layer?.querySelector<HTMLInputElement>('input.armed');
@@ -87,7 +87,6 @@
       const id = g.dataset.lane, r = g.querySelector('rect.lane-bg')?.getBoundingClientRect();
       return id && r ? [{ id, x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height }] : [];
     });
-    measured = true;
     boxes = [...host.querySelectorAll('g.node')].flatMap((g) => {
       const id = mermaidBoxOf(g), r = g.getBoundingClientRect();
       return id ? [{ id, x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height }] : [];
@@ -226,7 +225,7 @@
   }
   export function backOut(): boolean {
     if (editing) { cancelEdit(); return true; }
-    if (laneEditing) { doneTyping(); laneEditing = null; return true; }
+    if (laneEditing) { cancelLane(); return true; }
     if (linking || moveEnd !== null || sel) { linking = null; moveEnd = null; sel = null; return true; }
     return false;
   }
@@ -260,17 +259,28 @@
     flow.lanes = [...lanes, { id, label: `Lane ${lanes.length + 1}` }];
     startLaneEdit(id);
   }
+  let laneBefore = '';
   function startLaneEdit(id: string) {
     sel = { lane: id };
     laneEditing = id;
-    laneText = flow.lanes?.find((l) => l.id === id)?.label ?? '';
+    laneText = laneBefore = flow.lanes?.find((l) => l.id === id)?.label ?? '';
   }
-  function commitLane() {
+  function typedLane() {
     const l = flow.lanes?.find((x) => x.id === laneEditing);
     if (l && laneText.trim()) l.label = laneText.trim();
+  }
+  function commitLane() {
+    typedLane();
     doneTyping();
     laneEditing = null;
   }
+  function cancelLane() {
+    const l = flow.lanes?.find((x) => x.id === laneEditing);
+    if (l) l.label = laneBefore;
+    doneTyping();
+    laneEditing = null;
+  }
+  $effect.pre(() => { if (laneEditing && !(sel && 'lane' in sel && sel.lane === laneEditing)) untrack(() => { doneTyping(); laneEditing = null; }); });
   function moveLane(id: string, by: -1 | 1) {
     const lanes = [...(flow.lanes ?? [])];
     const i = lanes.findIndex((l) => l.id === id), j = i + by;
@@ -600,15 +610,41 @@
   const selId = $derived(sel && 'node' in sel ? sel.node : null);
   const selNode = $derived(selId ? flow.nodes.find((n) => n.id === selId) ?? null : null);
   $effect(() => {
-    const drawnIds = new Set(boxes.map((b) => b.id)), edges = flow.edges.length;
-    if (!measured) return;
+    const ids = new Set(flow.nodes.map((n) => n.id));
     untrack(() => {
-      if (hover && !drawnIds.has(hover)) hover = null;
-      if (!sel) return;
-      const gone = 'node' in sel ? !drawnIds.has(sel.node) : 'nodes' in sel ? !sel.nodes.some((id) => drawnIds.has(id)) : 'edge' in sel ? sel.edge >= edges : false;
-      if (gone && !editing) sel = null;
+      if (hover && !ids.has(hover)) hover = null;
+      if (linking && !ids.has(linking)) linking = null;
     });
   });
+  let readFrom = untrack(() => flow);
+  $effect.pre(() => {
+    const now = flow, was = readFrom;
+    if (now === was) return;
+    readFrom = now;
+    untrack(() => {
+      sel = sel && pickedIn(now, sel, was);
+      moveEnd = moveEnd === null ? null : sameLine(now, moveEnd, was);
+      const node = now.nodes.find((n) => n.id === editing), lane = now.lanes?.find((l) => l.id === laneEditing);
+      if (node) editText = before = node.label;
+      if (lane) laneText = laneBefore = lane.label;
+      if ((editing && !node) || (laneEditing && !lane)) doneTyping();
+      if (!node) editing = null;
+      if (!lane) laneEditing = null;
+    });
+  });
+  /** what was picked, in the chart read anew (↶, ↷, a sync): the same box, lane or line, if it is still there */
+  function pickedIn(now: Flowchart, s: NonNullable<typeof sel>, was: Flowchart): typeof sel {
+    const has = (id: string) => now.nodes.some((n) => n.id === id);
+    if ('node' in s) return has(s.node) ? s : null;
+    if ('nodes' in s) { const ids = s.nodes.filter(has); return ids.length > 1 ? { nodes: ids } : ids.length ? { node: ids[0] } : null; }
+    if ('lane' in s) return now.lanes?.some((l) => l.id === s.lane) ? s : null;
+    const i = sameLine(now, s.edge, was);
+    return i === null ? null : { ...s, edge: i };
+  }
+  function sameLine(now: Flowchart, i: number, was: Flowchart): number | null {
+    const e = was.edges[i], at = e ? now.edges.findIndex((x) => x.from === e.from && x.to === e.to) : -1;
+    return at < 0 ? null : at;
+  }
   const selBox = $derived(boxOf(selId));
   const selEdge = $derived(sel && 'edge' in sel ? flow.edges[sel.edge] ?? null : null);
   const PLUS_OVER_BOX = 100, PLUS_OFF_CARD = 50, PLUS_ON_LINE = 1, PLUS_UNDER_BAR = 1000;
@@ -728,8 +764,8 @@
       <div class="ring" style:left={`${hb.x - 2}px`} style:top={`${hb.y - 2}px`} style:width={`${hb.w + 4}px`} style:height={`${hb.h + 4}px`}></div>
       {#key lid}{#if laneEditing === lid || (armed && 'lane' in armed)}
         <NameField bind:value={laneText} editing={laneEditing === lid} shown="lane-name" label="Lane name" placeholder="Lane" grab={focusAndSelect}
-          left={clampX(hb.x + hb.w / 2, 140)} top={hb.y + hb.h / 2 - 16} onstart={() => (laneEditing = lid)}
-          oncommit={commitLane} oncancel={() => { doneTyping(); laneEditing = null; }}
+          left={clampX(hb.x + hb.w / 2, 140)} top={hb.y + hb.h / 2 - 16} onstart={() => (laneEditing = lid)} ontype={typedLane}
+          oncommit={commitLane} oncancel={cancelLane}
           onblur={(el) => queueMicrotask(() => { if (el.isConnected && laneEditing === lid) commitLane(); })} />
       {/if}{/key}
       {#if laneEditing !== lid}

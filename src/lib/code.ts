@@ -8,7 +8,6 @@ import { claimKeys, composing, PRIORITY } from './keys';
 import { isMobile } from './platform';
 import { inKorean, starter, toCode, type Diagram, type Kind } from './diagram';
 import { mountDiagram } from './diagramBlock.svelte';
-import { editedLine } from './diagramUndo';
 import { closeHistory, redoNoScroll, undoNoScroll } from '@tiptap/pm/history';
 import { blockBeside, inCell } from './blocks';
 import { fenceFor } from './markdown';
@@ -477,7 +476,6 @@ export const CodeBlock = CodeBlockBase.extend({
       dom.append(chip, pre, host);
       const posNow = () => getPos();
       let block: ReturnType<typeof mountDiagram> | null = null;
-      let lastLine: number | null = null;
       let codeShown = false;
       let drawnNode: PMNode = node;
       const setDiagram = (n: PMNode) => {
@@ -488,16 +486,14 @@ export const CodeBlock = CodeBlockBase.extend({
         const start = START_DIAGRAM.read(editor.state) === n.textContent;
         block = mountDiagram(host, {
           code: n.textContent, start, codeShown,
-          onCode: (code) => {
+          onCode: (code, startsChange) => {
             if (editor.isDestroyed) return;
             const p = posNow();
             const cur = p == null ? null : editor.state.doc.nodeAt(p);
             // equal, not the same object: the note read anew keeps this view for an equal node without telling it
             if (p == null || !cur || !cur.eq(drawnNode) || cur.textContent === code) return;
-            const line = editedLine(cur.textContent, code);
             const tr = editor.state.tr.replaceWith(p + 1, p + cur.nodeSize - 1, code ? editor.schema.text(code) : []);
-            if (line === null || line !== lastLine) closeHistory(tr);
-            lastLine = line;
+            if (startsChange) closeHistory(tr);
             editor.view.dispatch(tr);
           },
           onHistory: (redo) => queueMicrotask(() => (redo ? redoNoScroll : undoNoScroll)(editor.state, editor.view.dispatch)),

@@ -5,7 +5,7 @@
   import { fenced } from './lib/markdown';
   import { ui, hooks, under, type MenuItem } from './lib/ui.svelte';
   import { letGo } from './lib/focusWatch';
-  import { claimKeys } from './lib/keys';
+  import { claimKeys, composing } from './lib/keys';
   import { renderMermaid, themeKey } from './lib/mermaid';
   import { foldSeq, foldable, markFolds, type SeqBlock } from './lib/seqFold';
   import { spreadLabels } from './lib/edgeLabels';
@@ -24,7 +24,7 @@
     code: string;
     start: boolean;
     codeShown: boolean;
-    onCode: (code: string) => void;
+    onCode: (code: string, startsChange: boolean) => void;
     onCodeEdit: () => void;
     onCodeLeave: () => void;
     onError: (failed: boolean) => void;
@@ -39,11 +39,20 @@
   let active = $state(initial.start && !!fromCode(initial.code));
   const mine = $derived(d ? toCode(d) : null);
   let edited = $state(false);
-  const writeBack = new WriteBack(untrack(() => mine), (c) => onCode(c), () => code);
+  const writeBack = new WriteBack(untrack(() => mine), (c, startsChange) => onCode(c, startsChange), () => code);
+  let typedNow: Element | null = null;
   $effect(() => {
     const c = mine;
-    untrack(() => { if (writeBack.drawn(c)) edited = true; });
+    untrack(() => {
+      if (writeBack.drawn(c, typedNow)) edited = true;
+      typedNow = null;
+    });
   });
+  const textField = (t: EventTarget | null) => t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && !/^(checkbox|radio|range|button|submit)$/.test(t.type));
+  const typesText = (e: KeyboardEvent) => composing(e) || (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete'));
+  function typedIn(e: Event) { typedNow = textField(e.target) ? (e.target as Element) : null; }
+  function stopTyping() { typedNow = null; writeBack.stopTyping(); }
+  function keyIn(e: KeyboardEvent) { typedNow = null; if (!typesText(e)) writeBack.stopTyping(); }
   const flush = () => writeBack.flush(mine);
   $effect(() => {
     const c = code;
@@ -169,7 +178,7 @@
     }
     const escapeOut = (e: KeyboardEvent) => e.key === 'Escape' && take(e) && (backOrLeave(), true);
     const holdSelectAll = (e: KeyboardEvent, t: Element) => (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && (t === document.body || root.contains(t)) && take(e);
-    const undoAtBody = (e: KeyboardEvent, t: Element) => { const h = historyKey(e); return !!h && t === document.body && stepHistory(e, h); };
+    const undoInDrawing = (e: KeyboardEvent, t: Element) => { const h = historyKey(e); return !!h && (t === document.body || root.contains(t)) && stepHistory(e, h); };
     const swallowStrayKey = (e: KeyboardEvent, t: Element) => !!chart && t === document.body && !e.metaKey && !e.ctrlKey && !e.altKey && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') && take(e);
     const keys = (e: KeyboardEvent) => {
       if (drawingFromCode(e) || e.defaultPrevented) return;
@@ -178,7 +187,7 @@
       const typing = t instanceof HTMLElement && t.matches('input:not(.armed), textarea, select');
       if (undoOnFullScreen(e, t, typing) || zoomOnFullScreen(e, typing) || !active || undoFromRow(e, t, typing)) return;
       const ours = t === document.body || (root.contains(t) && !typing) || (!typing && t.closest?.('.tiptap') === root.closest('.tiptap'));
-      if (ours) void (escapeOut(e) || holdSelectAll(e, t) || undoAtBody(e, t) || swallowStrayKey(e, t));
+      if (ours) void (escapeOut(e) || holdSelectAll(e, t) || undoInDrawing(e, t) || swallowStrayKey(e, t));
     };
     const unclaim = claimKeys('global', { '*': keys }, { capture: true });
     return () => {
@@ -412,7 +421,8 @@
   }
 </script>
 
-<div class="dblock" class:active class:full bind:this={root} onkeydown={onKey} oncontextmenu={menu} role={full ? 'dialog' : 'group'} aria-modal={full ? 'true' : undefined} aria-label={full ? 'Diagram' : undefined}>
+<div class="dblock" class:active class:full bind:this={root} onkeydown={onKey} oncontextmenu={menu}
+  oninputcapture={typedIn} onkeydowncapture={keyIn} onpointerdowncapture={stopTyping} onfocusoutcapture={stopTyping} role={full ? 'dialog' : 'group'} aria-modal={full ? 'true' : undefined} aria-label={full ? 'Diagram' : undefined}>
   <div class="pic">
   <div class="mermaid-view diagram-canvas" class:error={!!error} bind:this={canvas} role="button" aria-label="Edit diagram" tabindex={opensFromKeys ? 0 : -1}
     onclick={open} onkeydown={openFromKeys} onwheel={onWheel} onpointerdown={onPanDown} {@attach scrollHint} {@attach pinchZoom}>
