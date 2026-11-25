@@ -629,8 +629,9 @@ try {
   await page.close();
   console.log('ok   a table column’s type and key are clicked in the drawing to change them');
 
-  // ---- the dock's ↶ then ↷ in a long note: the note stays where it is, so ↷ is still under the pointer ----
-  // (↶ scrolled the note to where the change was, the dock went off the top, and ↷ was pressed on nothing)
+  // ---- the dock's ↶ then ↷ in a long note, and ⌘Z on the drawing: the note never moves, so ↷ is still under the pointer ----
+  // (↶ scrolled the note to where the caret was and the dock went off the top, so ↷ was pressed on nothing; a hold
+  // that put the note back for a few frames after it still moved it, and kept a person from scrolling it meanwhile)
   page = await open('pie title Pets\n  "Dogs" : 40\n  "Cats" : 30', false);
   {
     await page.evaluate(() => { const ed = window.__editor; ed.commands.insertContentAt(ed.state.doc.content.size, Array.from({ length: 40 }, (_, i) => ({ type: 'paragraph', content: [{ type: 'text', text: `Line ${i}` }] }))); });
@@ -640,18 +641,35 @@ try {
     await page.waitForSelector('.tiptap .dblock.active .dock');
     await dockMenu(page, 'More', 'Values');
     await page.waitForTimeout(400);
+    /** the note's scroll from the step until the drawing is drawn again and shown */
+    const moves = async (step) => {
+      await page.evaluate(() => {
+        const sc = document.querySelector('.dblock').closest('.scroll');
+        window.__moved = [];
+        window.__redrawn = false;
+        if (!window.__watching) { window.__watching = true; sc.addEventListener('scroll', () => window.__moved.push(sc.scrollTop)); }
+        new MutationObserver((_, o) => { window.__redrawn = true; o.disconnect(); }).observe(document.querySelector('.tiptap .mermaid-view'), { childList: true });
+      });
+      await step();
+      await page.waitForFunction(() => window.__redrawn);
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      return page.evaluate(() => window.__moved);
+    };
     const y0 = (await page.locator('.dblock.active .dock button[aria-label="Undo"]').boundingBox()).y;
-    await page.locator('.dblock.active .dock button[aria-label="Undo"]').click();
-    await page.waitForTimeout(500);
+    assert.deepEqual(await moves(() => page.locator('.dblock.active .dock button[aria-label="Undo"]').click()), [], '↶ does not move the note');
     assert.doesNotMatch(await md(page), /pie showData/, '↶ took Values back');
     const y1 = (await page.locator('.dblock.active .dock button[aria-label="Redo"]').boundingBox()).y;
     assert.ok(Math.abs(y1 - y0) < 3, `the dock stays where it was (${Math.round(y0)} → ${Math.round(y1)})`);
-    await page.locator('.dblock.active .dock button[aria-label="Redo"]').click();
-    await page.waitForTimeout(500);
+    assert.deepEqual(await moves(() => page.locator('.dblock.active .dock button[aria-label="Redo"]').click()), [], '↷ does not move the note');
     assert.match(await md(page), /pie showData/, '↷ brought it back');
+    await done(page);
+    await page.locator('.tiptap .mermaid-view').first().click({ position: { x: 6, y: 6 } });
+    await page.waitForFunction(() => document.querySelector('.tiptap .dblock.active') && document.activeElement === document.body);
+    assert.deepEqual(await moves(() => page.keyboard.press('Meta+z')), [], '⌘Z with the keyboard on the drawing does not move the note');
+    assert.doesNotMatch(await md(page), /pie showData/, '⌘Z took Values back');
   }
   await page.close();
-  console.log('ok   the dock’s ↶ and ↷ keep the note where it is');
+  console.log('ok   the dock’s ↶ and ↷ and ⌘Z on the drawing keep the note where it is');
   assert.deepEqual(errors, [], 'no errors in the page');
 } finally {
   await browser.close();

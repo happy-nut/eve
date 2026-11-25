@@ -9,7 +9,7 @@ import { isMobile } from './platform';
 import { inKorean, starter, toCode, type Diagram, type Kind } from './diagram';
 import { mountDiagram } from './diagramBlock.svelte';
 import { editedLine } from './diagramUndo';
-import { closeHistory } from '@tiptap/pm/history';
+import { closeHistory, redoNoScroll, undoNoScroll } from '@tiptap/pm/history';
 import { blockBeside, inCell } from './blocks';
 import { fenceFor } from './markdown';
 
@@ -500,7 +500,7 @@ export const CodeBlock = CodeBlockBase.extend({
             lastLine = line;
             editor.view.dispatch(tr);
           },
-          onHistory: (redo) => queueMicrotask(() => { if (redo) editor.commands.redo(); else editor.commands.undo(); }),
+          onHistory: (redo) => queueMicrotask(() => (redo ? redoNoScroll : undoNoScroll)(editor.state, editor.view.dispatch)),
           onCodeEdit: () => {
             const p = posNow();
             const cur = p == null ? null : editor.state.doc.nodeAt(p);

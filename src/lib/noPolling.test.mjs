@@ -18,7 +18,6 @@ const src = join(root, 'src');
 
 /** waits that try again, each with what outside forces it and until when; `at` is the function, `loop`, or `interval` */
 const ALLOWED = [
-  { file: 'DiagramBlock.svelte', at: 'hold', why: "the dock's ↶ ↷: ProseMirror scrolls to the change, then mermaid draws the block again some frames later, and a redraw that comes out the same gives no signal to stop holding on", until: '2026-12-31' },
   // timers on a clock or a gesture, not waits for something to be drawn
   { file: 'FlowEditor.svelte', at: 'interval', why: 'a line dragged to the edge scrolls the drawing every 30 ms while it is held there' },
   { file: 'PdfViewer.svelte', at: 'interval', why: "WebKit's PDF view in the iframe takes the keyboard by itself while it loads, with no event the page hears", until: '2026-12-31' },
@@ -112,7 +111,7 @@ assert.deepEqual(gone.map((a) => `${a.file} ${a.at}`), [], 'these waits are gone
 /** fixed sleeps in the browser checks, per file: may only go down */
 const SLEEPS = {
   'e2e/code.mjs': 23,
-  'e2e/diagramForms.mjs': 47,
+  'e2e/diagramForms.mjs': 45,
   'e2e/diagrams.mjs': 10,
   'e2e/handle.mjs': 31,
   'e2e/head.mjs': 4,

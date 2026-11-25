@@ -284,16 +284,6 @@
       { label: 'Edit code', sep: true, run: () => { active = false; onCodeEdit(); } },
     ];
   }
-  const STAY_PUT_FRAMES = 12;
-  function stayPut(run: () => void) {
-    const sc = root.closest<HTMLElement>('.scroll') ?? (document.scrollingElement as HTMLElement | null);
-    const top = sc?.scrollTop ?? 0;
-    run();
-    if (!sc) return;
-    let n = 0;
-    const hold = () => { sc.scrollTop = top; if (++n < STAY_PUT_FRAMES) requestAnimationFrame(hold); };
-    requestAnimationFrame(hold);
-  }
   function menuFrom(e: MouseEvent, items: MenuItem[]) {
     e.stopPropagation();
     ui.openMenu(under(e.currentTarget as HTMLElement), items);
@@ -471,10 +461,10 @@
         </button>
       {/if}
       <i class="sep edit"></i>
-      <button type="button" tabindex={dockTab} class="edit" style="--i: 3" aria-label="Undo" data-tip="Undo (⌘Z)" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); stayPut(() => onHistory(false)); }}>
+      <button type="button" tabindex={dockTab} class="edit" style="--i: 3" aria-label="Undo" data-tip="Undo (⌘Z)" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); onHistory(false); }}>
         <svg viewBox="0 0 16 16"><path d="M5.5 4 2.5 7l3 3M2.5 7h7a4 4 0 0 1 0 8H8" /></svg>
       </button>
-      <button type="button" tabindex={dockTab} class="edit" style="--i: 4" aria-label="Redo" data-tip="Redo (⇧⌘Z)" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); stayPut(() => onHistory(true)); }}>
+      <button type="button" tabindex={dockTab} class="edit" style="--i: 4" aria-label="Redo" data-tip="Redo (⇧⌘Z)" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); onHistory(true); }}>
         <svg viewBox="0 0 16 16"><path d="M10.5 4l3 3-3 3M13.5 7h-7a4 4 0 0 0 0 8H8" /></svg>
       </button>
       <button type="button" tabindex={dockTab} class="danger edit" style="--i: 5" aria-label="Delete diagram" data-tip="Delete diagram" onmousedown={(e) => e.preventDefault()} onclick={(e) => { e.stopPropagation(); flush(); active = false; onDelete(true); }}>
