@@ -26,19 +26,25 @@ interface EmojiReq { at: DOMRect; current: string; resolve: (v: string | null) =
 
 export type LayerId = 'photo' | 'math' | 'sheet' | 'emoji' | 'menu' | 'confirm' | 'diagramView' | 'find' | 'pdf' | 'card' | 'settings' | 'trash' | 'history' | 'present' | 'search';
 export type CloseReason = 'back' | 'esc' | 'putAway';
-export interface Layer {
+interface LayerBase {
   id: LayerId;
   close(reason: CloseReason): void;
   closesOnEsc?: boolean;
   grabsKeys?: boolean;
-  modal?: boolean;
   from: Element | null;
-  ownSelector?: string;
   keepsMovedFocus?: boolean;
   restoresOnPhone?: boolean;
   focusBackDelayMs?: number;
   endsWhenFocusLeaves?: boolean;
 }
+/** a modal layer says where the keyboard goes: into its own box (ui.layers puts it there as the box is drawn, if the
+ *  box has not taken it itself), or nowhere on purpose, its keys claimed (claimKeys) */
+type Keyboard =
+  | { modal: true; ownSelector: string; letsGoOfKeyboard?: never }
+  | { modal: true; letsGoOfKeyboard: true; ownSelector?: string }
+  | { modal?: false; ownSelector?: string; letsGoOfKeyboard?: never };
+export type Layer = LayerBase & Keyboard;
+type LayerSpec = Omit<LayerBase, 'from'> & { from?: Element | null } & Keyboard;
 
 const EMOJI_FOCUS_BACK_DELAY_MS = 60;
 
@@ -89,11 +95,29 @@ class Layers {
   get grabbing() { return this.shown.some((l) => l.grabsKeys); }
   get modal() { return this.shown.some((l) => l.modal); }
 
-  push(layer: Omit<Layer, 'from'> & { from?: Element | null }): () => void {
-    const l: Layer = { ...layer, from: layer.from !== undefined ? layer.from : document.activeElement };
+  push(layer: LayerSpec): () => void {
+    const l = { ...layer, from: layer.from !== undefined ? layer.from : document.activeElement } as Layer;
     this.set([...this.items, l]);
     memMark(l.id);
+    if (l.modal && l.ownSelector && !isMobile) this.keyboardInto(l, l.ownSelector);
     return () => this.remove(l);
+  }
+  /** once the layer's box is drawn (its component may be loaded on first use), the keyboard is in it */
+  private keyboardInto(l: Layer, ownSelector: string) {
+    const boxOf = () => { const all = document.querySelectorAll<HTMLElement>(ownSelector); return all[all.length - 1] ?? null; };
+    const take = (box: HTMLElement) => {
+      if (box.contains(document.activeElement)) return;
+      if (!box.hasAttribute('tabindex')) box.tabIndex = -1;
+      box.focus({ preventScroll: true });
+    };
+    const tryNow = () => {
+      if (!this.items.includes(l)) return drawn.disconnect();
+      const box = boxOf();
+      if (box) { drawn.disconnect(); take(box); }
+    };
+    const drawn = new MutationObserver(tryNow);
+    drawn.observe(document.body, { childList: true, subtree: true });
+    queueMicrotask(tryNow);
   }
   closeTop(reason: CloseReason): boolean {
     const l = this.items.at(-1);
@@ -182,7 +206,7 @@ class Ui {
   diagramView = $state<(() => void) | null>(null);
   private diagramOff: (() => void) | undefined;
   viewDiagram(close: () => void, from: HTMLElement | null = document.activeElement as HTMLElement | null) {
-    this.diagramOff ??= this.layers.push({ id: 'diagramView', close: () => this.closeDiagramView(), grabsKeys: true, modal: true, from });
+    this.diagramOff ??= this.layers.push({ id: 'diagramView', close: () => this.closeDiagramView(), grabsKeys: true, modal: true, letsGoOfKeyboard: true, from });
     this.diagramView = close;
   }
   closeDiagramView() {
@@ -241,7 +265,7 @@ class Ui {
   }
 
   openedSheet(close: () => void) {
-    return this.layers.push({ id: 'sheet', close, modal: true });
+    return this.layers.push({ id: 'sheet', close, modal: true, ownSelector: '.sheet' });
   }
   searching(close: () => void) {
     return this.layers.push({ id: 'search', close, closesOnEsc: true, from: null, endsWhenFocusLeaves: true });

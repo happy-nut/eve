@@ -63,6 +63,29 @@ function open(id: LayerId) {
 /** what the emoji picker waits before it puts the keyboard back */
 const settled = () => new Promise((r) => setTimeout(r, 80));
 
+// a modal layer drawn without taking the keyboard (its component loaded on first use, or written without a focus())
+// still has it: ui.layers puts it into the box as the box is drawn; one that lets go of it says so and claims its keys
+test.each(IDS)('%s: opened, the keyboard is in it once it is drawn, or it lets go of it on purpose', async (id) => {
+  OPENERS[id]();
+  const l = ui.layers.top!;
+  expect(l.id).toBe(id);
+  if (!l.modal) return;
+  if (l.letsGoOfKeyboard) { expect(l.grabsKeys).toBe(true); return; }
+  const sel = l.ownSelector!;
+  const box = document.createElement('div');
+  for (const [, cls] of sel.matchAll(/\.([\w-]+)/g)) box.classList.add(cls);
+  for (const [, k, v] of sel.matchAll(/\[([\w-]+)="([^"]*)"\]/g)) box.setAttribute(k, v);
+  box.innerHTML = '<button>in it</button>';
+  await Promise.resolve();
+  document.body.append(box);
+  await new Promise((r) => setTimeout(r, 0));
+  expect(box.contains(document.activeElement)).toBe(true);
+  ui.layers.closeTop('putAway');
+  box.remove();
+  await settled();
+  expect(document.activeElement).toBe(note);
+});
+
 test.each(IDS)('%s: back closes it and only it, and the keyboard goes back where it was', async (id) => {
   const under: LayerId = id === 'pdf' ? 'card' : 'pdf';
   OPENERS[under]();
