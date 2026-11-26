@@ -115,8 +115,8 @@ test('the calendar puts rows on their days, + makes one on a day; the gallery sh
   notes.update(g, '# Notes\n\nBring the forms.\n');
   const { target, schema } = show({ title: 'P', view: 'calendar', props: [{ name: 'When', type: 'date' }] }, page.id);
   await settle();
+  expect(barDays(target, 'Dentist')).toEqual([today]);
   const day = target.querySelector(`.day[aria-label="${today}"]`)!;
-  expect(day.textContent).toContain('Dentist');
   (day.querySelector('.day-add') as HTMLElement).click();
   await settle();
   // named first: a calendar shows no field to name it in
@@ -130,6 +130,76 @@ test('the calendar puts rows on their days, + makes one on a day; the gallery sh
   expect(schema().view).toBe('gallery');
   const card = [...target.querySelectorAll('.g-card')].find((c) => c.textContent!.includes('Notes'))!;
   expect(card.textContent).toContain('Bring the forms.');
+});
+
+/** the days a row's bar covers, as the calendar lays it over its week's days (grid columns) */
+function barDays(target: Element, title: string): string[] {
+  return [...target.querySelectorAll<HTMLElement>('.cal .week:not(.wds)')].flatMap((week) => {
+    const days = [...week.querySelectorAll('.day')].map((d) => d.getAttribute('aria-label')!);
+    return [...week.querySelectorAll<HTMLElement>('.bar')].filter((b) => b.querySelector('.bar-title')!.textContent === title).flatMap((b) => {
+      const [from, to] = b.style.gridColumn.split('/').map((x) => Number(x.trim()) - 1);
+      return days.slice(from, to);
+    });
+  });
+}
+/** a mouse pressed on `on` over one day, moved over others, let go: jsdom lays nothing out, so the day under the
+ *  pointer is the one its x names */
+function dragOver(target: Element, on: Element, days: string[]) {
+  const at = (i: number) => ({ clientX: i, clientY: 0, button: 0, pointerType: 'mouse', bubbles: true, pointerId: 1 });
+  document.elementsFromPoint = (x: number) => [target.querySelector(`.day[aria-label="${days[x]}"]`)!];
+  (on as HTMLElement).setPointerCapture = () => {}; // jsdom has no pointer capture
+  on.dispatchEvent(new PointerEvent('pointerdown', at(0)));
+  days.slice(1).forEach((_, i) => window.dispatchEvent(new PointerEvent('pointermove', at(i + 1))));
+  window.dispatchEvent(new PointerEvent('pointerup', at(days.length - 1)));
+}
+
+test('a date can run from one day to another: the table gives it an end, the calendar draws it across the days, dragged whole or by either end, and a new one dragged across empty days', async () => {
+  const page = notes.create('# Projects\n'); notes.touched(page.id);
+  const month = isoDay(new Date()).slice(0, 7);
+  const on = (d: number) => `${month}-${String(d).padStart(2, '0')}`;
+  const launch = notes.addRow(page.id, 'Launch', { When: on(10) }).id;
+  const { target } = show({ title: 'P', view: 'table', props: [{ name: 'When', type: 'date' }] }, page.id);
+  await settle();
+  // the table: → gives the day an end, a span written start/end
+  (target.querySelector('button[aria-label="Add an end date"]') as HTMLElement).click();
+  await settle();
+  const end = target.querySelector<HTMLInputElement>('input[aria-label="When end"]')!;
+  expect(document.activeElement).toBe(end);
+  end.value = on(13);
+  end.dispatchEvent(new Event('change', { bubbles: true }));
+  await settle();
+  expect(row(launch).props!.When).toBe(`${on(10)}/${on(13)}`);
+  // the calendar: across the four days
+  ([...target.querySelectorAll('.views button')].find((b) => b.textContent === 'Calendar') as HTMLElement).click();
+  await settle();
+  expect(barDays(target, 'Launch')).toEqual([on(10), on(11), on(12), on(13)]);
+  // a span over a week's end is drawn as a piece in each week: its start grip on the first, its end grip on the last
+  const pieces = () => [...target.querySelectorAll('.bar')].filter((b) => b.textContent!.includes('Launch'));
+  const bar = () => pieces()[0];
+  // dragged whole two days on, it keeps its length; the click that ends the drag opens nothing
+  const was = notes.currentId;
+  dragOver(target, bar(), [on(11), on(12), on(13)]);
+  bar().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await settle();
+  expect(row(launch).props!.When).toBe(`${on(12)}/${on(15)}`);
+  expect(notes.currentId).toBe(was);
+  // its end pulled back a day, its start pulled past the end stops on it
+  dragOver(target, pieces().at(-1)!.querySelector('.grip.end')!, [on(15), on(14)]);
+  await settle();
+  expect(row(launch).props!.When).toBe(`${on(12)}/${on(14)}`);
+  dragOver(target, bar().querySelector('.grip.start')!, [on(12), on(16)]);
+  await settle();
+  expect(row(launch).props!.When).toBe(on(14));
+  // ⌘Z takes back the last drag alone
+  key(target.querySelector('.db')!);
+  expect(row(launch).props!.When).toBe(`${on(12)}/${on(14)}`);
+  // empty days dragged across make a row over them, named first
+  dragOver(target, target.querySelector(`.day[aria-label="${on(20)}"]`)!, [on(20), on(21), on(22)]);
+  await settle();
+  expect(ui.pending?.input).toBe('');
+  ui.done('Review');
+  await settle();
+  expect(barDays(target, 'Review')).toEqual([on(20), on(21), on(22)]);
 });
 
 // as Menu.svelte picks: the menu closes first, then the item runs

@@ -4,11 +4,12 @@
   import { ui, under, type MenuItem } from './lib/ui.svelte';
   import { previewOf } from './lib/markdown';
   import { claimKeys } from './lib/keys';
+  import { followPointer } from './lib/followPointer';
   import { isoDay, monthGrid, monthName, sameMonth, shiftMonths, weekdayNames } from './lib/date';
   import { evaluate, type Val } from './lib/formula';
   import {
-    IS_EMPTY, NAME, ROLLUPS, TYPES, VIEWS, asLink, asList, byDay, columnsOf, computed, linksIn, parseDb, rollup, shown, tagColor, viewRows, withChoice,
-    type DbSchema, type PropDef, type PropType, type ViewKind,
+    IS_EMPTY, NAME, ROLLUPS, TYPES, VIEWS, asLink, asList, columnsOf, daysBetween, moved, spanOf, spanValue, weekBars, computed, linksIn, parseDb, rollup, shown, tagColor, viewRows, withChoice,
+    type DbSchema, type Edge, type PropDef, type PropType, type ViewKind,
   } from './lib/database';
 
   let { schema: initial, commit, page }: { schema: DbSchema; commit: (d: DbSchema) => void; page: () => string | null } = $props();
@@ -252,6 +253,7 @@
   }
 
   function setView(v: ViewKind) {
+    root.focus({ preventScroll: true });
     put({ ...d, view: v, ...(v === 'board' ? { groupBy: d.groupBy ?? groupProp?.name } : {}), ...(v === 'calendar' ? { dateBy: d.dateBy ?? dateProp?.name } : {}) });
   }
   let dragging: string | null = null;
@@ -263,7 +265,49 @@
   let month = $state(isoDay(new Date()));
   const today = isoDay(new Date());
   const weekNames = weekdayNames();
-  const days = $derived(byDay(shownRows, dateProp?.name));
+
+  function setSpan(n: Note, p: PropDef, start: string, end: string) {
+    setCell(n, p, start ? spanValue(start <= end || !end ? { start, end: end || start } : { start: end, end: start }) : null);
+  }
+  let ending = $state<string | null>(null);
+  const dayAt = (x: number, y: number) =>
+    document.elementsFromPoint(x, y).map((el) => el.closest<HTMLElement>('.db .day[aria-label]')).find((el) => el && root.contains(el))?.getAttribute('aria-label') ?? null;
+  let moving = $state<{ id: string; edge: Edge; by: number } | null>(null);
+  let dragged = false;
+  const spanNow = (n: Note) => {
+    const s = dateProp ? spanOf(n.props?.[dateProp.name]) : null;
+    return s && moving?.id === n.id ? moved(s, moving.edge, moving.by) : s;
+  };
+  function pressBar(e: PointerEvent, n: Note, edge: Edge) {
+    const p = dateProp, s = p && spanOf(n.props?.[p.name]), from = dayAt(e.clientX, e.clientY);
+    if (e.button !== 0 || e.pointerType === 'touch' || !p || !s || !from) return;
+    e.stopPropagation();
+    let by = 0;
+    followPointer({
+      press: e,
+      move: (m) => { const at = dayAt(m.clientX, m.clientY); if (at) { by = daysBetween(from, at); if (by) dragged = true; moving = { id: n.id, edge, by }; } },
+      up: () => { moving = null; if (by) setCell(n, p, spanValue(moved(s, edge, by))); if (dragged) setTimeout(() => (dragged = false)); },
+      cancel: () => { moving = null; dragged = false; },
+    });
+  }
+  let making = $state<{ from: string; to: string } | null>(null);
+  const inMaking = (iso: string) => !!making && making.from !== making.to && (making.from <= iso ? iso <= making.to : making.to <= iso && iso <= making.from);
+  function pressDay(e: PointerEvent, from: string) {
+    const p = dateProp;
+    if (e.button !== 0 || e.pointerType === 'touch' || !p || (e.target as HTMLElement).closest('button')) return;
+    e.preventDefault();
+    making = { from, to: from };
+    followPointer({
+      press: e,
+      move: (m) => { const at = dayAt(m.clientX, m.clientY); if (at && making) making = { from, to: at }; },
+      up: () => {
+        const m = making;
+        making = null;
+        if (m && m.to !== m.from) void addRow({ [p.name]: spanValue(m.from < m.to ? { start: m.from, end: m.to } : { start: m.to, end: m.from }) });
+      },
+      cancel: () => { making = null; },
+    });
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -284,7 +328,18 @@
     {#if p.type === 'checkbox'}
       <input type="checkbox" checked={v === 'true'} aria-label={p.name} onchange={(e) => setCell(n, p, e.currentTarget.checked ? 'true' : null)} />
     {:else if p.type === 'date'}
-      <input type="date" class:blank={!v} value={typeof v === 'string' ? v : ''} aria-label={p.name} onchange={(e) => setCell(n, p, e.currentTarget.value || null)} />
+      {@const s = spanOf(v)}
+      {@const here = `${n.id}\n${p.name}`}
+      <div class="span-cell">
+        <input type="date" class:blank={!s} value={s?.start ?? ''} aria-label={p.name} onchange={(e) => setSpan(n, p, e.currentTarget.value, s && s.end > s.start ? s.end : '')} />
+        {#if s && (s.end > s.start || ending === here)}
+          <span class="to">→</span>
+          <input type="date" value={s.end} aria-label="{p.name} end" {@attach (el) => { if (ending === here) (el as HTMLInputElement).focus(); }}
+            onchange={(e) => setSpan(n, p, s.start, e.currentTarget.value)} onblur={() => { if (ending === here) ending = null; }} />
+        {:else if s}
+          <button class="add-end" aria-label="Add an end date" title="Add an end date" onclick={() => (ending = here)}>→</button>
+        {/if}
+      </div>
     {:else if p.type === 'select' || p.type === 'multi'}
       <button class="chips" aria-label={p.name} onclick={(e) => choiceMenu(e, n, p)}>
         {#each asList(v) as c}<span class="chip" style:background="var(--tag-{tagColor(c)})">{c}</span>{:else}<span class="empty">&nbsp;</span>{/each}
@@ -364,14 +419,28 @@
         <button onclick={() => (month = today)}>Today</button>
         <span class="note">by {dateProp.name}</span>
       </div>
-      <div class="cal">
-        {#each weekNames as w}<div class="wd">{w}</div>{/each}
-        {#each monthGrid(month).flat() as iso (iso)}
-          <div class="day" class:out={!sameMonth(iso, month)} class:today={iso === today} role="group" aria-label={iso}
-            ondragover={(e) => e.preventDefault()} ondrop={(e) => { e.preventDefault(); dropOn(dateProp, iso); }}>
-            <div class="day-head"><span>{+iso.slice(-2)}</span><button class="day-add" aria-label="New on {iso}" onclick={() => addRow({ [dateProp.name]: iso })}>+</button></div>
-            {#each days.get(iso) ?? [] as n (n.id)}
-              <button class="day-row" draggable="true" ondragstart={() => (dragging = n.id)} onclick={() => open(n)}>{titleOf(n)}</button>
+      <div class="cal" class:busy={!!moving || !!making}>
+        <div class="week wds">{#each weekNames as w}<div class="wd">{w}</div>{/each}</div>
+        {#each monthGrid(month) as week (week[0])}
+          {@const bars = weekBars(shownRows, spanNow, week)}
+          <div class="week" style:--lanes={bars.reduce((most, b) => Math.max(most, b.lane + 1), 0)}>
+            {#each week as iso, i (iso)}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="day" class:out={!sameMonth(iso, month)} class:today={iso === today} class:making={inMaking(iso)} style:grid-column={i + 1}
+                role="group" aria-label={iso} onpointerdown={(e) => pressDay(e, iso)}>
+                <div class="day-head"><span>{+iso.slice(-2)}</span><button class="day-add" aria-label="New on {iso}" onclick={() => addRow({ [dateProp.name]: iso })}>+</button></div>
+              </div>
+            {/each}
+            {#each bars as b (b.row.id)}
+              {@const status = groupProp && asList(b.row.props?.[groupProp.name])[0]}
+              <button class="bar" class:before={b.before} class:after={b.after} class:moving={moving?.id === b.row.id}
+                style:grid-column="{b.from + 1} / {b.to + 2}" style:grid-row={b.lane + 2} style:--bar={status ? `var(--tag-${tagColor(status)})` : null}
+                aria-label="{titleOf(b.row)}, {b.span.end > b.span.start ? `${b.span.start} – ${b.span.end}` : b.span.start}"
+                onpointerdown={(e) => pressBar(e, b.row, 'both')} onclick={() => { if (!dragged) open(b.row); }}>
+                {#if !b.before}<span class="grip start" aria-hidden="true" onpointerdown={(e) => pressBar(e, b.row, 'start')}></span>{/if}
+                <span class="bar-title">{titleOf(b.row)}</span>
+                {#if !b.after}<span class="grip end" aria-hidden="true" onpointerdown={(e) => pressBar(e, b.row, 'end')}></span>{/if}
+              </button>
             {/each}
           </div>
         {/each}
@@ -443,17 +512,41 @@
   :global(html.mobile) .cal-bar button { min-width: 40px; min-height: 40px; }
   .cal-bar button:hover { background: var(--bg-hover); color: var(--fg); }
   .cal-month { font-weight: 600; min-width: 9em; text-align: center; }
-  .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+  .cal { border-top: 1px solid var(--line); border-left: 1px solid var(--line); user-select: none; -webkit-user-select: none; }
+  .cal.busy { cursor: grabbing; }
+  .week {
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-rows: 24px repeat(var(--lanes, 0), 22px) minmax(28px, 1fr); row-gap: 2px; min-height: 78px;
+  }
+  .wds { min-height: 0; grid-template-rows: auto; }
   .wd { padding: 3px 6px; color: var(--fg-dim); font-size: 0.85em; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-  .day { min-height: 78px; padding: 3px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
+  .day { grid-row: 1 / -1; padding: 3px; min-width: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   .day.out { color: var(--fg-dim); }
+  .day.making { background: var(--accent-soft); }
   .day.today .day-head span { background: var(--accent); color: var(--on-accent); border-radius: 10px; padding: 0 6px; }
   .day-head { display: flex; justify-content: space-between; align-items: center; font-size: 0.85em; }
   .day-add { width: 18px; height: 18px; line-height: 1; color: var(--fg-dim); opacity: 0; }
   .day:hover .day-add, .day-add:focus-visible { opacity: 1; }
   :global(html.mobile) .db .open, :global(html.mobile) .db .more, :global(html.mobile) .db .day-add { opacity: 1; width: 36px; height: 36px; }
-  .day-row { text-align: left; padding: 2px 5px; border-radius: 4px; background: var(--bg-input); color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.88em; }
-  .day-row:hover { background: var(--bg-active); }
+  .bar {
+    position: relative; display: flex; align-items: center; min-width: 0; margin: 0 4px; padding: 0 6px; border-radius: 5px;
+    background: linear-gradient(var(--bar, var(--bg-input)), var(--bar, var(--bg-input))) var(--bg);
+    color: var(--fg); font-size: 0.86em; text-align: left; cursor: grab;
+  }
+  .bar.before { margin-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .bar.after { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .bar:hover { box-shadow: inset 0 0 0 1px var(--line); }
+  .bar.moving { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18); }
+  .bar-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .grip { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; }
+  .grip.start { left: 0; }
+  .grip.end { right: 0; }
+  .span-cell { display: flex; align-items: center; }
+  .span-cell input { min-width: 0; }
+  .to { color: var(--fg-dim); flex: none; }
+  .add-end { flex: none; width: 24px; height: 24px; color: var(--fg-dim); opacity: 0; }
+  tr:hover .add-end, .add-end:focus-visible { opacity: 1; }
+  :global(html.mobile) .db .add-end { opacity: 1; width: 36px; height: 36px; }
   .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
   .g-preview { display: block; height: 72px; overflow: hidden; color: var(--fg-dim); font-size: 0.86em; line-height: 1.4; padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--line); white-space: pre-line; }
   .g-new { justify-content: center; align-items: center; color: var(--fg-dim); min-height: 120px; }

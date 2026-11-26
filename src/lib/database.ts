@@ -1,4 +1,5 @@
 import type { Note, PropValue } from './notes.svelte';
+import { shiftDays } from './date';
 
 export type PropType = 'text' | 'number' | 'select' | 'multi' | 'date' | 'checkbox' | 'relation' | 'rollup' | 'formula';
 export type RollupFn = 'count' | 'sum' | 'average' | 'min' | 'max' | 'list' | 'checked';
@@ -74,6 +75,7 @@ export function shown(v: PropValue | undefined, type: PropType): string {
   if (v === undefined) return '';
   if (type === 'relation') return linksIn(v).join(', ');
   if (Array.isArray(v)) return v.join(', ');
+  if (type === 'date') { const s = spanOf(v); return s && s.end > s.start ? `${s.start} → ${s.end}` : v; }
   return type === 'checkbox' ? (v === 'true' ? '✓' : '') : v;
 }
 export const asList = (v: PropValue | undefined): string[] => (v === undefined ? [] : Array.isArray(v) ? v : v ? [v] : []);
@@ -118,15 +120,43 @@ export function columnsOf<T extends Pick<Note, 'props'>>(rows: readonly T[], pro
   return cols;
 }
 
-export function byDay<T extends Pick<Note, 'props'>>(rows: readonly T[], prop: string | undefined): Map<string, T[]> {
-  const days = new Map<string, T[]>();
-  if (!prop) return days;
-  for (const r of rows) {
-    const v = r.props?.[prop];
-    const day = typeof v === 'string' ? /^\d{4}-\d{2}-\d{2}/.exec(v)?.[0] : undefined;
-    if (day) (days.get(day) ?? days.set(day, []).get(day)!).push(r);
+/** a Date property's value: one day, or a span written `start/end` (ISO 8601's interval) */
+export interface Span { readonly start: string; readonly end: string }
+export type Edge = 'start' | 'end' | 'both';
+const DAY = /^\d{4}-\d{2}-\d{2}/;
+export function spanOf(v: PropValue | undefined): Span | null {
+  if (typeof v !== 'string') return null;
+  const [a, b = ''] = v.trim().split('/');
+  const start = DAY.exec(a)?.[0];
+  if (!start) return null;
+  const end = DAY.exec(b)?.[0] ?? start;
+  return end < start ? { start: end, end: start } : { start, end };
+}
+export const spanValue = ({ start, end }: Span): string => (end > start ? `${start}/${end}` : start);
+const utc = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+export const daysBetween = (a: string, b: string): number => Math.round((utc(b) - utc(a)) / 86_400_000);
+export function moved(s: Span, edge: Edge, by: number): Span {
+  const start = edge === 'end' ? s.start : shiftDays(s.start, by);
+  const end = edge === 'start' ? s.end : shiftDays(s.end, by);
+  return edge === 'start' ? { start: start < end ? start : end, end } : edge === 'end' ? { start, end: end > start ? end : start } : { start, end };
+}
+
+export interface Bar<T> { row: T; span: Span; from: number; to: number; lane: number; before: boolean; after: boolean }
+export function weekBars<T>(rows: readonly T[], spanOf: (row: T) => Span | null, week: readonly string[]): Bar<T>[] {
+  const first = week[0], last = week[week.length - 1];
+  const cut = rows.flatMap((row) => {
+    const span = spanOf(row);
+    if (!span || span.end < first || span.start > last) return [];
+    const from = Math.max(0, daysBetween(first, span.start)), to = Math.min(week.length - 1, daysBetween(first, span.end));
+    return [{ row, span, from, to, lane: 0, before: span.start < first, after: span.end > last }];
+  }).sort((a, b) => a.from - b.from || b.to - a.to);
+  const ends: number[] = [];
+  for (const bar of cut) {
+    const lane = ends.findIndex((end) => end < bar.from);
+    bar.lane = lane < 0 ? ends.length : lane;
+    ends[bar.lane] = bar.to;
   }
-  return days;
+  return cut;
 }
 
 const TAGS = ['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'] as const;

@@ -21,7 +21,12 @@ a card page over it.
   show all`), Show all rows.
 - `db-board`: the Board tab groups rows by the select into columns with counts; a card dragged to another column
   changes the row's Status; ⌘Z on the board takes it back.
-- `db-calendar`: the Calendar tab puts each row on its Due day (`by Due`).
+- `db-calendar`: the Calendar tab puts each row on its Due day (`by Due`), as a bar over that day.
+- `db-calendar-span`: a date can run from one day to another (`Due: 2026-11-20/2026-11-22`): in the table a date
+  cell's `→` (`Add an end date`) gives it an end; in the calendar its bar runs across those days (cut at a week's end
+  and carried on in the next), coloured by its Status. A bar dragged moves the span and keeps its length; its left or
+  right edge dragged moves that end; empty days dragged across ask a `Name` and make a row over them; ⌘Z takes a drag
+  back. A finger taps a bar open and does not drag it.
 - `db-gallery`: the Gallery tab shows a card per row with its first line and properties, and a `+ New`.
 - `db-open-row`: a row's ↗ (`Open`), or a card, opens the row's own page (crumbs `Projects / <row>`).
 - `db-delete-row`: a row's ⋯ (`Row menu`) → Delete row moves it to the Trash at once (no question).
@@ -33,6 +38,7 @@ a card page over it.
 - `kanban-move`: a card dragged to another column moves there; in a card page, `→ <column>` (`Move to another
   column`) moves it from a menu of columns.
 - `kanban-delete`: a card page's bin (`Delete card`) asks `Delete “<title>”?`; ⌘Z brings the card back.
+
 
 ## How to get to it (user POV)
 
@@ -67,8 +73,12 @@ with front matter `parent: p`, `Status: …`, `Due: 2026-11-2x` (Write spec / In
   labelled by choice. `await t.page.dragAndDrop('.db button.card:has-text("Plan launch")', '.db .col[aria-label="Done"]');`
   → Done has Plan launch and Ship app, `r3` has `Status: Done`; `` await t.key(`${t.mod}+z`) `` → back in Not started,
   and so after a reload.
-- `db-calendar` `db-gallery` **Calendar, Gallery.** The tabs: Plan launch on 11-18, Write spec 11-20, Ship app 11-25 (`.db .day[aria-label]`);
+- `db-calendar` `db-gallery` **Calendar, Gallery.** The tabs: Plan launch on 11-18, Write spec 11-20, Ship app 11-25
+  (each `.db .bar` read by the `.db .day[aria-label]` boxes it lies over);
   `.db .g-card` cards with `About …`, Status and Due.
+- `db-calendar-span` **Spans.** In the Calendar, with `page.mouse` (down, moves, up): Write spec's `.grip.end` to the
+  22nd's day box → the bar covers 20–22 and the file has `Due: <month>-20/<month>-22`; the bar's middle (the 21st) to the 22nd →
+  21–23; ⌘Z → 20–22; the 27th's day box dragged to the 28th → a `Name` sheet, `Review`, Enter → Review over 27–28.
 - `db-open-row` `db-delete-row` **Open, delete.** Hover the row, `button[aria-label="Open"]` → the row's page; `button[aria-label="Row menu"]` →
   `Delete row` → gone from the table and the sidebar, `deleted: true`.
 - `db-phone` **Phone.** With `--phone` and the seeded database open: Board tab, `.db .col[aria-label="Not started"] button.new`
@@ -85,7 +95,7 @@ cards, move menu, delete question, deleted), `shots4/` (relation target, kinds, 
 Name sheet, board, row page).
 
 Not proved: Rollup (needs a relation to a second database), Text and Date as added properties, `+ Column` on the
-database board, a row dragged to another day in the Calendar view, the kanban template and ⌥-arrow card moves, a
+database board, a span dragged on a phone (a finger taps it open), the kanban template and ⌥-arrow card moves, a
 kanban card page on a phone.
 
 ## Gotchas

@@ -58,7 +58,7 @@ test('rows are made under the page, not opened; a property set, renamed, taken o
 });
 
 import { evaluate } from './formula';
-import { rollup, byDay, linksIn } from './database';
+import { rollup, linksIn, spanOf, spanValue, moved, weekBars, shown } from './database';
 
 test("formulas: Notion's operators and functions over a row's values; nothing is run as code; errors say where", () => {
   const row: Record<string, number | string | boolean | null> = { Price: 12, Qty: 3, Done: true, Due: '2026-11-10', Name: 'Pen', Note: null };
@@ -79,7 +79,7 @@ test("formulas: Notion's operators and functions over a row's values; nothing is
   expect(f('').value).toBe('');
 });
 
-test('rollups, a relation\'s links, and the calendar\'s days', () => {
+test('rollups and a relation\'s links', () => {
   expect(rollup(['3', '4.5', ''], 'sum')).toBe('7.5');
   expect(rollup(['3', '4'], 'average')).toBe('3.5');
   expect(rollup(['a', 'b'], 'count')).toBe('2');
@@ -87,13 +87,38 @@ test('rollups, a relation\'s links, and the calendar\'s days', () => {
   expect(rollup(['x', 'y'], 'sum')).toBe('');
   expect(rollup(['2026-11-02', '2026-10-01'], 'min')).toBe('2026-10-01');
   expect(linksIn(['[[Eve]]', '[[Plan|the plan]]', 'Bare'])).toEqual(['Eve', 'Plan', 'Bare']);
-  const rows = [note({ Due: '2026-11-01' }, 0), note({ Due: '2026-11-01 09:00' }, 1), note({ Due: 'soon' }, 2), note({}, 3)];
-  const days = byDay(rows, 'Due');
-  expect([...days.keys()]).toEqual(['2026-11-01']);
-  expect(days.get('2026-11-01')!.length).toBe(2);
   const d = parseDb(serializeDb({ title: 'T', view: 'calendar', dateBy: 'Due', props: [{ name: 'P', type: 'relation', target: 'x' }, { name: 'R', type: 'rollup', relation: 'P', of: 'Name', fn: 'count' }, { name: 'F', type: 'formula', expr: '1+1' }] }));
   expect(d!.props.map((p) => p.type)).toEqual(['relation', 'rollup', 'formula']);
   expect(d!.view).toBe('calendar');
+});
+
+test('a date is one day or a span from one day to another, written start/end; the calendar lays a week of them out in lanes', () => {
+  expect(spanOf('2026-11-01')).toEqual({ start: '2026-11-01', end: '2026-11-01' });
+  expect(spanOf('2026-11-01 09:00')).toEqual({ start: '2026-11-01', end: '2026-11-01' });
+  expect(spanOf('2026-11-03/2026-11-09')).toEqual({ start: '2026-11-03', end: '2026-11-09' });
+  expect(spanOf('2026-11-09/2026-11-03')).toEqual({ start: '2026-11-03', end: '2026-11-09' });
+  expect(spanOf('soon')).toBeNull();
+  expect(spanOf(undefined)).toBeNull();
+  expect(spanValue({ start: '2026-11-03', end: '2026-11-03' })).toBe('2026-11-03');
+  expect(spanValue({ start: '2026-11-03', end: '2026-11-09' })).toBe('2026-11-03/2026-11-09');
+  expect(shown('2026-11-03/2026-11-09', 'date')).toBe('2026-11-03 → 2026-11-09');
+  expect(shown('2026-11-03', 'date')).toBe('2026-11-03');
+  // moved whole it keeps its length, across a month's end; an end pulled past the other stops on it
+  const s = { start: '2026-11-28', end: '2026-12-02' };
+  expect(moved(s, 'both', 3)).toEqual({ start: '2026-12-01', end: '2026-12-05' });
+  expect(moved(s, 'end', 4)).toEqual({ start: '2026-11-28', end: '2026-12-06' });
+  expect(moved(s, 'end', -9)).toEqual({ start: '2026-11-28', end: '2026-11-28' });
+  expect(moved(s, 'start', 9)).toEqual({ start: '2026-12-02', end: '2026-12-02' });
+  // the week of 11-01 (Sun) to 11-07: what runs into it or out of it is cut at its edges and says so
+  const week = ['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07'];
+  const rows = ['2026-10-30/2026-11-02', '2026-11-03', '2026-11-02/2026-11-10', '2026-11-04/2026-11-05', '2026-11-09', 'soon'];
+  const bars = weekBars(rows, spanOf, week).map((b) => [b.row, b.from, b.to, b.lane, b.before, b.after]);
+  expect(bars).toEqual([
+    ['2026-10-30/2026-11-02', 0, 1, 0, true, false],
+    ['2026-11-02/2026-11-10', 1, 6, 1, false, true],
+    ['2026-11-03', 2, 2, 0, false, false],
+    ['2026-11-04/2026-11-05', 3, 4, 0, false, false],
+  ]);
 });
 
 test('a tag has one colour wherever it shows, read from its words; different tags get different ones', () => {

@@ -156,19 +156,48 @@ export default async (t) => {
   await t.page.waitForSelector('.db .col[role="group"]');
   await t.ok('db-board', async () => (await board(t))['Not started'] === '1,Plan launch', 'after a reload Plan launch is still in Not started');
 
-  const day = (d) => t.page.locator(`.db .day[aria-label="${month}-${d}"] .day-row`).allTextContents();
+  // the days a row's bar is drawn over: each day box its bars cover on screen, across and in the same week
+  const covered = (title) => t.page.evaluate((title) => {
+    const bars = [...document.querySelectorAll('.db .bar')].filter((b) => b.querySelector('.bar-title').textContent === title).map((b) => b.getBoundingClientRect());
+    return [...document.querySelectorAll('.db .day[aria-label]')].filter((d) => {
+      const r = d.getBoundingClientRect(), mid = r.left + r.width / 2;
+      return bars.some((b) => b.left < mid && mid < b.right && b.top >= r.top && b.bottom <= r.bottom);
+    }).map((d) => d.getAttribute('aria-label').slice(8));
+  }, title);
   await t.click('.db .views button[role="tab"]:has-text("Calendar")');
-  await t.ok('db-calendar', async () => (await day('18')).includes('Plan launch') && (await day('20')).includes('Write spec') && (await day('25')).includes('Ship app')
+  await t.ok('db-calendar', async () => (await covered('Plan launch')).join() === '18' && (await covered('Write spec')).join() === '20' && (await covered('Ship app')).join() === '25'
     && (await t.page.locator('.db .cal-bar .note').textContent()).trim() === 'by Due', 'each row is on its Due day, the bar saying by Due');
   await t.shot('db-calendar');
+
+  const centre = (sel) => t.page.locator(sel).first().boundingBox().then((b) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 }));
+  const drag = async (from, to) => {
+    await t.page.mouse.move(from.x, from.y); await t.page.mouse.down();
+    await t.page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2, { steps: 4 }); await t.page.mouse.move(to.x, to.y, { steps: 4 });
+    await t.page.mouse.up();
+  };
+  const grip = await t.page.locator('.db .bar:has-text("Write spec") .grip.end').boundingBox();
+  await drag({ x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 }, await centre(`.db .day[aria-label="${month}-22"]`));
+  await t.ok('db-calendar-span', async () => (await covered('Write spec')).join() === '20,21,22' && new RegExp(`^Due: ${month}-20/${month}-22$`, 'm').test(await saved(t, 'Write spec')),
+    "Write spec's end dragged to the 22nd: its bar runs 20 to 22, its file says Due: <20th>/<22nd>");
+  await drag(await centre('.db .bar:has-text("Write spec")'), await centre(`.db .day[aria-label="${month}-22"]`));
+  await t.ok('db-calendar-span', async () => (await covered('Write spec')).join() === '21,22,23', 'the bar dragged whole a day on (its middle, the 21st, to the 22nd) keeps its three days: 21 to 23');
+  await t.key(`${t.mod}+z`);
+  await t.ok('db-calendar-span', async () => (await covered('Write spec')).join() === '20,21,22', '⌘Z puts it back on 20 to 22');
+  await drag(await centre(`.db .day[aria-label="${month}-27"]`), await centre(`.db .day[aria-label="${month}-28"]`));
+  await t.page.waitForSelector('.box input');
+  await t.type('Review');
+  await t.key('Enter');
+  await t.ok('db-calendar-span', async () => (await covered('Review')).join() === '27,28' && new RegExp(`^Due: ${month}-27/${month}-28$`, 'm').test(await saved(t, 'Review')),
+    'two empty days dragged across, then a name, make Review over 27 and 28');
+  await t.shot('db-calendar-span');
 
   await t.click('.db .views button[role="tab"]:has-text("Gallery")');
   await t.ok('db-gallery', () => t.page.evaluate(() => {
     const cards = [...document.querySelectorAll('.db .g-card:not(.g-new)')].map((c) => c.textContent);
     const spec = cards.find((c) => c.includes('Write spec')) ?? '';
-    return cards.length === 3 && spec.includes('About the spec.') && spec.includes('Status: In progress') && spec.includes('Due: ')
+    return cards.length === 4 && spec.includes('About the spec.') && spec.includes('Status: In progress') && spec.includes('Due: ')
       && document.querySelector('.db .g-new')?.textContent.trim() === '+ New';
-  }), 'a card per row with its first line, Status and Due, and a + New');
+  }), 'a card per row (Review, made in the calendar, among them) with its first line, Status and Due, and a + New');
   await t.shot('db-gallery');
 
   await t.click('.db .views button[role="tab"]:has-text("Table")');
