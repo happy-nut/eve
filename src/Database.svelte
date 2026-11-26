@@ -417,7 +417,6 @@
         <span class="cal-month">{monthName(month)}</span>
         <button onclick={() => (month = shiftMonths(month, 1))} aria-label="Next month">›</button>
         <button onclick={() => (month = today)}>Today</button>
-        <span class="note">by {dateProp.name}</span>
       </div>
       <div class="cal" class:busy={!!moving || !!making}>
         <div class="week wds">{#each weekNames as w}<div class="wd">{w}</div>{/each}</div>

@@ -166,7 +166,10 @@ export default async (t) => {
   }, title);
   await t.click('.db .views button[role="tab"]:has-text("Calendar")');
   await t.ok('db-calendar', async () => (await covered('Plan launch')).join() === '18' && (await covered('Write spec')).join() === '20' && (await covered('Ship app')).join() === '25'
-    && (await t.page.locator('.db .cal-bar .note').textContent()).trim() === 'by Due', 'each row is on its Due day, the bar saying by Due');
+    && await t.page.evaluate(() => {
+      const mids = [...document.querySelectorAll('.db .cal-bar > *')].map((el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; });
+      return mids.length === 4 && Math.max(...mids) - Math.min(...mids) < 1;
+    }), "each row is on its Due day; the month's bar is ‹ month › Today, all on one line");
   await t.shot('db-calendar');
 
   const centre = (sel) => t.page.locator(sel).first().boundingBox().then((b) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 }));

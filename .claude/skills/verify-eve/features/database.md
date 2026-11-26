@@ -21,7 +21,7 @@ a card page over it.
   show all`), Show all rows.
 - `db-board`: the Board tab groups rows by the select into columns with counts; a card dragged to another column
   changes the row's Status; ⌘Z on the board takes it back.
-- `db-calendar`: the Calendar tab puts each row on its Due day (`by Due`), as a bar over that day.
+- `db-calendar`: the Calendar tab puts each row on its Due day, as a bar over that day; above the month, ‹ month › Today sit on one line.
 - `db-calendar-span`: a date can run from one day to another (`Due: 2026-11-20/2026-11-22`): in the table a date
   cell's `→` (`Add an end date`) gives it an end; in the calendar its bar runs across those days (cut at a week's end
   and carried on in the next), coloured by its Status. A bar dragged moves the span and keeps its length; its left or
