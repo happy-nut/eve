@@ -7,7 +7,8 @@ puts in a date from a small calendar, and a date chip can be made a reminder.
 ## Sub-features
 
 - `daily-on`: Settings (⌘,) → General → Daily notes switches on a `🗓️ Daily notes` row at the top of the sidebar.
-- `calendar-open`: a click on that row shows the month in the note's place, the keyboard on today (`.day.today.cursor`).
+- `calendar-open`: a click on that row shows the month in the note's place, the keyboard staying on the row; Enter on
+  it puts the keyboard on today (`.day.today.cursor`).
 - `calendar-keys`: ← → a day, ↑ ↓ a week, ⌘← ⌘→ a month; the `Today` button comes back to today (its `‹` `›`
   month buttons were not clicked).
 - `calendar-day`: Enter (or a click) on a day opens its note floating over the calendar (`.card-page`), titled
@@ -42,7 +43,7 @@ The list then reads `🗓️  Daily notes`, Plan, Groceries, Reading list. Read 
 `[...document.querySelectorAll('.calendar .day.has')].map((d) => d.querySelector('.num').textContent + ':' + (d.querySelector('.line')?.textContent ?? ''))`. Run: `node .claude/skills/verify-eve/drives/run.mjs calendar`
 
 - `daily-on` `calendar-open` **Open.** `await t.click('aside [data-row]:has-text("Daily")');` The month (`.calendar .month`, `2026년 11월`) with
-  today ringed and focused.
+  today ringed, the keyboard on the row; `await t.key('Enter');` focuses today.
 - `calendar-keys` **Keys.** `ArrowRight`, `ArrowDown` move the cursor 17 → 25; `` `${t.mod}+ArrowRight` `` shows `2026년 12월`;
   `await t.click('.calendar button.today-btn')` comes back with the cursor on today.
 - `calendar-day` **A day.** `await t.key('Enter');` → `.card-page` with the day's title; `await t.type('Walked the dog'); await t.key('Escape');`

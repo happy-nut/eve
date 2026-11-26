@@ -11,6 +11,8 @@ closes the sidebar to write. The phone has the same list as its own screen, rear
   the note is saved with `parent:` and stays there after a reload.
 - `sidebar-icon`: a click on a row's icon opens the `Choose an icon` picker; the emoji picked shows on the row and on
   the page's head.
+- `sidebar-click`: a click on a row opens its note and leaves the keyboard on the row, so ↑↓ go on through the list;
+  Enter (or →) on it goes into the note; a click on the list's blank puts the keyboard on the open row.
 - `sidebar-jump`: holding ⌘ shows 1…9 on the rows as listed; ⌘<digit> opens that note with the caret in it.
 - `sidebar-keys`: ⌘\ puts the keyboard on the open note's row; ↑↓ walk, ⌥↑↓ move a row a slot, ⌥→ nests it under the
   row above, ← folds (or goes up to the parent), Space folds and unfolds, Esc goes back to the note.
@@ -45,6 +47,8 @@ Preconditions: the default three notes plus `d.md` with front matter (a real `up
   `localStorage.getItem('eve.notes.d')` has `parent: a`.
 - `sidebar-icon` **Icon.** `await t.click('aside .note-row:has([data-note="c"]) .ico-slot'); await t.page.waitForSelector('[aria-label="Choose an icon"] .grid .cell'); await t.click('[aria-label="Choose an icon"] .grid .cell >> nth=3');`
   The row reads `😁  Reading list`; open it and the page's head shows the big 😁 over `Add cover`.
+- `sidebar-click` **Click.** `await t.click('aside [data-note="a"]');` Plan is open, the keyboard on its row; `ArrowDown` → Garden;
+  `ArrowUp`, `Enter` → the `.tiptap`. A click on the blank under the rows puts the keyboard back on Plan's row.
 - `sidebar-jump` **Jump.** `await t.click('.tiptap'); await t.page.keyboard.down('Meta'); await t.wait(800);` shot the sidebar: 1 2 3 4
   badges in list order, Groceries' included. `await t.page.keyboard.press('Digit3'); await t.page.keyboard.up('Meta');`
   Reading list is open and `document.activeElement` is the `.tiptap`.

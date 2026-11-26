@@ -32,10 +32,14 @@ export default async (t) => {
   await t.shot('daily-row', 'aside');
 
   await t.click('aside [data-row]:has-text("Daily")');
+  await t.ok('calendar-open', () => t.page.evaluate(() => !!document.querySelector('.calendar .day.today.cursor')
+    && document.activeElement?.matches('aside [data-row].active') && !document.querySelector('.tiptap')),
+  "a click on the row shows the month in the note's place with today ringed, the keyboard staying on the row");
+  await t.key('Enter');
   await t.ok('calendar-open', async () => (await t.page.evaluate(() => {
     const c = document.querySelector('.calendar .day.today.cursor');
-    return !!c && document.activeElement === c && !document.querySelector('.tiptap');
-  })) && at(t, today), "the month shows in the note's place with today ringed and the keyboard on it");
+    return !!c && document.activeElement === c;
+  })) && at(t, today), 'Enter on the row puts the keyboard on today');
   await t.shot('calendar-open');
 
   await t.key('ArrowRight');

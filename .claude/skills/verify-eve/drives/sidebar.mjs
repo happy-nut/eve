@@ -39,6 +39,16 @@ export default async (t) => {
   await t.shot('icon-set');
 
   await t.click('aside [data-note="a"]');
+  await t.ok('sidebar-click', async () => (await focusedRow(t)) === 'Plan' && !(await inNote(t))
+    && await t.page.evaluate(() => document.querySelector('.tiptap h1')?.textContent === 'Plan'), 'a click on Plan opens it and leaves the keyboard on its row');
+  await t.key('ArrowDown');
+  await t.ok('sidebar-click', async () => (await focusedRow(t)) === '🌱 Garden', '↓ then walks the list to Garden');
+  await t.key('ArrowUp');
+  await t.key('Enter');
+  await t.ok('sidebar-click', () => inNote(t), 'Enter on the row goes into the note');
+  await t.page.mouse.click(60, (await t.page.locator('aside .tree').boundingBox()).y + 200);
+  await t.ok('sidebar-click', async () => (await focusedRow(t)) === 'Plan', "a click on the list's blank below the rows puts the keyboard on the open row");
+  await t.shot('click-row', 'aside');
   await t.click('.tiptap');
   await t.page.keyboard.down('Meta');
   await t.ok('sidebar-jump', () => t.page.evaluate(() => [...document.querySelectorAll('aside [data-row]')].map((r) => r.closest('.note-row')?.querySelector('.num')?.textContent ?? '-').join('') === '1234'),

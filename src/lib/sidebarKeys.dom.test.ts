@@ -75,3 +75,35 @@ test('Esc in the search is the layers\' Esc: what was typed goes, the keyboard g
   expect(document.activeElement).toBe(main.querySelector('.tiptap'));
   expect(ui.layers.has('search')).toBe(false);
 });
+
+test('a row clicked with the mouse opens its note and keeps the keyboard on the row; Enter on it goes into the note; a click on the list\'s blank puts the keyboard on the open row', async () => {
+  const { ui } = await import('./ui.svelte');
+  const open = notes.addImported('# Here\n\nnow\n');
+  const other = notes.addImported('# There\n\nthen\n');
+  notes.currentId = open.id;
+  const main = document.body.appendChild(document.createElement('main'));
+  main.innerHTML = '<div class="tiptap" tabindex="0"></div>';
+  app = mount(Sidebar, { target: document.body, props: { open: true, searchEl: null, cmdHeld: false, onSettings: () => {}, onNew: () => {} } });
+  flushSync(); await new Promise((r) => setTimeout(r, 0));
+  const row = (id: string) => document.querySelector<HTMLElement>(`aside [data-note="${id}"]`)!;
+  const text = main.querySelector<HTMLElement>('.tiptap')!;
+  text.focus();
+
+  row(other.id).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+  flushSync(); await new Promise((r) => setTimeout(r, 0)); await new Promise((r) => setTimeout(r, 0));
+  expect(notes.currentId).toBe(other.id);
+  expect(document.activeElement).toBe(row(other.id));
+  expect(ui.focusOwner).toBe('sidebar');
+
+  row(open.id).focus();
+  row(open.id).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
+  flushSync(); await new Promise((r) => setTimeout(r, 0)); await new Promise((r) => setTimeout(r, 0));
+  expect(notes.currentId).toBe(open.id);
+  expect(document.activeElement).toBe(text);
+
+  const blank = document.querySelector<HTMLElement>('aside ul.tree')!;
+  const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true, detail: 1 });
+  blank.dispatchEvent(down);
+  expect(down.defaultPrevented).toBe(true);
+  expect(document.activeElement).toBe(row(open.id));
+});

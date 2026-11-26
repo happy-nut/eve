@@ -263,12 +263,19 @@
   }
 
   function rowClick(e: MouseEvent, n: Note) {
-    if (e.metaKey && !isMobile && n.id !== CALENDAR_NOTE_ID) tabs.open(n.id); else void openNote(n);
+    if (e.metaKey && !isMobile && n.id !== CALENDAR_NOTE_ID) tabs.open(n.id);
+    else void openNote(n, e.detail > 0 && !isMobile ? e.currentTarget as HTMLElement : undefined);
   }
-  /** WebKit gives a clicked button no focus, so the keyboard is put on the icon's row */
+  /** WebKit gives a clicked button no focus, so the keyboard is put on the row the button is in */
+  const rowOf = (e: MouseEvent) => (e.currentTarget as HTMLElement).closest('.note-row')?.querySelector<HTMLElement>('[data-row]');
+  function keyboardToList(e: MouseEvent) {
+    if (isMobile || (e.target as Element).closest('button, input, a, [tabindex], .note-row')) return;
+    e.preventDefault();
+    (document.querySelector<HTMLElement>('aside [data-row].active') ?? rowsNow()[0])?.focus({ preventScroll: true });
+  }
   function pickIconHere(e: MouseEvent, n: Note) {
     const icon = e.currentTarget as HTMLElement;
-    icon.parentElement?.querySelector<HTMLElement>('[data-row]')?.focus({ preventScroll: true });
+    rowOf(e)?.focus({ preventScroll: true });
     void pickIcon(n, icon);
   }
   async function pickIcon(n: Note, anchor?: HTMLElement) {
@@ -345,22 +352,24 @@
   const syncLabel = $derived(sync.enabled ? (sync.status === 'error' ? 'sync error' : sync.status === 'syncing' ? 'syncing…' : sync.settings.lastSynced ? 'synced' : 'not synced yet') : 'local only');
   const GEAR = '<svg class="gear-i" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
 
-  async function openCalendar() {
+  async function openCalendar(clicked?: HTMLElement) {
     notes.currentId = CALENDAR;
     if (isMobile) { open = false; return; }
+    if (clicked) return clicked.focus({ preventScroll: true });
     await tick();
     document.querySelector<HTMLElement>('.calendar .day.cursor')?.focus();
   }
   const onCalendar = $derived(notes.currentId === CALENDAR || !!(notes.current && (isDailyId(notes.current.id) || notes.current.id === DAILY_TEMPLATE_ID)));
-  async function openNote(n: Note) {
-    if (n.id === CALENDAR_NOTE_ID) return openCalendar();
+  async function openNote(n: Note, clicked?: HTMLElement) {
+    if (n.id === CALENDAR_NOTE_ID) return openCalendar(clicked);
     const list = tree.ordered(), from = list.findIndex((x) => x.id === notes.currentId), to = list.findIndex((x) => x.id === n.id);
     if (from >= 0 && to === from + 1) hints.action('nextNote', 'The next note is a key away');
     else if (from >= 0 && to === from - 1) hints.action('prevNote', 'The previous note is a key away');
-    ui.focusOwner = 'editor';
+    ui.focusOwner = clicked ? 'sidebar' : 'editor';
     notes.currentId = n.id;
     moves.openedFromList.id = n.id;
     if (isMobile) { open = false; return; }
+    if (clicked) return clicked.focus({ preventScroll: true });
     await tick();
     focusNote();
   }
@@ -375,7 +384,8 @@
     {:else}<svg class="gear-i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v8.5M8.5 12.5 12 16l3.5-3.5"/></svg>{/if}
   </button>
 {/snippet}
-  <aside transition:drawer style={drawerStyle}
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <aside transition:drawer style={drawerStyle} onmousedown={keyboardToList}
     ontouchstart={pullStart} ontouchmove={pullMove} ontouchend={pullEnd} ontouchcancel={pullEnd}>
     {#if isMobile}
       <div class="mtop">
@@ -400,7 +410,6 @@
     </div>
 
     <ul class="tree" role="tree" use:showOpen onkeydown={treeKey} use:touchReorder={reorder}
-      onmousedown={(e) => { if (!(e.target as Element).closest('button, input, a, [tabindex]')) e.preventDefault(); }}
       oncontextmenu={(e) => { if (isMobile) e.preventDefault(); else rowMenu(e); }}
       ondragover={overEnd} ondrop={drop}>
       {#each rows as r (r.key)}
@@ -442,7 +451,7 @@
               {/if}
               {#if r.kids}
                 <button class="icon mini fold tip-right" aria-label={tree.isFolded(n.id) ? 'Expand' : 'Collapse'}
-                  data-tip={tree.isFolded(n.id) ? 'Expand' : 'Collapse'} onclick={() => tree.fold(n.id)}>
+                  data-tip={tree.isFolded(n.id) ? 'Expand' : 'Collapse'} onclick={(e) => { tree.fold(n.id); if (e.detail && !isMobile) rowOf(e)?.focus({ preventScroll: true }); }}>
                   <svg class="chev" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4"/></svg>
                 </button>
               {/if}
